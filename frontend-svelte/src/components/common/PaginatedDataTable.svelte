@@ -89,6 +89,8 @@
   } from "../../controllers/globalModal.store.js";
   import DeleteModal from '../modals/DeleteModal.svelte';
   import BlockedDeleteModal from '../modals/BlockedDeleteModal.svelte';
+  import BatchDeleteConfirmModal from '../modals/BatchDeleteConfirmModal.svelte';
+  import BatchDeleteReportModal from '../modals/BatchDeleteReportModal.svelte';
 
   export let items = [];
   export let totalCount = 0;
@@ -383,6 +385,12 @@
   let itemToDelete = null;
   let blockedData = null;
 
+  // Batch Delete Modals State
+  let isBatchConfirmOpen = false;
+  let isBatchDeleting = false;
+  let isBatchReportOpen = false;
+  let batchReportData = null;
+
   // Universal Client-Side Search Filtering
   $: filteredItems = (function() {
     if (isServerSide || !items || !Array.isArray(items)) return items || [];
@@ -613,21 +621,55 @@
 
   function handleBatchDelete() {
     const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
     if (ids.length === 1) {
       const item = items.find(i => i.id === ids[0]);
       promptDelete(item || { id: ids[0] });
     } else {
-      dispatch('batchDelete', {
-        ids,
-        onResult: (res) => {
-          if (res && res.blocked) {
-            blockedData = res;
-            isBlockedModalOpen = true;
-          }
-        }
-      });
+      isBatchConfirmOpen = true;
     }
-    selectedIds = new Set();
+  }
+
+  function confirmBatchDelete() {
+    const ids = Array.from(selectedIds);
+    isBatchDeleting = true;
+
+    dispatch('batchDelete', {
+      ids,
+      items: ids.map(id => items.find(i => i.id === id) || { id }),
+      onResult: (res) => {
+        isBatchDeleting = false;
+        isBatchConfirmOpen = false;
+        selectedIds = new Set();
+        handleBatchReport(res);
+      }
+    });
+  }
+
+  function handleBatchReport(res) {
+    if (!res) return;
+    if (res.blocked && !Array.isArray(res.blocked)) {
+      blockedData = res;
+      isBlockedModalOpen = true;
+      return;
+    }
+
+    const blockedList = res.blocked || [];
+    const errorList = res.errors || [];
+    const deletedList = res.deleted || [];
+
+    if (blockedList.length > 0 || errorList.length > 0) {
+      batchReportData = {
+        deleted: deletedList,
+        blocked: blockedList,
+        errors: errorList,
+        total: res.total || (deletedList.length + blockedList.length + errorList.length),
+        entityType
+      };
+      isBatchReportOpen = true;
+    } else if (deletedList.length > 0) {
+      triggerToast(`✅ ${deletedList.length} registros eliminados exitosamente de la base de datos`, 'success');
+    }
   }
 
   // Inline Editing Methods
@@ -1422,6 +1464,23 @@
   isOpen={isBlockedModalOpen}
   blockedData={blockedData}
   on:close={() => (isBlockedModalOpen = false)}
+/>
+
+<!-- Batch Delete Confirm Modal -->
+<BatchDeleteConfirmModal 
+  isOpen={isBatchConfirmOpen}
+  count={selectedIds.size}
+  {entityType}
+  isDeleting={isBatchDeleting}
+  on:confirm={confirmBatchDelete}
+  on:close={() => (isBatchConfirmOpen = false)}
+/>
+
+<!-- Batch Delete Report Modal -->
+<BatchDeleteReportModal 
+  isOpen={isBatchReportOpen}
+  report={batchReportData}
+  on:close={() => (isBatchReportOpen = false)}
 />
 
 {#if isDesincorporarModalOpen && itemToDesincorporar}

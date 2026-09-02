@@ -328,21 +328,60 @@
 
   async function handleBatchDelete(event) {
     const { ids, onResult } = event.detail;
+    const deleted = [];
+    const blocked = [];
+    const errors = [];
+
     const filteredIds = ids.filter(id => !String(id).startsWith('SYS-'));
-    if (filteredIds.length === 0) {
-      triggerToast('Las plantillas base seleccionadas no pueden ser eliminadas', 'warning');
-      return;
+    const sysIds = ids.filter(id => String(id).startsWith('SYS-'));
+
+    for (const sysId of sysIds) {
+      const item = items.find(i => String(i.id) === String(sysId));
+      blocked.push({
+        id: sysId,
+        name: item?.nombre || `Plantilla Base (${sysId})`,
+        reason: 'Es una plantilla base del sistema y está protegida contra eliminación.',
+        dependencies: []
+      });
     }
+
     for (const id of filteredIds) {
       try {
-        await fetch(`/api/master/plantillas-horarios/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/master/plantillas-horarios/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json && json.blocked) {
+          blocked.push({
+            id,
+            name: json.entityName || `ID: ${id}`,
+            reason: json.message || 'Tiene elementos o empleados asociados en la base de datos',
+            dependencies: json.dependencies || []
+          });
+        } else if (res.ok && (json.success || json.id)) {
+          deleted.push({ id });
+        } else {
+          blocked.push({
+            id,
+            name: `ID: ${id}`,
+            reason: json?.error || 'No se pudo eliminar por restricciones de datos',
+            dependencies: []
+          });
+        }
       } catch (err) {
-        triggerToast(`Error al eliminar ID ${id}: ${err.message}`, 'error');
+        errors.push({ id, error: err.message });
       }
     }
-    triggerToast(`${filteredIds.length} registros eliminados en masivo`, 'success');
-    onResult({ success: true });
+
     await loadServerData();
+
+    if (onResult) {
+      onResult({
+        deleted,
+        blocked,
+        errors,
+        total: ids.length,
+        entityType: 'horario'
+      });
+    }
   }
 </script>
 

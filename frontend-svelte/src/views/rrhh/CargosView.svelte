@@ -220,20 +220,46 @@
 
   async function handleBatchDelete(event) {
     const { ids, onResult } = event.detail;
+    const deleted = [];
+    const blocked = [];
+    const errors = [];
+
     for (const id of ids) {
       try {
         const res = await masterCargosActions.delete(id);
         if (res && res.blocked) {
-          onResult(res);
-          return;
+          blocked.push({
+            id,
+            name: res.entityName || `ID: ${id}`,
+            reason: res.message || 'Tiene elementos asociados en la base de datos',
+            dependencies: res.dependencies || []
+          });
+        } else if (res && (res.success || res.id)) {
+          deleted.push({ id });
+        } else {
+          blocked.push({
+            id,
+            name: `ID: ${id}`,
+            reason: res?.error || 'No se pudo eliminar por restricciones de datos',
+            dependencies: []
+          });
         }
       } catch (err) {
-        triggerToast(`Error al eliminar cargo ID ${id}: ${err.message}`, 'error');
+        errors.push({ id, error: err.message });
       }
     }
-    triggerToast(`${ids.length} cargos eliminados en masivo`, 'success');
-    onResult({ success: true });
+
     await loadServerData();
+
+    if (onResult) {
+      onResult({
+        deleted,
+        blocked,
+        errors,
+        total: ids.length,
+        entityType: 'cargo'
+      });
+    }
   }
 </script>
 
