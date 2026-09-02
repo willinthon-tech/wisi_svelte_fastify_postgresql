@@ -3063,6 +3063,8 @@ export async function getEmpleadosModel(params = {}) {
     'nombre': 'e.nombre',
     'cedula': 'e.cedula',
     'sexo': 'e.sexo',
+    'fecha_nacimiento': 'e.fecha_nacimiento',
+    'fecha_ingreso': 'e.fecha_ingreso',
     'cargo_nombre': 'c.nombre',
     'area_nombre': 'a.nombre',
     'departamento_nombre': 'd.nombre',

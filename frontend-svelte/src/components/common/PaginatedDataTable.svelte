@@ -9,6 +9,74 @@
       .join(' ');
   }
 
+  function parseLocalDate(dateStr) {
+    if (!dateStr) return null;
+    if (dateStr instanceof Date) return dateStr;
+    const str = String(dateStr).trim();
+    const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      return new Date(year, month, day, 12, 0, 0);
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function formatDateDDMMYYYY(dateStr) {
+    if (!dateStr) return '—';
+    const d = parseLocalDate(dateStr);
+    if (!d || isNaN(d.getTime())) return '—';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  function calculateEdad(dateStr) {
+    if (!dateStr) return '';
+    const birth = parseLocalDate(dateStr);
+    if (!birth || isNaN(birth.getTime())) return '';
+    const now = new Date();
+    let years = now.getFullYear() - birth.getFullYear();
+    const m = now.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
+      years--;
+    }
+    return `${years} ${years === 1 ? 'año' : 'años'}`;
+  }
+
+  function calculateAntiguedad(dateStr) {
+    if (!dateStr) return '';
+    const start = parseLocalDate(dateStr);
+    if (!start || isNaN(start.getTime())) return '';
+    const now = new Date();
+    if (start > now) return '0 días';
+
+    let years = now.getFullYear() - start.getFullYear();
+    let months = now.getMonth() - start.getMonth();
+    let days = now.getDate() - start.getDate();
+
+    if (days < 0) {
+      months--;
+      const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      days += prevMonth.getDate();
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+
+    if (years >= 1) {
+      return `${years} ${years === 1 ? 'año' : 'años'}${months > 0 ? `, ${months}m` : ''}`;
+    }
+    if (months >= 1) {
+      return `${months} ${months === 1 ? 'mes' : 'meses'}${days > 0 ? `, ${days}d` : ''}`;
+    }
+    return `${days} ${days === 1 ? 'día' : 'días'}`;
+  }
+
 
   import { createEventDispatcher } from 'svelte';
   import html2canvas from 'html2canvas';
@@ -962,6 +1030,15 @@
                         {/each}
                       </select>
 
+                    {:else if col.type === 'fecha_nacimiento' || col.type === 'fecha_ingreso' || col.type === 'date'}
+                      <!-- Date Input for Birthday / Join Date -->
+                      <input 
+                        type="date" 
+                        bind:value={inlineDraft[col.key]}
+                        class="inline-input"
+                        style="padding: 3px 6px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: 1px solid #2563eb; background: #ffffff;"
+                      />
+
                     {:else}
                       <!-- Standard Text Input -->
                       <input 
@@ -1131,6 +1208,36 @@
                         Mixto
                       </button>
                     </div>
+
+                  {:else if col.type === 'fecha_nacimiento'}
+                    <!-- READ-ONLY Fecha de Nacimiento con Edad -->
+                    {#if item[col.key]}
+                      <div style="display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap;">
+                        <span style="font-size: 12.5px; font-weight: 800; color: #0f172a;">
+                          {formatDateDDMMYYYY(item[col.key])}
+                        </span>
+                        <span style="font-size: 11.5px; font-weight: 800; color: #7c3aed;">
+                          ({calculateEdad(item[col.key])})
+                        </span>
+                      </div>
+                    {:else}
+                      <span style="color: #94a3b8; font-style: italic; font-size: 12px;">—</span>
+                    {/if}
+
+                  {:else if col.type === 'fecha_ingreso'}
+                    <!-- READ-ONLY Fecha de Ingreso con Antigüedad -->
+                    {#if item[col.key]}
+                      <div style="display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap;">
+                        <span style="font-size: 12.5px; font-weight: 800; color: #0f172a;">
+                          {formatDateDDMMYYYY(item[col.key])}
+                        </span>
+                        <span style="font-size: 11.5px; font-weight: 800; color: #2563eb;">
+                          ({calculateAntiguedad(item[col.key])})
+                        </span>
+                      </div>
+                    {:else}
+                      <span style="color: #94a3b8; font-style: italic; font-size: 12px;">—</span>
+                    {/if}
 
                   {:else}
                     <!-- READ-ONLY CELL -->

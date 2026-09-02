@@ -285,6 +285,8 @@
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Empleado', bold: true, sortable: true, editable: true },
     { key: 'cedula', label: 'Cédula', sortable: true, editable: true },
+    { key: 'fecha_nacimiento', label: 'Fecha de Nacimiento', type: 'fecha_nacimiento', sortable: true, editable: true },
+    { key: 'fecha_ingreso', label: 'Fecha de Ingreso', type: 'fecha_ingreso', sortable: true, editable: true },
     { key: 'cargo_nombre', keyId: 'cargo_id', label: 'Cargo', sortable: true, editable: true, options: filteredCargosStore },
     { key: 'sala_nombre', label: 'Sala', sortable: true, editable: false }
   ];
