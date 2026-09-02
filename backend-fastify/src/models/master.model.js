@@ -121,6 +121,12 @@ export async function getDynamicTableDependencies(tableName, recordId) {
 
 export async function deleteEntityDynamic(tableName, entityTypeLabel, id) {
   const rId = Number(id);
+  if (isNaN(rId) || rId <= 0) {
+    return {
+      success: false,
+      message: 'ID de registro inválido'
+    };
+  }
   if (isPgConnected && sql) {
     let name = `ID: ${rId}`;
     try {

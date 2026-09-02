@@ -227,39 +227,55 @@
   }
 
   async function handleDelete(e) {
-    const id = e.detail;
+    const { id, onResult } = (e.detail && typeof e.detail === 'object') ? e.detail : { id: e.detail, onResult: null };
+    if (!id) return;
+
     if (String(id).startsWith('SYS-')) {
       triggerToast('Las fechas patrias base del sistema no pueden eliminarse', 'warning');
+      if (onResult) onResult({ blocked: true, message: 'Fecha protegida del sistema' });
       return;
     }
+
     try {
       const res = await fetch(`/api/master/calendario/${id}`, {
         method: 'DELETE'
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         triggerToast('Fecha patria eliminada exitosamente', 'success');
+        if (onResult) onResult({ success: true });
         await loadServerData();
         await fetchFilterOptions();
+      } else if (json && json.blocked) {
+        if (onResult) onResult(json);
       } else {
         triggerToast(json.message || json.error || 'No se pudo eliminar la fecha patria', 'error');
+        if (onResult) onResult({ error: true, message: json.message || json.error });
       }
     } catch (err) {
       console.error(err);
       triggerToast('Error de conexión', 'error');
+      if (onResult) onResult({ error: true });
     }
   }
 
   async function handleBatchDelete(e) {
-    const { ids, onComplete } = e.detail || {};
+    const { ids, onResult, onComplete } = e.detail || {};
+    const doneCallback = onResult || onComplete;
     if (!ids || ids.length === 0) return;
 
     let successCount = 0;
+    const deleted = [];
+    const blocked = [];
     const errors = [];
 
     for (const id of ids) {
       if (String(id).startsWith('SYS-')) {
-        errors.push({ id, reason: 'Fecha patria base del sistema (protegida)' });
+        blocked.push({
+          id,
+          name: `ID: ${id}`,
+          reason: 'Fecha patria base del sistema (protegida)'
+        });
         continue;
       }
       try {
@@ -267,6 +283,14 @@
         const json = await res.json().catch(() => ({}));
         if (res.ok && json.success) {
           successCount++;
+          deleted.push({ id });
+        } else if (json && json.blocked) {
+          blocked.push({
+            id,
+            name: json.entityName || `ID: ${id}`,
+            reason: json.message || 'Tiene elementos asociados',
+            dependencies: json.dependencies || []
+          });
         } else {
           errors.push({
             id,
@@ -281,10 +305,12 @@
     await loadServerData();
     await fetchFilterOptions();
 
-    if (onComplete) {
-      onComplete({
-        successCount,
+    if (doneCallback) {
+      doneCallback({
+        deleted,
+        blocked,
         errors,
+        successCount,
         total: ids.length,
         entityType: 'fecha patria'
       });
