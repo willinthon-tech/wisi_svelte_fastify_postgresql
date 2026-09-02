@@ -13,6 +13,7 @@
   import AuthView from "./views/AuthView.svelte";
   import MasterAdminView from "./views/MasterAdminView.svelte";
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
+  import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
   import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal } from "./controllers/globalModal.store.js";
 
   // Import Feature Views
@@ -1232,6 +1233,9 @@
 
 <!-- Modal Global Unificado de Fotografías y Fichas -->
 <GlobalPhotoModal />
+
+<!-- Notificación y Botón Nativo de Instalación PWA (Android / Escritorio) -->
+<PwaInstallPrompt />
 
 <style>
   :global(*::-webkit-scrollbar) {

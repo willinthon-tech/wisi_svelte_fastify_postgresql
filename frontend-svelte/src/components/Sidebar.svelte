@@ -56,7 +56,8 @@
 
 <aside class="sidebar {isOpen ? 'open' : 'closed'}">
   <!-- Brand Logo Header -->
-  <div class="sidebar-logo">
+  <div class="sidebar-logo" style="display: flex; align-items: center; gap: 8px;">
+    <img src="/pwa-192x192.png" alt="Wisi Space Logo" style="width: 32px; height: 32px; border-radius: 50%; object-fit: contain;" />
     <span class="sidebar-logo-text">
       Wisi <span style="background: linear-gradient(135deg, #60a5fa, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Space</span>
     </span>
