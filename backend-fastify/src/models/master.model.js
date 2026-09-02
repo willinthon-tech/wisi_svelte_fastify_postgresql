@@ -596,13 +596,19 @@ function isapiHttpRequest(targetUrl, options = {}) {
     const lib = isHttps ? https : http;
     const defaultPort = isHttps ? 443 : 80;
 
+    const reqHeaders = { ...(options.headers || {}) };
+    if (options.body) {
+      reqHeaders['Content-Length'] = Buffer.byteLength(options.body, 'utf8');
+    }
+    reqHeaders['Connection'] = 'close';
+
     const reqOptions = {
       hostname: parsed.hostname,
       port: parsed.port || defaultPort,
       path: parsed.pathname + parsed.search,
       method: options.method || 'GET',
-      headers: options.headers || {},
-      timeout: options.timeout || 12000,
+      headers: reqHeaders,
+      timeout: options.timeout || 8000,
       rejectUnauthorized: false
     };
 
@@ -627,7 +633,7 @@ function isapiHttpRequest(targetUrl, options = {}) {
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error(`Tiempo de espera agotado (12s) al conectar con ${parsed.hostname}:${reqOptions.port}`));
+      reject(new Error(`Timeout (${reqOptions.timeout / 1000}s) en ${parsed.hostname}:${reqOptions.port}`));
     });
 
     req.on('error', (err) => {
@@ -645,7 +651,7 @@ export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
   const dId = Number(id);
   let dev = null;
   if (isPgConnected && sql) {
-    const rows = await sql`SELECT * FROM dispositivos WHERE id = ${dId}`;
+    const rows = await sql`SELECT *, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto FROM dispositivos WHERE id = ${dId}`;
     dev = rows[0];
   } else {
     dev = (inMemoryData.dispositivos || []).find(d => d.id === dId);
@@ -656,7 +662,6 @@ export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
   }
 
   const savedConfig = await getConfiguracionModel();
-  const rawIp = (dev.ip_remota || dev.ip_local || '127.0.0.1').trim();
   const username = dev.usuario || 'admin';
   const password = dev.clave || '123456';
 
@@ -688,19 +693,39 @@ ${hostXml}
 
   const isapiUri = '/ISAPI/Event/notification/httpHosts/1';
 
+  // Candidatos de IP en orden de prioridad para Web Panel / ISAPI:
+  // 1. ip_panel (puerto web panel HTTP / ISAPI)
+  // 2. ip_panel_remoto
+  // 3. ip_remota
+  // 4. ip_local
+  const candidateIps = [
+    dev.ip_panel,
+    dev.ip_panel_remoto,
+    dev.ip_remota,
+    dev.ip_local
+  ].filter(ip => ip && typeof ip === 'string' && ip.trim().length > 0 && ip.trim() !== '—');
+
+  const uniqueIps = [...new Set(candidateIps.map(x => x.trim()))];
+  if (uniqueIps.length === 0) {
+    throw new Error(`El dispositivo '${dev.nombre}' no tiene configurada ninguna dirección IP (panel o remota)`);
+  }
+
   let targetHosts = [];
-  if (rawIp.startsWith('http://') || rawIp.startsWith('https://')) {
-    targetHosts.push(rawIp.replace(/\/+$/, ''));
-  } else {
-    targetHosts.push(`http://${rawIp.replace(/\/+$/, '')}`);
-    targetHosts.push(`https://${rawIp.replace(/\/+$/, '')}`);
+  for (const raw of uniqueIps) {
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      targetHosts.push(raw.replace(/\/+$/, ''));
+    } else {
+      // Priorizamos HTTP porque los paneles web Hikvision en puertos NAT usan HTTP
+      targetHosts.push(`http://${raw.replace(/\/+$/, '')}`);
+      targetHosts.push(`https://${raw.replace(/\/+$/, '')}`);
+    }
   }
 
   let lastError = null;
 
   for (const baseHost of targetHosts) {
     const isapiFullUrl = `${baseHost}${isapiUri}`;
-    console.log(`[ISAPI INJECTION] ⚡ Intentando inyección HTTP Listening a Biométrico #${dev.id} ('${dev.nombre}') en ${isapiFullUrl}`);
+    console.log(`[ISAPI INJECTION] ⚡ Intentando inyección HTTP Listening en ${isapiFullUrl} para '${dev.nombre}'...`);
 
     try {
       const step1Res = await isapiHttpRequest(isapiFullUrl, {
@@ -709,7 +734,8 @@ ${hostXml}
           'Content-Type': 'application/xml',
           'User-Agent': 'Wisi-ISAPI-Client/2.0'
         },
-        body: xmlPayload
+        body: xmlPayload,
+        timeout: 7000
       });
 
       if (step1Res.status === 401) {
@@ -723,14 +749,15 @@ ${hostXml}
               'Authorization': authHeader,
               'User-Agent': 'Wisi-ISAPI-Client/2.0'
             },
-            body: xmlPayload
+            body: xmlPayload,
+            timeout: 7000
           });
 
           const respText = await step2Res.text();
           const isSuccess = step2Res.ok || respText.includes('statusCode>1<') || respText.includes('statusString>OK<') || respText.includes('subStatusCode>ok<');
 
           if (isSuccess) {
-            console.log(`[ISAPI SUCCESS] ✅ Configuración HTTP Listening aplicada en #${dev.id} ('${dev.nombre}')`);
+            console.log(`[ISAPI SUCCESS] ✅ Configuración HTTP Listening aplicada en #${dev.id} ('${dev.nombre}') vía ${baseHost}`);
             return {
               success: true,
               message: `¡HTTP Listening configurado exitosamente en '${dev.nombre}'! (${ipAddress}:${portNo}${urlPath})`,
@@ -739,7 +766,7 @@ ${hostXml}
           } else if (step2Res.status === 401) {
             return {
               success: false,
-              error: `El biométrico '${dev.nombre}' rechazó las credenciales (usuario '${username}' o clave incorrecta)`
+              error: `El biométrico '${dev.nombre}' en ${baseHost} rechazó la autenticación (usuario '${username}' o clave incorrecta)`
             };
           } else {
             const subMatch = respText.match(/<subStatusCode>([^<]+)<\/subStatusCode>/i) 
@@ -748,14 +775,14 @@ ${hostXml}
             const detailMsg = subMatch ? subMatch[1] : `HTTP ${step2Res.status}`;
             return {
               success: false,
-              error: `El biométrico '${dev.nombre}' rechazó el XML (${detailMsg})`,
+              error: `El biométrico '${dev.nombre}' rechazó el XML en ${baseHost} (${detailMsg})`,
               rawResponse: respText
             };
           }
         } else {
           return {
             success: false,
-            error: `El biométrico '${dev.nombre}' solicitó autenticación no soportada: ${wwwAuth}`
+            error: `El biométrico '${dev.nombre}' en ${baseHost} solicitó autenticación no soportada: ${wwwAuth}`
           };
         }
       } else if (step1Res.ok) {
@@ -766,17 +793,17 @@ ${hostXml}
         };
       } else {
         const resp1Text = await step1Res.text();
-        lastError = `Respuesta HTTP ${step1Res.status} de ${baseHost}: ${resp1Text.slice(0, 100)}`;
+        lastError = `HTTP ${step1Res.status} de ${baseHost}: ${resp1Text.slice(0, 100)}`;
       }
     } catch (err) {
-      lastError = err.message;
-      console.warn(`[ISAPI INJECTION TRY FAILED] en ${baseHost}: ${err.message}`);
+      lastError = `${baseHost} (${err.message})`;
+      console.warn(`[ISAPI INJECTION TRY] Intento en ${baseHost} falló: ${err.message}`);
     }
   }
 
   return {
     success: false,
-    error: `No se pudo conectar con el biométrico '${dev.nombre}' (${rawIp}): ${lastError}`
+    error: `No se pudo conectar con el biométrico '${dev.nombre}'. Último detalle: ${lastError}`
   };
 }
 
