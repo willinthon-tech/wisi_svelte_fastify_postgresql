@@ -147,8 +147,33 @@
       return `${base}/empleados/${empCed || empId}.jpg`;
     }
 
-    // Si es un marcaje, usa la foto del marcaje
+    // Si es un marcaje y tiene foto guardada
+    if (record.has_photo !== false && record.id) {
+      return `${base}/attlogs/${record.id}.jpg`;
+    }
+
+    // Si el marcaje no tiene foto guardada (has_photo = false), usar foto de perfil directamente sin esperar error de red
+    const empCed = (record.cedula || record.employee_no || "").replace(/^#/, "").trim();
+    if (empCed) return `${base}/empleados/${empCed}.jpg`;
+    if (record.empleado_id) return `${base}/empleados/${record.empleado_id}.jpg`;
+
     return `${base}/attlogs/${record.id}.jpg`;
+  }
+
+  $: photoSrc = getPhotoUrl(item);
+
+  // Precargar las fotos adyacentes (-2, -1, +1, +2) para navegacion a 0ms
+  $: if (isOpen && items && items.length > 0) {
+    [-2, -1, 1, 2].forEach((offset) => {
+      const neighbor = items[currentIndex + offset];
+      if (neighbor) {
+        const url = getPhotoUrl(neighbor);
+        if (url && typeof window !== 'undefined') {
+          const preImg = new Image();
+          preImg.src = url;
+        }
+      }
+    });
   }
 
   function getInitials(name, cedula) {
@@ -272,9 +297,8 @@
         ‹
       </button>
 
-      {#key item.id}
-        <div bind:this={modalCardElement} class="global-modal-card">
-          <!-- Header -->
+      <div bind:this={modalCardElement} class="global-modal-card">
+        <!-- Header -->
           <div class="modal-header">
             <div class="header-left">
               <div class="header-title-row">
@@ -309,31 +333,33 @@
 
           <!-- Photo Container -->
           <div class="modal-photo-area">
-            <img
-              crossorigin="anonymous"
-              src={getPhotoUrl(item)}
-              alt="Fotografía Ampliada"
-              class="modal-main-img"
-              on:error={(e) => {
-                const img = e.currentTarget;
-                const ced = (item?.cedula || item?.employee_no || "").toString().replace(/^#/, "").trim();
-                const empId = item?.empleado_id || item?.id;
-                if (!img.dataset.triedCed && ced) {
-                  img.dataset.triedCed = "true";
-                  img.src = `${backendUrl.endsWith("/api") ? backendUrl : backendUrl + "/api"}/empleados/${ced}.jpg`;
-                } else if (!img.dataset.triedId && empId) {
-                  img.dataset.triedId = "true";
-                  img.src = `${backendUrl.endsWith("/api") ? backendUrl : backendUrl + "/api"}/empleados/${empId}.jpg`;
-                } else {
-                  img.style.display = "none";
-                  const fb = img.nextElementSibling;
-                  if (fb) fb.style.display = "flex";
-                }
-              }}
-            />
-            <div class="modal-photo-fallback">
-              {getInitials(toTitleCase(item.nombre), item.cedula || item.employee_no)}
-            </div>
+            {#key photoSrc}
+              <img
+                crossorigin="anonymous"
+                src={photoSrc}
+                alt="Fotografía Ampliada"
+                class="modal-main-img"
+                on:error={(e) => {
+                  const img = e.currentTarget;
+                  const ced = (item?.cedula || item?.employee_no || "").toString().replace(/^#/, "").trim();
+                  const empId = item?.empleado_id || item?.id;
+                  if (!img.dataset.triedCed && ced) {
+                    img.dataset.triedCed = "true";
+                    img.src = `${backendUrl.endsWith("/api") ? backendUrl : backendUrl + "/api"}/empleados/${ced}.jpg`;
+                  } else if (!img.dataset.triedId && empId) {
+                    img.dataset.triedId = "true";
+                    img.src = `${backendUrl.endsWith("/api") ? backendUrl : backendUrl + "/api"}/empleados/${empId}.jpg`;
+                  } else {
+                    img.style.display = "none";
+                    const fb = img.nextElementSibling;
+                    if (fb) fb.style.display = "flex";
+                  }
+                }}
+              />
+              <div class="modal-photo-fallback">
+                {getInitials(toTitleCase(item.nombre), item.cedula || item.employee_no)}
+              </div>
+            {/key}
           </div>
 
           <!-- Info Details Grid -->
@@ -474,7 +500,6 @@
             </div>
           {/if}
         </div>
-      {/key}
 
       <!-- Botón Lateral Siguiente (›) -->
       <button

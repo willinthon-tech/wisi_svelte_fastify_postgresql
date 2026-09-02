@@ -141,6 +141,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/attlogs/latest', getLatestAttlogs);
   fastify.get('/attlogs/filter-options', getAttlogsFilterOptions);
   fastify.get('/api/attlogs/filter-options', getAttlogsFilterOptions);
+  fastify.all('/attlogs/sync-photos-disk', async (req, reply) => {
+    const { syncDiskPhotosWithDb } = await import('../../sync_photos_disk.js');
+    const result = await syncDiskPhotosWithDb();
+    return { success: true, ...result };
+  });
+  fastify.all('/api/attlogs/sync-photos-disk', async (req, reply) => {
+    const { syncDiskPhotosWithDb } = await import('../../sync_photos_disk.js');
+    const result = await syncDiskPhotosWithDb();
+    return { success: true, ...result };
+  });
   fastify.get('/attlogs/stats', getAttlogsStats);
   fastify.get('/attlogs/last-event-time', getLastAttlogEventTime);
   fastify.get('/attlogs/dispositivo/:id/last-event-time', getLastAttlogEventTime);
