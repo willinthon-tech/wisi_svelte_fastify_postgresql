@@ -12,6 +12,7 @@
   const backendUrl = getCloudBaseUrl();
 
   let modalCardElement = null;
+  let imgElement = null;
   let isCapturingScreenshot = false;
 
   $: isOpen = $photoModalStore.isOpen;
@@ -138,49 +139,55 @@
 
   function getPhotoUrl(record) {
     if (!record) return "";
-    const base = backendUrl.endsWith("/api") ? backendUrl : `${backendUrl}/api`;
     
-    // Si es un empleado (sin evento de marcaje), usa su foto de empleado
+    // Si es un empleado o desincorporado (sin evento de marcaje), usa su foto de empleado
     if (mode === 'empleado' || mode === 'desincorporado' || !record.event_time) {
-      if (record.foto && typeof record.foto === 'string') {
+      if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
         const clean = record.foto.trim();
         if (clean.startsWith('http')) return clean;
-        return `${backendUrl}${clean.startsWith('/') ? '' : '/'}${clean}`;
+        return clean.startsWith('/') ? clean : `/${clean}`;
       }
       const empId = record.empleado_id || record.id;
-      return `${backendUrl}/empleados/${empId}.jpg`;
+      if (empId) return `/empleados/${empId}.jpg`;
+      return "";
     }
 
     // Si es un marcaje y tiene foto guardada (has_photo = true)
     if (record.has_photo === true && record.id) {
-      return `${base}/attlogs/${record.id}.jpg`;
+      return `/attlogs/${record.id}.jpg`;
     }
 
     // Si el marcaje no tiene foto guardada en disco, usar directamente la foto de perfil del empleado (por ID o ruta foto)
-    if (record.empleado_foto && typeof record.empleado_foto === 'string') {
+    if (record.empleado_foto && typeof record.empleado_foto === 'string' && record.empleado_foto.trim().length > 0) {
       const clean = record.empleado_foto.trim();
       if (clean.startsWith('http')) return clean;
-      return `${backendUrl}${clean.startsWith('/') ? '' : '/'}${clean}`;
+      return clean.startsWith('/') ? clean : `/${clean}`;
     }
     if (record.empleado_id) {
-      return `${backendUrl}/empleados/${record.empleado_id}.jpg`;
+      return `/empleados/${record.empleado_id}.jpg`;
     }
 
-    return `${base}/attlogs/${record.id}.jpg`;
+    return `/attlogs/${record.id}.jpg`;
   }
 
   $: photoSrc = getPhotoUrl(item);
 
-  // Precargar las fotos adyacentes (-2, -1, +1, +2) para navegacion a 0ms
-  $: if (isOpen && items && items.length > 0) {
-    [-2, -1, 1, 2].forEach((offset) => {
-      const neighbor = items[currentIndex + offset];
-      if (neighbor) {
-        const url = getPhotoUrl(neighbor);
-        if (url && typeof window !== 'undefined') {
-          const preImg = new Image();
-          preImg.src = url;
-        }
+  $: if (photoSrc && imgElement) {
+    imgElement.dataset.triedEmpFoto = "";
+    imgElement.dataset.triedId = "";
+    imgElement.style.display = "block";
+    if (imgElement.nextElementSibling) {
+      imgElement.nextElementSibling.style.display = "none";
+    }
+  }
+
+  // Precargar TODAS las fotos del lote actual (los 10 o 20 registros) para que al navegar la respuesta sea inmediata (0ms)
+  $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
+    items.forEach((it) => {
+      const u = getPhotoUrl(it);
+      if (u) {
+        const preImg = new Image();
+        preImg.src = u;
       }
     });
   }
@@ -342,34 +349,38 @@
 
           <!-- Photo Container -->
           <div class="modal-photo-area">
-            {#key photoSrc}
-              <img
-                crossorigin="anonymous"
-                src={photoSrc}
-                alt="Fotografía Ampliada"
-                class="modal-main-img"
-                on:error={(e) => {
-                  const img = e.currentTarget;
-                  const empFoto = item?.empleado_foto || item?.foto;
-                  const empId = item?.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? item?.id : null);
+            <img
+              bind:this={imgElement}
+              crossorigin="anonymous"
+              src={photoSrc}
+              alt="Fotografía Ampliada"
+              class="modal-main-img"
+              on:load={(e) => {
+                const img = e.currentTarget;
+                img.style.display = "block";
+                if (img.nextElementSibling) img.nextElementSibling.style.display = "none";
+              }}
+              on:error={(e) => {
+                const img = e.currentTarget;
+                const empFoto = item?.empleado_foto || item?.foto;
+                const empId = item?.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? item?.id : null);
 
-                  if (!img.dataset.triedEmpFoto && empFoto) {
-                    img.dataset.triedEmpFoto = "true";
-                    img.src = empFoto.startsWith("http") ? empFoto : `${backendUrl}${empFoto.startsWith("/") ? "" : "/"}${empFoto}`;
-                  } else if (!img.dataset.triedId && empId) {
-                    img.dataset.triedId = "true";
-                    img.src = `${backendUrl}/empleados/${empId}.jpg`;
-                  } else {
-                    img.style.display = "none";
-                    const fb = img.nextElementSibling;
-                    if (fb) fb.style.display = "flex";
-                  }
-                }}
-              />
-              <div class="modal-photo-fallback">
-                {getInitials(toTitleCase(item.nombre), item.cedula || item.employee_no)}
-              </div>
-            {/key}
+                if (!img.dataset.triedEmpFoto && empFoto) {
+                  img.dataset.triedEmpFoto = "true";
+                  img.src = empFoto.startsWith("http") ? empFoto : (empFoto.startsWith("/") ? empFoto : `/${empFoto}`);
+                } else if (!img.dataset.triedId && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
+                  img.dataset.triedId = "true";
+                  img.src = `/empleados/${empId}.jpg`;
+                } else {
+                  img.style.display = "none";
+                  const fb = img.nextElementSibling;
+                  if (fb) fb.style.display = "flex";
+                }
+              }}
+            />
+            <div class="modal-photo-fallback">
+              {getInitials(toTitleCase(item?.nombre), item?.cedula || item?.employee_no)}
+            </div>
           </div>
 
           <!-- Info Details Grid -->

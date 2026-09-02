@@ -53,8 +53,8 @@
   const backendUrl = getCloudBaseUrl();
 
   function getPhotoUrl(id) {
-    const base = backendUrl.endsWith("/api") ? backendUrl : `${backendUrl}/api`;
-    return `${base}/attlogs/${id}.jpg`;
+    if (!id) return "";
+    return `/attlogs/${id}.jpg`;
   }
 
   function formatEventTime(val) {
@@ -635,7 +635,7 @@
                 style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #22c55e;box-shadow:0 4px 12px rgba(34,197,94,0.25);"
                 on:error={(e) => {
                   const empId = latestCheckIn?.empleado_id;
-                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/api/empleados/${empId}.jpg`; }
+                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/empleados/${empId}.jpg`; }
                   else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }
                 }}
               />
@@ -713,7 +713,7 @@
                 style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #c94145;box-shadow:0 4px 12px rgba(201,65,69,0.25);"
                 on:error={(e) => {
                   const empId = latestCheckOut?.empleado_id;
-                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/api/empleados/${empId}.jpg`; }
+                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/empleados/${empId}.jpg`; }
                   else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }
                 }}
               />

@@ -64,8 +64,7 @@
       (record.empleado_id ? `/empleados/${record.empleado_id}.jpg` : null);
     if (!empFoto) return null;
     if (empFoto.startsWith("http")) return empFoto;
-    const cleanPath = empFoto.startsWith("/") ? empFoto : `/${empFoto}`;
-    return `${backendUrl}${cleanPath}`;
+    return empFoto.startsWith("/") ? empFoto : `/${empFoto}`;
   }
 
   // Extract assigned sala IDs strictly for the logged in user
@@ -118,8 +117,8 @@
       : null);
 
   function getPhotoUrl(id) {
-    const base = backendUrl.endsWith("/api") ? backendUrl : `${backendUrl}/api`;
-    return `${base}/attlogs/${id}.jpg`;
+    if (!id) return "";
+    return `/attlogs/${id}.jpg`;
   }
 
   async function fetchLatestAttlogs() {

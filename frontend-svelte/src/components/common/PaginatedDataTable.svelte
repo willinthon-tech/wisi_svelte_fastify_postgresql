@@ -437,11 +437,11 @@
     if (item.foto && typeof item.foto === 'string' && item.foto.trim().length > 0) {
       const clean = item.foto.trim();
       if (clean.startsWith('http')) return clean;
-      if (clean.startsWith('/api')) return clean;
-      return `/api${clean.startsWith('/') ? '' : '/'}${clean}`;
+      return clean.startsWith('/') ? clean : `/${clean}`;
     }
-    if (item.id) {
-      return `/api/empleados/${item.id}.jpg`;
+    const empId = item.empleado_id || item.id;
+    if (empId) {
+      return `/empleados/${empId}.jpg`;
     }
     return '';
   }
@@ -865,10 +865,10 @@
                         class="employee-thumb"
                         on:error={(e) => { 
                           const img = e.target;
-                          const emp = String(item.cedula || item.id || '').replace(/^#/, '').trim();
-                          if (!img.dataset.triedEmp && emp) {
+                          const empId = item.empleado_id || item.id;
+                          if (!img.dataset.triedEmp && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
                             img.dataset.triedEmp = 'true';
-                            img.src = `/api/empleados/${emp}.jpg`;
+                            img.src = `/empleados/${empId}.jpg`;
                           } else {
                             img.style.display = 'none';
                             if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
@@ -2254,10 +2254,10 @@
               style="width: 100%; height: 100%; object-fit: cover;"
               on:error={(e) => { 
                 const img = e.target;
-                const emp = String(itemToReincorporar.cedula || itemToReincorporar.id || '').replace(/^#/, '').trim();
-                if (!img.dataset.triedEmp && emp) {
+                const empId = itemToReincorporar?.empleado_id || itemToReincorporar?.id;
+                if (!img.dataset.triedEmp && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
                   img.dataset.triedEmp = 'true';
-                  img.src = `/api/empleados/${emp}.jpg`;
+                  img.src = `/empleados/${empId}.jpg`;
                 } else {
                   img.style.display = 'none';
                   if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
