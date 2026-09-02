@@ -57,6 +57,28 @@
     return `/attlogs/${id}.jpg`;
   }
 
+  function getFallbackProfilePhoto(record) {
+    if (!record) return null;
+    const empFoto =
+      record.empleado_foto ||
+      record.foto ||
+      (record.empleado_id ? `/empleados/${record.empleado_id}.jpg` : null);
+    if (!empFoto) return null;
+    if (empFoto.startsWith("http")) return empFoto;
+    return empFoto.startsWith("/") ? empFoto : `/${empFoto}`;
+  }
+
+  function getRecordPhoto(record) {
+    if (!record) return "";
+    if (record.has_photo && record.id) {
+      return `/attlogs/${record.id}.jpg`;
+    }
+    const fallback = getFallbackProfilePhoto(record);
+    if (fallback) return fallback;
+    if (record.id) return `/attlogs/${record.id}.jpg`;
+    return "";
+  }
+
   function formatEventTime(val) {
     if (!val) return "";
     let str = String(val).trim().replace("T", " ");
@@ -630,13 +652,19 @@
               style="position:relative;width:60px;height:60px;flex-shrink:0;padding:0;border:none;background:transparent;cursor:pointer;border-radius:50%;outline:none;"
             >
               <img
-                src={getPhotoUrl(latestCheckIn.id)}
+                src={getRecordPhoto(latestCheckIn)}
                 alt="Foto entrada"
                 style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #22c55e;box-shadow:0 4px 12px rgba(34,197,94,0.25);"
                 on:error={(e) => {
-                  const empId = latestCheckIn?.empleado_id;
-                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/empleados/${empId}.jpg`; }
-                  else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }
+                  const img = e.currentTarget;
+                  const fallback = getFallbackProfilePhoto(latestCheckIn);
+                  if (!img.dataset.triedEmp && fallback && !img.src.endsWith(fallback)) {
+                    img.dataset.triedEmp = 'true';
+                    img.src = fallback;
+                  } else {
+                    img.style.display = 'none';
+                    if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
+                  }
                 }}
               />
               <div style="display:none;width:60px;height:60px;border-radius:50%;background:{getAvatarColor(latestCheckIn.employee_no)};color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
@@ -708,13 +736,19 @@
               style="position:relative;width:60px;height:60px;flex-shrink:0;padding:0;border:none;background:transparent;cursor:pointer;border-radius:50%;outline:none;"
             >
               <img
-                src={getPhotoUrl(latestCheckOut.id)}
+                src={getRecordPhoto(latestCheckOut)}
                 alt="Foto salida"
                 style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #c94145;box-shadow:0 4px 12px rgba(201,65,69,0.25);"
                 on:error={(e) => {
-                  const empId = latestCheckOut?.empleado_id;
-                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/empleados/${empId}.jpg`; }
-                  else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }
+                  const img = e.currentTarget;
+                  const fallback = getFallbackProfilePhoto(latestCheckOut);
+                  if (!img.dataset.triedEmp && fallback && !img.src.endsWith(fallback)) {
+                    img.dataset.triedEmp = 'true';
+                    img.src = fallback;
+                  } else {
+                    img.style.display = 'none';
+                    if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
+                  }
                 }}
               />
               <div style="display:none;width:60px;height:60px;border-radius:50%;background:{getAvatarColor(latestCheckOut.employee_no)};color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
