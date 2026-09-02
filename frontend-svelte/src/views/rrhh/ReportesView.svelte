@@ -566,7 +566,6 @@
     if (!emp) return null;
     let foto = emp.foto;
     if (!foto && emp.id) foto = `${emp.id}.jpg`;
-    if (!foto && emp.cedula) foto = `${emp.cedula}.jpg`;
     if (!foto) return null;
 
     if (foto.startsWith("http") || foto.startsWith("data:")) return foto;

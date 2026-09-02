@@ -165,8 +165,6 @@
     if (record.empleado_id) {
       return `${backendUrl}/empleados/${record.empleado_id}.jpg`;
     }
-    const empCed = (record.cedula || record.employee_no || "").replace(/^#/, "").trim();
-    if (empCed) return `${backendUrl}/empleados/${empCed}.jpg`;
 
     return `${base}/attlogs/${record.id}.jpg`;
   }
@@ -353,8 +351,7 @@
                 on:error={(e) => {
                   const img = e.currentTarget;
                   const empFoto = item?.empleado_foto || item?.foto;
-                  const empId = item?.empleado_id || item?.id;
-                  const ced = (item?.cedula || item?.employee_no || "").toString().replace(/^#/, "").trim();
+                  const empId = item?.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? item?.id : null);
 
                   if (!img.dataset.triedEmpFoto && empFoto) {
                     img.dataset.triedEmpFoto = "true";
@@ -362,9 +359,6 @@
                   } else if (!img.dataset.triedId && empId) {
                     img.dataset.triedId = "true";
                     img.src = `${backendUrl}/empleados/${empId}.jpg`;
-                  } else if (!img.dataset.triedCed && ced) {
-                    img.dataset.triedCed = "true";
-                    img.src = `${backendUrl}/empleados/${ced}.jpg`;
                   } else {
                     img.style.display = "none";
                     const fb = img.nextElementSibling;

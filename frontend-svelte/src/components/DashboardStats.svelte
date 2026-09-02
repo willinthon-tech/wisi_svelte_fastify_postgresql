@@ -634,9 +634,8 @@
                 alt="Foto entrada"
                 style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #22c55e;box-shadow:0 4px 12px rgba(34,197,94,0.25);"
                 on:error={(e) => {
-                  const img = e.target;
-                  const emp = String(latestCheckIn?.employee_no || latestCheckIn?.cedula || latestCheckIn?.id || '').replace(/^#/,'').trim();
-                  if (!img.dataset.triedEmp && emp) { img.dataset.triedEmp='true'; img.src=`/api/empleados/${emp}.jpg`; }
+                  const empId = latestCheckIn?.empleado_id;
+                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/api/empleados/${empId}.jpg`; }
                   else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }
                 }}
               />
@@ -713,9 +712,8 @@
                 alt="Foto salida"
                 style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #c94145;box-shadow:0 4px 12px rgba(201,65,69,0.25);"
                 on:error={(e) => {
-                  const img = e.target;
-                  const emp = String(latestCheckOut?.employee_no || latestCheckOut?.cedula || latestCheckOut?.id || '').replace(/^#/,'').trim();
-                  if (!img.dataset.triedEmp && emp) { img.dataset.triedEmp='true'; img.src=`/api/empleados/${emp}.jpg`; }
+                  const empId = latestCheckOut?.empleado_id;
+                  if (!img.dataset.triedEmp && empId) { img.dataset.triedEmp='true'; img.src=`/api/empleados/${empId}.jpg`; }
                   else { img.style.display='none'; if(img.nextElementSibling) img.nextElementSibling.style.display='flex'; }
                 }}
               />

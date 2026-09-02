@@ -721,13 +721,14 @@
                 style="width: 44px; height: 44px; border-radius: 10px; object-fit: cover; border: 2px solid {stBadge.borderColor}; background: #f1f5f9; transition: transform 0.2s ease;"
                 on:error={(e) => {
                   const img = e.currentTarget;
-                  const ced = (log.cedula || log.employee_no || "")
-                    .toString()
-                    .replace(/^#/, "")
-                    .trim();
-                  if (!img.dataset.triedProfile && ced) {
+                  const empFoto = log.empleado_foto || log.foto;
+                  const empId = log.empleado_id;
+                  if (!img.dataset.triedProfile && empFoto) {
                     img.dataset.triedProfile = "true";
-                    img.src = `${backendUrl}/empleados/${ced}.jpg`;
+                    img.src = empFoto.startsWith("http") ? empFoto : `${backendUrl}${empFoto.startsWith("/") ? "" : "/"}${empFoto}`;
+                  } else if (!img.dataset.triedProfile && empId) {
+                    img.dataset.triedProfile = "true";
+                    img.src = `${backendUrl}/empleados/${empId}.jpg`;
                   } else {
                     img.style.display = "none";
                     if (img.nextElementSibling)

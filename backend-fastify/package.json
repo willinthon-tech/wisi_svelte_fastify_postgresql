@@ -7,8 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "sync:photos": "node sync_photos_disk.js",
-    "sync:aliases": "node create_photo_aliases.js"
+    "sync:photos": "node sync_photos_disk.js"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
