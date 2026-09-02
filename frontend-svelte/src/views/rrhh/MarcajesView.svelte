@@ -186,10 +186,10 @@
   // Precarga automática en segundo plano de las fotos de los 10 marcajes visibles en pantalla
   $: if (attlogs && attlogs.length > 0 && typeof window !== "undefined") {
     attlogs.forEach((att) => {
-      const photoId = att?.id || att?.attlog_id;
-      if (photoId) {
+      const url = att?.has_photo ? getPhotoUrl(att?.id || att?.attlog_id) : getFallbackProfilePhoto(att);
+      if (url) {
         const img = new Image();
-        img.src = getPhotoUrl(photoId);
+        img.src = url;
       }
     });
   }
@@ -1029,23 +1029,16 @@
                     title="Ampliar fotografía"
                   >
                     <img
-                      src={getPhotoUrl(item.id)}
+                      src={item.has_photo ? getPhotoUrl(item.id) : (getFallbackProfilePhoto(item) || getPhotoUrl(item.id))}
                       alt="Miniatura marcaje"
                       style="width: 26px; height: 26px; border-radius: 6px; object-fit: cover; border: 1px solid #3b82f6; background: #f1f5f9;"
                       on:error={(e) => {
                         const img = e.currentTarget;
                         const target = item || selectedPhotoModal;
-                        const ced = (
-                          target?.cedula ||
-                          target?.employee_no ||
-                          ""
-                        )
-                          .toString()
-                          .replace(/^#/, "")
-                          .trim();
-                        if (!img.dataset.triedProfile && ced) {
+                        const fallback = getFallbackProfilePhoto(target);
+                        if (!img.dataset.triedProfile && fallback && img.src !== fallback) {
                           img.dataset.triedProfile = "true";
-                          img.src = `${backendUrl}/empleados/${ced}.jpg`;
+                          img.src = fallback;
                         } else {
                           img.style.display = "none";
                           if (img.nextElementSibling)

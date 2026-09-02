@@ -142,20 +142,31 @@
     
     // Si es un empleado (sin evento de marcaje), usa su foto de empleado
     if (mode === 'empleado' || mode === 'desincorporado' || !record.event_time) {
+      if (record.foto && typeof record.foto === 'string') {
+        const clean = record.foto.trim();
+        if (clean.startsWith('http')) return clean;
+        return `${backendUrl}${clean.startsWith('/') ? '' : '/'}${clean}`;
+      }
       const empId = record.empleado_id || record.id;
-      const empCed = (record.cedula || record.employee_no || "").replace(/^#/, "").trim();
-      return `${base}/empleados/${empCed || empId}.jpg`;
+      return `${backendUrl}/empleados/${empId}.jpg`;
     }
 
-    // Si es un marcaje y tiene foto guardada
-    if (record.has_photo !== false && record.id) {
+    // Si es un marcaje y tiene foto guardada (has_photo = true)
+    if (record.has_photo === true && record.id) {
       return `${base}/attlogs/${record.id}.jpg`;
     }
 
-    // Si el marcaje no tiene foto guardada (has_photo = false), usar foto de perfil directamente sin esperar error de red
+    // Si el marcaje no tiene foto guardada en disco, usar directamente la foto de perfil del empleado (por ID o ruta foto)
+    if (record.empleado_foto && typeof record.empleado_foto === 'string') {
+      const clean = record.empleado_foto.trim();
+      if (clean.startsWith('http')) return clean;
+      return `${backendUrl}${clean.startsWith('/') ? '' : '/'}${clean}`;
+    }
+    if (record.empleado_id) {
+      return `${backendUrl}/empleados/${record.empleado_id}.jpg`;
+    }
     const empCed = (record.cedula || record.employee_no || "").replace(/^#/, "").trim();
-    if (empCed) return `${base}/empleados/${empCed}.jpg`;
-    if (record.empleado_id) return `${base}/empleados/${record.empleado_id}.jpg`;
+    if (empCed) return `${backendUrl}/empleados/${empCed}.jpg`;
 
     return `${base}/attlogs/${record.id}.jpg`;
   }
@@ -341,14 +352,19 @@
                 class="modal-main-img"
                 on:error={(e) => {
                   const img = e.currentTarget;
-                  const ced = (item?.cedula || item?.employee_no || "").toString().replace(/^#/, "").trim();
+                  const empFoto = item?.empleado_foto || item?.foto;
                   const empId = item?.empleado_id || item?.id;
-                  if (!img.dataset.triedCed && ced) {
-                    img.dataset.triedCed = "true";
-                    img.src = `${backendUrl.endsWith("/api") ? backendUrl : backendUrl + "/api"}/empleados/${ced}.jpg`;
+                  const ced = (item?.cedula || item?.employee_no || "").toString().replace(/^#/, "").trim();
+
+                  if (!img.dataset.triedEmpFoto && empFoto) {
+                    img.dataset.triedEmpFoto = "true";
+                    img.src = empFoto.startsWith("http") ? empFoto : `${backendUrl}${empFoto.startsWith("/") ? "" : "/"}${empFoto}`;
                   } else if (!img.dataset.triedId && empId) {
                     img.dataset.triedId = "true";
-                    img.src = `${backendUrl.endsWith("/api") ? backendUrl : backendUrl + "/api"}/empleados/${empId}.jpg`;
+                    img.src = `${backendUrl}/empleados/${empId}.jpg`;
+                  } else if (!img.dataset.triedCed && ced) {
+                    img.dataset.triedCed = "true";
+                    img.src = `${backendUrl}/empleados/${ced}.jpg`;
                   } else {
                     img.style.display = "none";
                     const fb = img.nextElementSibling;
