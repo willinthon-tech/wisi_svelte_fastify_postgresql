@@ -3799,16 +3799,25 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
         const eId = Number(item.empleado_id);
         const pIds = Array.isArray(item.plantilla_ids) ? item.plantilla_ids : [];
         if (!eId) continue;
-        await sql`DELETE FROM empleados_plantillas_horarios WHERE empleado_id = ${eId}`;
+        await sql`
+          DELETE FROM empleados_plantillas_horarios 
+          WHERE empleado_id = ${eId}
+          AND plantilla_horario_id IN (
+            SELECT id FROM plantillas_horarios WHERE tipo = 'horario'
+          )
+        `;
         for (const pId of pIds) {
-          await sql`
-            INSERT INTO empleados_plantillas_horarios (empleado_id, plantilla_horario_id)
-            VALUES (${eId}, ${Number(pId)})
-            ON CONFLICT DO NOTHING;
-          `;
+          const numPId = Number(pId);
+          if (numPId) {
+            await sql`
+              INSERT INTO empleados_plantillas_horarios (empleado_id, plantilla_horario_id)
+              VALUES (${eId}, ${numPId})
+              ON CONFLICT DO NOTHING;
+            `;
+          }
         }
       }
-      return { success: true };
+      return { success: true, message: 'Horarios actualizados exitosamente' };
     }
     return { success: true };
   } catch (err) {

@@ -40,102 +40,87 @@
     }
   }
 
-  // Bulk assign plantilla to ALL active employees in this department
-  async function handleBulkAssign(plantillaId) {
-    if (!department || !department.id || !plantillaId) return;
-    try {
-      const res = await fetch(`/api/master/departamentos-ciclos/${department.id}/empleados`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'bulk_add',
-          plantilla_id: plantillaId
-        })
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast(json.message || 'Horario asignado a todos los empleados', 'success');
-        const pObj = plantillasSala.find(p => Number(p.id) === Number(plantillaId));
-        if (pObj) {
-          empleados = empleados.map(e => {
-            const exists = (e.horarios || []).some(h => Number(h.id) === Number(plantillaId));
-            return {
-              ...e,
-              horarios: exists ? (e.horarios || []) : [...(e.horarios || []), pObj]
-            };
-          });
-        }
-        await loadDepartmentData(department.id);
-        dispatch('saved');
-      } else {
-        throw new Error(json.error || 'Error en asignación masiva');
-      }
-    } catch (err) {
-      triggerToast(`Error: ${err.message}`, 'error');
-    }
+  let hasUnsavedChanges = false;
+  let isSaving = false;
+
+  // Bulk assign plantilla to ALL active employees in this department (EN MEMORIA)
+  function handleBulkAssign(plantillaId) {
+    if (!plantillaId) return;
+    const pObj = plantillasSala.find(p => Number(p.id) === Number(plantillaId));
+    if (!pObj) return;
+
+    empleados = empleados.map(e => {
+      const current = Array.isArray(e.horarios) ? e.horarios : [];
+      const exists = current.some(h => Number(h.id) === Number(plantillaId));
+      return {
+        ...e,
+        horarios: exists ? current : [...current, pObj]
+      };
+    });
+    hasUnsavedChanges = true;
   }
 
-  // Bulk remove ALL horario-type plantillas from ALL employees in this department
-  async function handleBulkRemoveAll() {
+  // Bulk remove ALL horario-type plantillas from ALL employees in this department (EN MEMORIA)
+  function handleBulkRemoveAll() {
+    empleados = empleados.map(e => ({ ...e, horarios: [] }));
+    hasUnsavedChanges = true;
+  }
+
+  // Toggle single plantilla for specific employee (EN MEMORIA)
+  function handleTogglePlantilla(empId, plantillaId) {
+    if (!empId || !plantillaId) return;
+    const targetEmp = empleados.find(e => Number(e.empleado_id) === Number(empId));
+    if (!targetEmp) return;
+
+    const current = Array.isArray(targetEmp.horarios) ? targetEmp.horarios : [];
+    const hasIt = current.some(h => Number(h.id) === Number(plantillaId));
+    if (hasIt) {
+      targetEmp.horarios = current.filter(h => Number(h.id) !== Number(plantillaId));
+    } else {
+      const pObj = plantillasSala.find(p => Number(p.id) === Number(plantillaId));
+      if (pObj) {
+        targetEmp.horarios = [...current, pObj];
+      }
+    }
+    empleados = [...empleados];
+    hasUnsavedChanges = true;
+  }
+
+  // Guardar todos los cambios acumulados en la base de datos
+  async function handleSave() {
     if (!department || !department.id) return;
+    isSaving = true;
     try {
-      const res = await fetch(`/api/master/departamentos-ciclos/${department.id}/empleados`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'bulk_remove_all' })
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast(json.message || 'Todos los horarios han sido quitados', 'success');
-        // Clear horarios from local state
-        empleados = empleados.map(e => ({ ...e, horarios: [] }));
-        await loadDepartmentData(department.id);
-        dispatch('saved');
-      } else {
-        throw new Error(json.error || 'Error al quitar horarios');
-      }
-    } catch (err) {
-      triggerToast(`Error: ${err.message}`, 'error');
-    }
-  }
+      const assignments = empleados.map(e => ({
+        empleado_id: Number(e.empleado_id),
+        plantilla_ids: (e.horarios || []).map(h => Number(h.id))
+      }));
 
-  // Toggle single plantilla for specific employee
-  async function handleTogglePlantilla(empId, plantillaId) {
-    if (!department || !department.id || !empId || !plantillaId) return;
-    try {
       const res = await fetch(`/api/master/departamentos-ciclos/${department.id}/empleados`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'toggle',
-          empleado_id: empId,
-          plantilla_id: plantillaId
-        })
+        body: JSON.stringify({ assignments })
       });
       const json = await res.json();
       if (json && json.success) {
-        const targetEmp = empleados.find(e => Number(e.empleado_id) === Number(empId));
-        if (targetEmp) {
-          const hasIt = targetEmp.horarios.some(h => Number(h.id) === Number(plantillaId));
-          if (hasIt) {
-            targetEmp.horarios = targetEmp.horarios.filter(h => Number(h.id) !== Number(plantillaId));
-          } else {
-            const pObj = plantillasSala.find(p => Number(p.id) === Number(plantillaId));
-            if (pObj) targetEmp.horarios = [...targetEmp.horarios, pObj];
-          }
-          empleados = [...empleados];
-        }
+        triggerToast('Horarios guardados exitosamente en la base de datos', 'success');
+        hasUnsavedChanges = false;
         dispatch('saved');
+        dispatch('close');
       } else {
-        throw new Error(json.error || 'Error al actualizar horario');
+        throw new Error(json.error || 'Error al guardar horarios');
       }
     } catch (err) {
+      console.error(err);
       triggerToast(`Error: ${err.message}`, 'error');
+    } finally {
+      isSaving = false;
     }
   }
 
   function closeModal() {
-    dispatch('saved');
+    activePickerEmpId = null;
+    hasUnsavedChanges = false;
     dispatch('close');
   }
 
@@ -367,13 +352,33 @@
       </div>
 
       <!-- Modal Footer -->
-      <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0;">
-        <button 
-          type="button" 
-          on:click={closeModal}
-          style="padding: 8px 20px; font-size: 13px; font-weight: 800; color: #ffffff; background: #2563eb; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);">
-          Listo / Cerrar
-        </button>
+      <div style="padding: 14px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; flex-wrap: wrap; gap: 10px;">
+        <div>
+          {#if hasUnsavedChanges}
+            <span style="font-size: 12px; font-weight: 700; color: #d97706; display: flex; align-items: center; gap: 6px;">
+              <span>⚠️</span> Tienes cambios pendientes por guardar en base de datos
+            </span>
+          {/if}
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button 
+            type="button" 
+            on:click={closeModal}
+            style="padding: 8px 18px; font-size: 13px; font-weight: 700; color: #64748b; background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; cursor: pointer; transition: all 0.15s;">
+            Cancelar
+          </button>
+          <button 
+            type="button" 
+            disabled={isSaving}
+            on:click={handleSave}
+            style="padding: 8px 24px; font-size: 13px; font-weight: 800; color: #ffffff; background: {hasUnsavedChanges ? '#16a34a' : '#2563eb'}; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); display: flex; align-items: center; gap: 6px; transition: all 0.15s;">
+            {#if isSaving}
+              <span>Guardando...</span>
+            {:else}
+              <span>💾 Guardar Cambios</span>
+            {/if}
+          </button>
+        </div>
       </div>
 
     </div>
