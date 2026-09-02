@@ -538,9 +538,6 @@
         modalState.isOpen &&
         (modalState.mode === "live_records" || modalState.mode === "checkin_checkout")
       ) {
-        // PRESERVAR EL REGISTRO QUE EL USUARIO ESTÁ VIENDO ACTUALMENTE
-        const currentViewingId = modalState.activeItem?.id;
-
         if (modalState.currentPage === 0) {
           const combinedModal = [
             newRecord,
@@ -553,27 +550,38 @@
             return Number(b.id || 0) - Number(a.id || 0);
           });
 
-          // Buscar la nueva posición del registro que el usuario ya está viendo
-          const newIdx = combinedModal.findIndex(
-            (a) => String(a.id) === String(currentViewingId)
-          );
-
-          if (newIdx !== -1 && newIdx < pageSize) {
-            // El usuario sigue viendo al mismo empleado / foto intacto,
-            // pero su índice de posición se actualiza limpiamente en pantalla (ej. de 1 a 2)
+          // Caso A: El usuario está parado en el último registro en vivo (página 0, índice 0)
+          if (modalState.currentIndex === 0) {
             photoModalStore.update((s) => ({
               ...s,
               items: combinedModal.slice(0, pageSize),
-              currentIndex: newIdx,
+              activeItem: newRecord,
+              currentIndex: 0,
               totalCount: totalCount,
               totalPages: Math.ceil(totalCount / pageSize) || 1,
             }));
           } else {
-            photoModalStore.update((s) => ({
-              ...s,
-              totalCount: totalCount,
-              totalPages: Math.ceil(totalCount / pageSize) || 1,
-            }));
+            // Caso B: El usuario está inspeccionando un registro anterior (índice > 0)
+            const currentViewingId = modalState.activeItem?.id;
+            const newIdx = combinedModal.findIndex(
+              (a) => String(a.id) === String(currentViewingId)
+            );
+
+            if (newIdx !== -1 && newIdx < pageSize) {
+              photoModalStore.update((s) => ({
+                ...s,
+                items: combinedModal.slice(0, pageSize),
+                currentIndex: newIdx,
+                totalCount: totalCount,
+                totalPages: Math.ceil(totalCount / pageSize) || 1,
+              }));
+            } else {
+              photoModalStore.update((s) => ({
+                ...s,
+                totalCount: totalCount,
+                totalPages: Math.ceil(totalCount / pageSize) || 1,
+              }));
+            }
           }
         } else {
           // Está en página >= 1: simplemente actualizamos el totalCount en el modal

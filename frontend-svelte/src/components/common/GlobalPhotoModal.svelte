@@ -152,12 +152,13 @@
       return "";
     }
 
-    // Si es un marcaje y tiene foto guardada (has_photo = true)
-    if (record.has_photo === true && record.id) {
+    // Para registros de marcaje (live_records, attlog, checkin_checkout, etc.)
+    // Si tiene id de marcaje, SIEMPRE cargar la foto capturada del evento /attlogs/${record.id}.jpg
+    // Si la foto no estuviera disponible, el evento on:error del <img> hará automáticamente fallback a la foto de perfil
+    if (record.id) {
       return `/attlogs/${record.id}.jpg`;
     }
 
-    // Si el marcaje no tiene foto guardada en disco, usar directamente la foto de perfil del empleado (por ID o ruta foto)
     if (record.empleado_foto && typeof record.empleado_foto === 'string' && record.empleado_foto.trim().length > 0) {
       const clean = record.empleado_foto.trim();
       if (clean.startsWith('http')) return clean;
@@ -167,7 +168,7 @@
       return `/empleados/${record.empleado_id}.jpg`;
     }
 
-    return `/attlogs/${record.id}.jpg`;
+    return "";
   }
 
   $: photoSrc = getPhotoUrl(item);

@@ -1609,7 +1609,7 @@ export async function syncAttlogsModel(data) {
       `;
       const attlogId = rows[0]?.id;
       if (attlogId && log.foto_base64) {
-        saveAttlogPhoto(attlogId, log.foto_base64);
+        await saveAttlogPhoto(attlogId, log.foto_base64);
       }
       if (attlogId) {
         let fullRecord = null;
@@ -1621,6 +1621,7 @@ export async function syncAttlogsModel(data) {
                    a.dispositivo_id, d.nombre AS dispositivo_nombre, d.sala_id, s.nombre AS sala_nombre,
                    e.id AS empleado_id, e.cedula, e.foto AS empleado_foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento,
                    c.nombre AS cargo_nombre, ar.nombre AS area_nombre, dep.nombre AS departamento_nombre,
+                   a.has_photo,
                    (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
             FROM attlogs a
             LEFT JOIN empleados e ON (a.employee_no = e.cedula OR a.employee_no = CAST(e.id AS TEXT) OR e.cedula = 'V' || a.employee_no OR e.cedula = REPLACE(a.employee_no, 'V', ''))
@@ -1634,6 +1635,7 @@ export async function syncAttlogsModel(data) {
           if (fullRows && fullRows.length > 0) {
             fullRecord = {
               ...fullRows[0],
+              has_photo: Boolean(fullRows[0].has_photo || hasPhoto),
               currentverifymode: fullRows[0].currentverifymode || verifyMode || null,
               currentverifymode_status: fullRows[0].currentverifymode || verifyMode || null
             };
@@ -1644,6 +1646,7 @@ export async function syncAttlogsModel(data) {
 
         attlogEvents.emit('new_attlog', fullRecord || {
           id: attlogId,
+          has_photo: hasPhoto,
           dispositivo_id: Number(dispositivo_id),
           sala_id: data.sala_id || null,
           employee_no: String(log.employee_no),
