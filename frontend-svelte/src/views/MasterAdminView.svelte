@@ -49,7 +49,7 @@
     isapi_url: "/api/attlogs/sync",
     isapi_port: "8015",
     isapi_protocol: "HTTP",
-    timezone: "America/Caracas"
+    timezone: "America/Caracas",
   };
   let isSavingConfig = false;
 
@@ -77,7 +77,10 @@
       });
       const data = await res.json();
       if (data && data.success) {
-        triggerToast("⚡ Ajustes guardados exitosamente en la tabla 'configuracion'", "success");
+        triggerToast(
+          "⚡ Ajustes guardados exitosamente en la tabla 'configuracion'",
+          "success",
+        );
       } else {
         triggerToast(
           `Error guardando configuración: ${data ? data.error : "Error desconocido"}`,
@@ -386,7 +389,7 @@ app.use((req, res, next) => {
 });
 
 const PORT = config.agent?.port || 3030;
-const CLOUD_URL = config.agent?.cloud_url || 'http://localhost:3001';
+const CLOUD_URL = config.agent?.cloud_url || 'http://localhost:3030';
 
 function parseDigestChallenge(wwwAuthenticate) {
   const challenge = {};
@@ -618,7 +621,7 @@ async function handleHikvisionPushEvent(req, res) {
       attlogs: [attlogRecord]
     };
 
-    const syncCloudEndpoint = (CLOUD_URL || 'http://localhost:3001').replace(new RegExp('/+$'), '') + '/api/attlogs/sync';
+    const syncCloudEndpoint = (CLOUD_URL || 'http://localhost:3030').replace(new RegExp('/+$'), '') + '/api/attlogs/sync';
 
     axios.post(syncCloudEndpoint, payload).catch(err => {
       console.error('[AGENTE] ❌ Error enviando marcaje push:', err.message);
@@ -757,7 +760,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         ip_remota: "",
         ip_panel: "",
         usuario: "admin",
-        clave: "Sigma2025"
+        clave: "Sigma2025",
       };
     } else if (activeTab === "usuarios") {
       createForm = { nombre_apellido: "", usuario: "", password: "" };
@@ -808,20 +811,32 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     injectingDeviceId = device.id;
     try {
       const serverUrl = window.location.origin;
-      const res = await fetch(`/api/master/dispositivos/${device.id}/inject-push-config`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ server_url: serverUrl })
-      });
+      const res = await fetch(
+        `/api/master/dispositivos/${device.id}/inject-push-config`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ server_url: serverUrl }),
+        },
+      );
       const json = await res.json();
       if (json && json.success) {
-        triggerToast(`⚡ Configuración HTTP Push inyectada exitosamente en '${device.nombre}'`, "success");
+        triggerToast(
+          `⚡ Configuración HTTP Push inyectada exitosamente en '${device.nombre}'`,
+          "success",
+        );
       } else {
-        triggerToast(json?.error || `Inyección procesada para '${device.nombre}'`, "info");
+        triggerToast(
+          json?.error || `Inyección procesada para '${device.nombre}'`,
+          "info",
+        );
       }
     } catch (err) {
       console.error("Error inyectando configuración al dispositivo:", err);
-      triggerToast(`Inyección HTTP Push enviada a '${device.nombre}' (${device.ip_remota || device.ip_local})`, "success");
+      triggerToast(
+        `Inyección HTTP Push enviada a '${device.nombre}' (${device.ip_remota || device.ip_local})`,
+        "success",
+      );
     } finally {
       injectingDeviceId = null;
     }
@@ -834,7 +849,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     ip_domain: "190.72.102.210",
     url: "/api/attlogs/sync",
     port: 8015,
-    protocol: "HTTP"
+    protocol: "HTTP",
   };
 
   async function openIsapiModal(device) {
@@ -845,7 +860,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       ip_domain: systemConfig.isapi_ip_domain || "190.72.102.210",
       url: systemConfig.isapi_url || "/api/attlogs/sync",
       port: systemConfig.isapi_port || 8015,
-      protocol: systemConfig.isapi_protocol || "HTTP"
+      protocol: systemConfig.isapi_protocol || "HTTP",
     };
     isIsapiModalOpen = true;
   }
@@ -854,21 +869,30 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     if (!isapiSelectedDevice) return;
     isapiSubmitting = true;
     try {
-      const res = await fetch(`/api/master/dispositivos/${isapiSelectedDevice.id}/isapi-http-listening`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isapiForm)
-      });
+      const res = await fetch(
+        `/api/master/dispositivos/${isapiSelectedDevice.id}/isapi-http-listening`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(isapiForm),
+        },
+      );
       const json = await res.json();
       if (json && json.success) {
-        triggerToast(`🚀 ${json.message || 'Configuración HTTP Listening ISAPI inyectada exitosamente'}`, "success");
+        triggerToast(
+          `🚀 ${json.message || "Configuración HTTP Listening ISAPI inyectada exitosamente"}`,
+          "success",
+        );
         isIsapiModalOpen = false;
       } else {
         triggerToast(json?.error || "Error al inyectar por ISAPI", "error");
       }
     } catch (err) {
       console.error("Error submitting ISAPI injection:", err);
-      triggerToast(`Configuración ISAPI enviada a '${isapiSelectedDevice.nombre}'`, "success");
+      triggerToast(
+        `Configuración ISAPI enviada a '${isapiSelectedDevice.nombre}'`,
+        "success",
+      );
       isIsapiModalOpen = false;
     } finally {
       isapiSubmitting = false;
@@ -2017,11 +2041,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       </div>
 
       <!-- Sección: Parámetros Predeterminados para HTTP Listening (ISAPI) -->
-      <div style="margin-top: 28px; padding-top: 24px; border-top: 1px solid #334155; margin-bottom: 24px;">
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+      <div
+        style="margin-top: 28px; padding-top: 24px; border-top: 1px solid #334155; margin-bottom: 24px;"
+      >
+        <div
+          style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;"
+        >
           <span style="font-size: 20px;">⚡</span>
           <div>
-            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #f8fafc;">
+            <h3
+              style="margin: 0; font-size: 16px; font-weight: 800; color: #f8fafc;"
+            >
               Parámetros de Inyección HTTP Listening (ISAPI)
             </h3>
             <span style="font-size: 12px; color: #94a3b8;">
@@ -2063,7 +2093,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
             />
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;"
+          >
             <div>
               <label
                 for="isapi-port-no"
@@ -2172,7 +2204,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 <th style="padding: 10px 14px;">Teléfono</th>
               {:else if activeTab === "paginas"}
                 <th style="padding: 10px 14px;">Nombre de la Página</th>
-                <th style="padding: 10px 14px; text-align: center;">Módulos / Orden</th>
+                <th style="padding: 10px 14px; text-align: center;"
+                  >Módulos / Orden</th
+                >
               {:else if activeTab === "modulos"}
                 <th style="padding: 10px 14px;">Nombre del Módulo</th>
                 <th style="padding: 10px 14px;">Página Asociada (Foránea)</th>
@@ -2280,12 +2314,22 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       type="button"
                       on:click={() => openOrderModulosModal(item)}
                       style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 8px; border: 1.5px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 800; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(37, 99, 235, 0.08);"
-                      on:mouseenter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-                      on:mouseleave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
+                      on:mouseenter={(e) => {
+                        e.currentTarget.style.background = "#dbeafe";
+                        e.currentTarget.style.borderColor = "#93c5fd";
+                      }}
+                      on:mouseleave={(e) => {
+                        e.currentTarget.style.background = "#eff6ff";
+                        e.currentTarget.style.borderColor = "#bfdbfe";
+                      }}
                       title="Definir el orden de los módulos de esta página"
                     >
                       <span style="font-size: 13px;">↕️</span>
-                      <span>Ordenar Módulos ({($masterModulosStore || []).filter(m => Number(m.page_id) === Number(item.id)).length})</span>
+                      <span
+                        >Ordenar Módulos ({($masterModulosStore || []).filter(
+                          (m) => Number(m.page_id) === Number(item.id),
+                        ).length})</span
+                      >
                     </button>
                   </td>
                 {:else if activeTab === "modulos"}
@@ -2803,7 +2847,10 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   pagina={selectedPaginaToOrder}
   modulos={$masterModulosStore}
   on:saved={() => loadMasterStoresFromBackend()}
-  on:close={() => { isOrderModulosModalOpen = false; selectedPaginaToOrder = null; }}
+  on:close={() => {
+    isOrderModulosModalOpen = false;
+    selectedPaginaToOrder = null;
+  }}
 />
 
 <!-- Modal Inyectar HTTP Listening (ISAPI / Network Service) -->
@@ -2820,7 +2867,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 20px;">⚡</span>
           <div>
-            <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: #ffffff;">
+            <h3
+              style="margin: 0; font-size: 15px; font-weight: 800; color: #ffffff;"
+            >
               Inyectar HTTP Listening (ISAPI Digest)
             </h3>
             <p style="margin: 2px 0 0 0; font-size: 11.5px; color: #94a3b8;">
@@ -2832,23 +2881,40 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           on:click={() => (isIsapiModalOpen = false)}
           type="button"
           style="background: transparent; border: none; color: #94a3b8; font-size: 18px; cursor: pointer;"
-        >✕</button>
+          >✕</button
+        >
       </div>
 
-      <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
-        <div style="padding: 10px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 12px;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+      <div
+        style="padding: 20px; display: flex; flex-direction: column; gap: 14px;"
+      >
+        <div
+          style="padding: 10px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 12px;"
+        >
+          <div
+            style="display: flex; justify-content: space-between; margin-bottom: 4px;"
+          >
             <strong style="color: #0f172a;">Dispositivo:</strong>
-            <span style="color: #2563eb; font-weight: 700;">{isapiSelectedDevice?.nombre}</span> (#{isapiSelectedDevice?.id})
+            <span style="color: #2563eb; font-weight: 700;"
+              >{isapiSelectedDevice?.nombre}</span
+            >
+            (#{isapiSelectedDevice?.id})
           </div>
           <div style="display: flex; justify-content: space-between;">
             <strong style="color: #0f172a;">IP Destino ISAPI:</strong>
-            <span style="font-family: monospace; color: #059669; font-weight: 700;">{isapiSelectedDevice?.ip_remota || isapiSelectedDevice?.ip_local || '127.0.0.1'}</span>
+            <span
+              style="font-family: monospace; color: #059669; font-weight: 700;"
+              >{isapiSelectedDevice?.ip_remota ||
+                isapiSelectedDevice?.ip_local ||
+                "127.0.0.1"}</span
+            >
           </div>
         </div>
 
         <div>
-          <label style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;">
+          <label
+            style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;"
+          >
             * Event Alarm IP/Domain Name
           </label>
           <input
@@ -2860,7 +2926,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         </div>
 
         <div>
-          <label style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;">
+          <label
+            style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;"
+          >
             * URL
           </label>
           <input
@@ -2873,7 +2941,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div>
-            <label style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;">
+            <label
+              style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;"
+            >
               * Port
             </label>
             <input
@@ -2886,22 +2956,40 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           </div>
 
           <div>
-            <label style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;">
+            <label
+              style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 4px;"
+            >
               * Protocol
             </label>
-            <div style="display: flex; align-items: center; gap: 16px; padding: 7px 0;">
-              <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; cursor: pointer; color: #0f172a;">
-                <input type="radio" bind:group={isapiForm.protocol} value="HTTP" /> HTTP
+            <div
+              style="display: flex; align-items: center; gap: 16px; padding: 7px 0;"
+            >
+              <label
+                style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; cursor: pointer; color: #0f172a;"
+              >
+                <input
+                  type="radio"
+                  bind:group={isapiForm.protocol}
+                  value="HTTP"
+                /> HTTP
               </label>
-              <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; cursor: pointer; color: #0f172a;">
-                <input type="radio" bind:group={isapiForm.protocol} value="HTTPS" /> HTTPS
+              <label
+                style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; cursor: pointer; color: #0f172a;"
+              >
+                <input
+                  type="radio"
+                  bind:group={isapiForm.protocol}
+                  value="HTTPS"
+                /> HTTPS
               </label>
             </div>
           </div>
         </div>
       </div>
 
-      <div style="padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+      <div
+        style="padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; align-items: center; justify-content: flex-end; gap: 10px;"
+      >
         <button
           on:click={() => (isIsapiModalOpen = false)}
           type="button"

@@ -58,19 +58,19 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3001',
+        target: 'http://127.0.0.1:3030',
         changeOrigin: true
       },
       '/empleados': {
-        target: 'http://127.0.0.1:3001',
+        target: 'http://127.0.0.1:3030',
         changeOrigin: true
       },
       '/attlogs': {
-        target: 'http://127.0.0.1:3001',
+        target: 'http://127.0.0.1:3030',
         changeOrigin: true
       },
       '/ws': {
-        target: 'ws://127.0.0.1:3001',
+        target: 'ws://127.0.0.1:3030',
         ws: true,
         changeOrigin: true
       }

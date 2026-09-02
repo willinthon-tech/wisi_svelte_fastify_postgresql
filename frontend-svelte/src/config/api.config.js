@@ -5,12 +5,12 @@ export function getCloudBaseUrl() {
     const { hostname, origin } = window.location;
     // Si estamos en desarrollo local (localhost o 127.0.0.1)
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:3001';
+      return 'http://localhost:3030';
     }
     // En producción en dominio real (ej. https://wisi.space)
     return origin;
   }
-  return 'http://localhost:3001';
+  return 'http://localhost:3030';
 }
 
 export function getWsUrl() {
@@ -18,11 +18,11 @@ export function getWsUrl() {
     const { hostname, protocol, host } = window.location;
     const wsProto = protocol === 'https:' ? 'wss:' : 'ws:';
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'ws://localhost:3001/ws/attlogs';
+      return 'ws://localhost:3030/ws/attlogs';
     }
     return `${wsProto}//${host}/ws/attlogs`;
   }
-  return 'ws://localhost:3001/ws/attlogs';
+  return 'ws://localhost:3030/ws/attlogs';
 }
 
 export const CLOUD_BASE_URL = getCloudBaseUrl();
