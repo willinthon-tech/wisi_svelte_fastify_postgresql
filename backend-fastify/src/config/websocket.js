@@ -1,0 +1,94 @@
+import websocketPlugin from '@fastify/websocket';
+import { attlogEvents } from '../events/attlog.events.js';
+
+// Active WebSocket client connections
+const activeClients = new Set();
+
+export async function initWebsockets(fastify) {
+  await fastify.register(websocketPlugin, {
+    options: { maxPayload: 1048576 }
+  });
+
+  // WebSocket endpoint for real-time attlog notifications
+  fastify.get('/ws/attlogs', { websocket: true }, (connection, req) => {
+    const socket = connection.socket;
+    activeClients.add(socket);
+    //console.log(`\x1b[36m⚡ [WEBSOCKET]\x1b[0m Cliente conectado en /ws/attlogs. Total activos: ${activeClients.size}`);
+
+    socket.on('message', (msg) => {
+      try {
+        const data = JSON.parse(msg.toString());
+        if (data.type === 'PING') {
+          socket.send(JSON.stringify({ type: 'PONG' }));
+        }
+      } catch (e) {
+        // silent parse error
+      }
+    });
+
+    socket.on('close', () => {
+      activeClients.delete(socket);
+      //console.log(`\x1b[33m⚡ [WEBSOCKET]\x1b[0m Cliente desconectado. Total activos: ${activeClients.size}`);
+    });
+
+    socket.on('error', (err) => {
+      activeClients.delete(socket);
+    });
+  });
+
+  // Alias endpoint for root /ws
+  fastify.get('/ws', { websocket: true }, (connection, req) => {
+    const socket = connection.socket;
+    activeClients.add(socket);
+    //console.log(`\x1b[36m⚡ [WEBSOCKET]\x1b[0m Cliente conectado en /ws. Total activos: ${activeClients.size}`);
+
+    socket.on('message', (msg) => {
+      try {
+        const data = JSON.parse(msg.toString());
+        if (data.type === 'PING') {
+          socket.send(JSON.stringify({ type: 'PONG' }));
+        }
+      } catch (e) {
+        // silent parse error
+      }
+    });
+
+    socket.on('close', () => {
+      activeClients.delete(socket);
+      //console.log(`\x1b[33m⚡ [WEBSOCKET]\x1b[0m Cliente desconectado. Total activos: ${activeClients.size}`);
+    });
+
+    socket.on('error', (err) => {
+      activeClients.delete(socket);
+    });
+  });
+}
+
+/**
+ * Broadcasts a new attendance log event to all connected WebSocket clients
+ */
+export function broadcastNewAttlog(attlogData) {
+  if (activeClients.size === 0) return;
+
+  const payload = JSON.stringify({
+    type: 'NEW_MARCAJE',
+    data: attlogData,
+    timestamp: new Date().toISOString()
+  });
+
+  for (const client of activeClients) {
+    if (client.readyState === 1) { // 1 = OPEN
+      try {
+        client.send(payload);
+      } catch (err) {
+        activeClients.delete(client);
+      }
+    }
+  }
+  //console.log(`\x1b[32m⚡ [WEBSOCKET BROADCAST]\x1b[0m Notificación de marcaje enviada a ${activeClients.size} clientes.`);
+}
+
+// Automatically subscribe to system-wide attlog events
+attlogEvents.on('new_attlog', (data) => {
+  broadcastNewAttlog(data);
+});

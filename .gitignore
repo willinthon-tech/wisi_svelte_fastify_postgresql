@@ -1,0 +1,32 @@
+# Dependencias (node_modules en backend y frontend)
+node_modules/
+**/node_modules/
+
+# Archivos de entorno y credenciales (secretos)
+.env.local
+.env.production
+*.env
+
+# Archivos y carpetas de fotos / uploads en backend-fastify
+backend-fastify/attlogs/
+backend-fastify/attlogs/*
+backend-fastify/empleados/
+backend-fastify/empleados/*
+backend-fastify/scratch/
+
+# Archivos de compilación / dist / build
+frontend-svelte/dist/
+frontend-svelte/build/
+frontend-svelte/.svelte-kit/
+
+# Archivos de registros y logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Archivos del sistema y de editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
