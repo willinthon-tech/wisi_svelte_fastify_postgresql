@@ -13,7 +13,8 @@ import {
   getEmpleadosModel, getEmpleadosFilterOptionsModel, checkEmpleadoCedulaModel, getEmpleadoDispositivosModel, createEmpleadoModel, updateEmpleadoModel, deleteEmpleadoModel,
   getDepartamentosCiclosModel, getDepartamentosCiclosFilterOptionsModel,
   getPlantillasHorariosModel, getPlantillasHorariosFilterOptionsModel, createPlantillaHorarioModel, updatePlantillaHorarioModel, deletePlantillaHorarioModel,
-  getDepartamentoEmpleadosCiclosModel, updateDepartamentoEmpleadosCiclosModel
+  getDepartamentoEmpleadosCiclosModel, updateDepartamentoEmpleadosCiclosModel,
+  getFeriadosModel, getFeriadosFilterOptionsModel, createFeriadoModel, updateFeriadoModel, deleteFeriadoModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1235,5 +1236,81 @@ export async function updateDepartamentoEmpleadosCiclos(request, reply) {
     return reply.status(400).send({ success: false, error: err.message });
   }
 }
+
+// ==========================================
+// 📅 CONTROLADORES DE FERIADOS / CALENDARIO
+// ==========================================
+
+export async function getFeriados(request, reply) {
+  try {
+    const res = await getFeriadosModel(request.query);
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getFeriadosFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    let userSalaIds = null;
+    if (q.user_sala_ids) {
+      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    let salaIds = null;
+    if (q.sala_ids) {
+      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    const res = await getFeriadosFilterOptionsModel({
+      userSalaIds,
+      salaIds,
+      search: q.search
+    });
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function createFeriado(request, reply) {
+  try {
+    const data = request.body || {};
+    if (!data.nombre || !data.nombre.trim()) {
+      return reply.status(400).send({ success: false, error: 'El nombre es obligatorio' });
+    }
+    if (!data.sala_id) {
+      return reply.status(400).send({ success: false, error: 'La sala es obligatoria' });
+    }
+    const res = await createFeriadoModel(data);
+    return reply.status(201).send({ success: true, data: res });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateFeriado(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = request.body || {};
+    const res = await updateFeriadoModel(id, data);
+    return reply.send({ success: true, data: res });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteFeriado(request, reply) {
+  try {
+    const { id } = request.params;
+    const res = await deleteFeriadoModel(id);
+    if (!res.success) {
+      return reply.status(409).send(res);
+    }
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
 
 

@@ -86,7 +86,7 @@ const initialModulos = [
   { id: 28, nombre: 'Carnet', icono: 'settings', ruta: '/rrhh/carnet', page_id: 2 },
   { id: 29, nombre: 'Plantillas', icono: 'settings', ruta: '/rrhh/plantillas', page_id: 2 },
   { id: 30, nombre: 'Cumpleaños', icono: 'settings', ruta: '/rrhh/cumpleanos', page_id: 2 },
-  { id: 31, nombre: 'Feriados', icono: 'settings', ruta: '/rrhh/feriados', page_id: 2 },
+  { id: 31, nombre: 'Calendario', icono: 'calendar_month', ruta: '/rrhh/calendario', page_id: 2 },
   { id: 23, nombre: 'Máquinas', icono: 'settings', ruta: '/maquinas/maquinas', page_id: 3 },
   { id: 14, nombre: 'Estados', icono: 'settings', ruta: '/maquinas/estados', page_id: 3 },
   { id: 15, nombre: 'Sociedades', icono: 'settings', ruta: '/maquinas/sociedades', page_id: 3 },

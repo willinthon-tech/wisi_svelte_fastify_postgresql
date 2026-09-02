@@ -564,6 +564,58 @@ export async function initDb() {
       );
     `;
 
+    // 19. Table feriados (Fechas patrias y días feriados por sala y nacionales)
+    await sql`
+      CREATE TABLE IF NOT EXISTS feriados (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        sala_id INT REFERENCES salas(id) ON DELETE CASCADE,
+        mes INT NOT NULL,
+        dia INT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Actualizar nombre y ruta de módulo 31 a Calendario
+    await sql`
+      UPDATE modulos 
+      SET nombre = 'Calendario', ruta = '/rrhh/calendario' 
+      WHERE id = 31 OR LOWER(nombre) = 'feriados';
+    `.catch(() => {});
+
+    // Sembrar fechas patrias iniciales si la tabla feriados está vacía
+    const feriadosCountRes = await sql`SELECT count(*)::int as count FROM feriados`.catch(() => [{ count: 0 }]);
+    if (feriadosCountRes[0]?.count === 0) {
+      await sql`
+        INSERT INTO feriados (id, nombre, sala_id, mes, dia) VALUES
+        (22, 'Fundación de Porlamar', 4, 3, 26),
+        (23, 'Día de la Independencia de Margarita.', 4, 5, 4),
+        (24, 'Natalicio de Santiago Mariño', 4, 7, 25),
+        (25, 'Batalla de Matasiete', 4, 7, 31),
+        (26, 'Día de la Asunción de la Virgen, patrona de la Diócesis de Margarita', 4, 8, 15),
+        (27, 'Día de la Virgen del Valle, Patrona del Oriente venezolano', 4, 9, 8),
+        (30, 'Lunes de Carnaval', 6, 2, 16),
+        (31, 'Martes de Carnaval', 6, 2, 17),
+        (32, 'Jueves Santo', 6, 4, 2),
+        (33, 'Viernes Santo', 6, 4, 3),
+        (34, 'Viernes Santo', 6, 4, 3),
+        (35, 'BATALLA DE SAN FELIX', 2, 4, 11),
+        (36, 'LUNES DE CARNAVAL', 1, 2, 16),
+        (37, 'MARTES DE CARNAVAL', 1, 2, 17),
+        (38, 'JUVES SANTO', 1, 4, 2),
+        (39, 'VIERNES SANTO', 1, 4, 3),
+        (40, 'LUNES DE CARNAVAL', 2, 2, 16),
+        (41, 'MARTES DE CARNAVAL', 2, 2, 17),
+        (42, 'DIA DE JUBILO NACIONAL PROVICIONAL', 1, 3, 18),
+        (43, 'Jueves santo', 2, 4, 2),
+        (44, 'Viernes santo', 2, 4, 3),
+        (45, 'DECRETO REGIONAL MARINOS DE ANZOATEGUI', 3, 6, 19)
+        ON CONFLICT (id) DO NOTHING;
+      `.catch((e) => console.warn('Error sembrando feriados iniciales:', e));
+      await sql`SELECT setval('feriados_id_seq', (SELECT COALESCE(MAX(id), 1) FROM feriados));`.catch(() => {});
+    }
+
     // Existing wisi_items table
     await sql`
       CREATE TABLE IF NOT EXISTS wisi_items (
@@ -727,7 +779,8 @@ export async function syncInMemoryFromPg() {
       cargos,
       empleados,
       configuracion,
-      wisiItems
+      wisiItems,
+      feriados
     ] = await Promise.all([
       sql`SELECT * FROM usuarios ORDER BY id ASC`.catch(() => inMemoryData.usuarios),
       sql`SELECT * FROM grupo_salas ORDER BY id ASC`.catch(() => inMemoryData.grupo_salas),
@@ -743,7 +796,8 @@ export async function syncInMemoryFromPg() {
       sql`SELECT * FROM cargos ORDER BY id ASC`.catch(() => inMemoryData.cargos),
       sql`SELECT * FROM empleados ORDER BY id ASC`.catch(() => inMemoryData.empleados),
       sql`SELECT * FROM configuracion`.catch(() => inMemoryData.configuracion),
-      sql`SELECT * FROM wisi_items ORDER BY id ASC`.catch(() => inMemoryData.wisi_items)
+      sql`SELECT * FROM wisi_items ORDER BY id ASC`.catch(() => inMemoryData.wisi_items),
+      sql`SELECT * FROM feriados ORDER BY mes ASC, dia ASC, id ASC`.catch(() => inMemoryData.feriados || [])
     ]);
 
     if (usuarios && usuarios.length > 0) inMemoryData.usuarios = usuarios;
@@ -761,6 +815,7 @@ export async function syncInMemoryFromPg() {
     if (empleados && empleados.length > 0) inMemoryData.empleados = empleados;
     if (configuracion && configuracion.length > 0) inMemoryData.configuracion = configuracion;
     if (wisiItems && wisiItems.length > 0) inMemoryData.wisi_items = wisiItems;
+    if (feriados && feriados.length > 0) inMemoryData.feriados = feriados;
   } catch (err) {
     console.warn('Aviso sincronizando In-Memory Fallback desde PostgreSQL:', err.message);
   }

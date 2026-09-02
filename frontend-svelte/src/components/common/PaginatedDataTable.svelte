@@ -2269,15 +2269,32 @@
                     <label for={`create_subfield_${subField.key}`} style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
                       {subField.label} {subField.required ? '*' : ''}
                     </label>
-                    <input 
-                      id={`create_subfield_${subField.key}`}
-                      type={subField.type || 'text'} 
-                      step={subField.type === 'time' ? '1' : undefined}
-                      bind:value={createDraft[subField.key]}
-                      placeholder={subField.placeholder || ''}
-                      required={subField.required}
-                      style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
-                    />
+                    {#if subField.type === 'select'}
+                      <select 
+                        id={`create_subfield_${subField.key}`}
+                        bind:value={createDraft[subField.key]}
+                        required={subField.required}
+                        style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+                      >
+                        {#each (subField.options || []) as opt}
+                          <option value={typeof opt === 'object' ? opt.id : opt}>
+                            {typeof opt === 'object' ? (opt.nombre || opt.label) : opt}
+                          </option>
+                        {/each}
+                      </select>
+                    {:else}
+                      <input 
+                        id={`create_subfield_${subField.key}`}
+                        type={subField.type || 'text'} 
+                        step={subField.type === 'time' ? '1' : undefined}
+                        min={subField.min}
+                        max={subField.max}
+                        bind:value={createDraft[subField.key]}
+                        placeholder={subField.placeholder || ''}
+                        required={subField.required}
+                        style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+                      />
+                    {/if}
                   </div>
                 {/each}
               </div>

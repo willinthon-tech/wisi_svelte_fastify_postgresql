@@ -14,7 +14,8 @@ import {
   getDepartamentos, getDepartamentosFilterOptions, createDepartamento, updateDepartamento, deleteDepartamento,
   getAreas, getAreasFilterOptions, createArea, updateArea, deleteArea,
   getCargos, getCargosFilterOptions, createCargo, updateCargo, deleteCargo,
-  getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado
+  getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado,
+  getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -51,6 +52,40 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/plantillas-horarios/:id', updatePlantillaHorario);
   fastify.delete('/master/plantillas-horarios/:id', deletePlantillaHorario);
   fastify.delete('/api/master/plantillas-horarios/:id', deletePlantillaHorario);
+
+  // Calendario / Feriados (Fechas Patrias por Sala y Nacionales)
+  fastify.get('/master/calendario', getFeriados);
+  fastify.get('/api/master/calendario', getFeriados);
+  fastify.get('/master/feriados', getFeriados);
+  fastify.get('/api/master/feriados', getFeriados);
+  fastify.get('/feriados', getFeriados);
+  fastify.get('/calendario', getFeriados);
+
+  fastify.get('/master/calendario/filter-options', getFeriadosFilterOptions);
+  fastify.get('/api/master/calendario/filter-options', getFeriadosFilterOptions);
+  fastify.get('/master/feriados/filter-options', getFeriadosFilterOptions);
+  fastify.get('/api/master/feriados/filter-options', getFeriadosFilterOptions);
+
+  fastify.post('/master/calendario', createFeriado);
+  fastify.post('/api/master/calendario', createFeriado);
+  fastify.post('/master/feriados', createFeriado);
+  fastify.post('/api/master/feriados', createFeriado);
+  fastify.post('/feriados', createFeriado);
+  fastify.post('/calendario', createFeriado);
+
+  fastify.put('/master/calendario/:id', updateFeriado);
+  fastify.put('/api/master/calendario/:id', updateFeriado);
+  fastify.put('/master/feriados/:id', updateFeriado);
+  fastify.put('/api/master/feriados/:id', updateFeriado);
+  fastify.put('/feriados/:id', updateFeriado);
+  fastify.put('/calendario/:id', updateFeriado);
+
+  fastify.delete('/master/calendario/:id', deleteFeriado);
+  fastify.delete('/api/master/calendario/:id', deleteFeriado);
+  fastify.delete('/master/feriados/:id', deleteFeriado);
+  fastify.delete('/api/master/feriados/:id', deleteFeriado);
+  fastify.delete('/feriados/:id', deleteFeriado);
+  fastify.delete('/calendario/:id', deleteFeriado);
 
   // Configuracion del sistema
   fastify.get('/configuracion', getConfiguracion);

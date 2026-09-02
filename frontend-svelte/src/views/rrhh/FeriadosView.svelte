@@ -1,13 +1,5 @@
 <script>
-  import DataTableView from '../DataTableView.svelte';
-  export let items = [];
+  import CalendarioView from './CalendarioView.svelte';
 </script>
 
-<DataTableView 
-  {items}
-  on:toggle
-  on:edit
-  on:delete
-  on:openModal
-  on:saveInline
-/>
+<CalendarioView />

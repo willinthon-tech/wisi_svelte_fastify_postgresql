@@ -3827,3 +3827,218 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
   }
 }
 
+// ==========================================
+// 📅 MODELOS DE FERIADOS / CALENDARIO
+// ==========================================
+
+const MESES_MAP = {
+  1: 'Enero',
+  2: 'Febrero',
+  3: 'Marzo',
+  4: 'Abril',
+  5: 'Mayo',
+  6: 'Junio',
+  7: 'Julio',
+  8: 'Agosto',
+  9: 'Septiembre',
+  10: 'Octubre',
+  11: 'Noviembre',
+  12: 'Diciembre'
+};
+
+function buildFeriadosConditions(options = {}) {
+  const conds = [];
+  const { userSalaIds, salaIds, search } = options;
+
+  // Filtro por salas asignadas al usuario
+  if (userSalaIds && userSalaIds.length > 0) {
+    const ids = userSalaIds.map(Number).filter(Boolean);
+    if (ids.length > 0) {
+      conds.push(sql`f.sala_id IN ${sql(ids)}`);
+    }
+  }
+
+  // Filtro por selección de salas en el filtro superior
+  if (salaIds && salaIds.length > 0) {
+    const ids = salaIds.map(Number).filter(Boolean);
+    if (ids.length > 0) {
+      conds.push(sql`f.sala_id IN ${sql(ids)}`);
+    }
+  }
+
+  // Búsqueda libre
+  if (search && search.trim()) {
+    const term = `%${search.trim()}%`;
+    conds.push(sql`(
+      f.nombre ILIKE ${term} OR 
+      s.nombre ILIKE ${term} OR
+      CAST(f.dia AS TEXT) = ${search.trim()} OR
+      CAST(f.mes AS TEXT) = ${search.trim()}
+    )`);
+  }
+
+  return conds;
+}
+
+export async function getFeriadosFilterOptionsModel(options = {}) {
+  if (!isPgConnected || !sql) {
+    return { success: true, data: { salas: [] } };
+  }
+
+  const userSalaIds = options.userSalaIds || [];
+  const conds = buildFeriadosConditions({ userSalaIds });
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  let allSalas = [];
+  if (userSalaIds.length > 0) {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id IN ${sql(userSalaIds)} ORDER BY s.nombre ASC`;
+  } else {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+  }
+
+  const countsRes = await sql`
+    SELECT f.sala_id AS id, COUNT(f.id)::int AS count
+    FROM feriados f
+    LEFT JOIN salas s ON f.sala_id = s.id
+    ${where}
+    GROUP BY f.sala_id
+  `;
+  const countMap = new Map(countsRes.map(r => [r.id, r.count]));
+  const activeSalas = new Set((options.salaIds || []).map(Number));
+
+  const salas = allSalas
+    .map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      count: countMap.get(s.id) || 0
+    }))
+    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    success: true,
+    data: { salas }
+  };
+}
+
+export async function getFeriadosModel(params = {}) {
+  const page = Math.max(1, parseInt(params.page) || 1);
+  const limit = Math.max(1, parseInt(params.limit) || 10);
+  const offset = (page - 1) * limit;
+  const search = (params.search || '').trim();
+  const sortBy = params.sort_by || params.sortBy || 'mes';
+  const sortDir = (params.sort_order || params.sortDir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+
+  const userSalaIds = params.user_sala_ids ? params.user_sala_ids.split(',').map(Number).filter(Boolean) : [];
+  const salaIds = params.sala_ids ? params.sala_ids.split(',').map(Number).filter(Boolean) : [];
+
+  const allowedSortColumns = {
+    'id': 'f.id',
+    'nombre': 'UPPER(f.nombre)',
+    'sala_nombre': 'UPPER(s.nombre)',
+    'mes': 'f.mes',
+    'dia': 'f.dia',
+    'fecha': 'f.mes * 100 + f.dia'
+  };
+
+  const sortSql = allowedSortColumns[sortBy] || 'f.mes, f.dia';
+  const orderClause = sql.unsafe("ORDER BY " + sortSql + " " + sortDir + ", f.id ASC");
+
+  if (isPgConnected && sql) {
+    const conds = buildFeriadosConditions({
+      userSalaIds,
+      salaIds,
+      search
+    });
+
+    const whereClause = conds.length > 0
+      ? sql`WHERE ${conds.reduce((acc, cond) => sql`${acc} AND ${cond}`)}`
+      : sql``;
+
+    const countRes = await sql`
+      SELECT COUNT(*)::int AS total
+      FROM feriados f
+      LEFT JOIN salas s ON f.sala_id = s.id
+      ${whereClause}
+    `;
+    const total = countRes[0]?.total || 0;
+
+    const dataRes = await sql`
+      SELECT f.*, s.nombre AS sala_nombre
+      FROM feriados f
+      LEFT JOIN salas s ON f.sala_id = s.id
+      ${whereClause}
+      ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    const mapped = dataRes.map(r => ({
+      ...r,
+      mes_nombre: MESES_MAP[r.mes] || `Mes ${r.mes}`
+    }));
+
+    const totalPages = Math.ceil(total / limit) || 1;
+    return { success: true, data: mapped, total, page, limit, totalPages };
+  }
+
+  return { success: true, data: [], total: 0, page: 1, limit: 10, totalPages: 1 };
+}
+
+export async function createFeriadoModel(data) {
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      INSERT INTO feriados (nombre, sala_id, mes, dia)
+      VALUES (
+        ${data.nombre.trim()},
+        ${Number(data.sala_id)},
+        ${Math.min(12, Math.max(1, parseInt(data.mes) || 1))},
+        ${Math.min(31, Math.max(1, parseInt(data.dia) || 1))}
+      )
+      RETURNING *
+    `;
+    const row = rows[0];
+    if (row) {
+      const sala = await sql`SELECT nombre FROM salas WHERE id = ${row.sala_id}`;
+      return {
+        ...row,
+        sala_nombre: sala[0]?.nombre || 'Sin Sala',
+        mes_nombre: MESES_MAP[row.mes] || `Mes ${row.mes}`
+      };
+    }
+    return row;
+  }
+  return null;
+}
+
+export async function updateFeriadoModel(id, data) {
+  const fId = Number(id);
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      UPDATE feriados
+      SET nombre = ${data.nombre ? data.nombre.trim() : sql`nombre`},
+          sala_id = ${data.sala_id ? Number(data.sala_id) : sql`sala_id`},
+          mes = ${data.mes ? Math.min(12, Math.max(1, parseInt(data.mes))) : sql`mes`},
+          dia = ${data.dia ? Math.min(31, Math.max(1, parseInt(data.dia))) : sql`dia`},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${fId}
+      RETURNING *
+    `;
+    const row = rows[0];
+    if (row) {
+      const sala = await sql`SELECT nombre FROM salas WHERE id = ${row.sala_id}`;
+      return {
+        ...row,
+        sala_nombre: sala[0]?.nombre || 'Sin Sala',
+        mes_nombre: MESES_MAP[row.mes] || `Mes ${row.mes}`
+      };
+    }
+    return row;
+  }
+  return null;
+}
+
+export async function deleteFeriadoModel(id) {
+  return await deleteEntityDynamic('feriados', 'feriado', id);
+}
+
+
