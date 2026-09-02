@@ -43,11 +43,6 @@
   <!-- Autenticador & Login Card Único y Limpio -->
   <div class="flow-card" style="box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3); border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
     <div style="text-align: center; margin-bottom: 24px;">
-      <img
-        src="/pwa-192x192.png"
-        alt="Wisi Space Logo"
-        style="width: 76px; height: 76px; margin: 0 auto 12px; display: block; border-radius: 50%; box-shadow: 0 6px 16px rgba(2, 132, 199, 0.25);"
-      />
       <h2 style="font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 6px; letter-spacing: -0.5px;">
         Wisi <span style="color: #3b82f6;">Space</span>
       </h2>
