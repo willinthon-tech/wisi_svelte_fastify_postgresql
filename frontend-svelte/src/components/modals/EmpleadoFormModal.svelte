@@ -35,13 +35,22 @@
 
   // Photo Cropper States
   let isCropperOpen = false;
-  let rawImageSrc = '';
-  let cropperZoom = 1;
-  let imageElem;
-  let cropperBox = { x: 50, y: 30, size: 220 };
-  let isDraggingCrop = false;
-  let dragStart = { x: 0, y: 0 };
+  let cropperCanvas;
+  let cropperImg = null;
+  let cropperZoom = 1.0;
+  let cropperOffsetX = 0;
+  let cropperOffsetY = 0;
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let initialOffsetX = 0;
+  let initialOffsetY = 0;
   let fileInput;
+
+  const CROP_SIZE = 220;
+  const CANVAS_SIZE = 340;
+  const CROP_X = (CANVAS_SIZE - CROP_SIZE) / 2;
+  const CROP_Y = (CANVAS_SIZE - CROP_SIZE) / 2;
 
   // Reactivity: Filtered Cargos according to assigned salas
   $: availableCargos = ($masterCargosStore || []).filter(c => {
@@ -204,53 +213,160 @@
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      rawImageSrc = event.target.result;
-      cropperZoom = 1;
-      isCropperOpen = true;
+      const img = new Image();
+      img.onload = () => {
+        cropperImg = img;
+        cropperZoom = 1.0;
+        cropperOffsetX = 0;
+        cropperOffsetY = 0;
+        isCropperOpen = true;
+        setTimeout(drawCropper, 60);
+      };
+      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
     e.target.value = ''; // Reset input
   }
 
+  function drawCropper() {
+    if (!cropperCanvas || !cropperImg) return;
+    const ctx = cropperCanvas.getContext('2d');
+    const cw = cropperCanvas.width;
+    const ch = cropperCanvas.height;
+
+    ctx.clearRect(0, 0, cw, ch);
+
+    // Fondo oscuro detrás
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Escalar la imagen manteniendo proporción
+    const baseScale = Math.max(CROP_SIZE / cropperImg.width, CROP_SIZE / cropperImg.height);
+    const scale = baseScale * cropperZoom;
+    const drawW = cropperImg.width * scale;
+    const drawH = cropperImg.height * scale;
+
+    const drawX = (cw - drawW) / 2 + cropperOffsetX;
+    const drawY = (ch - drawH) / 2 + cropperOffsetY;
+
+    ctx.drawImage(cropperImg, drawX, drawY, drawW, drawH);
+
+    // Sombra oscura alrededor del recuadro de recorte
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    // Arriba
+    ctx.fillRect(0, 0, cw, CROP_Y);
+    // Abajo
+    ctx.fillRect(0, CROP_Y + CROP_SIZE, cw, ch - (CROP_Y + CROP_SIZE));
+    // Izquierda
+    ctx.fillRect(0, CROP_Y, CROP_X, CROP_SIZE);
+    // Derecha
+    ctx.fillRect(CROP_X + CROP_SIZE, CROP_Y, cw - (CROP_X + CROP_SIZE), CROP_SIZE);
+
+    // Borde verde del recuadro
+    ctx.strokeStyle = '#16a34a';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(CROP_X, CROP_Y, CROP_SIZE, CROP_SIZE);
+
+    // 4 Esquinas verdes
+    ctx.fillStyle = '#16a34a';
+    const hs = 10;
+    ctx.fillRect(CROP_X - 2, CROP_Y - 2, hs, hs);
+    ctx.fillRect(CROP_X + CROP_SIZE - hs + 2, CROP_Y - 2, hs, hs);
+    ctx.fillRect(CROP_X - 2, CROP_Y + CROP_SIZE - hs + 2, hs, hs);
+    ctx.fillRect(CROP_X + CROP_SIZE - hs + 2, CROP_Y + CROP_SIZE - hs + 2, hs, hs);
+  }
+
+  function handleMouseDown(e) {
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    initialOffsetX = cropperOffsetX;
+    initialOffsetY = cropperOffsetY;
+  }
+
+  function handleMouseMove(e) {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    cropperOffsetX = initialOffsetX + dx;
+    cropperOffsetY = initialOffsetY + dy;
+    drawCropper();
+  }
+
+  function handleMouseUp() {
+    isDragging = false;
+  }
+
+  function handleTouchStart(e) {
+    if (e.touches && e.touches.length > 0) {
+      isDragging = true;
+      dragStartX = e.touches[0].clientX;
+      dragStartY = e.touches[0].clientY;
+      initialOffsetX = cropperOffsetX;
+      initialOffsetY = cropperOffsetY;
+    }
+  }
+
+  function handleTouchMove(e) {
+    if (!isDragging || !e.touches || e.touches.length === 0) return;
+    const dx = e.touches[0].clientX - dragStartX;
+    const dy = e.touches[0].clientY - dragStartY;
+    cropperOffsetX = initialOffsetX + dx;
+    cropperOffsetY = initialOffsetY + dy;
+    drawCropper();
+  }
+
+  function handleTouchEnd() {
+    isDragging = false;
+  }
+
+  function handleWheel(e) {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.08 : -0.08;
+    cropperZoom = Math.min(3.5, Math.max(1.0, cropperZoom + delta));
+    drawCropper();
+  }
+
+  function handleZoomSlider(e) {
+    cropperZoom = parseFloat(e.target.value);
+    drawCropper();
+  }
+
   function cancelCropping() {
     isCropperOpen = false;
-    rawImageSrc = '';
+    cropperImg = null;
   }
 
   function processCroppedImage() {
-    if (!imageElem) return;
+    if (!cropperImg) return;
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = 400;
+    outCanvas.height = 400;
+    const outCtx = outCanvas.getContext('2d');
 
-    // Canvas extraction
-    const canvas = document.createElement('canvas');
-    const targetSize = 400; // Optimal 400x400 standard employee photo
-    canvas.width = targetSize;
-    canvas.height = targetSize;
-    const ctx = canvas.getContext('2d');
+    const cw = CANVAS_SIZE;
+    const ch = CANVAS_SIZE;
+    const baseScale = Math.max(CROP_SIZE / cropperImg.width, CROP_SIZE / cropperImg.height);
+    const scale = baseScale * cropperZoom;
+    const drawW = cropperImg.width * scale;
+    const drawH = cropperImg.height * scale;
+    const drawX = (cw - drawW) / 2 + cropperOffsetX;
+    const drawY = (ch - drawH) / 2 + cropperOffsetY;
 
-    // Source rect
-    const imgNaturalW = imageElem.naturalWidth;
-    const imgNaturalH = imageElem.naturalHeight;
-    const displayW = imageElem.width;
-    const displayH = imageElem.height;
+    // Mapeo exacto de las coordenadas del recuadro hacia la imagen original
+    const sx = (CROP_X - drawX) / scale;
+    const sy = (CROP_Y - drawY) / scale;
+    const sSize = CROP_SIZE / scale;
 
-    const scaleX = imgNaturalW / displayW;
-    const scaleY = imgNaturalH / displayH;
+    outCtx.fillStyle = '#ffffff';
+    outCtx.fillRect(0, 0, 400, 400);
+    outCtx.drawImage(cropperImg, sx, sy, sSize, sSize, 0, 0, 400, 400);
 
-    const sx = Math.max(0, cropperBox.x * scaleX);
-    const sy = Math.max(0, cropperBox.y * scaleY);
-    const sw = Math.min(imgNaturalW - sx, cropperBox.size * scaleX);
-    const sh = Math.min(imgNaturalH - sy, cropperBox.size * scaleY);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, targetSize, targetSize);
-    ctx.drawImage(imageElem, sx, sy, sw, sh, 0, 0, targetSize, targetSize);
-
-    // Compress to JPEG 85%
-    const compressed = canvas.toDataURL('image/jpeg', 0.85);
+    const compressed = outCanvas.toDataURL('image/jpeg', 0.85);
     fotoBase64 = compressed;
     fotoUrl = compressed;
     isCropperOpen = false;
-    rawImageSrc = '';
+    cropperImg = null;
     triggerToast('Fotografía procesada y optimizada con éxito', 'success');
   }
 
@@ -583,39 +699,38 @@
       class="cropper-backdrop" 
       role="dialog" 
       aria-modal="true" 
+      tabindex="-1"
       on:click|stopPropagation>
       
       <div class="cropper-card">
         <div class="cropper-viewport">
-          <div class="cropper-stage" style="transform: scale({cropperZoom});">
-            <img 
-              src={rawImageSrc} 
-              alt="Para recortar" 
-              bind:this={imageElem} 
-              class="cropper-source-img" 
-            />
-            
-            <!-- Green Interactive Crop Box Overlay -->
-            <div 
-              class="crop-box-green" 
-              style="left: {cropperBox.x}px; top: {cropperBox.y}px; width: {cropperBox.size}px; height: {cropperBox.size}px;">
-              <span class="handle h-tl"></span>
-              <span class="handle h-tr"></span>
-              <span class="handle h-bl"></span>
-              <span class="handle h-br"></span>
-            </div>
-          </div>
+          <!-- Interactive HTML5 Canvas -->
+          <canvas 
+            bind:this={cropperCanvas}
+            width={CANVAS_SIZE}
+            height={CANVAS_SIZE}
+            class="cropper-canvas {isDragging ? 'is-dragging' : ''}"
+            on:mousedown={handleMouseDown}
+            on:mousemove={handleMouseMove}
+            on:mouseup={handleMouseUp}
+            on:mouseleave={handleMouseUp}
+            on:touchstart|passive={handleTouchStart}
+            on:touchmove|passive={handleTouchMove}
+            on:touchend={handleTouchEnd}
+            on:wheel|preventDefault={handleWheel}
+          ></canvas>
 
           <!-- Vertical Zoom Slider with Green Thumb -->
           <div class="zoom-slider-container">
             <input 
               type="range" 
-              min="0.8" 
-              max="2.5" 
+              min="1.0" 
+              max="3.5" 
               step="0.05" 
-              bind:value={cropperZoom} 
+              value={cropperZoom} 
+              on:input={handleZoomSlider}
               class="vertical-zoom-range" 
-              title="Ajustar zoom" 
+              title="Ajustar zoom de la foto" 
             />
           </div>
         </div>
@@ -1099,56 +1214,63 @@
     overflow: hidden;
   }
 
-  .cropper-stage {
-    position: relative;
-    display: inline-block;
-    transition: transform 0.05s ease-out;
-  }
-
-  .cropper-source-img {
-    max-height: 290px;
-    max-width: 320px;
+  .cropper-canvas {
     display: block;
+    cursor: grab;
     user-select: none;
+    touch-action: none;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
-  .crop-box-green {
-    position: absolute;
-    border: 2px solid #16a34a;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
-    pointer-events: none;
+  .cropper-canvas.is-dragging {
+    cursor: grabbing;
   }
-
-  .handle {
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    background: #16a34a;
-  }
-
-  .h-tl { top: -4px; left: -4px; }
-  .h-tr { top: -4px; right: -4px; }
-  .h-bl { bottom: -4px; left: -4px; }
-  .h-br { bottom: -4px; right: -4px; }
 
   .zoom-slider-container {
     position: absolute;
-    right: 14px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
     height: 180px;
+    width: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
   .vertical-zoom-range {
-    writing-mode: bt-lr; /* IE */
-    -webkit-appearance: slider-vertical;
-    width: 8px;
-    height: 160px;
-    accent-color: #16a34a;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 140px;
+    height: 6px;
+    background: #475569;
+    border-radius: 4px;
+    outline: none;
+    transform: rotate(-90deg);
     cursor: pointer;
+  }
+
+  .vertical-zoom-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #16a34a;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  }
+
+  .vertical-zoom-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #16a34a;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
   }
 
   .cropper-footer {
