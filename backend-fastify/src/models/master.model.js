@@ -3117,9 +3117,13 @@ export async function getEmpleadosModel(params = {}) {
 
 export async function createEmpleadoModel(data) {
   if (isPgConnected && sql) {
+    const nextIdRes = await sql`SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM empleados`;
+    const nextId = Number(nextIdRes[0].next_id);
+    const foto = data.foto || `/empleados/${nextId}.jpg`;
+
     const rows = await sql`
-      INSERT INTO empleados (foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_id, activo, motivo_desincorporacion)
-      VALUES (${data.foto || null}, ${data.nombre}, ${data.cedula}, ${data.fecha_ingreso || null}, ${data.fecha_nacimiento || null}, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
+      INSERT INTO empleados (id, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_id, activo, motivo_desincorporacion)
+      VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${data.fecha_ingreso || null}, ${data.fecha_nacimiento || null}, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
       RETURNING *
     `;
     return rows[0];
