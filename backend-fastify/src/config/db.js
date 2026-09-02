@@ -696,9 +696,73 @@ export async function initDb() {
 
     isPgConnected = true;
     console.log(`\x1b[32m🟢 [CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
+
+    // Sincronizar In-Memory Fallback con la data viva de PostgreSQL al inicio
+    await syncInMemoryFromPg();
+
+    // Sincronización periódica cada 5 minutos en segundo plano
+    setInterval(syncInMemoryFromPg, 5 * 60 * 1000).unref();
   } catch (err) {
     isPgConnected = false;
     console.log(`\x1b[31m🔴 [DESCONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Modo: In-Memory`);
+  }
+}
+
+// Sincroniza todas las tablas vivas de PostgreSQL en el almacén en memoria para que nunca quede desactualizado
+export async function syncInMemoryFromPg() {
+  if (!isPgConnected || !sql) return;
+  try {
+    const [
+      usuarios,
+      grupoSalas,
+      salas,
+      userSalas,
+      paginas,
+      modulos,
+      permissions,
+      userModulePermissions,
+      dispositivos,
+      departamentos,
+      areas,
+      cargos,
+      empleados,
+      configuracion,
+      wisiItems
+    ] = await Promise.all([
+      sql`SELECT * FROM usuarios ORDER BY id ASC`.catch(() => inMemoryData.usuarios),
+      sql`SELECT * FROM grupo_salas ORDER BY id ASC`.catch(() => inMemoryData.grupo_salas),
+      sql`SELECT * FROM salas ORDER BY id ASC`.catch(() => inMemoryData.salas),
+      sql`SELECT * FROM user_salas ORDER BY id ASC`.catch(() => inMemoryData.user_salas),
+      sql`SELECT * FROM paginas ORDER BY id ASC`.catch(() => inMemoryData.paginas),
+      sql`SELECT * FROM modulos ORDER BY orden ASC, id ASC`.catch(() => inMemoryData.modulos),
+      sql`SELECT * FROM permissions ORDER BY id ASC`.catch(() => inMemoryData.permissions),
+      sql`SELECT * FROM user_module_permissions ORDER BY id ASC`.catch(() => inMemoryData.user_module_permissions),
+      sql`SELECT *, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto FROM dispositivos ORDER BY id ASC`.catch(() => inMemoryData.dispositivos),
+      sql`SELECT * FROM departamentos ORDER BY id ASC`.catch(() => inMemoryData.departamentos),
+      sql`SELECT * FROM areas ORDER BY id ASC`.catch(() => inMemoryData.areas),
+      sql`SELECT * FROM cargos ORDER BY id ASC`.catch(() => inMemoryData.cargos),
+      sql`SELECT * FROM empleados ORDER BY id ASC`.catch(() => inMemoryData.empleados),
+      sql`SELECT * FROM configuracion`.catch(() => inMemoryData.configuracion),
+      sql`SELECT * FROM wisi_items ORDER BY id ASC`.catch(() => inMemoryData.wisi_items)
+    ]);
+
+    if (usuarios && usuarios.length > 0) inMemoryData.usuarios = usuarios;
+    if (grupoSalas && grupoSalas.length > 0) inMemoryData.grupo_salas = grupoSalas;
+    if (salas && salas.length > 0) inMemoryData.salas = salas;
+    if (userSalas && userSalas.length > 0) inMemoryData.user_salas = userSalas;
+    if (paginas && paginas.length > 0) inMemoryData.paginas = paginas;
+    if (modulos && modulos.length > 0) inMemoryData.modulos = modulos;
+    if (permissions && permissions.length > 0) inMemoryData.permissions = permissions;
+    if (userModulePermissions && userModulePermissions.length > 0) inMemoryData.user_module_permissions = userModulePermissions;
+    if (dispositivos && dispositivos.length > 0) inMemoryData.dispositivos = dispositivos;
+    if (departamentos && departamentos.length > 0) inMemoryData.departamentos = departamentos;
+    if (areas && areas.length > 0) inMemoryData.areas = areas;
+    if (cargos && cargos.length > 0) inMemoryData.cargos = cargos;
+    if (empleados && empleados.length > 0) inMemoryData.empleados = empleados;
+    if (configuracion && configuracion.length > 0) inMemoryData.configuracion = configuracion;
+    if (wisiItems && wisiItems.length > 0) inMemoryData.wisi_items = wisiItems;
+  } catch (err) {
+    console.warn('Aviso sincronizando In-Memory Fallback desde PostgreSQL:', err.message);
   }
 }
 

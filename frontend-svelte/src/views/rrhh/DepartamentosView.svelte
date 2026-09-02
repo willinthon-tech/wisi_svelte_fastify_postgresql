@@ -70,8 +70,10 @@
   };
 
   onMount(async () => {
-    await loadMasterStoresFromBackend();
-    await loadServerData(currentParams);
+    await Promise.all([
+      loadMasterStoresFromBackend(),
+      loadServerData(currentParams)
+    ]);
   });
 
   // Fetch filter options ONLY when active filters, user assigned salas or search change

@@ -486,12 +486,10 @@
       updateInitialDaysHeader();
     }
 
-    await fetchFilterOptions();
-
-    // Auto-fetch using preserved dates if returning to an active search
-    if (fechaDesde && fechaHasta) {
-      await fetchReporteData(true);
-    }
+    await Promise.all([
+      fetchFilterOptions(),
+      (fechaDesde && fechaHasta) ? fetchReporteData(true) : Promise.resolve()
+    ]);
   });
 
   async function fetchReporteData(silent = false) {

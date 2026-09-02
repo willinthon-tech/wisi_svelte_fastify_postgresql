@@ -446,6 +446,17 @@
     return '';
   }
 
+  // Precarga en segundo plano de las fotos visibles en la página actual para respuesta instantánea (0ms)
+  $: if (paginatedItems && paginatedItems.length > 0 && typeof window !== 'undefined') {
+    paginatedItems.forEach(item => {
+      const url = getPhotoUrl(item);
+      if (url) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }
+
   function getInitials(name, cedula) {
     if (name && typeof name === 'string' && name.trim().length > 0) {
       const parts = name.trim().split(/\s+/);

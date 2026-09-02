@@ -183,6 +183,17 @@
     return `${base}/attlogs/${id}.jpg`;
   }
 
+  // Precarga automática en segundo plano de las fotos de los 10 marcajes visibles en pantalla
+  $: if (attlogs && attlogs.length > 0 && typeof window !== "undefined") {
+    attlogs.forEach((att) => {
+      const photoId = att?.id || att?.attlog_id;
+      if (photoId) {
+        const img = new Image();
+        img.src = getPhotoUrl(photoId);
+      }
+    });
+  }
+
   // Debounce search input (300ms)
   $: {
     if (searchQuery !== undefined) {

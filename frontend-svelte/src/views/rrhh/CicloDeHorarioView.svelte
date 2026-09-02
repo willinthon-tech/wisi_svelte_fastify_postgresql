@@ -75,11 +75,13 @@
   }
 
   onMount(async () => {
-    await loadMasterStoresFromBackend();
     isMounted = true;
     lastFetchedSalaIds = assignedSalaIds.join(',');
-    await fetchFilterOptions();
-    await loadServerData(currentParams);
+    await Promise.all([
+      loadMasterStoresFromBackend(),
+      fetchFilterOptions(),
+      loadServerData(currentParams)
+    ]);
   });
 
   // Fetch filter options
