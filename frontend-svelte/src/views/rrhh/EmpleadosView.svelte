@@ -149,8 +149,10 @@
   let isMounted = false;
 
   onMount(async () => {
-    await loadMasterStoresFromBackend();
-    await loadServerData(currentParams);
+    await Promise.all([
+      loadMasterStoresFromBackend(),
+      loadServerData(currentParams)
+    ]);
     isMounted = true;
 
     // Reactividad en tiempo real: si cambia masterEmpleadosStore al crear/eliminar, recargar automáticamente
