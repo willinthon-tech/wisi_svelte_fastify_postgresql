@@ -432,7 +432,7 @@ export async function getDispositivosModel(salaId = null, salaIds = null) {
   if (isPgConnected && sql) {
     if (ids.length > 0) {
       return await sql`
-        SELECT d.*, COALESCE(d.ip_panel_remoto, '') AS ip_panel, COALESCE(d.ip_panel_remoto, '') AS ip_panel_remoto, s.nombre AS sala_nombre
+        SELECT d.*, COALESCE(d.ip_panel, '') AS ip_panel, COALESCE(d.ip_panel, '') AS ip_panel_remoto, s.nombre AS sala_nombre
         FROM dispositivos d
         LEFT JOIN salas s ON d.sala_id = s.id
         WHERE d.sala_id = ANY(${ids})
@@ -440,7 +440,7 @@ export async function getDispositivosModel(salaId = null, salaIds = null) {
       `;
     }
     return await sql`
-      SELECT d.*, COALESCE(d.ip_panel_remoto, '') AS ip_panel, COALESCE(d.ip_panel_remoto, '') AS ip_panel_remoto, s.nombre AS sala_nombre
+      SELECT d.*, COALESCE(d.ip_panel, '') AS ip_panel, COALESCE(d.ip_panel, '') AS ip_panel_remoto, s.nombre AS sala_nombre
       FROM dispositivos d
       LEFT JOIN salas s ON d.sala_id = s.id
       ORDER BY d.id DESC
@@ -453,12 +453,12 @@ export async function getDispositivosModel(salaId = null, salaIds = null) {
 }
 
 export async function createDispositivoModel(data) {
-  const ipPanelVal = data.ip_panel_remoto || data.ip_panel || '';
+  const ipPanelVal = data.ip_panel || data.ip_panel_remoto || '';
   if (isPgConnected && sql) {
     const rows = await sql`
-      INSERT INTO dispositivos (nombre, sala_id, ip_local, ip_remota, ip_panel_remoto, usuario, clave)
+      INSERT INTO dispositivos (nombre, sala_id, ip_local, ip_remota, ip_panel, usuario, clave)
       VALUES (${data.nombre}, ${data.sala_id}, ${data.ip_local}, ${data.ip_remota}, ${ipPanelVal}, ${data.usuario || 'admin'}, ${data.clave || '123456'})
-      RETURNING *, COALESCE(ip_panel_remoto, '') AS ip_panel, COALESCE(ip_panel_remoto, '') AS ip_panel_remoto
+      RETURNING *, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto
     `;
     return rows[0];
   } else {
@@ -471,15 +471,15 @@ export async function createDispositivoModel(data) {
 
 export async function updateDispositivoModel(id, data) {
   const dId = Number(id);
-  const ipPanelVal = data.ip_panel_remoto || data.ip_panel || '';
+  const ipPanelVal = data.ip_panel || data.ip_panel_remoto || '';
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE dispositivos
       SET nombre = ${data.nombre}, sala_id = ${data.sala_id}, ip_local = ${data.ip_local},
-          ip_remota = ${data.ip_remota}, ip_panel_remoto = ${ipPanelVal}, usuario = ${data.usuario || 'admin'},
+          ip_remota = ${data.ip_remota}, ip_panel = ${ipPanelVal}, usuario = ${data.usuario || 'admin'},
           clave = ${data.clave || '123456'}
       WHERE id = ${dId}
-      RETURNING *, COALESCE(ip_panel_remoto, '') AS ip_panel, COALESCE(ip_panel_remoto, '') AS ip_panel_remoto
+      RETURNING *, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto
     `;
     return rows[0];
   } else {
