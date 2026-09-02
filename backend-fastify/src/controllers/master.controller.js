@@ -287,9 +287,12 @@ export async function injectHikvisionIsapiHttpListening(request, reply) {
     const { id } = request.params;
     const config = parseBody(request.body) || {};
     const result = await injectHikvisionIsapiHttpListeningModel(id, config);
+    if (!result.success) {
+      return reply.status(400).send(result);
+    }
     return reply.send({
       success: true,
-      message: result.message || `Configuración HTTP Listening ISAPI enviada a '${result.nombre || id}'`,
+      message: result.message || `Configuración HTTP Listening ISAPI inyectada a '${result.nombre || id}'`,
       data: result
     });
   } catch (err) {

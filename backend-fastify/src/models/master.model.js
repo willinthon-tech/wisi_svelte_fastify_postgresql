@@ -29,6 +29,8 @@ import { sql, isPgConnected, inMemoryData } from '../config/db.js';
 import { attlogEvents } from '../events/attlog.events.js';
 import fs from 'fs';
 import path from 'path';
+import http from 'http';
+import https from 'https';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -532,27 +534,111 @@ function md5Hash(str) {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
-function computeDigestHeader(wwwAuthHeader, username, password, method, uri) {
-  const realmMatch = wwwAuthHeader.match(/realm="([^"]+)"/i);
-  const nonceMatch = wwwAuthHeader.match(/nonce="([^"]+)"/i);
-  const qopMatch = wwwAuthHeader.match(/qop="([^"]+)"/i);
+function getAuthParam(header, param) {
+  if (!header) return '';
+  const match = header.match(new RegExp(`${param}="?([^",\\s]+)"?`, 'i'));
+  return match ? match[1] : '';
+}
 
-  const realm = realmMatch ? realmMatch[1] : '';
-  const nonce = nonceMatch ? nonceMatch[1] : '';
-  const qop = qopMatch ? qopMatch[1] : '';
+function computeDigestHeader(wwwAuthHeader, username, password, method, uri) {
+  const realm = getAuthParam(wwwAuthHeader, 'realm');
+  const nonce = getAuthParam(wwwAuthHeader, 'nonce');
+  const qopRaw = getAuthParam(wwwAuthHeader, 'qop');
+  const opaque = getAuthParam(wwwAuthHeader, 'opaque');
+  const algorithm = (getAuthParam(wwwAuthHeader, 'algorithm') || 'MD5').toUpperCase();
+
+  const qop = qopRaw.toLowerCase().includes('auth') ? 'auth' : '';
 
   const ha1 = md5Hash(`${username}:${realm}:${password}`);
   const ha2 = md5Hash(`${method}:${uri}`);
+
+  let authParts = [
+    `username="${username}"`,
+    `realm="${realm}"`,
+    `nonce="${nonce}"`,
+    `uri="${uri}"`
+  ];
+
+  if (algorithm && algorithm !== 'MD5') {
+    authParts.push(`algorithm=${algorithm}`);
+  }
 
   if (qop) {
     const cnonce = crypto.randomBytes(8).toString('hex');
     const nc = '00000001';
     const response = md5Hash(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`);
-    return `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", qop=${qop}, nc=${nc}, cnonce="${cnonce}", response="${response}"`;
+    authParts.push(`qop=${qop}`);
+    authParts.push(`nc=${nc}`);
+    authParts.push(`cnonce="${cnonce}"`);
+    authParts.push(`response="${response}"`);
   } else {
     const response = md5Hash(`${ha1}:${nonce}:${ha2}`);
-    return `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"`;
+    authParts.push(`response="${response}"`);
   }
+
+  if (opaque) {
+    authParts.push(`opaque="${opaque}"`);
+  }
+
+  return `Digest ${authParts.join(', ')}`;
+}
+
+function isapiHttpRequest(targetUrl, options = {}) {
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(targetUrl);
+    } catch (e) {
+      return reject(new Error(`URL inválida '${targetUrl}': ${e.message}`));
+    }
+
+    const isHttps = parsed.protocol === 'https:';
+    const lib = isHttps ? https : http;
+    const defaultPort = isHttps ? 443 : 80;
+
+    const reqOptions = {
+      hostname: parsed.hostname,
+      port: parsed.port || defaultPort,
+      path: parsed.pathname + parsed.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      timeout: options.timeout || 12000,
+      rejectUnauthorized: false
+    };
+
+    const req = lib.request(reqOptions, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode,
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          headers: {
+            get: (name) => {
+              const val = res.headers[name.toLowerCase()];
+              return Array.isArray(val) ? val.join(', ') : val || null;
+            }
+          },
+          text: async () => data
+        });
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Tiempo de espera agotado (12s) al conectar con ${parsed.hostname}:${reqOptions.port}`));
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    if (options.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
 }
 
 export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
@@ -570,18 +656,22 @@ export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
   }
 
   const savedConfig = await getConfiguracionModel();
-  const rawIp = dev.ip_remota || dev.ip_local || '127.0.0.1';
-  const targetHost = rawIp.startsWith('http') ? rawIp : `http://${rawIp}`;
+  const rawIp = (dev.ip_remota || dev.ip_local || '127.0.0.1').trim();
   const username = dev.usuario || 'admin';
   const password = dev.clave || '123456';
 
-  const ipAddress = config.ip_domain || savedConfig.isapi_ip_domain || '190.72.102.210';
-  const urlPath = config.url || savedConfig.isapi_url || '/api/attlogs/sync';
-  const portNo = Number(config.port || savedConfig.isapi_port) || 8015;
-  const protocolType = String(config.protocol || savedConfig.isapi_protocol || 'HTTP').toUpperCase();
+  const ipAddress = (config.ip_domain || savedConfig.isapi_ip_domain || 'willinthon.wisi.space').trim();
+  const urlPath = (config.url || savedConfig.isapi_url || '/api/attlogs/sync').trim();
+  const portNo = Number(config.port || savedConfig.isapi_port) || 443;
+  const protocolType = String(config.protocol || savedConfig.isapi_protocol || 'HTTPS').toUpperCase();
 
-  const isapiUri = '/ISAPI/Event/notification/httpHosts/1';
-  const isapiFullUrl = `${targetHost.replace(/\/+$/, '')}${isapiUri}`;
+  const isDomain = /[a-zA-Z]/.test(ipAddress);
+  const hostXml = isDomain
+    ? `  <addressingFormatType>hostname</addressingFormatType>
+  <hostName>${ipAddress}</hostName>
+  <ipAddress>${ipAddress}</ipAddress>`
+    : `  <addressingFormatType>ipaddress</addressingFormatType>
+  <ipAddress>${ipAddress}</ipAddress>`;
 
   const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
 <HttpHostNotification version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
@@ -589,70 +679,105 @@ export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
   <url>${urlPath}</url>
   <protocolType>${protocolType}</protocolType>
   <parameterFormatType>XML</parameterFormatType>
-  <addressingFormatType>ipaddress</addressingFormatType>
-  <ipAddress>${ipAddress}</ipAddress>
+${hostXml}
   <portNo>${portNo}</portNo>
   <httpListening>
     <enable>true</enable>
   </httpListening>
 </HttpHostNotification>`;
 
-  console.log(`[ISAPI LISTENING] ⚡ Intentando inyección ISAPI HTTP Listening a Biométrico #${dev.id} ('${dev.nombre}') en ${isapiFullUrl}`);
+  const isapiUri = '/ISAPI/Event/notification/httpHosts/1';
 
-  try {
-    const step1Res = await fetch(isapiFullUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/xml' },
-      body: xmlPayload
-    });
+  let targetHosts = [];
+  if (rawIp.startsWith('http://') || rawIp.startsWith('https://')) {
+    targetHosts.push(rawIp.replace(/\/+$/, ''));
+  } else {
+    targetHosts.push(`http://${rawIp.replace(/\/+$/, '')}`);
+    targetHosts.push(`https://${rawIp.replace(/\/+$/, '')}`);
+  }
 
-    if (step1Res.status === 401) {
-      const wwwAuth = step1Res.headers.get('www-authenticate');
-      if (wwwAuth && wwwAuth.toLowerCase().includes('digest')) {
-        const authHeader = computeDigestHeader(wwwAuth, username, password, 'PUT', isapiUri);
-        const step2Res = await fetch(isapiFullUrl, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/xml',
-            'Authorization': authHeader
-          },
-          body: xmlPayload
-        });
+  let lastError = null;
 
-        const respText = await step2Res.text();
-        if (step2Res.ok || respText.includes('OK') || respText.includes('statusCode>1<')) {
-          console.log(`[ISAPI LISTENING SUCCESS] Configuración ISAPI inyectada exitosamente en #${dev.id}`);
-          return {
-            success: true,
-            status_code: step2Res.status,
-            message: `Configuración HTTP Listening inyectada por ISAPI (Digest) exitosamente en '${dev.nombre}'`,
-            details: { ipAddress, urlPath, portNo, protocolType, targetHost }
-          };
+  for (const baseHost of targetHosts) {
+    const isapiFullUrl = `${baseHost}${isapiUri}`;
+    console.log(`[ISAPI INJECTION] ⚡ Intentando inyección HTTP Listening a Biométrico #${dev.id} ('${dev.nombre}') en ${isapiFullUrl}`);
+
+    try {
+      const step1Res = await isapiHttpRequest(isapiFullUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/xml',
+          'User-Agent': 'Wisi-ISAPI-Client/2.0'
+        },
+        body: xmlPayload
+      });
+
+      if (step1Res.status === 401) {
+        const wwwAuth = step1Res.headers.get('www-authenticate') || '';
+        if (wwwAuth.toLowerCase().includes('digest')) {
+          const authHeader = computeDigestHeader(wwwAuth, username, password, 'PUT', isapiUri);
+          const step2Res = await isapiHttpRequest(isapiFullUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/xml',
+              'Authorization': authHeader,
+              'User-Agent': 'Wisi-ISAPI-Client/2.0'
+            },
+            body: xmlPayload
+          });
+
+          const respText = await step2Res.text();
+          const isSuccess = step2Res.ok || respText.includes('statusCode>1<') || respText.includes('statusString>OK<') || respText.includes('subStatusCode>ok<');
+
+          if (isSuccess) {
+            console.log(`[ISAPI SUCCESS] ✅ Configuración HTTP Listening aplicada en #${dev.id} ('${dev.nombre}')`);
+            return {
+              success: true,
+              message: `¡HTTP Listening configurado exitosamente en '${dev.nombre}'! (${ipAddress}:${portNo}${urlPath})`,
+              details: { ipAddress, urlPath, portNo, protocolType, targetHost: baseHost }
+            };
+          } else if (step2Res.status === 401) {
+            return {
+              success: false,
+              error: `El biométrico '${dev.nombre}' rechazó las credenciales (usuario '${username}' o clave incorrecta)`
+            };
+          } else {
+            const subMatch = respText.match(/<subStatusCode>([^<]+)<\/subStatusCode>/i) 
+              || respText.match(/<statusString>([^<]+)<\/statusString>/i)
+              || respText.match(/<errorMsg>([^<]+)<\/errorMsg>/i);
+            const detailMsg = subMatch ? subMatch[1] : `HTTP ${step2Res.status}`;
+            return {
+              success: false,
+              error: `El biométrico '${dev.nombre}' rechazó el XML (${detailMsg})`,
+              rawResponse: respText
+            };
+          }
         } else {
           return {
-            success: true,
-            status_code: step2Res.status,
-            message: `Comando ISAPI Digest transmitido a '${dev.nombre}' (${targetHost})`,
-            details: { ipAddress, urlPath, portNo, protocolType, targetHost, response: respText }
+            success: false,
+            error: `El biométrico '${dev.nombre}' solicitó autenticación no soportada: ${wwwAuth}`
           };
         }
+      } else if (step1Res.ok) {
+        return {
+          success: true,
+          message: `¡HTTP Listening configurado exitosamente en '${dev.nombre}'! (${ipAddress}:${portNo}${urlPath})`,
+          details: { ipAddress, urlPath, portNo, protocolType, targetHost: baseHost }
+        };
+      } else {
+        const resp1Text = await step1Res.text();
+        lastError = `Respuesta HTTP ${step1Res.status} de ${baseHost}: ${resp1Text.slice(0, 100)}`;
       }
+    } catch (err) {
+      lastError = err.message;
+      console.warn(`[ISAPI INJECTION TRY FAILED] en ${baseHost}: ${err.message}`);
     }
-
-    return {
-      success: true,
-      status_code: step1Res.status,
-      message: `Configuración HTTP Listening ISAPI enviada a '${dev.nombre}' (${targetHost})`,
-      details: { ipAddress, urlPath, portNo, protocolType, targetHost }
-    };
-  } catch (err) {
-    console.error(`[ISAPI LISTENING] Nota: Se envió la configuración ISAPI para '${dev.nombre}': ${err.message}`);
-    return {
-      success: true,
-      message: `Configuración HTTP Listening inyectada para '${dev.nombre}' (${targetHost})`,
-      details: { ipAddress, urlPath, portNo, protocolType, targetHost }
-    };
   }
+
+  return {
+    success: false,
+    error: `No se pudo conectar con el biométrico '${dev.nombre}' (${rawIp}): ${lastError}`
+  };
 }
 
 export async function deleteDispositivoModel(id) {

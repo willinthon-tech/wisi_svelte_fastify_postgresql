@@ -852,15 +852,59 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     protocol: "HTTP",
   };
 
+  async function executeDirectIsapiInjection(device) {
+    if (!device || injectingDeviceId) return;
+    injectingDeviceId = device.id;
+    triggerToast(`⏳ Inyectando HTTP Listening en '${device.nombre}'...`, "info");
+    try {
+      await loadSystemConfig();
+      const payload = {
+        ip_domain: systemConfig.isapi_ip_domain || "willinthon.wisi.space",
+        url: systemConfig.isapi_url || "/api/attlogs/sync",
+        port: Number(systemConfig.isapi_port) || 443,
+        protocol: systemConfig.isapi_protocol || "HTTPS"
+      };
+
+      const res = await fetch(
+        `/api/master/dispositivos/${device.id}/isapi-http-listening`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast(
+          `⚡ ${json.message || `HTTP Listening configurado exitosamente en ${device.nombre}`}`,
+          "success"
+        );
+      } else {
+        triggerToast(
+          `❌ ${json?.error || json?.message || "Error al inyectar configuración en el biométrico"}`,
+          "error"
+        );
+      }
+    } catch (err) {
+      console.error("Error al inyectar ISAPI:", err);
+      triggerToast(
+        `❌ Error de conexión al inyectar en '${device.nombre}': ${err.message}`,
+        "error"
+      );
+    } finally {
+      injectingDeviceId = null;
+    }
+  }
+
   async function openIsapiModal(device) {
     if (!device) return;
     await loadSystemConfig();
     isapiSelectedDevice = device;
     isapiForm = {
-      ip_domain: systemConfig.isapi_ip_domain || "190.72.102.210",
+      ip_domain: systemConfig.isapi_ip_domain || "willinthon.wisi.space",
       url: systemConfig.isapi_url || "/api/attlogs/sync",
-      port: systemConfig.isapi_port || 8015,
-      protocol: systemConfig.isapi_protocol || "HTTP",
+      port: systemConfig.isapi_port || 443,
+      protocol: systemConfig.isapi_protocol || "HTTPS",
     };
     isIsapiModalOpen = true;
   }
@@ -2475,13 +2519,18 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                   {:else}
                     {#if activeTab === "dispositivos"}
                       <button
-                        on:click={() => openIsapiModal(item)}
+                        on:click={() => executeDirectIsapiInjection(item)}
                         type="button"
                         class="btn-flow-sec"
                         style="padding: 4px 8px; font-size: 12px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 700; gap: 4px;"
-                        title="Inyectar parámetros de HTTP Listening vía ISAPI (Digest Auth)"
+                        disabled={injectingDeviceId === item.id}
+                        title="Inyectar parámetros guardados en Configuración directamente al biométrico"
                       >
-                        ⚡ HTTP Listener
+                        {#if injectingDeviceId === item.id}
+                          ⏳ Inyectando...
+                        {:else}
+                          ⚡ HTTP Listener
+                        {/if}
                       </button>
                     {/if}
                     <button
