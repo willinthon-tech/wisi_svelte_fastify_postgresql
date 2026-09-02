@@ -14,7 +14,7 @@ import {
   getDepartamentos, getDepartamentosFilterOptions, createDepartamento, updateDepartamento, deleteDepartamento,
   getAreas, getAreasFilterOptions, createArea, updateArea, deleteArea,
   getCargos, getCargosFilterOptions, createCargo, updateCargo, deleteCargo,
-  getEmpleados, getEmpleadosFilterOptions, createEmpleado, updateEmpleado, deleteEmpleado
+  getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -121,6 +121,8 @@ export default async function masterRoutes(fastify, options) {
   // Empleados
   fastify.get('/master/empleados', getEmpleados);
   fastify.get('/master/empleados/filter-options', getEmpleadosFilterOptions);
+  fastify.get('/master/empleados/check-cedula', checkEmpleadoCedula);
+  fastify.get('/master/empleados/:id/dispositivos', getEmpleadoDispositivos);
   fastify.post('/master/empleados', createEmpleado);
   fastify.put('/master/empleados/:id', updateEmpleado);
   fastify.delete('/master/empleados/:id', deleteEmpleado);

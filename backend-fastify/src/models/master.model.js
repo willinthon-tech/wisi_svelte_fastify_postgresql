@@ -3117,18 +3117,100 @@ export async function getEmpleadosModel(params = {}) {
   return { success: true, data, total, page, limit, totalPages };
 }
 
+export async function checkEmpleadoCedulaModel(cedula, excludeId = null) {
+  if (!isPgConnected || !sql || !cedula) return { exists: false };
+  const clean = String(cedula).trim().toUpperCase();
+  const cleanNum = clean.replace(/^[VE]/i, '');
+  const excId = excludeId ? Number(excludeId) : null;
+
+  const rows = await sql`
+    SELECT 
+      e.id, 
+      e.nombre, 
+      e.cedula, 
+      e.activo, 
+      s.nombre AS sala_nombre
+    FROM empleados e
+    LEFT JOIN cargos c ON e.cargo_id = c.id
+    LEFT JOIN areas a ON c.area_id = a.id
+    LEFT JOIN departamentos d ON a.departamento_id = d.id
+    LEFT JOIN salas s ON d.sala_id = s.id
+    WHERE (UPPER(e.cedula) = ${clean} OR e.cedula = ${cleanNum} OR e.cedula = ${'V' + cleanNum} OR e.cedula = ${'E' + cleanNum})
+      ${excId ? sql`AND e.id != ${excId}` : sql``}
+    LIMIT 1
+  `;
+
+  if (rows.length > 0) {
+    return {
+      exists: true,
+      empleado: {
+        id: rows[0].id,
+        nombre: rows[0].nombre,
+        cedula: rows[0].cedula,
+        activo: rows[0].activo,
+        sala_nombre: rows[0].sala_nombre || 'Sin sala asignada'
+      }
+    };
+  }
+  return { exists: false };
+}
+
+export async function getEmpleadoDispositivosModel(empleadoId) {
+  if (!isPgConnected || !sql || !empleadoId) return [];
+  const rows = await sql`
+    SELECT dispositivo_id 
+    FROM empleado_dispositivos 
+    WHERE empleado_id = ${Number(empleadoId)}
+  `;
+  return rows.map(r => r.dispositivo_id);
+}
+
 export async function createEmpleadoModel(data) {
   if (isPgConnected && sql) {
     const nextIdRes = await sql`SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM empleados`;
     const nextId = Number(nextIdRes[0].next_id);
     const foto = data.foto || `/empleados/${nextId}.jpg`;
 
+    // Guardar foto en disco si viene en base64
+    if (data.fotoBase64) {
+      try {
+        const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const fs = await import('fs');
+        const path = await import('path');
+        const dir = path.join(process.cwd(), 'empleados');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, `${nextId}.jpg`), buffer);
+      } catch (e) {
+        console.error('Error guardando foto de empleado:', e);
+      }
+    }
+
     const rows = await sql`
       INSERT INTO empleados (id, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_id, activo, motivo_desincorporacion)
       VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${data.fecha_ingreso || null}, ${data.fecha_nacimiento || null}, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
       RETURNING *
     `;
-    return rows[0];
+    const emp = rows[0];
+
+    // Sincronizar dispositivos seleccionados
+    if (Array.isArray(data.dispositivo_ids)) {
+      for (const devId of data.dispositivo_ids) {
+        const dNum = Number(devId);
+        if (!isNaN(dNum) && dNum > 0) {
+          await sql`
+            INSERT INTO empleado_dispositivos (id, empleado_id, dispositivo_id)
+            VALUES (
+              (SELECT COALESCE(MAX(id), 0) + 1 FROM empleado_dispositivos),
+              ${nextId},
+              ${dNum}
+            )
+          `;
+        }
+      }
+    }
+
+    return emp;
   }
   return null;
 }
@@ -3141,7 +3223,22 @@ export async function updateEmpleadoModel(id, data) {
     if (currentRows.length === 0) throw new Error('Empleado no encontrado');
     const existing = currentRows[0];
 
-    const foto = data.foto !== undefined ? data.foto : existing.foto;
+    // Guardar nueva foto en disco si viene en base64
+    if (data.fotoBase64) {
+      try {
+        const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const fs = await import('fs');
+        const path = await import('path');
+        const dir = path.join(process.cwd(), 'empleados');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, `${eId}.jpg`), buffer);
+      } catch (e) {
+        console.error('Error actualizando foto de empleado:', e);
+      }
+    }
+
+    const foto = data.foto !== undefined ? data.foto : (data.fotoBase64 ? `/empleados/${eId}.jpg` : existing.foto);
     const nombre = data.nombre !== undefined ? data.nombre : existing.nombre;
     const cedula = data.cedula !== undefined ? data.cedula : existing.cedula;
     const fecha_ingreso = data.fecha_ingreso !== undefined ? data.fecha_ingreso : existing.fecha_ingreso;
@@ -3166,7 +3263,27 @@ export async function updateEmpleadoModel(id, data) {
       WHERE id = ${eId}
       RETURNING *
     `;
-    return rows[0];
+    const updatedEmp = rows[0];
+
+    // Sincronizar dispositivos seleccionados si se enviaron
+    if (Array.isArray(data.dispositivo_ids)) {
+      await sql`DELETE FROM empleado_dispositivos WHERE empleado_id = ${eId}`;
+      for (const devId of data.dispositivo_ids) {
+        const dNum = Number(devId);
+        if (!isNaN(dNum) && dNum > 0) {
+          await sql`
+            INSERT INTO empleado_dispositivos (id, empleado_id, dispositivo_id)
+            VALUES (
+              (SELECT COALESCE(MAX(id), 0) + 1 FROM empleado_dispositivos),
+              ${eId},
+              ${dNum}
+            )
+          `;
+        }
+      }
+    }
+
+    return updatedEmp;
   }
   return null;
 }

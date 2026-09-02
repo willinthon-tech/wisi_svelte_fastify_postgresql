@@ -10,7 +10,7 @@ import {
   getDepartamentosModel, getDepartamentosFilterOptionsModel, createDepartamentoModel, updateDepartamentoModel, deleteDepartamentoModel,
   getAreasModel, getAreasFilterOptionsModel, createAreaModel, updateAreaModel, deleteAreaModel,
   getCargosModel, getCargosFilterOptionsModel, createCargoModel, updateCargoModel, deleteCargoModel,
-  getEmpleadosModel, getEmpleadosFilterOptionsModel, createEmpleadoModel, updateEmpleadoModel, deleteEmpleadoModel,
+  getEmpleadosModel, getEmpleadosFilterOptionsModel, checkEmpleadoCedulaModel, getEmpleadoDispositivosModel, createEmpleadoModel, updateEmpleadoModel, deleteEmpleadoModel,
   getDepartamentosCiclosModel, getDepartamentosCiclosFilterOptionsModel,
   getPlantillasHorariosModel, getPlantillasHorariosFilterOptionsModel, createPlantillaHorarioModel, updatePlantillaHorarioModel, deletePlantillaHorarioModel,
   getDepartamentoEmpleadosCiclosModel, updateDepartamentoEmpleadosCiclosModel
@@ -1013,6 +1013,26 @@ export async function getEmpleadosFilterOptions(request, reply) {
 export async function getEmpleados(request, reply) {
   const result = await getEmpleadosModel(request.query);
   return reply.send(result);
+}
+
+export async function checkEmpleadoCedula(request, reply) {
+  try {
+    const { cedula, excludeId } = request.query || {};
+    const result = await checkEmpleadoCedulaModel(cedula, excludeId);
+    return reply.send({ success: true, ...result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function getEmpleadoDispositivos(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await getEmpleadoDispositivosModel(id);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
 }
 
 export async function createEmpleado(request, reply) {

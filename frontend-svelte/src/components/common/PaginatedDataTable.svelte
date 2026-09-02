@@ -105,6 +105,7 @@
   export let cargosOptions = [];
   export let reservedCodes = []; // Array of codes that cannot be used (e.g., ['L', 'U'])
   export let createModalTitle = ''; // Optional custom modal title override
+  export let customCreateModal = false; // When true, parent handles create modal via on:openModal
     let allMasterCargos = [];
   $: allMasterCargos = $masterCargosStore || [];
   $: activeCargosList = (cargosOptions && cargosOptions.length > 0) ? cargosOptions : allMasterCargos;
@@ -323,7 +324,7 @@
     if (val > lastTriggerVal) {
       lastTriggerVal = val;
       dispatch('openModal');
-      if (createFields && createFields.length > 0) {
+      if (!customCreateModal && createFields && createFields.length > 0) {
         openCreateModal();
       }
     }
@@ -1303,13 +1304,23 @@
                           Editar
                         </button>
                       {:else}
-                        <button 
-                          type="button"
-                          class="btn-action btn-edit"
-                          title="Editar en la misma línea"
-                          on:click={() => startInlineEdit(item)}>
-                          Editar
-                        </button>
+                        {#if actions.editModal}
+                          <button 
+                            type="button"
+                            class="btn-action btn-edit"
+                            title="Editar registro"
+                            on:click={() => dispatch('openEdit', item)}>
+                            Editar
+                          </button>
+                        {:else}
+                          <button 
+                            type="button"
+                            class="btn-action btn-edit"
+                            title="Editar en la misma línea"
+                            on:click={() => startInlineEdit(item)}>
+                            Editar
+                          </button>
+                        {/if}
                       {/if}
                     {/if}
 

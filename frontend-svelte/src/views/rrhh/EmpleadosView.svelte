@@ -26,6 +26,7 @@
   import { onMount, onDestroy } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
+  import EmpleadoFormModal from '../../components/modals/EmpleadoFormModal.svelte';
   import { 
     masterSalasStore,
     masterCargosStore, 
@@ -291,12 +292,37 @@
     { key: 'sala_nombre', label: 'Sala', sortable: true, editable: false }
   ];
 
+  let isFormModalOpen = false;
+  let formModalItem = null;
+
+  function openCreateFormModal() {
+    formModalItem = null;
+    isFormModalOpen = true;
+  }
+
+  function openEditFormModal(e) {
+    formModalItem = e.detail || null;
+    isFormModalOpen = true;
+  }
+
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterEmpleadosActions.add(draft);
-      triggerToast('Empleado creado exitosamente', 'success');
-      await loadServerData();
+      const res = await fetch('/api/master/empleados', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft)
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast('Empleado creado exitosamente', 'success');
+        isFormModalOpen = false;
+        formModalItem = null;
+        await loadMasterStoresFromBackend();
+        await loadServerData();
+      } else {
+        throw new Error(json.error || 'Error al crear empleado');
+      }
     } catch (err) {
       triggerToast(`Error al crear empleado: ${err.message}`, 'error');
     }
@@ -305,9 +331,21 @@
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
     try {
-      await masterEmpleadosActions.update(id, draft);
-      triggerToast('Empleado actualizado exitosamente', 'success');
-      await loadServerData();
+      const res = await fetch(`/api/master/empleados/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft)
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast('Empleado actualizado exitosamente', 'success');
+        isFormModalOpen = false;
+        formModalItem = null;
+        await loadMasterStoresFromBackend();
+        await loadServerData();
+      } else {
+        throw new Error(json.error || 'Error al actualizar empleado');
+      }
     } catch (err) {
       triggerToast(`Error al actualizar empleado: ${err.message}`, 'error');
     }
@@ -347,7 +385,8 @@
 <PaginatedDataTable 
   {items}
   existingItems={$masterEmpleadosStore || []}
-  {createFields}
+  createFields={[]}
+  customCreateModal={true}
   {totalCount}
   {currentPage}
   {pageSize}
@@ -356,10 +395,10 @@
   bind:searchQuery
   searchPlaceholder="Buscar por empleado, cédula, cargo, sala o ID..."
   entityType="empleado"
-  actions={{ edit: true, delete: false, desincorporate: true }}
+  actions={{ edit: true, editModal: true, delete: false, desincorporate: true }}
   on:fetchServerData={(e) => loadServerData(e.detail)}
-  on:create={handleCreate}
-  on:saveInline={handleSaveInline}
+  on:openModal={openCreateFormModal}
+  on:openEdit={openEditFormModal}
   on:desincorporate={handleDesincorporate}
   on:batchDesincorporate={handleBatchDesincorporate}
 >
@@ -438,6 +477,15 @@
     {/if}
   </div>
 </PaginatedDataTable>
+
+<EmpleadoFormModal 
+  bind:isOpen={isFormModalOpen}
+  item={formModalItem}
+  {assignedSalaIds}
+  on:create={handleCreate}
+  on:update={handleSaveInline}
+  on:close={() => { isFormModalOpen = false; formModalItem = null; }}
+/>
 
 <style>
   .smart-filters-grid {
