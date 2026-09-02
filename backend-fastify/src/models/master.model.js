@@ -1434,12 +1434,14 @@ export async function syncAttlogsModel(data) {
     for (const log of attlogs) {
       if (!log.employee_no || !log.event_time) continue;
       const verifyMode = log.currentVerifyMode || log.currentverifymode || log.verifyMode || log.verifymode || null;
+      const hasPhoto = Boolean(log.foto_base64 && String(log.foto_base64).trim().length > 0);
       const rows = await sql`
-        INSERT INTO attlogs (dispositivo_id, employee_no, event_time, nombre, attendancestatus, currentverifymode)
-        VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}, ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode})
+        INSERT INTO attlogs (dispositivo_id, employee_no, event_time, nombre, attendancestatus, currentverifymode, has_photo)
+        VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}, ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode}, ${hasPhoto})
         ON CONFLICT (dispositivo_id, employee_no, event_time)
         DO UPDATE SET updated_at = CURRENT_TIMESTAMP,
-                      currentverifymode = COALESCE(EXCLUDED.currentverifymode, attlogs.currentverifymode)
+                      currentverifymode = COALESCE(EXCLUDED.currentverifymode, attlogs.currentverifymode),
+                      has_photo = CASE WHEN EXCLUDED.has_photo = TRUE THEN TRUE ELSE attlogs.has_photo END
         RETURNING id
       `;
       const attlogId = rows[0]?.id;
