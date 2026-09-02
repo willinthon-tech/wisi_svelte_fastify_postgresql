@@ -401,23 +401,24 @@
   }
 
   .plantillas-cards-row {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 8px;
-    flex-wrap: wrap;
     width: 100%;
   }
 
   .base-plantilla-pill {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 10px;
+    padding: 5px 8px;
     border-radius: 6px;
     border: 1px solid #cbd5e1;
     background: #ffffff;
     transition: all 0.15s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    min-width: 0;
+    overflow: hidden;
   }
 
   .pill-feriado-base {
@@ -437,6 +438,7 @@
     font-weight: 800;
     font-family: monospace;
     white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .pill-name {
@@ -444,12 +446,27 @@
     font-weight: 700;
     color: #1e3a8a;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
+  }
+
+  @media (max-width: 1200px) {
+    .plantillas-cards-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
 
   @media (max-width: 768px) {
     .plantillas-cards-row {
-      flex-direction: column;
-      align-items: flex-start;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 480px) {
+    .plantillas-cards-row {
+      grid-template-columns: 1fr;
     }
   }
 </style>
