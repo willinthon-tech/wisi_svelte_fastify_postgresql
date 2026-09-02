@@ -52,21 +52,76 @@
   const CROP_X = (CANVAS_SIZE - CROP_SIZE) / 2;
   const CROP_Y = (CANVAS_SIZE - CROP_SIZE) / 2;
 
-  // Reactivity: Filtered Cargos according to assigned salas
-  $: availableCargos = ($masterCargosStore || []).filter(c => {
-    if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return !c.sala_id || assignedSalaIds.map(Number).includes(Number(c.sala_id));
-  });
+  // Reactivity: Filtered Cargos according to assigned salas + ensuring current cargo is included
+  $: availableCargos = (function() {
+    const list = $masterCargosStore || [];
+    let filtered = list;
+    if (assignedSalaIds && assignedSalaIds.length > 0) {
+      filtered = list.filter(c => !c.sala_id || assignedSalaIds.map(Number).includes(Number(c.sala_id)));
+    }
+    // Si estamos editando y el cargo del empleado no está en la lista filtrada, ¡lo agregamos para que NUNCA aparezca en blanco!
+    if (item && item.cargo_id && !filtered.some(c => Number(c.id) === Number(item.cargo_id))) {
+      const currentCargo = list.find(c => Number(c.id) === Number(item.cargo_id));
+      if (currentCargo) {
+        filtered = [currentCargo, ...filtered];
+      } else if (item.cargo_nombre) {
+        filtered = [{ 
+          id: Number(item.cargo_id), 
+          nombre: item.cargo_nombre, 
+          sala_nombre: item.sala_nombre || 'General',
+          departamento_nombre: item.departamento_nombre || '',
+          area_nombre: item.area_nombre || '',
+          sala_id: item.sala_id || null
+        }, ...filtered];
+      }
+    }
+    return filtered;
+  })();
+
+  // Hierarchical Optgroup grouping for Cargos: Sala > Departamento > Área
+  $: groupedCargos = (function() {
+    const groups = {};
+    for (const c of availableCargos) {
+      const sala = c.sala_nombre || 'General';
+      const depto = c.departamento_nombre || 'Sin Departamento';
+      const area = c.area_nombre || 'Sin Área';
+      const groupKey = `${sala} — ${depto} › ${area}`;
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(c);
+    }
+    return groups;
+  })();
 
   // Find sala_id of the selected cargo
-  $: selectedCargoObj = ($masterCargosStore || []).find(c => Number(c.id) === Number(cargoId));
+  $: selectedCargoObj = ($masterCargosStore || []).find(c => Number(c.id) === Number(cargoId)) || (item && Number(item.cargo_id) === Number(cargoId) ? item : null);
   $: targetSalaId = selectedCargoObj ? Number(selectedCargoObj.sala_id) : null;
 
-  // Devices belonging to that sala
-  $: availableDispositivos = ($masterDispositivosStore || []).filter(d => {
-    if (!targetSalaId) return false;
-    return Number(d.sala_id) === Number(targetSalaId);
-  });
+  // Devices grouped by Sala
+  $: availableDispositivosGrouped = (function() {
+    const list = $masterDispositivosStore || [];
+    let relevantDevices = [];
+    if (targetSalaId) {
+      relevantDevices = list.filter(d => {
+        return Number(d.sala_id) === Number(targetSalaId) || selectedDispositivoIds.has(Number(d.id));
+      });
+    } else if (selectedDispositivoIds.size > 0) {
+      relevantDevices = list.filter(d => selectedDispositivoIds.has(Number(d.id)));
+    } else if (assignedSalaIds && assignedSalaIds.length > 0) {
+      relevantDevices = list.filter(d => assignedSalaIds.map(Number).includes(Number(d.sala_id)));
+    } else {
+      relevantDevices = list;
+    }
+
+    const grouped = {};
+    for (const d of relevantDevices) {
+      const sala = d.sala_nombre || 'Sin Sala Asignada';
+      if (!grouped[sala]) grouped[sala] = [];
+      grouped[sala].push(d);
+    }
+    return grouped;
+  })();
 
   // Watch item changes to reset or populate form
   $: if (isOpen) {
@@ -100,7 +155,7 @@
       fechaIngreso = formatDateForInput(item.fecha_ingreso) || new Date().toISOString().split('T')[0];
       fechaNacimiento = formatDateForInput(item.fecha_nacimiento) || '';
       sexo = item.sexo || 'Masculino';
-      cargoId = item.cargo_id ? String(item.cargo_id) : '';
+      cargoId = item.cargo_id ? Number(item.cargo_id) : '';
 
       // Load assigned devices from backend
       try {
@@ -622,10 +677,14 @@
           <label class="form-label">Cargo:</label>
           <select bind:value={cargoId} class="form-select" required>
             <option value="">Seleccione un cargo...</option>
-            {#each availableCargos as c}
-              <option value={c.id}>
-                {c.nombre} {c.sala_nombre ? `(${c.sala_nombre})` : ''}
-              </option>
+            {#each Object.entries(groupedCargos) as [groupLabel, cargosInGroup]}
+              <optgroup label={groupLabel}>
+                {#each cargosInGroup as c}
+                  <option value={Number(c.id)}>
+                    {c.nombre}
+                  </option>
+                {/each}
+              </optgroup>
             {/each}
           </select>
         </div>
@@ -636,30 +695,40 @@
           <label class="form-label">Dispositivos:</label>
           
           <div class="devices-box">
-            {#if !cargoId}
+            {#if !cargoId && selectedDispositivoIds.size === 0}
               <div class="devices-empty-placeholder">
                 Primero selecciona un cargo para ver los dispositivos disponibles
               </div>
-            {:else if availableDispositivos.length === 0}
+            {:else if Object.keys(availableDispositivosGrouped).length === 0}
               <div class="devices-empty-placeholder">
                 No hay dispositivos registrados en esta sala
               </div>
             {:else}
-              <div class="devices-list">
-                {#each availableDispositivos as dev}
-                  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                  <div 
-                    class="device-item" 
-                    on:click={() => toggleDispositivo(dev.id)}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedDispositivoIds.has(Number(dev.id))} 
-                      on:change={() => toggleDispositivo(dev.id)}
-                      class="device-checkbox" 
-                    />
-                    <span class="device-name">
-                      {dev.nombre} {dev.sala_nombre ? `- ${dev.sala_nombre}` : ''}
-                    </span>
+              <div class="devices-grouped-container">
+                {#each Object.entries(availableDispositivosGrouped) as [salaNombre, devs]}
+                  <div class="sala-devices-block">
+                    <div class="sala-devices-header">
+                      <span class="sala-badge-tag">📍 Sala: {salaNombre}</span>
+                    </div>
+                    <div class="sala-devices-items">
+                      {#each devs as dev}
+                        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+                        <div 
+                          class="device-item" 
+                          title="Dispositivo: {dev.nombre} (Sala: {salaNombre})"
+                          on:click={() => toggleDispositivo(dev.id)}>
+                          <input 
+                            type="checkbox" 
+                            checked={selectedDispositivoIds.has(Number(dev.id))} 
+                            on:change={() => toggleDispositivo(dev.id)}
+                            class="device-checkbox" 
+                          />
+                          <span class="device-name">
+                            {dev.nombre}
+                          </span>
+                        </div>
+                      {/each}
+                    </div>
                   </div>
                 {/each}
               </div>
@@ -667,7 +736,7 @@
           </div>
           
           <span class="help-text">
-            {#if !cargoId}
+            {#if !cargoId && selectedDispositivoIds.size === 0}
               Selecciona un cargo primero
             {:else}
               Opcional: Selecciona uno o varios dispositivos de la sala
@@ -1096,11 +1165,46 @@
     color: #94a3b8;
   }
 
-  .devices-list {
+  .devices-grouped-container {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 14px;
     width: 100%;
+  }
+
+  .sala-devices-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-bottom: 1px dashed #e2e8f0;
+    padding-bottom: 10px;
+  }
+
+  .sala-devices-block:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .sala-devices-header {
+    display: flex;
+    align-items: center;
+  }
+
+  .sala-badge-tag {
+    font-size: 11px;
+    font-weight: 800;
+    color: #1e40af;
+    background: #dbeafe;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.2px;
+  }
+
+  .sala-devices-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 4px;
   }
 
   .device-item {
