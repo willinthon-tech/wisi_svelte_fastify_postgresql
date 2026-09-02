@@ -130,8 +130,8 @@
       const qIn = new URLSearchParams({ limit: "1", estados: "checkin" });
       const qOut = new URLSearchParams({ limit: "1", estados: "checkout" });
       if (assignedSalaIds.length > 0) {
-        qIn.set("sala_ids", assignedSalaIds.join(","));
-        qOut.set("sala_ids", assignedSalaIds.join(","));
+        qIn.set("user_sala_ids", assignedSalaIds.join(","));
+        qOut.set("user_sala_ids", assignedSalaIds.join(","));
       }
 
       const [resIn, resOut] = await Promise.all([
@@ -572,9 +572,11 @@
     // Subscribe to checkIn events
     unsubscribeCheckIn = latestCheckInStore.subscribe((rec) => {
       if (!rec) return;
-      const recSalaId = Number(rec.sala_id);
+      const recSalaId = Number(rec.sala_id || rec.dispositivo_sala_id);
       if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(recSalaId)) return;
-      if (!latestCheckIn || rec.event_time >= latestCheckIn.event_time) {
+      const timeRec = new Date(rec.event_time).getTime() || 0;
+      const timeCur = latestCheckIn ? (new Date(latestCheckIn.event_time).getTime() || 0) : 0;
+      if (!latestCheckIn || timeRec > timeCur || (timeRec === timeCur && Number(rec.id || 0) >= Number(latestCheckIn.id || 0))) {
         if (lastSeenCheckInId !== null && Number(lastSeenCheckInId) !== Number(rec.id)) {
           triggerFlashCheckIn();
           fetchAttlogsStats();
@@ -587,9 +589,11 @@
     // Subscribe to checkOut events
     unsubscribeCheckOut = latestCheckOutStore.subscribe((rec) => {
       if (!rec) return;
-      const recSalaId = Number(rec.sala_id);
+      const recSalaId = Number(rec.sala_id || rec.dispositivo_sala_id);
       if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(recSalaId)) return;
-      if (!latestCheckOut || rec.event_time >= latestCheckOut.event_time) {
+      const timeRec = new Date(rec.event_time).getTime() || 0;
+      const timeCur = latestCheckOut ? (new Date(latestCheckOut.event_time).getTime() || 0) : 0;
+      if (!latestCheckOut || timeRec > timeCur || (timeRec === timeCur && Number(rec.id || 0) >= Number(latestCheckOut.id || 0))) {
         if (lastSeenCheckOutId !== null && Number(lastSeenCheckOutId) !== Number(rec.id)) {
           triggerFlashCheckOut();
           fetchAttlogsStats();

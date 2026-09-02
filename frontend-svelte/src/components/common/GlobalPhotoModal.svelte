@@ -330,7 +330,7 @@
             <div data-html2canvas-ignore="true" class="header-right">
               <div class="header-right-meta">
                 <span class="pagination-badge">
-                  Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'marcajes'})
+                  Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
                 </span>
                 <span class="index-badge">
                   {currentIndex + 1} / {items.length}

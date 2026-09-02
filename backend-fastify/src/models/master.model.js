@@ -1563,8 +1563,6 @@ export async function getAttlogPositionModel(id, salaIds = null, estados = null)
   let whereConditions = [];
   if (estados && Array.isArray(estados) && estados.length > 0) {
     whereConditions.push(sql`LOWER(COALESCE(a.attendancestatus, '')) = ANY(${estados.map(e => e.toLowerCase())})`);
-  } else if (estados === null) {
-    whereConditions.push(sql`LOWER(COALESCE(a.attendancestatus, '')) IN ('checkin', 'checkout')`);
   }
   if (salaIds && Array.isArray(salaIds) && salaIds.length > 0) {
     whereConditions.push(sql`d.sala_id = ANY(${salaIds})`);

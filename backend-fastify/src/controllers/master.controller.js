@@ -48,10 +48,10 @@ export async function getLastAttlogEventTime(request, reply) {
 export async function getAttlogPosition(request, reply) {
   try {
     const { id } = request.params;
-    const salaIdsRaw = request.query?.sala_ids;
+    const salaIdsRaw = request.query?.sala_ids || request.query?.user_sala_ids;
     const estadosRaw = request.query?.estados;
     let salaIds = null;
-    if (salaIdsRaw && String(salaIdsRaw).trim().length > 0) {
+    if (salaIdsRaw && String(salaIdsRaw).trim().length > 0 && String(salaIdsRaw) !== '-1') {
       const parsed = String(salaIdsRaw).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
       if (parsed.length > 0) salaIds = parsed;
     }

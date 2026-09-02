@@ -130,7 +130,7 @@
 
       const salaParam =
         assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "-1";
-      const queryParams = `limit=${pageSize}&offset=${offset}&sala_ids=${salaParam}&estados=checkin,checkout`;
+      const queryParams = `limit=${pageSize}&offset=${offset}&user_sala_ids=${salaParam}`;
 
       const res = await fetch(`${base}/attlogs/latest?${queryParams}`);
       if (res.ok) {
@@ -171,7 +171,7 @@
 
   $: if (latestAttlogs !== lastKnownAttlogs) {
     lastKnownAttlogs = latestAttlogs;
-    if ($photoModalStore.isOpen && $photoModalStore.mode === 'checkin_checkout') {
+    if ($photoModalStore.isOpen && ($photoModalStore.mode === 'live_records' || $photoModalStore.mode === 'checkin_checkout')) {
       if (pendingModalPageDirection && latestAttlogs.length > 0) {
         const dir = pendingModalPageDirection;
         pendingModalPageDirection = null;
@@ -196,7 +196,7 @@
       currentPage,
       totalPages: Math.ceil(totalCount / pageSize) || 1,
       totalCount,
-      mode: 'checkin_checkout',
+      mode: 'live_records',
       onPageNext: () => {
         if ((currentPage + 1) * pageSize < totalCount) {
           pendingModalPageDirection = 'next';
@@ -312,12 +312,12 @@
       const base = backendUrl.endsWith("/api") ? backendUrl : `${backendUrl}/api`;
       const salaParam = assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "";
 
-      // 1. Obtener la posición global real en el flujo de checkin/checkout
+      // 1. Obtener la posición global real en el flujo sin filtrar de marcajes (idéntico a rrhh/marcajes)
       let targetPage = 0;
       let targetIndex = 0;
       try {
         const qPos = new URLSearchParams();
-        if (salaParam) qPos.set("sala_ids", salaParam);
+        if (salaParam) qPos.set("user_sala_ids", salaParam);
         const posRes = await fetch(`${base}/attlogs/${record.id}/position?${qPos.toString()}`);
         if (posRes.ok) {
           const posJson = await posRes.json();
@@ -331,16 +331,15 @@
         console.warn("No se pudo obtener posición global:", e);
       }
 
-      // 2. Si la página destino es diferente a la página actual del carrusel, buscarla
+      // 2. Cargar los registros de la página donde se encuentra el registro solicitado
       let pageItems = latestAttlogs;
       if (targetPage !== currentPage || latestAttlogs.length === 0) {
         const offset = targetPage * pageSize;
         const q = new URLSearchParams({
           limit: String(pageSize),
           offset: String(offset),
-          estados: "checkin,checkout"
         });
-        if (salaParam) q.set("sala_ids", salaParam);
+        if (salaParam) q.set("user_sala_ids", salaParam);
         const res = await fetch(`${base}/attlogs/latest?${q.toString()}`);
         if (res.ok) {
           const json = await res.json();
@@ -353,7 +352,12 @@
         }
       }
 
-      const activeItem = pageItems[targetIndex] || record;
+      // Localizar el item exacto en la lista obtenida
+      let activeItem = pageItems.find(p => String(p.id) === String(record.id)) || pageItems[targetIndex] || record;
+      const foundIdx = pageItems.findIndex(p => String(p.id) === String(activeItem.id));
+      if (foundIdx !== -1) {
+        targetIndex = foundIdx;
+      }
 
       triggerGlobalPhotoModal({
         item: activeItem,
@@ -362,7 +366,7 @@
         currentPage: targetPage,
         totalPages: Math.ceil(totalCount / pageSize) || 1,
         totalCount,
-        mode: "checkin_checkout",
+        mode: "live_records",
         onPageNext: () => {
           if ((currentPage + 1) * pageSize < totalCount) {
             pendingModalPageDirection = "next";
@@ -498,10 +502,8 @@
     fetchLatestAttlogs();
     unsubscribeWs = latestAttlogEventStore.subscribe((newRecord) => {
       if (!newRecord) return;
-      const st = String(newRecord.attendancestatus || "").toLowerCase().trim();
-      if (st !== "checkin" && st !== "checkout") return;
 
-      const recSalaId = Number(newRecord.sala_id);
+      const recSalaId = Number(newRecord.sala_id || newRecord.dispositivo_sala_id);
       if (
         recSalaId &&
         assignedSalaIds.length > 0 &&
@@ -512,75 +514,74 @@
       // Incrementar contador total en tiempo real
       totalCount++;
 
-      // 1. Si el carrusel de fondo está en la página 0, insertar el nuevo registro
+      // 1. Si el carrusel de fondo está en la página 0, insertar y ordenar estrictamente por event_time DESC
       if (currentPage === 0) {
-        latestAttlogs = [
+        const combined = [
           newRecord,
           ...latestAttlogs.filter((a) => String(a.id) !== String(newRecord.id)),
-        ].slice(0, pageSize);
-        dispatch("latestRecord", newRecord);
+        ];
+        combined.sort((a, b) => {
+          const tA = new Date(a.event_time).getTime() || 0;
+          const tB = new Date(b.event_time).getTime() || 0;
+          if (tA !== tB) return tB - tA;
+          return Number(b.id || 0) - Number(a.id || 0);
+        });
+        latestAttlogs = combined.slice(0, pageSize);
+        if (latestAttlogs.length > 0) {
+          dispatch("latestRecord", latestAttlogs[0]);
+        }
       }
 
-      // 2. Si el modal global está abierto en modo checkin_checkout:
+      // 2. Si el modal global está abierto en modo de registros en vivo:
       const modalState = get(photoModalStore);
-      if (modalState.isOpen && modalState.mode === "checkin_checkout") {
-        // Caso A: El usuario está en el registro 1 de la página 1 (posición 1)
-        if (modalState.currentPage === 0 && modalState.currentIndex === 0) {
-          const updatedItems = [
+      if (
+        modalState.isOpen &&
+        (modalState.mode === "live_records" || modalState.mode === "checkin_checkout")
+      ) {
+        // PRESERVAR EL REGISTRO QUE EL USUARIO ESTÁ VIENDO ACTUALMENTE
+        const currentViewingId = modalState.activeItem?.id;
+
+        if (modalState.currentPage === 0) {
+          const combinedModal = [
             newRecord,
             ...modalState.items.filter((a) => String(a.id) !== String(newRecord.id)),
-          ].slice(0, pageSize);
+          ];
+          combinedModal.sort((a, b) => {
+            const tA = new Date(a.event_time).getTime() || 0;
+            const tB = new Date(b.event_time).getTime() || 0;
+            if (tA !== tB) return tB - tA;
+            return Number(b.id || 0) - Number(a.id || 0);
+          });
 
-          photoModalStore.update((s) => ({
-            ...s,
-            items: updatedItems,
-            activeItem: newRecord,
-            currentIndex: 0,
-            totalCount: totalCount,
-            totalPages: Math.ceil(totalCount / pageSize) || 1,
-          }));
-        } else {
-          // Caso B: El usuario está en otra posición (ej. índice 3) o en otra página
-          // Debe continuar viendo EXACTAMENTE al mismo empleado / registro que tenía abierto
-          const currentViewingId = modalState.activeItem?.id;
+          // Buscar la nueva posición del registro que el usuario ya está viendo
+          const newIdx = combinedModal.findIndex(
+            (a) => String(a.id) === String(currentViewingId)
+          );
 
-          if (modalState.currentPage === 0) {
-            const extendedList = [
-              newRecord,
-              ...modalState.items.filter((a) => String(a.id) !== String(newRecord.id)),
-            ];
-            const newIdx = extendedList.findIndex((a) => String(a.id) === String(currentViewingId));
-
-            if (newIdx !== -1 && newIdx < pageSize) {
-              // El registro que estaba viendo sigue dentro de la página 1 (su índice se incrementó en +1)
-              photoModalStore.update((s) => ({
-                ...s,
-                items: extendedList.slice(0, pageSize),
-                currentIndex: newIdx,
-                totalCount: totalCount,
-                totalPages: Math.ceil(totalCount / pageSize) || 1,
-              }));
-            } else if (newIdx >= pageSize) {
-              // El registro que estaba viendo fue empujado a la página 2 (ej. era el 10 y ahora es el 1 de la pág 2)
-              currentPage = 1;
-              latestAttlogs = extendedList.slice(pageSize, pageSize * 2);
-              photoModalStore.update((s) => ({
-                ...s,
-                currentPage: 1,
-                items: latestAttlogs,
-                currentIndex: 0,
-                totalCount: totalCount,
-                totalPages: Math.ceil(totalCount / pageSize) || 1,
-              }));
-            }
+          if (newIdx !== -1 && newIdx < pageSize) {
+            // El usuario sigue viendo al mismo empleado / foto intacto,
+            // pero su índice de posición se actualiza limpiamente en pantalla (ej. de 1 a 2)
+            photoModalStore.update((s) => ({
+              ...s,
+              items: combinedModal.slice(0, pageSize),
+              currentIndex: newIdx,
+              totalCount: totalCount,
+              totalPages: Math.ceil(totalCount / pageSize) || 1,
+            }));
           } else {
-            // Está en página >= 1: simplemente actualizamos el totalCount en el modal
             photoModalStore.update((s) => ({
               ...s,
               totalCount: totalCount,
               totalPages: Math.ceil(totalCount / pageSize) || 1,
             }));
           }
+        } else {
+          // Está en página >= 1: simplemente actualizamos el totalCount en el modal
+          photoModalStore.update((s) => ({
+            ...s,
+            totalCount: totalCount,
+            totalPages: Math.ceil(totalCount / pageSize) || 1,
+          }));
         }
       }
     });
@@ -615,7 +616,7 @@
         <span
           style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981;"
         ></span>
-        Últimos Marcajes en Vivo
+        Últimos Registros en Vivo
       </h3>
       <span
         style="font-size: 11px; font-weight: 700; padding: 2px 8px; background: #dcfce7; color: #15803d; border-radius: 12px;"
@@ -634,7 +635,7 @@
     <!-- Page Controls & Navigation Arrows -->
     <div style="display: flex; align-items: center; gap: 12px;">
       <span style="font-size: 12px; font-weight: 700; color: #64748b;">
-        Página {currentPage + 1} de {totalPages} ({totalCount} marcajes)
+        Página {currentPage + 1} de {totalPages} ({totalCount} registros)
       </span>
 
       <div style="display: flex; align-items: center; gap: 6px;">
