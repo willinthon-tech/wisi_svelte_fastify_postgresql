@@ -503,8 +503,19 @@
         scale: 2,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: null,
+        backgroundColor: "#ffffff",
         logging: false,
+        onclone: (clonedDoc, clonedElement) => {
+          clonedElement.style.animation = "none";
+          clonedElement.style.transition = "none";
+          clonedElement.style.transform = "none";
+          clonedElement.style.opacity = "1";
+          const allAnim = clonedElement.querySelectorAll("*");
+          allAnim.forEach((el) => {
+            el.style.animation = "none";
+            el.style.transition = "none";
+          });
+        }
       });
 
       const roundedCanvas = document.createElement("canvas");
@@ -528,6 +539,9 @@
       ctx.quadraticCurveTo(0, 0, r, 0);
       ctx.closePath();
       ctx.clip();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
 
       ctx.drawImage(sourceCanvas, 0, 0);
 

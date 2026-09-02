@@ -219,14 +219,27 @@
     isCapturingScreenshot = true;
 
     try {
+      const scaleFactor = Math.max(2, window.devicePixelRatio || 2);
       const sourceCanvas = await html2canvas(modalCardElement, {
         useCORS: true,
         allowTaint: false,
-        backgroundColor: null,
-        scale: Math.max(2, window.devicePixelRatio || 2),
+        backgroundColor: "#ffffff",
+        scale: scaleFactor,
         logging: false,
         imageTimeout: 10000,
         ignoreElements: (el) => el.getAttribute("data-html2canvas-ignore") === "true",
+        onclone: (clonedDoc, clonedElement) => {
+          // Desactivar cualquier animación (como zoomIn / fadeIn) para que no se capture a mitad de opacidad
+          clonedElement.style.animation = "none";
+          clonedElement.style.transition = "none";
+          clonedElement.style.transform = "none";
+          clonedElement.style.opacity = "1";
+          const allAnim = clonedElement.querySelectorAll("*");
+          allAnim.forEach((el) => {
+            el.style.animation = "none";
+            el.style.transition = "none";
+          });
+        }
       });
 
       const roundedCanvas = document.createElement("canvas");
@@ -234,7 +247,7 @@
       roundedCanvas.height = sourceCanvas.height;
       const ctx = roundedCanvas.getContext("2d");
 
-      const radius = 16 * (Math.max(2, window.devicePixelRatio || 2));
+      const radius = 16 * scaleFactor;
       ctx.beginPath();
       ctx.moveTo(radius, 0);
       ctx.lineTo(roundedCanvas.width - radius, 0);
@@ -247,6 +260,10 @@
       ctx.quadraticCurveTo(0, 0, radius, 0);
       ctx.closePath();
       ctx.clip();
+
+      // Rellenar fondo con blanco 100% sólido para evitar cualquier transparencia o tonalidad lechosa
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, roundedCanvas.width, roundedCanvas.height);
 
       ctx.drawImage(sourceCanvas, 0, 0);
 
