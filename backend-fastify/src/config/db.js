@@ -90,7 +90,7 @@ export let inMemoryData = {
     { id: 28, nombre: 'Carnet', icono: 'settings', ruta: '/rrhh/carnet', page_id: 2 },
     { id: 29, nombre: 'Plantillas', icono: 'settings', ruta: '/rrhh/plantillas', page_id: 2 },
     { id: 30, nombre: 'Cumpleaños', icono: 'settings', ruta: '/rrhh/cumpleanos', page_id: 2 },
-    { id: 31, nombre: 'Feriados', icono: 'settings', ruta: '/rrhh/feriados', page_id: 2 },
+    { id: 31, nombre: 'Calendario', icono: 'calendar_month', ruta: '/rrhh/calendario', page_id: 2 },
     // Módulos de MAQUINAS (page_id = 3)
     { id: 23, nombre: 'Máquinas', icono: 'settings', ruta: '/maquinas/maquinas', page_id: 3 },
     { id: 14, nombre: 'Estados', icono: 'settings', ruta: '/maquinas/estados', page_id: 3 },
@@ -686,7 +686,7 @@ export async function initDb() {
         (28, 'Carnet', 'settings', '/rrhh/carnet', 2),
         (29, 'Plantillas', 'settings', '/rrhh/plantillas', 2),
         (30, 'Cumpleaños', 'settings', '/rrhh/cumpleanos', 2),
-        (31, 'Feriados', 'settings', '/rrhh/feriados', 2),
+        (31, 'Calendario', 'calendar_month', '/rrhh/calendario', 2),
         (23, 'Máquinas', 'settings', '/gestion-de-maquinas', 3),
         (14, 'Estados', 'settings', '/maquinas/estados', 3),
         (15, 'Sociedades', 'settings', '/maquinas/sociedades', 3),

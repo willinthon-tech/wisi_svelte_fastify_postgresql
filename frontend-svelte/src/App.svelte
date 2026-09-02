@@ -42,7 +42,6 @@
   import CarnetView from "./views/rrhh/CarnetView.svelte";
   import HorariosView from "./views/rrhh/HorariosView.svelte";
   import CumpleanosView from "./views/rrhh/CumpleanosView.svelte";
-  import FeriadosView from "./views/rrhh/FeriadosView.svelte";
   import CalendarioView from "./views/rrhh/CalendarioView.svelte";
 
   // Import MAQUINAS Views
@@ -904,7 +903,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "rrhh/calendario" || $currentRouteStore === "calendario" || $currentRouteStore === "rrhh/feriados" || $currentRouteStore === "feriados"}
+        {:else if $currentRouteStore === "rrhh/calendario" || $currentRouteStore === "calendario"}
           <CalendarioView />
 
           <!-- MAQUINAS Module Views -->
