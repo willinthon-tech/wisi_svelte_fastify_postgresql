@@ -3089,7 +3089,7 @@ export async function getEmpleadosModel(params = {}) {
   let data;
   if (limit > 0) {
     data = await sql`
-      SELECT e.*, c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.nombre AS sala_nombre
+      SELECT e.*, c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.id AS sala_id, s.nombre AS sala_nombre
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas a ON c.area_id = a.id
@@ -3101,7 +3101,7 @@ export async function getEmpleadosModel(params = {}) {
     `;
   } else {
     data = await sql`
-      SELECT e.*, c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.nombre AS sala_nombre
+      SELECT e.*, c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.id AS sala_id, s.nombre AS sala_nombre
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas a ON c.area_id = a.id

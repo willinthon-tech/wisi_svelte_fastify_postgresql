@@ -94,29 +94,44 @@
     return groups;
   })();
 
-  // Find sala_id of the selected cargo
-  $: selectedCargoObj = ($masterCargosStore || []).find(c => Number(c.id) === Number(cargoId)) || (item && Number(item.cargo_id) === Number(cargoId) ? item : null);
-  $: targetSalaId = selectedCargoObj ? Number(selectedCargoObj.sala_id) : null;
+  // Find selected cargo object and its exact sala_id
+  $: selectedCargoObj = (function() {
+    if (!cargoId) return null;
+    const found = ($masterCargosStore || []).find(c => Number(c.id) === Number(cargoId));
+    if (found) return found;
+    if (item && Number(item.cargo_id) === Number(cargoId)) return item;
+    return null;
+  })();
 
-  // Devices grouped by Sala
-  $: availableDispositivosGrouped = (function() {
-    const list = $masterDispositivosStore || [];
-    let relevantDevices = [];
-    if (targetSalaId) {
-      relevantDevices = list.filter(d => {
-        return Number(d.sala_id) === Number(targetSalaId) || selectedDispositivoIds.has(Number(d.id));
-      });
-    } else if (selectedDispositivoIds.size > 0) {
-      relevantDevices = list.filter(d => selectedDispositivoIds.has(Number(d.id)));
-    } else if (assignedSalaIds && assignedSalaIds.length > 0) {
-      relevantDevices = list.filter(d => assignedSalaIds.map(Number).includes(Number(d.sala_id)));
-    } else {
-      relevantDevices = list;
+  $: targetSalaId = selectedCargoObj ? (selectedCargoObj.sala_id !== undefined && selectedCargoObj.sala_id !== null ? Number(selectedCargoObj.sala_id) : null) : null;
+  $: targetSalaNombre = selectedCargoObj ? (selectedCargoObj.sala_nombre || '') : '';
+
+  let lastTargetSalaId = null;
+  $: if (targetSalaId !== lastTargetSalaId) {
+    if (lastTargetSalaId !== null && targetSalaId !== null) {
+      const validDevIds = new Set(
+        ($masterDispositivosStore || [])
+          .filter(d => Number(d.sala_id) === Number(targetSalaId))
+          .map(d => Number(d.id))
+      );
+      selectedDispositivoIds = new Set([...selectedDispositivoIds].filter(devId => validDevIds.has(devId)));
     }
+    lastTargetSalaId = targetSalaId;
+  }
+
+  // Devices strictly filtered by the selected cargo's sala
+  $: availableDispositivosGrouped = (function() {
+    if (!targetSalaId) return {};
+
+    const list = $masterDispositivosStore || [];
+    // Strict filter: only devices belonging to this cargo's sala
+    const relevantDevices = list.filter(d => Number(d.sala_id) === Number(targetSalaId));
+
+    if (relevantDevices.length === 0) return {};
 
     const grouped = {};
     for (const d of relevantDevices) {
-      const sala = d.sala_nombre || 'Sin Sala Asignada';
+      const sala = d.sala_nombre || targetSalaNombre || 'Sala Asignada';
       if (!grouped[sala]) grouped[sala] = [];
       grouped[sala].push(d);
     }
