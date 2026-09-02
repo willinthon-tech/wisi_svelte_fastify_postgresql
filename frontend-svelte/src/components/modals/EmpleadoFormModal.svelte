@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterCargosStore, masterSalasStore, masterDispositivosStore } from '../../controllers/master.store.js';
+  import { masterCargosStore, masterSalasStore, masterDispositivosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
 
   export let isOpen = false;
   export let item = null; // null for Create, employee object for Edit
@@ -103,8 +103,29 @@
     return null;
   })();
 
-  $: targetSalaId = selectedCargoObj ? (selectedCargoObj.sala_id !== undefined && selectedCargoObj.sala_id !== null ? Number(selectedCargoObj.sala_id) : null) : null;
-  $: targetSalaNombre = selectedCargoObj ? (selectedCargoObj.sala_nombre || '') : '';
+  // Target sala_id strictly from the selected cargo (with multiple fallbacks)
+  $: targetSalaId = (function() {
+    if (selectedCargoObj && selectedCargoObj.sala_id !== undefined && selectedCargoObj.sala_id !== null) {
+      return Number(selectedCargoObj.sala_id);
+    }
+    if (item && item.sala_id !== undefined && item.sala_id !== null) {
+      return Number(item.sala_id);
+    }
+    const sName = selectedCargoObj?.sala_nombre || item?.sala_nombre;
+    if (sName) {
+      const match = ($masterSalasStore || []).find(s => 
+        String(s.nombre).trim().toLowerCase() === String(sName).trim().toLowerCase()
+      );
+      if (match) return Number(match.id);
+    }
+    if (cargoId) {
+      const cMatch = ($masterCargosStore || []).find(c => Number(c.id) === Number(cargoId));
+      if (cMatch && cMatch.sala_id) return Number(cMatch.sala_id);
+    }
+    return null;
+  })();
+
+  $: targetSalaNombre = selectedCargoObj ? (selectedCargoObj.sala_nombre || (item ? item.sala_nombre : '')) : (item ? item.sala_nombre || '' : '');
 
   let lastTargetSalaId = null;
   $: if (targetSalaId !== lastTargetSalaId) {
@@ -149,6 +170,11 @@
     isPrefixDropdownOpen = false;
     isCropperOpen = false;
     fotoBase64 = '';
+
+    // Si los stores de cargos o dispositivos aún no están listos en la primera apertura, cargarlos inmediatamente
+    if (!$masterCargosStore || $masterCargosStore.length === 0 || !$masterDispositivosStore || $masterDispositivosStore.length === 0) {
+      loadMasterStoresFromBackend();
+    }
 
     if (item && item.id) {
       id = item.id;
