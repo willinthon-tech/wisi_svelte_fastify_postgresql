@@ -204,7 +204,7 @@ masterUsuariosStore.subscribe(val => saveStore('usuarios_v4', val));
 userSalasStore.subscribe(val => saveStore('user_salas_v4', val));
 userModulePermissionsStore.subscribe(val => saveStore('user_perms_v4', val));
 
-// Load real-time master data from PostgreSQL backend
+// Load real-time master data from PostgreSQL backend in parallel using Promise.allSettled
 export async function loadMasterStoresFromBackend() {
   const fetchEntity = async (entityName, store) => {
     try {
@@ -220,40 +220,49 @@ export async function loadMasterStoresFromBackend() {
     }
   };
 
-    await fetchEntity('plantillas-horarios', masterPlantillasHorariosStore);
-  await fetchEntity('departamentos', masterDepartamentosStore);
-  await fetchEntity('areas', masterAreasStore);
-  await fetchEntity('cargos', masterCargosStore);
-  await fetchEntity('empleados', masterEmpleadosStore);
-await fetchEntity('usuarios', masterUsuariosStore);
-  await fetchEntity('salas', masterSalasStore);
-  await fetchEntity('paginas', masterPaginasStore);
-  await fetchEntity('modulos', masterModulosStore);
-  await fetchEntity('dispositivos', masterDispositivosStore);
-
-  try {
-    const resSalas = await fetch('/api/master/user-salas');
-    if (resSalas.ok) {
-      const json = await resSalas.json();
-      if (json && json.success && json.data) {
-        userSalasStore.update(curr => ({ ...curr, ...json.data }));
+  const fetchUserSalas = async () => {
+    try {
+      const resSalas = await fetch('/api/master/user-salas');
+      if (resSalas.ok) {
+        const json = await resSalas.json();
+        if (json && json.success && json.data) {
+          userSalasStore.update(curr => ({ ...curr, ...json.data }));
+        }
       }
+    } catch (err) {
+      console.warn('Error fetching user salas from backend:', err);
     }
-  } catch (err) {
-    console.warn('Error fetching user salas from backend:', err);
-  }
+  };
 
-  try {
-    const resPerms = await fetch('/api/master/user-permissions');
-    if (resPerms.ok) {
-      const json = await resPerms.json();
-      if (json && json.success && json.data) {
-        userModulePermissionsStore.update(curr => ({ ...curr, ...json.data }));
+  const fetchUserPerms = async () => {
+    try {
+      const resPerms = await fetch('/api/master/user-permissions');
+      if (resPerms.ok) {
+        const json = await resPerms.json();
+        if (json && json.success && json.data) {
+          userModulePermissionsStore.update(curr => ({ ...curr, ...json.data }));
+        }
       }
+    } catch (err) {
+      console.warn('Error fetching user permissions from backend:', err);
     }
-  } catch (err) {
-    console.warn('Error fetching user permissions from backend:', err);
-  }
+  };
+
+  // Carga ultra rápida en paralelo de todas las tablas maestras
+  await Promise.allSettled([
+    fetchEntity('plantillas-horarios', masterPlantillasHorariosStore),
+    fetchEntity('departamentos', masterDepartamentosStore),
+    fetchEntity('areas', masterAreasStore),
+    fetchEntity('cargos', masterCargosStore),
+    fetchEntity('empleados', masterEmpleadosStore),
+    fetchEntity('usuarios', masterUsuariosStore),
+    fetchEntity('salas', masterSalasStore),
+    fetchEntity('paginas', masterPaginasStore),
+    fetchEntity('modulos', masterModulosStore),
+    fetchEntity('dispositivos', masterDispositivosStore),
+    fetchUserSalas(),
+    fetchUserPerms()
+  ]);
 }
 
 export async function saveUserSalasToBackend(userId, salaIds) {
