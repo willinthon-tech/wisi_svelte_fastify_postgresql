@@ -3933,16 +3933,17 @@ export async function getFeriadosModel(params = {}) {
   const salaIds = params.sala_ids ? params.sala_ids.split(',').map(Number).filter(Boolean) : [];
 
   const allowedSortColumns = {
-    'id': 'f.id',
-    'nombre': 'UPPER(f.nombre)',
-    'sala_nombre': 'UPPER(s.nombre)',
-    'mes': 'f.mes',
-    'dia': 'f.dia',
-    'fecha': 'f.mes * 100 + f.dia'
+    'id': 'f.id ' + sortDir,
+    'nombre': 'UPPER(f.nombre) ' + sortDir,
+    'sala_nombre': 'UPPER(s.nombre) ' + sortDir,
+    'mes': 'f.mes ' + sortDir + ', f.dia ' + sortDir,
+    'mes_nombre': 'f.mes ' + sortDir + ', f.dia ' + sortDir,
+    'dia': 'f.dia ' + sortDir + ', f.mes ' + sortDir,
+    'fecha': 'f.mes ' + sortDir + ', f.dia ' + sortDir
   };
 
-  const sortSql = allowedSortColumns[sortBy] || 'f.mes, f.dia';
-  const orderClause = sql.unsafe("ORDER BY " + sortSql + " " + sortDir + ", f.id ASC");
+  const sortSql = allowedSortColumns[sortBy] || ('f.mes ' + sortDir + ', f.dia ' + sortDir);
+  const orderClause = sql.unsafe("ORDER BY " + sortSql + ", f.id ASC");
 
   if (isPgConnected && sql) {
     const conds = buildFeriadosConditions({

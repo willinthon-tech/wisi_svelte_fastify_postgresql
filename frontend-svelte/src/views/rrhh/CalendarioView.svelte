@@ -85,40 +85,20 @@
   ];
 
   let rawServerItems = [];
-  let serverTotalCount = 0;
-  let currentPage = 1;
-  let pageSize = 10;
 
-  // Filtrar las fechas patrias base si el usuario busca por texto
-  $: matchingBaseFeriados = BASE_FERIADOS.filter(bf => {
-    if ((searchQuery || '').trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      const matchNom = bf.nombre.toLowerCase().includes(q);
-      const matchMes = bf.mes_nombre.toLowerCase().includes(q);
-      const matchDia = String(bf.dia) === q;
-      if (!matchNom && !matchMes && !matchDia) return false;
+  // Combinar fechas base nacionales con las fechas patrias de las salas del servidor
+  $: combinedItems = (function() {
+    let serverList = [...rawServerItems];
+    if (selectedSalas.length > 0) {
+      const set = new Set(selectedSalas.map(Number));
+      serverList = serverList.filter(item => set.has(Number(item.sala_id)));
     }
-    return true;
-  });
-
-  // Mostrar las fechas base nacionales al principio en la primera página
-  $: items = (Number(currentPage) === 1)
-    ? [...matchingBaseFeriados, ...rawServerItems]
-    : rawServerItems;
-
-  $: totalCount = serverTotalCount + matchingBaseFeriados.length;
-
-  let currentParams = {
-    page: 1,
-    limit: 10,
-    search: '',
-    sortBy: 'mes',
-    sortDir: 'asc'
-  };
+    return [...BASE_FERIADOS, ...serverList];
+  })();
 
   // Fetch filter options ONLY when active filters, user assigned salas or search change
   let lastFilterKey = "";
-  $: filterKey = `${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${(searchQuery || "").trim()}`;
+  $: filterKey = `${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}`;
   $: if (filterKey !== lastFilterKey) {
     lastFilterKey = filterKey;
     fetchFilterOptions();
@@ -129,7 +109,6 @@
       const q = new URLSearchParams();
       if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
-      if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
       const res = await fetch(`/api/master/calendario/filter-options?${q.toString()}`);
       if (res.ok) {
@@ -143,30 +122,21 @@
     }
   }
 
-  async function loadServerData(params = {}) {
-    currentParams = { ...currentParams, ...params };
+  async function loadServerData() {
     try {
       const q = new URLSearchParams({
-        page: currentParams.page || 1,
-        limit: currentParams.limit || 10,
-        search: currentParams.search || '',
-        sort_by: currentParams.sortBy || currentParams.sort_by || 'mes',
-        sort_order: currentParams.sortDir || currentParams.sort_order || 'asc'
+        limit: 1000,
+        sort_by: 'mes',
+        sort_order: 'asc'
       });
       if (assignedSalaIds && assignedSalaIds.length > 0) {
         q.set('user_sala_ids', assignedSalaIds.join(','));
-      }
-      if (selectedSalas.length > 0) {
-        q.set('sala_ids', selectedSalas.join(','));
       }
 
       const res = await fetch(`/api/master/calendario?${q.toString()}`);
       const json = await res.json();
       if (json && json.success) {
         rawServerItems = json.data || [];
-        serverTotalCount = json.total || 0;
-        currentPage = json.page || 1;
-        pageSize = json.limit || 10;
       }
     } catch (err) {
       console.error(err);
@@ -177,7 +147,6 @@
   function clearAllFilters() {
     searchQuery = "";
     selectedSalas = [];
-    loadServerData({ page: 1, search: "" });
   }
 
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
@@ -323,25 +292,24 @@
   }
 
   onMount(() => {
-    loadServerData({ page: 1 });
+    loadServerData();
     fetchFilterOptions();
   });
 </script>
 
 <PaginatedDataTable 
-  {items}
-  existingItems={items}
-  {totalCount}
-  {currentPage}
-  {pageSize}
-  isServerSide={true}
+  items={combinedItems}
+  existingItems={combinedItems}
+  isServerSide={false}
+  pageSize={10}
+  sortBy="mes_nombre"
+  sortDir="asc"
   {columns}
   {createFields}
   bind:searchQuery
   searchPlaceholder="Buscar por fecha patria, sala..."
   entityType="fecha patria"
   createModalTitle="Agregar Fecha Patria"
-  on:fetchServerData={(e) => loadServerData(e.detail)}
   on:create={handleCreate}
   on:saveInline={handleSaveInline}
   on:delete={handleDelete}
@@ -353,10 +321,6 @@
       label="Salas"
       options={filterOptions.salas}
       bind:selectedValues={selectedSalas}
-      on:change={(e) => {
-        selectedSalas = e.detail;
-        loadServerData({ page: 1 });
-      }}
     />
   </div>
 

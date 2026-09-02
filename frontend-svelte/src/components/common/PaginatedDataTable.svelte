@@ -364,8 +364,8 @@
 
   // Search & Sorting State
   export let searchQuery = '';
-  let sortBy = 'id';
-  let sortDir = 'desc';
+  export let sortBy = 'id';
+  export let sortDir = 'desc';
 
   // Batch Selection State
   let selectedIds = new Set();
@@ -414,6 +414,29 @@
 
     const list = [...filteredItems];
     list.sort((a, b) => {
+      // Especial para calendario: orden cronológico por mes y día
+      if (sortBy === 'mes' || sortBy === 'mes_nombre') {
+        const mA = Number(a.mes || 0);
+        const mB = Number(b.mes || 0);
+        if (mA !== mB) {
+          return sortDir === 'asc' ? mA - mB : mB - mA;
+        }
+        const dA = Number(a.dia || 0);
+        const dB = Number(b.dia || 0);
+        return sortDir === 'asc' ? dA - dB : dB - dA;
+      }
+
+      if (sortBy === 'dia') {
+        const dA = Number(a.dia || 0);
+        const dB = Number(b.dia || 0);
+        if (dA !== dB) {
+          return sortDir === 'asc' ? dA - dB : dB - dA;
+        }
+        const mA = Number(a.mes || 0);
+        const mB = Number(b.mes || 0);
+        return sortDir === 'asc' ? mA - mB : mB - mA;
+      }
+
       let valA = a[sortBy];
       let valB = b[sortBy];
       if (valA === null || valA === undefined) valA = '';
