@@ -226,7 +226,7 @@
       correo: fromMap.correo || emp.sala_correo || "rrhh@casino.com",
       telefono: fromMap.telefono || emp.sala_telefono || "0424-968.86.12",
       has_logo: hasLogo,
-      logo_url: hasLogo ? `/salas/${emp.sala_id}.png` : null
+      logo_url: hasLogo ? `/api/salas/${emp.sala_id}.png` : null
     };
   }
 
