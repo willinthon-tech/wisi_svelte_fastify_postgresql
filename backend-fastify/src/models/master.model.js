@@ -4076,6 +4076,7 @@ export async function getCumpleanosModel(params = {}) {
       SELECT 
         e.id, 
         e.nombre, 
+        e.cedula,
         e.fecha_nacimiento, 
         e.foto,
         EXTRACT(DAY FROM e.fecha_nacimiento)::int AS dia,

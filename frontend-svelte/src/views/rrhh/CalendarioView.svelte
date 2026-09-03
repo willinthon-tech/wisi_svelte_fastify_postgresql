@@ -390,6 +390,23 @@
     window.print();
   }
 
+  let selectedDayModalData = null;
+
+  function openDayModal(cell) {
+    if (!cell || !cell.isCurrentMonth) return;
+    selectedDayModalData = {
+      day: cell.day,
+      monthName: MESES[calCurrentMonth]?.nombre || '',
+      year: calCurrentYear,
+      cumples: cell.cumpleEvents || [],
+      feriados: cell.feriadoEvents || []
+    };
+  }
+
+  function closeDayModal() {
+    selectedDayModalData = null;
+  }
+
   $: calMonthName = MESES[calCurrentMonth]?.nombre || '';
   $: calMonthTitle = `${calMonthName} ${calCurrentYear}`;
 
@@ -410,6 +427,8 @@
         day: daysInPrevMonth - i,
         isCurrentMonth: false,
         isToday: false,
+        cumpleEvents: [],
+        feriadoEvents: [],
         events: []
       });
     }
@@ -439,6 +458,7 @@
             type: 'cumpleanos',
             id: emp.id,
             title: emp.nombre,
+            cedula: emp.cedula,
             age,
             foto: emp.foto,
             salaNombre: emp.sala_nombre,
@@ -628,7 +648,11 @@
     <!-- Cuadrícula de días -->
     <div class="cal-days-grid">
       {#each calendarMatrix as cell}
-        <div class="cal-day-cell {cell.isCurrentMonth ? 'is-current' : 'is-outside'} {cell.isToday ? 'is-today' : ''}">
+        <div 
+          class="cal-day-cell {cell.isCurrentMonth ? 'is-current' : 'is-outside'} {cell.isToday ? 'is-today' : ''}"
+          on:click={() => openDayModal(cell)}
+          title={cell.isCurrentMonth ? `Ver detalles del día ${cell.day} de ${calMonthName}` : ''}
+        >
           <div class="cal-day-header">
             <span class="cal-day-num {cell.isToday ? 'today-badge' : ''}">{cell.day}</span>
           </div>
@@ -686,6 +710,115 @@
     </div>
   </div>
 </div>
+
+<!-- MODAL DE DETALLES DEL DÍA -->
+{#if selectedDayModalData}
+  <div class="day-modal-backdrop" on:click={closeDayModal}>
+    <div class="day-modal-card" on:click|stopPropagation>
+      <!-- Header -->
+      <div class="day-modal-header">
+        <div class="day-modal-title-group">
+          <span class="day-modal-cal-icon">📅</span>
+          <div>
+            <h3 class="day-modal-title">
+              {selectedDayModalData.day} de {selectedDayModalData.monthName} {selectedDayModalData.year}
+            </h3>
+            <p class="day-modal-subtitle">Resumen de eventos, cumpleaños y fechas patrias</p>
+          </div>
+        </div>
+        <button type="button" class="day-modal-close" on:click={closeDayModal} title="Cerrar ventana">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="day-modal-body">
+        <!-- 1. CUMPLEAÑEROS -->
+        <div class="modal-section-box">
+          <div class="modal-sec-header cumple-header">
+            <span class="sec-icon">🎂</span>
+            <span class="sec-title">Cumpleañeros del Día</span>
+            <span class="sec-count-badge badge-green">{selectedDayModalData.cumples.length}</span>
+          </div>
+
+          {#if selectedDayModalData.cumples.length > 0}
+            <div class="modal-cumples-cards-grid">
+              {#each selectedDayModalData.cumples as c}
+                <div class="modal-cumple-item-card">
+                  <img 
+                    src="{c.foto}" 
+                    alt="{c.title}" 
+                    class="modal-emp-img" 
+                    on:error={(e) => { e.currentTarget.src = '/user.png'; }}
+                  />
+                  <div class="modal-emp-details">
+                    <div class="modal-emp-top">
+                      <span class="modal-emp-name">{c.title}</span>
+                      {#if c.age !== null && c.age > 0}
+                        <span class="modal-emp-age-badge">Cumple {c.age} años 🎂</span>
+                      {/if}
+                    </div>
+                    <div class="modal-emp-bottom">
+                      <span class="modal-emp-tag tag-sala">🏛️ {c.salaNombre}</span>
+                      {#if c.cargoNombre}
+                        <span class="modal-emp-tag tag-cargo">💼 {c.cargoNombre}</span>
+                      {/if}
+                      {#if c.cedula}
+                        <span class="modal-emp-tag tag-cedula">🪪 {c.cedula}</span>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="modal-empty-state">
+              <span class="empty-icon">🎈</span>
+              <p>No hay cumpleaños registrados para este día.</p>
+            </div>
+          {/if}
+        </div>
+
+        <!-- 2. FERIADOS / FECHAS PATRIAS -->
+        <div class="modal-section-box">
+          <div class="modal-sec-header feriado-header">
+            <span class="sec-icon">🏛️</span>
+            <span class="sec-title">Fechas Patrias y Feriados</span>
+            <span class="sec-count-badge badge-blue">{selectedDayModalData.feriados.length}</span>
+          </div>
+
+          {#if selectedDayModalData.feriados.length > 0}
+            <div class="modal-feriados-cards-grid">
+              {#each selectedDayModalData.feriados as f}
+                <div class="modal-feriado-item-card {f.type === 'feriado_nacional' ? 'border-nac' : 'border-sala'}">
+                  <div class="modal-feriado-flag">
+                    {f.type === 'feriado_nacional' ? '🇻🇪' : '🏛️'}
+                  </div>
+                  <div class="modal-feriado-details">
+                    <span class="modal-feriado-name">{f.title}</span>
+                    <span class="modal-feriado-type-badge {f.type === 'feriado_nacional' ? 'type-nac' : 'type-sala'}">
+                      {f.type === 'feriado_nacional' ? 'Fecha Patria Nacional (Aplica a todas las salas)' : `Fecha Feriada de Sala: ${f.subtitle}`}
+                    </span>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="modal-empty-state">
+              <span class="empty-icon">🗓️</span>
+              <p>No hay feriados ni fechas patrias registradas para este día.</p>
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="day-modal-footer">
+        <button type="button" class="btn-modal-close-action" on:click={closeDayModal}>
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .monthly-calendar-section {
@@ -897,6 +1030,22 @@
     background: #f0fdf4;
   }
 
+  .cal-day-cell.is-current {
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .cal-day-cell.is-current:hover {
+    background: #f1f5f9;
+    box-shadow: inset 0 0 0 2px #3b82f6;
+    z-index: 2;
+  }
+
+  .cal-day-cell.is-current.is-today:hover {
+    background: #dcfce7;
+    box-shadow: inset 0 0 0 2px #16a34a;
+  }
+
   .cal-day-header {
     display: flex;
     align-items: center;
@@ -965,13 +1114,6 @@
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
-    transition: all 0.15s ease;
-  }
-
-  .evt-cumple:hover {
-    border-color: #86efac;
-    background: #f0fdf4;
-    transform: translateY(-1px);
   }
 
   .cal-avatar-img {
@@ -1103,6 +1245,335 @@
       size: landscape;
       margin: 8mm;
     }
+  }
+
+  /* MODAL DE DETALLES DEL DÍA */
+  .day-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    padding: 16px;
+    box-sizing: border-box;
+    animation: fadeInModal 0.15s ease-out;
+  }
+
+  .day-modal-card {
+    background: #ffffff;
+    border-radius: 14px;
+    width: 100%;
+    max-width: 620px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    animation: scaleInModal 0.18s ease-out;
+  }
+
+  @keyframes fadeInModal {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes scaleInModal {
+    from { transform: scale(0.96); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .day-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .day-modal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .day-modal-cal-icon {
+    font-size: 26px;
+  }
+
+  .day-modal-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: capitalize;
+  }
+
+  .day-modal-subtitle {
+    margin: 2px 0 0 0;
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .day-modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+
+  .day-modal-close:hover {
+    background: #cbd5e1;
+    color: #0f172a;
+  }
+
+  .day-modal-body {
+    padding: 18px 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .modal-section-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .modal-sec-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .cumple-header {
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+
+  .feriado-header {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+  }
+
+  .sec-count-badge {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11.5px;
+    font-weight: 800;
+  }
+
+  .badge-green {
+    background: #16a34a;
+    color: #ffffff;
+  }
+
+  .badge-blue {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .modal-cumples-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .modal-cumple-item-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    transition: all 0.15s ease;
+  }
+
+  .modal-cumple-item-card:hover {
+    border-color: #86efac;
+    background: #f9fdfa;
+  }
+
+  .modal-emp-img {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #cbd5e1;
+    border: 2px solid #e2e8f0;
+    flex-shrink: 0;
+  }
+
+  .modal-emp-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .modal-emp-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .modal-emp-name {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .modal-emp-age-badge {
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 11.5px;
+    font-weight: 800;
+  }
+
+  .modal-emp-bottom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .modal-emp-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  .tag-sala {
+    background: #f1f5f9;
+    color: #334155;
+  }
+
+  .tag-cargo {
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+  }
+
+  .tag-cedula {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .modal-feriados-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .modal-feriado-item-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+
+  .modal-feriado-item-card.border-nac {
+    border-left: 4px solid #2563eb;
+    background: #f8fafc;
+  }
+
+  .modal-feriado-item-card.border-sala {
+    border-left: 4px solid #9333ea;
+    background: #faf5ff;
+  }
+
+  .modal-feriado-flag {
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+
+  .modal-feriado-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .modal-feriado-name {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .modal-feriado-type-badge {
+    font-size: 11.5px;
+    color: #64748b;
+  }
+
+  .modal-empty-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px dashed #cbd5e1;
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .day-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 20px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .btn-modal-close-action {
+    padding: 7px 18px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-modal-close-action:hover {
+    background: #f1f5f9;
+    color: #0f172a;
   }
 
   .smart-filters-grid {
