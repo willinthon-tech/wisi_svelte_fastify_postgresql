@@ -1,5 +1,6 @@
 <script>
   import { onMount } from "svelte";
+  import { toPng } from "html-to-image";
   import html2canvas from "html2canvas";
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../../controllers/auth.store.js";
@@ -249,31 +250,43 @@
   async function downloadCard(element, filename) {
     if (!element || isDownloading) return;
     isDownloading = true;
-    downloadProgress = "Generando...";
+    downloadProgress = "Generando HD...";
     try {
-      // 4x scale = 1180px x 1872px (Ultra Alta Resolución 300+ DPI para impresión en PVC/fotos)
-      const canvas = await html2canvas(element, {
-        scale: 4,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        imageTimeout: 15000,
-        onclone: (clonedDoc, clonedEl) => {
-          clonedEl.style.boxShadow = "none";
-          clonedEl.style.transform = "none";
-          clonedEl.style.animation = "none";
-          clonedEl.style.transition = "none";
-        }
-      });
+      // html-to-image preserva al 100% todos los clip-path (hexágono de foto, corte en V de cabecera, ribbon de cargo)
+      // pixelRatio 4x genera una resolución ultra nítida de más de 300 DPI (~1272 x 2000 px)
+      let dataUrl;
+      try {
+        dataUrl = await toPng(element, {
+          pixelRatio: 4,
+          quality: 1.0,
+          backgroundColor: "#ffffff",
+          cacheBust: true,
+          style: {
+            margin: "0",
+            boxShadow: "none",
+            transform: "none"
+          }
+        });
+      } catch (errHtmlToImage) {
+        console.warn("Aviso html-to-image, utilizando fallback:", errHtmlToImage);
+        const canvas = await html2canvas(element, {
+          scale: 4,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#ffffff",
+          logging: false
+        });
+        dataUrl = canvas.toDataURL("image/png", 1.0);
+      }
 
-      const dataUrl = canvas.toDataURL("image/png", 1.0);
-      const link = document.createElement("a");
-      link.download = filename;
-      link.href = dataUrl;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (dataUrl) {
+        const link = document.createElement("a");
+        link.download = filename;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     } catch (err) {
       console.error("Error al generar carnet en alta resolución:", err);
       alert("No se pudo generar la imagen del carnet. Por favor reintente.");
@@ -508,6 +521,7 @@
                   src={currentSala.logo_url}
                   alt="Logo {currentSala.nombre}"
                   class="sala-logo-img"
+                  crossorigin="anonymous"
                   on:error={(e) => {
                     e.target.style.display = 'none';
                   }}
@@ -523,6 +537,7 @@
                 src={currentEmp.foto}
                 alt={currentEmp.nombre}
                 class="employee-photo"
+                crossorigin="anonymous"
                 on:error={(e) => {
                   e.target.src = "/apple-touch-icon.png";
                 }}
