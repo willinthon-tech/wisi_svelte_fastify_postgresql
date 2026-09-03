@@ -637,21 +637,22 @@
               {#if evt.type === 'cumpleanos'}
                 <div 
                   class="cal-event-item evt-cumple" 
-                  title="{evt.title} ({evt.age ? evt.age + ' años' : ''}) - {evt.salaNombre} ({evt.cargoNombre})"
+                  title="{evt.title} ({evt.age > 0 ? (evt.prevAge + ' ➔ ' + evt.age + ' años') : ''}) - {evt.salaNombre} ({evt.cargoNombre})"
                 >
                   <img 
                     src="{evt.foto}" 
                     alt="{evt.title}" 
                     class="cal-avatar-img"
-                    on:error={(e) => { e.currentTarget.style.display = 'none'; }}
+                    on:error={(e) => { e.currentTarget.src = '/user.png'; }}
                   />
-                  <span class="cal-emp-name">{evt.title}</span>
-                  {#if evt.age !== null}
-                    {#if evt.prevAge !== null}
-                      <span class="cal-emp-age">( {evt.prevAge} -> {evt.age} )</span>
-                    {:else}
-                      <span class="cal-emp-age">( {evt.age} )</span>
-                    {/if}
+                  {#if evt.age !== null && evt.age > 0}
+                    <span class="cal-age-badge">
+                      <span class="age-bracket">(</span>
+                      <span class="age-prev">{evt.prevAge}</span>
+                      <span class="age-arrow">-&gt;</span>
+                      <span class="age-next">{evt.age}</span>
+                      <span class="age-bracket">)</span>
+                    </span>
                   {/if}
                 </div>
               {:else if evt.type === 'feriado_nacional'}
@@ -935,36 +936,56 @@
   }
 
   .evt-cumple {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    width: fit-content;
+    max-width: 100%;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+  }
+
+  .evt-cumple:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+    transform: translateY(-1px);
   }
 
   .cal-avatar-img {
-    width: 17px;
-    height: 17px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     object-fit: cover;
     background: #cbd5e1;
     flex-shrink: 0;
+    border: 1px solid #e2e8f0;
   }
 
-  .cal-emp-name {
-    font-weight: 700;
-    color: #1e293b;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-    flex: 1;
-  }
-
-  .cal-emp-age {
+  .cal-age-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2.5px;
+    font-size: 11.5px;
     font-weight: 800;
-    color: #16a34a;
-    font-size: 10.5px;
     white-space: nowrap;
-    flex-shrink: 0;
+    letter-spacing: 0.2px;
+  }
+
+  .age-bracket,
+  .age-prev,
+  .age-arrow {
+    color: #0f172a;
+    font-weight: 800;
+  }
+
+  .age-next {
+    color: #16a34a;
+    font-weight: 800;
   }
 
   .evt-feriado-nac {
