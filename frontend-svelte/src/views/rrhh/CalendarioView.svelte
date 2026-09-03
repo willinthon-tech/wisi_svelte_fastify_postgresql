@@ -17,11 +17,40 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
-  $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+  // Extraer las salas asignadas estrictamente para el usuario logueado
+  $: assignedSalaIds = (function () {
+    const user = $currentUserStore;
+    const userId = user?.id || 1;
+
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas
+        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .filter(Boolean);
+    }
+
+    const masterMap = $masterUserSalasStore;
+    if (
+      masterMap &&
+      typeof masterMap === "object" &&
+      !Array.isArray(masterMap)
+    ) {
+      const userList = masterMap[userId] || masterMap[String(userId)];
+      if (Array.isArray(userList)) {
+        return userList
+          .map((s) => (typeof s === "object" ? s.id : Number(s)))
+          .filter(Boolean);
+      }
+    }
+
+    const authList = $authUserSalasStore;
+    if (Array.isArray(authList) && authList.length > 0) {
+      return authList
+        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .filter(Boolean);
+    }
+
+    return [];
+  })();
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -72,26 +101,29 @@
 
   // Las 10 Fechas Patrias Base Nacionales del Sistema (Hardcodeadas, protegidas, aplican a todas las salas)
   const BASE_FERIADOS = [
-    { id: 'SYS-12', nombre: 'Año Nuevo', mes: 1, dia: 1, mes_nombre: 'Enero', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-13', nombre: 'Declaración de la Independencia', mes: 4, dia: 19, mes_nombre: 'Abril', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-14', nombre: 'Día del Trabajador', mes: 5, dia: 1, mes_nombre: 'Mayo', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-15', nombre: 'Batalla de Carabobo', mes: 6, dia: 24, mes_nombre: 'Junio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-16', nombre: 'Día de la Independencia', mes: 7, dia: 5, mes_nombre: 'Julio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-17', nombre: 'Natalicio del Libertador Simón Bolívar', mes: 7, dia: 24, mes_nombre: 'Julio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-18', nombre: 'Día de la Resistencia Indígena', mes: 10, dia: 12, mes_nombre: 'Octubre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-19', nombre: 'Víspera de Navidad', mes: 12, dia: 24, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-20', nombre: 'Navidad', mes: 12, dia: 25, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true },
-    { id: 'SYS-21', nombre: 'Fin de Año', mes: 12, dia: 31, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true }
+    { id: 'SYS-12', nombre: 'Año Nuevo', mes: 1, dia: 1, mes_nombre: 'Enero', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-13', nombre: 'Declaración de la Independencia', mes: 4, dia: 19, mes_nombre: 'Abril', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-14', nombre: 'Día del Trabajador', mes: 5, dia: 1, mes_nombre: 'Mayo', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-15', nombre: 'Batalla de Carabobo', mes: 6, dia: 24, mes_nombre: 'Junio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-16', nombre: 'Día de la Independencia', mes: 7, dia: 5, mes_nombre: 'Julio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-17', nombre: 'Natalicio del Libertador Simón Bolívar', mes: 7, dia: 24, mes_nombre: 'Julio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-18', nombre: 'Día de la Resistencia Indígena', mes: 10, dia: 12, mes_nombre: 'Octubre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-19', nombre: 'Víspera de Navidad', mes: 12, dia: 24, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-20', nombre: 'Navidad', mes: 12, dia: 25, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
+    { id: 'SYS-21', nombre: 'Fin de Año', mes: 12, dia: 31, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null }
   ];
 
   let rawServerItems = [];
 
-  // Combinar fechas base nacionales con las fechas patrias de las salas del servidor
+  // Combinar fechas base nacionales con las fechas patrias de las salas del servidor (filtrando por salas asignadas)
   $: combinedItems = (function() {
     let serverList = [...rawServerItems];
     if (selectedSalas.length > 0) {
       const set = new Set(selectedSalas.map(Number));
       serverList = serverList.filter(item => set.has(Number(item.sala_id)));
+    } else if (assignedSalaIds && assignedSalaIds.length > 0) {
+      const set = new Set(assignedSalaIds.map(Number));
+      serverList = serverList.filter(item => !item.sala_id || set.has(Number(item.sala_id)));
     }
     return [...BASE_FERIADOS, ...serverList];
   })();
@@ -352,11 +384,16 @@
     { id: 'CUMPLEANOS', nombre: 'Cumpleaños de Empleados' }
   ];
 
-  // Opciones limpias de salas sin conteos engañosos
-  $: calSalasOptions = ($masterSalasStore || []).map(s => ({
-    id: s.id,
-    nombre: s.nombre
-  }));
+  // Opciones limpias de salas (estrictamente las asignadas al usuario logueado)
+  $: calSalasOptions = ($masterSalasStore || [])
+    .filter(s => {
+      if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
+      return assignedSalaIds.map(Number).includes(Number(s.id));
+    })
+    .map(s => ({
+      id: s.id,
+      nombre: s.nombre
+    }));
 
   let rawCumpleanos = [];
   let loadingCumpleanos = false;
@@ -381,6 +418,14 @@
     } finally {
       loadingCumpleanos = false;
     }
+  }
+
+  // Cargar/actualizar cumpleaños automáticamente cuando cambian las salas asignadas, filtros o meses
+  let lastCumpleKey = "";
+  $: cumpleKey = `${(assignedSalaIds || []).join(",")}_${calSelectedSalas.join(",")}_${calSelectedMeses.join(",")}`;
+  $: if (cumpleKey !== lastCumpleKey) {
+    lastCumpleKey = cumpleKey;
+    fetchCumpleanos();
   }
 
   function handleMesChange() {
@@ -458,8 +503,9 @@
     return '';
   })();
 
-  // Nombre de sala para la cabecera: solo sale cuando hay una única sala seleccionada
+  // Nombre de sala para la cabecera: solo sale cuando hay una única sala seleccionada o asignada al usuario
   $: singleSalaName = (function() {
+    // 1. Si seleccionó exactamente 1 sala
     if (calSelectedSalas && calSelectedSalas.length === 1) {
       const sId = String(calSelectedSalas[0]);
       const f1 = (calSalasOptions || []).find(s => String(s.id) === sId);
@@ -469,11 +515,14 @@
       const f3 = rawCumpleanos.find(c => String(c.sala_id) === sId);
       if (f3 && f3.sala_nombre) return f3.sala_nombre.toUpperCase();
     }
-    // Si son todas o varias, queda vacío hasta que se seleccione una sola
+    // 2. Si no seleccionó nada pero solo tiene 1 sala asignada o disponible
+    if ((!calSelectedSalas || calSelectedSalas.length === 0) && calSalasOptions && calSalasOptions.length === 1) {
+      return (calSalasOptions[0].nombre || '').toUpperCase();
+    }
     return '';
   })();
 
-  // Resumen para impresión: Cumpleañeros agrupados por Departamento
+  // Resumen para impresión: Cumpleañeros agrupados por Departamento (estrictamente de las salas del usuario)
   $: printCumpleanosGrouped = (function() {
     const activeMonthsSet = (calSelectedMeses && calSelectedMeses.length > 0)
       ? new Set(calSelectedMeses.map(Number))
@@ -483,6 +532,9 @@
     if (calSelectedSalas.length > 0) {
       const salaSet = new Set(calSelectedSalas.map(Number));
       emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
+    } else if (assignedSalaIds && assignedSalaIds.length > 0) {
+      const allowedSet = new Set(assignedSalaIds.map(Number));
+      emps = emps.filter(c => allowedSet.has(Number(c.sala_id)));
     }
     emps.sort((a, b) => Number(a.dia) - Number(b.dia) || a.nombre.localeCompare(b.nombre));
 
@@ -510,7 +562,7 @@
     return count;
   })();
 
-  // Resumen para impresión: Feriados
+  // Resumen para impresión: Feriados (base nacionales + salas asignadas al usuario)
   $: printFeriadosMonth = (function() {
     const activeMonthsSet = (calSelectedMeses && calSelectedMeses.length > 0)
       ? new Set(calSelectedMeses.map(Number))
@@ -532,6 +584,9 @@
     if (calSelectedSalas.length > 0) {
       const salaSet = new Set(calSelectedSalas.map(Number));
       serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
+    } else if (assignedSalaIds && assignedSalaIds.length > 0) {
+      const allowedSet = new Set(assignedSalaIds.map(Number));
+      serverHols = serverHols.filter(rf => allowedSet.has(Number(rf.sala_id)));
     }
     for (const sh of serverHols) {
       list.push({
@@ -605,6 +660,9 @@
         if (calSelectedSalas.length > 0) {
           const salaSet = new Set(calSelectedSalas.map(Number));
           emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
+        } else if (assignedSalaIds && assignedSalaIds.length > 0) {
+          const allowedSet = new Set(assignedSalaIds.map(Number));
+          emps = emps.filter(c => allowedSet.has(Number(c.sala_id)));
         }
         for (const emp of emps) {
           const age = emp.anio_nacimiento ? (calCurrentYear - emp.anio_nacimiento) : null;
@@ -634,11 +692,14 @@
           });
         }
 
-        // Fechas de Salas en DB
+        // Fechas de Salas en DB (filtrando por salas asignadas al usuario)
         let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)) && Number(rf.dia) === d);
         if (calSelectedSalas.length > 0) {
           const salaSet = new Set(calSelectedSalas.map(Number));
           serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
+        } else if (assignedSalaIds && assignedSalaIds.length > 0) {
+          const allowedSet = new Set(assignedSalaIds.map(Number));
+          serverHols = serverHols.filter(rf => allowedSet.has(Number(rf.sala_id)));
         }
         for (const sh of serverHols) {
           feriadoEvents.push({
