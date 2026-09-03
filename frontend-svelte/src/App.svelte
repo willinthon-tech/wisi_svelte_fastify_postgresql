@@ -485,6 +485,11 @@
 
   $: activeTabStore.set($currentRouteStore);
 
+  function isBuiltInTab(route) {
+    const clean = String(route || '').split('?')[0].trim();
+    return builtInTabs.includes(clean) || builtInTabs.includes(route);
+  }
+
   function getNewRecordButtonLabel(tab) {
     return "Nuevo Registro";
   }
@@ -725,7 +730,7 @@
             </h1>
           </div>
 
-          {#if !builtInTabs.includes($currentRouteStore)}
+          {#if !isBuiltInTab($currentRouteStore)}
             <button
               on:click={openCreateModalUI}
               type="button"

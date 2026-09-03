@@ -620,13 +620,30 @@
   }
 
   let showGenerarCorteModal = false;
+  let activeCortePayload = null;
+  let activeCorteTotal = 0;
 
-  function getCleanCortePayload() {
-    const cleanEmpleados = (allEvaluatedEmployees || []).map(emp => ({
+  function handleGenerarCorte() {
+    let targetEmployees = (filteredEmployees && filteredEmployees.length > 0)
+      ? filteredEmployees
+      : (allEvaluatedEmployees && allEvaluatedEmployees.length > 0
+          ? allEvaluatedEmployees
+          : (reportData && reportData.empleados ? reportData.empleados : []));
+
+    if (!targetEmployees || targetEmployees.length === 0) {
+      triggerToast("No hay empleados en el reporte actual para generar el corte", "warning");
+      return;
+    }
+
+    const cleanEmpleados = targetEmployees.map(emp => ({
       id: emp.id,
       nombre: emp.nombre,
       cedula: emp.cedula,
-      cargo: emp.cargo,
+      cargo: emp.cargo_nombre || emp.cargo || "Personal",
+      sala_id: emp.sala_id,
+      sala_nombre: emp.sala_nombre,
+      departamento_id: emp.departamento_id,
+      departamento_nombre: emp.departamento_nombre,
       foto: emp.foto || `/empleados/${emp.id}.jpg`,
       dias: (emp.dias || []).map(d => ({
         fechaStr: d.fechaStr,
@@ -651,17 +668,11 @@
       }))
     }));
 
-    return {
+    activeCortePayload = {
       empleados: cleanEmpleados,
       diasDelMes: (reportData && reportData.diasDelMes) || []
     };
-  }
-
-  function handleGenerarCorte() {
-    if (!allEvaluatedEmployees || allEvaluatedEmployees.length === 0) {
-      triggerToast("No hay empleados en el reporte actual para generar el corte", "warning");
-      return;
-    }
+    activeCorteTotal = cleanEmpleados.length;
     showGenerarCorteModal = true;
   }
 </script>
@@ -1149,8 +1160,8 @@
   {fechaHasta}
   salas={filterOptions.salas || []}
   selectedSalaId={selectedSalas && selectedSalas.length === 1 ? selectedSalas[0] : null}
-  totalEmpleados={allEvaluatedEmployees.length}
-  payloadData={getCleanCortePayload()}
+  totalEmpleados={activeCorteTotal}
+  payloadData={activeCortePayload}
   on:close={() => { showGenerarCorteModal = false; }}
   on:saved={() => {
     showGenerarCorteModal = false;

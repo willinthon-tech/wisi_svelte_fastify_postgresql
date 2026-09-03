@@ -4276,7 +4276,16 @@ export async function getCorteByIdModel(id) {
     try {
       const rows = await sql`SELECT * FROM cortes WHERE id = ${numId} LIMIT 1`;
       if (rows && rows.length > 0) {
-        return { success: true, data: rows[0] };
+        let corteData = rows[0].data;
+        if (typeof corteData === 'string') {
+          try {
+            corteData = JSON.parse(corteData);
+            if (typeof corteData === 'string') {
+              corteData = JSON.parse(corteData);
+            }
+          } catch (e) {}
+        }
+        return { success: true, data: { ...rows[0], data: corteData } };
       }
       return { success: false, error: 'Corte no encontrado' };
     } catch (err) {
@@ -4286,7 +4295,13 @@ export async function getCorteByIdModel(id) {
 
   const found = (inMemoryData.cortes || []).find(c => Number(c.id) === numId);
   if (found) {
-    return { success: true, data: found };
+    let corteData = found.data;
+    if (typeof corteData === 'string') {
+      try {
+        corteData = JSON.parse(corteData);
+      } catch (e) {}
+    }
+    return { success: true, data: { ...found, data: corteData } };
   }
   return { success: false, error: 'Corte no encontrado' };
 }
@@ -4301,6 +4316,8 @@ export async function createCorteModel(payload = {}) {
     total_empleados,
     data
   } = payload;
+
+  const jsonStr = typeof data === 'string' ? data : JSON.stringify(data || {});
 
   if (isPgConnected && sql) {
     try {
@@ -4320,15 +4337,19 @@ export async function createCorteModel(payload = {}) {
           ${fecha_desde},
           ${fecha_hasta},
           ${total_empleados ? Number(total_empleados) : 0},
-          ${data ? JSON.stringify(data) : null}
+          CAST(${jsonStr} AS JSONB)
         )
         RETURNING id, titulo, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at
       `;
 
       if (rows && rows.length > 0) {
         const created = rows[0];
+        let parsedData = data;
+        if (typeof parsedData === 'string') {
+          try { parsedData = JSON.parse(parsedData); } catch (e) {}
+        }
         if (!inMemoryData.cortes) inMemoryData.cortes = [];
-        inMemoryData.cortes.unshift({ ...created, data });
+        inMemoryData.cortes.unshift({ ...created, data: parsedData });
         return { success: true, data: created };
       }
     } catch (err) {
