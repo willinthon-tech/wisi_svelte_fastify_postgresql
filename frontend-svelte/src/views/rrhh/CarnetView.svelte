@@ -58,8 +58,8 @@
 
   // Filtros y Estados
   let selectedSalas = [];
-  let selectedModelo = "roraima"; // "roraima", "wave", "minimal", "vip"
-  let selectedColor = "burgundy"; // "burgundy", "royal", "emerald", "gold", "graphite", "fire"
+  let selectedModelo = "roraima";
+  let selectedColor = "burgundy";
   let searchQuery = "";
   let currentIndex = 0;
   let viewMode = "individual"; // "individual" o "lote"
@@ -68,24 +68,48 @@
   let isLoading = false;
   let salasMap = {};
 
-  // Paletas de Color Disponibles
+  // Paletas de Color Disponibles (22 opciones de alta gama)
   const colorPalettes = [
-    { id: "burgundy", name: "🍷 Vino / Borgoña", primary: "#742a35", accent: "#943644", text: "#ffffff" },
-    { id: "royal", name: "🔵 Azul Royal", primary: "#1e3a8a", accent: "#2563eb", text: "#ffffff" },
-    { id: "emerald", name: "🟢 Verde Esmeralda", primary: "#065f46", accent: "#059669", text: "#ffffff" },
-    { id: "gold", name: "🟡 Dorado Casino", primary: "#854d0e", accent: "#d97706", text: "#ffffff" },
-    { id: "graphite", name: "⚫ Grafito / Dark", primary: "#0f172a", accent: "#334155", text: "#ffffff" },
-    { id: "fire", name: "🟠 Naranja Fuego", primary: "#9a3412", accent: "#ea580c", text: "#ffffff" }
+    { id: "burgundy",  name: "🍷 Vino / Borgoña",       primary: "#742a35", accent: "#943644", text: "#ffffff" },
+    { id: "royal",     name: "🔵 Azul Royal",            primary: "#1e3a8a", accent: "#2563eb", text: "#ffffff" },
+    { id: "emerald",   name: "🟢 Verde Esmeralda",       primary: "#065f46", accent: "#059669", text: "#ffffff" },
+    { id: "gold",      name: "🟡 Dorado Casino",         primary: "#854d0e", accent: "#d97706", text: "#ffffff" },
+    { id: "graphite",  name: "⚫ Grafito / Dark",        primary: "#0f172a", accent: "#334155", text: "#ffffff" },
+    { id: "fire",      name: "🟠 Naranja Fuego",         primary: "#9a3412", accent: "#ea580c", text: "#ffffff" },
+    { id: "violet",    name: "🟣 Violeta / Púrpura",     primary: "#4c1d95", accent: "#7c3aed", text: "#ffffff" },
+    { id: "rose",      name: "🌹 Rosa Elegante",         primary: "#881337", accent: "#e11d48", text: "#ffffff" },
+    { id: "teal",      name: "🩵 Turquesa / Teal",       primary: "#134e4a", accent: "#0d9488", text: "#ffffff" },
+    { id: "navy",      name: "⚓ Azul Marino",           primary: "#172554", accent: "#1d4ed8", text: "#ffffff" },
+    { id: "copper",    name: "🥉 Cobre / Bronce",        primary: "#7c2d12", accent: "#c2410c", text: "#ffffff" },
+    { id: "military",  name: "🪖 Verde Militar",         primary: "#14532d", accent: "#166534", text: "#ffffff" },
+    { id: "pink",      name: "💗 Rosa Fucsia",           primary: "#831843", accent: "#db2777", text: "#ffffff" },
+    { id: "slate",     name: "🌫️ Azul Pizarra",         primary: "#1e293b", accent: "#475569", text: "#ffffff" },
+    { id: "amethyst",  name: "🪐 Amatista Místico",      primary: "#581c87", accent: "#9333ea", text: "#ffffff" },
+    { id: "sapphire",  name: "💎 Zafiro Profundo",       primary: "#1e40af", accent: "#3b82f6", text: "#ffffff" },
+    { id: "forest",    name: "🌲 Verde Bosque",          primary: "#064e3b", accent: "#10b981", text: "#ffffff" },
+    { id: "coral",     name: "🌅 Atardecer Coral",       primary: "#9f1239", accent: "#f43f5e", text: "#ffffff" },
+    { id: "espresso",  name: "☕ Café Espresso",         primary: "#451a03", accent: "#78350f", text: "#ffffff" },
+    { id: "caribbean", name: "🌊 Océano Caribeño",       primary: "#0e7490", accent: "#06b6d4", text: "#ffffff" },
+    { id: "plum",      name: "🍇 Ciruela Imperial",      primary: "#701a75", accent: "#c026d3", text: "#ffffff" },
+    { id: "platinum",  name: "🪙 Platino Titanio",       primary: "#334155", accent: "#64748b", text: "#ffffff" }
   ];
 
   $: activePalette = colorPalettes.find((c) => c.id === selectedColor) || colorPalettes[0];
 
-  // Modelos de Diseño Disponibles
+  // Modelos de Diseño Disponibles (12 opciones profesionales)
   const modelos = [
-    { id: "roraima", name: "🛡️ Tálamo / Hexagonal (Oficial)", desc: "Cabecera oscura, foto hexagonal y ecualizador" },
-    { id: "wave", name: "🌊 Modern Wave", desc: "Curvas fluidas, marco circular con aro decorativo" },
-    { id: "minimal", name: "📐 Minimalista Tech", desc: "Líneas rectas, estética limpia con código de barras" },
-    { id: "vip", name: "👑 Casino VIP Gold", desc: "Elegante fondo de gala con destellos dorados" }
+    { id: "roraima",   name: "🛡️ Tálamo Hexagonal (Oficial)",  desc: "Cabecera negra con corte en V, foto hexagonal y ecualizador" },
+    { id: "wave",      name: "🌊 Modern Wave",                  desc: "Curvas fluidas, marco circular con aro decorativo" },
+    { id: "minimal",   name: "📐 Minimalista Tech",             desc: "Líneas rectas, estética limpia con código de barras" },
+    { id: "vip",       name: "👑 Casino VIP Gold",              desc: "Elegante fondo de gala con línea dorada y ribetes" },
+    { id: "diamond",   name: "💎 Diamond Royale",              desc: "Rombos decorativos y bisel dorado premium" },
+    { id: "neon",      name: "⚡ Neon Futurista",               desc: "Fondo oscuro con detalles neón y trazo brillante" },
+    { id: "corporate", name: "🏢 Corporativo Clásico",          desc: "Cabecera lateral con franjas y marco sobrio" },
+    { id: "retro",     name: "🎰 Retro Casino",                 desc: "Ficha circular, patrones dorados y borde vintage" },
+    { id: "geometric", name: "📐 Diagonal Modern",             desc: "Cortes angulares dinámicos y franja de acento" },
+    { id: "executive", name: "👔 Ejecutivo Deluxe",             desc: "Bisel metálico premium con cabecera en degradé" },
+    { id: "cyber",     name: "🌐 Cyber Matrix",                 desc: "Fondo tech oscuro con líneas de escaneo luminosas" },
+    { id: "aurora",    name: "🌌 Aurora Gradient",              desc: "Curvas suaves con degradado moderno multicolor" }
   ];
 
   // Limpiar texto para prevenir mojibake o tildes rotas (ej. Monseñor)
@@ -249,21 +273,24 @@
   async function downloadCard(element, filename) {
     if (!element || isDownloading) return;
     isDownloading = true;
-    downloadProgress = "Generando HD...";
+    downloadProgress = "Generando Ultra HD...";
     try {
-      // 4x scale = 1272px x 2000px (Ultra Alta Resolución 300+ DPI para impresión en PVC)
+      // Escala 5x = 1590 x 2500 px (Ultra Alta Resolución PVC 450+ DPI real)
       const canvas = await html2canvas(element, {
-        scale: 4,
+        scale: 5,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: "#ffffff",
+        backgroundColor: null,
         logging: false,
-        imageTimeout: 15000,
+        imageTimeout: 20000,
+        removeContainer: true,
         onclone: (clonedDoc, clonedEl) => {
           clonedEl.style.boxShadow = "none";
           clonedEl.style.transform = "none";
           clonedEl.style.animation = "none";
           clonedEl.style.transition = "none";
+          clonedEl.style.webkitPrintColorAdjust = "exact";
+          clonedEl.style.printColorAdjust = "exact";
         }
       });
 
@@ -275,7 +302,7 @@
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      console.error("Error al generar carnet en alta resolución:", err);
+      console.error("Error al generar carnet en ultra alta resolución:", err);
       alert("No se pudo generar la imagen del carnet. Por favor reintente.");
     } finally {
       isDownloading = false;
@@ -357,8 +384,10 @@
         img.src = src;
       });
 
-      const w = 196;
-      const h = 248;
+      // Multiplicador 4x de alta resolución (784 x 992 px) para calidad cristalina en la descarga Ultra HD
+      const hdFactor = 4;
+      const w = 196 * hdFactor;
+      const h = 248 * hdFactor;
       const canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
@@ -534,7 +563,7 @@
         <div
           bind:this={frontCardEl}
           class="carnet-card carnet-front modelo-{selectedModelo}"
-          style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
+          style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent}; {selectedModelo === 'neon' ? 'background:#050510;' : selectedModelo === 'retro' ? 'background:#1a0a00;' : selectedModelo === 'cyber' ? 'background:#020617;' : ''}"
         >
           <!-- Cabecera Superior con Forma Geométrica SVG Nativa (Preservada al 100% en la descarga) -->
           <div class="card-header-top">
@@ -559,6 +588,136 @@
                 <polygon points="0,0 318,0 318,124 159,165 0,124" fill="url(#vip-grad)" />
                 <polyline points="0,124 159,165 318,124" fill="none" stroke="#d4af37" stroke-width="3" />
               </svg>
+            {:else if selectedModelo === 'diamond'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="diamond-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="{activePalette.primary}" />
+                    <stop offset="100%" stop-color="#000000" />
+                  </linearGradient>
+                </defs>
+                <!-- Cabecera trapezoidal -->
+                <polygon points="0,0 318,0 318,140 0,165" fill="url(#diamond-grad)" />
+                <!-- Linea dorada decorativa -->
+                <line x1="0" y1="140" x2="318" y2="165" stroke="#d4af37" stroke-width="2.5" />
+                <!-- Rombos decorativos -->
+                <polygon points="30,20 44,34 30,48 16,34" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" />
+                <polygon points="280,20 294,34 280,48 266,34" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5" />
+                <polygon points="155,8 163,16 155,24 147,16" fill="#d4af37" opacity="0.8" />
+              </svg>
+            {:else if selectedModelo === 'neon'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="neon-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#050510" />
+                    <stop offset="100%" stop-color="#0d0d1a" />
+                  </linearGradient>
+                </defs>
+                <rect x="0" y="0" width="318" height="165" fill="url(#neon-grad)" />
+                <!-- Línea neón inferior -->
+                <line x1="0" y1="158" x2="318" y2="158" stroke="{activePalette.accent}" stroke-width="3" opacity="0.9" />
+                <!-- Cuadrícula de puntos sutil -->
+                {#each [40,80,120,160,200,240,280] as x}
+                  {#each [30,60,90,120,150] as y}
+                    <circle cx={x} cy={y} r="1" fill="rgba(255,255,255,0.08)" />
+                  {/each}
+                {/each}
+                <!-- Marco inferior tipo circuito -->
+                <polyline points="0,150 40,130 80,145 120,125 160,140 200,120 240,135 280,118 318,130" fill="none" stroke="{activePalette.accent}" stroke-width="1.5" opacity="0.5" />
+              </svg>
+            {:else if selectedModelo === 'corporate'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="corp-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="{activePalette.primary}" />
+                    <stop offset="60%" stop-color="{activePalette.primary}" />
+                    <stop offset="100%" stop-color="{activePalette.accent}" />
+                  </linearGradient>
+                </defs>
+                <!-- Barra lateral izquierda ancha -->
+                <rect x="0" y="0" width="70" height="165" fill="url(#corp-grad)" />
+                <!-- Fondo cabecera claro -->
+                <rect x="70" y="0" width="248" height="165" fill="#f8fafc" />
+                <!-- Líneas decorativas corporativas -->
+                <line x1="70" y1="0" x2="70" y2="165" stroke="{activePalette.accent}" stroke-width="4" />
+                <line x1="76" y1="0" x2="76" y2="165" stroke="{activePalette.accent}" stroke-width="1.5" opacity="0.5" />
+                <!-- Detalle esquina -->
+                <rect x="70" y="140" width="248" height="25" fill="{activePalette.primary}" opacity="0.08" />
+              </svg>
+            {:else if selectedModelo === 'retro'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="retro-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1a0a00" />
+                    <stop offset="100%" stop-color="#2d1600" />
+                  </linearGradient>
+                  <pattern id="retro-dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <circle cx="10" cy="10" r="1.5" fill="rgba(212,175,55,0.18)" />
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="318" height="165" fill="url(#retro-grad)" />
+                <rect x="0" y="0" width="318" height="165" fill="url(#retro-dots)" />
+                <!-- Marco dorado superior e inferior -->
+                <rect x="0" y="0" width="318" height="4" fill="#d4af37" />
+                <rect x="0" y="155" width="318" height="4" fill="#d4af37" />
+                <!-- Marco lateral izquierdo y derecho -->
+                <rect x="0" y="0" width="4" height="165" fill="#d4af37" />
+                <rect x="314" y="0" width="4" height="165" fill="#d4af37" />
+                <!-- Filigrana central tipo casino -->
+                <circle cx="159" cy="82" r="40" fill="none" stroke="rgba(212,175,55,0.2)" stroke-width="1" />
+                <circle cx="159" cy="82" r="30" fill="none" stroke="rgba(212,175,55,0.15)" stroke-width="1" />
+              </svg>
+            {:else if selectedModelo === 'geometric'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="geom-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#0f172a" />
+                    <stop offset="100%" stop-color="{activePalette.primary}" />
+                  </linearGradient>
+                </defs>
+                <polygon points="0,0 318,0 318,100 230,145 0,115" fill="url(#geom-grad)" />
+                <polygon points="0,115 230,145 200,160 0,135" fill="{activePalette.accent}" opacity="0.85" />
+                <polygon points="230,145 318,100 318,125 200,160" fill="{activePalette.primary}" opacity="0.4" />
+              </svg>
+            {:else if selectedModelo === 'executive'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="exec-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#1e293b" />
+                    <stop offset="50%" stop-color="#0f172a" />
+                    <stop offset="100%" stop-color="{activePalette.primary}" />
+                  </linearGradient>
+                </defs>
+                <rect x="0" y="0" width="318" height="150" fill="url(#exec-grad)" />
+                <rect x="0" y="146" width="318" height="4" fill="#94a3b8" />
+                <rect x="0" y="150" width="318" height="2" fill="{activePalette.accent}" />
+                <line x1="20" y1="130" x2="298" y2="130" stroke="rgba(255,255,255,0.15)" stroke-width="1" />
+              </svg>
+            {:else if selectedModelo === 'cyber'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="cyber-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#020617" />
+                    <stop offset="100%" stop-color="#091322" />
+                  </linearGradient>
+                </defs>
+                <rect x="0" y="0" width="318" height="165" fill="url(#cyber-grad)" />
+                <polygon points="0,150 120,150 140,162 318,162 318,165 0,165" fill="{activePalette.accent}" />
+                <line x1="0" y1="140" x2="318" y2="140" stroke="{activePalette.primary}" stroke-width="1.5" opacity="0.6" stroke-dasharray="8 4" />
+                <circle cx="140" cy="162" r="3" fill="#38bdf8" />
+              </svg>
+            {:else if selectedModelo === 'aurora'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="aurora-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="{activePalette.primary}" />
+                    <stop offset="50%" stop-color="{activePalette.accent}" />
+                    <stop offset="100%" stop-color="#0284c7" />
+                  </linearGradient>
+                </defs>
+                <path d="M 0,0 L 318,0 L 318,125 C 240,165 120,100 0,145 Z" fill="url(#aurora-grad)" />
+                <path d="M 0,145 C 120,100 240,165 318,125 L 318,135 C 240,175 120,110 0,155 Z" fill="rgba(255,255,255,0.25)" />
+              </svg>
             {:else}
               <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
                 <polygon points="0,0 318,0 318,106 159,165 0,106" fill="#000000" />
@@ -580,52 +739,88 @@
             </div>
           </div>
 
-          <!-- Marco de Foto (Hexágono con borde de acento y foto real visible en descarga) -->
+          <!-- Marco de Foto según modelo -->
           <div class="photo-wrapper">
             {#if selectedModelo === 'roraima'}
               <div class="photo-hex-container">
-                <!-- Marco exterior hexagonal con color de acento -->
                 <svg viewBox="0 0 116 130" width="116" height="130" class="svg-photo-hex-bg">
-                  <polygon
-                    points="58,0 110,30 110,100 58,130 6,100 6,30"
-                    fill="{activePalette.primary}"
-                  />
+                  <polygon points="58,0 110,30 110,100 58,130 6,100 6,30" fill="{activePalette.primary}" />
                 </svg>
-
-                <!-- Foto del empleado con recorte hexagonal transparente -->
                 <img
                   src={hexPhotoDataUrl || currentEmp.foto}
                   alt={currentEmp.nombre}
                   class="employee-hex-photo"
                   crossorigin="anonymous"
-                  on:error={(e) => {
-                    e.target.src = "/apple-touch-icon.png";
-                  }}
+                  on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }}
                 />
               </div>
             {:else if selectedModelo === 'wave'}
               <div class="photo-circle-container" style="--accent-ring: {activePalette.primary};">
-                <img
-                  src={currentEmp.foto}
-                  alt={currentEmp.nombre}
-                  class="employee-circle-photo"
-                  crossorigin="anonymous"
-                  on:error={(e) => {
-                    e.target.src = "/apple-touch-icon.png";
-                  }}
-                />
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-circle-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'diamond'}
+              <!-- Foto con marco de diamante / octágono -->
+              <div class="photo-diamond-container" style="--diamond-color: {activePalette.primary};">
+                <svg viewBox="0 0 120 120" width="120" height="120" class="svg-photo-diamond-bg">
+                  <polygon points="60,2 118,30 118,90 60,118 2,90 2,30" fill="{activePalette.primary}" />
+                  <polygon points="60,8 112,34 112,86 60,112 8,86 8,34" fill="#d4af37" opacity="0.5" />
+                </svg>
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-diamond-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'neon'}
+              <!-- Foto con marco neón circular con glow -->
+              <div class="photo-neon-container" style="--neon-color: {activePalette.accent};">
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-neon-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'corporate'}
+              <!-- Foto corporativa: rectangular sobria -->
+              <div class="photo-corporate-container" style="border-color: {activePalette.primary};">
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-corporate-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'retro'}
+              <!-- Foto con marco tipo ficha de casino -->
+              <div class="photo-retro-container">
+                <svg viewBox="0 0 124 124" width="124" height="124" class="svg-photo-retro-bg">
+                  <circle cx="62" cy="62" r="60" fill="{activePalette.primary}" />
+                  <circle cx="62" cy="62" r="56" fill="none" stroke="#d4af37" stroke-width="2" />
+                  <circle cx="62" cy="62" r="50" fill="none" stroke="rgba(212,175,55,0.4)" stroke-width="1" stroke-dasharray="4 3" />
+                </svg>
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-retro-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'geometric'}
+              <!-- Foto con marco angular moderno -->
+              <div class="photo-geometric-container" style="--accent-border: {activePalette.primary};">
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-geometric-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'executive'}
+              <!-- Foto con marco ejecutivo bimetálico -->
+              <div class="photo-executive-container" style="--exec-accent: {activePalette.primary};">
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-executive-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'cyber'}
+              <!-- Foto con visor tech y halo cyber -->
+              <div class="photo-cyber-container" style="--cyber-accent: {activePalette.accent};">
+                <div class="cyber-scan-ring"></div>
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-cyber-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+              </div>
+            {:else if selectedModelo === 'aurora'}
+              <!-- Foto con halo fluido degradado aurora -->
+              <div class="photo-aurora-container" style="--aurora-p: {activePalette.primary}; --aurora-a: {activePalette.accent};">
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-aurora-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
               </div>
             {:else}
               <div class="photo-rect-container" style="border-color: {activePalette.primary};">
-                <img
-                  src={currentEmp.foto}
-                  alt={currentEmp.nombre}
-                  class="employee-rect-photo"
-                  crossorigin="anonymous"
-                  on:error={(e) => {
-                    e.target.src = "/apple-touch-icon.png";
-                  }}
-                />
+                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-rect-photo"
+                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
               </div>
             {/if}
           </div>
@@ -682,7 +877,7 @@
             title="Descargar Frente en Alta Resolución"
           >
             <span class="btn-icon">📥</span>
-            <span>Descargar Frente (HD)</span>
+            <span>Descargar Frente (Ultra HD)</span>
           </button>
         </div>
       </div>
@@ -697,7 +892,7 @@
         <div
           bind:this={backCardEl}
           class="carnet-card carnet-back modelo-{selectedModelo}"
-          style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
+          style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent}; {selectedModelo === 'neon' ? 'background:#050510;' : selectedModelo === 'retro' ? 'background:#1a0a00;' : selectedModelo === 'cyber' ? 'background:#020617;' : ''}"
         >
           <!-- Contenedor Interno Estilizado -->
           <div class="back-card-inner-frame">
@@ -759,7 +954,7 @@
             title="Descargar Reverso en Alta Resolución"
           >
             <span class="btn-icon">📥</span>
-            <span>Descargar Reverso (HD)</span>
+            <span>Descargar Reverso (Ultra HD)</span>
           </button>
         </div>
       </div>
@@ -1201,6 +1396,274 @@
     object-fit: cover;
   }
 
+  /* Marco Diamond (Modelo Diamond Premium) */
+  .photo-diamond-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
+  }
+
+  .svg-photo-diamond-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .employee-diamond-photo {
+    position: relative;
+    z-index: 2;
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    display: block;
+    clip-path: polygon(50% 0%, 96% 25%, 96% 75%, 50% 100%, 4% 75%, 4% 25%);
+  }
+
+  /* Marco Neón (Modelo Neon Futurista) */
+  .photo-neon-container {
+    width: 112px;
+    height: 112px;
+    border-radius: 50%;
+    padding: 3px;
+    background: var(--neon-color);
+    box-shadow:
+      0 0 10px var(--neon-color),
+      0 0 20px var(--neon-color),
+      0 0 6px rgba(255, 255, 255, 0.6) inset;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .employee-neon-photo {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(0, 0, 0, 0.5);
+  }
+
+  /* Marco Corporativo (Modelo Corporate) */
+  .photo-corporate-container {
+    width: 96px;
+    height: 116px;
+    border-radius: 4px;
+    border: 3px solid;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  }
+
+  .employee-corporate-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Marco Retro / Ficha Casino (Modelo Retro) */
+  .photo-retro-container {
+    position: relative;
+    width: 124px;
+    height: 124px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+  }
+
+  .svg-photo-retro-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .employee-retro-photo {
+    position: relative;
+    z-index: 2;
+    width: 94px;
+    height: 94px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Ajustes de photo-wrapper para modelo corporativo (logo en barra lateral) */
+  .modelo-corporate .photo-wrapper {
+    margin-top: -38px;
+    justify-content: flex-end;
+    padding-right: 20px;
+  }
+
+  /* Ajuste del fondo de tarjeta para Neon */
+  .modelo-neon .carnet-card,
+  .modelo-neon.carnet-card {
+    background: #050510 !important;
+  }
+
+  /* Fondo oscuro para modelo Retro */
+  .modelo-retro.carnet-card {
+    background: #1a0a00 !important;
+  }
+
+  /* Colores de texto para Neon */
+  .modelo-neon .emp-name {
+    color: #ffffff;
+    text-shadow: 0 0 8px var(--accent-light);
+  }
+
+  .modelo-neon .detail-label,
+  .modelo-neon .detail-value {
+    color: #e2e8f0;
+  }
+
+  .modelo-neon .detail-row {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Colores de texto para Retro */
+  .modelo-retro .emp-name {
+    color: #fef08a;
+  }
+
+  .modelo-retro .detail-label {
+    color: #d4af37;
+  }
+
+  .modelo-retro .detail-value {
+    color: #fef9c3;
+  }
+
+  .modelo-retro .detail-row {
+    border-bottom-color: rgba(212, 175, 55, 0.2);
+  }
+
+  .modelo-retro .cargo-banner {
+    background: linear-gradient(135deg, #d4af37, #92400e) !important;
+    color: #1a0a00 !important;
+    font-weight: 900;
+  }
+
+  /* Marco Geometric (Modelo Diagonal Modern) */
+  .photo-geometric-container {
+    width: 110px;
+    height: 118px;
+    border: 3px solid var(--accent-border);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+    background: #ffffff;
+  }
+
+  .employee-geometric-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Marco Executive (Modelo Ejecutivo Deluxe) */
+  .photo-executive-container {
+    width: 106px;
+    height: 120px;
+    border: 3px solid #94a3b8;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25), 0 0 0 1.5px var(--exec-accent);
+    background: #ffffff;
+  }
+
+  .employee-executive-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Marco Cyber (Modelo Cyber Matrix) */
+  .photo-cyber-container {
+    position: relative;
+    width: 114px;
+    height: 114px;
+    border-radius: 50%;
+    padding: 3px;
+    background: #020617;
+    border: 2px solid var(--cyber-accent);
+    box-shadow: 0 0 14px var(--cyber-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .employee-cyber-photo {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .modelo-cyber .emp-name {
+    color: #f8fafc;
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  }
+
+  .modelo-cyber .detail-label {
+    color: #38bdf8;
+  }
+
+  .modelo-cyber .detail-value {
+    color: #e2e8f0;
+  }
+
+  .modelo-cyber .detail-row {
+    border-bottom-color: rgba(56, 189, 248, 0.15);
+  }
+
+  .modelo-cyber .cargo-banner {
+    background: #091322 !important;
+    border: 1px solid var(--accent-light);
+    color: #38bdf8 !important;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+  }
+
+  /* Marco Aurora (Modelo Aurora Gradient) */
+  .photo-aurora-container {
+    width: 114px;
+    height: 114px;
+    border-radius: 50%;
+    padding: 4px;
+    background: linear-gradient(135deg, var(--aurora-p), var(--aurora-a), #38bdf8);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .employee-aurora-photo {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #ffffff;
+  }
+
   /* ----------------------------------------------------
      CARA FRONTAL: NOMBRE Y BANNER DE CARGO
      ---------------------------------------------------- */
@@ -1482,6 +1945,124 @@
     text-overflow: ellipsis;
     max-width: 100%;
     display: block;
+  }
+
+  /* ----------------------------------------------------
+     REVERSO PERSONALIZADO POR MODELO
+     ---------------------------------------------------- */
+  /* Reverso Neon Futurista */
+  .modelo-neon .back-card-inner-frame {
+    background: #0a0a18 !important;
+    border-color: var(--accent-light) !important;
+    box-shadow: 0 0 14px rgba(0, 0, 0, 0.7);
+  }
+
+  .modelo-neon .legal-intro,
+  .modelo-neon .legal-notice {
+    color: #cbd5e1 !important;
+  }
+
+  .modelo-neon .company-name-highlight,
+  .modelo-neon .company-rif {
+    color: #ffffff !important;
+  }
+
+  .modelo-neon .company-phone {
+    color: var(--accent-light) !important;
+    text-shadow: 0 0 10px var(--accent-light);
+  }
+
+  .modelo-neon .company-address {
+    color: #94a3b8 !important;
+  }
+
+  .modelo-neon .divider-line {
+    background: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* Reverso Retro Casino */
+  .modelo-retro .back-card-inner-frame {
+    background: #251101 !important;
+    border-color: #d4af37 !important;
+    box-shadow: 0 0 14px rgba(212, 175, 55, 0.2);
+  }
+
+  .modelo-retro .legal-intro,
+  .modelo-retro .legal-notice {
+    color: #fef08a !important;
+  }
+
+  .modelo-retro .company-name-highlight,
+  .modelo-retro .company-rif {
+    color: #fef9c3 !important;
+  }
+
+  .modelo-retro .company-phone {
+    color: #d4af37 !important;
+  }
+
+  .modelo-retro .company-address {
+    color: #e2d2aa !important;
+  }
+
+  .modelo-retro .divider-line {
+    background: rgba(212, 175, 55, 0.3) !important;
+  }
+
+  .modelo-retro .back-footer-pill {
+    background: linear-gradient(135deg, #d4af37, #92400e) !important;
+    color: #1a0a00 !important;
+  }
+
+  /* Reverso Cyber Matrix */
+  .modelo-cyber .back-card-inner-frame {
+    background: #07101e !important;
+    border-color: #0284c7 !important;
+    box-shadow: 0 0 14px rgba(2, 132, 199, 0.3);
+  }
+
+  .modelo-cyber .legal-intro,
+  .modelo-cyber .legal-notice {
+    color: #94a3b8 !important;
+  }
+
+  .modelo-cyber .company-name-highlight,
+  .modelo-cyber .company-rif {
+    color: #f8fafc !important;
+  }
+
+  .modelo-cyber .company-phone {
+    color: #38bdf8 !important;
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  }
+
+  .modelo-cyber .company-address {
+    color: #64748b !important;
+  }
+
+  .modelo-cyber .divider-line {
+    background: rgba(56, 189, 248, 0.2) !important;
+  }
+
+  /* Reverso VIP & Diamond (Elegancia dorada) */
+  .modelo-vip .back-card-inner-frame,
+  .modelo-diamond .back-card-inner-frame {
+    border-color: #d4af37 !important;
+  }
+
+  .modelo-vip .company-name-highlight,
+  .modelo-diamond .company-name-highlight {
+    color: #854d0e !important;
+  }
+
+  .modelo-vip .company-phone,
+  .modelo-diamond .company-phone {
+    color: #854d0e !important;
+  }
+
+  .modelo-vip .divider-line,
+  .modelo-diamond .divider-line {
+    background: #d4af37 !important;
   }
 
   /* ----------------------------------------------------
