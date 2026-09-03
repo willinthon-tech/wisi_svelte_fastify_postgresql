@@ -1400,7 +1400,7 @@
   @media print {
     @page {
       size: portrait;
-      margin: 3mm;
+      margin: 10mm;
     }
 
     :global(body *) {
@@ -1414,9 +1414,10 @@
 
     .monthly-calendar-card {
       position: absolute !important;
-      left: 0 !important;
-      top: 0 !important;
-      width: 100% !important;
+      left: 10mm !important;
+      top: 10mm !important;
+      right: 10mm !important;
+      width: calc(100% - 20mm) !important;
       margin: 0 !important;
       padding: 0 !important;
       border: 1.5px solid #0f172a !important;
@@ -1528,18 +1529,22 @@
     }
 
     .cal-cumples-grid {
-      display: flex !important;
-      flex-wrap: wrap !important;
+      display: grid !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
       gap: 2px !important;
-      align-items: center !important;
-      justify-content: flex-start !important;
+      width: 100% !important;
     }
 
     .cal-event-item.evt-cumple {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
       padding: 0 !important;
       background: transparent !important;
       border: none !important;
       box-shadow: none !important;
+      width: 100% !important;
+      min-width: 0 !important;
     }
 
     .cal-avatar-img {
@@ -1547,6 +1552,7 @@
       height: 16px !important;
       border-radius: 50% !important;
       border: 1px solid #64748b !important;
+      margin: 0 auto !important;
     }
 
     /* Ocultar edad en versión de impresión dentro de los días del calendario */
