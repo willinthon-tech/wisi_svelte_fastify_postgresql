@@ -66,11 +66,22 @@
   let pageSize = initial.pageSize || 10;
   let searchQuery = initial.searchQuery || "";
 
-  // Date Filters State (Limited to today strictly)
+  // Date Filters State (Automático: día en curso a 10 días atrás)
   const nowObj = new Date();
   const todayStr = `${nowObj.getFullYear()}-${String(nowObj.getMonth() + 1).padStart(2, "0")}-${String(nowObj.getDate()).padStart(2, "0")}`;
-  let fechaDesde = initial.fechaDesde || "";
-  let fechaHasta = initial.fechaHasta || todayStr;
+
+  function getPastDateStr(daysAgo = 10) {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const defaultFechaDesde = getPastDateStr(10);
+  let fechaDesde = (initial.hasSearched && initial.fechaDesde) ? initial.fechaDesde : defaultFechaDesde;
+  let fechaHasta = (initial.hasSearched && initial.fechaHasta) ? initial.fechaHasta : todayStr;
   let hasSearched = initial.hasSearched || false;
   let reportData = initial.reportData || {
     mesesAgrupados: [],
@@ -468,17 +479,11 @@
   }
 
   onMount(async () => {
-    // Only set default quincena if no date range was previously selected/restored
+    // Por defecto: desde 10 días atrás hasta el día en curso
     if (!fechaDesde) {
-      const currentYear = nowObj.getFullYear();
-      const currentMonth = nowObj.getMonth();
-      const currentDay = nowObj.getDate();
-
-      if (currentDay <= 15) {
-        fechaDesde = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
-      } else {
-        fechaDesde = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-16`;
-      }
+      fechaDesde = defaultFechaDesde;
+    }
+    if (!fechaHasta) {
       fechaHasta = todayStr;
     }
 
