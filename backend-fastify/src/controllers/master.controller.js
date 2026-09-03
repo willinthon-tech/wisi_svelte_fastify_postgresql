@@ -14,7 +14,8 @@ import {
   getDepartamentosCiclosModel, getDepartamentosCiclosFilterOptionsModel,
   getPlantillasHorariosModel, getPlantillasHorariosFilterOptionsModel, createPlantillaHorarioModel, updatePlantillaHorarioModel, deletePlantillaHorarioModel,
   getDepartamentoEmpleadosCiclosModel, updateDepartamentoEmpleadosCiclosModel,
-  getFeriadosModel, getFeriadosFilterOptionsModel, createFeriadoModel, updateFeriadoModel, deleteFeriadoModel
+  getFeriadosModel, getFeriadosFilterOptionsModel, createFeriadoModel, updateFeriadoModel, deleteFeriadoModel,
+  getCumpleanosModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1309,6 +1310,15 @@ export async function deleteFeriado(request, reply) {
     return reply.send(res);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function getCumpleanos(request, reply) {
+  try {
+    const data = await getCumpleanosModel(request.query);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
   }
 }
 

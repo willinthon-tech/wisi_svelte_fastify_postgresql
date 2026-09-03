@@ -320,7 +320,185 @@
   onMount(() => {
     loadServerData();
     fetchFilterOptions();
+    fetchCumpleanos();
   });
+
+  // --- ESTADO DEL CALENDARIO MENSUAL INTERACTIVO ---
+  const todayDate = new Date();
+  let calCurrentYear = todayDate.getFullYear();
+  let calCurrentMonth = todayDate.getMonth(); // 0 a 11
+
+  let calSelectedSalas = [];
+  let calSelectedTipos = ['FERIADOS', 'CUMPLEANOS'];
+
+  const TIPO_OPTIONS = [
+    { id: 'FERIADOS', nombre: 'Feriados / Fechas Patrias' },
+    { id: 'CUMPLEANOS', nombre: 'Cumpleaños de Empleados' }
+  ];
+
+  let rawCumpleanos = [];
+  let loadingCumpleanos = false;
+
+  async function fetchCumpleanos() {
+    loadingCumpleanos = true;
+    try {
+      const q = new URLSearchParams({
+        mes: calCurrentMonth + 1
+      });
+      if (assignedSalaIds.length > 0) q.set('user_sala_ids', assignedSalaIds.join(','));
+      if (calSelectedSalas.length > 0) q.set('sala_ids', calSelectedSalas.join(','));
+
+      const res = await fetch(`/api/master/cumpleanos?${q.toString()}`);
+      const json = await res.json();
+      if (json && json.success) {
+        rawCumpleanos = json.data || [];
+      }
+    } catch (err) {
+      console.warn('Error cargando cumpleaños:', err);
+    } finally {
+      loadingCumpleanos = false;
+    }
+  }
+
+  function prevMonth() {
+    if (calCurrentMonth === 0) {
+      calCurrentMonth = 11;
+      calCurrentYear--;
+    } else {
+      calCurrentMonth--;
+    }
+    fetchCumpleanos();
+  }
+
+  function nextMonth() {
+    if (calCurrentMonth === 11) {
+      calCurrentMonth = 0;
+      calCurrentYear++;
+    } else {
+      calCurrentMonth++;
+    }
+    fetchCumpleanos();
+  }
+
+  function goToToday() {
+    calCurrentYear = todayDate.getFullYear();
+    calCurrentMonth = todayDate.getMonth();
+    fetchCumpleanos();
+  }
+
+  function printCalendar() {
+    window.print();
+  }
+
+  $: calMonthName = MESES[calCurrentMonth]?.nombre || '';
+  $: calMonthTitle = `${calMonthName} ${calCurrentYear}`;
+
+  const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+  $: calendarMatrix = (function() {
+    const firstDayRaw = new Date(calCurrentYear, calCurrentMonth, 1).getDay();
+    const startDayOffset = (firstDayRaw + 6) % 7; // Lunes = 0, Domingo = 6
+
+    const daysInCurrentMonth = new Date(calCurrentYear, calCurrentMonth + 1, 0).getDate();
+    const daysInPrevMonth = new Date(calCurrentYear, calCurrentMonth, 0).getDate();
+
+    const cells = [];
+
+    // Días del mes previo
+    for (let i = startDayOffset - 1; i >= 0; i--) {
+      cells.push({
+        day: daysInPrevMonth - i,
+        isCurrentMonth: false,
+        isToday: false,
+        events: []
+      });
+    }
+
+    // Días del mes actual
+    const currentMonthNum = calCurrentMonth + 1;
+    for (let d = 1; d <= daysInCurrentMonth; d++) {
+      const isToday = (
+        d === todayDate.getDate() &&
+        calCurrentMonth === todayDate.getMonth() &&
+        calCurrentYear === todayDate.getFullYear()
+      );
+
+      const dayEvents = [];
+
+      // 1. Feriados
+      if (calSelectedTipos.includes('FERIADOS')) {
+        // Fechas Base Nacionales
+        const baseHols = BASE_FERIADOS.filter(bf => bf.mes === currentMonthNum && bf.dia === d);
+        for (const bh of baseHols) {
+          dayEvents.push({
+            type: 'feriado_nacional',
+            id: bh.id,
+            title: bh.nombre,
+            subtitle: 'Nacional'
+          });
+        }
+
+        // Fechas de Salas en DB
+        let serverHols = rawServerItems.filter(rf => Number(rf.mes) === currentMonthNum && Number(rf.dia) === d);
+        if (calSelectedSalas.length > 0) {
+          const salaSet = new Set(calSelectedSalas.map(Number));
+          serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
+        }
+        for (const sh of serverHols) {
+          dayEvents.push({
+            type: 'feriado_sala',
+            id: sh.id,
+            title: sh.nombre,
+            subtitle: sh.sala_nombre || 'Sala'
+          });
+        }
+      }
+
+      // 2. Cumpleaños
+      if (calSelectedTipos.includes('CUMPLEANOS')) {
+        let emps = rawCumpleanos.filter(c => Number(c.dia) === d);
+        if (calSelectedSalas.length > 0) {
+          const salaSet = new Set(calSelectedSalas.map(Number));
+          emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
+        }
+        for (const emp of emps) {
+          const age = emp.anio_nacimiento ? (calCurrentYear - emp.anio_nacimiento) : null;
+          dayEvents.push({
+            type: 'cumpleanos',
+            id: emp.id,
+            title: emp.nombre,
+            age,
+            foto: emp.foto,
+            salaNombre: emp.sala_nombre,
+            cargoNombre: emp.cargo_nombre
+          });
+        }
+      }
+
+      cells.push({
+        day: d,
+        isCurrentMonth: true,
+        isToday,
+        events: dayEvents
+      });
+    }
+
+    // Días del mes siguiente para completar la cuadrícula
+    const remainder = cells.length % 7;
+    if (remainder > 0) {
+      const needed = 7 - remainder;
+      for (let n = 1; n <= needed; n++) {
+        cells.push({
+          day: n,
+          isCurrentMonth: false,
+          isToday: false,
+          events: []
+        });
+      }
+    }
+
+    return cells;
+  })();
 </script>
 
 <PaginatedDataTable 
@@ -381,7 +559,503 @@
   </div>
 </PaginatedDataTable>
 
+<!-- CALENDARIO MENSUAL INTERACTIVO -->
+<div class="monthly-calendar-section">
+  <!-- Filtros superiores del Calendario -->
+  <div class="cal-controls-card">
+    <div class="cal-filters-heading">
+      <span class="cal-section-icon">📅</span>
+      <span class="cal-section-title">Vista de Calendario Mensual</span>
+      <span class="cal-section-subtitle">Filtra por salas y tipo de evento (feriados y cumpleaños de empleados):</span>
+    </div>
+
+    <div class="cal-filters-row">
+      <div class="cal-filter-col">
+        <SmartMultiSelect
+          id="filter-monthly-cal-salas"
+          label="Salas"
+          options={filterOptions.salas}
+          bind:selectedValues={calSelectedSalas}
+          on:change={fetchCumpleanos}
+        />
+      </div>
+
+      <div class="cal-filter-col">
+        <SmartMultiSelect
+          id="filter-monthly-cal-tipos"
+          label="Tipo de Evento"
+          options={TIPO_OPTIONS}
+          bind:selectedValues={calSelectedTipos}
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- Tarjeta Principal del Calendario -->
+  <div class="monthly-calendar-card" id="printable-monthly-calendar">
+    <!-- Cabecera del Calendario -->
+    <div class="cal-top-header">
+      <div class="cal-nav-group">
+        <button type="button" class="cal-nav-arrow" on:click={prevMonth} title="Mes anterior">
+          <span>◀</span>
+        </button>
+        <h3 class="cal-month-title">{calMonthTitle}</h3>
+        <button type="button" class="cal-nav-arrow" on:click={nextMonth} title="Mes siguiente">
+          <span>▶</span>
+        </button>
+      </div>
+
+      <div class="cal-actions-group">
+        <button type="button" class="cal-btn-today" on:click={goToToday} title="Ir al mes actual">
+          Hoy
+        </button>
+        <button type="button" class="cal-btn-print" on:click={printCalendar} title="Imprimir este calendario">
+          <span class="print-icon">🖨️</span> Imprimir
+        </button>
+      </div>
+    </div>
+
+    <!-- Barra de días de la semana -->
+    <div class="cal-weekdays-grid">
+      {#each WEEKDAYS as wd}
+        <div class="cal-weekday-cell">{wd}</div>
+      {/each}
+    </div>
+
+    <!-- Cuadrícula de días -->
+    <div class="cal-days-grid">
+      {#each calendarMatrix as cell}
+        <div class="cal-day-cell {cell.isCurrentMonth ? 'is-current' : 'is-outside'} {cell.isToday ? 'is-today' : ''}">
+          <div class="cal-day-header">
+            <span class="cal-day-num {cell.isToday ? 'today-badge' : ''}">{cell.day}</span>
+          </div>
+
+          <div class="cal-events-list">
+            {#each cell.events as evt}
+              {#if evt.type === 'cumpleanos'}
+                <div 
+                  class="cal-event-item evt-cumple" 
+                  title="{evt.title} ({evt.age ? evt.age + ' años' : ''}) - {evt.salaNombre} ({evt.cargoNombre})"
+                >
+                  <img 
+                    src="{evt.foto}" 
+                    alt="{evt.title}" 
+                    class="cal-avatar-img"
+                    on:error={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                  <span class="cal-emp-name">{evt.title}</span>
+                  {#if evt.age !== null}
+                    <span class="cal-emp-age">( {evt.age} )</span>
+                  {/if}
+                </div>
+              {:else if evt.type === 'feriado_nacional'}
+                <div 
+                  class="cal-event-item evt-feriado-nac" 
+                  title="{evt.title} - Nacional (Aplica a todas las salas)"
+                >
+                  <span class="cal-icon-feriado">🇻🇪</span>
+                  <span class="cal-feriado-title">{evt.title}</span>
+                </div>
+              {:else if evt.type === 'feriado_sala'}
+                <div 
+                  class="cal-event-item evt-feriado-sala" 
+                  title="{evt.title} - {evt.subtitle}"
+                >
+                  <span class="cal-icon-feriado">🏛️</span>
+                  <span class="cal-feriado-title">{evt.title}</span>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </div>
+  </div>
+</div>
+
 <style>
+  .monthly-calendar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+    margin-top: 24px;
+  }
+
+  .cal-controls-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+
+  .cal-filters-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #1e293b;
+    flex-wrap: wrap;
+  }
+
+  .cal-section-icon {
+    font-size: 15px;
+  }
+
+  .cal-section-title {
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .cal-section-subtitle {
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .cal-filters-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .cal-filter-col {
+    width: 100%;
+  }
+
+  .monthly-calendar-card {
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .cal-top-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    position: relative;
+  }
+
+  .cal-nav-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 auto;
+  }
+
+  .cal-nav-arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: #16a34a;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  .cal-nav-arrow:hover {
+    background: #15803d;
+    transform: scale(1.04);
+  }
+
+  .cal-month-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: capitalize;
+    letter-spacing: -0.2px;
+    min-width: 160px;
+    text-align: center;
+  }
+
+  .cal-actions-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cal-btn-today {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .cal-btn-today:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+
+  .cal-btn-print {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #475569;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+
+  .cal-btn-print:hover {
+    background: #334155;
+  }
+
+  .print-icon {
+    font-size: 13px;
+  }
+
+  .cal-weekdays-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .cal-weekday-cell {
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 800;
+    color: #475569;
+    border-right: 1px solid #e2e8f0;
+  }
+
+  .cal-weekday-cell:last-child {
+    border-right: none;
+  }
+
+  .cal-days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #cbd5e1;
+    gap: 1px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .cal-day-cell {
+    background: #ffffff;
+    min-height: 100px;
+    padding: 6px 6px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .cal-day-cell.is-outside {
+    background: #f8fafc;
+  }
+
+  .cal-day-cell.is-today {
+    background: #f0fdf4;
+  }
+
+  .cal-day-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .cal-day-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  .cal-day-cell.is-outside .cal-day-num {
+    color: #94a3b8;
+  }
+
+  .today-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2563eb;
+    color: #ffffff !important;
+  }
+
+  .cal-events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow-y: auto;
+    max-height: 130px;
+  }
+
+  .cal-event-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  .evt-cumple {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+
+  .cal-avatar-img {
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #cbd5e1;
+    flex-shrink: 0;
+  }
+
+  .cal-emp-name {
+    font-weight: 700;
+    color: #1e293b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .cal-emp-age {
+    font-weight: 800;
+    color: #16a34a;
+    font-size: 10.5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .evt-feriado-nac {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+  }
+
+  .evt-feriado-sala {
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+  }
+
+  .cal-icon-feriado {
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .cal-feriado-title {
+    font-weight: 800;
+    color: #1e3a8a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .evt-feriado-sala .cal-feriado-title {
+    color: #7e22ce;
+  }
+
+  @media (max-width: 768px) {
+    .cal-filters-row {
+      grid-template-columns: 1fr;
+    }
+
+    .cal-top-header {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .cal-nav-group {
+      margin: 0;
+    }
+
+    .cal-day-cell {
+      min-height: 75px;
+      padding: 3px;
+    }
+
+    .cal-emp-name {
+      max-width: 50px;
+    }
+  }
+
+  @media print {
+    :global(body *) {
+      visibility: hidden !important;
+    }
+
+    .monthly-calendar-card,
+    .monthly-calendar-card * {
+      visibility: visible !important;
+    }
+
+    .monthly-calendar-card {
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 1px solid #94a3b8 !important;
+      box-shadow: none !important;
+    }
+
+    .cal-actions-group,
+    .cal-nav-arrow,
+    .cal-controls-card {
+      display: none !important;
+    }
+
+    .cal-top-header {
+      justify-content: center !important;
+      border-bottom: 2px solid #334155 !important;
+    }
+
+    .cal-day-cell {
+      min-height: 120px !important;
+    }
+
+    @page {
+      size: landscape;
+      margin: 8mm;
+    }
+  }
+
   .smart-filters-grid {
     display: grid;
     grid-template-columns: 1fr;

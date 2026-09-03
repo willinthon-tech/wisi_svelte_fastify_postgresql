@@ -15,7 +15,8 @@ import {
   getAreas, getAreasFilterOptions, createArea, updateArea, deleteArea,
   getCargos, getCargosFilterOptions, createCargo, updateCargo, deleteCargo,
   getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado,
-  getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado
+  getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado,
+  getCumpleanos
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -72,6 +73,11 @@ export default async function masterRoutes(fastify, options) {
   fastify.delete('/master/calendario/:id', deleteFeriado);
   fastify.delete('/api/master/calendario/:id', deleteFeriado);
   fastify.delete('/calendario/:id', deleteFeriado);
+
+  // Cumpleaños de Empleados
+  fastify.get('/master/cumpleanos', getCumpleanos);
+  fastify.get('/api/master/cumpleanos', getCumpleanos);
+  fastify.get('/cumpleanos', getCumpleanos);
 
   // Configuracion del sistema
   fastify.get('/configuracion', getConfiguracion);
