@@ -597,7 +597,7 @@
   }
 
   let currentDate = new Date();
-  let isTraerTodo = true; // Por defecto arranca en traer todo
+  let isTraerTodo = false; // Situado por defecto en el día en curso (Hoy)
   let isFetchingStats = false;
 
   $: selectedDateStr = formatLocalDate(currentDate);
@@ -1180,7 +1180,7 @@
               readonly
               disabled
               value="{formattedSelectedDateText}"
-              style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 800; color: #0f172a; text-align: center; width: 125px; cursor: default; user-select: none; font-family: monospace;"
+              style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 800; color: #0f172a; text-align: center; width: 135px; cursor: default; user-select: none; font-family: monospace;"
               title="Fecha visualizada (Solo lectura)"
             />
 
