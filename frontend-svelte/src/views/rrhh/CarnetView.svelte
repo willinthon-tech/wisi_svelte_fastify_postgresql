@@ -559,21 +559,24 @@
               <span class="divider-line"></span>
             </div>
 
-            <!-- Sección 3: Aviso a Autoridades -->
-            <p class="legal-notice">
-              Se le agradece a las autoridades Civiles, Militares y otros Organismos Públicos,
-              brindarle todo su apoyo y colaboración. En caso de emergencia o pérdida,
-              favor avisar al teléfono:
-            </p>
+            <!-- Bloque Central: Aviso Legal, Teléfono y Dirección (Centrado vertical en el height disponible) -->
+            <div class="back-middle-group">
+              <!-- Sección 3: Aviso a Autoridades -->
+              <p class="legal-notice">
+                Se le agradece a las autoridades Civiles, Militares y otros Organismos Públicos,
+                brindarle todo su apoyo y colaboración. En caso de emergencia o pérdida,
+                favor avisar al teléfono:
+              </p>
 
-            <!-- Sección 4: Teléfono de Contacto en Negrita -->
-            <div class="company-phone">
-              {currentSala.telefono}
-            </div>
+              <!-- Sección 4: Teléfono de Contacto en Negrita -->
+              <div class="company-phone">
+                {currentSala.telefono}
+              </div>
 
-            <!-- Sección 5: Ubicación Física Completa -->
-            <div class="company-address">
-              {currentSala.ubicacion}
+              <!-- Sección 5: Ubicación Física Completa -->
+              <div class="company-address">
+                {currentSala.ubicacion}
+              </div>
             </div>
 
             <!-- Sección 6: Bloque de Correo Institucional (2 Líneas exactas) -->
@@ -712,15 +715,18 @@
                 <span class="divider-line"></span>
               </div>
 
-              <p class="legal-notice">
-                Se le agradece a las autoridades Civiles, Militares y otros Organismos Públicos,
-                brindarle todo su apoyo y colaboración. En caso de emergencia o pérdida,
-                favor avisar al teléfono:
-              </p>
+              <!-- Bloque Central: Aviso Legal, Teléfono y Dirección (Centrado vertical en el height disponible) -->
+              <div class="back-middle-group">
+                <p class="legal-notice">
+                  Se le agradece a las autoridades Civiles, Militares y otros Organismos Públicos,
+                  brindarle todo su apoyo y colaboración. En caso de emergencia o pérdida,
+                  favor avisar al teléfono:
+                </p>
 
-              <div class="company-phone">{sala.telefono}</div>
+                <div class="company-phone">{sala.telefono}</div>
 
-              <div class="company-address">{sala.ubicacion}</div>
+                <div class="company-address">{sala.ubicacion}</div>
+              </div>
 
               <!-- Sección 6: Bloque de Correo Institucional (2 Líneas exactas) -->
               <div class="back-footer-pill">
@@ -1337,25 +1343,26 @@
     height: 100%;
     border: 1.5px solid rgba(0, 0, 0, 0.12);
     border-radius: 12px;
-    padding: 20px 14px;
+    padding: 18px 14px 14px 14px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     align-items: center;
     text-align: center;
     background: #ffffff;
   }
 
   .legal-intro {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 700;
     color: #1e293b;
     margin: 0;
-    line-height: 1.4;
+    line-height: 1.35;
   }
 
   .company-block {
-    margin: 10px 0 6px 0;
+    margin: 8px 0 4px 0;
     max-width: 100%;
   }
 
@@ -1377,7 +1384,7 @@
     font-weight: 800;
     color: #000000;
     letter-spacing: 0.5px;
-    margin-top: 3px;
+    margin-top: 2px;
   }
 
   .ornament-divider {
@@ -1385,7 +1392,7 @@
     align-items: center;
     justify-content: center;
     width: 82%;
-    margin: 12px 0;
+    margin: 10px 0 0 0;
   }
 
   .divider-line {
@@ -1395,31 +1402,44 @@
     border-radius: 1px;
   }
 
+  /* Contenedor del Bloque Central para centrado vertical perfecto */
+  .back-middle-group {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: auto 0;
+    padding: 6px 0;
+    box-sizing: border-box;
+  }
+
   .legal-notice {
     font-size: 11.5px;
     font-weight: 500;
     color: #1e293b;
-    margin: 0 0 8px 0;
-    line-height: 1.5;
+    margin: 0 0 10px 0;
+    line-height: 1.45;
     padding: 0 4px;
   }
 
   .company-phone {
-    font-size: 20px;
+    font-size: 21px;
     font-weight: 900;
     color: #000000;
     letter-spacing: 0.8px;
-    margin: 2px 0 8px 0;
+    margin: 0 0 10px 0;
   }
 
   .company-address {
-    font-size: 12px;
+    font-size: 11.5px;
     font-style: italic;
     font-weight: 600;
     color: #334155;
     line-height: 1.4;
-    padding: 0 8px;
-    margin-bottom: auto;
+    padding: 0 6px;
+    margin: 0;
   }
 
   .back-footer-pill {
@@ -1435,7 +1455,7 @@
     justify-content: center;
     text-align: center;
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
-    margin-top: 10px;
+    margin-top: 8px;
     box-sizing: border-box;
   }
 
@@ -1802,21 +1822,30 @@
       font-size: 6.8pt !important;
     }
 
+    .back-middle-group {
+      flex: 1 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      margin: auto 0 !important;
+    }
+
     .legal-notice {
       font-size: 5.4pt !important;
       line-height: 1.28 !important;
-      margin-bottom: 1.5mm !important;
+      margin-bottom: 1.2mm !important;
     }
 
     .company-phone {
       font-size: 8pt !important;
-      margin: 1mm 0 !important;
+      margin: 0 0 1.2mm 0 !important;
     }
 
     .company-address {
       font-size: 5.2pt !important;
       line-height: 1.25 !important;
-      margin-bottom: auto !important;
+      margin-bottom: 0 !important;
     }
 
     .back-footer-pill {
