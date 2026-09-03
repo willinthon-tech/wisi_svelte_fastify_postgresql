@@ -339,36 +339,72 @@
 
   $: currentEmp = empleados[currentIndex] || null;
   $: currentSala = currentEmp ? getSalaInfo(currentEmp) : null;
+
+  // Generar foto con recorte hexagonal transparente vía canvas para que html2canvas la dibuje al 100%
+  let hexPhotoDataUrl = "";
+
+  async function generateHexPhoto(src) {
+    if (!src) {
+      hexPhotoDataUrl = "";
+      return;
+    }
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = src;
+      });
+
+      const w = 196;
+      const h = 248;
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+
+      // Trazar hexágono proporcional con recorte
+      ctx.beginPath();
+      ctx.moveTo(w * 0.5, 0);
+      ctx.lineTo(w, h * 0.25);
+      ctx.lineTo(w, h * 0.75);
+      ctx.lineTo(w * 0.5, h);
+      ctx.lineTo(0, h * 0.75);
+      ctx.lineTo(0, h * 0.25);
+      ctx.closePath();
+      ctx.clip();
+
+      // Dibujar foto ajustada preservando aspecto (cover)
+      const imgRatio = img.naturalWidth / img.naturalHeight;
+      const targetRatio = w / h;
+      let sw = img.naturalWidth;
+      let sh = img.naturalHeight;
+      let sx = 0;
+      let sy = 0;
+
+      if (imgRatio > targetRatio) {
+        sw = sh * targetRatio;
+        sx = (img.naturalWidth - sw) / 2;
+      } else {
+        sh = sw / targetRatio;
+        sy = (img.naturalHeight - sh) / 2;
+      }
+
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+      hexPhotoDataUrl = canvas.toDataURL("image/png");
+    } catch (err) {
+      console.warn("No se pudo generar recorte hexagonal en canvas:", err);
+      hexPhotoDataUrl = src;
+    }
+  }
+
+  $: if (currentEmp && currentEmp.foto) {
+    generateHexPhoto(currentEmp.foto);
+  }
 </script>
 
 <div class="carnet-view-container">
-  <!-- Cabecera Principal (Oculta en impresión) -->
-  <div class="header-section no-print">
-    <div class="title-wrap">
-      <div class="icon-badge">🪪</div>
-      <div>
-        <h1 class="main-title">Carnets de Empleados</h1>
-        <p class="subtitle">
-          Personalización, visualización y emisión de credenciales de identificación institucional
-        </p>
-      </div>
-    </div>
-
-    <div class="top-actions">
-      <!-- Botón Principal: Descargar Carnet en Alta Resolución -->
-      <button
-        type="button"
-        class="download-action-btn"
-        on:click={downloadBothSides}
-        disabled={!currentEmp || isDownloading}
-        title="Descargar ambos lados (Frente y Reverso) en Ultra Alta Resolución"
-      >
-        <span class="btn-icon">📥</span>
-        <span>{isDownloading ? (downloadProgress || "Generando...") : "Descargar Carnet (HD)"}</span>
-      </button>
-    </div>
-  </div>
-
   <!-- Barra de Filtros y Configuración (Oculta en impresión) -->
   <div class="controls-toolbar no-print">
     <!-- Multiselect de Salas -->
@@ -544,74 +580,52 @@
             </div>
           </div>
 
-          <!-- Marco de Foto con Forma Geométrica SVG Nativa (Hexágono perfecto en descarga HD) -->
+          <!-- Marco de Foto (Hexágono con borde de acento y foto real visible en descarga) -->
           <div class="photo-wrapper">
             {#if selectedModelo === 'roraima'}
-              <div class="photo-frame-svg-wrap">
-                <svg viewBox="0 0 116 130" width="116" height="130" class="svg-photo-frame">
-                  <defs>
-                    <clipPath id="hex-clip-{currentEmp.id || 'curr'}">
-                      <polygon points="58,3.5 106,31 106,99 58,126.5 10,99 10,31" />
-                    </clipPath>
-                  </defs>
+              <div class="photo-hex-container">
+                <!-- Marco exterior hexagonal con color de acento -->
+                <svg viewBox="0 0 116 130" width="116" height="130" class="svg-photo-hex-bg">
                   <polygon
                     points="58,0 110,30 110,100 58,130 6,100 6,30"
                     fill="{activePalette.primary}"
                   />
-                  <image
-                    href={currentEmp.foto}
-                    x="10"
-                    y="3.5"
-                    width="96"
-                    height="123"
-                    preserveAspectRatio="xMidYMid slice"
-                    clip-path="url(#hex-clip-{currentEmp.id || 'curr'})"
-                  />
                 </svg>
+
+                <!-- Foto del empleado con recorte hexagonal transparente -->
+                <img
+                  src={hexPhotoDataUrl || currentEmp.foto}
+                  alt={currentEmp.nombre}
+                  class="employee-hex-photo"
+                  crossorigin="anonymous"
+                  on:error={(e) => {
+                    e.target.src = "/apple-touch-icon.png";
+                  }}
+                />
               </div>
             {:else if selectedModelo === 'wave'}
-              <div class="photo-frame-svg-wrap">
-                <svg viewBox="0 0 116 116" width="116" height="116" class="svg-photo-frame">
-                  <defs>
-                    <clipPath id="circle-clip-{currentEmp.id || 'curr'}">
-                      <circle cx="58" cy="58" r="53" />
-                    </clipPath>
-                    <linearGradient id="wave-ring" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="{activePalette.primary}" />
-                      <stop offset="100%" stop-color="#ffffff" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="58" cy="58" r="58" fill="url(#wave-ring)" />
-                  <image
-                    href={currentEmp.foto}
-                    x="5"
-                    y="5"
-                    width="106"
-                    height="106"
-                    preserveAspectRatio="xMidYMid slice"
-                    clip-path="url(#circle-clip-{currentEmp.id || 'curr'})"
-                  />
-                </svg>
+              <div class="photo-circle-container" style="--accent-ring: {activePalette.primary};">
+                <img
+                  src={currentEmp.foto}
+                  alt={currentEmp.nombre}
+                  class="employee-circle-photo"
+                  crossorigin="anonymous"
+                  on:error={(e) => {
+                    e.target.src = "/apple-touch-icon.png";
+                  }}
+                />
               </div>
             {:else}
-              <div class="photo-frame-svg-wrap">
-                <svg viewBox="0 0 112 122" width="112" height="122" class="svg-photo-frame">
-                  <defs>
-                    <clipPath id="rect-clip-{currentEmp.id || 'curr'}">
-                      <rect x="3" y="3" width="106" height="116" rx="12" ry="12" />
-                    </clipPath>
-                  </defs>
-                  <rect x="0" y="0" width="112" height="122" rx="14" ry="14" fill="{activePalette.primary}" />
-                  <image
-                    href={currentEmp.foto}
-                    x="3"
-                    y="3"
-                    width="106"
-                    height="116"
-                    preserveAspectRatio="xMidYMid slice"
-                    clip-path="url(#rect-clip-{currentEmp.id || 'curr'})"
-                  />
-                </svg>
+              <div class="photo-rect-container" style="border-color: {activePalette.primary};">
+                <img
+                  src={currentEmp.foto}
+                  alt={currentEmp.nombre}
+                  class="employee-rect-photo"
+                  crossorigin="anonymous"
+                  on:error={(e) => {
+                    e.target.src = "/apple-touch-icon.png";
+                  }}
+                />
               </div>
             {/if}
           </div>
@@ -767,80 +781,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   }
 
-  .header-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    color: #ffffff;
-    padding: 16px 22px;
-    border-radius: 12px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  }
 
-  .title-wrap {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .icon-badge {
-    font-size: 28px;
-    background: rgba(255, 255, 255, 0.1);
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-  }
-
-  .main-title {
-    font-size: 20px;
-    font-weight: 800;
-    margin: 0;
-    letter-spacing: -0.3px;
-  }
-
-  .subtitle {
-    font-size: 12.5px;
-    color: #94a3b8;
-    margin: 2px 0 0 0;
-  }
-
-  .top-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .download-action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-    color: #ffffff;
-    border: none;
-    padding: 9px 20px;
-    font-size: 13.5px;
-    font-weight: 800;
-    border-radius: 8px;
-    cursor: pointer;
-    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
-    transition: all 0.2s ease;
-  }
-
-  .download-action-btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45);
-    background: linear-gradient(135deg, #047857 0%, #059669 100%);
-  }
-
-  .download-action-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
 
   /* ----------------------------------------------------
      BARRA DE HERRAMIENTAS / CONTROLES
@@ -1156,37 +1097,73 @@
     z-index: 10;
   }
 
-  .photo-frame-svg-wrap {
+  .photo-hex-container {
+    position: relative;
+    width: 116px;
+    height: 130px;
     display: flex;
     align-items: center;
     justify-content: center;
     filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
   }
 
-  .svg-photo-frame {
+  .svg-photo-hex-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .employee-hex-photo {
+    position: relative;
+    z-index: 2;
+    width: 98px;
+    height: 124px;
+    object-fit: cover;
     display: block;
-    overflow: visible;
+    clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
   }
 
   /* Marco Circular (Modelo Wave) */
-  .modelo-wave .photo-frame {
+  .photo-circle-container {
     width: 114px;
     height: 114px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent-color), #ffffff);
-    padding: 4px;
+    padding: 3.5px;
+    background: linear-gradient(135deg, var(--accent-ring), #ffffff);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   }
 
-  .modelo-wave .employee-photo {
+  .employee-circle-photo {
     width: 100%;
     height: 100%;
     border-radius: 50%;
     object-fit: cover;
-    background: #e2e8f0;
+  }
+
+  /* Marco Rectangular (Modelo Minimal / VIP) */
+  .photo-rect-container {
+    width: 110px;
+    height: 120px;
+    border-radius: 14px;
+    border: 3.5px solid;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+
+  .employee-rect-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   /* Marco Rectangular Redondeado (Modelo Minimalista) */

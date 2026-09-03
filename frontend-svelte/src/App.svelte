@@ -473,6 +473,8 @@
     "mesas-en-vivo/mesas-borradas",
     "rrhh/desincorporados",
     "rrhh/asignaciones",
+    "rrhh/carnet",
+    "carnet",
   ];
 
   $: activeTabStore.set($currentRouteStore);

@@ -885,7 +885,10 @@
       {#each calendarMatrix as cell}
         <div 
           class="cal-day-cell {cell.isCurrentMonth ? 'is-current' : 'is-outside'} {cell.isToday ? 'is-today' : ''}"
+          role="button"
+          tabindex="0"
           on:click={() => openDayModal(cell)}
+          on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openDayModal(cell); }}
           title={cell.isCurrentMonth ? (calMonthName ? `Ver detalles del día ${cell.day} de ${calMonthName}` : `Ver detalles del día ${cell.day}`) : ''}
         >
           <div class="cal-day-header">
@@ -1001,8 +1004,8 @@
 
 <!-- MODAL DE DETALLES DEL DÍA -->
 {#if selectedDayModalData}
-  <div class="day-modal-backdrop" on:click={closeDayModal}>
-    <div class="day-modal-card" on:click|stopPropagation>
+  <div class="day-modal-backdrop" role="presentation" on:click={closeDayModal} on:keydown={(e) => { if (e.key === 'Escape') closeDayModal(); }}>
+    <div class="day-modal-card" role="dialog" aria-modal="true" on:click|stopPropagation on:keydown|stopPropagation>
       <!-- Header -->
       <div class="day-modal-header">
         <div class="day-modal-title-group">

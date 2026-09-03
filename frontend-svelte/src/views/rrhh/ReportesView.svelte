@@ -1979,17 +1979,7 @@
     white-space: nowrap;
   }
 
-  .loading-state-box,
-  .empty-state-box {
-    background: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    padding: 40px;
-    text-align: center;
-    color: #64748b;
-    font-size: 14px;
-    font-weight: 700;
-  }
+  /* .loading-state-box y .empty-state-box eliminados (no usados en este componente) */
 
   .pulse-loader {
     width: 40px;
