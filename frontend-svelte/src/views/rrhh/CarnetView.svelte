@@ -178,9 +178,6 @@
     currentIndex = (currentIndex + 1) % empleados.length;
   }
 
-  function selectEmpleado(index) {
-    currentIndex = index;
-  }
 
   // Formateador de fecha
   function formatDate(str) {
@@ -586,34 +583,6 @@
             </div>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Carrusel de Miniaturas para Selección Rápida (Oculto en impresión) -->
-    <div class="thumbnail-strip no-print">
-      <div class="strip-header">
-        <span class="strip-title">Personal de la Sala ({empleados.length})</span>
-        <span class="strip-hint">Haz clic en un empleado para previsualizar su carnet</span>
-      </div>
-      <div class="strip-scroll">
-        {#each empleados as emp, idx}
-          <button
-            type="button"
-            class="thumb-item {idx === currentIndex ? 'active' : ''}"
-            on:click={() => selectEmpleado(idx)}
-          >
-            <img
-              src={emp.foto}
-              alt={emp.nombre}
-              class="thumb-photo"
-              on:error={(e) => (e.target.src = "/apple-touch-icon.png")}
-            />
-            <div class="thumb-info">
-              <div class="thumb-name">{emp.nombre}</div>
-              <div class="thumb-cargo">{emp.cargo_nombre}</div>
-            </div>
-          </button>
-        {/each}
       </div>
     </div>
 
@@ -1480,107 +1449,6 @@
     text-overflow: ellipsis;
     max-width: 100%;
     display: block;
-  }
-
-  /* ----------------------------------------------------
-     TIRA DE MINIATURAS (STRIP)
-     ---------------------------------------------------- */
-  .thumbnail-strip {
-    background: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    padding: 14px 18px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
-    margin-top: 8px;
-  }
-
-  .strip-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-
-  .strip-title {
-    font-size: 13px;
-    font-weight: 800;
-    color: #1e293b;
-  }
-
-  .strip-hint {
-    font-size: 11px;
-    color: #64748b;
-  }
-
-  .strip-scroll {
-    display: flex;
-    gap: 12px;
-    overflow-x: auto;
-    padding-bottom: 6px;
-  }
-
-  .strip-scroll::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .strip-scroll::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 10px;
-  }
-
-  .thumb-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #f8fafc;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 6px 12px;
-    cursor: pointer;
-    min-width: 190px;
-    text-align: left;
-    transition: all 0.15s ease;
-  }
-
-  .thumb-item:hover {
-    border-color: #94a3b8;
-    background: #f1f5f9;
-  }
-
-  .thumb-item.active {
-    border-color: #3b82f6;
-    background: #eff6ff;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
-  }
-
-  .thumb-photo {
-    width: 36px;
-    height: 36px;
-    border-radius: 6px;
-    object-fit: cover;
-    background: #cbd5e1;
-    flex-shrink: 0;
-  }
-
-  .thumb-info {
-    overflow: hidden;
-  }
-
-  .thumb-name {
-    font-size: 12px;
-    font-weight: 700;
-    color: #1e293b;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .thumb-cargo {
-    font-size: 10.5px;
-    color: #64748b;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   /* ----------------------------------------------------
