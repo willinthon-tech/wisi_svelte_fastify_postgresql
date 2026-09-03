@@ -42,7 +42,17 @@
       const perms = activeUserPermsMap[m.id] || [];
       return perms.includes('VER');
     });
-    return { ...page, modulos: visibleModulos };
+
+    // Deduplicar estrictamente por ruta única dentro de la sección
+    const seenRoutes = new Set();
+    const uniqueModulos = visibleModulos.filter(m => {
+      const key = (m.ruta || m.nombre || '').toLowerCase().trim();
+      if (seenRoutes.has(key)) return false;
+      seenRoutes.add(key);
+      return true;
+    });
+
+    return { ...page, modulos: uniqueModulos };
   }).filter(page => page.modulos.length > 0);
 </script>
 

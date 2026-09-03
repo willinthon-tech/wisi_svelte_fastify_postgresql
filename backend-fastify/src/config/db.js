@@ -600,6 +600,12 @@ export async function initDb() {
       ON CONFLICT (id) DO UPDATE SET nombre = 'Cortes', ruta = '/rrhh/cortes';
     `.catch(() => {});
 
+    // Limpiar posibles duplicados anteriores del módulo Cortes
+    await sql`
+      DELETE FROM modulos 
+      WHERE (LOWER(nombre) = 'cortes' OR ruta = '/rrhh/cortes') AND id != 36;
+    `.catch(() => {});
+
     // Asignar permisos completos de Cortes al usuario 1
     await sql`
       INSERT INTO user_module_permissions (user_id, module_id, permission_id) VALUES

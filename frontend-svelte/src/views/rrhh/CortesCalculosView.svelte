@@ -57,8 +57,32 @@
 
   function computeCalculos(corteObj) {
     if (!corteObj) return;
-    const snapshotData = corteObj.data || {};
-    const rawEmpleados = snapshotData.empleados || (snapshotData.reportData && snapshotData.reportData.empleados) || [];
+    let snapshotData = corteObj.data || {};
+    if (typeof snapshotData === 'string') {
+      try {
+        snapshotData = JSON.parse(snapshotData);
+      } catch (e) {
+        snapshotData = {};
+      }
+    }
+
+    let rawEmpleados = snapshotData.empleados || [];
+    if ((!rawEmpleados || rawEmpleados.length === 0) && snapshotData.reportData) {
+      if (snapshotData.reportData.empleados && snapshotData.reportData.empleados.length > 0) {
+        rawEmpleados = snapshotData.reportData.empleados;
+      } else if (snapshotData.reportData.salas) {
+        const flat = [];
+        snapshotData.reportData.salas.forEach(s => {
+          (s.departamentos || []).forEach(d => {
+            (d.empleados || []).forEach(e => {
+              flat.push({ ...e, sala_id: s.id, sala_nombre: s.nombre, departamento_id: d.id, departamento_nombre: d.nombre });
+            });
+          });
+        });
+        rawEmpleados = flat;
+      }
+    }
+
     const diasDelMes = snapshotData.diasDelMes || (snapshotData.reportData && snapshotData.reportData.diasDelMes) || [];
 
     processedEmployees = rawEmpleados.map(emp => {
