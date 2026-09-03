@@ -50,7 +50,8 @@ export const navMenuStore = writable([
       { id: 28, nombre: 'Carnet', ruta: '/rrhh/carnet', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 29, nombre: 'Plantillas', ruta: '/rrhh/plantillas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 30, nombre: 'Cumpleaños', ruta: '/rrhh/cumpleanos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 31, nombre: 'Calendario', ruta: '/rrhh/calendario', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+      { id: 31, nombre: 'Calendario', ruta: '/rrhh/calendario', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
+      { id: 36, nombre: 'Cortes', ruta: '/rrhh/cortes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
     ]
   },
   {

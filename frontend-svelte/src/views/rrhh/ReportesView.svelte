@@ -30,8 +30,10 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../../controllers/auth.store.js";
   import { userSalasStore as masterUserSalasStore } from "../../controllers/master.store.js";
   import { triggerToast } from "../../controllers/ui.store.js";
+  import { navigateToRoute } from "../../controllers/router.store.js";
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
   import ExcepcionHorarioModal from "../../components/modals/ExcepcionHorarioModal.svelte";
+  import GenerarCorteModal from "../../components/modals/GenerarCorteModal.svelte";
 
   export let items = [];
   $: void items;
@@ -617,9 +619,14 @@
     dayColWidth = 100;
   }
 
+  let showGenerarCorteModal = false;
+
   function handleGenerarCorte() {
-    triggerToast("Generando reporte de corte de asistencia...", "info");
-    // Action trigger for Generating attendance cut/report
+    if (!allEvaluatedEmployees || allEvaluatedEmployees.length === 0) {
+      triggerToast("No hay empleados en el reporte actual para generar el corte", "warning");
+      return;
+    }
+    showGenerarCorteModal = true;
   }
 </script>
 
@@ -1097,6 +1104,27 @@
   dia={activeDiaExcepcion}
   plantillasSala={plantillasSalaExcepcion}
   on:saved={handleExcepcionSaved}
+/>
+
+<!-- Modal para Generar y Guardar Histórico de Corte -->
+<GenerarCorteModal
+  isOpen={showGenerarCorteModal}
+  {fechaDesde}
+  {fechaHasta}
+  salas={filterOptions.salas || []}
+  selectedSalaId={selectedSalas && selectedSalas.length === 1 ? selectedSalas[0] : null}
+  totalEmpleados={allEvaluatedEmployees.length}
+  payloadData={{
+    reportData,
+    empleados: allEvaluatedEmployees,
+    diasDelMes: reportData.diasDelMes,
+    mesesAgrupados: reportData.mesesAgrupados
+  }}
+  on:close={() => { showGenerarCorteModal = false; }}
+  on:saved={() => {
+    showGenerarCorteModal = false;
+    navigateToRoute("rrhh/cortes");
+  }}
 />
 
 <style>

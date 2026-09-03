@@ -16,7 +16,8 @@ import {
   getCargos, getCargosFilterOptions, createCargo, updateCargo, deleteCargo,
   getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado,
   getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado,
-  getCumpleanos, getCarnets
+  getCumpleanos, getCarnets,
+  getCortes, getCorteById, createCorte, deleteCorte, getCortesFilterOptions
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -83,6 +84,25 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/master/carnets', getCarnets);
   fastify.get('/api/master/carnets', getCarnets);
   fastify.get('/carnets', getCarnets);
+
+  // Cortes Históricos de Asistencia
+  fastify.get('/master/cortes', getCortes);
+  fastify.get('/api/master/cortes', getCortes);
+  fastify.get('/cortes', getCortes);
+
+  fastify.get('/master/cortes/filter-options', getCortesFilterOptions);
+  fastify.get('/api/master/cortes/filter-options', getCortesFilterOptions);
+
+  fastify.get('/master/cortes/:id', getCorteById);
+  fastify.get('/api/master/cortes/:id', getCorteById);
+
+  fastify.post('/master/cortes', createCorte);
+  fastify.post('/api/master/cortes', createCorte);
+  fastify.post('/cortes', createCorte);
+
+  fastify.delete('/master/cortes/:id', deleteCorte);
+  fastify.delete('/api/master/cortes/:id', deleteCorte);
+  fastify.delete('/cortes/:id', deleteCorte);
 
   // Configuracion del sistema
   fastify.get('/configuracion', getConfiguracion);

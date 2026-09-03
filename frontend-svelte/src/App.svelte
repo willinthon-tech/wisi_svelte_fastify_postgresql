@@ -43,6 +43,8 @@
   import HorariosView from "./views/rrhh/HorariosView.svelte";
   import CumpleanosView from "./views/rrhh/CumpleanosView.svelte";
   import CalendarioView from "./views/rrhh/CalendarioView.svelte";
+  import CortesView from "./views/rrhh/CortesView.svelte";
+  import CortesCalculosView from "./views/rrhh/CortesCalculosView.svelte";
 
   // Import MAQUINAS Views
   import MaquinasView from "./views/maquinas/MaquinasView.svelte";
@@ -475,6 +477,10 @@
     "rrhh/asignaciones",
     "rrhh/carnet",
     "carnet",
+    "rrhh/cortes",
+    "cortes",
+    "rrhh/cortes/calculos",
+    "cortes/calculos",
   ];
 
   $: activeTabStore.set($currentRouteStore);
@@ -497,6 +503,8 @@
     if (tab === "auth") return "Autenticación";
     if (tab === "settings") return "Diagnóstico del Sistema";
     if (tab === "rrhh/marcajes" || tab === "marcajes") return "Marcajes";
+    if (tab === "rrhh/cortes" || tab === "cortes") return "Cortes";
+    if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Cálculos de Asistencia";
 
     if ($navMenuStore && Array.isArray($navMenuStore)) {
       for (const page of $navMenuStore) {
@@ -885,6 +893,10 @@
           />
         {:else if $currentRouteStore === "rrhh/calendario" || $currentRouteStore === "calendario"}
           <CalendarioView />
+        {:else if $currentRouteStore === "rrhh/cortes" || $currentRouteStore === "cortes"}
+          <CortesView />
+        {:else if $currentRouteStore === "rrhh/cortes/calculos" || $currentRouteStore === "cortes/calculos" || String($currentRouteStore || '').startsWith("rrhh/cortes/calculos")}
+          <CortesCalculosView />
 
           <!-- MAQUINAS Module Views -->
         {:else if $currentRouteStore === "maquinas/maquinas" || $currentRouteStore === "maquinas"}

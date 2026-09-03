@@ -17,6 +17,7 @@ export let inMemoryData = {
   configuracion: [
     { clave: 'timezone', valor: 'America/Caracas' }
   ],
+  cortes: [],
   usuarios: [
     {
       id: 1,
@@ -576,6 +577,36 @@ export async function initDb() {
       );
     `;
 
+    // 20. Table cortes (Históricos de cortes de asistencia congelados con snapshot JSON completo)
+    await sql`
+      CREATE TABLE IF NOT EXISTS cortes (
+        id SERIAL PRIMARY KEY,
+        titulo VARCHAR(255) NOT NULL,
+        sala_id INT REFERENCES salas(id) ON DELETE SET NULL,
+        sala_nombre VARCHAR(255),
+        fecha_desde DATE NOT NULL,
+        fecha_hasta DATE NOT NULL,
+        total_empleados INT DEFAULT 0,
+        data JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Registrar módulo 36 Cortes
+    await sql`
+      INSERT INTO modulos (id, nombre, icono, ruta, page_id, orden) VALUES
+      (36, 'Cortes', 'receipt_long', '/rrhh/cortes', 2, 28)
+      ON CONFLICT (id) DO UPDATE SET nombre = 'Cortes', ruta = '/rrhh/cortes';
+    `.catch(() => {});
+
+    // Asignar permisos completos de Cortes al usuario 1
+    await sql`
+      INSERT INTO user_module_permissions (user_id, module_id, permission_id) VALUES
+      (1, 36, 1), (1, 36, 2), (1, 36, 3), (1, 36, 4), (1, 36, 5)
+      ON CONFLICT DO NOTHING;
+    `.catch(() => {});
+
     // Actualizar nombre y ruta de módulo 31 a Calendario
     await sql`
       UPDATE modulos 
@@ -779,7 +810,8 @@ export async function syncInMemoryFromPg() {
       empleados,
       configuracion,
       wisiItems,
-      feriados
+      feriados,
+      cortes
     ] = await Promise.all([
       sql`SELECT * FROM usuarios ORDER BY id ASC`.catch(() => inMemoryData.usuarios),
       sql`SELECT * FROM grupo_salas ORDER BY id ASC`.catch(() => inMemoryData.grupo_salas),
@@ -796,7 +828,8 @@ export async function syncInMemoryFromPg() {
       sql`SELECT * FROM empleados ORDER BY id ASC`.catch(() => inMemoryData.empleados),
       sql`SELECT * FROM configuracion`.catch(() => inMemoryData.configuracion),
       sql`SELECT * FROM wisi_items ORDER BY id ASC`.catch(() => inMemoryData.wisi_items),
-      sql`SELECT * FROM feriados ORDER BY mes ASC, dia ASC, id ASC`.catch(() => inMemoryData.feriados || [])
+      sql`SELECT * FROM feriados ORDER BY mes ASC, dia ASC, id ASC`.catch(() => inMemoryData.feriados || []),
+      sql`SELECT id, titulo, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at FROM cortes ORDER BY id DESC`.catch(() => inMemoryData.cortes || [])
     ]);
 
     if (usuarios && usuarios.length > 0) inMemoryData.usuarios = usuarios;
@@ -815,6 +848,7 @@ export async function syncInMemoryFromPg() {
     if (configuracion && configuracion.length > 0) inMemoryData.configuracion = configuracion;
     if (wisiItems && wisiItems.length > 0) inMemoryData.wisi_items = wisiItems;
     if (feriados && feriados.length > 0) inMemoryData.feriados = feriados;
+    if (cortes && cortes.length > 0) inMemoryData.cortes = cortes;
   } catch (err) {
     console.warn('Aviso sincronizando In-Memory Fallback desde PostgreSQL:', err.message);
   }

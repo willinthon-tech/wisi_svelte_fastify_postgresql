@@ -1241,6 +1241,26 @@
                       {item.total_empleados || 0} emp.
                     </span>
 
+                  {:else if col.type === 'corte_empleados_badge'}
+                    <!-- Empleados badge en Corte Histórico -->
+                    <span style="display: inline-flex; align-items: center; gap: 5px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 800;">
+                      👥 {item.total_empleados || 0} empleados
+                    </span>
+
+                  {:else if col.type === 'corte_actions'}
+                    <!-- Botón Ver Cálculos de Corte Histórico -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <button 
+                        type="button" 
+                        on:click={() => dispatch('verCalculos', item)}
+                        style="padding: 6px 14px; border-radius: 8px; border: 1px solid #7c3aed; background: #7c3aed; color: #ffffff; font-size: 12px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(124, 58, 237, 0.25); transition: all 0.15s ease;"
+                        on:mouseenter={(e) => e.currentTarget.style.background = '#6d28d9'}
+                        on:mouseleave={(e) => e.currentTarget.style.background = '#7c3aed'}
+                        title="Ver desglose completo de cálculos de asistencia">
+                        <span>📊</span> Ver Cálculos
+                      </button>
+                    </div>
+
                   {:else if col.type === 'departamento_ciclos_actions'}
                     <!-- Dedicated Action Button: Ver Departamento -->
                     <div style="display: flex; align-items: center; gap: 8px;">

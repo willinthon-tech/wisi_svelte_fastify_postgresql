@@ -4174,5 +4174,225 @@ export async function getCarnetsModel(params = {}) {
   return [];
 }
 
+// ==========================================
+// 📊 HISTÓRICOS DE CORTES DE ASISTENCIA
+// ==========================================
+
+export async function getCortesModel(options = {}) {
+  const page = parseInt(options.page) || 1;
+  const limit = parseInt(options.limit) || 10;
+  const offset = (page - 1) * limit;
+  const search = options.search ? String(options.search).trim().toLowerCase() : '';
+
+  if (isPgConnected && sql) {
+    try {
+      const conds = [];
+
+      if (options.userSalaIds && options.userSalaIds.length > 0) {
+        conds.push(sql`(sala_id IS NULL OR sala_id = ANY(${options.userSalaIds}))`);
+      }
+
+      if (options.salaIds && options.salaIds.length > 0) {
+        conds.push(sql`sala_id = ANY(${options.salaIds})`);
+      }
+
+      if (search) {
+        const term = `%${search}%`;
+        conds.push(sql`(
+          LOWER(COALESCE(titulo, '')) LIKE ${term} OR
+          LOWER(COALESCE(sala_nombre, '')) LIKE ${term} OR
+          CAST(id AS TEXT) LIKE ${term}
+        )`);
+      }
+
+      const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+      const [countResult, rows] = await Promise.all([
+        sql`SELECT COUNT(*)::int AS total FROM cortes ${where}`,
+        sql`
+          SELECT 
+            id, 
+            titulo, 
+            sala_id, 
+            sala_nombre, 
+            fecha_desde, 
+            fecha_hasta, 
+            total_empleados, 
+            created_at, 
+            updated_at 
+          FROM cortes 
+          ${where}
+          ORDER BY id DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `
+      ]);
+
+      return {
+        success: true,
+        data: rows,
+        total: countResult[0]?.total || 0,
+        page,
+        limit
+      };
+    } catch (err) {
+      console.error('Error getCortesModel en PG:', err);
+    }
+  }
+
+  // Fallback in-memory
+  let items = [...(inMemoryData.cortes || [])];
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    items = items.filter(c => !c.sala_id || options.userSalaIds.map(Number).includes(Number(c.sala_id)));
+  }
+  if (options.salaIds && options.salaIds.length > 0) {
+    items = items.filter(c => options.salaIds.map(Number).includes(Number(c.sala_id)));
+  }
+  if (search) {
+    items = items.filter(c => 
+      (c.titulo || '').toLowerCase().includes(search) ||
+      (c.sala_nombre || '').toLowerCase().includes(search) ||
+      String(c.id).includes(search)
+    );
+  }
+  items.sort((a, b) => b.id - a.id);
+  const total = items.length;
+  const paged = items.slice(offset, offset + limit).map(c => {
+    const { data, ...rest } = c;
+    return rest;
+  });
+
+  return {
+    success: true,
+    data: paged,
+    total,
+    page,
+    limit
+  };
+}
+
+export async function getCorteByIdModel(id) {
+  const numId = Number(id);
+  if (isPgConnected && sql) {
+    try {
+      const rows = await sql`SELECT * FROM cortes WHERE id = ${numId} LIMIT 1`;
+      if (rows && rows.length > 0) {
+        return { success: true, data: rows[0] };
+      }
+      return { success: false, error: 'Corte no encontrado' };
+    } catch (err) {
+      console.error('Error getCorteByIdModel en PG:', err);
+    }
+  }
+
+  const found = (inMemoryData.cortes || []).find(c => Number(c.id) === numId);
+  if (found) {
+    return { success: true, data: found };
+  }
+  return { success: false, error: 'Corte no encontrado' };
+}
+
+export async function createCorteModel(payload = {}) {
+  const {
+    titulo,
+    sala_id,
+    sala_nombre,
+    fecha_desde,
+    fecha_hasta,
+    total_empleados,
+    data
+  } = payload;
+
+  if (isPgConnected && sql) {
+    try {
+      const rows = await sql`
+        INSERT INTO cortes (
+          titulo, 
+          sala_id, 
+          sala_nombre, 
+          fecha_desde, 
+          fecha_hasta, 
+          total_empleados, 
+          data
+        ) VALUES (
+          ${titulo || 'Corte de Asistencia'},
+          ${sala_id ? Number(sala_id) : null},
+          ${sala_nombre || null},
+          ${fecha_desde},
+          ${fecha_hasta},
+          ${total_empleados ? Number(total_empleados) : 0},
+          ${data ? JSON.stringify(data) : null}
+        )
+        RETURNING id, titulo, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at
+      `;
+
+      if (rows && rows.length > 0) {
+        const created = rows[0];
+        if (!inMemoryData.cortes) inMemoryData.cortes = [];
+        inMemoryData.cortes.unshift({ ...created, data });
+        return { success: true, data: created };
+      }
+    } catch (err) {
+      console.error('Error createCorteModel en PG:', err);
+      throw err;
+    }
+  }
+
+  // Fallback in-memory
+  if (!inMemoryData.cortes) inMemoryData.cortes = [];
+  const nextId = inMemoryData.cortes.length > 0 ? Math.max(...inMemoryData.cortes.map(c => Number(c.id) || 0)) + 1 : 1;
+  const newCorte = {
+    id: nextId,
+    titulo: titulo || 'Corte de Asistencia',
+    sala_id: sala_id ? Number(sala_id) : null,
+    sala_nombre: sala_nombre || null,
+    fecha_desde,
+    fecha_hasta,
+    total_empleados: total_empleados ? Number(total_empleados) : 0,
+    data,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  inMemoryData.cortes.unshift(newCorte);
+  const { data: _d, ...createdWithoutData } = newCorte;
+  return { success: true, data: createdWithoutData };
+}
+
+export async function deleteCorteModel(id) {
+  const numId = Number(id);
+  if (isPgConnected && sql) {
+    try {
+      await sql`DELETE FROM cortes WHERE id = ${numId}`;
+      if (inMemoryData.cortes) {
+        inMemoryData.cortes = inMemoryData.cortes.filter(c => Number(c.id) !== numId);
+      }
+      return { success: true };
+    } catch (err) {
+      console.error('Error deleteCorteModel en PG:', err);
+      throw err;
+    }
+  }
+
+  if (inMemoryData.cortes) {
+    inMemoryData.cortes = inMemoryData.cortes.filter(c => Number(c.id) !== numId);
+  }
+  return { success: true };
+}
+
+export async function getCortesFilterOptionsModel(options = {}) {
+  const salasMap = new Map();
+  (inMemoryData.salas || []).forEach(s => {
+    if (!options.userSalaIds || options.userSalaIds.map(Number).includes(Number(s.id))) {
+      salasMap.set(Number(s.id), { id: s.id, nombre: s.nombre_comercial || s.nombre });
+    }
+  });
+
+  return {
+    success: true,
+    data: {
+      salas: Array.from(salasMap.values())
+    }
+  };
+}
+
 
 

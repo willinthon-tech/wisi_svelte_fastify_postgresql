@@ -15,7 +15,8 @@ import {
   getPlantillasHorariosModel, getPlantillasHorariosFilterOptionsModel, createPlantillaHorarioModel, updatePlantillaHorarioModel, deletePlantillaHorarioModel,
   getDepartamentoEmpleadosCiclosModel, updateDepartamentoEmpleadosCiclosModel,
   getFeriadosModel, getFeriadosFilterOptionsModel, createFeriadoModel, updateFeriadoModel, deleteFeriadoModel,
-  getCumpleanosModel, getCarnetsModel
+  getCumpleanosModel, getCarnetsModel,
+  getCortesModel, getCorteByIdModel, createCorteModel, deleteCorteModel, getCortesFilterOptionsModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1331,5 +1332,85 @@ export async function getCarnets(request, reply) {
   }
 }
 
+// ==========================================
+// 📊 CONTROLADORES DE CORTES HISTÓRICOS
+// ==========================================
 
+export async function getCortes(request, reply) {
+  try {
+    const q = request.query || {};
+    let userSalaIds = null;
+    if (q.user_sala_ids) {
+      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    let salaIds = null;
+    if (q.sala_ids) {
+      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
 
+    const res = await getCortesModel({
+      page: q.page,
+      limit: q.limit,
+      search: q.search,
+      userSalaIds,
+      salaIds
+    });
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getCorteById(request, reply) {
+  try {
+    const { id } = request.params;
+    const res = await getCorteByIdModel(id);
+    if (!res.success) {
+      return reply.status(404).send(res);
+    }
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function createCorte(request, reply) {
+  try {
+    const body = request.body || {};
+    if (!body.titulo || !body.titulo.trim()) {
+      return reply.status(400).send({ success: false, error: 'El título del corte es obligatorio' });
+    }
+    if (!body.fecha_desde || !body.fecha_hasta) {
+      return reply.status(400).send({ success: false, error: 'Las fechas desde y hasta son obligatorias' });
+    }
+
+    const res = await createCorteModel(body);
+    return reply.status(201).send(res);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteCorte(request, reply) {
+  try {
+    const { id } = request.params;
+    const res = await deleteCorteModel(id);
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function getCortesFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    let userSalaIds = null;
+    if (q.user_sala_ids) {
+      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    const res = await getCortesFilterOptionsModel({ userSalaIds });
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
