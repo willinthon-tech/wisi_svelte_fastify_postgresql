@@ -1,6 +1,5 @@
 <script>
   import { onMount } from "svelte";
-  import { toPng } from "html-to-image";
   import html2canvas from "html2canvas";
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../../controllers/auth.store.js";
@@ -252,41 +251,29 @@
     isDownloading = true;
     downloadProgress = "Generando HD...";
     try {
-      // html-to-image preserva al 100% todos los clip-path (hexágono de foto, corte en V de cabecera, ribbon de cargo)
-      // pixelRatio 4x genera una resolución ultra nítida de más de 300 DPI (~1272 x 2000 px)
-      let dataUrl;
-      try {
-        dataUrl = await toPng(element, {
-          pixelRatio: 4,
-          quality: 1.0,
-          backgroundColor: "#ffffff",
-          cacheBust: true,
-          style: {
-            margin: "0",
-            boxShadow: "none",
-            transform: "none"
-          }
-        });
-      } catch (errHtmlToImage) {
-        console.warn("Aviso html-to-image, utilizando fallback:", errHtmlToImage);
-        const canvas = await html2canvas(element, {
-          scale: 4,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: "#ffffff",
-          logging: false
-        });
-        dataUrl = canvas.toDataURL("image/png", 1.0);
-      }
+      // 4x scale = 1272px x 2000px (Ultra Alta Resolución 300+ DPI para impresión en PVC)
+      const canvas = await html2canvas(element, {
+        scale: 4,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        imageTimeout: 15000,
+        onclone: (clonedDoc, clonedEl) => {
+          clonedEl.style.boxShadow = "none";
+          clonedEl.style.transform = "none";
+          clonedEl.style.animation = "none";
+          clonedEl.style.transition = "none";
+        }
+      });
 
-      if (dataUrl) {
-        const link = document.createElement("a");
-        link.download = filename;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      const dataUrl = canvas.toDataURL("image/png", 1.0);
+      const link = document.createElement("a");
+      link.download = filename;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err) {
       console.error("Error al generar carnet en alta resolución:", err);
       alert("No se pudo generar la imagen del carnet. Por favor reintente.");
@@ -455,12 +442,12 @@
       </div>
     </div>
 
-    <!-- Paginador Rápido de Empleados (en modo individual) -->
-    {#if viewMode === 'individual' && empleados.length > 0}
+    <!-- Paginador Rápido de Empleados -->
+    {#if empleados.length > 0}
       <div class="control-item pager-item">
-        <label class="control-label">
+        <span class="control-label">
           <span class="label-icon">👤</span> Empleado
-        </label>
+        </span>
         <div class="pager-box">
           <button
             type="button"
@@ -513,8 +500,35 @@
           class="carnet-card carnet-front modelo-{selectedModelo}"
           style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
         >
-          <!-- Cabecera Superior con Espacio Dedicado y Permanente para el Logo -->
+          <!-- Cabecera Superior con Forma Geométrica SVG Nativa (Preservada al 100% en la descarga) -->
           <div class="card-header-top">
+            {#if selectedModelo === 'wave'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="wave-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#000000" />
+                    <stop offset="100%" stop-color="{activePalette.primary}" />
+                  </linearGradient>
+                </defs>
+                <path d="M 0,0 L 318,0 L 318,110 Q 159,175 0,110 Z" fill="url(#wave-grad)" />
+              </svg>
+            {:else if selectedModelo === 'vip'}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="vip-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#18181b" />
+                    <stop offset="100%" stop-color="#09090b" />
+                  </linearGradient>
+                </defs>
+                <polygon points="0,0 318,0 318,124 159,165 0,124" fill="url(#vip-grad)" />
+                <polyline points="0,124 159,165 318,124" fill="none" stroke="#d4af37" stroke-width="3" />
+              </svg>
+            {:else}
+              <svg class="header-bg-svg" viewBox="0 0 318 165" preserveAspectRatio="none">
+                <polygon points="0,0 318,0 318,106 159,165 0,106" fill="#000000" />
+              </svg>
+            {/if}
+
             <div class="sala-logo-box">
               {#if currentSala.has_logo && currentSala.logo_url}
                 <img
@@ -530,19 +544,76 @@
             </div>
           </div>
 
-          <!-- Marco de Foto según Modelo (Hexagonal en modelo Roraima) -->
+          <!-- Marco de Foto con Forma Geométrica SVG Nativa (Hexágono perfecto en descarga HD) -->
           <div class="photo-wrapper">
-            <div class="photo-frame">
-              <img
-                src={currentEmp.foto}
-                alt={currentEmp.nombre}
-                class="employee-photo"
-                crossorigin="anonymous"
-                on:error={(e) => {
-                  e.target.src = "/apple-touch-icon.png";
-                }}
-              />
-            </div>
+            {#if selectedModelo === 'roraima'}
+              <div class="photo-frame-svg-wrap">
+                <svg viewBox="0 0 116 130" width="116" height="130" class="svg-photo-frame">
+                  <defs>
+                    <clipPath id="hex-clip-{currentEmp.id || 'curr'}">
+                      <polygon points="58,3.5 106,31 106,99 58,126.5 10,99 10,31" />
+                    </clipPath>
+                  </defs>
+                  <polygon
+                    points="58,0 110,30 110,100 58,130 6,100 6,30"
+                    fill="{activePalette.primary}"
+                  />
+                  <image
+                    href={currentEmp.foto}
+                    x="10"
+                    y="3.5"
+                    width="96"
+                    height="123"
+                    preserveAspectRatio="xMidYMid slice"
+                    clip-path="url(#hex-clip-{currentEmp.id || 'curr'})"
+                  />
+                </svg>
+              </div>
+            {:else if selectedModelo === 'wave'}
+              <div class="photo-frame-svg-wrap">
+                <svg viewBox="0 0 116 116" width="116" height="116" class="svg-photo-frame">
+                  <defs>
+                    <clipPath id="circle-clip-{currentEmp.id || 'curr'}">
+                      <circle cx="58" cy="58" r="53" />
+                    </clipPath>
+                    <linearGradient id="wave-ring" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="{activePalette.primary}" />
+                      <stop offset="100%" stop-color="#ffffff" />
+                    </linearGradient>
+                  </defs>
+                  <circle cx="58" cy="58" r="58" fill="url(#wave-ring)" />
+                  <image
+                    href={currentEmp.foto}
+                    x="5"
+                    y="5"
+                    width="106"
+                    height="106"
+                    preserveAspectRatio="xMidYMid slice"
+                    clip-path="url(#circle-clip-{currentEmp.id || 'curr'})"
+                  />
+                </svg>
+              </div>
+            {:else}
+              <div class="photo-frame-svg-wrap">
+                <svg viewBox="0 0 112 122" width="112" height="122" class="svg-photo-frame">
+                  <defs>
+                    <clipPath id="rect-clip-{currentEmp.id || 'curr'}">
+                      <rect x="3" y="3" width="106" height="116" rx="12" ry="12" />
+                    </clipPath>
+                  </defs>
+                  <rect x="0" y="0" width="112" height="122" rx="14" ry="14" fill="{activePalette.primary}" />
+                  <image
+                    href={currentEmp.foto}
+                    x="3"
+                    y="3"
+                    width="106"
+                    height="116"
+                    preserveAspectRatio="xMidYMid slice"
+                    clip-path="url(#rect-clip-{currentEmp.id || 'curr'})"
+                  />
+                </svg>
+              </div>
+            {/if}
           </div>
 
           <!-- Nombre del Empleado (Inmediatamente debajo del marco y logo) -->
@@ -1024,7 +1095,7 @@
      ---------------------------------------------------- */
   .card-header-top {
     position: relative;
-    background: #000000;
+    background: transparent;
     height: 165px;
     width: 100%;
     display: flex;
@@ -1035,23 +1106,19 @@
     box-sizing: border-box;
   }
 
-  /* Corte curvo / angular estilo Tálamo / Roraima */
-  .modelo-roraima .card-header-top {
-    clip-path: polygon(0 0, 100% 0, 100% 64%, 50% 100%, 0 64%);
-  }
-
-  .modelo-wave .card-header-top {
-    background: linear-gradient(135deg, #000000 0%, var(--accent-color) 100%);
-    clip-path: ellipse(125% 95% at 50% 5%);
-  }
-
-  .modelo-vip .card-header-top {
-    background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
-    border-bottom: 2.5px solid #d4af37;
-    clip-path: polygon(0 0, 100% 0, 100% 75%, 50% 100%, 0 75%);
+  .header-bg-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
   }
 
   .sala-logo-box {
+    position: relative;
+    z-index: 2;
     width: 100%;
     height: 122px;
     display: flex;
@@ -1079,7 +1146,7 @@
   }
 
   /* ----------------------------------------------------
-     CARA FRONTAL: FOTO DEL EMPLEADO
+     CARA FRONTAL: FOTO DEL EMPLEADO (SVG NATIVO)
      ---------------------------------------------------- */
   .photo-wrapper {
     display: flex;
@@ -1089,25 +1156,16 @@
     z-index: 10;
   }
 
-  /* Marco Hexagonal (Modelo Roraima) */
-  .modelo-roraima .photo-frame {
-    width: 116px;
-    height: 130px;
-    background: var(--accent-color);
-    padding: 3.5px;
-    clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+  .photo-frame-svg-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
   }
 
-  .modelo-roraima .employee-photo {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
-    background: #e2e8f0;
+  .svg-photo-frame {
+    display: block;
+    overflow: visible;
   }
 
   /* Marco Circular (Modelo Wave) */
