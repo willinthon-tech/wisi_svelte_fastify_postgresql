@@ -235,6 +235,46 @@
     window.print();
   }
 
+  // Generar barras dinámicas de código de barras basadas estrictamente en la cédula del empleado
+  function generateCedulaBarcode(cedula) {
+    const raw = String(cedula || "").trim().toUpperCase();
+    const cleanDigits = raw.replace(/\D/g, "") || "00000000";
+    const digits = cleanDigits.split("").map(Number);
+    const bars = [];
+    
+    // Barra de inicio / guarda fija (estética de código de barras profesional)
+    bars.push({ h: 32, w: 2.4 });
+    bars.push({ h: 16, w: 1.8 });
+
+    for (let i = 0; i < digits.length; i++) {
+      const d = digits[i];
+      const prev = digits[(i - 1 + digits.length) % digits.length];
+      const next = digits[(i + 1) % digits.length];
+
+      // Alturas moduladas dinámicamente según el valor del dígito
+      const h1 = 12 + ((d * 7 + 3) % 25);
+      const h2 = 14 + (((d + prev) * 5 + 7) % 23);
+      const h3 = 13 + (((d * 11 + next * 3)) % 24);
+
+      // Ancho dinámico tipo barcode (grueso o fino)
+      const w1 = d % 2 === 0 ? 3.2 : 2.0;
+      const w2 = (d + i) % 3 === 0 ? 3.4 : 2.2;
+      const w3 = d > 4 ? 2.8 : 2.0;
+
+      bars.push({ h: Math.min(36, Math.max(12, h1)), w: w1 });
+      bars.push({ h: Math.min(36, Math.max(12, h2)), w: w2 });
+      if (digits.length <= 8) {
+        bars.push({ h: Math.min(36, Math.max(12, h3)), w: w3 });
+      }
+    }
+
+    // Barra de cierre / guarda final
+    bars.push({ h: 18, w: 1.8 });
+    bars.push({ h: 34, w: 2.4 });
+
+    return bars;
+  }
+
   $: currentEmp = empleados[currentIndex] || null;
   $: currentSala = currentEmp ? getSalaInfo(currentEmp) : null;
 </script>
@@ -478,11 +518,11 @@
             </div>
           </div>
 
-          <!-- Decoración Inferior de Barras / Ecualizador -->
+          <!-- Código de Barras Dinámico generado con la Cédula -->
           <div class="card-footer-decoration">
-            <div class="equalizer-bars">
-              {#each [18, 28, 14, 32, 22, 12, 26, 34, 16, 24, 30, 20, 36, 15, 28, 32, 19, 25, 33, 14, 27] as h}
-                <span class="eq-bar" style="height: {h}px;"></span>
+            <div class="equalizer-bars" title="Código de barras: {formatCedula(currentEmp.cedula)}">
+              {#each generateCedulaBarcode(currentEmp.cedula) as bar}
+                <span class="eq-bar" style="height: {bar.h}px; width: {bar.w}px;"></span>
               {/each}
             </div>
           </div>
@@ -517,10 +557,8 @@
               </div>
             </div>
 
-            <!-- Divisor sutil institucional -->
+            <!-- Divisor sutil institucional sin estrellas -->
             <div class="ornament-divider">
-              <span class="divider-line"></span>
-              <span class="divider-star">★ ★ ★</span>
               <span class="divider-line"></span>
             </div>
 
@@ -643,10 +681,11 @@
               </div>
             </div>
 
+            <!-- Código de Barras Dinámico generado con la Cédula -->
             <div class="card-footer-decoration">
-              <div class="equalizer-bars">
-                {#each [18, 28, 14, 32, 22, 12, 26, 34, 16, 24, 30, 20, 36, 15, 28, 32, 19, 25, 33, 14, 27] as h}
-                  <span class="eq-bar" style="height: {h}px;"></span>
+              <div class="equalizer-bars" title="Código de barras: {formatCedula(emp.cedula)}">
+                {#each generateCedulaBarcode(emp.cedula) as bar}
+                  <span class="eq-bar" style="height: {bar.h}px; width: {bar.w}px;"></span>
                 {/each}
               </div>
             </div>
@@ -671,9 +710,8 @@
                 </div>
               </div>
 
+              <!-- Divisor sutil institucional sin estrellas -->
               <div class="ornament-divider">
-                <span class="divider-line"></span>
-                <span class="divider-star">★ ★ ★</span>
                 <span class="divider-line"></span>
               </div>
 
@@ -1022,7 +1060,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 10px 14px 0 14px;
+    padding: 0 14px;
     box-sizing: border-box;
   }
 
@@ -1044,10 +1082,12 @@
 
   .sala-logo-box {
     width: 100%;
-    height: 86px;
+    height: 118px;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
+    padding: 6px 12px 0 12px;
   }
 
   .sala-logo-svg {
@@ -1057,10 +1097,11 @@
   }
 
   .sala-logo-img {
-    max-width: 88%;
-    max-height: 72px;
+    max-width: 84%;
+    max-height: 82px;
     object-fit: contain;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    margin: auto;
   }
 
   /* ----------------------------------------------------
@@ -1333,21 +1374,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    width: 80%;
-    margin: 10px 0;
+    width: 82%;
+    margin: 14px 0;
   }
 
   .divider-line {
-    flex: 1;
-    height: 1px;
-    background: #cbd5e1;
-  }
-
-  .divider-star {
-    font-size: 11px;
-    color: #94a3b8;
-    letter-spacing: 2px;
+    width: 100%;
+    height: 1.5px;
+    background: #e2e8f0;
+    border-radius: 1px;
   }
 
   .legal-notice {
@@ -1637,9 +1672,17 @@
 
     .card-header-top {
       height: 28mm !important;
-      padding: 1.5mm 2mm 0 2mm !important;
+      padding: 0 2mm !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
+    }
+
+    .sala-logo-box {
+      width: 100% !important;
+      height: 20mm !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
     }
 
     .sala-logo-svg {
@@ -1649,8 +1692,9 @@
 
     .sala-logo-img {
       max-width: 44mm !important;
-      max-height: 16mm !important;
+      max-height: 18mm !important;
       object-fit: contain !important;
+      margin: auto !important;
     }
 
     .photo-wrapper {
