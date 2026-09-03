@@ -423,14 +423,36 @@
         calCurrentYear === todayDate.getFullYear()
       );
 
-      const dayEvents = [];
+      const feriadoEvents = [];
+      const cumpleEvents = [];
 
-      // 1. Feriados
+      // 1. Cumpleaños (encima)
+      if (calSelectedTipos.includes('CUMPLEANOS')) {
+        let emps = rawCumpleanos.filter(c => Number(c.dia) === d);
+        if (calSelectedSalas.length > 0) {
+          const salaSet = new Set(calSelectedSalas.map(Number));
+          emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
+        }
+        for (const emp of emps) {
+          const age = emp.anio_nacimiento ? (calCurrentYear - emp.anio_nacimiento) : null;
+          cumpleEvents.push({
+            type: 'cumpleanos',
+            id: emp.id,
+            title: emp.nombre,
+            age,
+            foto: emp.foto,
+            salaNombre: emp.sala_nombre,
+            cargoNombre: emp.cargo_nombre
+          });
+        }
+      }
+
+      // 2. Feriados (abajo)
       if (calSelectedTipos.includes('FERIADOS')) {
         // Fechas Base Nacionales
         const baseHols = BASE_FERIADOS.filter(bf => bf.mes === currentMonthNum && bf.dia === d);
         for (const bh of baseHols) {
-          dayEvents.push({
+          feriadoEvents.push({
             type: 'feriado_nacional',
             id: bh.id,
             title: bh.nombre,
@@ -445,7 +467,7 @@
           serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
         }
         for (const sh of serverHols) {
-          dayEvents.push({
+          feriadoEvents.push({
             type: 'feriado_sala',
             id: sh.id,
             title: sh.nombre,
@@ -454,34 +476,13 @@
         }
       }
 
-      // 2. Cumpleaños
-      if (calSelectedTipos.includes('CUMPLEANOS')) {
-        let emps = rawCumpleanos.filter(c => Number(c.dia) === d);
-        if (calSelectedSalas.length > 0) {
-          const salaSet = new Set(calSelectedSalas.map(Number));
-          emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
-        }
-        for (const emp of emps) {
-          const age = emp.anio_nacimiento ? (calCurrentYear - emp.anio_nacimiento) : null;
-          const prevAge = age !== null ? (age - 1) : null;
-          dayEvents.push({
-            type: 'cumpleanos',
-            id: emp.id,
-            title: emp.nombre,
-            age,
-            prevAge,
-            foto: emp.foto,
-            salaNombre: emp.sala_nombre,
-            cargoNombre: emp.cargo_nombre
-          });
-        }
-      }
-
       cells.push({
         day: d,
         isCurrentMonth: true,
         isToday,
-        events: dayEvents
+        cumpleEvents,
+        feriadoEvents,
+        events: [...cumpleEvents, ...feriadoEvents]
       });
     }
 
@@ -633,46 +634,52 @@
           </div>
 
           <div class="cal-events-list">
-            {#each cell.events as evt}
-              {#if evt.type === 'cumpleanos'}
-                <div 
-                  class="cal-event-item evt-cumple" 
-                  title="{evt.title} ({evt.age > 0 ? (evt.prevAge + ' ➔ ' + evt.age + ' años') : ''}) - {evt.salaNombre} ({evt.cargoNombre})"
-                >
-                  <img 
-                    src="{evt.foto}" 
-                    alt="{evt.title}" 
-                    class="cal-avatar-img"
-                    on:error={(e) => { e.currentTarget.src = '/user.png'; }}
-                  />
-                  {#if evt.age !== null && evt.age > 0}
-                    <span class="cal-age-badge">
-                      <span class="age-bracket">(</span>
-                      <span class="age-prev">{evt.prevAge}</span>
-                      <span class="age-arrow">-&gt;</span>
-                      <span class="age-next">{evt.age}</span>
-                      <span class="age-bracket">)</span>
-                    </span>
+            <!-- 1. Cumpleaños encima (col-6, 2 por fila) -->
+            {#if cell.cumpleEvents && cell.cumpleEvents.length > 0}
+              <div class="cal-cumples-grid">
+                {#each cell.cumpleEvents as evt}
+                  <div 
+                    class="cal-event-item evt-cumple" 
+                    title="{evt.title} (cumple {evt.age} años) - {evt.salaNombre} ({evt.cargoNombre})"
+                  >
+                    <img 
+                      src="{evt.foto}" 
+                      alt="{evt.title}" 
+                      class="cal-avatar-img"
+                      on:error={(e) => { e.currentTarget.src = '/user.png'; }}
+                    />
+                    {#if evt.age !== null && evt.age > 0}
+                      <span class="cal-age-single-green">{evt.age}</span>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            <!-- 2. Feriados abajo (col-12, ancho completo) -->
+            {#if cell.feriadoEvents && cell.feriadoEvents.length > 0}
+              <div class="cal-feriados-list">
+                {#each cell.feriadoEvents as evt}
+                  {#if evt.type === 'feriado_nacional'}
+                    <div 
+                      class="cal-event-item evt-feriado-nac" 
+                      title="{evt.title} - Nacional (Aplica a todas las salas)"
+                    >
+                      <span class="cal-icon-feriado">🇻🇪</span>
+                      <span class="cal-feriado-title">{evt.title}</span>
+                    </div>
+                  {:else if evt.type === 'feriado_sala'}
+                    <div 
+                      class="cal-event-item evt-feriado-sala" 
+                      title="{evt.title} - {evt.subtitle}"
+                    >
+                      <span class="cal-icon-feriado">🏛️</span>
+                      <span class="cal-feriado-title">{evt.title}</span>
+                    </div>
                   {/if}
-                </div>
-              {:else if evt.type === 'feriado_nacional'}
-                <div 
-                  class="cal-event-item evt-feriado-nac" 
-                  title="{evt.title} - Nacional (Aplica a todas las salas)"
-                >
-                  <span class="cal-icon-feriado">🇻🇪</span>
-                  <span class="cal-feriado-title">{evt.title}</span>
-                </div>
-              {:else if evt.type === 'feriado_sala'}
-                <div 
-                  class="cal-event-item evt-feriado-sala" 
-                  title="{evt.title} - {evt.subtitle}"
-                >
-                  <span class="cal-icon-feriado">🏛️</span>
-                  <span class="cal-feriado-title">{evt.title}</span>
-                </div>
-              {/if}
-            {/each}
+                {/each}
+              </div>
+            {/if}
           </div>
         </div>
       {/each}
@@ -935,30 +942,38 @@
     min-width: 0;
   }
 
+  .cal-cumples-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    width: 100%;
+  }
+
   .evt-cumple {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 3px 6px;
+    justify-content: center;
+    gap: 5px;
+    padding: 2px 4px;
     border-radius: 6px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    width: fit-content;
-    max-width: 100%;
+    width: 100%;
+    min-width: 0;
     box-sizing: border-box;
     transition: all 0.15s ease;
   }
 
   .evt-cumple:hover {
-    border-color: #cbd5e1;
-    background: #f8fafc;
+    border-color: #86efac;
+    background: #f0fdf4;
     transform: translateY(-1px);
   }
 
   .cal-avatar-img {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     object-fit: cover;
     background: #cbd5e1;
@@ -966,26 +981,19 @@
     border: 1px solid #e2e8f0;
   }
 
-  .cal-age-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 2.5px;
+  .cal-age-single-green {
     font-size: 11.5px;
     font-weight: 800;
-    white-space: nowrap;
-    letter-spacing: 0.2px;
-  }
-
-  .age-bracket,
-  .age-prev,
-  .age-arrow {
-    color: #0f172a;
-    font-weight: 800;
-  }
-
-  .age-next {
     color: #16a34a;
-    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .cal-feriados-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
   }
 
   .evt-feriado-nac {
