@@ -4084,7 +4084,9 @@ export async function getCumpleanosModel(params = {}) {
         EXTRACT(YEAR FROM e.fecha_nacimiento)::int AS anio_nacimiento,
         s.id AS sala_id, 
         COALESCE(s.nombre, 'Sin Sala') AS sala_nombre,
-        c.nombre AS cargo_nombre
+        c.nombre AS cargo_nombre,
+        COALESCE(d.nombre, 'General') AS departamento_nombre,
+        COALESCE(a.nombre, '') AS area_nombre
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas a ON c.area_id = a.id

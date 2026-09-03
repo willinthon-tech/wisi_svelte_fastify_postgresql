@@ -410,6 +410,66 @@
   $: calMonthName = MESES[calCurrentMonth]?.nombre || '';
   $: calMonthTitle = `${calMonthName} ${calCurrentYear}`;
 
+  // Resumen para impresión: Cumpleañeros del mes agrupados por Departamento
+  $: printCumpleanosGrouped = (function() {
+    let emps = [...rawCumpleanos];
+    if (calSelectedSalas.length > 0) {
+      const salaSet = new Set(calSelectedSalas.map(Number));
+      emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
+    }
+    emps.sort((a, b) => Number(a.dia) - Number(b.dia) || a.nombre.localeCompare(b.nombre));
+
+    const groups = {};
+    for (const emp of emps) {
+      const depKey = emp.departamento_nombre || emp.sala_nombre || 'General';
+      if (!groups[depKey]) {
+        groups[depKey] = [];
+      }
+      const age = emp.anio_nacimiento ? (calCurrentYear - emp.anio_nacimiento) : null;
+      groups[depKey].push({
+        ...emp,
+        age
+      });
+    }
+    return groups;
+  })();
+
+  // Resumen para impresión: Feriados del mes
+  $: printFeriadosMonth = (function() {
+    const list = [];
+    const currentMonthNum = calCurrentMonth + 1;
+
+    // 1. Base nacionales
+    for (const bf of BASE_FERIADOS) {
+      if (bf.mes === currentMonthNum) {
+        list.push({
+          dia: bf.dia,
+          nombre: bf.nombre,
+          tipo: 'Nacional',
+          sala: 'Todas las salas'
+        });
+      }
+    }
+
+    // 2. Feriados de sala en DB
+    let serverHols = rawServerItems.filter(rf => Number(rf.mes) === currentMonthNum);
+    if (calSelectedSalas.length > 0) {
+      const salaSet = new Set(calSelectedSalas.map(Number));
+      serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
+    }
+    for (const sh of serverHols) {
+      list.push({
+        dia: Number(sh.dia),
+        nombre: sh.nombre,
+        tipo: 'Sala',
+        sala: sh.sala_nombre || 'Sala'
+      });
+    }
+
+    list.sort((a, b) => a.dia - b.dia);
+    return list;
+  })();
+
   const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
   $: calendarMatrix = (function() {
@@ -619,16 +679,16 @@
     <!-- Cabecera del Calendario -->
     <div class="cal-top-header">
       <div class="cal-nav-group">
-        <button type="button" class="cal-nav-arrow" on:click={prevMonth} title="Mes anterior">
+        <button type="button" class="cal-nav-arrow print-hidden" on:click={prevMonth} title="Mes anterior">
           <span>◀</span>
         </button>
         <h3 class="cal-month-title">{calMonthTitle}</h3>
-        <button type="button" class="cal-nav-arrow" on:click={nextMonth} title="Mes siguiente">
+        <button type="button" class="cal-nav-arrow print-hidden" on:click={nextMonth} title="Mes siguiente">
           <span>▶</span>
         </button>
       </div>
 
-      <div class="cal-actions-group">
+      <div class="cal-actions-group print-hidden">
         <button type="button" class="cal-btn-today" on:click={goToToday} title="Ir al mes actual">
           Hoy
         </button>
@@ -707,6 +767,59 @@
           </div>
         </div>
       {/each}
+    </div>
+
+    <!-- RESUMEN INFERIOR EXCLUSIVO PARA IMPRESIÓN (Cumpleañeros y Feriados del Mes) -->
+    <div class="cal-print-bottom-summary">
+      <!-- Columna Izquierda: Cumpleañeros del Mes -->
+      <div class="cal-print-col cal-print-col-cumples">
+        <h4 class="cal-print-col-title">CUMPLEAÑEROS DEL MES</h4>
+        {#if Object.keys(printCumpleanosGrouped).length > 0}
+          <div class="cal-print-groups-list">
+            {#each Object.entries(printCumpleanosGrouped) as [depName, empList]}
+              <div class="cal-print-dep-group">
+                <h5 class="cal-print-dep-title">{depName.toUpperCase()}</h5>
+                <div class="cal-print-emp-items">
+                  {#each empList as emp}
+                    <div class="cal-print-emp-row">
+                      <span class="print-emp-bullet">•</span>
+                      <span class="print-emp-day">Día {emp.dia}:</span>
+                      <span class="print-emp-name">{emp.nombre}</span>
+                      {#if emp.cargo_nombre}
+                        <span class="print-emp-cargo">({emp.cargo_nombre})</span>
+                      {/if}
+                      {#if emp.age !== null && emp.age > 0}
+                        <span class="print-emp-age">- {emp.age} años</span>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="cal-print-empty">No hay cumpleaños registrados para este mes.</p>
+        {/if}
+      </div>
+
+      <!-- Columna Derecha: Feriados del Mes -->
+      <div class="cal-print-col cal-print-col-feriados">
+        <h4 class="cal-print-col-title">FERIADOS DEL MES</h4>
+        {#if printFeriadosMonth.length > 0}
+          <div class="cal-print-feriados-list">
+            {#each printFeriadosMonth as fer}
+              <div class="cal-print-feriado-row">
+                <span class="print-fer-bullet">•</span>
+                <span class="print-fer-day">Día {fer.dia}:</span>
+                <span class="print-fer-name">{fer.nombre}</span>
+                <span class="print-fer-scope">({fer.sala})</span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="cal-print-empty">No hay feriados registrados para este mes.</p>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
@@ -1205,7 +1318,16 @@
     }
   }
 
+  .cal-print-bottom-summary {
+    display: none;
+  }
+
   @media print {
+    @page {
+      size: portrait;
+      margin: 8mm;
+    }
+
     :global(body *) {
       visibility: hidden !important;
     }
@@ -1222,28 +1344,203 @@
       width: 100% !important;
       margin: 0 !important;
       padding: 0 !important;
-      border: 1px solid #94a3b8 !important;
+      border: 1.5px solid #0f172a !important;
       box-shadow: none !important;
+      border-radius: 0 !important;
     }
 
+    .print-hidden,
     .cal-actions-group,
     .cal-nav-arrow,
-    .cal-controls-card {
+    .cal-controls-card,
+    .plantillas-base-banner,
+    .day-modal-backdrop {
       display: none !important;
     }
 
     .cal-top-header {
+      display: flex !important;
       justify-content: center !important;
-      border-bottom: 2px solid #334155 !important;
+      align-items: center !important;
+      padding: 10px 0 !important;
+      border-bottom: 2px solid #0f172a !important;
+    }
+
+    .cal-month-title {
+      font-size: 19px !important;
+      font-weight: 900 !important;
+      color: #000000 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.5px !important;
+      text-align: center !important;
+      width: 100% !important;
+    }
+
+    .cal-weekdays-grid {
+      background: #f8fafc !important;
+      border-bottom: 1.5px solid #0f172a !important;
+    }
+
+    .cal-weekday-cell {
+      padding: 4px 2px !important;
+      font-size: 11px !important;
+      font-weight: 800 !important;
+      color: #000000 !important;
+      border-right: 1px solid #cbd5e1 !important;
+    }
+
+    .cal-days-grid {
+      border-bottom: 2px solid #0f172a !important;
+      background: #cbd5e1 !important;
     }
 
     .cal-day-cell {
-      min-height: 120px !important;
+      height: 68px !important;
+      max-height: 68px !important;
+      padding: 2px 2px !important;
+      border-right: 1px solid #cbd5e1 !important;
+      border-bottom: 1px solid #cbd5e1 !important;
+      overflow: hidden !important;
+      background: #ffffff !important;
     }
 
-    @page {
-      size: landscape;
-      margin: 8mm;
+    .cal-day-cell.is-outside {
+      background: #f8fafc !important;
+    }
+
+    .cal-day-num {
+      font-size: 10px !important;
+      font-weight: 700 !important;
+    }
+
+    .today-badge {
+      width: 16px !important;
+      height: 16px !important;
+      font-size: 9px !important;
+    }
+
+    .cal-avatar-img {
+      width: 14px !important;
+      height: 14px !important;
+    }
+
+    .cal-age-single-green {
+      font-size: 8.5px !important;
+      color: #15803d !important;
+      font-weight: 800 !important;
+    }
+
+    .cal-icon-feriado {
+      font-size: 8px !important;
+    }
+
+    .cal-feriado-title {
+      font-size: 8px !important;
+    }
+
+    /* Resumen inferior de Cumpleañeros y Feriados en impresión */
+    .cal-print-bottom-summary {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 20px !important;
+      padding: 14px 12px !important;
+      border-top: 2px solid #0f172a !important;
+      page-break-inside: avoid !important;
+      background: #ffffff !important;
+    }
+
+    .cal-print-col {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+    }
+
+    .cal-print-col-title {
+      font-size: 12.5px !important;
+      font-weight: 900 !important;
+      color: #000000 !important;
+      margin: 0 0 6px 0 !important;
+      border-bottom: 1.5px solid #000000 !important;
+      padding-bottom: 3px !important;
+      letter-spacing: 0.5px !important;
+      text-transform: uppercase !important;
+    }
+
+    .cal-print-groups-list {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+    }
+
+    .cal-print-dep-group {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 2px !important;
+    }
+
+    .cal-print-dep-title {
+      font-size: 10.5px !important;
+      font-weight: 800 !important;
+      color: #1e3a8a !important;
+      margin: 2px 0 2px 0 !important;
+      text-transform: uppercase !important;
+      border-bottom: 1px dashed #cbd5e1 !important;
+      padding-bottom: 1px !important;
+    }
+
+    .cal-print-emp-items,
+    .cal-print-feriados-list {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 2px !important;
+    }
+
+    .cal-print-emp-row,
+    .cal-print-feriado-row {
+      font-size: 9.5px !important;
+      color: #0f172a !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+      line-height: 1.3 !important;
+    }
+
+    .print-emp-bullet,
+    .print-fer-bullet {
+      font-size: 10px !important;
+      color: #64748b !important;
+    }
+
+    .print-emp-day,
+    .print-fer-day {
+      font-weight: 800 !important;
+      color: #0f172a !important;
+      min-width: 42px !important;
+    }
+
+    .print-emp-name,
+    .print-fer-name {
+      font-weight: 700 !important;
+      color: #0f172a !important;
+    }
+
+    .print-emp-cargo,
+    .print-fer-scope {
+      color: #475569 !important;
+      font-size: 9px !important;
+    }
+
+    .print-emp-age {
+      font-weight: 800 !important;
+      color: #15803d !important;
+      margin-left: auto !important;
+    }
+
+    .cal-print-empty {
+      font-size: 10px !important;
+      color: #64748b !important;
+      font-style: italic !important;
+      margin: 4px 0 !important;
     }
   }
 
