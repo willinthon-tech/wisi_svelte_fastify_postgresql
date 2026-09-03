@@ -769,10 +769,10 @@
       {/each}
     </div>
 
-    <!-- RESUMEN INFERIOR EXCLUSIVO PARA IMPRESIÓN (Cumpleañeros y Feriados del Mes) -->
+    <!-- RESUMEN INFERIOR EXCLUSIVO PARA IMPRESIÓN (Cumpleañeros y Feriados con flujo a 2 columnas) -->
     <div class="cal-print-bottom-summary">
-      <!-- Columna Izquierda: Cumpleañeros del Mes -->
-      <div class="cal-print-col cal-print-col-cumples">
+      <!-- 1. Bloque Cumpleañeros del Mes -->
+      <div class="cal-print-section-block cal-print-cumples-block">
         <h4 class="cal-print-col-title">CUMPLEAÑEROS DEL MES</h4>
         {#if Object.keys(printCumpleanosGrouped).length > 0}
           <div class="cal-print-groups-list">
@@ -802,8 +802,8 @@
         {/if}
       </div>
 
-      <!-- Columna Derecha: Feriados del Mes -->
-      <div class="cal-print-col cal-print-col-feriados">
+      <!-- 2. Bloque Feriados del Mes (debajo de cumpleaños, y fluye a la otra columna si sobrepasa) -->
+      <div class="cal-print-section-block cal-print-feriados-block">
         <h4 class="cal-print-col-title">FERIADOS DEL MES</h4>
         {#if printFeriadosMonth.length > 0}
           <div class="cal-print-feriados-list">
@@ -1438,71 +1438,88 @@
       font-size: 8px !important;
     }
 
-    /* Resumen inferior de Cumpleañeros y Feriados en impresión */
+    /* Resumen inferior con flujo dinámico a 2 columnas (feriados debajo de cumpleaños) */
     .cal-print-bottom-summary {
-      display: grid !important;
-      grid-template-columns: 1fr 1fr !important;
-      gap: 20px !important;
-      padding: 14px 12px !important;
+      display: block !important;
+      columns: 2 !important;
+      column-gap: 22px !important;
+      padding: 10px 8px !important;
       border-top: 2px solid #0f172a !important;
-      page-break-inside: avoid !important;
       background: #ffffff !important;
     }
 
-    .cal-print-col {
-      display: flex !important;
-      flex-direction: column !important;
-      gap: 8px !important;
+    .cal-print-section-block {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+
+    .cal-print-cumples-block {
+      margin-bottom: 10px !important;
+    }
+
+    .cal-print-feriados-block {
+      margin-top: 10px !important;
+      break-inside: auto !important;
+      page-break-inside: auto !important;
     }
 
     .cal-print-col-title {
-      font-size: 12.5px !important;
+      font-size: 12px !important;
       font-weight: 900 !important;
       color: #000000 !important;
-      margin: 0 0 6px 0 !important;
+      margin: 0 0 5px 0 !important;
       border-bottom: 1.5px solid #000000 !important;
-      padding-bottom: 3px !important;
+      padding-bottom: 2px !important;
       letter-spacing: 0.5px !important;
       text-transform: uppercase !important;
+      break-after: avoid !important;
+      page-break-after: avoid !important;
     }
 
     .cal-print-groups-list {
       display: flex !important;
       flex-direction: column !important;
-      gap: 8px !important;
+      gap: 6px !important;
     }
 
     .cal-print-dep-group {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+      margin-bottom: 5px !important;
       display: flex !important;
       flex-direction: column !important;
-      gap: 2px !important;
+      gap: 1.5px !important;
     }
 
     .cal-print-dep-title {
-      font-size: 10.5px !important;
+      font-size: 10px !important;
       font-weight: 800 !important;
       color: #1e3a8a !important;
-      margin: 2px 0 2px 0 !important;
+      margin: 2px 0 1px 0 !important;
       text-transform: uppercase !important;
       border-bottom: 1px dashed #cbd5e1 !important;
       padding-bottom: 1px !important;
+      break-after: avoid !important;
+      page-break-after: avoid !important;
     }
 
     .cal-print-emp-items,
     .cal-print-feriados-list {
       display: flex !important;
       flex-direction: column !important;
-      gap: 2px !important;
+      gap: 1.5px !important;
     }
 
     .cal-print-emp-row,
     .cal-print-feriado-row {
-      font-size: 9.5px !important;
+      font-size: 9px !important;
       color: #0f172a !important;
       display: flex !important;
       align-items: center !important;
       gap: 4px !important;
       line-height: 1.3 !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
 
     .print-emp-bullet,
@@ -1515,7 +1532,7 @@
     .print-fer-day {
       font-weight: 800 !important;
       color: #0f172a !important;
-      min-width: 42px !important;
+      min-width: 40px !important;
     }
 
     .print-emp-name,
@@ -1527,7 +1544,7 @@
     .print-emp-cargo,
     .print-fer-scope {
       color: #475569 !important;
-      font-size: 9px !important;
+      font-size: 8.5px !important;
     }
 
     .print-emp-age {
@@ -1537,10 +1554,10 @@
     }
 
     .cal-print-empty {
-      font-size: 10px !important;
+      font-size: 9.5px !important;
       color: #64748b !important;
       font-style: italic !important;
-      margin: 4px 0 !important;
+      margin: 3px 0 !important;
     }
   }
 
