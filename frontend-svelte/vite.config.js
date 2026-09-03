@@ -17,9 +17,19 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
-        orientation: 'any',
-        scope: '/',
+        lang: 'es',
         start_url: '/',
+        scope: '/',
+        categories: ['business', 'productivity', 'utilities'],
+        shortcuts: [
+          {
+            name: 'Reportes y Cortes',
+            short_name: 'Reportes',
+            description: 'Acceso directo a Reportes y Cortes RRHH',
+            url: '/',
+            icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
+          }
+        ],
         icons: [
           {
             src: '/pwa-192x192.png',
