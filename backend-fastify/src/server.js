@@ -235,22 +235,7 @@ async function startServer() {
         }
       }
 
-      let salaName = "CASINO";
-      const cleanId = Number(filename.replace(/\.[^/.]+$/, ""));
-      if (!isNaN(cleanId) && isPgConnected && sql) {
-        try {
-          const rows = await sql`SELECT nombre, nombre_comercial FROM salas WHERE id = ${cleanId} LIMIT 1`;
-          if (rows.length > 0) {
-            salaName = rows[0].nombre || rows[0].nombre_comercial || "CASINO";
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      reply.header('Cache-Control', 'public, max-age=86400');
-      reply.type('image/svg+xml').status(200);
-      return reply.send(getSalaLogoSvg(salaName));
+      return reply.status(404).send({ error: 'Logo no disponible para esta sala' });
     };
 
     fastify.get('/empleados/:filename', servePhotoWithFallback);

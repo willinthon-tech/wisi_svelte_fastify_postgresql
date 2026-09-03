@@ -215,14 +215,18 @@
   function getSalaInfo(emp) {
     if (!emp) return {};
     const fromMap = salasMap[emp.sala_id] || {};
+    const salasConLogo = [1, 2, 6, 7];
+    const hasLogo = salasConLogo.includes(Number(emp.sala_id));
     return {
+      id: emp.sala_id,
       nombre: fromMap.nombre || emp.sala_nombre || "CASINO",
       nombre_comercial: fromMap.nombre_comercial || emp.sala_nombre_comercial || emp.sala_nombre || "Casino",
       rif: fromMap.rif || emp.sala_rif || "J-30606591-6",
       ubicacion: cleanText(fromMap.ubicacion || emp.sala_ubicacion || "Instalaciones del Casino"),
       correo: fromMap.correo || emp.sala_correo || "rrhh@casino.com",
       telefono: fromMap.telefono || emp.sala_telefono || "0424-968.86.12",
-      logo_url: `/salas/${emp.sala_id}.svg`
+      has_logo: hasLogo,
+      logo_url: hasLogo ? `/salas/${emp.sala_id}.png` : null
     };
   }
 
@@ -415,37 +419,16 @@
           <!-- Cabecera Superior con Espacio Dedicado y Permanente para el Logo -->
           <div class="card-header-top">
             <div class="sala-logo-box">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 95" class="sala-logo-svg">
-                <defs>
-                  <linearGradient id="goldTepui" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stop-color="#f59e0b" />
-                    <stop offset="50%" stop-color="#fbbf24" />
-                    <stop offset="100%" stop-color="#d97706" />
-                  </linearGradient>
-                  <filter id="shadowLogo" x="-10%" y="-10%" width="120%" height="120%">
-                    <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.8"/>
-                  </filter>
-                </defs>
-
-                <!-- Silueta de la Meseta Tepuy Roraima -->
-                <path d="M 85 24 Q 92 12 105 10 L 175 10 Q 183 12 188 18 L 198 18 Q 205 10 215 10 L 250 10 Q 256 12 254 20 L 258 24" fill="none" stroke="url(#goldTepui)" stroke-width="2.6" stroke-linecap="round" filter="url(#shadowLogo)"/>
-
-                <!-- Nombre de la Sala en tipografía caligráfica -->
-                <text x="150" y="44" font-family="'Brush Script MT', 'Dancing Script', 'Playfair Display', cursive, sans-serif" font-weight="900" font-size="36" fill="#ffffff" text-anchor="middle" letter-spacing="1" filter="url(#shadowLogo)">
-                  {currentSala.nombre}
-                </text>
-
-                <!-- Estrellas y CASINO -->
-                <g transform="translate(0, 62)">
-                  <text x="110" y="0" font-size="13" fill="url(#goldTepui)" text-anchor="middle" letter-spacing="2">★★★★★</text>
-                  <text x="178" y="-1" font-family="'Montserrat', 'Inter', sans-serif" font-weight="900" font-size="13" fill="#ffffff" letter-spacing="3">CASINO</text>
-                </g>
-
-                <!-- RIF Oficial -->
-                <text x="150" y="80" font-family="'Inter', monospace, sans-serif" font-size="10.5" font-weight="700" fill="#e2e8f0" text-anchor="middle" letter-spacing="1">
-                  RIF {currentSala.rif}
-                </text>
-              </svg>
+              {#if currentSala.has_logo && currentSala.logo_url}
+                <img
+                  src={currentSala.logo_url}
+                  alt="Logo {currentSala.nombre}"
+                  class="sala-logo-img"
+                  on:error={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              {/if}
             </div>
           </div>
 
@@ -609,26 +592,16 @@
           >
             <div class="card-header-top">
               <div class="sala-logo-box">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 95" class="sala-logo-svg">
-                  <defs>
-                    <linearGradient id="goldTepuiBatch" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stop-color="#f59e0b" />
-                      <stop offset="50%" stop-color="#fbbf24" />
-                      <stop offset="100%" stop-color="#d97706" />
-                    </linearGradient>
-                  </defs>
-                  <path d="M 85 24 Q 92 12 105 10 L 175 10 Q 183 12 188 18 L 198 18 Q 205 10 215 10 L 250 10 Q 256 12 254 20 L 258 24" fill="none" stroke="url(#goldTepuiBatch)" stroke-width="2.6" stroke-linecap="round"/>
-                  <text x="150" y="44" font-family="'Brush Script MT', 'Dancing Script', 'Playfair Display', cursive, sans-serif" font-weight="900" font-size="36" fill="#ffffff" text-anchor="middle" letter-spacing="1">
-                    {sala.nombre}
-                  </text>
-                  <g transform="translate(0, 62)">
-                    <text x="110" y="0" font-size="13" fill="url(#goldTepuiBatch)" text-anchor="middle" letter-spacing="2">★★★★★</text>
-                    <text x="178" y="-1" font-family="'Montserrat', 'Inter', sans-serif" font-weight="900" font-size="13" fill="#ffffff" letter-spacing="3">CASINO</text>
-                  </g>
-                  <text x="150" y="80" font-family="'Inter', monospace, sans-serif" font-size="10.5" font-weight="700" fill="#e2e8f0" text-anchor="middle" letter-spacing="1">
-                    RIF {sala.rif}
-                  </text>
-                </svg>
+                {#if sala.has_logo && sala.logo_url}
+                  <img
+                    src={sala.logo_url}
+                    alt="Logo {sala.nombre}"
+                    class="sala-logo-img"
+                    on:error={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                {/if}
               </div>
             </div>
 
@@ -1081,6 +1054,13 @@
     width: 100%;
     max-width: 250px;
     height: 80px;
+  }
+
+  .sala-logo-img {
+    max-width: 88%;
+    max-height: 72px;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
   }
 
   /* ----------------------------------------------------
@@ -1665,6 +1645,12 @@
     .sala-logo-svg {
       max-width: 44mm !important;
       height: 14mm !important;
+    }
+
+    .sala-logo-img {
+      max-width: 44mm !important;
+      max-height: 16mm !important;
+      object-fit: contain !important;
     }
 
     .photo-wrapper {
