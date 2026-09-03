@@ -120,15 +120,18 @@ async function startServer() {
       const searchDirs = [
         path.join(process.cwd(), 'attlogs'),
         path.join(process.cwd(), 'empleados'),
+        path.join(process.cwd(), 'salas'),
         path.join(process.cwd(), 'photos')
       ];
 
       // 1. Direct file match on disk
       for (const dir of searchDirs) {
-        const fullPath = path.join(dir,filename);
+        const fullPath = path.join(dir, filename);
         if (fs.existsSync(fullPath)) {
           reply.header('Cache-Control', 'public, max-age=2592000, immutable');
-          reply.type('image/jpeg');
+          if (filename.endsWith('.png')) reply.type('image/png');
+          else if (filename.endsWith('.svg')) reply.type('image/svg+xml');
+          else reply.type('image/jpeg');
           return fs.createReadStream(fullPath);
         }
       }
@@ -192,10 +195,70 @@ async function startServer() {
       return reply.send(DEFAULT_AVATAR_SVG);
     };
 
+    const getSalaLogoSvg = (name = "CASINO") => `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100">
+      <rect width="300" height="100" fill="transparent"/>
+      <text x="150" y="44" font-family="'Inter', sans-serif" font-weight="900" font-size="22" fill="#ffffff" text-anchor="middle" letter-spacing="2">
+        ${String(name).toUpperCase()}
+      </text>
+      <text x="150" y="66" font-family="sans-serif" font-size="14" fill="#fbbf24" text-anchor="middle" letter-spacing="4">
+        ★★★★★
+      </text>
+      <text x="150" y="84" font-family="'Inter', sans-serif" font-weight="800" font-size="11" fill="#cbd5e1" text-anchor="middle" letter-spacing="3">
+        CASINO &amp; RESORT
+      </text>
+    </svg>`;
+
+    const serveSalaLogoWithFallback = async (req, reply) => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const { sql, isPgConnected } = await import('./config/db.js');
+
+      let filename = req.params.filename || '';
+      const salasDir = path.join(process.cwd(), 'salas');
+
+      const candidates = [
+        filename,
+        `${filename}.svg`,
+        `${filename}.png`,
+        `${filename}.jpg`,
+        `${filename}.jpeg`
+      ];
+
+      for (const cand of candidates) {
+        const fullPath = path.join(salasDir, cand);
+        if (fs.existsSync(fullPath)) {
+          reply.header('Cache-Control', 'public, max-age=2592000, immutable');
+          if (cand.endsWith('.svg')) reply.type('image/svg+xml');
+          else if (cand.endsWith('.png')) reply.type('image/png');
+          else reply.type('image/jpeg');
+          return fs.createReadStream(fullPath);
+        }
+      }
+
+      let salaName = "CASINO";
+      const cleanId = Number(filename.replace(/\.[^/.]+$/, ""));
+      if (!isNaN(cleanId) && isPgConnected && sql) {
+        try {
+          const rows = await sql`SELECT nombre, nombre_comercial FROM salas WHERE id = ${cleanId} LIMIT 1`;
+          if (rows.length > 0) {
+            salaName = rows[0].nombre || rows[0].nombre_comercial || "CASINO";
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      reply.header('Cache-Control', 'public, max-age=86400');
+      reply.type('image/svg+xml').status(200);
+      return reply.send(getSalaLogoSvg(salaName));
+    };
+
     fastify.get('/empleados/:filename', servePhotoWithFallback);
     fastify.get('/api/empleados/:filename', servePhotoWithFallback);
     fastify.get('/attlogs/:filename', servePhotoWithFallback);
     fastify.get('/api/attlogs/:filename', servePhotoWithFallback);
+    fastify.get('/salas/:filename', serveSalaLogoWithFallback);
+    fastify.get('/api/salas/:filename', serveSalaLogoWithFallback);
 
     // Root endpoint fallback
     /* fastify.get('/', async () => {

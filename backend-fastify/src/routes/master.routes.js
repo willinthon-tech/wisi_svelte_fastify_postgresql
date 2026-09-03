@@ -16,7 +16,7 @@ import {
   getCargos, getCargosFilterOptions, createCargo, updateCargo, deleteCargo,
   getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado,
   getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado,
-  getCumpleanos
+  getCumpleanos, getCarnets
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -78,6 +78,11 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/master/cumpleanos', getCumpleanos);
   fastify.get('/api/master/cumpleanos', getCumpleanos);
   fastify.get('/cumpleanos', getCumpleanos);
+
+  // Carnets de Empleados
+  fastify.get('/master/carnets', getCarnets);
+  fastify.get('/api/master/carnets', getCarnets);
+  fastify.get('/carnets', getCarnets);
 
   // Configuracion del sistema
   fastify.get('/configuracion', getConfiguracion);

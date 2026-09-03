@@ -4112,4 +4112,67 @@ export async function getCumpleanosModel(params = {}) {
   return [];
 }
 
+// --- CARNETS DE EMPLEADOS ---
+export async function getCarnetsModel(params = {}) {
+  const { sala_ids, user_sala_ids, search } = params;
+  if (isPgConnected && sql) {
+    const conds = [sql`e.activo = true`];
+
+    if (sala_ids) {
+      const sIds = String(sala_ids).split(',').map(Number).filter(Boolean);
+      if (sIds.length > 0) {
+        conds.push(sql`s.id IN ${sql(sIds)}`);
+      }
+    } else if (user_sala_ids) {
+      const uIds = String(user_sala_ids).split(',').map(Number).filter(Boolean);
+      if (uIds.length > 0) {
+        conds.push(sql`s.id IN ${sql(uIds)}`);
+      }
+    }
+
+    if (search && String(search).trim()) {
+      const term = `%${String(search).trim()}%`;
+      conds.push(sql`(e.nombre ILIKE ${term} OR e.cedula ILIKE ${term} OR c.nombre ILIKE ${term})`);
+    }
+
+    const where = sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}`;
+
+    const rows = await sql`
+      SELECT 
+        e.id, 
+        e.nombre, 
+        e.cedula,
+        e.fecha_nacimiento, 
+        e.fecha_ingreso,
+        e.foto,
+        s.id AS sala_id, 
+        COALESCE(s.nombre, 'Sin Sala') AS sala_nombre,
+        COALESCE(s.nombre_comercial, s.nombre, 'Casino') AS sala_nombre_comercial,
+        COALESCE(s.rif, '') AS sala_rif,
+        COALESCE(s.ubicacion, '') AS sala_ubicacion,
+        COALESCE(s.correo, '') AS sala_correo,
+        COALESCE(s.telefono, '') AS sala_telefono,
+        COALESCE(c.nombre, 'Personal') AS cargo_nombre,
+        COALESCE(d.nombre, 'General') AS departamento_nombre,
+        COALESCE(a.nombre, '') AS area_nombre
+      FROM empleados e
+      LEFT JOIN cargos c ON e.cargo_id = c.id
+      LEFT JOIN areas a ON c.area_id = a.id
+      LEFT JOIN departamentos d ON a.departamento_id = d.id
+      LEFT JOIN salas s ON d.sala_id = s.id
+      ${where}
+      ORDER BY s.nombre ASC, e.nombre ASC
+    `;
+
+    return rows.map(r => ({
+      ...r,
+      foto: r.foto || `/empleados/${r.id}.jpg`,
+      sala_logo: `/salas/${r.sala_id}.svg`
+    }));
+  }
+
+  return [];
+}
+
+
 

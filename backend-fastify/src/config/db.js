@@ -40,14 +40,14 @@ export let inMemoryData = {
     { id: 2, nombre: 'GALPÓN', descripcion: 'Galpón / Depósito de almacenamiento' }
   ],
   salas: [
-    { id: 1, grupo_id: 1, nombre: 'Monagas Royal Casino', nombre_comercial: 'Monagas Royal Casino, C.A.', rif: 'J-50354350-7', ubicacion: 'Av Alirio Ugarte PelayoInstalaciones del Hotel StaufferMaturin Estado Monagas.', correo: 'rrhh@monagasroyalcasino.com', telefono: '0412-019.37.73', logo: null },
-    { id: 2, grupo_id: 1, nombre: 'Roraima', nombre_comercial: 'Casino Roraima Inn', rif: 'J-30606591-6', ubicacion: 'Av Monseñor Zabaleta Edif Roraima Inn Piso 0 al 3 Local Roraima Inn Sector Castillito Puerto Ordaz Guayana Bolivar Zona Postal 8050', correo: 'rrhhcasinororaima2023@gmail.com', telefono: '0424-968.86.12', logo: null },
-    { id: 3, grupo_id: 1, nombre: 'Gan Casino PLC', nombre_comercial: 'Gan Casino PLC', rif: 'J-12345678-0', ubicacion: 'Puerto La Cruz', correo: 'contacto@gancasino.com', telefono: '0281-265.43.21', logo: null },
-    { id: 4, grupo_id: 1, nombre: 'Charaima', nombre_comercial: 'Charaima', rif: 'J-87654321-9', ubicacion: 'Charaima', correo: 'info@charaima.com', telefono: '0295-888.77.66', logo: null },
-    { id: 5, grupo_id: 1, nombre: 'Casino Caribe Plaza', nombre_comercial: 'Casino Caribe Plaza', rif: 'J-99887766-5', ubicacion: 'Caribe Plaza', correo: 'contacto@caribeplaza.com', telefono: '0295-999.00.11', logo: null },
-    { id: 6, grupo_id: 1, nombre: 'Gran Casino El Marques', nombre_comercial: 'Gran Casino El Marques', rif: 'J-11223344-8', ubicacion: 'El Marqués, Caracas', correo: 'rrhh@marquescasino.com', telefono: '0212-234.56.78', logo: null },
-    { id: 7, grupo_id: 1, nombre: 'Gran Casino San Cristobal', nombre_comercial: 'Gran Casino San Cristobal', rif: 'J-55667788-3', ubicacion: 'San Cristóbal, Táchira', correo: 'contacto@sancristobal.com', telefono: '0276-345.67.89', logo: null },
-    { id: 8, grupo_id: 1, nombre: 'Casino Ciudad Bolivar', nombre_comercial: 'Casino Ciudad Bolivar', rif: 'J-44332211-0', ubicacion: 'Ciudad Bolivar', correo: 'contacto@ciudadbolivar.com', telefono: '0285-654.32.10', logo: null }
+    { id: 1, grupo_id: 1, nombre: 'Monagas Royal Casino', nombre_comercial: 'Monagas Royal Casino, C.A.', rif: 'J-50354350-7', ubicacion: 'Av Alirio Ugarte PelayoInstalaciones del Hotel StaufferMaturin Estado Monagas.', correo: 'rrhh@monagasroyalcasino.com', telefono: '0412-019.37.73' },
+    { id: 2, grupo_id: 1, nombre: 'Roraima', nombre_comercial: 'Casino Roraima Inn', rif: 'J-30606591-6', ubicacion: 'Av Monseñor Zabaleta Edif Roraima Inn Piso 0 al 3 Local Roraima Inn Sector Castillito Puerto Ordaz Guayana Bolivar Zona Postal 8050', correo: 'rrhhcasinororaima2023@gmail.com', telefono: '0424-968.86.12' },
+    { id: 3, grupo_id: 1, nombre: 'Gan Casino PLC', nombre_comercial: 'Gan Casino PLC', rif: 'J-12345678-0', ubicacion: 'Puerto La Cruz', correo: 'contacto@gancasino.com', telefono: '0281-265.43.21' },
+    { id: 4, grupo_id: 1, nombre: 'Charaima', nombre_comercial: 'Charaima', rif: 'J-87654321-9', ubicacion: 'Charaima', correo: 'info@charaima.com', telefono: '0295-888.77.66' },
+    { id: 5, grupo_id: 1, nombre: 'Casino Caribe Plaza', nombre_comercial: 'Casino Caribe Plaza', rif: 'J-99887766-5', ubicacion: 'Caribe Plaza', correo: 'contacto@caribeplaza.com', telefono: '0295-999.00.11' },
+    { id: 6, grupo_id: 1, nombre: 'Gran Casino El Marques', nombre_comercial: 'Gran Casino El Marques', rif: 'J-11223344-8', ubicacion: 'El Marqués, Caracas', correo: 'rrhh@marquescasino.com', telefono: '0212-234.56.78' },
+    { id: 7, grupo_id: 1, nombre: 'Gran Casino San Cristobal', nombre_comercial: 'Gran Casino San Cristobal', rif: 'J-55667788-3', ubicacion: 'San Cristóbal, Táchira', correo: 'contacto@sancristobal.com', telefono: '0276-345.67.89' },
+    { id: 8, grupo_id: 1, nombre: 'Casino Ciudad Bolivar', nombre_comercial: 'Casino Ciudad Bolivar', rif: 'J-44332211-0', ubicacion: 'Ciudad Bolivar', correo: 'contacto@ciudadbolivar.com', telefono: '0285-654.32.10' }
   ],
   user_salas: [
     { id: 32, user_id: 1, sala_id: 1 },
@@ -369,7 +369,6 @@ export async function initDb() {
         ubicacion TEXT,
         correo VARCHAR(100),
         telefono VARCHAR(50),
-        logo TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
