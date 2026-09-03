@@ -23,9 +23,10 @@ const __dirname = dirname(__filename);
 
 dotenv.config();
 
-// Disable verbose per-request JSON logging in terminal
+// Disable verbose per-request JSON logging in terminal and support large payloads for attendance snapshots
 const fastify = Fastify({
-  logger: false
+  logger: false,
+  bodyLimit: 100 * 1024 * 1024 // 100 MB
 });
 
 const PORT = process.env.PORT || 3030;

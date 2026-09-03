@@ -61,18 +61,30 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      const json = await res.json();
 
-      if (json && json.success) {
+      let json = null;
+      const responseText = await res.text();
+      try {
+        json = JSON.parse(responseText);
+      } catch (_parseErr) {
+        if (res.status === 413) {
+          triggerToast('Error 413: El tamaño de los datos es demasiado grande para el servidor.', 'error');
+        } else {
+          triggerToast(`Error del servidor (${res.status}) al procesar el corte.`, 'error');
+        }
+        return;
+      }
+
+      if (res.ok && json && json.success) {
         triggerToast('🎉 Corte generado y guardado en el histórico exitosamente', 'success');
         dispatch('saved', { corte: json.data });
         dispatch('close');
       } else {
-        triggerToast(json?.error || 'Error al guardar el corte histórico', 'error');
+        triggerToast(json?.error || `Error (${res.status}) al guardar el corte histórico`, 'error');
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error de conexión al generar el corte', 'error');
+      console.error('Error al generar corte:', err);
+      triggerToast('Error de red o conexión al generar el corte', 'error');
     } finally {
       isSaving = false;
     }

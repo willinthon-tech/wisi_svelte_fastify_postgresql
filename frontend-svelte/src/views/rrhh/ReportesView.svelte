@@ -621,6 +621,42 @@
 
   let showGenerarCorteModal = false;
 
+  function getCleanCortePayload() {
+    const cleanEmpleados = (allEvaluatedEmployees || []).map(emp => ({
+      id: emp.id,
+      nombre: emp.nombre,
+      cedula: emp.cedula,
+      cargo: emp.cargo,
+      foto: emp.foto || `/empleados/${emp.id}.jpg`,
+      dias: (emp.dias || []).map(d => ({
+        fechaStr: d.fechaStr,
+        dayOfWeek: d.dayOfWeek,
+        resultadoStr: d.resultadoStr,
+        trabajadosMins: d.trabajadosMins || 0,
+        trabajadoStr: d.trabajadoStr || "00:00",
+        marcajeStr: d.marcajeStr || "",
+        entBadge: d.entBadge ? { text: d.entBadge.text, isAlert: Boolean(d.entBadge.isAlert) } : null,
+        salBadge: d.salBadge ? { text: d.salBadge.text, isAlert: Boolean(d.salBadge.isAlert) } : null,
+        isExcepcion: Boolean(d.isExcepcion),
+        shift: d.shift ? {
+          codigo: d.shift.codigo,
+          nombre: d.shift.nombre,
+          color: d.shift.color,
+          tipo: d.shift.tipo,
+          hora_entrada: d.shift.hora_entrada,
+          hora_salida: d.shift.hora_salida
+        } : null,
+        isFeriado: Boolean(d.isFeriado || d.feriadoNombre),
+        feriadoNombre: d.feriadoNombre || null
+      }))
+    }));
+
+    return {
+      empleados: cleanEmpleados,
+      diasDelMes: (reportData && reportData.diasDelMes) || []
+    };
+  }
+
   function handleGenerarCorte() {
     if (!allEvaluatedEmployees || allEvaluatedEmployees.length === 0) {
       triggerToast("No hay empleados en el reporte actual para generar el corte", "warning");
@@ -1114,12 +1150,7 @@
   salas={filterOptions.salas || []}
   selectedSalaId={selectedSalas && selectedSalas.length === 1 ? selectedSalas[0] : null}
   totalEmpleados={allEvaluatedEmployees.length}
-  payloadData={{
-    reportData,
-    empleados: allEvaluatedEmployees,
-    diasDelMes: reportData.diasDelMes,
-    mesesAgrupados: reportData.mesesAgrupados
-  }}
+  payloadData={getCleanCortePayload()}
   on:close={() => { showGenerarCorteModal = false; }}
   on:saved={() => {
     showGenerarCorteModal = false;
