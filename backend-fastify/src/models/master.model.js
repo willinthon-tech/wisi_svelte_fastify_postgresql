@@ -4054,8 +4054,14 @@ export async function getCumpleanosModel(params = {}) {
   if (isPgConnected && sql) {
     const conds = [sql`e.fecha_nacimiento IS NOT NULL`, sql`e.activo = true`];
 
-    if (mes) {
-      conds.push(sql`EXTRACT(MONTH FROM e.fecha_nacimiento) = ${Number(mes)}`);
+    const mesesParam = params.meses || params.mes;
+    if (mesesParam) {
+      const mList = String(mesesParam).split(',').map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 12);
+      if (mList.length === 1) {
+        conds.push(sql`EXTRACT(MONTH FROM e.fecha_nacimiento) = ${mList[0]}`);
+      } else if (mList.length > 1) {
+        conds.push(sql`EXTRACT(MONTH FROM e.fecha_nacimiento) IN ${sql(mList)}`);
+      }
     }
 
     if (sala_ids) {

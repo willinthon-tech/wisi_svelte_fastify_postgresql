@@ -329,12 +329,34 @@
   let calCurrentMonth = todayDate.getMonth(); // 0 a 11
 
   let calSelectedSalas = [];
+  let calSelectedMeses = [todayDate.getMonth() + 1]; // Inicia con el mes en curso (ej. 9 para Septiembre)
   let calSelectedTipos = ['FERIADOS', 'CUMPLEANOS'];
+
+  const MES_OPTIONS = [
+    { id: 1, nombre: 'Enero' },
+    { id: 2, nombre: 'Febrero' },
+    { id: 3, nombre: 'Marzo' },
+    { id: 4, nombre: 'Abril' },
+    { id: 5, nombre: 'Mayo' },
+    { id: 6, nombre: 'Junio' },
+    { id: 7, nombre: 'Julio' },
+    { id: 8, nombre: 'Agosto' },
+    { id: 9, nombre: 'Septiembre' },
+    { id: 10, nombre: 'Octubre' },
+    { id: 11, nombre: 'Noviembre' },
+    { id: 12, nombre: 'Diciembre' }
+  ];
 
   const TIPO_OPTIONS = [
     { id: 'FERIADOS', nombre: 'Feriados / Fechas Patrias' },
     { id: 'CUMPLEANOS', nombre: 'Cumpleaños de Empleados' }
   ];
+
+  // Opciones limpias de salas sin conteos engañosos
+  $: calSalasOptions = ($masterSalasStore || []).map(s => ({
+    id: s.id,
+    nombre: s.nombre
+  }));
 
   let rawCumpleanos = [];
   let loadingCumpleanos = false;
@@ -342,9 +364,10 @@
   async function fetchCumpleanos() {
     loadingCumpleanos = true;
     try {
-      const q = new URLSearchParams({
-        mes: calCurrentMonth + 1
-      });
+      const q = new URLSearchParams();
+      if (calSelectedMeses.length > 0 && calSelectedMeses.length < 12) {
+        q.set('meses', calSelectedMeses.join(','));
+      }
       if (assignedSalaIds.length > 0) q.set('user_sala_ids', assignedSalaIds.join(','));
       if (calSelectedSalas.length > 0) q.set('sala_ids', calSelectedSalas.join(','));
 
@@ -360,6 +383,13 @@
     }
   }
 
+  function handleMesChange() {
+    if (calSelectedMeses.length === 1) {
+      calCurrentMonth = Number(calSelectedMeses[0]) - 1;
+    }
+    fetchCumpleanos();
+  }
+
   function prevMonth() {
     if (calCurrentMonth === 0) {
       calCurrentMonth = 11;
@@ -367,6 +397,7 @@
     } else {
       calCurrentMonth--;
     }
+    calSelectedMeses = [calCurrentMonth + 1];
     fetchCumpleanos();
   }
 
@@ -377,12 +408,14 @@
     } else {
       calCurrentMonth++;
     }
+    calSelectedMeses = [calCurrentMonth + 1];
     fetchCumpleanos();
   }
 
   function goToToday() {
     calCurrentYear = todayDate.getFullYear();
     calCurrentMonth = todayDate.getMonth();
+    calSelectedMeses = [calCurrentMonth + 1];
     fetchCumpleanos();
   }
 
@@ -396,7 +429,7 @@
     if (!cell || !cell.isCurrentMonth) return;
     selectedDayModalData = {
       day: cell.day,
-      monthName: MESES[calCurrentMonth]?.nombre || '',
+      monthName: (calSelectedMeses.length === 1 ? (MES_OPTIONS.find(m => m.id === Number(calSelectedMeses[0]))?.nombre || '') : 'Meses Seleccionados'),
       year: calCurrentYear,
       cumples: cell.cumpleEvents || [],
       feriados: cell.feriadoEvents || []
@@ -407,45 +440,39 @@
     selectedDayModalData = null;
   }
 
-  $: calMonthName = MESES[calCurrentMonth]?.nombre || '';
-  $: calMonthTitle = `${calMonthName} ${calCurrentYear}`;
-
-  // Nombre de sala para la cabecera (si es una sola sala seleccionada o asignada)
-  $: singleSalaName = (function() {
-    // 1. Si hay 1 sala seleccionada en calSelectedSalas
-    if (calSelectedSalas && calSelectedSalas.length === 1) {
-      const sId = String(calSelectedSalas[0]);
-      // En filterOptions.salas
-      const f1 = (filterOptions.salas || []).find(s => String(s.id ?? s.value) === sId);
-      if (f1) return (f1.nombre || f1.label || '').toUpperCase();
-      // En masterSalasStore
-      const f2 = ($masterSalasStore || []).find(s => String(s.id) === sId);
-      if (f2) return (f2.nombre || '').toUpperCase();
-      // En rawCumpleanos
-      const f3 = rawCumpleanos.find(c => String(c.sala_id) === sId);
-      if (f3 && f3.sala_nombre) return f3.sala_nombre.toUpperCase();
-      // En rawServerItems
-      const f4 = rawServerItems.find(rf => String(rf.sala_id) === sId);
-      if (f4 && f4.sala_nombre) return f4.sala_nombre.toUpperCase();
+  // Título del mes: solo sale cuando hay un único mes seleccionado
+  $: calMonthTitle = (function() {
+    if (calSelectedMeses && calSelectedMeses.length === 1) {
+      const mNum = Number(calSelectedMeses[0]);
+      const found = MES_OPTIONS.find(m => m.id === mNum);
+      return found ? `${found.nombre.toUpperCase()} ${calCurrentYear}` : '';
     }
-    // 2. Si no seleccionó nada pero solo tiene 1 sala asignada o disponible
-    if (!calSelectedSalas || calSelectedSalas.length === 0) {
-      if (assignedSalaIds && assignedSalaIds.length === 1) {
-        const sId = String(assignedSalaIds[0]);
-        const f1 = ($masterSalasStore || []).find(s => String(s.id) === sId) ||
-                   (filterOptions.salas || []).find(s => String(s.id ?? s.value) === sId);
-        if (f1) return (f1.nombre || f1.label || '').toUpperCase();
-      }
-      if ($masterSalasStore && $masterSalasStore.length === 1) {
-        return ($masterSalasStore[0].nombre || '').toUpperCase();
-      }
-    }
+    // Si son todos o varios, no sale el título hasta que se seleccione uno
     return '';
   })();
 
-  // Resumen para impresión: Cumpleañeros del mes agrupados por Departamento
+  // Nombre de sala para la cabecera: solo sale cuando hay una única sala seleccionada
+  $: singleSalaName = (function() {
+    if (calSelectedSalas && calSelectedSalas.length === 1) {
+      const sId = String(calSelectedSalas[0]);
+      const f1 = (calSalasOptions || []).find(s => String(s.id) === sId);
+      if (f1) return (f1.nombre || '').toUpperCase();
+      const f2 = ($masterSalasStore || []).find(s => String(s.id) === sId);
+      if (f2) return (f2.nombre || '').toUpperCase();
+      const f3 = rawCumpleanos.find(c => String(c.sala_id) === sId);
+      if (f3 && f3.sala_nombre) return f3.sala_nombre.toUpperCase();
+    }
+    // Si son todas o varias, queda vacío hasta que se seleccione una sola
+    return '';
+  })();
+
+  // Resumen para impresión: Cumpleañeros agrupados por Departamento
   $: printCumpleanosGrouped = (function() {
-    let emps = [...rawCumpleanos];
+    const activeMonthsSet = (calSelectedMeses && calSelectedMeses.length > 0)
+      ? new Set(calSelectedMeses.map(Number))
+      : new Set([1,2,3,4,5,6,7,8,9,10,11,12]);
+
+    let emps = rawCumpleanos.filter(c => !c.mes || activeMonthsSet.has(Number(c.mes)));
     if (calSelectedSalas.length > 0) {
       const salaSet = new Set(calSelectedSalas.map(Number));
       emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
@@ -467,7 +494,7 @@
     return groups;
   })();
 
-  // Total de cumpleañeros del mes filtrados
+  // Total de cumpleañeros filtrados
   $: totalCumpleanosMonth = (function() {
     let count = 0;
     for (const list of Object.values(printCumpleanosGrouped)) {
@@ -476,14 +503,15 @@
     return count;
   })();
 
-  // Resumen para impresión: Feriados del mes
+  // Resumen para impresión: Feriados
   $: printFeriadosMonth = (function() {
-    const list = [];
-    const currentMonthNum = calCurrentMonth + 1;
+    const activeMonthsSet = (calSelectedMeses && calSelectedMeses.length > 0)
+      ? new Set(calSelectedMeses.map(Number))
+      : new Set([1,2,3,4,5,6,7,8,9,10,11,12]);
 
-    // 1. Base nacionales
+    const list = [];
     for (const bf of BASE_FERIADOS) {
-      if (bf.mes === currentMonthNum) {
+      if (activeMonthsSet.has(bf.mes)) {
         list.push({
           dia: bf.dia,
           nombre: bf.nombre,
@@ -493,8 +521,7 @@
       }
     }
 
-    // 2. Feriados de sala en DB
-    let serverHols = rawServerItems.filter(rf => Number(rf.mes) === currentMonthNum);
+    let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)));
     if (calSelectedSalas.length > 0) {
       const salaSet = new Set(calSelectedSalas.map(Number));
       serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
@@ -515,15 +542,30 @@
   const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
   $: calendarMatrix = (function() {
-    const firstDayRaw = new Date(calCurrentYear, calCurrentMonth, 1).getDay();
-    const startDayOffset = (firstDayRaw + 6) % 7; // Lunes = 0, Domingo = 6
+    const isSingleMonth = (calSelectedMeses && calSelectedMeses.length === 1);
+    const targetMonth = isSingleMonth ? (Number(calSelectedMeses[0]) - 1) : calCurrentMonth;
+    const activeMonthsSet = (calSelectedMeses && calSelectedMeses.length > 0)
+      ? new Set(calSelectedMeses.map(Number))
+      : new Set([1,2,3,4,5,6,7,8,9,10,11,12]);
 
-    const daysInCurrentMonth = new Date(calCurrentYear, calCurrentMonth + 1, 0).getDate();
-    const daysInPrevMonth = new Date(calCurrentYear, calCurrentMonth, 0).getDate();
+    let startDayOffset = 0;
+    let daysInCurrentMonth = 31;
+    let daysInPrevMonth = 31;
+
+    if (isSingleMonth) {
+      const firstDayRaw = new Date(calCurrentYear, targetMonth, 1).getDay();
+      startDayOffset = (firstDayRaw + 6) % 7; // Lunes = 0, Domingo = 6
+      daysInCurrentMonth = new Date(calCurrentYear, targetMonth + 1, 0).getDate();
+      daysInPrevMonth = new Date(calCurrentYear, targetMonth, 0).getDate();
+    } else {
+      // Mes con más días: 31 días iniciando en la primera celda
+      daysInCurrentMonth = 31;
+      startDayOffset = 0;
+    }
 
     const cells = [];
 
-    // Días del mes previo
+    // Días del mes previo (solo si es mes individual con offset)
     for (let i = startDayOffset - 1; i >= 0; i--) {
       cells.push({
         day: daysInPrevMonth - i,
@@ -535,12 +577,11 @@
       });
     }
 
-    // Días del mes actual
-    const currentMonthNum = calCurrentMonth + 1;
+    // Días activos
     for (let d = 1; d <= daysInCurrentMonth; d++) {
-      const isToday = (
+      const isToday = isSingleMonth && (
         d === todayDate.getDate() &&
-        calCurrentMonth === todayDate.getMonth() &&
+        targetMonth === todayDate.getMonth() &&
         calCurrentYear === todayDate.getFullYear()
       );
 
@@ -549,7 +590,11 @@
 
       // 1. Cumpleaños (encima)
       if (calSelectedTipos.includes('CUMPLEANOS')) {
-        let emps = rawCumpleanos.filter(c => Number(c.dia) === d);
+        let emps = rawCumpleanos.filter(c => {
+          if (Number(c.dia) !== d) return false;
+          if (c.mes && !activeMonthsSet.has(Number(c.mes))) return false;
+          return true;
+        });
         if (calSelectedSalas.length > 0) {
           const salaSet = new Set(calSelectedSalas.map(Number));
           emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
@@ -572,7 +617,7 @@
       // 2. Feriados (abajo)
       if (calSelectedTipos.includes('FERIADOS')) {
         // Fechas Base Nacionales
-        const baseHols = BASE_FERIADOS.filter(bf => bf.mes === currentMonthNum && bf.dia === d);
+        const baseHols = BASE_FERIADOS.filter(bf => activeMonthsSet.has(bf.mes) && bf.dia === d);
         for (const bh of baseHols) {
           feriadoEvents.push({
             type: 'feriado_nacional',
@@ -583,7 +628,7 @@
         }
 
         // Fechas de Salas en DB
-        let serverHols = rawServerItems.filter(rf => Number(rf.mes) === currentMonthNum && Number(rf.dia) === d);
+        let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)) && Number(rf.dia) === d);
         if (calSelectedSalas.length > 0) {
           const salaSet = new Set(calSelectedSalas.map(Number));
           serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
@@ -608,8 +653,7 @@
       });
     }
 
-    // Completar la cuadrícula siempre a 42 celdas (6 filas exactas de 7 días)
-    // Esto asegura que todos los cuadros de cada día midan lo mismo mes a mes de todo el año
+    // Completar la cuadrícula siempre a 42 celdas exactas (6 filas de 7 días)
     let nextMonthDay = 1;
     while (cells.length < 42) {
       cells.push({
@@ -699,9 +743,19 @@
         <SmartMultiSelect
           id="filter-monthly-cal-salas"
           label="Salas"
-          options={filterOptions.salas}
+          options={calSalasOptions}
           bind:selectedValues={calSelectedSalas}
           on:change={fetchCumpleanos}
+        />
+      </div>
+
+      <div class="cal-filter-col">
+        <SmartMultiSelect
+          id="filter-monthly-cal-meses"
+          label="Mes"
+          options={MES_OPTIONS}
+          bind:selectedValues={calSelectedMeses}
+          on:change={handleMesChange}
         />
       </div>
 
@@ -826,7 +880,7 @@
     <div class="cal-print-bottom-summary">
       <!-- 1. Bloque Cumpleañeros del Mes -->
       <div class="cal-print-section-block cal-print-cumples-block">
-        <h4 class="cal-print-col-title">CUMPLEAÑEROS DEL MES ({totalCumpleanosMonth})</h4>
+        <h4 class="cal-print-col-title">{calSelectedMeses && calSelectedMeses.length === 1 ? 'CUMPLEAÑEROS DEL MES' : 'CUMPLEAÑEROS'} ({totalCumpleanosMonth})</h4>
         {#if Object.keys(printCumpleanosGrouped).length > 0}
           <div class="cal-print-groups-list">
             {#each Object.entries(printCumpleanosGrouped) as [depName, empList]}
@@ -857,7 +911,7 @@
 
       <!-- 2. Bloque Feriados del Mes (debajo de cumpleaños, y fluye a la otra columna si sobrepasa) -->
       <div class="cal-print-section-block cal-print-feriados-block">
-        <h4 class="cal-print-col-title">FERIADOS DEL MES</h4>
+        <h4 class="cal-print-col-title">{calSelectedMeses && calSelectedMeses.length === 1 ? 'FERIADOS DEL MES' : 'FERIADOS'}</h4>
         {#if printFeriadosMonth.length > 0}
           <div class="cal-print-feriados-list">
             {#each printFeriadosMonth as fer}
@@ -1031,9 +1085,15 @@
 
   .cal-filters-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     width: 100%;
+  }
+
+  @media (max-width: 900px) {
+    .cal-filters-row {
+      grid-template-columns: 1fr;
+    }
   }
 
   .cal-filter-col {
