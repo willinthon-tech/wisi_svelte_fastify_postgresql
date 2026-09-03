@@ -1192,7 +1192,8 @@
 
   .cal-days-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: repeat(6, 110px);
     background: #cbd5e1;
     gap: 1px;
     border-bottom: 1px solid #e2e8f0;
@@ -1201,6 +1202,7 @@
   .cal-day-cell {
     background: #ffffff;
     height: 110px;
+    min-height: 110px;
     max-height: 110px;
     padding: 5px;
     box-sizing: border-box;
@@ -1400,7 +1402,7 @@
   @media print {
     @page {
       size: portrait;
-      margin: 10mm;
+      margin: 14mm;
     }
 
     :global(body *) {
@@ -1414,10 +1416,10 @@
 
     .monthly-calendar-card {
       position: absolute !important;
-      left: 10mm !important;
-      top: 10mm !important;
-      right: 10mm !important;
-      width: calc(100% - 20mm) !important;
+      left: 14mm !important;
+      top: 14mm !important;
+      right: 14mm !important;
+      width: calc(100% - 28mm) !important;
       margin: 0 !important;
       padding: 0 !important;
       border: 1.5px solid #0f172a !important;
@@ -1499,18 +1501,24 @@
     }
 
     .cal-days-grid {
+      display: grid !important;
+      grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+      grid-template-rows: repeat(6, 58px) !important;
       border-bottom: 2px solid #0f172a !important;
       background: #cbd5e1 !important;
+      gap: 1px !important;
     }
 
     .cal-day-cell {
-      height: 60px !important;
-      max-height: 60px !important;
+      height: 58px !important;
+      min-height: 58px !important;
+      max-height: 58px !important;
       padding: 2px 2px !important;
       border-right: 1px solid #cbd5e1 !important;
       border-bottom: 1px solid #cbd5e1 !important;
       overflow: hidden !important;
       background: #ffffff !important;
+      box-sizing: border-box !important;
     }
 
     .cal-day-cell.is-outside {
