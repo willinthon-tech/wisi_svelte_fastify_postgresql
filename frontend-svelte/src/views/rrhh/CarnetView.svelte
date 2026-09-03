@@ -235,42 +235,39 @@
     window.print();
   }
 
-  // Generar barras dinámicas de código de barras basadas estrictamente en la cédula del empleado
+  // Generar barras dinámicas de código de barras basadas estrictamente en la cédula del empleado (extremo a extremo)
   function generateCedulaBarcode(cedula) {
     const raw = String(cedula || "").trim().toUpperCase();
-    const cleanDigits = raw.replace(/\D/g, "") || "00000000";
+    const cleanDigits = raw.replace(/\D/g, "") || "12345678";
     const digits = cleanDigits.split("").map(Number);
     const bars = [];
     
-    // Barra de inicio / guarda fija (estética de código de barras profesional)
-    bars.push({ h: 32, w: 2.4 });
-    bars.push({ h: 16, w: 1.8 });
+    // Guardas de inicio (estilo barcode profesional)
+    bars.push({ h: 35, w: 2.5 });
+    bars.push({ h: 15, w: 1.8 });
+    bars.push({ h: 32, w: 2.2 });
 
-    for (let i = 0; i < digits.length; i++) {
-      const d = digits[i];
+    // 42 barras centrales para alcanzar 48 barras en total de extremo a extremo
+    const count = 42;
+    for (let i = 0; i < count; i++) {
+      const d = digits[i % digits.length];
       const prev = digits[(i - 1 + digits.length) % digits.length];
       const next = digits[(i + 1) % digits.length];
+      const p = (i * 7) + 13;
 
-      // Alturas moduladas dinámicamente según el valor del dígito
-      const h1 = 12 + ((d * 7 + 3) % 25);
-      const h2 = 14 + (((d + prev) * 5 + 7) % 23);
-      const h3 = 13 + (((d * 11 + next * 3)) % 24);
+      // Alturas moduladas dinámicamente según la cédula (12px a 36px)
+      const h = 12 + ((d * 11 + prev * 5 + next * 7 + p) % 25);
 
-      // Ancho dinámico tipo barcode (grueso o fino)
-      const w1 = d % 2 === 0 ? 3.2 : 2.0;
-      const w2 = (d + i) % 3 === 0 ? 3.4 : 2.2;
-      const w3 = d > 4 ? 2.8 : 2.0;
+      // Grosor dinámico tipo barcode auténtico
+      const w = ((d + i) % 3 === 0) ? 3.0 : ((d % 2 === 0) ? 2.4 : 1.8);
 
-      bars.push({ h: Math.min(36, Math.max(12, h1)), w: w1 });
-      bars.push({ h: Math.min(36, Math.max(12, h2)), w: w2 });
-      if (digits.length <= 8) {
-        bars.push({ h: Math.min(36, Math.max(12, h3)), w: w3 });
-      }
+      bars.push({ h: Math.min(36, Math.max(12, h)), w: w });
     }
 
-    // Barra de cierre / guarda final
-    bars.push({ h: 18, w: 1.8 });
-    bars.push({ h: 34, w: 2.4 });
+    // Guardas de fin
+    bars.push({ h: 32, w: 2.2 });
+    bars.push({ h: 15, w: 1.8 });
+    bars.push({ h: 35, w: 2.5 });
 
     return bars;
   }
@@ -579,9 +576,9 @@
               {currentSala.ubicacion}
             </div>
 
-            <!-- Sección 6: Bloque de Correo Institucional -->
+            <!-- Sección 6: Bloque de Correo Institucional (2 Líneas exactas) -->
             <div class="back-footer-pill">
-              <span class="footer-email-label">Correo:</span>
+              <span class="footer-email-label">CORREO:</span>
               <span class="footer-email-val">{currentSala.correo}</span>
             </div>
           </div>
@@ -725,8 +722,9 @@
 
               <div class="company-address">{sala.ubicacion}</div>
 
+              <!-- Sección 6: Bloque de Correo Institucional (2 Líneas exactas) -->
               <div class="back-footer-pill">
-                <span class="footer-email-label">Correo:</span>
+                <span class="footer-email-label">CORREO:</span>
                 <span class="footer-email-val">{sala.correo}</span>
               </div>
             </div>
@@ -1060,7 +1058,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding: 0 14px;
+    padding: 0;
     box-sizing: border-box;
   }
 
@@ -1082,12 +1080,14 @@
 
   .sala-logo-box {
     width: 100%;
-    height: 118px;
+    height: 122px;
     display: flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    padding: 6px 12px 0 12px;
+    padding: 4px 18px 0 18px;
+    margin: 0 auto;
+    text-align: center;
   }
 
   .sala-logo-svg {
@@ -1097,11 +1097,12 @@
   }
 
   .sala-logo-img {
-    max-width: 84%;
-    max-height: 82px;
+    max-width: 78%;
+    max-height: 84px;
     object-fit: contain;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.6));
     margin: auto;
+    display: block;
   }
 
   /* ----------------------------------------------------
@@ -1202,48 +1203,51 @@
   }
 
   .emp-name {
-    font-size: 18px;
+    font-size: clamp(14px, 3.8vw, 17px);
     font-weight: 900;
     color: #000000;
     margin: 0;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
-    line-height: 1.15;
+    letter-spacing: 0.5px;
+    line-height: 1.18;
+    max-width: 100%;
+    word-break: break-word;
   }
 
   .cargo-banner-wrap {
     display: flex;
     justify-content: center;
-    margin: 6px 0 10px 0;
+    margin: 5px 0 8px 0;
+    max-width: 100%;
   }
 
   .cargo-banner {
     background: var(--accent-color);
     color: #ffffff;
-    font-size: 11.5px;
+    font-size: 10px;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    padding: 4px 18px;
+    letter-spacing: 0.5px;
+    padding: 3.5px 16px;
     border-radius: 4px;
     display: inline-block;
-    max-width: 88%;
+    max-width: 94%;
     text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    line-height: 1.25;
+    word-break: break-word;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
   }
 
   .modelo-roraima .cargo-banner {
-    clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0% 50%);
-    padding: 4.5px 22px;
+    clip-path: polygon(6px 0%, calc(100% - 6px) 0%, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0% 50%);
+    padding: 4px 18px;
     border-radius: 0;
   }
 
   .modelo-wave .cargo-banner {
     border-radius: 20px;
-    padding: 4px 18px;
+    padding: 3.5px 16px;
   }
 
   .modelo-vip .cargo-banner {
@@ -1253,15 +1257,15 @@
   }
 
   /* ----------------------------------------------------
-     CARA FRONTAL: TABLA DE DATOS DEL EMPLEADO
+     CARA FRONTAL: GRILLA DE DETALLES
      ---------------------------------------------------- */
   .emp-details-grid {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 0 26px;
-    margin-top: 2px;
-    flex: 1;
+    gap: 5px;
+    padding: 0 22px;
+    margin-top: 4px;
+    box-sizing: border-box;
   }
 
   .detail-row {
@@ -1270,12 +1274,14 @@
     align-items: baseline;
     font-size: 13px;
     line-height: 1.35;
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
+    padding-bottom: 2px;
   }
 
   .detail-label {
     font-weight: 800;
-    color: #0f172a;
-    flex-shrink: 0;
+    color: #000000;
+    min-width: 100px;
   }
 
   .detail-value {
@@ -1290,23 +1296,24 @@
      ---------------------------------------------------- */
   .card-footer-decoration {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: flex-end;
-    padding: 4px 16px 12px 16px;
+    padding: 4px 14px 12px 14px;
     margin-top: auto;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .equalizer-bars {
     display: flex;
     align-items: flex-end;
-    justify-content: center;
-    gap: 4.5px;
+    justify-content: space-between;
     width: 100%;
     height: 36px;
+    box-sizing: border-box;
   }
 
   .eq-bar {
-    width: 3.2px;
     background: var(--accent-color);
     border-radius: 2px;
     opacity: 0.9;
@@ -1348,26 +1355,29 @@
   }
 
   .company-block {
-    margin: 12px 0 6px 0;
+    margin: 10px 0 6px 0;
+    max-width: 100%;
   }
 
   .company-name-highlight {
-    font-size: 20px;
+    font-size: clamp(14px, 3.8vw, 18px);
     font-weight: 900;
     color: #000000;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
-    line-height: 1.25;
+    letter-spacing: 0.5px;
+    line-height: 1.22;
     text-decoration: underline;
-    text-underline-offset: 4px;
+    text-underline-offset: 3.5px;
+    max-width: 100%;
+    word-break: break-word;
   }
 
   .company-rif {
-    font-size: 16px;
+    font-size: clamp(13px, 3.2vw, 15px);
     font-weight: 800;
     color: #000000;
-    letter-spacing: 0.6px;
-    margin-top: 4px;
+    letter-spacing: 0.5px;
+    margin-top: 3px;
   }
 
   .ornament-divider {
@@ -1375,7 +1385,7 @@
     align-items: center;
     justify-content: center;
     width: 82%;
-    margin: 14px 0;
+    margin: 12px 0;
   }
 
   .divider-line {
@@ -1386,28 +1396,28 @@
   }
 
   .legal-notice {
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 500;
     color: #1e293b;
-    margin: 0 0 10px 0;
-    line-height: 1.55;
+    margin: 0 0 8px 0;
+    line-height: 1.5;
     padding: 0 4px;
   }
 
   .company-phone {
-    font-size: 21px;
+    font-size: 20px;
     font-weight: 900;
     color: #000000;
-    letter-spacing: 1px;
-    margin: 4px 0 10px 0;
+    letter-spacing: 0.8px;
+    margin: 2px 0 8px 0;
   }
 
   .company-address {
-    font-size: 12.5px;
+    font-size: 12px;
     font-style: italic;
     font-weight: 600;
     color: #334155;
-    line-height: 1.45;
+    line-height: 1.4;
     padding: 0 8px;
     margin-bottom: auto;
   }
@@ -1415,31 +1425,41 @@
   .back-footer-pill {
     background: var(--accent-color);
     color: #ffffff;
-    border-radius: 12px;
-    padding: 10px 14px;
-    width: calc(100% - 10px);
+    border-radius: 10px;
+    padding: 6px 10px 7px 10px;
+    width: calc(100% - 6px);
+    max-width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    text-align: center;
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
-    margin-top: 14px;
+    margin-top: 10px;
+    box-sizing: border-box;
   }
 
   .footer-email-label {
-    font-size: 11px;
-    font-weight: 700;
-    opacity: 0.9;
+    font-size: 9.5px;
+    font-weight: 800;
+    opacity: 0.95;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    line-height: 1.2;
+    margin-bottom: 2px;
+    display: block;
   }
 
   .footer-email-val {
-    font-size: 13.5px;
-    font-weight: 800;
-    word-break: break-all;
-    letter-spacing: 0.3px;
+    font-size: clamp(9.5px, 2.7vw, 12px);
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: block;
   }
 
   /* ----------------------------------------------------
