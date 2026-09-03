@@ -440,12 +440,19 @@
     selectedDayModalData = null;
   }
 
-  // Título del mes: solo sale cuando hay un único mes seleccionado
-  $: calMonthTitle = (function() {
+  // Nombre reactivo del mes seleccionado (si es uno solo)
+  $: calMonthName = (function() {
     if (calSelectedMeses && calSelectedMeses.length === 1) {
       const mNum = Number(calSelectedMeses[0]);
-      const found = MES_OPTIONS.find(m => m.id === mNum);
-      return found ? `${found.nombre.toUpperCase()} ${calCurrentYear}` : '';
+      return MES_OPTIONS.find(m => m.id === mNum)?.nombre || '';
+    }
+    return '';
+  })();
+
+  // Título del mes: solo sale cuando hay un único mes seleccionado
+  $: calMonthTitle = (function() {
+    if (calMonthName) {
+      return `${calMonthName.toUpperCase()} ${calCurrentYear}`;
     }
     // Si son todos o varios, no sale el título hasta que se seleccione uno
     return '';
@@ -818,7 +825,7 @@
         <div 
           class="cal-day-cell {cell.isCurrentMonth ? 'is-current' : 'is-outside'} {cell.isToday ? 'is-today' : ''}"
           on:click={() => openDayModal(cell)}
-          title={cell.isCurrentMonth ? `Ver detalles del día ${cell.day} de ${calMonthName}` : ''}
+          title={cell.isCurrentMonth ? (calMonthName ? `Ver detalles del día ${cell.day} de ${calMonthName}` : `Ver detalles del día ${cell.day}`) : ''}
         >
           <div class="cal-day-header">
             <span class="cal-day-num {cell.isToday ? 'today-badge' : ''}">{cell.day}</span>
