@@ -826,7 +826,7 @@
     <div class="cal-print-bottom-summary">
       <!-- 1. Bloque Cumpleañeros del Mes -->
       <div class="cal-print-section-block cal-print-cumples-block">
-        <h4 class="cal-print-col-title">CUMPLEAÑEROS DEL MES ({totalCumpleanosMonth} del mes)</h4>
+        <h4 class="cal-print-col-title">CUMPLEAÑEROS DEL MES ({totalCumpleanosMonth})</h4>
         {#if Object.keys(printCumpleanosGrouped).length > 0}
           <div class="cal-print-groups-list">
             {#each Object.entries(printCumpleanosGrouped) as [depName, empList]}
@@ -1413,9 +1413,11 @@
     }
 
     .monthly-calendar-card {
-      position: relative !important;
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
       width: 100% !important;
-      margin: 0 auto !important;
+      margin: 0 !important;
       padding: 0 !important;
       border: 1.5px solid #0f172a !important;
       box-shadow: none !important;
