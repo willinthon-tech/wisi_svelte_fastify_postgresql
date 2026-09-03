@@ -1400,7 +1400,7 @@
   @media print {
     @page {
       size: portrait;
-      margin: 8mm;
+      margin: 3mm;
     }
 
     :global(body *) {
@@ -1423,6 +1423,8 @@
       box-shadow: none !important;
       border-radius: 0 !important;
       box-sizing: border-box !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
 
     .print-hidden,
@@ -1438,7 +1440,7 @@
       display: flex !important;
       align-items: center !important;
       justify-content: space-between !important;
-      padding: 6px 10px !important;
+      padding: 5px 8px !important;
       border-bottom: 2px solid #0f172a !important;
     }
 
@@ -1488,8 +1490,8 @@
     }
 
     .cal-weekday-cell {
-      padding: 4px 2px !important;
-      font-size: 11px !important;
+      padding: 3px 2px !important;
+      font-size: 10.5px !important;
       font-weight: 800 !important;
       color: #000000 !important;
       border-right: 1px solid #cbd5e1 !important;
@@ -1501,8 +1503,8 @@
     }
 
     .cal-day-cell {
-      height: 68px !important;
-      max-height: 68px !important;
+      height: 60px !important;
+      max-height: 60px !important;
       padding: 2px 2px !important;
       border-right: 1px solid #cbd5e1 !important;
       border-bottom: 1px solid #cbd5e1 !important;
@@ -1515,25 +1517,41 @@
     }
 
     .cal-day-num {
-      font-size: 10px !important;
+      font-size: 9.5px !important;
       font-weight: 700 !important;
     }
 
     .today-badge {
-      width: 16px !important;
-      height: 16px !important;
-      font-size: 9px !important;
+      width: 15px !important;
+      height: 15px !important;
+      font-size: 8.5px !important;
+    }
+
+    .cal-cumples-grid {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 2px !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+    }
+
+    .cal-event-item.evt-cumple {
+      padding: 0 !important;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
     }
 
     .cal-avatar-img {
-      width: 14px !important;
-      height: 14px !important;
+      width: 16px !important;
+      height: 16px !important;
+      border-radius: 50% !important;
+      border: 1px solid #64748b !important;
     }
 
+    /* Ocultar edad en versión de impresión dentro de los días del calendario */
     .cal-age-single-green {
-      font-size: 8.5px !important;
-      color: #15803d !important;
-      font-weight: 800 !important;
+      display: none !important;
     }
 
     .cal-icon-feriado {
@@ -1548,11 +1566,13 @@
     .cal-print-bottom-summary {
       display: block !important;
       columns: 2 !important;
-      column-gap: 22px !important;
-      margin-top: 16px !important;
-      padding: 12px 8px !important;
+      column-gap: 20px !important;
+      margin-top: 10px !important;
+      padding: 8px 6px !important;
       border-top: 2px solid #0f172a !important;
       background: #ffffff !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
 
     .cal-print-section-block {
