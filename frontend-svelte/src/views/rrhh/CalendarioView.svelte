@@ -486,18 +486,18 @@
       });
     }
 
-    // Días del mes siguiente para completar la cuadrícula
-    const remainder = cells.length % 7;
-    if (remainder > 0) {
-      const needed = 7 - remainder;
-      for (let n = 1; n <= needed; n++) {
-        cells.push({
-          day: n,
-          isCurrentMonth: false,
-          isToday: false,
-          events: []
-        });
-      }
+    // Completar la cuadrícula siempre a 42 celdas (6 filas exactas de 7 días)
+    // Esto asegura que todos los cuadros de cada día midan lo mismo mes a mes de todo el año
+    let nextMonthDay = 1;
+    while (cells.length < 42) {
+      cells.push({
+        day: nextMonthDay++,
+        isCurrentMonth: false,
+        isToday: false,
+        cumpleEvents: [],
+        feriadoEvents: [],
+        events: []
+      });
     }
 
     return cells;
@@ -879,12 +879,13 @@
 
   .cal-day-cell {
     background: #ffffff;
-    min-height: 100px;
-    padding: 6px 6px;
+    height: 110px;
+    max-height: 110px;
+    padding: 5px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     overflow: hidden;
   }
 
@@ -916,8 +917,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #2563eb;
     color: #ffffff !important;
@@ -928,7 +929,9 @@
     flex-direction: column;
     gap: 3px;
     overflow-y: auto;
-    max-height: 130px;
+    flex: 1;
+    min-height: 0;
+    scrollbar-width: thin;
   }
 
   .cal-event-item {
@@ -944,8 +947,8 @@
 
   .cal-cumples-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px;
     width: 100%;
   }
 
@@ -953,8 +956,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    padding: 2px 4px;
+    gap: 4px;
+    padding: 2px 3px;
     border-radius: 6px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -972,8 +975,8 @@
   }
 
   .cal-avatar-img {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     object-fit: cover;
     background: #cbd5e1;
@@ -982,7 +985,7 @@
   }
 
   .cal-age-single-green {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 800;
     color: #16a34a;
     line-height: 1;
