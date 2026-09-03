@@ -463,11 +463,13 @@
         }
         for (const emp of emps) {
           const age = emp.anio_nacimiento ? (calCurrentYear - emp.anio_nacimiento) : null;
+          const prevAge = age !== null ? (age - 1) : null;
           dayEvents.push({
             type: 'cumpleanos',
             id: emp.id,
             title: emp.nombre,
             age,
+            prevAge,
             foto: emp.foto,
             salaNombre: emp.sala_nombre,
             cargoNombre: emp.cargo_nombre
@@ -645,7 +647,11 @@
                   />
                   <span class="cal-emp-name">{evt.title}</span>
                   {#if evt.age !== null}
-                    <span class="cal-emp-age">( {evt.age} )</span>
+                    {#if evt.prevAge !== null}
+                      <span class="cal-emp-age">( {evt.prevAge} -> {evt.age} )</span>
+                    {:else}
+                      <span class="cal-emp-age">( {evt.age} )</span>
+                    {/if}
                   {/if}
                 </div>
               {:else if evt.type === 'feriado_nacional'}
