@@ -410,15 +410,35 @@
   $: calMonthName = MESES[calCurrentMonth]?.nombre || '';
   $: calMonthTitle = `${calMonthName} ${calCurrentYear}`;
 
-  // Nombre de sala para la cabecera (si es una sola sala o está filtrada una sola)
+  // Nombre de sala para la cabecera (si es una sola sala seleccionada o asignada)
   $: singleSalaName = (function() {
+    // 1. Si hay 1 sala seleccionada en calSelectedSalas
     if (calSelectedSalas && calSelectedSalas.length === 1) {
-      const sId = calSelectedSalas[0];
-      const found = (filterOptions.salas || []).find(s => String(s.value) === String(sId));
-      return found ? found.label.toUpperCase() : '';
+      const sId = String(calSelectedSalas[0]);
+      // En filterOptions.salas
+      const f1 = (filterOptions.salas || []).find(s => String(s.id ?? s.value) === sId);
+      if (f1) return (f1.nombre || f1.label || '').toUpperCase();
+      // En masterSalasStore
+      const f2 = ($masterSalasStore || []).find(s => String(s.id) === sId);
+      if (f2) return (f2.nombre || '').toUpperCase();
+      // En rawCumpleanos
+      const f3 = rawCumpleanos.find(c => String(c.sala_id) === sId);
+      if (f3 && f3.sala_nombre) return f3.sala_nombre.toUpperCase();
+      // En rawServerItems
+      const f4 = rawServerItems.find(rf => String(rf.sala_id) === sId);
+      if (f4 && f4.sala_nombre) return f4.sala_nombre.toUpperCase();
     }
-    if ((!calSelectedSalas || calSelectedSalas.length === 0) && filterOptions.salas && filterOptions.salas.length === 1) {
-      return filterOptions.salas[0].label.toUpperCase();
+    // 2. Si no seleccionó nada pero solo tiene 1 sala asignada o disponible
+    if (!calSelectedSalas || calSelectedSalas.length === 0) {
+      if (assignedSalaIds && assignedSalaIds.length === 1) {
+        const sId = String(assignedSalaIds[0]);
+        const f1 = ($masterSalasStore || []).find(s => String(s.id) === sId) ||
+                   (filterOptions.salas || []).find(s => String(s.id ?? s.value) === sId);
+        if (f1) return (f1.nombre || f1.label || '').toUpperCase();
+      }
+      if ($masterSalasStore && $masterSalasStore.length === 1) {
+        return ($masterSalasStore[0].nombre || '').toUpperCase();
+      }
     }
     return '';
   })();
@@ -445,6 +465,15 @@
       });
     }
     return groups;
+  })();
+
+  // Total de cumpleañeros del mes filtrados
+  $: totalCumpleanosMonth = (function() {
+    let count = 0;
+    for (const list of Object.values(printCumpleanosGrouped)) {
+      count += list.length;
+    }
+    return count;
   })();
 
   // Resumen para impresión: Feriados del mes
@@ -797,7 +826,7 @@
     <div class="cal-print-bottom-summary">
       <!-- 1. Bloque Cumpleañeros del Mes -->
       <div class="cal-print-section-block cal-print-cumples-block">
-        <h4 class="cal-print-col-title">CUMPLEAÑEROS DEL MES</h4>
+        <h4 class="cal-print-col-title">CUMPLEAÑEROS DEL MES ({totalCumpleanosMonth} del mes)</h4>
         {#if Object.keys(printCumpleanosGrouped).length > 0}
           <div class="cal-print-groups-list">
             {#each Object.entries(printCumpleanosGrouped) as [depName, empList]}
@@ -1371,7 +1400,7 @@
   @media print {
     @page {
       size: portrait;
-      margin: 4mm;
+      margin: 8mm;
     }
 
     :global(body *) {
@@ -1384,15 +1413,14 @@
     }
 
     .monthly-calendar-card {
-      position: absolute !important;
-      left: 0 !important;
-      top: 0 !important;
+      position: relative !important;
       width: 100% !important;
-      margin: 0 !important;
+      margin: 0 auto !important;
       padding: 0 !important;
       border: 1.5px solid #0f172a !important;
       box-shadow: none !important;
       border-radius: 0 !important;
+      box-sizing: border-box !important;
     }
 
     .print-hidden,
@@ -1519,7 +1547,8 @@
       display: block !important;
       columns: 2 !important;
       column-gap: 22px !important;
-      padding: 10px 8px !important;
+      margin-top: 16px !important;
+      padding: 12px 8px !important;
       border-top: 2px solid #0f172a !important;
       background: #ffffff !important;
     }
