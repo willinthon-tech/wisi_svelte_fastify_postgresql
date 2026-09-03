@@ -4084,6 +4084,7 @@ export async function getCumpleanosModel(params = {}) {
         e.nombre, 
         e.cedula,
         e.fecha_nacimiento, 
+        e.fecha_ingreso,
         e.foto,
         EXTRACT(DAY FROM e.fecha_nacimiento)::int AS dia,
         EXTRACT(MONTH FROM e.fecha_nacimiento)::int AS mes,

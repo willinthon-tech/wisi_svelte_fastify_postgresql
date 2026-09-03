@@ -11,6 +11,7 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../controllers/auth.store.js";
   import { latestAttlogEventStore } from "../controllers/websocket.store.js";
   import { openPhotoModal, updatePhotoModalItems } from "../controllers/globalModal.store.js";
+  import { currentRouteStore } from "../controllers/router.store.js";
 
   export let items = [];
 
@@ -44,12 +45,47 @@
   let isFlashingRecord = false;
   let flashRecordTimer = null;
 
-  // State for today's birthdays (Card 2)
-  let todayBirthdays = [];
+  // State for Month Birthdays Hub (Card 2)
+  let monthBirthdays = [];
   let isFetchingBirthdays = false;
-  let activeBirthdayIdx = 0;
+  let activeTabBirthday = "hoy"; // 'hoy' | 'proximos' | 'destacados'
+  let activeCelebrantIdx = 0;
+  let activeDestacadoType = "mayor"; // 'mayor' | 'joven' | 'antiguo'
   let pollTimer = null;
   let carouselRef = null;
+
+  const monthNames = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+
+  const nowDt = new Date();
+  const currentDay = nowDt.getDate();
+  const currentMonthNum = nowDt.getMonth() + 1;
+  const currentYearNum = nowDt.getFullYear();
+  const currentMonthName = monthNames[nowDt.getMonth()];
+
+  $: todayBirthdays = (monthBirthdays || []).filter((c) => Number(c.dia) === currentDay);
+  $: upcomingBirthdays = (monthBirthdays || []).filter((c) => Number(c.dia) > currentDay);
+  $: pastBirthdays = (monthBirthdays || []).filter((c) => Number(c.dia) < currentDay);
+
+  // El más viejo (mayor edad)
+  $: oldestCelebrant = (monthBirthdays || [])
+    .filter((c) => c.age !== null && c.age !== undefined)
+    .reduce((max, c) => (!max || c.age > max.age ? c : max), null);
+
+  // El más joven (menor edad)
+  $: youngestCelebrant = (monthBirthdays || [])
+    .filter((c) => c.age !== null && c.age !== undefined)
+    .reduce((min, c) => (!min || c.age < min.age ? c : min), null);
+
+  // El más antiguo en la empresa
+  $: mostSeniorCelebrant = (monthBirthdays || [])
+    .filter((c) => c.fecha_ingreso)
+    .reduce((oldest, c) => {
+      if (!oldest) return c;
+      return new Date(c.fecha_ingreso) < new Date(oldest.fecha_ingreso) ? c : oldest;
+    }, null);
 
   $: statusInfo = getRecordStatus(latestRecord);
 
@@ -132,50 +168,83 @@
     return { label: "PUERTA / OTROS", color: "#c2410c", bg: "#fff7ed", border: "#fdba74", dot: "#f97316", headerBg: "linear-gradient(90deg, #ffedd5, #fff7ed)", headerColor: "#c2410c", headerBorder: "#fdba74", headerTag: "🟠 ÚLTIMO REGISTRO" };
   }
 
+  function formatAntiguedad(val) {
+    if (!val) return "Sin fecha";
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val).split("T")[0];
+      const now = new Date();
+      let years = now.getFullYear() - d.getFullYear();
+      let months = now.getMonth() - d.getMonth();
+      if (months < 0 || (months === 0 && now.getDate() < d.getDate())) {
+        years--;
+        months += 12;
+      }
+      if (years < 0) return "Nuevo ingreso";
+      if (years === 0) {
+        let diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+        if (diffDays < 30) return `${diffDays} días`;
+        return `${months || 1} ${months === 1 ? "mes" : "meses"}`;
+      }
+      return `${years} ${years === 1 ? "año" : "años"}`;
+    } catch (e) {
+      return "";
+    }
+  }
+
   async function fetchTodayBirthdays() {
     try {
       isFetchingBirthdays = true;
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentDay = now.getDate();
-      const currentYear = now.getFullYear();
-
-      const q = new URLSearchParams({ mes: String(currentMonth) });
+      const q = new URLSearchParams({ mes: String(currentMonthNum) });
       if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
 
       const res = await fetch(`/api/master/cumpleanos?${q.toString()}`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
-          let list = json.data.filter(c => Number(c.dia) === currentDay);
+          let list = json.data;
           if (assignedSalaIds.length > 0) {
             const allowed = new Set(assignedSalaIds.map(Number));
-            list = list.filter(c => allowed.has(Number(c.sala_id)));
+            list = list.filter((c) => allowed.has(Number(c.sala_id)));
           }
-          todayBirthdays = list.map(c => ({
+          monthBirthdays = list.map((c) => ({
             ...c,
-            age: c.anio_nacimiento ? (currentYear - Number(c.anio_nacimiento)) : null
+            age: c.anio_nacimiento ? (currentYearNum - Number(c.anio_nacimiento)) : null
           }));
-          if (activeBirthdayIdx >= todayBirthdays.length) activeBirthdayIdx = 0;
+
+          // Pestaña inteligente: si hoy cumple alguien se abre 'hoy', si no 'proximos'
+          const hasToday = monthBirthdays.some((c) => Number(c.dia) === currentDay);
+          if (hasToday) {
+            activeTabBirthday = "hoy";
+          } else if (monthBirthdays.some((c) => Number(c.dia) > currentDay)) {
+            activeTabBirthday = "proximos";
+          } else {
+            activeTabBirthday = "destacados";
+          }
+          activeCelebrantIdx = 0;
         }
       }
     } catch (e) {
-      console.warn("Error cargando cumpleañeros de hoy:", e);
+      console.warn("Error cargando cumpleañeros:", e);
     } finally {
       isFetchingBirthdays = false;
     }
   }
 
-  function nextBirthday() {
-    if (todayBirthdays.length > 1) {
-      activeBirthdayIdx = (activeBirthdayIdx + 1) % todayBirthdays.length;
+  function nextCelebrant(listLength) {
+    if (listLength > 1) {
+      activeCelebrantIdx = (activeCelebrantIdx + 1) % listLength;
     }
   }
 
-  function prevBirthday() {
-    if (todayBirthdays.length > 1) {
-      activeBirthdayIdx = (activeBirthdayIdx - 1 + todayBirthdays.length) % todayBirthdays.length;
+  function prevCelebrant(listLength) {
+    if (listLength > 1) {
+      activeCelebrantIdx = (activeCelebrantIdx - 1 + listLength) % listLength;
     }
+  }
+
+  function goToCalendar() {
+    currentRouteStore.set("rrhh/calendario");
   }
 
   // Fetch the real absolute latest record directly from DB (without filtering by status)
@@ -731,127 +800,344 @@
     </div>
 
     <!-- ════════════════════════════════════════════════════════
-         Card 2: CUMPLEAÑEROS DE HOY — Today's celebrants
+         Card 2: CUMPLEAÑEROS — Hub dinámico del mes en curso
          ════════════════════════════════════════════════════════ -->
     <div
       class="flow-card"
       style="display:flex;flex-direction:column;transition:all 0.3s ease;position:relative;background:#ffffff;padding:0;overflow:hidden;"
     >
       <!-- Festive celebration header -->
-      <div style="padding:8px 16px;background:linear-gradient(90deg,#fdf4ff,#fae8ff);border-bottom:1px solid #f0abfc;display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#a21caf;">
-          🎂 CUMPLEAÑEROS DE HOY
+      <div style="padding:7px 14px;background:linear-gradient(90deg,#fdf4ff,#fae8ff);border-bottom:1px solid #f0abfc;display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+        <span style="font-size:11px;font-weight:900;letter-spacing:0.8px;text-transform:uppercase;color:#a21caf;display:inline-flex;align-items:center;gap:5px;">
+          🎂 CUMPLEAÑOS DE {currentMonthName.toUpperCase()}
         </span>
-        {#if todayBirthdays.length > 0}
-          <span style="font-size:10px;font-weight:800;background:#a21caf;color:#fff;padding:1px 7px;border-radius:10px;box-shadow:0 1px 3px rgba(162,28,175,0.3);">
-            {todayBirthdays.length} {todayBirthdays.length === 1 ? 'cumpleañero' : 'cumpleañeros'}
-          </span>
-        {/if}
+        <span style="font-size:10px;font-weight:900;background:#a21caf;color:#fff;padding:2px 8px;border-radius:10px;box-shadow:0 1px 3px rgba(162,28,175,0.3);">
+          {monthBirthdays.length} {monthBirthdays.length === 1 ? 'cumpleañero' : 'cumpleañeros'}
+        </span>
       </div>
 
-      <div style="padding:14px 16px;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
+      <!-- Navigation Tabs: [🎉 Hoy] [⏳ Próximos] [⭐ Destacados] -->
+      <div style="display:flex;align-items:center;gap:4px;padding:6px 12px;background:#faf5ff;border-bottom:1px solid #f3e8ff;">
+        <button
+          type="button"
+          on:click={() => { activeTabBirthday = 'hoy'; activeCelebrantIdx = 0; }}
+          style="flex:1;padding:4px 6px;font-size:10px;font-weight:800;border-radius:6px;cursor:pointer;transition:all 0.15s ease;display:flex;align-items:center;justify-content:center;gap:3px;
+          {activeTabBirthday === 'hoy'
+            ? 'background:#a21caf;color:#ffffff;border:1px solid #86198f;box-shadow:0 1px 3px rgba(162,28,175,0.3);'
+            : 'background:#ffffff;color:#6b21a8;border:1px solid #e9d5ff;'}"
+        >
+          <span>🎉 Hoy</span>
+          {#if todayBirthdays.length > 0}
+            <span style="font-size:9px;background:{activeTabBirthday === 'hoy' ? '#fdf4ff' : '#a21caf'};color:{activeTabBirthday === 'hoy' ? '#a21caf' : '#fff'};padding:0 4px;border-radius:8px;">
+              {todayBirthdays.length}
+            </span>
+          {/if}
+        </button>
+
+        <button
+          type="button"
+          on:click={() => { activeTabBirthday = 'proximos'; activeCelebrantIdx = 0; }}
+          style="flex:1;padding:4px 6px;font-size:10px;font-weight:800;border-radius:6px;cursor:pointer;transition:all 0.15s ease;display:flex;align-items:center;justify-content:center;gap:3px;
+          {activeTabBirthday === 'proximos'
+            ? 'background:#a21caf;color:#ffffff;border:1px solid #86198f;box-shadow:0 1px 3px rgba(162,28,175,0.3);'
+            : 'background:#ffffff;color:#6b21a8;border:1px solid #e9d5ff;'}"
+        >
+          <span>⏳ Próximos</span>
+          {#if upcomingBirthdays.length > 0}
+            <span style="font-size:9px;background:{activeTabBirthday === 'proximos' ? '#fdf4ff' : '#a21caf'};color:{activeTabBirthday === 'proximos' ? '#a21caf' : '#fff'};padding:0 4px;border-radius:8px;">
+              {upcomingBirthdays.length}
+            </span>
+          {/if}
+        </button>
+
+        <button
+          type="button"
+          on:click={() => { activeTabBirthday = 'destacados'; }}
+          style="flex:1;padding:4px 6px;font-size:10px;font-weight:800;border-radius:6px;cursor:pointer;transition:all 0.15s ease;display:flex;align-items:center;justify-content:center;gap:3px;
+          {activeTabBirthday === 'destacados'
+            ? 'background:#a21caf;color:#ffffff;border:1px solid #86198f;box-shadow:0 1px 3px rgba(162,28,175,0.3);'
+            : 'background:#ffffff;color:#6b21a8;border:1px solid #e9d5ff;'}"
+        >
+          <span>⭐ Destacados</span>
+        </button>
+      </div>
+
+      <!-- Card Body -->
+      <div style="padding:12px 14px;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
         {#if isFetchingBirthdays}
-          <div style="padding:32px 0;text-align:center;color:#a21caf;font-size:13px;font-weight:600;">
-            ⏳ Cargando cumpleañeros...
-          </div>
-        {:else if todayBirthdays.length > 0}
-          {@const currentCelebrant = todayBirthdays[activeBirthdayIdx] || todayBirthdays[0]}
-          <!-- Sub-header con controles si hay varios -->
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">
-              🎉 ¡HOY DE FIESTA!
-            </span>
-            {#if todayBirthdays.length > 1}
-              <div style="display:flex;align-items:center;gap:4px;">
-                <button
-                  type="button"
-                  on:click={prevBirthday}
-                  style="width:22px;height:22px;border-radius:4px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;color:#475569;"
-                  title="Anterior cumpleañero"
-                >◀</button>
-                <span style="font-size:11px;font-weight:800;color:#a21caf;font-family:monospace;padding:0 4px;">
-                  {activeBirthdayIdx + 1}/{todayBirthdays.length}
-                </span>
-                <button
-                  type="button"
-                  on:click={nextBirthday}
-                  style="width:22px;height:22px;border-radius:4px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;color:#475569;"
-                  title="Siguiente cumpleañero"
-                >▶</button>
-              </div>
-            {:else}
-              <span style="font-size:11.5px;font-weight:800;display:inline-flex;align-items:center;gap:4px;color:#a21caf;">
-                🎈 ¡Felicidades!
-              </span>
-            {/if}
+          <div style="padding:32px 0;text-align:center;color:#a21caf;font-size:12.5px;font-weight:700;">
+            ⏳ Cargando datos de cumpleaños...
           </div>
 
-          <!-- Photo + Name -->
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
-            <div style="position:relative;width:60px;height:60px;flex-shrink:0;">
-              <img
-                src={currentCelebrant.foto ? (currentCelebrant.foto.startsWith('/') ? currentCelebrant.foto : `/${currentCelebrant.foto}`) : `/empleados/${currentCelebrant.id}.jpg`}
-                alt="Foto cumpleañero"
-                style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #d946ef;box-shadow:0 4px 12px rgba(217,70,239,0.25);"
-                on:error={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
-                }}
-              />
-              <div style="display:none;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg, #d946ef, #a21caf);color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
-                {getInitials(toTitleCase(currentCelebrant.nombre), currentCelebrant.cedula)}
+        <!-- ══════════════════════════════════════════
+             TAB 1: 🎉 HOY
+             ══════════════════════════════════════════ -->
+        {:else if activeTabBirthday === 'hoy'}
+          {#if todayBirthdays.length > 0}
+            {@const currentCelebrant = todayBirthdays[activeCelebrantIdx] || todayBirthdays[0]}
+            <!-- Sub-header -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <span style="font-size:11px;font-weight:800;color:#a21caf;letter-spacing:0.5px;display:inline-flex;align-items:center;gap:4px;">
+                🎉 ¡CUMPLEAÑERO DE HOY!
+              </span>
+              {#if todayBirthdays.length > 1}
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <button type="button" on:click={() => prevCelebrant(todayBirthdays.length)} style="width:20px;height:20px;border-radius:4px;border:1px solid #e9d5ff;background:#ffffff;cursor:pointer;font-size:9px;color:#6b21a8;display:flex;align-items:center;justify-content:center;">◀</button>
+                  <span style="font-size:10.5px;font-weight:800;color:#a21caf;font-family:monospace;">{activeCelebrantIdx + 1}/{todayBirthdays.length}</span>
+                  <button type="button" on:click={() => nextCelebrant(todayBirthdays.length)} style="width:20px;height:20px;border-radius:4px;border:1px solid #e9d5ff;background:#ffffff;cursor:pointer;font-size:9px;color:#6b21a8;display:flex;align-items:center;justify-content:center;">▶</button>
+                </div>
+              {:else}
+                <span style="font-size:11px;font-weight:800;color:#16a34a;">🎈 ¡Día {currentDay}!</span>
+              {/if}
+            </div>
+
+            <!-- Photo + Name -->
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+              <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
+                <img
+                  src={currentCelebrant.foto ? (currentCelebrant.foto.startsWith('/') ? currentCelebrant.foto : `/${currentCelebrant.foto}`) : `/empleados/${currentCelebrant.id}.jpg`}
+                  alt="Foto cumpleañero"
+                  style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #d946ef;box-shadow:0 3px 10px rgba(217,70,239,0.25);"
+                  on:error={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                <div style="display:none;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg, #d946ef, #a21caf);color:#fff;font-weight:800;font-size:18px;align-items:center;justify-content:center;">
+                  {getInitials(toTitleCase(currentCelebrant.nombre), currentCelebrant.cedula)}
+                </div>
+                <span style="position:absolute;bottom:-2px;right:-2px;font-size:15px;line-height:1;" title="¡Feliz cumpleaños!">🎂</span>
               </div>
-              <span style="position:absolute;bottom:-2px;right:-2px;font-size:16px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2));" title="¡Feliz cumpleaños!">
+              <div style="flex:1;min-width:0;">
+                <span style="font-size:14.5px;font-weight:800;color:#0f172a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title={toTitleCase(currentCelebrant.nombre)}>
+                  {toTitleCase(currentCelebrant.nombre)}
+                </span>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                  <span style="font-size:11.5px;font-weight:700;color:#2563eb;font-family:monospace;">{currentCelebrant.cedula || ''}</span>
+                  {#if currentCelebrant.age}
+                    <span style="font-size:10px;font-weight:800;background:#fae8ff;color:#a21caf;padding:1px 6px;border-radius:4px;border:1px solid #f0abfc;">
+                      {currentCelebrant.age} años
+                    </span>
+                  {/if}
+                </div>
+              </div>
+            </div>
+
+            <!-- Metadata: Cargo y Sala -->
+            <div style="background:#fdf4ff;border:1px solid #fae8ff;border-radius:8px;padding:8px 10px;font-size:11.5px;">
+              <div style="display:flex;align-items:center;gap:5px;font-weight:800;color:#0f172a;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span>💼</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{currentCelebrant.cargo_nombre || 'Empleado'}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;color:#a21caf;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span>📍</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{currentCelebrant.sala_nombre || 'Sala'}</span>
+              </div>
+            </div>
+          {:else}
+            <!-- Sin cumpleañeros hoy -->
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 8px;text-align:center;">
+              <div style="width:40px;height:40px;border-radius:50%;background:#fdf4ff;border:1px solid #f0abfc;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:6px;">
                 🎂
+              </div>
+              <span style="font-size:12.5px;font-weight:800;color:#475569;margin-bottom:3px;">
+                No hay cumpleañeros el día de hoy
               </span>
-            </div>
-            <div style="flex:1;min-width:0;">
-              <span style="font-size:15px;font-weight:800;color:#0f172a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                title={toTitleCase(currentCelebrant.nombre)}>
-                {toTitleCase(currentCelebrant.nombre)}
-              </span>
-              <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
-                <span style="font-size:12px;font-weight:700;color:#2563eb;font-family:monospace;">
-                  {currentCelebrant.cedula || ''}
+              {#if upcomingBirthdays.length > 0}
+                <span style="font-size:11px;font-weight:600;color:#9333ea;margin-bottom:8px;">
+                  Próximo: <strong>{upcomingBirthdays[0].nombre}</strong> (Día {upcomingBirthdays[0].dia})
                 </span>
-                {#if currentCelebrant.age}
-                  <span style="font-size:10.5px;font-weight:800;background:#fae8ff;color:#a21caf;padding:1px 6px;border-radius:4px;border:1px solid #f0abfc;">
-                    {currentCelebrant.age} años
-                  </span>
-                {/if}
+                <button
+                  type="button"
+                  on:click={() => { activeTabBirthday = 'proximos'; activeCelebrantIdx = 0; }}
+                  style="font-size:10.5px;font-weight:800;color:#a21caf;background:#fdf4ff;border:1px solid #f0abfc;padding:4px 12px;border-radius:6px;cursor:pointer;"
+                >
+                  👉 Ver Próximos ({upcomingBirthdays.length})
+                </button>
+              {:else}
+                <span style="font-size:11px;color:#94a3b8;">No quedan más cumpleaños este mes.</span>
+              {/if}
+            </div>
+          {/if}
+
+        <!-- ══════════════════════════════════════════
+             TAB 2: ⏳ PRÓXIMOS
+             ══════════════════════════════════════════ -->
+        {:else if activeTabBirthday === 'proximos'}
+          {#if upcomingBirthdays.length > 0}
+            {@const upCelebrant = upcomingBirthdays[activeCelebrantIdx] || upcomingBirthdays[0]}
+            {@const diffDays = Number(upCelebrant.dia) - currentDay}
+            <!-- Sub-header -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <span style="font-size:10.5px;font-weight:900;color:#d97706;letter-spacing:0.5px;display:inline-flex;align-items:center;gap:4px;">
+                ⏳ {diffDays === 1 ? '¡MAÑANA!' : (diffDays === 2 ? 'EN 2 DÍAS' : `EN ${diffDays} DÍAS`)} • DÍA {upCelebrant.dia}
+              </span>
+              {#if upcomingBirthdays.length > 1}
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <button type="button" on:click={() => prevCelebrant(upcomingBirthdays.length)} style="width:20px;height:20px;border-radius:4px;border:1px solid #fed7aa;background:#ffffff;cursor:pointer;font-size:9px;color:#c2410c;display:flex;align-items:center;justify-content:center;">◀</button>
+                  <span style="font-size:10.5px;font-weight:800;color:#c2410c;font-family:monospace;">{activeCelebrantIdx + 1}/{upcomingBirthdays.length}</span>
+                  <button type="button" on:click={() => nextCelebrant(upcomingBirthdays.length)} style="width:20px;height:20px;border-radius:4px;border:1px solid #fed7aa;background:#ffffff;cursor:pointer;font-size:9px;color:#c2410c;display:flex;align-items:center;justify-content:center;">▶</button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Photo + Name -->
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+              <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
+                <img
+                  src={upCelebrant.foto ? (upCelebrant.foto.startsWith('/') ? upCelebrant.foto : `/${upCelebrant.foto}`) : `/empleados/${upCelebrant.id}.jpg`}
+                  alt="Foto cumpleañero"
+                  style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #f59e0b;box-shadow:0 3px 10px rgba(245,158,11,0.25);"
+                  on:error={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                <div style="display:none;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg, #f59e0b, #d97706);color:#fff;font-weight:800;font-size:18px;align-items:center;justify-content:center;">
+                  {getInitials(toTitleCase(upCelebrant.nombre), upCelebrant.cedula)}
+                </div>
+                <span style="position:absolute;bottom:-2px;right:-2px;font-size:15px;line-height:1;">🎈</span>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <span style="font-size:14.5px;font-weight:800;color:#0f172a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title={toTitleCase(upCelebrant.nombre)}>
+                  {toTitleCase(upCelebrant.nombre)}
+                </span>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                  <span style="font-size:11.5px;font-weight:700;color:#2563eb;font-family:monospace;">{upCelebrant.cedula || ''}</span>
+                  {#if upCelebrant.age}
+                    <span style="font-size:10px;font-weight:800;background:#fef3c7;color:#b45309;padding:1px 6px;border-radius:4px;border:1px solid #fde68a;">
+                      Cumplirá {upCelebrant.age} años
+                    </span>
+                  {/if}
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Metadata: Cargo y Sala -->
-          <div style="background:#fdf4ff;border:1px solid #fae8ff;border-radius:10px;padding:10px 12px;font-size:12px;">
-            <div style="display:flex;align-items:center;gap:6px;font-weight:800;color:#0f172a;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              <span>💼</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title={currentCelebrant.cargo_nombre || 'Empleado'}>{currentCelebrant.cargo_nombre || 'Empleado'}</span>
+            <!-- Metadata: Cargo y Sala -->
+            <div style="background:#fffbeb;border:1px solid #fef3c7;border-radius:8px;padding:8px 10px;font-size:11.5px;">
+              <div style="display:flex;align-items:center;gap:5px;font-weight:800;color:#0f172a;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span>💼</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{upCelebrant.cargo_nombre || 'Empleado'}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;color:#b45309;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span>📍</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{upCelebrant.sala_nombre || 'Sala'}</span>
+              </div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;color:#a21caf;font-weight:700;min-width:0;overflow:hidden;">
-              <span style="flex-shrink:0;">📍</span>
-              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title={currentCelebrant.sala_nombre || 'Sala'}>
-                {currentCelebrant.sala_nombre || 'Sala'}
+          {:else}
+            <!-- No hay más próximos en el mes -->
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px 8px;text-align:center;">
+              <div style="font-size:22px;margin-bottom:4px;">✨</div>
+              <span style="font-size:12.5px;font-weight:800;color:#475569;margin-bottom:3px;">
+                No quedan más cumpleaños este mes
+              </span>
+              <span style="font-size:11px;color:#94a3b8;">
+                ¡Todos los de {currentMonthName} ya se celebraron!
               </span>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;color:#c026d3;font-weight:700;margin-top:6px;border-top:1px dashed #f5d0fe;padding-top:5px;">
-              <span>🎁</span><span>{currentCelebrant.age ? `¡Celebrando sus ${currentCelebrant.age} años!` : '¡Celebrando su cumpleaños hoy!'}</span>
-            </div>
+          {/if}
+
+        <!-- ══════════════════════════════════════════
+             TAB 3: ⭐ DESTACADOS (Más Viejo, Más Joven, Más Antiguo)
+             ══════════════════════════════════════════ -->
+        {:else if activeTabBirthday === 'destacados'}
+          <!-- Sub-selector 3 buttons -->
+          <div style="display:flex;gap:4px;margin-bottom:8px;">
+            <button
+              type="button"
+              on:click={() => activeDestacadoType = 'mayor'}
+              style="flex:1;padding:3px 4px;font-size:9.5px;font-weight:800;border-radius:5px;cursor:pointer;
+              {activeDestacadoType === 'mayor'
+                ? 'background:#4338ca;color:#ffffff;border:1px solid #3730a3;'
+                : 'background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;'}"
+            >
+              👴 Más Grande
+            </button>
+            <button
+              type="button"
+              on:click={() => activeDestacadoType = 'joven'}
+              style="flex:1;padding:3px 4px;font-size:9.5px;font-weight:800;border-radius:5px;cursor:pointer;
+              {activeDestacadoType === 'joven'
+                ? 'background:#059669;color:#ffffff;border:1px solid #047857;'
+                : 'background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;'}"
+            >
+              👶 Más Joven
+            </button>
+            <button
+              type="button"
+              on:click={() => activeDestacadoType = 'antiguo'}
+              style="flex:1;padding:3px 4px;font-size:9.5px;font-weight:800;border-radius:5px;cursor:pointer;
+              {activeDestacadoType === 'antiguo'
+                ? 'background:#d97706;color:#ffffff;border:1px solid #b45309;'
+                : 'background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;'}"
+            >
+              🏆 Más Antiguo
+            </button>
           </div>
-        {:else}
-          <!-- Sin cumpleañeros hoy -->
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px 10px;text-align:center;">
-            <div style="width:46px;height:46px;border-radius:50%;background:#fdf4ff;border:1px solid #f0abfc;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:8px;">
-              🎂
+
+          {@const destCelebrant = activeDestacadoType === 'mayor' ? oldestCelebrant : (activeDestacadoType === 'joven' ? youngestCelebrant : mostSeniorCelebrant)}
+
+          {#if destCelebrant}
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+              <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
+                <img
+                  src={destCelebrant.foto ? (destCelebrant.foto.startsWith('/') ? destCelebrant.foto : `/${destCelebrant.foto}`) : `/empleados/${destCelebrant.id}.jpg`}
+                  alt="Foto cumpleañero"
+                  style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid {activeDestacadoType === 'mayor' ? '#6366f1' : (activeDestacadoType === 'joven' ? '#10b981' : '#f59e0b')};box-shadow:0 3px 10px rgba(0,0,0,0.12);"
+                  on:error={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                <div style="display:none;width:56px;height:56px;border-radius:50%;background:#475569;color:#fff;font-weight:800;font-size:18px;align-items:center;justify-content:center;">
+                  {getInitials(toTitleCase(destCelebrant.nombre), destCelebrant.cedula)}
+                </div>
+                <span style="position:absolute;bottom:-2px;right:-2px;font-size:15px;line-height:1;">
+                  {activeDestacadoType === 'mayor' ? '👴' : (activeDestacadoType === 'joven' ? '👶' : '🏆')}
+                </span>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <span style="font-size:14px;font-weight:800;color:#0f172a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title={toTitleCase(destCelebrant.nombre)}>
+                  {toTitleCase(destCelebrant.nombre)}
+                </span>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                  <span style="font-size:11.5px;font-weight:700;color:#2563eb;font-family:monospace;">{destCelebrant.cedula || ''}</span>
+                  <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;
+                    {activeDestacadoType === 'mayor' ? 'background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;' : (activeDestacadoType === 'joven' ? 'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;' : 'background:#fffbeb;color:#b45309;border:1px solid #fde68a;')}"
+                  >
+                    {activeDestacadoType === 'antiguo' ? formatAntiguedad(destCelebrant.fecha_ingreso) : `${destCelebrant.age} años`}
+                  </span>
+                </div>
+              </div>
             </div>
-            <span style="font-size:13px;font-weight:800;color:#475569;margin-bottom:4px;">
-              No hay cumpleañeros el día de hoy
-            </span>
-            <span style="font-size:11px;font-weight:600;color:#94a3b8;max-width:220px;">
-              ¡Revisa el Calendario RRHH para consultar las fechas del mes!
-            </span>
-          </div>
+
+            <!-- Metadata -->
+            <div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:8px;padding:8px 10px;font-size:11.5px;">
+              <div style="display:flex;align-items:center;gap:5px;font-weight:800;color:#0f172a;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span>💼</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{destCelebrant.cargo_nombre || 'Empleado'}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;color:#475569;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span>📍</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{destCelebrant.sala_nombre || 'Sala'}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:5px;color:#a21caf;font-weight:800;margin-top:4px;border-top:1px dashed #e2e8f0;padding-top:4px;">
+                <span>📅</span><span>Cumpleaños: <strong>Día {destCelebrant.dia} de {currentMonthName}</strong></span>
+              </div>
+            </div>
+          {:else}
+            <div style="padding:20px 0;text-align:center;color:#94a3b8;font-size:12px;">Sin datos disponibles para esta categoría</div>
+          {/if}
         {/if}
+
+        <!-- Bottom Link to Full Calendar -->
+        <div style="margin-top:8px;border-top:1px solid #f3e8ff;padding-top:6px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:10px;color:#6b21a8;font-weight:700;">
+            {monthBirthdays.length} celebrando este mes
+          </span>
+          <button
+            type="button"
+            on:click={goToCalendar}
+            style="background:transparent;border:none;padding:0;font-size:10.5px;font-weight:800;color:#a21caf;cursor:pointer;display:inline-flex;align-items:center;gap:3px;text-decoration:underline;"
+            title="Ir al calendario interactivo de RRHH"
+          >
+            Ver calendario completo ➔
+          </button>
+        </div>
       </div>
     </div>
 
