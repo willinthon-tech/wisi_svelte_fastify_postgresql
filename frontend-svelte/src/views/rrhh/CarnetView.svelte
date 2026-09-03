@@ -1,5 +1,6 @@
 <script>
   import { onMount } from "svelte";
+  import html2canvas from "html2canvas";
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../../controllers/auth.store.js";
   import { userSalasStore as masterUserSalasStore, masterSalasStore } from "../../controllers/master.store.js";
@@ -232,6 +233,73 @@
     window.print();
   }
 
+  // Estados y elementos para descarga en Ultra Alta Resolución
+  let frontCardEl;
+  let backCardEl;
+  let isDownloading = false;
+  let downloadProgress = "";
+
+  function getSanitizedName(emp) {
+    if (!emp) return "Empleado";
+    const name = (emp.nombre || "").trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "");
+    const cedula = (emp.cedula || "").trim().replace(/[^a-zA-Z0-9]/g, "");
+    return `${name}_${cedula}`;
+  }
+
+  async function downloadCard(element, filename) {
+    if (!element || isDownloading) return;
+    isDownloading = true;
+    downloadProgress = "Generando...";
+    try {
+      // 4x scale = 1180px x 1872px (Ultra Alta Resolución 300+ DPI para impresión en PVC/fotos)
+      const canvas = await html2canvas(element, {
+        scale: 4,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        imageTimeout: 15000,
+        onclone: (clonedDoc, clonedEl) => {
+          clonedEl.style.boxShadow = "none";
+          clonedEl.style.transform = "none";
+          clonedEl.style.animation = "none";
+          clonedEl.style.transition = "none";
+        }
+      });
+
+      const dataUrl = canvas.toDataURL("image/png", 1.0);
+      const link = document.createElement("a");
+      link.download = filename;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error al generar carnet en alta resolución:", err);
+      alert("No se pudo generar la imagen del carnet. Por favor reintente.");
+    } finally {
+      isDownloading = false;
+      downloadProgress = "";
+    }
+  }
+
+  async function downloadBothSides() {
+    if (!currentEmp || isDownloading) return;
+    isDownloading = true;
+    downloadProgress = "Frente HD...";
+    const baseName = getSanitizedName(currentEmp);
+
+    try {
+      await downloadCard(frontCardEl, `Carnet_Frontal_${baseName}.png`);
+      downloadProgress = "Reverso HD...";
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await downloadCard(backCardEl, `Carnet_Reverso_${baseName}.png`);
+    } finally {
+      isDownloading = false;
+      downloadProgress = "";
+    }
+  }
+
   // Generar barras dinámicas de código de barras basadas estrictamente en la cédula del empleado (extremo a extremo)
   function generateCedulaBarcode(cedula) {
     const raw = String(cedula || "").trim().toUpperCase();
@@ -287,35 +355,16 @@
     </div>
 
     <div class="top-actions">
-      <!-- Selector de Modo de Vista -->
-      <div class="mode-switch">
-        <button
-          type="button"
-          class="mode-btn {viewMode === 'individual' ? 'active' : ''}"
-          on:click={() => (viewMode = 'individual')}
-          title="Ver frente y reverso detallados del empleado actual"
-        >
-          👁️ Vista Detallada
-        </button>
-        <button
-          type="button"
-          class="mode-btn {viewMode === 'lote' ? 'active' : ''}"
-          on:click={() => (viewMode = 'lote')}
-          title="Ver todos los carnets en cuadrícula para impresión múltiple"
-        >
-          📑 Todos ({empleados.length})
-        </button>
-      </div>
-
-      <!-- Botón de Impresión -->
+      <!-- Botón Principal: Descargar Carnet en Alta Resolución -->
       <button
         type="button"
-        class="print-action-btn"
-        on:click={handlePrint}
-        disabled={empleados.length === 0}
+        class="download-action-btn"
+        on:click={downloadBothSides}
+        disabled={!currentEmp || isDownloading}
+        title="Descargar ambos lados (Frente y Reverso) en Ultra Alta Resolución"
       >
-        <span class="btn-icon">🖨️</span>
-        <span>Imprimir Carnet{viewMode === 'lote' ? 's' : ''}</span>
+        <span class="btn-icon">📥</span>
+        <span>{isDownloading ? (downloadProgress || "Generando...") : "Descargar Carnet (HD)"}</span>
       </button>
     </div>
   </div>
@@ -436,8 +485,8 @@
       <h3>No se encontraron empleados</h3>
       <p>Ajusta el filtro de salas o el término de búsqueda para generar los carnets.</p>
     </div>
-  {:else if viewMode === 'individual' && currentEmp && currentSala}
-    <!-- Vista Individual: Frente y Reverso Lado a Lado -->
+  {:else if currentEmp && currentSala}
+    <!-- Vista de Carnet: Frente y Reverso Lado a Lado -->
     <div class="carnet-workspace">
       <!-- Tarjeta Frente -->
       <div class="card-stage">
@@ -447,6 +496,7 @@
         </div>
 
         <div
+          bind:this={frontCardEl}
           class="carnet-card carnet-front modelo-{selectedModelo}"
           style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
         >
@@ -521,6 +571,20 @@
             </div>
           </div>
         </div>
+
+        <!-- Botón Debajo del Carnet Frontal -->
+        <div class="stage-bottom-actions no-print">
+          <button
+            type="button"
+            class="btn-card-download"
+            on:click={() => downloadCard(frontCardEl, `Carnet_Frontal_${getSanitizedName(currentEmp)}.png`)}
+            disabled={isDownloading}
+            title="Descargar Frente en Alta Resolución"
+          >
+            <span class="btn-icon">📥</span>
+            <span>Descargar Frente (HD)</span>
+          </button>
+        </div>
       </div>
 
       <!-- Tarjeta Detrás / Reverso (Diseño balanceado sin espacios vacíos feos) -->
@@ -531,6 +595,7 @@
         </div>
 
         <div
+          bind:this={backCardEl}
           class="carnet-card carnet-back modelo-{selectedModelo}"
           style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
         >
@@ -583,129 +648,21 @@
             </div>
           </div>
         </div>
-      </div>
-    </div>
 
-  {:else}
-    <!-- Vista Lote / Imprimir Todos -->
-    <div class="batch-grid">
-      {#each empleados as emp}
-        {@const sala = getSalaInfo(emp)}
-        <div class="batch-pair">
-          <!-- Cara Frontal -->
-          <div
-            class="carnet-card carnet-front modelo-{selectedModelo}"
-            style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
+        <!-- Botón Debajo de la Parte Detrás del Carnet -->
+        <div class="stage-bottom-actions no-print">
+          <button
+            type="button"
+            class="btn-card-download secondary"
+            on:click={() => downloadCard(backCardEl, `Carnet_Reverso_${getSanitizedName(currentEmp)}.png`)}
+            disabled={isDownloading}
+            title="Descargar Reverso en Alta Resolución"
           >
-            <div class="card-header-top">
-              <div class="sala-logo-box">
-                {#if sala.has_logo && sala.logo_url}
-                  <img
-                    src={sala.logo_url}
-                    alt="Logo {sala.nombre}"
-                    class="sala-logo-img"
-                    on:error={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                {/if}
-              </div>
-            </div>
-
-            <div class="photo-wrapper">
-              <div class="photo-frame">
-                <img
-                  src={emp.foto}
-                  alt={emp.nombre}
-                  class="employee-photo"
-                  on:error={(e) => (e.target.src = "/apple-touch-icon.png")}
-                />
-              </div>
-            </div>
-
-            <div class="emp-name-wrap">
-              <h2 class="emp-name">{emp.nombre}</h2>
-            </div>
-
-            <div class="cargo-banner-wrap">
-              <div class="cargo-banner">{emp.cargo_nombre || "PERSONAL"}</div>
-            </div>
-
-            <div class="emp-details-grid">
-              <div class="detail-row">
-                <span class="detail-label">Cedula :</span>
-                <span class="detail-value">{formatCedula(emp.cedula)}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Departamento :</span>
-                <span class="detail-value">{emp.departamento_nombre || "General"}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Área :</span>
-                <span class="detail-value">{emp.area_nombre || emp.departamento_nombre || "CECOM"}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Ingreso :</span>
-                <span class="detail-value">{formatDate(emp.fecha_ingreso)}</span>
-              </div>
-            </div>
-
-            <!-- Código de Barras Dinámico generado con la Cédula -->
-            <div class="card-footer-decoration">
-              <div class="equalizer-bars" title="Código de barras: {formatCedula(emp.cedula)}">
-                {#each generateCedulaBarcode(emp.cedula) as bar}
-                  <span class="eq-bar" style="height: {bar.h}px; width: {bar.w}px;"></span>
-                {/each}
-              </div>
-            </div>
-          </div>
-
-          <!-- Cara Trasera -->
-          <div
-            class="carnet-card carnet-back modelo-{selectedModelo}"
-            style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
-          >
-            <div class="back-card-inner-frame">
-              <p class="legal-intro">
-                El portador del presente Carnet presta sus servicios Profesionales a:
-              </p>
-
-              <div class="company-block">
-                <div class="company-name-highlight">
-                  <u>{sala.nombre_comercial || sala.nombre}</u>
-                </div>
-                <div class="company-rif">
-                  R.I.F.: {sala.rif}
-                </div>
-              </div>
-
-              <!-- Divisor sutil institucional sin estrellas -->
-              <div class="ornament-divider">
-                <span class="divider-line"></span>
-              </div>
-
-              <!-- Bloque Central: Aviso Legal, Teléfono y Dirección (Centrado vertical en el height disponible) -->
-              <div class="back-middle-group">
-                <p class="legal-notice">
-                  Se le agradece a las autoridades Civiles, Militares y otros Organismos Públicos,
-                  brindarle todo su apoyo y colaboración. En caso de emergencia o pérdida,
-                  favor avisar al teléfono:
-                </p>
-
-                <div class="company-phone">{sala.telefono}</div>
-
-                <div class="company-address">{sala.ubicacion}</div>
-              </div>
-
-              <!-- Sección 6: Bloque de Correo Institucional (2 Líneas exactas) -->
-              <div class="back-footer-pill">
-                <span class="footer-email-label">CORREO:</span>
-                <span class="footer-email-val">{sala.correo}</span>
-              </div>
-            </div>
-          </div>
+            <span class="btn-icon">📥</span>
+            <span>Descargar Reverso (HD)</span>
+          </button>
         </div>
-      {/each}
+      </div>
     </div>
   {/if}
 </div>
@@ -772,55 +729,30 @@
     gap: 12px;
   }
 
-  .mode-switch {
-    display: flex;
-    background: rgba(0, 0, 0, 0.3);
-    padding: 3px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .mode-btn {
-    background: transparent;
-    border: none;
-    color: #94a3b8;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .mode-btn.active {
-    background: #3b82f6;
-    color: #ffffff;
-    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
-  }
-
-  .print-action-btn {
+  .download-action-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
     color: #ffffff;
     border: none;
-    padding: 8px 18px;
-    font-size: 13px;
-    font-weight: 700;
+    padding: 9px 20px;
+    font-size: 13.5px;
+    font-weight: 800;
     border-radius: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
     transition: all 0.2s ease;
   }
 
-  .print-action-btn:hover:not(:disabled) {
+  .download-action-btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45);
+    background: linear-gradient(135deg, #047857 0%, #059669 100%);
   }
 
-  .print-action-btn:disabled {
-    opacity: 0.5;
+  .download-action-btn:disabled {
+    opacity: 0.55;
     cursor: not-allowed;
   }
 
@@ -999,6 +931,57 @@
     font-size: 12px;
     color: #64748b;
     font-weight: 500;
+  }
+
+  .stage-bottom-actions {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .btn-card-download {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 10px 20px;
+    border-radius: 9px;
+    border: 1px solid #334155;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+    width: 100%;
+    max-width: 318px;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-card-download:hover:not(:disabled) {
+    background: #1e293b;
+    border-color: #3b82f6;
+    color: #60a5fa;
+    transform: translateY(-1.5px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+  }
+
+  .btn-card-download.secondary {
+    background: #1e293b;
+    border-color: #475569;
+  }
+
+  .btn-card-download.secondary:hover:not(:disabled) {
+    background: #334155;
+    border-color: #94a3b8;
+    color: #ffffff;
+  }
+
+  .btn-card-download:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   /* ----------------------------------------------------
