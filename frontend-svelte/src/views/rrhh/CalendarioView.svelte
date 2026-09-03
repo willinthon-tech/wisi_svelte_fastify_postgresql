@@ -410,6 +410,19 @@
   $: calMonthName = MESES[calCurrentMonth]?.nombre || '';
   $: calMonthTitle = `${calMonthName} ${calCurrentYear}`;
 
+  // Nombre de sala para la cabecera (si es una sola sala o está filtrada una sola)
+  $: singleSalaName = (function() {
+    if (calSelectedSalas && calSelectedSalas.length === 1) {
+      const sId = calSelectedSalas[0];
+      const found = (filterOptions.salas || []).find(s => String(s.value) === String(sId));
+      return found ? found.label.toUpperCase() : '';
+    }
+    if ((!calSelectedSalas || calSelectedSalas.length === 0) && filterOptions.salas && filterOptions.salas.length === 1) {
+      return filterOptions.salas[0].label.toUpperCase();
+    }
+    return '';
+  })();
+
   // Resumen para impresión: Cumpleañeros del mes agrupados por Departamento
   $: printCumpleanosGrouped = (function() {
     let emps = [...rawCumpleanos];
@@ -678,6 +691,14 @@
   <div class="monthly-calendar-card" id="printable-monthly-calendar">
     <!-- Cabecera del Calendario -->
     <div class="cal-top-header">
+      <!-- Izquierda: Nombre de sala para impresión / vista -->
+      <div class="cal-header-left">
+        {#if singleSalaName}
+          <span class="cal-print-sala-name">{singleSalaName}</span>
+        {/if}
+      </div>
+
+      <!-- Centro: Navegación y Título del Mes -->
       <div class="cal-nav-group">
         <button type="button" class="cal-nav-arrow print-hidden" on:click={prevMonth} title="Mes anterior">
           <span>◀</span>
@@ -688,13 +709,16 @@
         </button>
       </div>
 
-      <div class="cal-actions-group print-hidden">
-        <button type="button" class="cal-btn-today" on:click={goToToday} title="Ir al mes actual">
-          Hoy
-        </button>
-        <button type="button" class="cal-btn-print" on:click={printCalendar} title="Imprimir este calendario">
-          <span class="print-icon">🖨️</span> Imprimir
-        </button>
+      <!-- Derecha: Botones en pantalla / spacer en impresión -->
+      <div class="cal-header-right">
+        <div class="cal-actions-group print-hidden">
+          <button type="button" class="cal-btn-today" on:click={goToToday} title="Ir al mes actual">
+            Hoy
+          </button>
+          <button type="button" class="cal-btn-print" on:click={printCalendar} title="Imprimir este calendario">
+            <span class="print-icon">🖨️</span> Imprimir
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1009,11 +1033,33 @@
     position: relative;
   }
 
+  .cal-header-left {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .cal-print-sala-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: #1e3a8a;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
   .cal-nav-group {
     display: flex;
     align-items: center;
     gap: 12px;
     margin: 0 auto;
+  }
+
+  .cal-header-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
   }
 
   .cal-nav-arrow {
@@ -1325,7 +1371,7 @@
   @media print {
     @page {
       size: portrait;
-      margin: 8mm;
+      margin: 4mm;
     }
 
     :global(body *) {
@@ -1360,20 +1406,50 @@
 
     .cal-top-header {
       display: flex !important;
-      justify-content: center !important;
       align-items: center !important;
-      padding: 10px 0 !important;
+      justify-content: space-between !important;
+      padding: 6px 10px !important;
       border-bottom: 2px solid #0f172a !important;
     }
 
+    .cal-header-left {
+      flex: 1 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: flex-start !important;
+    }
+
+    .cal-print-sala-name {
+      display: block !important;
+      font-size: 13px !important;
+      font-weight: 900 !important;
+      color: #0f172a !important;
+      letter-spacing: 0.5px !important;
+      text-transform: uppercase !important;
+      white-space: nowrap !important;
+    }
+
+    .cal-nav-group {
+      flex: 2 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      margin: 0 !important;
+    }
+
     .cal-month-title {
-      font-size: 19px !important;
+      font-size: 18px !important;
       font-weight: 900 !important;
       color: #000000 !important;
       text-transform: uppercase !important;
       letter-spacing: 0.5px !important;
       text-align: center !important;
-      width: 100% !important;
+      width: auto !important;
+    }
+
+    .cal-header-right {
+      flex: 1 !important;
+      display: block !important;
     }
 
     .cal-weekdays-grid {
