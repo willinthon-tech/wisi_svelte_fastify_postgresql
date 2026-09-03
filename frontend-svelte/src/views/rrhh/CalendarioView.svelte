@@ -634,7 +634,7 @@
           </div>
 
           <div class="cal-events-list">
-            <!-- 1. Cumpleaños encima (col-6, 2 por fila) -->
+            <!-- 1. Cumpleaños encima (col-3, 4 por fila) -->
             {#if cell.cumpleEvents && cell.cumpleEvents.length > 0}
               <div class="cal-cumples-grid">
                 {#each cell.cumpleEvents as evt}
@@ -656,9 +656,9 @@
               </div>
             {/if}
 
-            <!-- 2. Feriados abajo (col-12, ancho completo) -->
+            <!-- 2. Feriados abajo (col-6, 2 por fila) -->
             {#if cell.feriadoEvents && cell.feriadoEvents.length > 0}
-              <div class="cal-feriados-list">
+              <div class="cal-feriados-grid">
                 {#each cell.feriadoEvents as evt}
                   {#if evt.type === 'feriado_nacional'}
                     <div 
@@ -947,8 +947,8 @@
 
   .cal-cumples-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 3px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2.5px;
     width: 100%;
   }
 
@@ -956,9 +956,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 2px 3px;
-    border-radius: 6px;
+    gap: 3px;
+    padding: 2px 2px;
+    border-radius: 5px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -975,8 +975,8 @@
   }
 
   .cal-avatar-img {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     object-fit: cover;
     background: #cbd5e1;
@@ -985,18 +985,29 @@
   }
 
   .cal-age-single-green {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 800;
     color: #16a34a;
     line-height: 1;
     white-space: nowrap;
   }
 
-  .cal-feriados-list {
-    display: flex;
-    flex-direction: column;
+  .cal-feriados-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 3px;
     width: 100%;
+  }
+
+  .evt-feriado-nac,
+  .evt-feriado-sala {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .evt-feriado-nac {
