@@ -39,7 +39,7 @@
     return [];
   })();
 
-  // Opciones de salas disponibles para el usuario
+  // Opciones de salas disponibles para el usuario (con id, key y value garantizados)
   let salasOptions = [];
   $: {
     const allSalas = $masterSalasStore || [];
@@ -48,6 +48,8 @@
       filtered = allSalas.filter((s) => assignedSalaIds.includes(Number(s.id)));
     }
     salasOptions = filtered.map((s) => ({
+      id: s.id,
+      key: s.id,
       value: s.id,
       label: s.nombre || s.nombre_comercial || `Sala #${s.id}`
     }));
@@ -85,6 +87,20 @@
     { id: "vip", name: "👑 Casino VIP Gold", desc: "Elegante fondo de gala con destellos dorados" }
   ];
 
+  // Limpiar texto para prevenir mojibake o tildes rotas (ej. Monseñor)
+  function cleanText(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/Ã±/g, "ñ")
+      .replace(/Ã‘/g, "Ñ")
+      .replace(/Ã¡/g, "á")
+      .replace(/Ã©/g, "é")
+      .replace(/Ã­/g, "í")
+      .replace(/Ã³/g, "ó")
+      .replace(/Ãº/g, "ú")
+      .replace(/&amp;/g, "&");
+  }
+
   // Cargar salas completas desde el backend
   async function fetchSalasData() {
     try {
@@ -108,7 +124,7 @@
     isLoading = true;
     try {
       const q = new URLSearchParams();
-      if (selectedSalas.length > 0) {
+      if (selectedSalas && selectedSalas.length > 0) {
         q.set("sala_ids", selectedSalas.join(","));
       } else if (assignedSalaIds.length > 0) {
         q.set("user_sala_ids", assignedSalaIds.join(","));
@@ -136,9 +152,12 @@
     }
   }
 
-  // Recargar cuando cambien las salas seleccionadas o la búsqueda
+  // Ejecutar búsqueda cuando cambie la selección de salas
+  let lastSalasKey = "";
   $: {
-    if (selectedSalas !== undefined) {
+    const currentSalasKey = (selectedSalas || []).join(",");
+    if (currentSalasKey !== lastSalasKey) {
+      lastSalasKey = currentSalasKey;
       fetchCarnetsData();
     }
   }
@@ -182,7 +201,11 @@
   function formatCedula(cedula) {
     if (!cedula) return "V00000000";
     const clean = String(cedula).trim();
-    if (clean.toUpperCase().startsWith("V") || clean.toUpperCase().startsWith("E") || clean.toUpperCase().startsWith("J")) {
+    if (
+      clean.toUpperCase().startsWith("V") ||
+      clean.toUpperCase().startsWith("E") ||
+      clean.toUpperCase().startsWith("J")
+    ) {
       return clean.toUpperCase();
     }
     return `V${clean}`;
@@ -196,7 +219,7 @@
       nombre: fromMap.nombre || emp.sala_nombre || "CASINO",
       nombre_comercial: fromMap.nombre_comercial || emp.sala_nombre_comercial || emp.sala_nombre || "Casino",
       rif: fromMap.rif || emp.sala_rif || "J-30606591-6",
-      ubicacion: fromMap.ubicacion || emp.sala_ubicacion || "Instalaciones del Casino",
+      ubicacion: cleanText(fromMap.ubicacion || emp.sala_ubicacion || "Instalaciones del Casino"),
       correo: fromMap.correo || emp.sala_correo || "rrhh@casino.com",
       telefono: fromMap.telefono || emp.sala_telefono || "0424-968.86.12",
       logo_url: `/salas/${emp.sala_id}.svg`
@@ -268,6 +291,7 @@
         label="Salas"
         options={salasOptions}
         bind:selectedValues={selectedSalas}
+        on:change={fetchCarnetsData}
       />
     </div>
 
@@ -374,7 +398,7 @@
       <h3>No se encontraron empleados</h3>
       <p>Ajusta el filtro de salas o el término de búsqueda para generar los carnets.</p>
     </div>
-  {:else if viewMode === 'individual'}
+  {:else if viewMode === 'individual' && currentEmp && currentSala}
     <!-- Vista Individual: Frente y Reverso Lado a Lado -->
     <div class="carnet-workspace">
       <!-- Tarjeta Frente -->
@@ -388,27 +412,44 @@
           class="carnet-card carnet-front modelo-{selectedModelo}"
           style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
         >
-          <!-- Cabecera con Logo de la Sala -->
+          <!-- Cabecera Superior con Espacio Dedicado y Permanente para el Logo -->
           <div class="card-header-top">
             <div class="sala-logo-box">
-              <img
-                src={currentSala.logo_url}
-                alt={currentSala.nombre}
-                class="sala-logo-img"
-                on:error={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextElementSibling.style.display = 'block';
-                }}
-              />
-              <div class="sala-fallback-logo" style="display: none;">
-                <div class="fallback-stars">★★★★★</div>
-                <div class="fallback-title">{currentSala.nombre}</div>
-                <div class="fallback-rif">{currentSala.rif}</div>
-              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 95" class="sala-logo-svg">
+                <defs>
+                  <linearGradient id="goldTepui" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#f59e0b" />
+                    <stop offset="50%" stop-color="#fbbf24" />
+                    <stop offset="100%" stop-color="#d97706" />
+                  </linearGradient>
+                  <filter id="shadowLogo" x="-10%" y="-10%" width="120%" height="120%">
+                    <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.8"/>
+                  </filter>
+                </defs>
+
+                <!-- Silueta de la Meseta Tepuy Roraima -->
+                <path d="M 85 24 Q 92 12 105 10 L 175 10 Q 183 12 188 18 L 198 18 Q 205 10 215 10 L 250 10 Q 256 12 254 20 L 258 24" fill="none" stroke="url(#goldTepui)" stroke-width="2.6" stroke-linecap="round" filter="url(#shadowLogo)"/>
+
+                <!-- Nombre de la Sala en tipografía caligráfica -->
+                <text x="150" y="44" font-family="'Brush Script MT', 'Dancing Script', 'Playfair Display', cursive, sans-serif" font-weight="900" font-size="36" fill="#ffffff" text-anchor="middle" letter-spacing="1" filter="url(#shadowLogo)">
+                  {currentSala.nombre}
+                </text>
+
+                <!-- Estrellas y CASINO -->
+                <g transform="translate(0, 62)">
+                  <text x="110" y="0" font-size="13" fill="url(#goldTepui)" text-anchor="middle" letter-spacing="2">★★★★★</text>
+                  <text x="178" y="-1" font-family="'Montserrat', 'Inter', sans-serif" font-weight="900" font-size="13" fill="#ffffff" letter-spacing="3">CASINO</text>
+                </g>
+
+                <!-- RIF Oficial -->
+                <text x="150" y="80" font-family="'Inter', monospace, sans-serif" font-size="10.5" font-weight="700" fill="#e2e8f0" text-anchor="middle" letter-spacing="1">
+                  RIF {currentSala.rif}
+                </text>
+              </svg>
             </div>
           </div>
 
-          <!-- Marco de Foto según Modelo -->
+          <!-- Marco de Foto según Modelo (Hexagonal en modelo Roraima) -->
           <div class="photo-wrapper">
             <div class="photo-frame">
               <img
@@ -422,7 +463,7 @@
             </div>
           </div>
 
-          <!-- Nombre del Empleado -->
+          <!-- Nombre del Empleado (Inmediatamente debajo del marco y logo) -->
           <div class="emp-name-wrap">
             <h2 class="emp-name">{currentEmp.nombre}</h2>
           </div>
@@ -437,7 +478,7 @@
           <!-- Tabla de Datos del Empleado -->
           <div class="emp-details-grid">
             <div class="detail-row">
-              <span class="detail-label">Cédula :</span>
+              <span class="detail-label">Cedula :</span>
               <span class="detail-value">{formatCedula(currentEmp.cedula)}</span>
             </div>
             <div class="detail-row">
@@ -446,7 +487,7 @@
             </div>
             <div class="detail-row">
               <span class="detail-label">Área :</span>
-              <span class="detail-value">{currentEmp.area_nombre || currentEmp.departamento_nombre || "Operaciones"}</span>
+              <span class="detail-value">{currentEmp.area_nombre || currentEmp.departamento_nombre || "CECOM"}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">Ingreso :</span>
@@ -465,7 +506,7 @@
         </div>
       </div>
 
-      <!-- Tarjeta Detrás / Reverso -->
+      <!-- Tarjeta Detrás / Reverso (Diseño balanceado sin espacios vacíos feos) -->
       <div class="card-stage">
         <div class="stage-label no-print">
           <span class="badge-tag secondary">DETRÁS</span>
@@ -476,40 +517,52 @@
           class="carnet-card carnet-back modelo-{selectedModelo}"
           style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
         >
-          <!-- Contenido Reverso -->
-          <div class="back-content-inner">
+          <!-- Contenedor Interno Estilizado -->
+          <div class="back-card-inner-frame">
+            <!-- Sección 1: Cabecera Acreditación -->
             <p class="legal-intro">
               El portador del presente Carnet presta sus servicios Profesionales a:
             </p>
 
-            <div class="company-name-highlight">
-              <u>{currentSala.nombre_comercial || currentSala.nombre}</u>
+            <!-- Sección 2: Nombre de la Empresa y RIF -->
+            <div class="company-block">
+              <div class="company-name-highlight">
+                <u>{currentSala.nombre_comercial || currentSala.nombre}</u>
+              </div>
+              <div class="company-rif">
+                R.I.F.: {currentSala.rif}
+              </div>
             </div>
 
-            <div class="company-rif">
-              R.I.F.: {currentSala.rif}
+            <!-- Divisor sutil institucional -->
+            <div class="ornament-divider">
+              <span class="divider-line"></span>
+              <span class="divider-star">★ ★ ★</span>
+              <span class="divider-line"></span>
             </div>
 
+            <!-- Sección 3: Aviso a Autoridades -->
             <p class="legal-notice">
               Se le agradece a las autoridades Civiles, Militares y otros Organismos Públicos,
               brindarle todo su apoyo y colaboración. En caso de emergencia o pérdida,
               favor avisar al teléfono:
             </p>
 
+            <!-- Sección 4: Teléfono de Contacto en Negrita -->
             <div class="company-phone">
               {currentSala.telefono}
             </div>
 
+            <!-- Sección 5: Ubicación Física Completa -->
             <div class="company-address">
               {currentSala.ubicacion}
             </div>
-          </div>
 
-          <!-- Bloque de Pie con Correo Institucional -->
-          <div class="back-footer-pill">
-            <span class="footer-email-text">
-              Correo: {currentSala.correo}
-            </span>
+            <!-- Sección 6: Bloque de Correo Institucional -->
+            <div class="back-footer-pill">
+              <span class="footer-email-label">Correo:</span>
+              <span class="footer-email-val">{currentSala.correo}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -556,7 +609,26 @@
           >
             <div class="card-header-top">
               <div class="sala-logo-box">
-                <img src={sala.logo_url} alt={sala.nombre} class="sala-logo-img" />
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 95" class="sala-logo-svg">
+                  <defs>
+                    <linearGradient id="goldTepuiBatch" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stop-color="#f59e0b" />
+                      <stop offset="50%" stop-color="#fbbf24" />
+                      <stop offset="100%" stop-color="#d97706" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M 85 24 Q 92 12 105 10 L 175 10 Q 183 12 188 18 L 198 18 Q 205 10 215 10 L 250 10 Q 256 12 254 20 L 258 24" fill="none" stroke="url(#goldTepuiBatch)" stroke-width="2.6" stroke-linecap="round"/>
+                  <text x="150" y="44" font-family="'Brush Script MT', 'Dancing Script', 'Playfair Display', cursive, sans-serif" font-weight="900" font-size="36" fill="#ffffff" text-anchor="middle" letter-spacing="1">
+                    {sala.nombre}
+                  </text>
+                  <g transform="translate(0, 62)">
+                    <text x="110" y="0" font-size="13" fill="url(#goldTepuiBatch)" text-anchor="middle" letter-spacing="2">★★★★★</text>
+                    <text x="178" y="-1" font-family="'Montserrat', 'Inter', sans-serif" font-weight="900" font-size="13" fill="#ffffff" letter-spacing="3">CASINO</text>
+                  </g>
+                  <text x="150" y="80" font-family="'Inter', monospace, sans-serif" font-size="10.5" font-weight="700" fill="#e2e8f0" text-anchor="middle" letter-spacing="1">
+                    RIF {sala.rif}
+                  </text>
+                </svg>
               </div>
             </div>
 
@@ -581,7 +653,7 @@
 
             <div class="emp-details-grid">
               <div class="detail-row">
-                <span class="detail-label">Cédula :</span>
+                <span class="detail-label">Cedula :</span>
                 <span class="detail-value">{formatCedula(emp.cedula)}</span>
               </div>
               <div class="detail-row">
@@ -590,7 +662,7 @@
               </div>
               <div class="detail-row">
                 <span class="detail-label">Área :</span>
-                <span class="detail-value">{emp.area_nombre || emp.departamento_nombre || "Operaciones"}</span>
+                <span class="detail-value">{emp.area_nombre || emp.departamento_nombre || "CECOM"}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Ingreso :</span>
@@ -612,27 +684,40 @@
             class="carnet-card carnet-back modelo-{selectedModelo}"
             style="--accent-color: {activePalette.primary}; --accent-light: {activePalette.accent};"
           >
-            <div class="back-content-inner">
+            <div class="back-card-inner-frame">
               <p class="legal-intro">
                 El portador del presente Carnet presta sus servicios Profesionales a:
               </p>
-              <div class="company-name-highlight">
-                <u>{sala.nombre_comercial || sala.nombre}</u>
+
+              <div class="company-block">
+                <div class="company-name-highlight">
+                  <u>{sala.nombre_comercial || sala.nombre}</u>
+                </div>
+                <div class="company-rif">
+                  R.I.F.: {sala.rif}
+                </div>
               </div>
-              <div class="company-rif">
-                R.I.F.: {sala.rif}
+
+              <div class="ornament-divider">
+                <span class="divider-line"></span>
+                <span class="divider-star">★ ★ ★</span>
+                <span class="divider-line"></span>
               </div>
+
               <p class="legal-notice">
                 Se le agradece a las autoridades Civiles, Militares y otros Organismos Públicos,
                 brindarle todo su apoyo y colaboración. En caso de emergencia o pérdida,
                 favor avisar al teléfono:
               </p>
-              <div class="company-phone">{sala.telefono}</div>
-              <div class="company-address">{sala.ubicacion}</div>
-            </div>
 
-            <div class="back-footer-pill">
-              <span class="footer-email-text">Correo: {sala.correo}</span>
+              <div class="company-phone">{sala.telefono}</div>
+
+              <div class="company-address">{sala.ubicacion}</div>
+
+              <div class="back-footer-pill">
+                <span class="footer-email-label">Correo:</span>
+                <span class="footer-email-val">{sala.correo}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -934,19 +1019,19 @@
 
   /* ----------------------------------------------------
      ESTRUCTURA DE LA TARJETA (CR80: 54mm x 85.6mm)
-     Proporción estándar: 320px x 506px
+     Proporción estándar: 318px x 500px
      ---------------------------------------------------- */
   .carnet-card {
-    width: 310px;
-    height: 490px;
+    width: 318px;
+    height: 500px;
     background: #ffffff;
-    border-radius: 16px;
+    border-radius: 18px;
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     box-sizing: border-box;
     user-select: none;
     background-clip: padding-box;
@@ -958,18 +1043,19 @@
   .card-header-top {
     position: relative;
     background: #000000;
-    height: 105px;
+    height: 165px;
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 8px 12px 18px 12px;
+    justify-content: flex-start;
+    padding: 10px 14px 0 14px;
     box-sizing: border-box;
   }
 
   /* Corte curvo / angular estilo Tálamo / Roraima */
   .modelo-roraima .card-header-top {
-    clip-path: ellipse(115% 100% at 50% 0%);
+    clip-path: polygon(0 0, 100% 0, 100% 64%, 50% 100%, 0 64%);
   }
 
   .modelo-wave .card-header-top {
@@ -979,46 +1065,22 @@
 
   .modelo-vip .card-header-top {
     background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
-    border-bottom: 2px solid #d4af37;
+    border-bottom: 2.5px solid #d4af37;
+    clip-path: polygon(0 0, 100% 0, 100% 75%, 50% 100%, 0 75%);
   }
 
   .sala-logo-box {
     width: 100%;
-    height: 100%;
+    height: 86px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .sala-logo-img {
-    max-width: 210px;
-    max-height: 68px;
-    object-fit: contain;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-  }
-
-  .sala-fallback-logo {
-    text-align: center;
-    color: #ffffff;
-  }
-
-  .fallback-stars {
-    color: #fbbf24;
-    font-size: 12px;
-    letter-spacing: 2px;
-  }
-
-  .fallback-title {
-    font-size: 16px;
-    font-weight: 900;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-
-  .fallback-rif {
-    font-size: 9.5px;
-    color: #cbd5e1;
-    letter-spacing: 0.5px;
+  .sala-logo-svg {
+    width: 100%;
+    max-width: 250px;
+    height: 80px;
   }
 
   /* ----------------------------------------------------
@@ -1027,36 +1089,36 @@
   .photo-wrapper {
     display: flex;
     justify-content: center;
-    margin-top: -30px;
+    margin-top: -46px;
     position: relative;
     z-index: 10;
   }
 
   /* Marco Hexagonal (Modelo Roraima) */
   .modelo-roraima .photo-frame {
-    width: 110px;
-    height: 124px;
+    width: 116px;
+    height: 130px;
     background: var(--accent-color);
     padding: 3.5px;
-    clip-path: polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
+    clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
     display: flex;
     align-items: center;
     justify-content: center;
-    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
   }
 
   .modelo-roraima .employee-photo {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    clip-path: polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%);
+    clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
     background: #e2e8f0;
   }
 
   /* Marco Circular (Modelo Wave) */
   .modelo-wave .photo-frame {
-    width: 112px;
-    height: 112px;
+    width: 114px;
+    height: 114px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent-color), #ffffff);
     padding: 4px;
@@ -1076,10 +1138,10 @@
 
   /* Marco Rectangular Redondeado (Modelo Minimalista) */
   .modelo-minimal .photo-frame {
-    width: 105px;
-    height: 115px;
-    border-radius: 12px;
-    border: 3px solid var(--accent-color);
+    width: 108px;
+    height: 118px;
+    border-radius: 14px;
+    border: 3.5px solid var(--accent-color);
     padding: 2px;
     background: #ffffff;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
@@ -1088,19 +1150,19 @@
   .modelo-minimal .employee-photo {
     width: 100%;
     height: 100%;
-    border-radius: 8px;
+    border-radius: 10px;
     object-fit: cover;
     background: #e2e8f0;
   }
 
   /* Marco Dorado VIP (Modelo VIP) */
   .modelo-vip .photo-frame {
-    width: 108px;
-    height: 120px;
-    border: 2px solid #d4af37;
+    width: 112px;
+    height: 124px;
+    border: 2.5px solid #d4af37;
     background: #000000;
     padding: 3px;
-    box-shadow: 0 0 12px rgba(212, 175, 55, 0.35);
+    box-shadow: 0 0 14px rgba(212, 175, 55, 0.4);
   }
 
   .modelo-vip .employee-photo {
@@ -1115,16 +1177,16 @@
   .emp-name-wrap {
     text-align: center;
     margin-top: 8px;
-    padding: 0 14px;
+    padding: 0 12px;
   }
 
   .emp-name {
-    font-size: 16.5px;
+    font-size: 18px;
     font-weight: 900;
     color: #000000;
     margin: 0;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     line-height: 1.15;
   }
 
@@ -1137,24 +1199,24 @@
   .cargo-banner {
     background: var(--accent-color);
     color: #ffffff;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     padding: 4px 18px;
     border-radius: 4px;
     display: inline-block;
-    max-width: 85%;
+    max-width: 88%;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
   }
 
   .modelo-roraima .cargo-banner {
-    clip-path: polygon(6px 0%, calc(100% - 6px) 0%, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0% 50%);
-    padding: 4px 22px;
+    clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0% 50%);
+    padding: 4.5px 22px;
     border-radius: 0;
   }
 
@@ -1176,28 +1238,29 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 0 24px;
+    padding: 0 26px;
     margin-top: 2px;
     flex: 1;
   }
 
   .detail-row {
     display: flex;
+    justify-content: space-between;
     align-items: baseline;
-    font-size: 11.5px;
+    font-size: 13px;
     line-height: 1.35;
   }
 
   .detail-label {
     font-weight: 800;
-    color: #1e293b;
-    min-width: 105px;
+    color: #0f172a;
     flex-shrink: 0;
   }
 
   .detail-value {
     font-weight: 700;
-    color: #334155;
+    color: #1e293b;
+    text-align: right;
     word-break: break-word;
   }
 
@@ -1208,7 +1271,7 @@
     display: flex;
     justify-content: center;
     align-items: flex-end;
-    padding: 4px 16px 10px 16px;
+    padding: 4px 16px 12px 16px;
     margin-top: auto;
   }
 
@@ -1218,103 +1281,148 @@
     justify-content: center;
     gap: 4.5px;
     width: 100%;
-    height: 40px;
+    height: 36px;
   }
 
   .eq-bar {
     width: 3.2px;
     background: var(--accent-color);
     border-radius: 2px;
-    opacity: 0.85;
+    opacity: 0.9;
     transition: height 0.3s ease;
   }
 
   /* ----------------------------------------------------
      CARA TRASERA / REVERSO DEL CARNET
+     (Diseño balanceado, armónico y lleno sin huecos feos)
      ---------------------------------------------------- */
   .carnet-back {
     background: #ffffff;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding: 22px 18px 14px 18px;
+    padding: 14px;
     box-sizing: border-box;
   }
 
-  .back-content-inner {
+  .back-card-inner-frame {
+    width: 100%;
+    height: 100%;
+    border: 1.5px solid rgba(0, 0, 0, 0.12);
+    border-radius: 12px;
+    padding: 20px 14px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 8px;
-    flex: 1;
+    background: #ffffff;
   }
 
   .legal-intro {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 13.5px;
+    font-weight: 700;
     color: #1e293b;
     margin: 0;
-    line-height: 1.35;
+    line-height: 1.4;
+  }
+
+  .company-block {
+    margin: 12px 0 6px 0;
   }
 
   .company-name-highlight {
-    font-size: 14.5px;
+    font-size: 20px;
     font-weight: 900;
-    color: #0f172a;
+    color: #000000;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     line-height: 1.25;
-    margin: 2px 0;
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
 
   .company-rif {
-    font-size: 13px;
-    font-weight: 900;
-    color: #0f172a;
-    letter-spacing: 0.5px;
+    font-size: 16px;
+    font-weight: 800;
+    color: #000000;
+    letter-spacing: 0.6px;
+    margin-top: 4px;
+  }
+
+  .ornament-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 80%;
+    margin: 10px 0;
+  }
+
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: #cbd5e1;
+  }
+
+  .divider-star {
+    font-size: 11px;
+    color: #94a3b8;
+    letter-spacing: 2px;
   }
 
   .legal-notice {
-    font-size: 10.2px;
+    font-size: 12px;
     font-weight: 500;
-    color: #334155;
-    margin: 6px 0 2px 0;
-    line-height: 1.38;
+    color: #1e293b;
+    margin: 0 0 10px 0;
+    line-height: 1.55;
     padding: 0 4px;
   }
 
   .company-phone {
-    font-size: 15px;
+    font-size: 21px;
     font-weight: 900;
     color: #000000;
-    letter-spacing: 0.8px;
-    margin: 2px 0;
+    letter-spacing: 1px;
+    margin: 4px 0 10px 0;
   }
 
   .company-address {
-    font-size: 10px;
+    font-size: 12.5px;
     font-style: italic;
-    font-weight: 500;
-    color: #475569;
-    line-height: 1.35;
-    padding: 0 6px;
-    margin-top: 4px;
+    font-weight: 600;
+    color: #334155;
+    line-height: 1.45;
+    padding: 0 8px;
+    margin-bottom: auto;
   }
 
   .back-footer-pill {
     background: var(--accent-color);
     color: #ffffff;
-    border-radius: 8px;
-    padding: 8px 12px;
-    text-align: center;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-    margin-top: auto;
+    border-radius: 12px;
+    padding: 10px 14px;
+    width: calc(100% - 10px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+    margin-top: 14px;
   }
 
-  .footer-email-text {
+  .footer-email-label {
     font-size: 11px;
     font-weight: 700;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .footer-email-val {
+    font-size: 13.5px;
+    font-weight: 800;
     word-break: break-all;
     letter-spacing: 0.3px;
   }
@@ -1548,19 +1656,19 @@
     }
 
     .card-header-top {
-      height: 19mm !important;
-      padding: 1.5mm 2mm 2.5mm 2mm !important;
+      height: 28mm !important;
+      padding: 1.5mm 2mm 0 2mm !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
 
-    .sala-logo-img {
-      max-width: 36mm !important;
-      max-height: 12mm !important;
+    .sala-logo-svg {
+      max-width: 44mm !important;
+      height: 14mm !important;
     }
 
     .photo-wrapper {
-      margin-top: -5.5mm !important;
+      margin-top: -8mm !important;
     }
 
     .modelo-roraima .photo-frame {
@@ -1619,7 +1727,12 @@
 
     /* Reverso en Impresión */
     .carnet-back {
-      padding: 3.5mm 3mm 2.5mm 3mm !important;
+      padding: 2.5mm !important;
+    }
+
+    .back-card-inner-frame {
+      padding: 3mm 2.5mm !important;
+      border: 0.8px solid #d1d5db !important;
     }
 
     .legal-intro {
@@ -1627,9 +1740,12 @@
       line-height: 1.25 !important;
     }
 
+    .company-block {
+      margin: 1.5mm 0 1mm 0 !important;
+    }
+
     .company-name-highlight {
-      font-size: 7.5pt !important;
-      margin: 0.5mm 0 !important;
+      font-size: 7.8pt !important;
     }
 
     .company-rif {
@@ -1639,28 +1755,32 @@
     .legal-notice {
       font-size: 5.4pt !important;
       line-height: 1.28 !important;
-      margin: 1mm 0 0.5mm 0 !important;
+      margin-bottom: 1.5mm !important;
     }
 
     .company-phone {
-      font-size: 7.8pt !important;
-      margin: 0.5mm 0 !important;
+      font-size: 8pt !important;
+      margin: 1mm 0 !important;
     }
 
     .company-address {
       font-size: 5.2pt !important;
       line-height: 1.25 !important;
-      margin-top: 0.8mm !important;
+      margin-bottom: auto !important;
     }
 
     .back-footer-pill {
-      padding: 1.2mm 2mm !important;
+      padding: 1.5mm 2mm !important;
       border-radius: 1.5mm !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
 
-    .footer-email-text {
+    .footer-email-label {
+      font-size: 4.8pt !important;
+    }
+
+    .footer-email-val {
       font-size: 5.8pt !important;
     }
   }

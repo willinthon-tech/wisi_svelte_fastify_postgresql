@@ -44,10 +44,18 @@
   // Reactive Set for O(1) instant lookup and bulletproof Svelte reactivity
   $: selectedSet = new Set((selectedValues || []).map(v => String(v)));
 
+  function getOptVal(opt) {
+    if (!opt) return undefined;
+    if (opt.key !== undefined) return opt.key;
+    if (opt.id !== undefined) return opt.id;
+    if (opt.value !== undefined) return opt.value;
+    return undefined;
+  }
+
   // Filter out options with count === 0 unless they are currently selected, and sort by count DESC
   $: visibleOptions = (options || [])
     .filter(opt => {
-      const optVal = opt.key !== undefined ? opt.key : opt.id;
+      const optVal = getOptVal(opt);
       const isSel = selectedSet.has(String(optVal));
       if (!isSel && opt.count !== undefined && Number(opt.count) <= 0) {
         return false;
@@ -167,7 +175,7 @@
   }
 
   function selectAll() {
-    const all = filteredOptions.map(opt => opt.key !== undefined ? opt.key : opt.id);
+    const all = filteredOptions.map(opt => getOptVal(opt));
     const set = new Set([...(selectedValues || []), ...all]);
     const updated = Array.from(set);
     selectedValues = updated;
@@ -175,7 +183,7 @@
   }
 
   function clearAll() {
-    const activeCurrentKeys = new Set(filteredOptions.map(opt => String(opt.key !== undefined ? opt.key : opt.id)));
+    const activeCurrentKeys = new Set(filteredOptions.map(opt => String(getOptVal(opt))));
     const updated = (selectedValues || []).filter(s => !activeCurrentKeys.has(String(s)));
     selectedValues = updated;
     dispatch('change', updated);
@@ -260,7 +268,7 @@
                 <span class="subgroup-header-count">({sub.items.length})</span>
               </div>
               {#each sub.items as opt}
-                {@const optVal = opt.key !== undefined ? opt.key : opt.id}
+                {@const optVal = getOptVal(opt)}
                 {@const optLabel = opt.label || opt.nombre || optVal}
                 {@const active = selectedSet.has(String(optVal))}
                 
@@ -302,7 +310,7 @@
               </div>
             {/if}
             {#each group.items as opt}
-              {@const optVal = opt.key !== undefined ? opt.key : opt.id}
+              {@const optVal = getOptVal(opt)}
               {@const optLabel = opt.label || opt.nombre || optVal}
               {@const active = selectedSet.has(String(optVal))}
               
