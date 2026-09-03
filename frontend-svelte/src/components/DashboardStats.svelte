@@ -9,7 +9,7 @@
   import { getCloudBaseUrl } from "../config/api.config.js";
   import { userSalasStore as masterUserSalasStore } from "../controllers/master.store.js";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../controllers/auth.store.js";
-  import { latestCheckInStore, latestCheckOutStore } from "../controllers/websocket.store.js";
+  import { latestAttlogEventStore } from "../controllers/websocket.store.js";
   import { openPhotoModal, updatePhotoModalItems } from "../controllers/globalModal.store.js";
 
   export let items = [];
@@ -38,17 +38,20 @@
     return [];
   })();
 
-  // Separate state for checkIn and checkOut latest records
-  let latestCheckIn = null;
-  let latestCheckOut = null;
-  let lastSeenCheckInId = null;
-  let lastSeenCheckOutId = null;
-  let isFlashingCheckIn = false;
-  let isFlashingCheckOut = false;
-  let flashCheckInTimer = null;
-  let flashCheckOutTimer = null;
+  // Unified state for absolute latest record (entrada, salida, or puerta/otros)
+  let latestRecord = null;
+  let lastSeenRecordId = null;
+  let isFlashingRecord = false;
+  let flashRecordTimer = null;
+
+  // State for today's birthdays (Card 2)
+  let todayBirthdays = [];
+  let isFetchingBirthdays = false;
+  let activeBirthdayIdx = 0;
   let pollTimer = null;
   let carouselRef = null;
+
+  $: statusInfo = getRecordStatus(latestRecord);
 
   const backendUrl = getCloudBaseUrl();
 
@@ -111,55 +114,91 @@
     return colors[num % colors.length];
   }
 
-  function triggerFlashCheckIn() {
-    isFlashingCheckIn = true;
-    if (flashCheckInTimer) clearTimeout(flashCheckInTimer);
-    flashCheckInTimer = setTimeout(() => { isFlashingCheckIn = false; }, 1500);
+  function triggerFlashRecord() {
+    isFlashingRecord = true;
+    if (flashRecordTimer) clearTimeout(flashRecordTimer);
+    flashRecordTimer = setTimeout(() => { isFlashingRecord = false; }, 1500);
   }
 
-  function triggerFlashCheckOut() {
-    isFlashingCheckOut = true;
-    if (flashCheckOutTimer) clearTimeout(flashCheckOutTimer);
-    flashCheckOutTimer = setTimeout(() => { isFlashingCheckOut = false; }, 1500);
+  function getRecordStatus(record) {
+    if (!record) return { label: "SIN REGISTRO", color: "#64748b", bg: "#f1f5f9", border: "#cbd5e1", dot: "#94a3b8", headerBg: "linear-gradient(90deg, #f1f5f9, #f8fafc)", headerColor: "#64748b", headerBorder: "#cbd5e1", headerTag: "⚡ ÚLTIMO REGISTRO" };
+    const st = String(record.status ?? record.attendance_status ?? record.attendancestatus ?? "").toLowerCase().trim();
+    if (st === "1" || st === "checkin" || st === "entrada") {
+      return { label: "ENTRADA", color: "#15803d", bg: "#f0fdf4", border: "#86efac", dot: "#22c55e", headerBg: "linear-gradient(90deg, #dcfce7, #f0fdf4)", headerColor: "#15803d", headerBorder: "#86efac", headerTag: "🟢 ÚLTIMO DE ENTRADA" };
+    }
+    if (st === "2" || st === "checkout" || st === "salida") {
+      return { label: "SALIDA", color: "#b91c1c", bg: "#fff1f2", border: "#fca5a5", dot: "#ef4444", headerBg: "linear-gradient(90deg, #fee2e2, #fff1f2)", headerColor: "#b91c1c", headerBorder: "#fca5a5", headerTag: "🔴 ÚLTIMO DE SALIDA" };
+    }
+    return { label: "PUERTA / OTROS", color: "#c2410c", bg: "#fff7ed", border: "#fdba74", dot: "#f97316", headerBg: "linear-gradient(90deg, #ffedd5, #fff7ed)", headerColor: "#c2410c", headerBorder: "#fdba74", headerTag: "🟠 ÚLTIMO REGISTRO" };
   }
 
-  // Fetch the real latest checkIn and checkOut records directly from DB
-  async function fetchLatestRecords() {
+  async function fetchTodayBirthdays() {
     try {
-      const base = backendUrl.endsWith("/api") ? backendUrl : `${backendUrl}/api`;
-      const qIn = new URLSearchParams({ limit: "1", estados: "checkin" });
-      const qOut = new URLSearchParams({ limit: "1", estados: "checkout" });
-      if (assignedSalaIds.length > 0) {
-        qIn.set("user_sala_ids", assignedSalaIds.join(","));
-        qOut.set("user_sala_ids", assignedSalaIds.join(","));
-      }
+      isFetchingBirthdays = true;
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentDay = now.getDate();
+      const currentYear = now.getFullYear();
 
-      const [resIn, resOut] = await Promise.all([
-        fetch(`${base}/attlogs/latest?${qIn.toString()}`),
-        fetch(`${base}/attlogs/latest?${qOut.toString()}`)
-      ]);
+      const q = new URLSearchParams({ mes: String(currentMonth) });
+      if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
 
-      if (resIn.ok) {
-        const jsonIn = await resIn.json();
-        if (jsonIn.success && Array.isArray(jsonIn.data) && jsonIn.data.length > 0) {
-          latestCheckIn = jsonIn.data[0];
-          lastSeenCheckInId = latestCheckIn.id;
-        } else {
-          latestCheckIn = null;
-        }
-      }
-
-      if (resOut.ok) {
-        const jsonOut = await resOut.json();
-        if (jsonOut.success && Array.isArray(jsonOut.data) && jsonOut.data.length > 0) {
-          latestCheckOut = jsonOut.data[0];
-          lastSeenCheckOutId = latestCheckOut.id;
-        } else {
-          latestCheckOut = null;
+      const res = await fetch(`/api/master/cumpleanos?${q.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && Array.isArray(json.data)) {
+          let list = json.data.filter(c => Number(c.dia) === currentDay);
+          if (assignedSalaIds.length > 0) {
+            const allowed = new Set(assignedSalaIds.map(Number));
+            list = list.filter(c => allowed.has(Number(c.sala_id)));
+          }
+          todayBirthdays = list.map(c => ({
+            ...c,
+            age: c.anio_nacimiento ? (currentYear - Number(c.anio_nacimiento)) : null
+          }));
+          if (activeBirthdayIdx >= todayBirthdays.length) activeBirthdayIdx = 0;
         }
       }
     } catch (e) {
-      console.warn("Error fetching latest records:", e);
+      console.warn("Error cargando cumpleañeros de hoy:", e);
+    } finally {
+      isFetchingBirthdays = false;
+    }
+  }
+
+  function nextBirthday() {
+    if (todayBirthdays.length > 1) {
+      activeBirthdayIdx = (activeBirthdayIdx + 1) % todayBirthdays.length;
+    }
+  }
+
+  function prevBirthday() {
+    if (todayBirthdays.length > 1) {
+      activeBirthdayIdx = (activeBirthdayIdx - 1 + todayBirthdays.length) % todayBirthdays.length;
+    }
+  }
+
+  // Fetch the real absolute latest record directly from DB (without filtering by status)
+  async function fetchLatestRecords() {
+    try {
+      const base = backendUrl.endsWith("/api") ? backendUrl : `${backendUrl}/api`;
+      const qLatest = new URLSearchParams({ limit: "1" });
+      if (assignedSalaIds.length > 0) {
+        qLatest.set("user_sala_ids", assignedSalaIds.join(","));
+      }
+
+      const res = await fetch(`${base}/attlogs/latest?${qLatest.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          latestRecord = json.data[0];
+          lastSeenRecordId = latestRecord.id;
+        } else {
+          latestRecord = null;
+        }
+      }
+    } catch (e) {
+      console.warn("Error fetching latest record:", e);
     }
   }
 
@@ -170,6 +209,7 @@
     if (lastSalaKey !== null && lastSalaKey !== salaKey) {
       lastSalaKey = salaKey;
       fetchLatestRecords();
+      fetchTodayBirthdays();
     } else if (lastSalaKey === null && salaKey) {
       lastSalaKey = salaKey;
     }
@@ -562,54 +602,35 @@
     }
   }
 
-  let unsubscribeCheckIn = null;
-  let unsubscribeCheckOut = null;
+  let unsubscribeAttlog = null;
 
   onMount(() => {
     fetchLatestRecords();
+    fetchTodayBirthdays();
     fetchAttlogsStats();
 
-    // Subscribe to checkIn events
-    unsubscribeCheckIn = latestCheckInStore.subscribe((rec) => {
+    // Suscripción al WebSocket para cualquier nuevo marcaje en vivo
+    unsubscribeAttlog = latestAttlogEventStore.subscribe((rec) => {
       if (!rec) return;
       const recSalaId = Number(rec.sala_id || rec.dispositivo_sala_id);
       if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(recSalaId)) return;
       const timeRec = new Date(rec.event_time).getTime() || 0;
-      const timeCur = latestCheckIn ? (new Date(latestCheckIn.event_time).getTime() || 0) : 0;
-      if (!latestCheckIn || timeRec > timeCur || (timeRec === timeCur && Number(rec.id || 0) >= Number(latestCheckIn.id || 0))) {
-        if (lastSeenCheckInId !== null && Number(lastSeenCheckInId) !== Number(rec.id)) {
-          triggerFlashCheckIn();
+      const timeCur = latestRecord ? (new Date(latestRecord.event_time).getTime() || 0) : 0;
+      if (!latestRecord || timeRec > timeCur || (timeRec === timeCur && Number(rec.id || 0) >= Number(latestRecord.id || 0))) {
+        if (lastSeenRecordId !== null && Number(lastSeenRecordId) !== Number(rec.id)) {
+          triggerFlashRecord();
           fetchAttlogsStats();
         }
-        lastSeenCheckInId = rec.id;
-        latestCheckIn = rec;
-      }
-    });
-
-    // Subscribe to checkOut events
-    unsubscribeCheckOut = latestCheckOutStore.subscribe((rec) => {
-      if (!rec) return;
-      const recSalaId = Number(rec.sala_id || rec.dispositivo_sala_id);
-      if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(recSalaId)) return;
-      const timeRec = new Date(rec.event_time).getTime() || 0;
-      const timeCur = latestCheckOut ? (new Date(latestCheckOut.event_time).getTime() || 0) : 0;
-      if (!latestCheckOut || timeRec > timeCur || (timeRec === timeCur && Number(rec.id || 0) >= Number(latestCheckOut.id || 0))) {
-        if (lastSeenCheckOutId !== null && Number(lastSeenCheckOutId) !== Number(rec.id)) {
-          triggerFlashCheckOut();
-          fetchAttlogsStats();
-        }
-        lastSeenCheckOutId = rec.id;
-        latestCheckOut = rec;
+        lastSeenRecordId = rec.id;
+        latestRecord = rec;
       }
     });
   });
 
   onDestroy(() => {
-    if (unsubscribeCheckIn) unsubscribeCheckIn();
-    if (unsubscribeCheckOut) unsubscribeCheckOut();
+    if (unsubscribeAttlog) unsubscribeAttlog();
     if (pollTimer) clearInterval(pollTimer);
-    if (flashCheckInTimer) clearTimeout(flashCheckInTimer);
-    if (flashCheckOutTimer) clearTimeout(flashCheckOutTimer);
+    if (flashRecordTimer) clearTimeout(flashRecordTimer);
   });
 
   function openAttlogModal(record) {
@@ -625,43 +646,44 @@
   <div class="dashboard-kpi-grid" style="margin-bottom: 20px;">
 
     <!-- ════════════════════════════════════════════════════════
-         Card 1: ULTIMOS DE ENTRADA — latest checkIn record
+         Card 1: ÚLTIMO REGISTRO — Absolute latest punch
          ════════════════════════════════════════════════════════ -->
     <div
-      class="flow-card {isFlashingCheckIn ? 'glow-flashing-card' : ''}"
+      class="flow-card {isFlashingRecord ? 'glow-flashing-card' : ''}"
       style="display:flex;flex-direction:column;transition:all 0.3s ease;position:relative;background:#ffffff;padding:0;overflow:hidden;"
     >
-      <!-- Green section header -->
-      <div style="padding:8px 16px;background:linear-gradient(90deg,#dcfce7,#f0fdf4);border-bottom:1px solid #86efac;">
-        <span style="font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#15803d;">
-          🟢 ULTIMO DE ENTRADA
+      <!-- Dynamic section header depending on status (Entrada, Salida, Puerta / Otros) -->
+      <div style="padding:8px 16px;background:{statusInfo.headerBg};border-bottom:1px solid {statusInfo.headerBorder};">
+        <span style="font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:{statusInfo.headerColor};">
+          {statusInfo.headerTag}
         </span>
       </div>
 
       <div style="padding:14px 16px;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
-        {#if latestCheckIn}
+        {#if latestRecord}
           <!-- Sub-header -->
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">ULTIMO REGISTRO</span>
-            <span style="font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:5px;color:#15803d;">
-              <span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#22c55e;"></span>
-              ENTRADA
+            <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">ÚLTIMO REGISTRO</span>
+            <span style="font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:5px;color:{statusInfo.color};">
+              <span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:{statusInfo.dot};"></span>
+              {statusInfo.label}
             </span>
           </div>
           <!-- Photo + Name -->
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
             <button
               type="button"
-              on:click={() => openAttlogModal(latestCheckIn)}
+              on:click={() => openAttlogModal(latestRecord)}
               style="position:relative;width:60px;height:60px;flex-shrink:0;padding:0;border:none;background:transparent;cursor:pointer;border-radius:50%;outline:none;"
+              title="Ver marcajes en lista global"
             >
               <img
-                src={getRecordPhoto(latestCheckIn)}
-                alt="Foto entrada"
-                style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #22c55e;box-shadow:0 4px 12px rgba(34,197,94,0.25);"
+                src={getRecordPhoto(latestRecord)}
+                alt="Foto marcaje"
+                style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid {statusInfo.dot};box-shadow:0 4px 12px rgba(0,0,0,0.12);"
                 on:error={(e) => {
                   const img = e.currentTarget;
-                  const fallback = getFallbackProfilePhoto(latestCheckIn);
+                  const fallback = getFallbackProfilePhoto(latestRecord);
                   if (!img.dataset.triedEmp && fallback && !img.src.endsWith(fallback)) {
                     img.dataset.triedEmp = 'true';
                     img.src = fallback;
@@ -671,123 +693,164 @@
                   }
                 }}
               />
-              <div style="display:none;width:60px;height:60px;border-radius:50%;background:{getAvatarColor(latestCheckIn.employee_no)};color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
-                {getInitials(toTitleCase(latestCheckIn.nombre), latestCheckIn.employee_no)}
+              <div style="display:none;width:60px;height:60px;border-radius:50%;background:{getAvatarColor(latestRecord.employee_no)};color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
+                {getInitials(toTitleCase(latestRecord.nombre), latestRecord.employee_no)}
               </div>
               <span style="position:absolute;bottom:0;right:0;width:18px;height:18px;border-radius:50%;background:#2563eb;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;">🔍</span>
             </button>
             <div style="flex:1;min-width:0;">
               <span style="font-size:15px;font-weight:800;color:#0f172a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                title={toTitleCase(latestCheckIn.nombre) || `Empleado ${(latestCheckIn.employee_no||'').replace(/^#/,'')}`}>
-                {toTitleCase(latestCheckIn.nombre) || `Empleado ${(latestCheckIn.employee_no||'').replace(/^#/,'')}`}
+                title={toTitleCase(latestRecord.nombre) || `Empleado ${(latestRecord.employee_no||'').replace(/^#/,'')}`}>
+                {toTitleCase(latestRecord.nombre) || `Empleado ${(latestRecord.employee_no||'').replace(/^#/,'')}`}
               </span>
               <span style="font-size:12px;font-weight:700;color:#2563eb;font-family:monospace;display:block;margin-top:2px;">
-                {(latestCheckIn.employee_no||'').replace(/^#/,'')}
+                {(latestRecord.employee_no||'').replace(/^#/,'')}
               </span>
             </div>
           </div>
           <!-- Metadata -->
           <div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:10px 12px;font-size:12px;">
             <div style="display:flex;align-items:center;gap:6px;font-weight:800;color:#0f172a;margin-bottom:5px;">
-              <span>🕒</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{formatEventTime(latestCheckIn.event_time)}</span>
+              <span>🕒</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{formatEventTime(latestRecord.event_time)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;color:#db2777;font-weight:600;min-width:0;overflow:hidden;">
               <span style="flex-shrink:0;">📍</span>
               <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                title="{latestCheckIn.sala_nombre||'Sala'} ({latestCheckIn.dispositivo_nombre||'Biométrico'})">
-                {latestCheckIn.sala_nombre||'Sala'} ({latestCheckIn.dispositivo_nombre||'Marcaje Personal'})
+                title="{latestRecord.sala_nombre||'Sala'} ({latestRecord.dispositivo_nombre||'Biométrico'})">
+                {latestRecord.sala_nombre||'Sala'} ({latestRecord.dispositivo_nombre||'Marcaje Personal'})
               </span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;color:#1e3a8a;font-weight:700;margin-top:6px;border-top:1px dashed #cbd5e1;padding-top:5px;">
-              <span>📊</span><span>Total acumulado: <strong>{latestCheckIn.total_employee_attlogs||1} marcajes</strong></span>
+              <span>📊</span><span>Total acumulado: <strong>{latestRecord.total_employee_attlogs||1} marcajes</strong></span>
             </div>
           </div>
         {:else}
-          <div style="padding:32px 0;text-align:center;color:#94a3b8;font-size:13px;">⏳ Sin entradas recientes...</div>
+          <div style="padding:32px 0;text-align:center;color:#94a3b8;font-size:13px;">⏳ Sin marcajes recientes...</div>
         {/if}
       </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════════
-         Card 2: ULTIMOS DE SALIDA — latest checkOut record
+         Card 2: CUMPLEAÑEROS DE HOY — Today's celebrants
          ════════════════════════════════════════════════════════ -->
     <div
-      class="flow-card {isFlashingCheckOut ? 'glow-flashing-card' : ''}"
+      class="flow-card"
       style="display:flex;flex-direction:column;transition:all 0.3s ease;position:relative;background:#ffffff;padding:0;overflow:hidden;"
     >
-      <!-- Red section header -->
-      <div style="padding:8px 16px;background:linear-gradient(90deg,#fee2e2,#fff1f2);border-bottom:1px solid #fca5a5;">
-        <span style="font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#b91c1c;">
-          🔴 ULTIMO DE SALIDA
+      <!-- Festive celebration header -->
+      <div style="padding:8px 16px;background:linear-gradient(90deg,#fdf4ff,#fae8ff);border-bottom:1px solid #f0abfc;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:11px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#a21caf;">
+          🎂 CUMPLEAÑEROS DE HOY
         </span>
+        {#if todayBirthdays.length > 0}
+          <span style="font-size:10px;font-weight:800;background:#a21caf;color:#fff;padding:1px 7px;border-radius:10px;box-shadow:0 1px 3px rgba(162,28,175,0.3);">
+            {todayBirthdays.length} {todayBirthdays.length === 1 ? 'cumpleañero' : 'cumpleañeros'}
+          </span>
+        {/if}
       </div>
 
       <div style="padding:14px 16px;flex:1;display:flex;flex-direction:column;justify-content:space-between;">
-        {#if latestCheckOut}
-          <!-- Sub-header -->
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">ULTIMO REGISTRO</span>
-            <span style="font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:5px;color:#b91c1c;">
-              <span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:#c94145;"></span>
-              SALIDA
-            </span>
+        {#if isFetchingBirthdays}
+          <div style="padding:32px 0;text-align:center;color:#a21caf;font-size:13px;font-weight:600;">
+            ⏳ Cargando cumpleañeros...
           </div>
+        {:else if todayBirthdays.length > 0}
+          {@const currentCelebrant = todayBirthdays[activeBirthdayIdx] || todayBirthdays[0]}
+          <!-- Sub-header con controles si hay varios -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">
+              🎉 ¡HOY DE FIESTA!
+            </span>
+            {#if todayBirthdays.length > 1}
+              <div style="display:flex;align-items:center;gap:4px;">
+                <button
+                  type="button"
+                  on:click={prevBirthday}
+                  style="width:22px;height:22px;border-radius:4px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;color:#475569;"
+                  title="Anterior cumpleañero"
+                >◀</button>
+                <span style="font-size:11px;font-weight:800;color:#a21caf;font-family:monospace;padding:0 4px;">
+                  {activeBirthdayIdx + 1}/{todayBirthdays.length}
+                </span>
+                <button
+                  type="button"
+                  on:click={nextBirthday}
+                  style="width:22px;height:22px;border-radius:4px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;color:#475569;"
+                  title="Siguiente cumpleañero"
+                >▶</button>
+              </div>
+            {:else}
+              <span style="font-size:11.5px;font-weight:800;display:inline-flex;align-items:center;gap:4px;color:#a21caf;">
+                🎈 ¡Felicidades!
+              </span>
+            {/if}
+          </div>
+
           <!-- Photo + Name -->
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
-            <button
-              type="button"
-              on:click={() => openAttlogModal(latestCheckOut)}
-              style="position:relative;width:60px;height:60px;flex-shrink:0;padding:0;border:none;background:transparent;cursor:pointer;border-radius:50%;outline:none;"
-            >
+            <div style="position:relative;width:60px;height:60px;flex-shrink:0;">
               <img
-                src={getRecordPhoto(latestCheckOut)}
-                alt="Foto salida"
-                style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #c94145;box-shadow:0 4px 12px rgba(201,65,69,0.25);"
+                src={currentCelebrant.foto ? (currentCelebrant.foto.startsWith('/') ? currentCelebrant.foto : `/${currentCelebrant.foto}`) : `/empleados/${currentCelebrant.id}.jpg`}
+                alt="Foto cumpleañero"
+                style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid #d946ef;box-shadow:0 4px 12px rgba(217,70,239,0.25);"
                 on:error={(e) => {
-                  const img = e.currentTarget;
-                  const fallback = getFallbackProfilePhoto(latestCheckOut);
-                  if (!img.dataset.triedEmp && fallback && !img.src.endsWith(fallback)) {
-                    img.dataset.triedEmp = 'true';
-                    img.src = fallback;
-                  } else {
-                    img.style.display = 'none';
-                    if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
-                  }
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
                 }}
               />
-              <div style="display:none;width:60px;height:60px;border-radius:50%;background:{getAvatarColor(latestCheckOut.employee_no)};color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
-                {getInitials(toTitleCase(latestCheckOut.nombre), latestCheckOut.employee_no)}
+              <div style="display:none;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg, #d946ef, #a21caf);color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
+                {getInitials(toTitleCase(currentCelebrant.nombre), currentCelebrant.cedula)}
               </div>
-              <span style="position:absolute;bottom:0;right:0;width:18px;height:18px;border-radius:50%;background:#2563eb;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;">🔍</span>
-            </button>
+              <span style="position:absolute;bottom:-2px;right:-2px;font-size:16px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2));" title="¡Feliz cumpleaños!">
+                🎂
+              </span>
+            </div>
             <div style="flex:1;min-width:0;">
               <span style="font-size:15px;font-weight:800;color:#0f172a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                title={toTitleCase(latestCheckOut.nombre) || `Empleado ${(latestCheckOut.employee_no||'').replace(/^#/,'')}`}>
-                {toTitleCase(latestCheckOut.nombre) || `Empleado ${(latestCheckOut.employee_no||'').replace(/^#/,'')}`}
+                title={toTitleCase(currentCelebrant.nombre)}>
+                {toTitleCase(currentCelebrant.nombre)}
               </span>
-              <span style="font-size:12px;font-weight:700;color:#2563eb;font-family:monospace;display:block;margin-top:2px;">
-                {(latestCheckOut.employee_no||'').replace(/^#/,'')}
-              </span>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap;">
+                <span style="font-size:12px;font-weight:700;color:#2563eb;font-family:monospace;">
+                  {currentCelebrant.cedula || ''}
+                </span>
+                {#if currentCelebrant.age}
+                  <span style="font-size:10.5px;font-weight:800;background:#fae8ff;color:#a21caf;padding:1px 6px;border-radius:4px;border:1px solid #f0abfc;">
+                    {currentCelebrant.age} años
+                  </span>
+                {/if}
+              </div>
             </div>
           </div>
-          <!-- Metadata -->
-          <div style="background:#f8fafc;border:1px solid #f1f5f9;border-radius:10px;padding:10px 12px;font-size:12px;">
-            <div style="display:flex;align-items:center;gap:6px;font-weight:800;color:#0f172a;margin-bottom:5px;">
-              <span>🕒</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{formatEventTime(latestCheckOut.event_time)}</span>
+
+          <!-- Metadata: Cargo y Sala -->
+          <div style="background:#fdf4ff;border:1px solid #fae8ff;border-radius:10px;padding:10px 12px;font-size:12px;">
+            <div style="display:flex;align-items:center;gap:6px;font-weight:800;color:#0f172a;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              <span>💼</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title={currentCelebrant.cargo_nombre || 'Empleado'}>{currentCelebrant.cargo_nombre || 'Empleado'}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;color:#db2777;font-weight:600;min-width:0;overflow:hidden;">
+            <div style="display:flex;align-items:center;gap:6px;color:#a21caf;font-weight:700;min-width:0;overflow:hidden;">
               <span style="flex-shrink:0;">📍</span>
-              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
-                title="{latestCheckOut.sala_nombre||'Sala'} ({latestCheckOut.dispositivo_nombre||'Biométrico'})">
-                {latestCheckOut.sala_nombre||'Sala'} ({latestCheckOut.dispositivo_nombre||'Marcaje Personal'})
+              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title={currentCelebrant.sala_nombre || 'Sala'}>
+                {currentCelebrant.sala_nombre || 'Sala'}
               </span>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;color:#1e3a8a;font-weight:700;margin-top:6px;border-top:1px dashed #cbd5e1;padding-top:5px;">
-              <span>📊</span><span>Total acumulado: <strong>{latestCheckOut.total_employee_attlogs||1} marcajes</strong></span>
+            <div style="display:flex;align-items:center;gap:6px;color:#c026d3;font-weight:700;margin-top:6px;border-top:1px dashed #f5d0fe;padding-top:5px;">
+              <span>🎁</span><span>{currentCelebrant.age ? `¡Celebrando sus ${currentCelebrant.age} años!` : '¡Celebrando su cumpleaños hoy!'}</span>
             </div>
           </div>
         {:else}
-          <div style="padding:32px 0;text-align:center;color:#94a3b8;font-size:13px;">⏳ Sin salidas recientes...</div>
+          <!-- Sin cumpleañeros hoy -->
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px 10px;text-align:center;">
+            <div style="width:46px;height:46px;border-radius:50%;background:#fdf4ff;border:1px solid #f0abfc;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:8px;">
+              🎂
+            </div>
+            <span style="font-size:13px;font-weight:800;color:#475569;margin-bottom:4px;">
+              No hay cumpleañeros el día de hoy
+            </span>
+            <span style="font-size:11px;font-weight:600;color:#94a3b8;max-width:220px;">
+              ¡Revisa el Calendario RRHH para consultar las fechas del mes!
+            </span>
+          </div>
         {/if}
       </div>
     </div>

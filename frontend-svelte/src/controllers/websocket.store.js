@@ -47,16 +47,14 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
         const payload = JSON.parse(event.data);
         if (payload.type === 'NEW_MARCAJE' && payload.data) {
           const rec = payload.data;
-          const status = (rec.attendancestatus || '').toLowerCase();
+          // Publicar en latestAttlogEventStore para la tarjeta unificada de último registro
+          latestAttlogEventStore.set(rec);
 
           if (status === 'checkin') {
             latestCheckInStore.set(rec);
-            latestAttlogEventStore.set(rec); // backward compat
           } else if (status === 'checkout') {
             latestCheckOutStore.set(rec);
-            latestAttlogEventStore.set(rec); // backward compat
           } else {
-            // undefined or any other value → separate alert toast
             latestMarcajeAlertStore.set(rec);
           }
 

@@ -947,7 +947,7 @@ export function buildAttlogConditions(options = {}) {
         estadoOrs.push(sql`LOWER(COALESCE(a.attendancestatus, '')) = 'checkin'`);
       } else if (e === 'checkout' || e === 'salida') {
         estadoOrs.push(sql`LOWER(COALESCE(a.attendancestatus, '')) = 'checkout'`);
-      } else if (e === 'undefined' || e === 'otros' || e === 'indefinido') {
+      } else if (e === 'undefined' || e === 'otros' || e === 'indefinido' || e === 'puerta' || e.includes('puerta')) {
         estadoOrs.push(sql`LOWER(COALESCE(a.attendancestatus, '')) NOT IN ('checkin', 'checkout')`);
       }
     }
@@ -1272,7 +1272,7 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         return [
           { key: 'checkin', label: 'Entrada', count: row.checkin_count || 0 },
           { key: 'checkout', label: 'Salida', count: row.checkout_count || 0 },
-          { key: 'undefined', label: 'Indefinido / Otros', count: row.undefined_count || 0 }
+          { key: 'undefined', label: 'Puerta / Otros', count: row.undefined_count || 0 }
         ].filter(e => e.count > 0 || activeEst.has(e.key));
       })(),
 

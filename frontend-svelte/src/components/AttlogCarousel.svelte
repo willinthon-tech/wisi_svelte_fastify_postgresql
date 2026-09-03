@@ -25,7 +25,7 @@
     if (s === "checkout" || s === "salida") {
       return { label: "SALIDA", color: "#b91c1c", bgDot: "#c94145", borderColor: "#c94145" };
     }
-    return { label: "INDEFINIDO", color: "#b91c1c", bgDot: "#ef4444", borderColor: "#ef4444" };
+    return { label: "PUERTA / OTROS", color: "#c2410c", bgDot: "#f97316", borderColor: "#fdba74" };
   }
 
   import { 

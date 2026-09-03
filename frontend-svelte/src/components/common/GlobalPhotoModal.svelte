@@ -211,7 +211,7 @@
     if (s === "checkout" || s === "salida") {
       return { label: "SALIDA", color: "#b91c1c", dotColor: "#c94145" };
     }
-    return { label: "INDEFINIDO", color: "#b91c1c", dotColor: "#ef4444" };
+    return { label: "PUERTA / OTROS", color: "#c2410c", dotColor: "#f97316" };
   }
 
   async function captureModalScreenshot() {

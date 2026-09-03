@@ -216,12 +216,9 @@
 
   let latestKnownRealtimeTimeMs = null;
 
-  async function openAttlogModalFromAlert(alertData, specificMode = null) {
+  async function openAttlogModalFromAlert(alertData) {
     if (!alertData) return;
     const rec = alertData.rawRecord || alertData;
-    const isUndef = String(rec.attendancestatus || '').toLowerCase().trim() === 'undefined';
-    const mode = specificMode || (isUndef ? 'undefined' : 'checkin_checkout');
-    const estadosParam = isUndef ? 'undefined' : 'checkin,checkout';
     const pageSize = 10;
 
     let targetPage = 0;
@@ -231,9 +228,9 @@
       const base = getCloudBaseUrl().endsWith("/api") ? getCloudBaseUrl() : `${getCloudBaseUrl()}/api`;
       const salaParam = assignedSalaIds && assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "";
 
-      // 1. Obtener la posición global real en el flujo correspondiente (checkin/checkout o undefined)
+      // 1. Obtener la posición global real en el flujo global (sin filtro de estado)
       try {
-        const qPos = new URLSearchParams({ estados: estadosParam });
+        const qPos = new URLSearchParams();
         if (salaParam) qPos.set("sala_ids", salaParam);
         const posRes = await fetch(`${base}/attlogs/${rec.id}/position?${qPos.toString()}`);
         if (posRes.ok) {
@@ -248,13 +245,12 @@
         console.warn("No se pudo obtener posición de la alerta:", errPos);
       }
 
-      // 2. Cargar la página correspondiente
+      // 2. Cargar la página correspondiente de la lista global
       async function fetchAlertPage(page) {
         const offset = page * pageSize;
         const q = new URLSearchParams({
           limit: String(pageSize),
-          offset: String(offset),
-          estados: estadosParam
+          offset: String(offset)
         });
         if (salaParam) q.set("sala_ids", salaParam);
         const res = await fetch(`${base}/attlogs/latest?${q.toString()}`);
@@ -286,7 +282,7 @@
         currentPage: targetPage,
         totalPages,
         totalCount,
-        mode,
+        mode: 'all',
         onPageNext: async () => {
           if (modalPage + 1 < totalPages) {
             modalPage++;
@@ -315,7 +311,16 @@
         }
       });
     } catch (e) {
-      console.warn("Error cargando lista para modal desde alerta:", e);
+      console.warn("Error cargando lista global para modal desde alerta:", e);
+      openPhotoModal({
+        item: rec,
+        items: [rec],
+        currentIndex: 0,
+        currentPage: 0,
+        totalPages: 1,
+        totalCount: 1,
+        mode: 'all'
+      });
     }
   }
 
@@ -416,7 +421,7 @@
     }
   }
 
-  // Toast 1: checkIn / checkOut
+  // Alerta única global (Top-Right): Entrada, Salida o Puerta / Otros
   function triggerGlobalMarcajeToast(rec, base, isSync = false) {
     globalMarcajeAlert = {
       id: rec.id,
@@ -434,7 +439,7 @@
     if (globalMarcajeAlertTimer) clearTimeout(globalMarcajeAlertTimer);
     globalMarcajeAlertTimer = setTimeout(() => { globalMarcajeAlert = null; }, 10000);
 
-    // Reproducir sonido SOLO en tiempo real (NO en marcajes SYNC) y SOLO para checkin/checkout
+    // Reproducir sonido SOLO en tiempo real (NO en marcajes SYNC)
     if (!isSync) {
       const status = String(rec.attendancestatus || "").toLowerCase().trim();
       if (status === "checkin" || status === "entrada") {
@@ -443,24 +448,6 @@
         playCheckOutSound();
       }
     }
-  }
-
-  // Toast 2: undefined / other statuses
-  function triggerGlobalMarcajeAlertOtherToast(rec, base, isSync = false) {
-    globalMarcajeAlertOther = {
-      id: rec.id,
-      nombre: toTitleCase(rec.nombre),
-      cedula: rec.employee_no || rec.cedula || "",
-      sala: rec.sala_nombre || "Sala",
-      dispositivo: rec.dispositivo_nombre || "Dispositivo",
-      time: formatEventTime(rec.event_time),
-      photo: `${base}/attlogs/${rec.id}.jpg`,
-      attendancestatus: rec.attendancestatus,
-      currentverifymode: rec.currentverifymode || rec.currentverifymode_status || rec.currentVerifyMode,
-      isSync: Boolean(isSync),
-    };
-    if (globalMarcajeAlertOtherTimer) clearTimeout(globalMarcajeAlertOtherTimer);
-    globalMarcajeAlertOtherTimer = setTimeout(() => { globalMarcajeAlertOther = null; }, 10000);
   }
 
   let healthStatus = {
@@ -584,10 +571,6 @@
       const recSalaId = Number(rec.sala_id);
       if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(recSalaId)) return;
 
-      // --- Status split: route to the correct toast ---
-      const status = (rec.attendancestatus || '').toLowerCase();
-      const isRealMarcaje = status === 'checkin' || status === 'checkout';
-
       const backendUrl = getCloudBaseUrl();
       const base = backendUrl.endsWith('/api') ? backendUrl : `${backendUrl}/api`;
 
@@ -604,13 +587,8 @@
         }
       }
 
-      if (isRealMarcaje) {
-        // checkIn / checkOut → Toast 1
-        triggerGlobalMarcajeToast(rec, base, isSync);
-      } else {
-        // undefined / other → Toast 2
-        triggerGlobalMarcajeAlertOtherToast(rec, base, isSync);
-      }
+      // Alerta única superior: Entrada, Salida o Puerta / Otros
+      triggerGlobalMarcajeToast(rec, base, isSync);
 
       // Actualizar modal si está abierto
       handleRealtimeAttlogInPhotoModal(rec);
@@ -1085,20 +1063,24 @@
   visible={$toastVisibleStore}
 />
 
-<!-- Toast 1: checkIn / checkOut real marcajes -->
+<!-- Alerta flotante superior única: Último Marcaje (Entrada, Salida o Puerta / Otros) -->
 {#if globalMarcajeAlert && $isAuthenticatedStore}
   <div class="global-marcaje-alert-toast-container">
     <div
       class="global-marcaje-alert-card"
-      class:global-marcaje-alert-card-checkin={globalMarcajeAlert.attendancestatus === "checkIn"}
-      class:global-marcaje-alert-card-checkout={globalMarcajeAlert.attendancestatus === "checkOut"}
-      class:global-marcaje-alert-card-undefined={globalMarcajeAlert.attendancestatus === "undefined"}
+      class:global-marcaje-alert-card-checkin={(globalMarcajeAlert.attendancestatus || '').toLowerCase() === "checkin"}
+      class:global-marcaje-alert-card-checkout={(globalMarcajeAlert.attendancestatus || '').toLowerCase() === "checkout"}
+      class:global-marcaje-alert-card-undefined={(globalMarcajeAlert.attendancestatus || '').toLowerCase() !== "checkin" && (globalMarcajeAlert.attendancestatus || '').toLowerCase() !== "checkout"}
+      on:click={() => openAttlogModalFromAlert(globalMarcajeAlert)}
+      role="button"
+      tabindex="0"
+      style="cursor: pointer;"
     >
       <div
         class="global-marcaje-avatar-ring"
-        class:global-marcaje-avatar-ring-checkin={globalMarcajeAlert.attendancestatus === "checkIn"}
-        class:global-marcaje-avatar-ring-checkout={globalMarcajeAlert.attendancestatus === "checkOut"}
-        class:global-marcaje-avatar-ring-undefined={globalMarcajeAlert.attendancestatus === "undefined"}
+        class:global-marcaje-avatar-ring-checkin={(globalMarcajeAlert.attendancestatus || '').toLowerCase() === "checkin"}
+        class:global-marcaje-avatar-ring-checkout={(globalMarcajeAlert.attendancestatus || '').toLowerCase() === "checkout"}
+        class:global-marcaje-avatar-ring-undefined={(globalMarcajeAlert.attendancestatus || '').toLowerCase() !== "checkin" && (globalMarcajeAlert.attendancestatus || '').toLowerCase() !== "checkout"}
       >
         <img
           src={globalMarcajeAlert.photo}
@@ -1123,12 +1105,15 @@
               SYNC
             </span>
           {/if}
-          {#if globalMarcajeAlert.attendancestatus === "checkIn"}
+          {#if (globalMarcajeAlert.attendancestatus || '').toLowerCase() === "checkin"}
             <span class="global-marcaje-pulse-dot-checkin"></span>
             <span class="global-marcaje-alert-tag-checkin">Entrada</span>
-          {:else if globalMarcajeAlert.attendancestatus === "checkOut"}
+          {:else if (globalMarcajeAlert.attendancestatus || '').toLowerCase() === "checkout"}
             <span class="global-marcaje-pulse-dot-checkout"></span>
             <span class="global-marcaje-alert-tag-checkout">Salida</span>
+          {:else}
+            <span class="global-marcaje-pulse-dot-undefined"></span>
+            <span class="global-marcaje-alert-tag-undefined">Puerta / Otros</span>
           {/if}
         </div>
         <div class="global-marcaje-alert-name">{globalMarcajeAlert.nombre}</div>
@@ -1138,9 +1123,9 @@
         <div class="global-marcaje-alert-meta" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px;">
           <button
             type="button"
-            on:click|stopPropagation={() => openAttlogModalFromAlert(globalMarcajeAlert, 'checkin_checkout')}
+            on:click|stopPropagation={() => openAttlogModalFromAlert(globalMarcajeAlert)}
             style="background: transparent; border: none; padding: 0; margin: 0; font-family: monospace; font-size: 11.5px; font-weight: 800; color: #2563eb; text-decoration: underline; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;"
-            title="Abrir modal con los detalles de este marcaje"
+            title="Abrir modal con la lista global de marcajes"
           >
             #{globalMarcajeAlert.id}
           </button>
@@ -1150,68 +1135,6 @@
               <span
                 style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; background: {vMode.bg}; color: {vMode.color}; border: 1px solid {vMode.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.04);"
                 title="Método de verificación: {globalMarcajeAlert.currentverifymode}"
-              >
-                <span>{vMode.icon}</span>
-                <span>{vMode.label}</span>
-              </span>
-            {/if}
-          {/if}
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Toast 2: undefined / other status events — bottom-right, brownish style -->
-{#if globalMarcajeAlertOther && $isAuthenticatedStore}
-  <div class="global-marcaje-alert-other-toast-container">
-    <div class="toast2-card">
-      <div class="toast2-avatar-ring">
-        <img
-          src={globalMarcajeAlertOther.photo}
-          alt="Marcaje"
-          class="global-marcaje-avatar-img"
-          on:error={(e) => {
-            e.target.style.display = "none";
-            if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = "flex";
-          }}
-        />
-        <div class="toast2-avatar-fallback">
-          {getInitials(globalMarcajeAlertOther.nombre, globalMarcajeAlertOther.cedula)}
-        </div>
-      </div>
-      <div class="global-marcaje-alert-content">
-        <div class="global-marcaje-alert-header" style="display: flex; align-items: center; gap: 6px;">
-          {#if globalMarcajeAlertOther.isSync}
-            <span
-              style="background: #2563eb; color: #ffffff; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 900; letter-spacing: 0.8px; box-shadow: 0 2px 5px rgba(37,99,235,0.3); display: inline-flex; align-items: center; gap: 3px;"
-              title="Registro sincronizado fuera de tiempo real"
-            >
-              SYNC
-            </span>
-          {/if}
-          <span class="toast2-pulse-dot"></span>
-          <span class="toast2-tag">⚠️ Indefinido</span>
-        </div>
-        <div class="global-marcaje-alert-name">{globalMarcajeAlertOther.nombre}</div>
-        <div class="global-marcaje-alert-meta"><span>🕒 {globalMarcajeAlertOther.time}</span></div>
-        <div class="global-marcaje-alert-meta"><span>🫆 {globalMarcajeAlertOther.dispositivo}</span></div>
-        <div class="global-marcaje-alert-meta"><span>📍 {globalMarcajeAlertOther.sala}</span></div>
-        <div class="global-marcaje-alert-meta" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px;">
-          <button
-            type="button"
-            on:click|stopPropagation={() => openAttlogModalFromAlert(globalMarcajeAlertOther, 'undefined')}
-            style="background: transparent; border: none; padding: 0; margin: 0; font-family: monospace; font-size: 11.5px; font-weight: 800; color: #2563eb; text-decoration: underline; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;"
-            title="Abrir modal con los detalles de este marcaje indefinido"
-          >
-            #{globalMarcajeAlertOther.id}
-          </button>
-          {#if globalMarcajeAlertOther.currentverifymode}
-            {@const vMode = formatVerifyMode(globalMarcajeAlertOther.currentverifymode)}
-            {#if vMode}
-              <span
-                style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; background: {vMode.bg}; color: {vMode.color}; border: 1px solid {vMode.border}; box-shadow: 0 1px 2px rgba(0,0,0,0.04);"
-                title="Método de verificación: {globalMarcajeAlertOther.currentverifymode}"
               >
                 <span>{vMode.icon}</span>
                 <span>{vMode.label}</span>
@@ -1294,7 +1217,7 @@
     pointer-events: auto;
   }
   .global-marcaje-alert-card-undefined {
-    border: 1.5px solid #5d6660;
+    border: 1.5px solid #f97316;
   }
   .global-marcaje-alert-card-checkin {
     border: 1.5px solid #22c55e;
@@ -1317,8 +1240,8 @@
   }
 
   .global-marcaje-avatar-ring-undefined {
-    border: 2px solid #5d6660;
-    background: #5d6660;
+    border: 2px solid #f97316;
+    background: #ea580c;
   }
   .global-marcaje-avatar-ring-checkin {
     border: 2px solid #22c55e;
@@ -1368,7 +1291,7 @@
   .global-marcaje-alert-tag-undefined {
     font-size: 10.5px;
     font-weight: 800;
-    color: #5d6660;
+    color: #ea580c;
     letter-spacing: 0.5px;
     text-transform: uppercase;
   }
@@ -1391,8 +1314,8 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #5d6660;
-    box-shadow: 0 0 8px #5d6660;
+    background: #f97316;
+    box-shadow: 0 0 8px #f97316;
     animation: globalMarcajePulse 1s infinite alternate;
   }
   .global-marcaje-pulse-dot-checkin {

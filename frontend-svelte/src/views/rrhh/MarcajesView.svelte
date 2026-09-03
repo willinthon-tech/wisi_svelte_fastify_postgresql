@@ -1083,9 +1083,7 @@
                       ? 'color: #22c55e;'
                       : item.attendancestatus === 'checkOut'
                         ? 'color: #c94145;'
-                        : item.attendancestatus === 'undefined'
-                          ? 'color: #5d6660;'
-                          : 'color: #5d6660;'}
+                        : 'color: #ea580c;'}
                 "
                   >
                     <span
@@ -1094,18 +1092,14 @@
                         ? 'background: #22c55e;'
                         : item.attendancestatus === 'checkOut'
                           ? 'background: #c94145;'
-                          : item.attendancestatus === 'undefined'
-                            ? 'background: #5d6660;'
-                            : 'background: #5d6660;'}
+                          : 'background: #f97316;'}
                 "
                     ></span>
                     {item.attendancestatus === "checkIn"
                       ? "ENTRADA"
                       : item.attendancestatus === "checkOut"
                         ? "SALIDA"
-                        : item.attendancestatus === "undefined"
-                          ? "INDEFINIDO"
-                          : "INDEFINIDO"}
+                        : "PUERTA / OTROS"}
                   </span>
                 </td>
 
