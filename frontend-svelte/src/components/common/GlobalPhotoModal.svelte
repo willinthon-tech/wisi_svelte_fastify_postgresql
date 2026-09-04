@@ -6,7 +6,7 @@
     photoModalNext,
     photoModalPrev
   } from "../../controllers/globalModal.store.js";
-  import { getCloudBaseUrl } from "../../config/api.config.js";
+  import { getCloudBaseUrl, toBackendUrl } from "../../config/api.config.js";
   import html2canvas from "html2canvas";
 
   const backendUrl = getCloudBaseUrl();
@@ -143,29 +143,23 @@
     // Si es un empleado o desincorporado (sin evento de marcaje), usa su foto de empleado
     if (mode === 'empleado' || mode === 'desincorporado' || !record.event_time) {
       if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
-        const clean = record.foto.trim();
-        if (clean.startsWith('http')) return clean;
-        return clean.startsWith('/') ? clean : `/${clean}`;
+        return toBackendUrl(record.foto);
       }
       const empId = record.empleado_id || record.id;
-      if (empId) return `/empleados/${empId}.jpg`;
+      if (empId) return toBackendUrl(`/empleados/${empId}.jpg`);
       return "";
     }
 
     // Para registros de marcaje (live_records, attlog, checkin_checkout, etc.)
-    // Si tiene id de marcaje, SIEMPRE cargar la foto capturada del evento /attlogs/${record.id}.jpg
-    // Si la foto no estuviera disponible, el evento on:error del <img> hará automáticamente fallback a la foto de perfil
     if (record.id) {
-      return `/attlogs/${record.id}.jpg`;
+      return toBackendUrl(`/attlogs/${record.id}.jpg`);
     }
 
     if (record.empleado_foto && typeof record.empleado_foto === 'string' && record.empleado_foto.trim().length > 0) {
-      const clean = record.empleado_foto.trim();
-      if (clean.startsWith('http')) return clean;
-      return clean.startsWith('/') ? clean : `/${clean}`;
+      return toBackendUrl(record.empleado_foto);
     }
     if (record.empleado_id) {
-      return `/empleados/${record.empleado_id}.jpg`;
+      return toBackendUrl(`/empleados/${record.empleado_id}.jpg`);
     }
 
     return "";

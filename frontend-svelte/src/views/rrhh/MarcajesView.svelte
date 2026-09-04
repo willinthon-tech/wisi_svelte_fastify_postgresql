@@ -35,7 +35,7 @@
   import { onMount, onDestroy } from "svelte";
   import html2canvas from "html2canvas";
   import { latestAttlogEventStore } from "../../controllers/websocket.store.js";
-  import { getCloudBaseUrl } from "../../config/api.config.js";
+  import { getCloudBaseUrl, toBackendUrl } from "../../config/api.config.js";
   import { userSalasStore as masterUserSalasStore } from "../../controllers/master.store.js";
   import {
     currentUserStore,
@@ -129,8 +129,7 @@
       record.foto ||
       (record.empleado_id ? `/empleados/${record.empleado_id}.jpg` : null);
     if (!empFoto) return null;
-    if (empFoto.startsWith("http")) return empFoto;
-    return empFoto.startsWith("/") ? empFoto : `/${empFoto}`;
+    return toBackendUrl(empFoto);
   }
 
   // Extract assigned sala IDs strictly for the logged in user
@@ -178,7 +177,7 @@
 
   function getPhotoUrl(id) {
     if (!id) return "";
-    return `/attlogs/${id}.jpg`;
+    return toBackendUrl(`/attlogs/${id}.jpg`);
   }
 
   // Precarga automática en segundo plano de las fotos de los 10 marcajes visibles en pantalla

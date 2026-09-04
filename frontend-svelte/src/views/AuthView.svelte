@@ -10,10 +10,19 @@
 
   import { triggerToast } from '../controllers/ui.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
+  import { getCloudBaseUrl } from '../config/api.config.js';
 
   let usuario = 'wilinthon';
   let password = '';
   let loading = false;
+
+  $: currentServerHost = (function() {
+    try {
+      return new URL(getCloudBaseUrl()).host;
+    } catch {
+      return 'willinthon.wisi.space';
+    }
+  })();
 
   async function handleLogin() {
     if (!usuario.trim() || !password.trim()) {
@@ -104,5 +113,10 @@
         </button>
       </form>
     {/if}
+
+    <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11.5px; color: #64748b;">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.4); display: inline-block;"></span>
+      <span>Cloud API: <strong style="color: #334155;">{currentServerHost}</strong></span>
+    </div>
   </div>
 </div>

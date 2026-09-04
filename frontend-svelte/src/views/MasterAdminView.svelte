@@ -855,14 +855,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   async function executeDirectIsapiInjection(device) {
     if (!device || injectingDeviceId) return;
     injectingDeviceId = device.id;
-    triggerToast(`⏳ Inyectando HTTP Listening en '${device.nombre}'...`, "info");
+    triggerToast(
+      `⏳ Inyectando HTTP Listening en '${device.nombre}'...`,
+      "info",
+    );
     try {
       await loadSystemConfig();
       const payload = {
         ip_domain: systemConfig.isapi_ip_domain || "willinthon.wisi.space",
         url: systemConfig.isapi_url || "/api/attlogs/sync",
         port: Number(systemConfig.isapi_port) || 443,
-        protocol: systemConfig.isapi_protocol || "HTTPS"
+        protocol: systemConfig.isapi_protocol || "HTTPS",
       };
 
       const res = await fetch(
@@ -871,25 +874,25 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-        }
+        },
       );
       const json = await res.json();
       if (json && json.success) {
         triggerToast(
           `⚡ ${json.message || `HTTP Listening configurado exitosamente en ${device.nombre}`}`,
-          "success"
+          "success",
         );
       } else {
         triggerToast(
           `❌ ${json?.error || json?.message || "Error al inyectar configuración en el biométrico"}`,
-          "error"
+          "error",
         );
       }
     } catch (err) {
       console.error("Error al inyectar ISAPI:", err);
       triggerToast(
         `❌ Error de conexión al inyectar en '${device.nombre}': ${err.message}`,
-        "error"
+        "error",
       );
     } finally {
       injectingDeviceId = null;

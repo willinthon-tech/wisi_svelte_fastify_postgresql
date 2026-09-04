@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "610605365914",
+    "project_id": "wisi-space",
+    "storage_bucket": "wisi-space.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610605365914:android:e3ec8d196420100830bd23",
+        "android_client_info": {
+          "package_name": "com.wisi.space"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyChV2xIFTHA7lrIk0Rcdu30fY-nNvFtweM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

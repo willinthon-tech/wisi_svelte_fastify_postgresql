@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Wisi Space</string>
+    <string name="title_activity_main">Wisi Space</string>
+    <string name="package_name">com.wisi.space</string>
+    <string name="custom_url_scheme">com.wisi.space</string>
+</resources>

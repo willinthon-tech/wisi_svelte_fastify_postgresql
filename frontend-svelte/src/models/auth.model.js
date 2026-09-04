@@ -1,7 +1,12 @@
-const API_BASE = '/api';
+import { getCloudBaseUrl } from '../config/api.config.js';
+
+function getApiBase() {
+  const base = getCloudBaseUrl();
+  return base.endsWith('/api') ? base : `${base}/api`;
+}
 
 export async function loginAuthModel(usuario, password) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const res = await fetch(`${getApiBase()}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ usuario, password })
@@ -17,7 +22,7 @@ export async function getMeAuthModel() {
   const userId = storedUser?.id || '';
 
   const headers = token ? { 'Authorization': token } : {};
-  const res = await fetch(`${API_BASE}/auth/me?user_id=${userId}`, { headers });
+  const res = await fetch(`${getApiBase()}/auth/me?user_id=${userId}`, { headers });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'Error al consultar información de usuario');
   return json;

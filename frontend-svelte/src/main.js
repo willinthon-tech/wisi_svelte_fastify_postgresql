@@ -1,3 +1,6 @@
+import { setupGlobalFetchInterceptor } from './config/api.config.js';
+setupGlobalFetchInterceptor();
+
 import { mount } from 'svelte';
 import './app.css';
 import App from './App.svelte';

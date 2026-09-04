@@ -82,6 +82,7 @@
   import html2canvas from 'html2canvas';
   import { triggerToast, globalCreateModalTriggerStore } from '../../controllers/ui.store.js';
   import { masterCargosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
   import { 
     photoModalStore, 
     openPhotoModal as triggerGlobalPhotoModal, 
@@ -535,13 +536,11 @@
   function getPhotoUrl(item) {
     if (!item) return '';
     if (item.foto && typeof item.foto === 'string' && item.foto.trim().length > 0) {
-      const clean = item.foto.trim();
-      if (clean.startsWith('http')) return clean;
-      return clean.startsWith('/') ? clean : `/${clean}`;
+      return toBackendUrl(item.foto);
     }
     const empId = item.empleado_id || item.id;
     if (empId) {
-      return `/empleados/${empId}.jpg`;
+      return toBackendUrl(`/empleados/${empId}.jpg`);
     }
     return '';
   }

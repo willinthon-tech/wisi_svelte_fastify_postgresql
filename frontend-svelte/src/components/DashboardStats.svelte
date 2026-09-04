@@ -6,7 +6,7 @@
 
   import { onMount, onDestroy } from "svelte";
   import AttlogCarousel from "./AttlogCarousel.svelte";
-  import { getCloudBaseUrl } from "../config/api.config.js";
+  import { getCloudBaseUrl, toBackendUrl } from "../config/api.config.js";
   import { userSalasStore as masterUserSalasStore } from "../controllers/master.store.js";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../controllers/auth.store.js";
   import { latestAttlogEventStore } from "../controllers/websocket.store.js";
@@ -93,7 +93,7 @@
 
   function getPhotoUrl(id) {
     if (!id) return "";
-    return `/attlogs/${id}.jpg`;
+    return toBackendUrl(`/attlogs/${id}.jpg`);
   }
 
   function getFallbackProfilePhoto(record) {
@@ -103,8 +103,7 @@
       record.foto ||
       (record.empleado_id ? `/empleados/${record.empleado_id}.jpg` : null);
     if (!empFoto) return null;
-    if (empFoto.startsWith("http")) return empFoto;
-    return empFoto.startsWith("/") ? empFoto : `/${empFoto}`;
+    return toBackendUrl(empFoto);
   }
 
   function getRecordPhoto(record) {
@@ -895,7 +894,7 @@
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
               <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
                 <img
-                  src={currentCelebrant.foto ? (currentCelebrant.foto.startsWith('/') ? currentCelebrant.foto : `/${currentCelebrant.foto}`) : `/empleados/${currentCelebrant.id}.jpg`}
+                  src={toBackendUrl(currentCelebrant.foto || `/empleados/${currentCelebrant.id}.jpg`)}
                   alt="Foto cumpleañero"
                   style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #d946ef;box-shadow:0 3px 10px rgba(217,70,239,0.25);"
                   on:error={(e) => {
@@ -983,7 +982,7 @@
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
               <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
                 <img
-                  src={upCelebrant.foto ? (upCelebrant.foto.startsWith('/') ? upCelebrant.foto : `/${upCelebrant.foto}`) : `/empleados/${upCelebrant.id}.jpg`}
+                  src={toBackendUrl(upCelebrant.foto || `/empleados/${upCelebrant.id}.jpg`)}
                   alt="Foto cumpleañero"
                   style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #f59e0b;box-shadow:0 3px 10px rgba(245,158,11,0.25);"
                   on:error={(e) => {
@@ -1077,7 +1076,7 @@
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
               <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
                 <img
-                  src={destCelebrant.foto ? (destCelebrant.foto.startsWith('/') ? destCelebrant.foto : `/${destCelebrant.foto}`) : `/empleados/${destCelebrant.id}.jpg`}
+                  src={toBackendUrl(destCelebrant.foto || `/empleados/${destCelebrant.id}.jpg`)}
                   alt="Foto cumpleañero"
                   style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid {activeDestacadoType === 'mayor' ? '#6366f1' : (activeDestacadoType === 'joven' ? '#10b981' : '#f59e0b')};box-shadow:0 3px 10px rgba(0,0,0,0.12);"
                   on:error={(e) => {

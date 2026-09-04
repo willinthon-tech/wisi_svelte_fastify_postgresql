@@ -3,6 +3,7 @@
   import { selectedCorteStore } from './CortesView.svelte';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   let corteId = null;
   let corte = null;
@@ -427,7 +428,7 @@
                   <td class="col-emp sticky-col">
                     <div class="emp-cell">
                       <img
-                        src={emp.foto || `/empleados/${emp.id}.jpg`}
+                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`)}
                         alt=""
                         class="emp-avatar"
                         on:error={(e) => { e.target.style.display = 'none'; }}
@@ -523,7 +524,7 @@
                   <td class="col-emp sticky-col">
                     <div class="emp-cell">
                       <img
-                        src={emp.foto || `/empleados/${emp.id}.jpg`}
+                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`)}
                         alt=""
                         class="emp-avatar"
                         on:error={(e) => { e.target.style.display = 'none'; }}

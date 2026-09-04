@@ -88,11 +88,16 @@
       tabindex="0"
       class="user-profile"
       title="Ver Perfil de Usuario"
-      style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 8px; border-radius: 8px; transition: background 0.15s ease;">
+      style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 4px 10px; border-radius: 10px; background: rgba(241, 245, 249, 0.7); border: 1px solid #e2e8f0; transition: all 0.15s ease;">
       
-      <div class="user-avatar" style="background: linear-gradient(135deg, #3b76ef, #6366f1); color: #ffffff; font-weight: 700; font-size: 13px; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-        {$currentUserStore?.nombre_apellido ? $currentUserStore.nombre_apellido[0] : 'W'}
-      </div>
+      <!-- Logo Wisi Space al lado del usuario -->
+      <img 
+        src="/logo.png" 
+        alt="Wisi Space Logo" 
+        style="width: 34px; height: 34px; border-radius: 8px; object-fit: contain; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.12);"
+        on:error={(e) => { e.currentTarget.src = '/pwa-192x192.png'; }}
+      />
+
       
       <div style="display: flex; flex-direction: column; text-align: left; line-height: 1.2;">
         <span class="user-name" style="font-size: 13px; font-weight: 700; color: #0f172a;">

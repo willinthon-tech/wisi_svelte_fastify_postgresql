@@ -4,6 +4,7 @@
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../../controllers/auth.store.js";
   import { userSalasStore as masterUserSalasStore, masterSalasStore } from "../../controllers/master.store.js";
+  import { toBackendUrl } from "../../config/api.config.js";
 
   // Extraer las salas asignadas estrictamente para el usuario logueado
   $: assignedSalaIds = (function () {
@@ -248,7 +249,7 @@
       correo: fromMap.correo || emp.sala_correo || "rrhh@casino.com",
       telefono: fromMap.telefono || emp.sala_telefono || "0424-968.86.12",
       has_logo: hasLogo,
-      logo_url: hasLogo ? `/api/salas/${emp.sala_id}.png` : null
+      logo_url: hasLogo ? toBackendUrl(`/api/salas/${emp.sala_id}.png`) : null
     };
   }
 
@@ -371,17 +372,30 @@
   let hexPhotoDataUrl = "";
 
   async function generateHexPhoto(src) {
-    if (!src) {
-      hexPhotoDataUrl = "";
+    if (!src || src === DEFAULT_AVATAR_PLACEHOLDER) {
+      hexPhotoDataUrl = DEFAULT_AVATAR_PLACEHOLDER;
       return;
     }
     try {
+      let imageSrcToLoad = src;
+      try {
+        const response = await fetch(src);
+        if (response.ok) {
+          const blob = await response.blob();
+          imageSrcToLoad = URL.createObjectURL(blob);
+        }
+      } catch (fetchErr) {
+        // Si fetch falla, continuar con src directo
+      }
+
       const img = new Image();
-      img.crossOrigin = "anonymous";
+      if (!imageSrcToLoad.startsWith("blob:")) {
+        img.crossOrigin = "anonymous";
+      }
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = reject;
-        img.src = src;
+        img.src = imageSrcToLoad;
       });
 
       // Multiplicador 4x de alta resolución (784 x 992 px) para calidad cristalina en la descarga Ultra HD
@@ -428,8 +442,25 @@
     }
   }
 
-  $: if (currentEmp && currentEmp.foto) {
-    generateHexPhoto(currentEmp.foto);
+  const DEFAULT_AVATAR_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120' fill='%23cbd5e1'%3E%3Crect width='120' height='120' fill='%23f1f5f9'/%3E%3Cpath d='M60 22a22 22 0 1 0 0 44 22 22 0 0 0 0-44zm0 50c-24.3 0-44 15.8-44 35.3 0 1.5 1.2 2.7 2.7 2.7h82.6c1.5 0 2.7-1.2 2.7-2.7C104 87.8 84.3 72 60 72z' fill='%2394a3b8'/%3E%3C/svg%3E";
+
+  function getEmpPhotoUrl(emp) {
+    if (!emp) return DEFAULT_AVATAR_PLACEHOLDER;
+    let foto = emp.foto || (emp.id ? `/empleados/${emp.id}.jpg` : '');
+    if (!foto) return DEFAULT_AVATAR_PLACEHOLDER;
+    if (foto.startsWith('/empleados/')) {
+      foto = '/api' + foto;
+    }
+    return toBackendUrl(foto);
+  }
+
+  $: empPhotoResolved = currentEmp ? getEmpPhotoUrl(currentEmp) : DEFAULT_AVATAR_PLACEHOLDER;
+
+  $: if (empPhotoResolved && empPhotoResolved !== DEFAULT_AVATAR_PLACEHOLDER) {
+    hexPhotoDataUrl = empPhotoResolved;
+    generateHexPhoto(empPhotoResolved);
+  } else {
+    hexPhotoDataUrl = DEFAULT_AVATAR_PLACEHOLDER;
   }
 </script>
 
@@ -730,9 +761,8 @@
                   src={currentSala.logo_url}
                   alt="Logo {currentSala.nombre}"
                   class="sala-logo-img"
-                  crossorigin="anonymous"
                   on:error={(e) => {
-                    e.target.style.display = 'none';
+                    e.currentTarget.style.display = 'none';
                   }}
                 />
               {/if}
@@ -747,17 +777,16 @@
                   <polygon points="58,0 110,30 110,100 58,130 6,100 6,30" fill="{activePalette.primary}" />
                 </svg>
                 <img
-                  src={hexPhotoDataUrl || currentEmp.foto}
+                  src={hexPhotoDataUrl || empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER}
                   alt={currentEmp.nombre}
                   class="employee-hex-photo"
-                  crossorigin="anonymous"
-                  on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }}
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }}
                 />
               </div>
             {:else if selectedModelo === 'wave'}
               <div class="photo-circle-container" style="--accent-ring: {activePalette.primary};">
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-circle-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-circle-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'diamond'}
               <!-- Foto con marco de diamante / octágono -->
@@ -766,20 +795,20 @@
                   <polygon points="60,2 118,30 118,90 60,118 2,90 2,30" fill="{activePalette.primary}" />
                   <polygon points="60,8 112,34 112,86 60,112 8,86 8,34" fill="#d4af37" opacity="0.5" />
                 </svg>
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-diamond-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-diamond-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'neon'}
               <!-- Foto con marco neón circular con glow -->
               <div class="photo-neon-container" style="--neon-color: {activePalette.accent};">
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-neon-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-neon-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'corporate'}
               <!-- Foto corporativa: rectangular sobria -->
               <div class="photo-corporate-container" style="border-color: {activePalette.primary};">
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-corporate-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-corporate-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'retro'}
               <!-- Foto con marco tipo ficha de casino -->
@@ -789,38 +818,38 @@
                   <circle cx="62" cy="62" r="56" fill="none" stroke="#d4af37" stroke-width="2" />
                   <circle cx="62" cy="62" r="50" fill="none" stroke="rgba(212,175,55,0.4)" stroke-width="1" stroke-dasharray="4 3" />
                 </svg>
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-retro-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-retro-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'geometric'}
               <!-- Foto con marco angular moderno -->
               <div class="photo-geometric-container" style="--accent-border: {activePalette.primary};">
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-geometric-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-geometric-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'executive'}
               <!-- Foto con marco ejecutivo bimetálico -->
               <div class="photo-executive-container" style="--exec-accent: {activePalette.primary};">
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-executive-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-executive-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'cyber'}
               <!-- Foto con visor tech y halo cyber -->
               <div class="photo-cyber-container" style="--cyber-accent: {activePalette.accent};">
                 <div class="cyber-scan-ring"></div>
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-cyber-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-cyber-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else if selectedModelo === 'aurora'}
               <!-- Foto con halo fluido degradado aurora -->
               <div class="photo-aurora-container" style="--aurora-p: {activePalette.primary}; --aurora-a: {activePalette.accent};">
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-aurora-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-aurora-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {:else}
               <div class="photo-rect-container" style="border-color: {activePalette.primary};">
-                <img src={currentEmp.foto} alt={currentEmp.nombre} class="employee-rect-photo"
-                  crossorigin="anonymous" on:error={(e) => { e.target.src = "/apple-touch-icon.png"; }} />
+                <img src={empPhotoResolved || DEFAULT_AVATAR_PLACEHOLDER} alt={currentEmp.nombre} class="employee-rect-photo"
+                  on:error={(e) => { if (e.currentTarget.src !== DEFAULT_AVATAR_PLACEHOLDER) e.currentTarget.src = DEFAULT_AVATAR_PLACEHOLDER; }} />
               </div>
             {/if}
           </div>

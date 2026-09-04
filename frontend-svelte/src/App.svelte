@@ -123,6 +123,12 @@
   } from "./controllers/ui.store.js";
 
   import { fetchHealthModel } from "./models/health.model.js";
+  import { initPushNotifications } from "./services/push.service.js";
+
+  // Registrar Notificaciones Push nativas cuando el usuario está autenticado en Android
+  $: if ($isAuthenticatedStore && $currentUserStore?.id) {
+    initPushNotifications($currentUserStore.id);
+  }
 
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;

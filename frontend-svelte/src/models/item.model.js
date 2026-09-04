@@ -1,4 +1,9 @@
-const API_BASE = '/api';
+import { getCloudBaseUrl } from '../config/api.config.js';
+
+function getApiBase() {
+  const base = getCloudBaseUrl();
+  return base.endsWith('/api') ? base : `${base}/api`;
+}
 
 export async function fetchItemsModel(params = {}) {
   const query = new URLSearchParams();
@@ -6,14 +11,14 @@ export async function fetchItemsModel(params = {}) {
   if (params.category && params.category !== 'All') query.append('category', params.category);
   if (params.completed !== undefined) query.append('completed', params.completed);
 
-  const res = await fetch(`${API_BASE}/items?${query.toString()}`);
+  const res = await fetch(`${getApiBase()}/items?${query.toString()}`);
   if (!res.ok) throw new Error('Error al obtener lista de elementos');
   const json = await res.json();
   return json.data || [];
 }
 
 export async function createItemModel(itemData) {
-  const res = await fetch(`${API_BASE}/items`, {
+  const res = await fetch(`${getApiBase()}/items`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(itemData)
@@ -24,7 +29,7 @@ export async function createItemModel(itemData) {
 }
 
 export async function updateItemModel(id, itemData) {
-  const res = await fetch(`${API_BASE}/items/${id}`, {
+  const res = await fetch(`${getApiBase()}/items/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(itemData)
@@ -35,7 +40,7 @@ export async function updateItemModel(id, itemData) {
 }
 
 export async function toggleItemModel(id) {
-  const res = await fetch(`${API_BASE}/items/${id}/toggle`, {
+  const res = await fetch(`${getApiBase()}/items/${id}/toggle`, {
     method: 'PATCH'
   });
   const json = await res.json();
@@ -44,7 +49,7 @@ export async function toggleItemModel(id) {
 }
 
 export async function deleteItemModel(id) {
-  const res = await fetch(`${API_BASE}/items/${id}`, {
+  const res = await fetch(`${getApiBase()}/items/${id}`, {
     method: 'DELETE'
   });
   const json = await res.json();

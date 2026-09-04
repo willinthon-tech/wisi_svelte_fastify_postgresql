@@ -27,6 +27,7 @@
 
 <script>
   import { onMount } from "svelte";
+  import { toBackendUrl } from "../../config/api.config.js";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../../controllers/auth.store.js";
   import { userSalasStore as masterUserSalasStore } from "../../controllers/master.store.js";
   import { triggerToast } from "../../controllers/ui.store.js";
@@ -582,7 +583,7 @@
       .replace(/^empleados\//, "")
       .replace(/^photos\//, "")
       .trim();
-    return `/empleados/${cleanFoto}`;
+    return toBackendUrl(`/empleados/${cleanFoto}`);
   }
 
   function getEntradaSalidaTimes(marcajeStr) {
