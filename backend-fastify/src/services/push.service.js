@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,7 +19,10 @@ const inMemoryTokens = new Set();
  * 4. GOOGLE_APPLICATION_CREDENTIALS
  */
 function initFirebase() {
-  if (isFirebaseInitialized) return;
+  if (isFirebaseInitialized || getApps().length > 0) {
+    isFirebaseInitialized = true;
+    return;
+  }
 
   try {
     let serviceAccount = null;
@@ -53,8 +57,8 @@ function initFirebase() {
     }
 
     if (serviceAccount) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+      initializeApp({
+        credential: cert(serviceAccount)
       });
       isFirebaseInitialized = true;
       console.log(`\x1b[32m🟢 [PUSH FCM]\x1b[0m Firebase Admin SDK inicializado exitosamente (Proyecto: ${serviceAccount.project_id || 'wisi-space'})`);
@@ -161,7 +165,8 @@ export async function sendPushNotificationToAll({ title, body, data = {}, icon =
   };
 
   try {
-    const response = await admin.messaging().sendEachForMulticast(message);
+    const messaging = getMessaging();
+    const response = await messaging.sendEachForMulticast(message);
 
     // Limpiar tokens inválidos o desinstalados
     if (response.failureCount > 0 && isPgConnected && sql) {
