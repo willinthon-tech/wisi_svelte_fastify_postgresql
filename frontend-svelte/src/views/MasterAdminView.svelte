@@ -70,6 +70,22 @@
     isSavingConfig = true;
     try {
       systemConfig.timezone = selectedTimezone;
+      if (selectedTimezone === "America/Caracas") {
+        systemConfig.timezone_offset = "-4";
+        systemConfig.timezone_display = "America/Caracas -4";
+      } else if (selectedTimezone === "America/Bogota") {
+        systemConfig.timezone_offset = "-5";
+        systemConfig.timezone_display = "America/Bogota -5";
+      } else if (selectedTimezone === "America/Santo_Domingo") {
+        systemConfig.timezone_offset = "-4";
+        systemConfig.timezone_display = "America/Santo_Domingo -4";
+      } else if (selectedTimezone === "America/New_York") {
+        systemConfig.timezone_offset = "-5";
+        systemConfig.timezone_display = "America/New_York -5";
+      } else if (selectedTimezone === "UTC") {
+        systemConfig.timezone_offset = "0";
+        systemConfig.timezone_display = "UTC +0";
+      }
       const res = await fetch("/api/master/configuracion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2072,18 +2088,18 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #f8fafc; font-size: 14.5px; font-weight: 600; outline: none; cursor: pointer;"
         >
           <option value="America/Caracas"
-            >🇻🇪 Venezuela (UTC-4) — America/Caracas</option
+            >🇻🇪 Venezuela (America/Caracas -4 / UTC-4)</option
           >
           <option value="America/Bogota"
-            >🇨🇴 Colombia / Perú (UTC-5) — America/Bogota</option
+            >🇨🇴 Colombia / Perú (America/Bogota -5 / UTC-5)</option
           >
           <option value="America/Santo_Domingo"
-            >🇩🇴 República Dominicana (UTC-4) — America/Santo_Domingo</option
+            >🇩🇴 República Dominicana (America/Santo_Domingo -4 / UTC-4)</option
           >
           <option value="America/New_York"
-            >🇺🇸 EE.UU. Este (UTC-5/UTC-4 EST) — America/New_York</option
+            >🇺🇸 EE.UU. Este (America/New_York -5 / EST)</option
           >
-          <option value="UTC">🌐 Estándar Internacional UTC (UTC+00:00)</option>
+          <option value="UTC">🌐 Estándar Internacional UTC (+0)</option>
         </select>
       </div>
 

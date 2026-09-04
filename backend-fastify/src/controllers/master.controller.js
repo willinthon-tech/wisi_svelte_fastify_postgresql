@@ -530,47 +530,9 @@ function extractHikvisionPushData(obj, rawStr = null) {
 
 function formatLocalDateTime(rawTime) {
   if (rawTime) {
-    const rawStr = String(rawTime).trim();
-    // Detect if rawTime contains explicit timezone information like Z, +00:00, -04:00, etc.
-    const hasTz = /Z|[+-]\d{2}(:?\d{2})?$/.test(rawStr);
-    if (hasTz) {
-      const d = new Date(rawStr);
-      if (!isNaN(d.getTime())) {
-        const formatter = new Intl.DateTimeFormat('sv-SE', {
-          timeZone: 'America/Caracas',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        });
-        return formatter.format(d).replace(' ', ' ');
-      }
-    }
-
-    // If it's already a standard local datetime string YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss
-    let s = rawStr.replace('T', ' ');
-    if (s.includes('.')) s = s.split('.')[0];
-    if (s.length >= 19 && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
-      return s.substring(0, 19);
-    }
+    return String(rawTime).trim();
   }
-
-  // Fallback to current time strictly in America/Caracas
-  const d = new Date();
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'America/Caracas',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  });
-  return formatter.format(d).replace(' ', ' ');
+  return new Date().toISOString();
 }
 
 let cachedDispositivos = null;

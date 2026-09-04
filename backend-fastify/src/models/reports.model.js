@@ -1,4 +1,5 @@
 import { sql, isPgConnected } from '../config/db.js';
+import { getConfiguracionModel, getDbTimezone } from './master.model.js';
 
 // Helper: Convert time string "HH:MM" or "HH:MM:SS" to total minutes
 function toMinutes(timeStr) {
@@ -269,6 +270,9 @@ export async function getMarcajePersonalReportModel(params = {}) {
   }
 
   // 5. Fetch Attendance Logs for date range
+  const config = await getConfiguracionModel();
+  const tz = getDbTimezone(config);
+
   const extendedMinDate = new Date(`${fechaDesdeStr}T00:00:00Z`);
   extendedMinDate.setUTCDate(extendedMinDate.getUTCDate() - 2);
   const minDateStr = `${extendedMinDate.toISOString().split('T')[0]} 00:00:00`;
@@ -282,8 +286,8 @@ export async function getMarcajePersonalReportModel(params = {}) {
 
   let attlogWhere = [
     sql`employee_no = ANY(${allCedulas})`,
-    sql`event_time >= ${minDateStr}::timestamp`,
-    sql`event_time <= ${maxDateStr}::timestamp`,
+    sql`(event_time AT TIME ZONE ${tz}) >= ${minDateStr}::timestamp`,
+    sql`(event_time AT TIME ZONE ${tz}) <= ${maxDateStr}::timestamp`,
     sql`(
       LOWER(COALESCE(attendancestatus, '')) LIKE '%checkin%' OR
       LOWER(COALESCE(attendancestatus, '')) LIKE '%checkout%' OR
@@ -300,7 +304,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
   const attWhereClause = sql`WHERE ${attlogWhere.reduce((acc, cond) => sql`${acc} AND ${cond}`)}`;
 
   const attlogs = await sql`
-    SELECT id, dispositivo_id, employee_no, event_time, attendancestatus, currentverifymode
+    SELECT id, dispositivo_id, employee_no, to_char(event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time, attendancestatus, currentverifymode
     FROM attlogs
     ${attWhereClause}
     ORDER BY event_time ASC
@@ -730,15 +734,18 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   dNext.setUTCDate(dNext.getUTCDate() + 1);
   const nextDateStr = dNext.toISOString().split('T')[0];
 
+  const config = await getConfiguracionModel();
+  const tz = getDbTimezone(config);
+
   const minDateStr = `${prevDateStr} 00:00:00`;
   const maxDateStr = `${nextDateStr} 23:59:59`;
 
   const attlogs = await sql`
-    SELECT employee_no, event_time, attendancestatus, currentverifymode
+    SELECT employee_no, to_char(event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time, attendancestatus, currentverifymode
     FROM attlogs
     WHERE (employee_no = ${empKey1} OR employee_no = ${empKey2})
-      AND event_time >= ${minDateStr}::timestamp
-      AND event_time <= ${maxDateStr}::timestamp
+      AND (event_time AT TIME ZONE ${tz}) >= ${minDateStr}::timestamp
+      AND (event_time AT TIME ZONE ${tz}) <= ${maxDateStr}::timestamp
       AND (
         LOWER(COALESCE(attendancestatus, '')) LIKE '%checkin%' OR
         LOWER(COALESCE(attendancestatus, '')) LIKE '%checkout%' OR

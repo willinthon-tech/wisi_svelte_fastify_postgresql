@@ -15,7 +15,9 @@ export let isPgConnected = false;
 // Fallback in-memory stores for tables
 export let inMemoryData = {
   configuracion: [
-    { clave: 'timezone', valor: 'America/Caracas' }
+    { clave: 'timezone', valor: 'America/Caracas' },
+    { clave: 'timezone_offset', valor: '-4' },
+    { clave: 'timezone_display', valor: 'America/Caracas -4' }
   ],
   cortes: [],
   usuarios: [
@@ -335,12 +337,12 @@ export async function initDb() {
       max: 10,
       onnotice: () => { },
       parameters: {
-        timezone: 'America/Caracas'
+        timezone: 'UTC'
       }
     });
 
-    // Fijar zona horaria estricta de Venezuela para evitar cualquier desfase de 1 hora
-    await sql`SET TIME ZONE 'America/Caracas';`.catch(() => {});
+    // Fijar zona horaria estricta en UTC (0)
+    await sql`SET TIME ZONE 'UTC';`.catch(() => {});
 
     // 1. Table usuarios
     await sql`
@@ -470,7 +472,10 @@ export async function initDb() {
 
     await sql`
       INSERT INTO configuracion (clave, valor)
-      VALUES ('timezone', 'America/Caracas')
+      VALUES 
+        ('timezone', 'America/Caracas'),
+        ('timezone_offset', '-4'),
+        ('timezone_display', 'America/Caracas -4')
       ON CONFLICT (clave) DO NOTHING;
     `;
 

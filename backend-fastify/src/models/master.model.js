@@ -876,9 +876,23 @@ export async function updateConfiguracionModel(claveOrData, valor) {
 }
 
 // --- ATTLOGS (MARCAJES) ---
+export function getDbTimezone(config) {
+  const raw = (config && config.timezone) || 'America/Caracas';
+  const clean = String(raw).trim();
+  if (clean.includes('Caracas')) return 'America/Caracas';
+  if (clean.includes('Bogota')) return 'America/Bogota';
+  if (clean.includes('Santo_Domingo')) return 'America/Santo_Domingo';
+  if (clean.includes('New_York')) return 'America/New_York';
+  if (clean === '-4' || clean === '-04' || clean === '-04:00' || clean.toLowerCase() === 'utc-4') return '-04:00';
+  if (clean === '+4' || clean === '+04' || clean === '+04:00') return '+04:00';
+  if (clean === '-5' || clean === '-05' || clean === '-05:00' || clean.toLowerCase() === 'utc-5') return '-05:00';
+  if (clean === 'UTC' || clean === '0' || clean === '+00:00') return 'UTC';
+  return clean;
+}
+
 export async function getAttlogsModel() {
   const config = await getConfiguracionModel();
-  const tz = config.timezone || 'America/Caracas';
+  const tz = getDbTimezone(config);
 
   if (isPgConnected && sql) {
     return await sql`
@@ -1082,7 +1096,7 @@ export async function getLatestAttlogsModel(
   const numLimit = Number(limit) > 0 ? Number(limit) : 10;
   const numOffset = Number(offset) >= 0 ? Number(offset) : 0;
   const config = await getConfiguracionModel();
-  const tz = config.timezone || 'America/Caracas';
+  const tz = getDbTimezone(config);
 
   const allowedSortColumns = {
     'id': 'a.id',
@@ -1606,7 +1620,7 @@ export async function syncAttlogsModel(data) {
       const hasPhoto = Boolean(log.foto_base64 && String(log.foto_base64).trim().length > 0);
       const rows = await sql`
         INSERT INTO attlogs (dispositivo_id, employee_no, event_time, nombre, attendancestatus, currentverifymode, has_photo)
-        VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}::timestamp AT TIME ZONE 'America/Caracas', ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode}, ${hasPhoto})
+        VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}, ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode}, ${hasPhoto})
         ON CONFLICT (dispositivo_id, employee_no, event_time)
         DO UPDATE SET updated_at = CURRENT_TIMESTAMP,
                       currentverifymode = COALESCE(EXCLUDED.currentverifymode, attlogs.currentverifymode),
@@ -1620,7 +1634,8 @@ export async function syncAttlogsModel(data) {
       if (attlogId) {
         let fullRecord = null;
         try {
-          const tz = 'America/Caracas';
+          const config = await getConfiguracionModel();
+          const tz = getDbTimezone(config);
           const fullRows = await sql`
             SELECT a.id, a.attendancestatus, a.currentverifymode, a.employee_no, to_char(a.event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time,
                    COALESCE(NULLIF(TRIM(e.nombre), ''), NULLIF(TRIM(a.nombre), ''), 'Empleado ' || a.employee_no) AS nombre,
@@ -1709,7 +1724,8 @@ export async function syncAttlogsModel(data) {
 
 export async function getLastAttlogEventTimeModel(dispositivoId = null) {
   const dId = dispositivoId ? Number(dispositivoId) : null;
-  const tz = 'America/Caracas';
+  const config = await getConfiguracionModel();
+  const tz = getDbTimezone(config);
   if (isPgConnected && sql) {
     let rows;
     if (dId) {
@@ -1762,7 +1778,7 @@ async function saveAttlogPhoto(attlogId, base64Data) {
 
 export async function getAttlogsStatsModel(salaIds = null, startDate = null, endDate = null) {
   const config = await getConfiguracionModel();
-  const tz = config.timezone || 'America/Caracas';
+  const tz = getDbTimezone(config);
 
   let slots10 = new Array(144).fill(0);
   let totalAttlogs = 0;
