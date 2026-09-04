@@ -97,18 +97,39 @@ attlogEvents.on('new_attlog', (data) => {
   // 2. Enviar Notificación Push FCM a Android (para recibir con app cerrada/segundo plano)
   if (data) {
     const empName = data.nombre || `Empleado ${data.employee_no || ''}`;
-    const actionType = String(data.tipo_evento || data.status || 'Marcaje').toUpperCase();
+
+    // Determinar badge según attendancestatus
+    const rawStatus = String(data.attendancestatus || data.tipo_evento || data.status || '').toLowerCase().trim();
+    let statusBadge = '🚪 PUERTA / OTROS';
+    let statusLabel = 'PUERTA / OTROS';
+    if (rawStatus === 'checkin' || rawStatus === 'entrada') {
+      statusBadge = '🟢 ENTRADA';
+      statusLabel = 'ENTRADA';
+    } else if (rawStatus === 'checkout' || rawStatus === 'salida') {
+      statusBadge = '🔴 SALIDA';
+      statusLabel = 'SALIDA';
+    }
+
+    const cargoName = data.cargo_nombre || data.cargo || '';
+    const statusCargoText = cargoName ? `${statusBadge} • ${cargoName}` : statusBadge;
     const salaName = data.sala_nombre || 'Sala';
     const timeStr = data.hora || (data.event_time ? String(data.event_time).split(' ')[1] : '');
 
+    const photoUrl = data.id ? `https://willinthon.wisi.space/api/attlogs/${data.id}.jpg` : null;
+
     sendPushNotificationToAll({
       title: `🔔 ${empName}`,
-      body: `${actionType} en ${salaName} (${timeStr})`,
+      body: `${statusCargoText} en ${salaName} (${timeStr})`,
+      imageUrl: photoUrl,
       data: {
         attlog_id: String(data.id || ''),
         empleado_id: String(data.empleado_id || ''),
         sala_id: String(data.sala_id || ''),
-        tipo: String(data.tipo_evento || data.status || '')
+        tipo: statusLabel,
+        cargo: String(cargoName),
+        sala: String(salaName),
+        nombre: String(empName),
+        image_url: String(photoUrl || '')
       }
     }).catch(() => {});
   }

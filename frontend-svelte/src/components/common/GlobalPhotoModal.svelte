@@ -26,16 +26,18 @@
   $: totalPages = $photoModalStore.totalPages;
   $: totalCount = $photoModalStore.totalCount;
   $: mode = $photoModalStore.mode;
+  $: isPageTransitioning = $photoModalStore.isPageTransitioning;
+  $: pageTransitionDirection = $photoModalStore.pageTransitionDirection;
   $: stInfo = getStatusBadge(item?.attendancestatus);
 
   $: isFirstPage = currentPage <= 0;
   $: isLastPage = totalPages <= 1 || (currentPage >= totalPages - 1);
-  $: isPrevDisabled = currentIndex <= 0 && isFirstPage;
-  $: isNextDisabled = currentIndex >= items.length - 1 && isLastPage;
+  $: isPrevDisabled = (currentIndex <= 0 && isFirstPage) || isPageTransitioning;
+  $: isNextDisabled = (currentIndex >= items.length - 1 && isLastPage) || isPageTransitioning;
 
   // Atajos de teclado: Escape para cerrar, Flechas para navegar
   function handleKeyDown(e) {
-    if (!isOpen) return;
+    if (!isOpen || isPageTransitioning) return;
     if (e.key === "Escape") {
       closePhotoModal();
     } else if (e.key === "ArrowLeft" && !isPrevDisabled) {
@@ -391,7 +393,7 @@
         class="nav-btn-float prev-btn"
         disabled={isPrevDisabled}
         on:click={photoModalPrev}
-        title={isPrevDisabled ? "Primer registro" : "Ver anterior (Flecha Izquierda ‹)"}
+        title={isPrevDisabled ? (isPageTransitioning ? "Cargando página..." : "Primer registro") : "Ver anterior (Flecha Izquierda ‹)"}
       >
         ‹
       </button>
@@ -412,11 +414,19 @@
 
             <div data-html2canvas-ignore="true" class="header-right">
               <div class="header-right-meta">
-                <span class="pagination-badge">
-                  Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
+                <span class="pagination-badge" class:pagination-badge-loading={isPageTransitioning}>
+                  {#if isPageTransitioning}
+                    ⏳ Cargando página...
+                  {:else}
+                    Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
+                  {/if}
                 </span>
                 <span class="index-badge">
-                  {currentIndex + 1} / {items.length}
+                  {#if isPageTransitioning}
+                    Sincronizando...
+                  {:else}
+                    {currentIndex + 1} / {items.length}
+                  {/if}
                 </span>
               </div>
               <button
@@ -432,6 +442,20 @@
 
           <!-- Photo Container -->
           <div class="modal-photo-area">
+            {#if isPageTransitioning}
+              <div class="page-transition-overlay" data-html2canvas-ignore="true">
+                <div class="page-transition-spinner"></div>
+                <div class="page-transition-text">
+                  {#if pageTransitionDirection === 'next'}
+                    Cargando página {currentPage + 2}...
+                  {:else}
+                    Cargando página {currentPage}...
+                  {/if}
+                </div>
+                <div class="page-transition-sub">Obteniendo nuevos registros e imágenes</div>
+              </div>
+            {/if}
+
             <img
               bind:this={imgElement}
               src={photoSrc}
@@ -738,6 +762,19 @@
     border-radius: 8px;
     border: 1px solid #bfdbfe;
     white-space: nowrap;
+    transition: all 0.2s ease;
+  }
+
+  .pagination-badge-loading {
+    color: #b45309;
+    background: #fef3c7;
+    border-color: #fde68a;
+    animation: pulseBadge 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulseBadge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.65; }
   }
 
   .index-badge {
@@ -780,6 +817,49 @@
     align-items: center;
     min-height: 320px;
     position: relative;
+  }
+
+  .page-transition-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.86);
+    backdrop-filter: blur(8px);
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    border-radius: 12px;
+    animation: fadeIn 0.15s ease-out;
+  }
+
+  .page-transition-spinner {
+    width: 46px;
+    height: 46px;
+    border: 4px solid rgba(59, 130, 246, 0.25);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spinPage 0.65s linear infinite;
+  }
+
+  @keyframes spinPage {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .page-transition-text {
+    color: #ffffff;
+    font-size: 14.5px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .page-transition-sub {
+    color: #94a3b8;
+    font-size: 11.5px;
+    font-weight: 500;
   }
 
   .modal-main-img {

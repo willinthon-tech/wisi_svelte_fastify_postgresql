@@ -310,8 +310,15 @@
       isLoading = false;
       isInitialLoad = false;
       if (pendingModalPageDirection && $photoModalStore.isOpen) {
+        const dir = pendingModalPageDirection;
         pendingModalPageDirection = null;
-        updatePhotoModalItems({ items: attlogs });
+        updatePhotoModalItems({
+          items: attlogs,
+          currentPage: currentPage - 1,
+          totalPages: totalPages || 1,
+          totalCount,
+          position: dir === 'next' ? 'first' : 'last'
+        });
       }
     }
   }

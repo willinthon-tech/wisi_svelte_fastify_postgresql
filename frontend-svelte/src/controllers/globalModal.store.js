@@ -1,6 +1,26 @@
 import { writable } from 'svelte/store';
 import { getCloudBaseUrl } from '../config/api.config.js';
 
+let transitionSafetyTimer = null;
+
+function startTransitionSafetyTimer() {
+  if (transitionSafetyTimer) clearTimeout(transitionSafetyTimer);
+  transitionSafetyTimer = setTimeout(() => {
+    photoModalStore.update(s => ({
+      ...s,
+      isPageTransitioning: false,
+      pageTransitionDirection: null
+    }));
+  }, 9000);
+}
+
+function clearTransitionSafetyTimer() {
+  if (transitionSafetyTimer) {
+    clearTimeout(transitionSafetyTimer);
+    transitionSafetyTimer = null;
+  }
+}
+
 /**
  * Estado del Modal Global de Fotografías y Fichas
  */
@@ -12,6 +32,8 @@ const initialModalState = {
   currentPage: 0,
   totalPages: 1,
   totalCount: 0,
+  isPageTransitioning: false,
+  pageTransitionDirection: null, // 'next' | 'prev'
   /**
    * modo:
    * - 'checkin_checkout': Marcajes de entrada / salida
@@ -32,6 +54,7 @@ export const photoModalStore = writable({ ...initialModalState });
  * Abre el modal global con la configuración y lista provista
  */
 export function openPhotoModal(config = {}) {
+  clearTransitionSafetyTimer();
   const items = Array.isArray(config.items) ? [...config.items] : (config.item ? [config.item] : []);
   let activeItem = config.item || items[0] || null;
   let currentIndex = typeof config.currentIndex === 'number' ? config.currentIndex : 0;
@@ -52,6 +75,8 @@ export function openPhotoModal(config = {}) {
     currentPage: typeof config.currentPage === 'number' ? config.currentPage : 0,
     totalPages: typeof config.totalPages === 'number' ? Math.max(1, config.totalPages) : 1,
     totalCount: typeof config.totalCount === 'number' ? config.totalCount : items.length,
+    isPageTransitioning: false,
+    pageTransitionDirection: null,
     mode: config.mode || inferItemMode(activeItem),
     onPageNext: typeof config.onPageNext === 'function' ? config.onPageNext : null,
     onPagePrev: typeof config.onPagePrev === 'function' ? config.onPagePrev : null
@@ -62,10 +87,13 @@ export function openPhotoModal(config = {}) {
  * Cierra el modal global sin alterar la ruta ni la vista actual
  */
 export function closePhotoModal() {
+  clearTransitionSafetyTimer();
   photoModalStore.update(state => ({
     ...state,
     isOpen: false,
-    activeItem: null
+    activeItem: null,
+    isPageTransitioning: false,
+    pageTransitionDirection: null
   }));
 }
 
@@ -83,6 +111,7 @@ export function photoModalNext() {
         activeItem: state.items[nextIdx]
       };
     } else if (state.onPageNext) {
+      startTransitionSafetyTimer();
       try {
         state.onPageNext();
       } catch (e) {
@@ -90,7 +119,8 @@ export function photoModalNext() {
       }
       return {
         ...state,
-        isPageTransitioning: true
+        isPageTransitioning: true,
+        pageTransitionDirection: 'next'
       };
     }
     return state;
@@ -111,6 +141,7 @@ export function photoModalPrev() {
         activeItem: state.items[prevIdx]
       };
     } else if (state.onPagePrev) {
+      startTransitionSafetyTimer();
       try {
         state.onPagePrev();
       } catch (e) {
@@ -118,7 +149,8 @@ export function photoModalPrev() {
       }
       return {
         ...state,
-        isPageTransitioning: true
+        isPageTransitioning: true,
+        pageTransitionDirection: 'prev'
       };
     }
     return state;
@@ -129,10 +161,17 @@ export function photoModalPrev() {
  * Actualiza la lista de elementos y paginación en el modal global
  */
 export function updatePhotoModalItems({ items, currentPage, totalPages, totalCount, position = 'keep' } = {}) {
+  clearTransitionSafetyTimer();
   photoModalStore.update(state => {
     if (!state.isOpen) return state;
     const newItems = Array.isArray(items) ? [...items] : state.items;
-    if (newItems.length === 0) return { ...state, isPageTransitioning: false };
+    if (newItems.length === 0) {
+      return {
+        ...state,
+        isPageTransitioning: false,
+        pageTransitionDirection: null
+      };
+    }
 
     let newIndex = state.currentIndex;
     if (position === 'first') {
@@ -148,6 +187,7 @@ export function updatePhotoModalItems({ items, currentPage, totalPages, totalCou
     return {
       ...state,
       isPageTransitioning: false,
+      pageTransitionDirection: null,
       items: newItems,
       currentIndex: newIndex,
       activeItem: newItems[newIndex] || state.activeItem,

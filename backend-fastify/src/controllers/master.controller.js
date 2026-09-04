@@ -4,7 +4,7 @@ import {
   getPaginasModel, createPaginaModel, updatePaginaModel, deletePaginaModel,
   getModulosModel, createModuloModel, updateModuloModel, deleteModuloModel, reorderModulosModel,
   getDispositivosModel, createDispositivoModel, updateDispositivoModel, injectDispositivoPushConfigModel, injectHikvisionIsapiHttpListeningModel, deleteDispositivoModel,
-  getAttlogsModel, getLatestAttlogsModel, getAttlogsCountModel, getAttlogsFilterOptionsModel, getAttlogsStatsModel, syncAttlogsModel, getLastAttlogEventTimeModel, getAttlogPositionModel,
+  getAttlogsModel, getLatestAttlogsModel, getAttlogsCountModel, getAttlogsFilterOptionsModel, getAttlogsStatsModel, syncAttlogsModel, getLastAttlogEventTimeModel, getAttlogPositionModel, getAttlogDetailModel,
   getConfiguracionModel, updateConfiguracionModel,
   getUserSalasMapModel, updateUserSalasModel, getUserPermissionsMapModel, updateUserPermissionsModel,
   getDepartamentosModel, getDepartamentosFilterOptionsModel, createDepartamentoModel, updateDepartamentoModel, deleteDepartamentoModel,
@@ -65,6 +65,20 @@ export async function getAttlogPosition(request, reply) {
     const pos = await getAttlogPositionModel(id, salaIds, estados);
     if (!pos) return reply.status(404).send({ success: false, error: 'Marcaje no encontrado' });
     return reply.send({ success: true, data: pos });
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getAttlogDetail(request, reply) {
+  try {
+    const { id } = request.params;
+    const detail = await getAttlogDetailModel(id);
+    if (!detail) {
+      return reply.status(404).send({ success: false, error: 'Marcaje no encontrado' });
+    }
+    return reply.send({ success: true, data: detail.record, position: detail.position });
   } catch (err) {
     request.log.error(err);
     return reply.status(500).send({ success: false, error: err.message });

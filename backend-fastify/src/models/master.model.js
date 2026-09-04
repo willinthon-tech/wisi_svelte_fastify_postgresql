@@ -1608,6 +1608,71 @@ export async function getAttlogPositionModel(id, salaIds = null, estados = null)
   };
 }
 
+export async function getAttlogDetailModel(id) {
+  if (!isPgConnected || !sql) return null;
+  const targetId = Number(id);
+  if (isNaN(targetId)) return null;
+
+  try {
+    const config = await getConfiguracionModel();
+    const tz = getDbTimezone(config);
+
+    const rows = await sql`
+      SELECT a.id,
+             a.dispositivo_id,
+             a.employee_no,
+             a.attendancestatus,
+             a.currentverifymode,
+             a.has_photo,
+             a.created_at,
+             a.updated_at,
+             to_char(a.event_time AT TIME ZONE 'UTC' AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time,
+             to_char(a.event_time AT TIME ZONE 'UTC' AT TIME ZONE ${tz}, 'YYYY-MM-DD') AS fecha,
+             to_char(a.event_time AT TIME ZONE 'UTC' AT TIME ZONE ${tz}, 'HH24:MI:SS') AS hora,
+             COALESCE(e.nombre, a.nombre) AS nombre,
+             e.id AS empleado_id,
+             e.cedula,
+             e.foto AS empleado_foto,
+             e.foto,
+             c.id AS cargo_id,
+             c.nombre AS cargo_nombre,
+             c.nombre AS cargo,
+             ar.id AS area_id,
+             ar.nombre AS area_nombre,
+             dep.id AS departamento_id,
+             dep.nombre AS departamento_nombre,
+             s.id AS sala_id,
+             s.nombre AS sala_nombre,
+             d.nombre AS dispositivo_nombre,
+             to_char(e.fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
+             to_char(e.fecha_ingreso, 'YYYY-MM-DD') AS fecha_ingreso,
+             e.sexo,
+             (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
+      FROM attlogs a
+      LEFT JOIN empleados e ON (a.employee_no = e.cedula OR a.employee_no = CAST(e.id AS TEXT) OR e.cedula = 'V' || a.employee_no OR e.cedula = REPLACE(a.employee_no, 'V', ''))
+      LEFT JOIN cargos c ON e.cargo_id = c.id
+      LEFT JOIN areas ar ON c.area_id = ar.id
+      LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
+      LEFT JOIN dispositivos d ON a.dispositivo_id = d.id
+      LEFT JOIN salas s ON d.sala_id = s.id
+      WHERE a.id = ${targetId}
+      LIMIT 1
+    `;
+
+    if (!rows || rows.length === 0) return null;
+    const record = rows[0];
+    const pos = await getAttlogPositionModel(targetId);
+
+    return {
+      record,
+      position: pos
+    };
+  } catch (err) {
+    console.error('Error in getAttlogDetailModel:', err);
+    return null;
+  }
+}
+
 export async function syncAttlogsModel(data) {
   const { dispositivo_id, attlogs } = data || {};
   if (!Array.isArray(attlogs) || attlogs.length === 0) {

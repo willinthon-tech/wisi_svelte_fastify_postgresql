@@ -105,7 +105,7 @@ export async function registerDeviceToken({ user_id = null, token, platform = 'a
  * Envía una notificación push a todos los dispositivos móviles registrados vía Firebase Cloud Messaging (FCM).
  * Se despierta el teléfono y muestra el banner en la barra de notificaciones de Android, exactamente igual a WhatsApp.
  */
-export async function sendPushNotificationToAll({ title, body, data = {}, icon = null }) {
+export async function sendPushNotificationToAll({ title, body, data = {}, imageUrl = null, icon = null }) {
   // 1. Obtener lista de tokens activos
   let tokens = [];
 
@@ -147,7 +147,8 @@ export async function sendPushNotificationToAll({ title, body, data = {}, icon =
   const message = {
     notification: {
       title: title || 'WISI Space',
-      body: body || 'Nuevo marcaje registrado'
+      body: body || 'Nuevo marcaje registrado',
+      ...(imageUrl ? { imageUrl } : {})
     },
     data: stringData,
     android: {
@@ -158,7 +159,8 @@ export async function sendPushNotificationToAll({ title, body, data = {}, icon =
         priority: 'max',
         visibility: 'public',
         defaultSound: true,
-        defaultVibrateTimings: true
+        defaultVibrateTimings: true,
+        ...(imageUrl ? { imageUrl } : {})
       }
     },
     tokens

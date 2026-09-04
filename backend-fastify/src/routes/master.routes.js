@@ -8,7 +8,7 @@ import {
   getPaginas, createPagina, updatePagina, deletePagina,
   getModulos, createModulo, updateModulo, deleteModulo, reorderModulos,
   getDispositivos, createDispositivo, updateDispositivo, injectDispositivoPushConfig, injectHikvisionIsapiHttpListening, deleteDispositivo,
-  getAttlogs, getLatestAttlogs, getAttlogsFilterOptions, getAttlogsStats, syncAttlogs, getLastAttlogEventTime, getAttlogPosition,
+  getAttlogs, getLatestAttlogs, getAttlogsFilterOptions, getAttlogsStats, syncAttlogs, getLastAttlogEventTime, getAttlogPosition, getAttlogDetail,
   getConfiguracion, updateConfiguracion,
   getUserSalasMap, updateUserSalas, getUserPermissionsMap, updateUserPermissions,
   getDepartamentos, getDepartamentosFilterOptions, createDepartamento, updateDepartamento, deleteDepartamento,
@@ -209,6 +209,9 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/attlogs/last-event-time', getLastAttlogEventTime);
   fastify.get('/attlogs/dispositivo/:id/last-event-time', getLastAttlogEventTime);
   fastify.get('/attlogs/:id/position', getAttlogPosition);
+  fastify.get('/api/attlogs/:id/position', getAttlogPosition);
+  fastify.get('/attlogs/:id/detail', getAttlogDetail);
+  fastify.get('/api/attlogs/:id/detail', getAttlogDetail);
   fastify.post('/attlogs/sync', syncAttlogs);
   fastify.post('/hikvision/alarm', syncAttlogs);
   fastify.post('/event', syncAttlogs);
@@ -261,6 +264,9 @@ export default async function masterRoutes(fastify, options) {
     for (const dir of searchDirs) {
       const fullPath = path.join(dir, filename);
       if (fs.existsSync(fullPath)) {
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        reply.header('Cache-Control', 'public, max-age=2592000, immutable');
         reply.type('image/jpeg');
         return fs.createReadStream(fullPath);
       }
@@ -305,6 +311,9 @@ export default async function masterRoutes(fastify, options) {
             for (const dir of searchDirs) {
               const altPath = path.join(dir, cand);
               if (fs.existsSync(altPath)) {
+                reply.header('Access-Control-Allow-Origin', '*');
+                reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+                reply.header('Cache-Control', 'public, max-age=2592000, immutable');
                 reply.type('image/jpeg');
                 return fs.createReadStream(altPath);
               }
@@ -317,6 +326,9 @@ export default async function masterRoutes(fastify, options) {
     }
 
     // 4. Ultimate Fallback: Stream SVG avatar placeholder with 200 OK so browser console NEVER logs 404!
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    reply.header('Cache-Control', 'public, max-age=86400');
     reply.type('image/svg+xml').status(200);
     return reply.send(DEFAULT_AVATAR_SVG);
   };
