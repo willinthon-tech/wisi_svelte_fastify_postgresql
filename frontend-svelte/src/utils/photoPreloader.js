@@ -52,6 +52,7 @@ export function preloadPhoto(url) {
   if (cache.has(url)) {
     const entry = cache.get(url);
     if (entry.loaded || entry.hasError) {
+      if (entry.img) entry.img.hasError = Boolean(entry.hasError);
       return Promise.resolve(entry.img);
     }
     if (entry.promise) return entry.promise;
@@ -74,6 +75,7 @@ export function preloadPhoto(url) {
         } catch {
           // Ignorar fallo de decode
         }
+        img.hasError = false;
         cache.set(url, { img, loaded: true, hasError: false, promise: null });
         resolve(img);
       }
@@ -82,6 +84,7 @@ export function preloadPhoto(url) {
     const onFinishError = () => {
       if (!settled) {
         settled = true;
+        img.hasError = true;
         cache.set(url, { img, loaded: true, hasError: true, promise: null });
         resolve(img);
       }
@@ -90,8 +93,8 @@ export function preloadPhoto(url) {
     img.onload = onFinishSuccess;
     img.onerror = onFinishError;
 
-    // Timeout de seguridad de 2.5 segundos para no colgar la UI si la red es lenta o la imagen no existe
-    setTimeout(onFinishError, 2500);
+    // Timeout de seguridad de 1.2 segundos para no colgar la UI si la red es lenta o la imagen no existe
+    setTimeout(onFinishError, 1200);
   });
 
   cache.set(url, { img, loaded: false, hasError: false, promise });

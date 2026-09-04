@@ -111,15 +111,38 @@ attlogEvents.on('new_attlog', (data) => {
     }
 
     const cargoName = data.cargo_nombre || data.cargo || '';
-    const statusCargoText = cargoName ? `${statusBadge} • ${cargoName}` : statusBadge;
     const salaName = data.sala_nombre || 'Sala';
-    const timeStr = data.hora || (data.event_time ? String(data.event_time).split(' ')[1] : '');
+    let timeStr = data.hora || '';
+    if (!timeStr && data.event_time) {
+      const cleanTime = String(data.event_time).replace('T', ' ');
+      timeStr = cleanTime.split(' ')[1] ? cleanTime.split(' ')[1].split('.')[0] : cleanTime;
+    }
 
-    const photoUrl = data.id ? `https://willinthon.wisi.space/api/attlogs/${data.id}.jpg` : null;
+    // Formato exacto solicitado para Android:
+    // Línea 1 (Título): Nombre
+    // Línea 2: Sala
+    // Línea 3: Cargo
+    // Línea 4: Entrada o Salida con hora
+    const bodyLines = [];
+    bodyLines.push(`📍 Sala: ${salaName}`);
+    bodyLines.push(`💼 Cargo: ${cargoName || 'Sin cargo asignado'}`);
+    bodyLines.push(`${statusBadge} - ${timeStr}`);
+    const notificationBody = bodyLines.join('\n');
+
+    let photoUrl = null;
+    if (data.id) {
+      photoUrl = `https://willinthon.wisi.space/api/attlogs/${data.id}.jpg`;
+    } else if (data.empleado_foto) {
+      photoUrl = data.empleado_foto.startsWith('http') ? data.empleado_foto : `https://willinthon.wisi.space${data.empleado_foto.startsWith('/') ? '' : '/'}${data.empleado_foto}`;
+    } else if (data.foto) {
+      photoUrl = data.foto.startsWith('http') ? data.foto : `https://willinthon.wisi.space${data.foto.startsWith('/') ? '' : '/'}${data.foto}`;
+    } else if (data.empleado_id) {
+      photoUrl = `https://willinthon.wisi.space/api/empleados/${data.empleado_id}.jpg`;
+    }
 
     sendPushNotificationToAll({
-      title: `🔔 ${empName}`,
-      body: `${statusCargoText} en ${salaName} (${timeStr})`,
+      title: `${empName}`,
+      body: notificationBody,
       imageUrl: photoUrl,
       data: {
         attlog_id: String(data.id || ''),

@@ -493,12 +493,18 @@
         if (currentPage < totalPages) {
           pendingModalPageDirection = 'next';
           goToPage(currentPage + 1);
+          fetchAttlogs(currentPage, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
+        } else {
+          updatePhotoModalItems();
         }
       },
       onPagePrev: () => {
         if (currentPage > 1) {
           pendingModalPageDirection = 'prev';
           goToPage(currentPage - 1);
+          fetchAttlogs(currentPage, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
+        } else {
+          updatePhotoModalItems();
         }
       }
     });

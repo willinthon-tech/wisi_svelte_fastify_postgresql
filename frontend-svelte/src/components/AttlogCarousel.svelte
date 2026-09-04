@@ -151,7 +151,7 @@
       const offset = currentPage * pageSize;
 
       const salaParam =
-        assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "-1";
+        assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "";
       const queryParams = `limit=${pageSize}&offset=${offset}&user_sala_ids=${salaParam}`;
 
       const res = await fetch(`${base}/attlogs/latest?${queryParams}`);
@@ -396,8 +396,12 @@
             totalCount = json.total || totalCount;
             currentPage = targetPage;
             latestAttlogs = json.data;
+            const cKey = `${targetPage}_${pageSize}_${(assignedSalaIds || []).join(",")}`;
+            carouselPageCache.set(cKey, { data: json.data, total: totalCount });
           }
         }
+      } else {
+        currentPage = targetPage;
       }
 
       // Localizar el item exacto en la lista obtenida

@@ -11,7 +11,7 @@ function startTransitionSafetyTimer() {
       isPageTransitioning: false,
       pageTransitionDirection: null
     }));
-  }, 9000);
+  }, 1500);
 }
 
 function clearTransitionSafetyTimer() {
@@ -110,7 +110,7 @@ export function photoModalNext() {
         currentIndex: nextIdx,
         activeItem: state.items[nextIdx]
       };
-    } else if (state.onPageNext) {
+    } else if (state.onPageNext && state.currentPage < state.totalPages - 1) {
       startTransitionSafetyTimer();
       try {
         state.onPageNext();
@@ -140,7 +140,7 @@ export function photoModalPrev() {
         currentIndex: prevIdx,
         activeItem: state.items[prevIdx]
       };
-    } else if (state.onPagePrev) {
+    } else if (state.onPagePrev && state.currentPage > 0) {
       startTransitionSafetyTimer();
       try {
         state.onPagePrev();

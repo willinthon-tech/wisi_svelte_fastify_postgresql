@@ -224,14 +224,33 @@
     return getPhotoUrl(record);
   }
 
-  // Activar espera de lote de inmediato al iniciar transición
-  let batchSafetyTimeout = null;
-  $: if (isPageTransitioning) {
+  // Activar espera de lote con temporizador de seguridad
+  let batchLoadingSafetyTimer = null;
+
+  function finishBatchLoad() {
+    isWaitingBatchLoad = false;
+    if (batchLoadingSafetyTimer) {
+      clearTimeout(batchLoadingSafetyTimer);
+      batchLoadingSafetyTimer = null;
+    }
+  }
+
+  function startBatchLoadWait() {
     isWaitingBatchLoad = true;
-    if (batchSafetyTimeout) clearTimeout(batchSafetyTimeout);
-    batchSafetyTimeout = setTimeout(() => {
-      isWaitingBatchLoad = false;
-    }, 4000);
+    if (batchLoadingSafetyTimer) clearTimeout(batchLoadingSafetyTimer);
+    // Timeout máximo absoluto de 800ms: NUNCA se queda pegado infinito
+    batchLoadingSafetyTimer = setTimeout(() => {
+      finishBatchLoad();
+    }, 800);
+  }
+
+  $: if (isPageTransitioning) {
+    startBatchLoadWait();
+  } else {
+    // Si ya no estamos en transición remota, cerrar la espera si la foto está disponible o falló
+    if (!activePhotoUrl || isPhotoLoaded(activePhotoUrl) || isCurrentPhotoLoaded || isCurrentPhotoError) {
+      finishBatchLoad();
+    }
   }
 
   // Precargar en paralelo todo el lote de imágenes de la página actual
@@ -239,7 +258,6 @@
   $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
     if (currentPage !== lastBatchPage) {
       lastBatchPage = currentPage;
-      isWaitingBatchLoad = true;
 
       const urlsToPreload = [];
       items.forEach((it) => {
@@ -261,54 +279,64 @@
 
   // Sincronización de la foto activa actual
   $: if (item) {
+    const recordId = item.id || item.employee_no || item.cedula;
     const url = resolveItemPhoto(item);
     activePhotoUrl = url;
     if (!url) {
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = true;
-      isWaitingBatchLoad = false;
+      finishBatchLoad();
     } else if (isPhotoLoaded(url)) {
       isCurrentPhotoLoaded = true;
       isCurrentPhotoError = false;
-      isWaitingBatchLoad = false;
+      finishBatchLoad();
     } else {
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = false;
       preloadPhoto(url).then((img) => {
-        if (item && resolveItemPhoto(item) === url) {
-          if (img && !img.hasError) {
+        if (item && (item.id || item.employee_no || item.cedula) === recordId) {
+          if (img && !img.hasError && img.naturalWidth > 0) {
             isCurrentPhotoLoaded = true;
             isCurrentPhotoError = false;
-            isWaitingBatchLoad = false;
+            finishBatchLoad();
             const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
             resolvedPhotoUrlCache.set(key, url);
           } else {
             handlePhotoErrorFallback(item, url);
           }
+        } else {
+          finishBatchLoad();
         }
+      }).catch(() => {
+        finishBatchLoad();
       });
     }
   }
 
   function handlePhotoErrorFallback(record, failedUrl) {
-    if (!record) return;
+    if (!record) {
+      finishBatchLoad();
+      return;
+    }
     const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
 
     const empFoto = record.empleado_foto || record.foto;
     const empFotoUrl = empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0 ? toBackendUrl(empFoto) : null;
     if (empFotoUrl && empFotoUrl !== failedUrl) {
       preloadPhoto(empFotoUrl).then((img) => {
-        if (img && !img.hasError) {
+        if (img && !img.hasError && img.naturalWidth > 0) {
           resolvedPhotoUrlCache.set(key, empFotoUrl);
-          if (item?.id === record.id) {
+          if (String(item?.id) === String(record.id)) {
             activePhotoUrl = empFotoUrl;
             isCurrentPhotoLoaded = true;
             isCurrentPhotoError = false;
-            isWaitingBatchLoad = false;
           }
+          finishBatchLoad();
         } else {
           tryIdFallback(record, empFotoUrl);
         }
+      }).catch(() => {
+        tryIdFallback(record, empFotoUrl);
       });
       return;
     }
@@ -322,30 +350,39 @@
 
     if (idUrl && idUrl !== previousUrl) {
       preloadPhoto(idUrl).then((img) => {
-        if (img && !img.hasError) {
+        if (img && !img.hasError && img.naturalWidth > 0) {
           resolvedPhotoUrlCache.set(key, idUrl);
-          if (item?.id === record.id) {
+          if (String(item?.id) === String(record.id)) {
             activePhotoUrl = idUrl;
             isCurrentPhotoLoaded = true;
             isCurrentPhotoError = false;
-            isWaitingBatchLoad = false;
           }
         } else {
           resolvedPhotoUrlCache.set(key, "");
-          if (item?.id === record.id) {
+          if (String(item?.id) === String(record.id)) {
+            activePhotoUrl = "";
             isCurrentPhotoLoaded = false;
             isCurrentPhotoError = true;
-            isWaitingBatchLoad = false;
           }
         }
+        finishBatchLoad();
+      }).catch(() => {
+        resolvedPhotoUrlCache.set(key, "");
+        if (String(item?.id) === String(record.id)) {
+          activePhotoUrl = "";
+          isCurrentPhotoLoaded = false;
+          isCurrentPhotoError = true;
+        }
+        finishBatchLoad();
       });
     } else {
       resolvedPhotoUrlCache.set(key, "");
-      if (item?.id === record.id) {
+      if (String(item?.id) === String(record.id)) {
+        activePhotoUrl = "";
         isCurrentPhotoLoaded = false;
         isCurrentPhotoError = true;
-        isWaitingBatchLoad = false;
       }
+      finishBatchLoad();
     }
   }
 
@@ -551,9 +588,9 @@
                 <div class="page-transition-spinner"></div>
                 <div class="page-transition-text">
                   {#if pageTransitionDirection === 'next'}
-                    Cargando página {currentPage + 2}...
+                    Cargando página siguiente...
                   {:else}
-                    Cargando página {currentPage}...
+                    Cargando página anterior...
                   {/if}
                 </div>
                 <div class="page-transition-sub">Preparando registros e imágenes</div>
@@ -572,7 +609,7 @@
                 style="opacity: {isCurrentPhotoLoaded ? '1' : '0'}; transition: opacity 0.15s ease;"
                 on:load={() => {
                   isCurrentPhotoLoaded = true;
-                  isWaitingBatchLoad = false;
+                  finishBatchLoad();
                 }}
                 on:error={() => {
                   handlePhotoErrorFallback(item, activePhotoUrl);

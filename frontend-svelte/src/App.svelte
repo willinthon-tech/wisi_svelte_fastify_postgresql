@@ -436,6 +436,7 @@
       nombre: toTitleCase(rec.nombre),
       cedula: rec.employee_no || rec.cedula || "",
       sala: rec.sala_nombre || "Sala",
+      cargo: rec.cargo_nombre || rec.cargo || "",
       dispositivo: rec.dispositivo_nombre || "Dispositivo",
       time: formatEventTime(rec.event_time),
       photo: `${base}/attlogs/${rec.id}.jpg`,
@@ -632,12 +633,15 @@
         }
 
         const cargoName = rec.cargo_nombre || rec.cargo || '';
-        const statusCargo = cargoName ? `${statusBadge} • ${cargoName}` : statusBadge;
         const salaName = rec.sala_nombre || 'Sala';
         const timeStr = rec.hora || (rec.event_time ? String(rec.event_time).split(' ')[1] : '');
 
-        const title = isSync ? `[SYNC] ${empName}` : `🔔 ${empName}`;
-        const body = `${statusCargo} en ${salaName} (${timeStr})`;
+        const title = isSync ? `[SYNC] ${empName}` : `${empName}`;
+        const bodyLines = [];
+        if (salaName) bodyLines.push(`📍 Sala: ${salaName}`);
+        if (cargoName) bodyLines.push(`💼 Cargo: ${cargoName}`);
+        bodyLines.push(`${statusBadge} - ${timeStr}`);
+        const body = bodyLines.join('\n');
         const photoUrl = rec.id ? toBackendUrl(`/api/attlogs/${rec.id}.jpg`) : (rec.foto ? toBackendUrl(rec.foto) : '/favicon.png');
 
         try {
@@ -1190,9 +1194,14 @@
           {/if}
         </div>
         <div class="global-marcaje-alert-name">{globalMarcajeAlert.nombre}</div>
+        {#if globalMarcajeAlert.sala}
+          <div class="global-marcaje-alert-meta"><span>📍 {globalMarcajeAlert.sala}</span></div>
+        {/if}
+        {#if globalMarcajeAlert.cargo}
+          <div class="global-marcaje-alert-meta"><span>💼 {globalMarcajeAlert.cargo}</span></div>
+        {/if}
         <div class="global-marcaje-alert-meta"><span>🕒 {globalMarcajeAlert.time}</span></div>
-        <div class="global-marcaje-alert-meta"><span>🫆 {globalMarcajeAlert.dispositivo}</span></div>
-        <div class="global-marcaje-alert-meta"><span>📍 {globalMarcajeAlert.sala}</span></div>
+        <div class="global-marcaje-alert-meta"><span>📟 {globalMarcajeAlert.dispositivo}</span></div>
         <div class="global-marcaje-alert-meta" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px;">
           <button
             type="button"
