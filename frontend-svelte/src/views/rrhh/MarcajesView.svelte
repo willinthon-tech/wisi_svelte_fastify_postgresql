@@ -204,6 +204,16 @@
     }
   }
 
+  // Caché en memoria para páginas ya cargadas (para que volver atrás sea inmediato a 0ms)
+  const attlogsPageCache = new Map();
+  let lastFilterCacheKey = "";
+  $: currentFilterCacheKey = `${pageSize}_${debouncedSearch}_${sortBy}_${sortDir}_${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${selectedDispositivos.join(",")}_${selectedVerifyModes.join(",")}_${selectedEstados.join(",")}_${selectedFotos.join(",")}_${selectedEstatusEmpleados.join(",")}_${selectedDepartamentos.join(",")}_${selectedAreas.join(",")}_${selectedCargos.join(",")}_${selectedSexo.join(",")}`;
+
+  $: if (currentFilterCacheKey !== lastFilterCacheKey) {
+    lastFilterCacheKey = currentFilterCacheKey;
+    attlogsPageCache.clear();
+  }
+
   // Controlled reactive fetch for data when any parameter changes
   let lastFetchKey = "";
   $: fetchKey = `${currentPage}_${pageSize}_${debouncedSearch}_${sortBy}_${sortDir}_${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${selectedDispositivos.join(",")}_${selectedVerifyModes.join(",")}_${selectedEstados.join(",")}_${selectedFotos.join(",")}_${selectedEstatusEmpleados.join(",")}_${selectedDepartamentos.join(",")}_${selectedAreas.join(",")}_${selectedCargos.join(",")}_${selectedSexo.join(",")}`;
@@ -265,6 +275,28 @@
     salas = [],
     silent = false,
   ) {
+    const pageCacheKey = `pg_${page}_${currentFilterCacheKey}`;
+    // Si la página ya fue traída antes, entregarla a 0ms sin ir a la red
+    if (attlogsPageCache.has(pageCacheKey)) {
+      const cached = attlogsPageCache.get(pageCacheKey);
+      attlogs = cached.data;
+      totalCount = cached.total;
+      isLoading = false;
+      isInitialLoad = false;
+      if (pendingModalPageDirection && $photoModalStore.isOpen) {
+        const dir = pendingModalPageDirection;
+        pendingModalPageDirection = null;
+        updatePhotoModalItems({
+          items: attlogs,
+          currentPage: page - 1,
+          totalPages: totalPages || 1,
+          totalCount,
+          position: dir === 'next' ? 'first' : 'last'
+        });
+      }
+      return;
+    }
+
     if (!silent) isLoading = true;
     try {
       const base = backendUrl.endsWith("/api")
@@ -302,6 +334,7 @@
         if (json.success && Array.isArray(json.data)) {
           attlogs = json.data;
           totalCount = json.total || 0;
+          attlogsPageCache.set(pageCacheKey, { data: json.data, total: json.total || 0 });
         }
       }
     } catch (e) {

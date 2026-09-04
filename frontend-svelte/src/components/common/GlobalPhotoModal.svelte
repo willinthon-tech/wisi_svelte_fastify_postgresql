@@ -212,9 +212,11 @@
     }
   }
 
-  // Caché persistente en memoria (RAM) para asegurar que las fotos del lote actual
-  // se mantengan decodificadas y listas para pintarse a 0ms sin ir a la red
-  const imageMemoryCache = new Map();
+  // Caché persistente y global en memoria (RAM) compartida en toda la ventana del navegador/app
+  if (typeof window !== "undefined" && !window.__wisiGlobalPhotoCache) {
+    window.__wisiGlobalPhotoCache = new Map();
+  }
+  const imageMemoryCache = typeof window !== "undefined" ? window.__wisiGlobalPhotoCache : new Map();
 
   function preloadPhoto(url) {
     if (!url || typeof window === "undefined") return;
@@ -456,40 +458,42 @@
               </div>
             {/if}
 
-            <img
-              bind:this={imgElement}
-              src={photoSrc}
-              crossorigin="anonymous"
-              decoding="async"
-              loading="eager"
-              alt="Fotografía Ampliada"
-              class="modal-main-img"
-              on:load={(e) => {
-                const img = e.currentTarget;
-                img.style.display = "block";
-                if (img.nextElementSibling) img.nextElementSibling.style.display = "none";
-              }}
-              on:error={(e) => {
-                const img = e.currentTarget;
-                const empFoto = item?.empleado_foto || item?.foto;
-                const empId = item?.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? item?.id : null);
+            {#key item?.id || photoSrc}
+              <img
+                bind:this={imgElement}
+                src={photoSrc}
+                crossorigin="anonymous"
+                decoding="async"
+                loading="eager"
+                alt="Fotografía Ampliada"
+                class="modal-main-img"
+                on:load={(e) => {
+                  const img = e.currentTarget;
+                  img.style.display = "block";
+                  if (img.nextElementSibling) img.nextElementSibling.style.display = "none";
+                }}
+                on:error={(e) => {
+                  const img = e.currentTarget;
+                  const empFoto = item?.empleado_foto || item?.foto;
+                  const empId = item?.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? item?.id : null);
 
-                if (!img.dataset.triedEmpFoto && empFoto) {
-                  img.dataset.triedEmpFoto = "true";
-                  img.src = toBackendUrl(empFoto);
-                } else if (!img.dataset.triedId && empId) {
-                  img.dataset.triedId = "true";
-                  img.src = toBackendUrl(`/empleados/${empId}.jpg`);
-                } else {
-                  img.style.display = "none";
-                  const fb = img.nextElementSibling;
-                  if (fb) fb.style.display = "flex";
-                }
-              }}
-            />
-            <div class="modal-photo-fallback">
-              {getInitials(toTitleCase(item?.nombre), item?.cedula || item?.employee_no)}
-            </div>
+                  if (!img.dataset.triedEmpFoto && empFoto) {
+                    img.dataset.triedEmpFoto = "true";
+                    img.src = toBackendUrl(empFoto);
+                  } else if (!img.dataset.triedId && empId) {
+                    img.dataset.triedId = "true";
+                    img.src = toBackendUrl(`/empleados/${empId}.jpg`);
+                  } else {
+                    img.style.display = "none";
+                    const fb = img.nextElementSibling;
+                    if (fb) fb.style.display = "flex";
+                  }
+                }}
+              />
+              <div class="modal-photo-fallback">
+                {getInitials(toTitleCase(item?.nombre), item?.cedula || item?.employee_no)}
+              </div>
+            {/key}
           </div>
 
           <!-- Info Details Grid -->

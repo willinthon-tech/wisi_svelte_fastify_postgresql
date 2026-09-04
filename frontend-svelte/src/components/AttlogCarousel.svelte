@@ -121,7 +121,18 @@
     return toBackendUrl(`/attlogs/${id}.jpg`);
   }
 
+  const carouselPageCache = new Map();
+
   async function fetchLatestAttlogs() {
+    const cacheKey = `${currentPage}_${pageSize}_${(assignedSalaIds || []).join(",")}`;
+    if (carouselPageCache.has(cacheKey)) {
+      const cached = carouselPageCache.get(cacheKey);
+      latestAttlogs = cached.data;
+      totalCount = cached.total;
+      isLoading = false;
+      return;
+    }
+
     try {
       const base = backendUrl.endsWith("/api")
         ? backendUrl
@@ -138,6 +149,7 @@
         if (json.success && Array.isArray(json.data)) {
           latestAttlogs = json.data;
           totalCount = json.total || 0;
+          carouselPageCache.set(cacheKey, { data: json.data, total: json.total || 0 });
           if (currentPage === 0 && json.data.length > 0) {
             dispatch("latestRecord", json.data[0]);
           }
