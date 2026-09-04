@@ -289,8 +289,8 @@
         updatePhotoModalItems({
           items: attlogs,
           currentPage: page - 1,
-          totalPages: totalPages || 1,
-          totalCount,
+          totalPages: Math.ceil((cached.total || 0) / limit) || 1,
+          totalCount: cached.total || 0,
           position: dir === 'next' ? 'first' : 'last'
         });
       }
@@ -348,7 +348,7 @@
         updatePhotoModalItems({
           items: attlogs,
           currentPage: currentPage - 1,
-          totalPages: totalPages || 1,
+          totalPages: Math.ceil((totalCount || 0) / limit) || 1,
           totalCount,
           position: dir === 'next' ? 'first' : 'last'
         });

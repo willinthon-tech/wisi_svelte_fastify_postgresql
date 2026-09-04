@@ -135,6 +135,8 @@ async function startServer() {
       for (const dir of searchDirs) {
         const fullPath = path.join(dir, filename);
         if (fs.existsSync(fullPath)) {
+          reply.header('Access-Control-Allow-Origin', '*');
+          reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
           reply.header('Cache-Control', 'public, max-age=2592000, immutable');
           if (filename.endsWith('.png')) reply.type('image/png');
           else if (filename.endsWith('.svg')) reply.type('image/svg+xml');
@@ -184,6 +186,8 @@ async function startServer() {
               for (const dir of searchDirs) {
                 const altPath = path.join(dir, cand);
                 if (fs.existsSync(altPath)) {
+                  reply.header('Access-Control-Allow-Origin', '*');
+                  reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
                   reply.header('Cache-Control', 'public, max-age=2592000, immutable');
                   reply.type('image/jpeg');
                   return fs.createReadStream(altPath);
@@ -197,6 +201,8 @@ async function startServer() {
       }
 
       // 4. Ultimate Fallback: Stream SVG avatar placeholder with 200 OK so browser console NEVER logs 404!
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
       reply.header('Cache-Control', 'public, max-age=86400');
       reply.type('image/svg+xml').status(200);
       return reply.send(DEFAULT_AVATAR_SVG);

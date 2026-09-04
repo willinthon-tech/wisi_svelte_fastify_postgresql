@@ -10,6 +10,11 @@
   import html2canvas from "html2canvas";
   import { saveOrShareFile } from "../../utils/fileSaver.js";
   import { triggerToast } from "../../controllers/ui.store.js";
+  import {
+    preloadPhoto,
+    isPhotoLoaded,
+    preloadPhotosBatch
+  } from "../../utils/photoPreloader.js";
 
   const backendUrl = getCloudBaseUrl();
 
@@ -17,6 +22,7 @@
   let imgElement = null;
   let isCapturingScreenshot = false;
   let isDownloadingPhoto = false;
+  let isWaitingBatchLoad = false;
 
   $: isOpen = $photoModalStore.isOpen;
   $: item = $photoModalStore.activeItem;
@@ -28,16 +34,17 @@
   $: mode = $photoModalStore.mode;
   $: isPageTransitioning = $photoModalStore.isPageTransitioning;
   $: pageTransitionDirection = $photoModalStore.pageTransitionDirection;
+  $: showPageSpinner = isPageTransitioning || isWaitingBatchLoad;
   $: stInfo = getStatusBadge(item?.attendancestatus);
 
   $: isFirstPage = currentPage <= 0;
   $: isLastPage = totalPages <= 1 || (currentPage >= totalPages - 1);
-  $: isPrevDisabled = (currentIndex <= 0 && isFirstPage) || isPageTransitioning;
-  $: isNextDisabled = (currentIndex >= items.length - 1 && isLastPage) || isPageTransitioning;
+  $: isPrevDisabled = (currentIndex <= 0 && isFirstPage) || showPageSpinner;
+  $: isNextDisabled = (currentIndex >= items.length - 1 && isLastPage) || showPageSpinner;
 
   // Atajos de teclado: Escape para cerrar, Flechas para navegar
   function handleKeyDown(e) {
-    if (!isOpen || isPageTransitioning) return;
+    if (!isOpen || showPageSpinner) return;
     if (e.key === "Escape") {
       closePhotoModal();
     } else if (e.key === "ArrowLeft" && !isPrevDisabled) {
@@ -201,50 +208,145 @@
     return "";
   }
 
-  $: photoSrc = getPhotoUrl(item);
+  // Caché de URLs resueltas por cada registro para garantizar retroceso instantáneo (0ms)
+  const resolvedPhotoUrlCache = new Map();
 
-  $: if (photoSrc && imgElement) {
-    imgElement.dataset.triedEmpFoto = "";
-    imgElement.dataset.triedId = "";
-    imgElement.style.display = "block";
-    if (imgElement.nextElementSibling) {
-      imgElement.nextElementSibling.style.display = "none";
+  let activePhotoUrl = "";
+  let isCurrentPhotoLoaded = false;
+  let isCurrentPhotoError = false;
+
+  function resolveItemPhoto(record) {
+    if (!record) return "";
+    const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
+    if (resolvedPhotoUrlCache.has(key)) {
+      return resolvedPhotoUrlCache.get(key);
+    }
+    return getPhotoUrl(record);
+  }
+
+  // Activar espera de lote de inmediato al iniciar transición
+  let batchSafetyTimeout = null;
+  $: if (isPageTransitioning) {
+    isWaitingBatchLoad = true;
+    if (batchSafetyTimeout) clearTimeout(batchSafetyTimeout);
+    batchSafetyTimeout = setTimeout(() => {
+      isWaitingBatchLoad = false;
+    }, 4000);
+  }
+
+  // Precargar en paralelo todo el lote de imágenes de la página actual
+  let lastBatchPage = null;
+  $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
+    if (currentPage !== lastBatchPage) {
+      lastBatchPage = currentPage;
+      isWaitingBatchLoad = true;
+
+      const urlsToPreload = [];
+      items.forEach((it) => {
+        const u = getPhotoUrl(it);
+        if (u) urlsToPreload.push(u);
+
+        const empFoto = it.empleado_foto || it.foto;
+        if (empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0) {
+          urlsToPreload.push(toBackendUrl(empFoto));
+        }
+        const empId = it.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? it.id : null);
+        if (empId) {
+          urlsToPreload.push(toBackendUrl(`/empleados/${empId}.jpg`));
+        }
+      });
+      preloadPhotosBatch(urlsToPreload);
     }
   }
 
-  // Caché persistente y global en memoria (RAM) compartida en toda la ventana del navegador/app
-  if (typeof window !== "undefined" && !window.__wisiGlobalPhotoCache) {
-    window.__wisiGlobalPhotoCache = new Map();
+  // Sincronización de la foto activa actual
+  $: if (item) {
+    const url = resolveItemPhoto(item);
+    activePhotoUrl = url;
+    if (!url) {
+      isCurrentPhotoLoaded = false;
+      isCurrentPhotoError = true;
+      isWaitingBatchLoad = false;
+    } else if (isPhotoLoaded(url)) {
+      isCurrentPhotoLoaded = true;
+      isCurrentPhotoError = false;
+      isWaitingBatchLoad = false;
+    } else {
+      isCurrentPhotoLoaded = false;
+      isCurrentPhotoError = false;
+      preloadPhoto(url).then((img) => {
+        if (item && resolveItemPhoto(item) === url) {
+          if (img && !img.hasError) {
+            isCurrentPhotoLoaded = true;
+            isCurrentPhotoError = false;
+            isWaitingBatchLoad = false;
+            const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
+            resolvedPhotoUrlCache.set(key, url);
+          } else {
+            handlePhotoErrorFallback(item, url);
+          }
+        }
+      });
+    }
   }
-  const imageMemoryCache = typeof window !== "undefined" ? window.__wisiGlobalPhotoCache : new Map();
 
-  function preloadPhoto(url) {
-    if (!url || typeof window === "undefined") return;
-    if (imageMemoryCache.has(url)) return;
+  function handlePhotoErrorFallback(record, failedUrl) {
+    if (!record) return;
+    const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
 
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.decoding = "async";
-    img.src = url;
-    imageMemoryCache.set(url, img);
+    const empFoto = record.empleado_foto || record.foto;
+    const empFotoUrl = empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0 ? toBackendUrl(empFoto) : null;
+    if (empFotoUrl && empFotoUrl !== failedUrl) {
+      preloadPhoto(empFotoUrl).then((img) => {
+        if (img && !img.hasError) {
+          resolvedPhotoUrlCache.set(key, empFotoUrl);
+          if (item?.id === record.id) {
+            activePhotoUrl = empFotoUrl;
+            isCurrentPhotoLoaded = true;
+            isCurrentPhotoError = false;
+            isWaitingBatchLoad = false;
+          }
+        } else {
+          tryIdFallback(record, empFotoUrl);
+        }
+      });
+      return;
+    }
+    tryIdFallback(record, failedUrl);
   }
 
-  // Precargar TODAS las fotos del lote actual (los 10 registros visibles de la página)
-  // con CORS anónimo idéntico al tag <img> para respuesta instantánea (0ms)
-  $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
-    items.forEach((it) => {
-      const u = getPhotoUrl(it);
-      if (u) preloadPhoto(u);
+  function tryIdFallback(record, previousUrl) {
+    const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
+    const empId = record.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? record.id : null);
+    const idUrl = empId ? toBackendUrl(`/empleados/${empId}.jpg`) : null;
 
-      const empFoto = it.empleado_foto || it.foto;
-      if (empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0) {
-        preloadPhoto(toBackendUrl(empFoto));
+    if (idUrl && idUrl !== previousUrl) {
+      preloadPhoto(idUrl).then((img) => {
+        if (img && !img.hasError) {
+          resolvedPhotoUrlCache.set(key, idUrl);
+          if (item?.id === record.id) {
+            activePhotoUrl = idUrl;
+            isCurrentPhotoLoaded = true;
+            isCurrentPhotoError = false;
+            isWaitingBatchLoad = false;
+          }
+        } else {
+          resolvedPhotoUrlCache.set(key, "");
+          if (item?.id === record.id) {
+            isCurrentPhotoLoaded = false;
+            isCurrentPhotoError = true;
+            isWaitingBatchLoad = false;
+          }
+        }
+      });
+    } else {
+      resolvedPhotoUrlCache.set(key, "");
+      if (item?.id === record.id) {
+        isCurrentPhotoLoaded = false;
+        isCurrentPhotoError = true;
+        isWaitingBatchLoad = false;
       }
-      const empId = it.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? it.id : null);
-      if (empId) {
-        preloadPhoto(toBackendUrl(`/empleados/${empId}.jpg`));
-      }
-    });
+    }
   }
 
   function getInitials(name, cedula) {
@@ -352,7 +454,7 @@
     if (!item || isDownloadingPhoto) return;
     isDownloadingPhoto = true;
     try {
-      const url = getPhotoUrl(item);
+      const url = activePhotoUrl || getPhotoUrl(item);
       if (!url) throw new Error("URL de fotografía no disponible");
 
       const res = await fetch(url);
@@ -416,15 +518,15 @@
 
             <div data-html2canvas-ignore="true" class="header-right">
               <div class="header-right-meta">
-                <span class="pagination-badge" class:pagination-badge-loading={isPageTransitioning}>
-                  {#if isPageTransitioning}
+                <span class="pagination-badge" class:pagination-badge-loading={showPageSpinner}>
+                  {#if showPageSpinner}
                     ⏳ Cargando página...
                   {:else}
                     Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
                   {/if}
                 </span>
                 <span class="index-badge">
-                  {#if isPageTransitioning}
+                  {#if showPageSpinner}
                     Sincronizando...
                   {:else}
                     {currentIndex + 1} / {items.length}
@@ -444,7 +546,7 @@
 
           <!-- Photo Container -->
           <div class="modal-photo-area">
-            {#if isPageTransitioning}
+            {#if showPageSpinner}
               <div class="page-transition-overlay" data-html2canvas-ignore="true">
                 <div class="page-transition-spinner"></div>
                 <div class="page-transition-text">
@@ -454,46 +556,35 @@
                     Cargando página {currentPage}...
                   {/if}
                 </div>
-                <div class="page-transition-sub">Obteniendo nuevos registros e imágenes</div>
+                <div class="page-transition-sub">Preparando registros e imágenes</div>
               </div>
             {/if}
 
-            {#key item?.id || photoSrc}
+            {#if activePhotoUrl && !isCurrentPhotoError}
               <img
                 bind:this={imgElement}
-                src={photoSrc}
+                src={activePhotoUrl}
                 crossorigin="anonymous"
                 decoding="async"
                 loading="eager"
                 alt="Fotografía Ampliada"
                 class="modal-main-img"
-                on:load={(e) => {
-                  const img = e.currentTarget;
-                  img.style.display = "block";
-                  if (img.nextElementSibling) img.nextElementSibling.style.display = "none";
+                style="opacity: {isCurrentPhotoLoaded ? '1' : '0'}; transition: opacity 0.15s ease;"
+                on:load={() => {
+                  isCurrentPhotoLoaded = true;
+                  isWaitingBatchLoad = false;
                 }}
-                on:error={(e) => {
-                  const img = e.currentTarget;
-                  const empFoto = item?.empleado_foto || item?.foto;
-                  const empId = item?.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? item?.id : null);
-
-                  if (!img.dataset.triedEmpFoto && empFoto) {
-                    img.dataset.triedEmpFoto = "true";
-                    img.src = toBackendUrl(empFoto);
-                  } else if (!img.dataset.triedId && empId) {
-                    img.dataset.triedId = "true";
-                    img.src = toBackendUrl(`/empleados/${empId}.jpg`);
-                  } else {
-                    img.style.display = "none";
-                    const fb = img.nextElementSibling;
-                    if (fb) fb.style.display = "flex";
-                  }
+                on:error={() => {
+                  handlePhotoErrorFallback(item, activePhotoUrl);
                 }}
               />
+            {/if}
+
+            {#if isCurrentPhotoError || (!activePhotoUrl && !showPageSpinner)}
               <div class="modal-photo-fallback">
                 {getInitials(toTitleCase(item?.nombre), item?.cedula || item?.employee_no)}
               </div>
-            {/key}
+            {/if}
           </div>
 
           <!-- Info Details Grid -->
@@ -869,6 +960,7 @@
   .modal-main-img {
     max-width: 100%;
     max-height: 420px;
+    min-height: 240px;
     border-radius: 12px;
     object-fit: contain;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
@@ -876,7 +968,7 @@
   }
 
   .modal-photo-fallback {
-    display: none;
+    display: flex;
     width: 140px;
     height: 140px;
     border-radius: 50%;

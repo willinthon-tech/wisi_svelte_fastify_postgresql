@@ -130,6 +130,17 @@
       latestAttlogs = cached.data;
       totalCount = cached.total;
       isLoading = false;
+      if (pendingModalPageDirection && $photoModalStore.isOpen) {
+        const dir = pendingModalPageDirection;
+        pendingModalPageDirection = null;
+        updatePhotoModalItems({
+          items: latestAttlogs,
+          currentPage,
+          totalPages: Math.ceil(totalCount / pageSize) || 1,
+          totalCount,
+          position: dir === 'next' ? 'first' : 'last'
+        });
+      }
       return;
     }
 
@@ -159,6 +170,17 @@
       console.warn("Error fetching latest attlogs carousel:", e);
     } finally {
       isLoading = false;
+      if (pendingModalPageDirection && $photoModalStore.isOpen) {
+        const dir = pendingModalPageDirection;
+        pendingModalPageDirection = null;
+        updatePhotoModalItems({
+          items: latestAttlogs,
+          currentPage,
+          totalPages: Math.ceil(totalCount / pageSize) || 1,
+          totalCount,
+          position: dir === 'next' ? 'first' : 'last'
+        });
+      }
     }
   }
 
