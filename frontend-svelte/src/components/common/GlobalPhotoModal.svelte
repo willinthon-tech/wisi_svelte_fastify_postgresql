@@ -8,12 +8,15 @@
   } from "../../controllers/globalModal.store.js";
   import { getCloudBaseUrl, toBackendUrl } from "../../config/api.config.js";
   import html2canvas from "html2canvas";
+  import { saveOrShareFile } from "../../utils/fileSaver.js";
+  import { triggerToast } from "../../controllers/ui.store.js";
 
   const backendUrl = getCloudBaseUrl();
 
   let modalCardElement = null;
   let imgElement = null;
   let isCapturingScreenshot = false;
+  let isDownloadingPhoto = false;
 
   $: isOpen = $photoModalStore.isOpen;
   $: item = $photoModalStore.activeItem;
@@ -244,7 +247,7 @@
         backgroundColor: "#ffffff",
         scale: scaleFactor,
         logging: false,
-        imageTimeout: 10000,
+        imageTimeout: 15000,
         ignoreElements: (el) => el.getAttribute("data-html2canvas-ignore") === "true",
         onclone: (clonedDoc, clonedElement) => {
           // Desactivar cualquier animación (como zoomIn / fadeIn) para que no se capture a mitad de opacidad
@@ -285,47 +288,62 @@
 
       ctx.drawImage(sourceCanvas, 0, 0);
 
+      const blob = await new Promise((resolve, reject) => {
+        roundedCanvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error("No se pudo generar el archivo PNG de la ficha"));
+        }, "image/png", 1.0);
+      });
+
       const cedula = (item?.cedula || item?.employee_no || "empleado").toString().replace(/^#/, "").trim();
       const rawTime = item?.event_time || "ficha";
       const cleanTime = String(rawTime).replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
       const fileName = `Ficha_${cedula}_${cleanTime}.png`;
 
-      const link = document.createElement("a");
-      link.href = roundedCanvas.toDataURL("image/png");
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await saveOrShareFile({
+        blob,
+        fileName,
+        dialogTitle: `Guardar Ficha de ${cedula}`,
+        mimeType: "image/png"
+      });
+      triggerToast(`Ficha guardada: ${fileName}`, "success");
     } catch (err) {
       console.error("Error al capturar screenshot de la ficha:", err);
+      triggerToast("Error al capturar ficha: " + (err.message || err), "error");
     } finally {
       isCapturingScreenshot = false;
     }
   }
 
   async function downloadPhoto() {
-    if (!item) return;
+    if (!item || isDownloadingPhoto) return;
+    isDownloadingPhoto = true;
     try {
       const url = getPhotoUrl(item);
+      if (!url) throw new Error("URL de fotografía no disponible");
+
       const res = await fetch(url);
-      if (!res.ok) throw new Error("No se pudo obtener la imagen");
+      if (!res.ok) throw new Error("No se pudo obtener la imagen del servidor");
       const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
 
       const cedula = (item.cedula || item.employee_no || "empleado").toString().replace(/^#/, "").trim();
       const rawTime = item.event_time || "foto";
       const cleanTime = String(rawTime).replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
-      const fileName = `Foto_${cedula}_${cleanTime}.jpg`;
+      const ext = blob.type.includes("png") ? "png" : "jpg";
+      const fileName = `Foto_${cedula}_${cleanTime}.${ext}`;
 
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      await saveOrShareFile({
+        blob,
+        fileName,
+        dialogTitle: `Guardar Fotografía de ${cedula}`,
+        mimeType: blob.type || "image/jpeg"
+      });
+      triggerToast(`Fotografía guardada: ${fileName}`, "success");
     } catch (err) {
       console.error("Error al descargar foto:", err);
+      triggerToast("Error al descargar foto: " + (err.message || err), "error");
+    } finally {
+      isDownloadingPhoto = false;
     }
   }
 </script>
@@ -388,6 +406,7 @@
             <img
               bind:this={imgElement}
               src={photoSrc}
+              crossorigin="anonymous"
               alt="Fotografía Ampliada"
               class="modal-main-img"
               on:load={(e) => {
@@ -535,10 +554,15 @@
                   type="button"
                   class="btn-action btn-download"
                   on:click={downloadPhoto}
+                  disabled={isDownloadingPhoto}
                   title="Descargar fotografía en alta resolución"
                 >
-                  <span>Descargar</span>
-                  <span>Foto</span>
+                  {#if isDownloadingPhoto}
+                    <span class="spin-icon">⏳</span>
+                  {:else}
+                    <span>Descargar</span>
+                    <span>Foto</span>
+                  {/if}
                 </button>
               </div>
             </div>

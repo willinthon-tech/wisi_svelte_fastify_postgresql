@@ -14,7 +14,7 @@
   import MasterAdminView from "./views/MasterAdminView.svelte";
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
   import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
-  import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal } from "./controllers/globalModal.store.js";
+  import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal, openPhotoModalForAttlog } from "./controllers/globalModal.store.js";
 
   // Import Feature Views
   import ProductsView from "./components/ProductsView.svelte";
@@ -622,18 +622,29 @@
       // Permite recibir la alerta aunque el usuario esté en otra ventana o app
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
         const empName = rec.nombre || `Empleado ${rec.employee_no || ''}`;
-        const actionType = String(rec.tipo_evento || rec.status || 'Marcaje').toUpperCase();
+        
+        const rawStatus = String(rec.attendancestatus || rec.tipo_evento || rec.status || '').toLowerCase().trim();
+        let statusBadge = '🚪 PUERTA / OTROS';
+        if (rawStatus === 'checkin' || rawStatus === 'entrada') {
+          statusBadge = '🟢 ENTRADA';
+        } else if (rawStatus === 'checkout' || rawStatus === 'salida') {
+          statusBadge = '🔴 SALIDA';
+        }
+
+        const cargoName = rec.cargo_nombre || rec.cargo || '';
+        const statusCargo = cargoName ? `${statusBadge} • ${cargoName}` : statusBadge;
         const salaName = rec.sala_nombre || 'Sala';
         const timeStr = rec.hora || (rec.event_time ? String(rec.event_time).split(' ')[1] : '');
 
-        const title = isSync ? `[SYNC] ${empName}` : `🔔 WISI Space: ${empName}`;
-        const body = `${actionType} en ${salaName} (${timeStr})`;
-        const icon = rec.foto ? toBackendUrl(rec.foto) : (rec.id ? toBackendUrl(`/attlogs/${rec.id}.jpg`) : '/favicon.png');
+        const title = isSync ? `[SYNC] ${empName}` : `🔔 ${empName}`;
+        const body = `${statusCargo} en ${salaName} (${timeStr})`;
+        const photoUrl = rec.id ? toBackendUrl(`/api/attlogs/${rec.id}.jpg`) : (rec.foto ? toBackendUrl(rec.foto) : '/favicon.png');
 
         try {
           const sysNotif = new Notification(title, {
             body,
-            icon,
+            icon: photoUrl,
+            image: photoUrl,
             badge: '/favicon.png',
             tag: `attlog-${rec.id || Date.now()}`,
             renotify: true
@@ -641,6 +652,7 @@
           sysNotif.onclick = () => {
             window.focus();
             sysNotif.close();
+            openPhotoModalForAttlog(rec.id, rec);
           };
         } catch (e) {
           // Ignorar si el sistema o navegador bloquea la notificación

@@ -103,6 +103,7 @@
 
   import { createEventDispatcher } from 'svelte';
   import html2canvas from 'html2canvas';
+  import { saveOrShareFile } from '../../utils/fileSaver.js';
   import { triggerToast, globalCreateModalTriggerStore } from '../../controllers/ui.store.js';
   import { masterCargosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
@@ -607,20 +608,22 @@
     if (!item) return;
     try {
       const url = getPhotoUrl(item);
+      if (!url) return;
       const res = await fetch(url);
+      if (!res.ok) throw new Error("No se pudo obtener la imagen");
       const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
 
       const cedula = (item.cedula || item.employee_no || item.id || 'empleado').toString().replace(/^#/, '').trim();
       const name = (toTitleCase(item.nombre) || 'foto').toString().replace(/[\s:]+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
-      const fileName = `${cedula}_${name}.jpg`;
+      const ext = blob.type.includes('png') ? 'png' : 'jpg';
+      const fileName = `${cedula}_${name}.${ext}`;
 
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      await saveOrShareFile({
+        blob,
+        fileName,
+        dialogTitle: `Guardar Foto de ${name}`,
+        mimeType: blob.type || 'image/jpeg'
+      });
     } catch (e) {
       console.error('Error downloading photo:', e);
     }

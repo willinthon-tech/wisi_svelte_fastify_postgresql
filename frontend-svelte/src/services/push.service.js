@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { toBackendUrl } from '../config/api.config.js';
+import { openPhotoModalForAttlog } from '../controllers/globalModal.store.js';
 
 /**
  * Inicializa y registra el dispositivo para Notificaciones Push (Firebase Cloud Messaging)
@@ -83,9 +84,14 @@ export async function initPushNotifications(userId, onNotificationReceived) {
       }
     });
 
-    // Notificación tocada / abierta por el usuario
+    // Notificación tocada / abierta por el usuario en Android
     PushNotifications.addListener('pushNotificationActionPerformed', (notificationAction) => {
       console.log('👆 [Push] Acción sobre notificación:', notificationAction);
+      const data = notificationAction.notification?.data || {};
+      const attlogId = data.attlog_id || data.id;
+      if (attlogId) {
+        openPhotoModalForAttlog(attlogId);
+      }
     });
 
   } catch (error) {

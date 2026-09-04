@@ -263,3 +263,53 @@ export function handleRealtimeAttlogInPhotoModal(newRecord) {
     };
   });
 }
+
+/**
+ * Abre el modal global apuntando a un marcaje específico mediante su ID (ej. al hacer click en notificación).
+ * Sincroniza los datos completos del empleado y la posición real en el paginador.
+ */
+export async function openPhotoModalForAttlog(attlogId, initialRecord = null) {
+  if (!attlogId && !initialRecord) return;
+
+  const validId = attlogId || initialRecord?.id;
+
+  // 1. Apertura instantánea con datos locales o provisionales si existen (0ms lag)
+  if (initialRecord) {
+    openPhotoModal({
+      item: initialRecord,
+      items: [initialRecord],
+      currentIndex: 0,
+      totalCount: 1,
+      mode: 'checkin_checkout'
+    });
+  }
+
+  // 2. Consultar al backend los datos enriquecidos y la posición para sincronización exacta
+  try {
+    const cloudBase = getCloudBaseUrl();
+    const res = await fetch(`${cloudBase}/api/attlogs/${validId}/detail`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.data) {
+        const rec = json.data;
+        const pos = json.position;
+        const globalIndex = pos ? pos.globalIndex : 0;
+        const pageSize = 10;
+        const page = Math.floor(globalIndex / pageSize);
+
+        openPhotoModal({
+          item: rec,
+          items: [rec],
+          currentIndex: 0,
+          currentPage: page,
+          totalPages: pos ? Math.ceil(pos.position / pageSize) : 1,
+          totalCount: pos ? pos.position : 1,
+          mode: 'checkin_checkout'
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[GlobalModal] Error abriendo ficha desde attlog_id:', err);
+  }
+}
+

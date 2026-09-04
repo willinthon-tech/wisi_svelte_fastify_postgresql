@@ -94,9 +94,27 @@ export function toBackendUrl(path) {
   if (!path || typeof path !== 'string') return '';
   const clean = path.trim();
   if (clean.startsWith('data:') || clean.startsWith('blob:')) return clean;
-  if (clean.startsWith('http://') || clean.startsWith('https://')) return clean;
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    if (clean.includes('willinthon.wisi.space')) {
+      return clean
+        .replace('willinthon.wisi.space/attlogs/', 'willinthon.wisi.space/api/attlogs/')
+        .replace('willinthon.wisi.space/empleados/', 'willinthon.wisi.space/api/empleados/')
+        .replace('willinthon.wisi.space/salas/', 'willinthon.wisi.space/api/salas/');
+    }
+    return clean;
+  }
   const base = getCloudBaseUrl();
-  const normalized = clean.startsWith('/') ? clean : `/${clean}`;
+  let normalized = clean.startsWith('/') ? clean : `/${clean}`;
+
+  // Asegurar que las rutas de fotografías pasen por /api/ para que Fastify inyecte cabeceras CORS
+  if (normalized.startsWith('/attlogs/') && !normalized.startsWith('/api/attlogs/')) {
+    normalized = `/api${normalized}`;
+  } else if (normalized.startsWith('/empleados/') && !normalized.startsWith('/api/empleados/')) {
+    normalized = `/api${normalized}`;
+  } else if (normalized.startsWith('/salas/') && !normalized.startsWith('/api/salas/')) {
+    normalized = `/api${normalized}`;
+  }
+
   return `${base}${normalized}`;
 }
 
@@ -196,7 +214,7 @@ export const ENDPOINTS = {
   // Agente y Marcajes (attlogs)
   ATTLOGS: `${CLOUD_BASE_URL}/api/attlogs`,
   ATTLOGS_SYNC: `${CLOUD_BASE_URL}/api/attlogs/sync`,
-  ATTLOG_IMAGE: (id) => `${CLOUD_BASE_URL}/attlogs/${id}/image`,
+  ATTLOG_IMAGE: (id) => `${CLOUD_BASE_URL}/api/attlogs/${id}/image`,
 
   // Recursos Operativos (CECOM, RRHH, Máquinas, Mesas, Llaves)
   LIBROS: `${CLOUD_BASE_URL}/api/libros`,
