@@ -363,7 +363,6 @@
           <div class="modal-photo-area">
             <img
               bind:this={imgElement}
-              crossorigin="anonymous"
               src={photoSrc}
               alt="Fotografía Ampliada"
               class="modal-main-img"
@@ -379,10 +378,10 @@
 
                 if (!img.dataset.triedEmpFoto && empFoto) {
                   img.dataset.triedEmpFoto = "true";
-                  img.src = empFoto.startsWith("http") ? empFoto : (empFoto.startsWith("/") ? empFoto : `/${empFoto}`);
-                } else if (!img.dataset.triedId && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
+                  img.src = toBackendUrl(empFoto);
+                } else if (!img.dataset.triedId && empId) {
                   img.dataset.triedId = "true";
-                  img.src = `/empleados/${empId}.jpg`;
+                  img.src = toBackendUrl(`/empleados/${empId}.jpg`);
                 } else {
                   img.style.display = "none";
                   const fb = img.nextElementSibling;

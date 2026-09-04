@@ -1606,7 +1606,7 @@ export async function syncAttlogsModel(data) {
       const hasPhoto = Boolean(log.foto_base64 && String(log.foto_base64).trim().length > 0);
       const rows = await sql`
         INSERT INTO attlogs (dispositivo_id, employee_no, event_time, nombre, attendancestatus, currentverifymode, has_photo)
-        VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}, ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode}, ${hasPhoto})
+        VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}::timestamp AT TIME ZONE 'America/Caracas', ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode}, ${hasPhoto})
         ON CONFLICT (dispositivo_id, employee_no, event_time)
         DO UPDATE SET updated_at = CURRENT_TIMESTAMP,
                       currentverifymode = COALESCE(EXCLUDED.currentverifymode, attlogs.currentverifymode),

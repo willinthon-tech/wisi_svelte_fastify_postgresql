@@ -309,6 +309,10 @@
     } finally {
       isLoading = false;
       isInitialLoad = false;
+      if (pendingModalPageDirection && $photoModalStore.isOpen) {
+        pendingModalPageDirection = null;
+        updatePhotoModalItems({ items: attlogs });
+      }
     }
   }
 

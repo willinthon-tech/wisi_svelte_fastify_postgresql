@@ -529,22 +529,48 @@ function extractHikvisionPushData(obj, rawStr = null) {
 }
 
 function formatLocalDateTime(rawTime) {
-  let d = null;
   if (rawTime) {
-    let s = String(rawTime).trim().replace('T', ' ');
-    if (s.includes('+')) s = s.split('+')[0];
-    if (s.endsWith('Z')) s = s.substring(0, s.length - 1);
+    const rawStr = String(rawTime).trim();
+    // Detect if rawTime contains explicit timezone information like Z, +00:00, -04:00, etc.
+    const hasTz = /Z|[+-]\d{2}(:?\d{2})?$/.test(rawStr);
+    if (hasTz) {
+      const d = new Date(rawStr);
+      if (!isNaN(d.getTime())) {
+        const formatter = new Intl.DateTimeFormat('sv-SE', {
+          timeZone: 'America/Caracas',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+        return formatter.format(d).replace(' ', ' ');
+      }
+    }
+
+    // If it's already a standard local datetime string YYYY-MM-DD HH:mm:ss or YYYY-MM-DDTHH:mm:ss
+    let s = rawStr.replace('T', ' ');
     if (s.includes('.')) s = s.split('.')[0];
-    if (s.length >= 19) return s.substring(0, 19);
+    if (s.length >= 19 && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
+      return s.substring(0, 19);
+    }
   }
-  d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const hours = String(d.getHours()).padStart(2, '0');
-  const mins = String(d.getMinutes()).padStart(2, '0');
-  const secs = String(d.getSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${mins}:${secs}`;
+
+  // Fallback to current time strictly in America/Caracas
+  const d = new Date();
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  return formatter.format(d).replace(' ', ' ');
 }
 
 let cachedDispositivos = null;

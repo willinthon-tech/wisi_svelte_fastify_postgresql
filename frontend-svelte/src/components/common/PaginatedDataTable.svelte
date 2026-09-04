@@ -816,16 +816,20 @@
       totalCount: displayTotalCount,
       mode: isDesinc ? 'desincorporado' : 'empleado',
       onPageNext: () => {
-        if (currentPage < totalPages) {
+        const curr = Number(currentPage) || 1;
+        const total = Number(totalPages) || 1;
+        if (curr < total) {
+          const nextPg = curr + 1;
           if (isServerSide) {
             pendingModalPageDirection = 'next';
-            changePage(currentPage + 1);
+            changePage(nextPg);
           } else {
-            changePage(currentPage + 1);
+            changePage(nextPg);
+            const nextItems = sortedItems.slice((nextPg - 1) * numPageSize, nextPg * numPageSize);
             updatePhotoModalItems({
-              items: paginatedItems,
-              currentPage: currentPage - 1,
-              totalPages: totalPages || 1,
+              items: nextItems,
+              currentPage: nextPg - 1,
+              totalPages: total,
               totalCount: displayTotalCount,
               position: 'first'
             });
@@ -833,16 +837,20 @@
         }
       },
       onPagePrev: () => {
-        if (currentPage > 1) {
+        const curr = Number(currentPage) || 1;
+        const total = Number(totalPages) || 1;
+        if (curr > 1) {
+          const prevPg = curr - 1;
           if (isServerSide) {
             pendingModalPageDirection = 'prev';
-            changePage(currentPage - 1);
+            changePage(prevPg);
           } else {
-            changePage(currentPage - 1);
+            changePage(prevPg);
+            const prevItems = sortedItems.slice((prevPg - 1) * numPageSize, prevPg * numPageSize);
             updatePhotoModalItems({
-              items: paginatedItems,
-              currentPage: currentPage - 1,
-              totalPages: totalPages || 1,
+              items: prevItems,
+              currentPage: prevPg - 1,
+              totalPages: total,
               totalCount: displayTotalCount,
               position: 'last'
             });

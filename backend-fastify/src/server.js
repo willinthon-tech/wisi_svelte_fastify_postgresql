@@ -1,3 +1,5 @@
+process.env.TZ = 'America/Caracas';
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import dotenv from 'dotenv';
@@ -108,6 +110,10 @@ async function startServer() {
     </svg>`;
 
     const servePhotoWithFallback = async (req, reply) => {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', '*');
+
       const fs = await import('fs');
       const path = await import('path');
       const { sql, isPgConnected } = await import('./config/db.js');
@@ -210,6 +216,10 @@ async function startServer() {
     </svg>`;
 
     const serveSalaLogoWithFallback = async (req, reply) => {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', '*');
+
       const fs = await import('fs');
       const path = await import('path');
       const { sql, isPgConnected } = await import('./config/db.js');

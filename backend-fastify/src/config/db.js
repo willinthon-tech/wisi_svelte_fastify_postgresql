@@ -333,8 +333,14 @@ export async function initDb() {
       max_lifetime: 60,
       idle_timeout: 10,
       max: 10,
-      onnotice: () => { }
+      onnotice: () => { },
+      parameters: {
+        timezone: 'America/Caracas'
+      }
     });
+
+    // Fijar zona horaria estricta de Venezuela para evitar cualquier desfase de 1 hora
+    await sql`SET TIME ZONE 'America/Caracas';`.catch(() => {});
 
     // 1. Table usuarios
     await sql`

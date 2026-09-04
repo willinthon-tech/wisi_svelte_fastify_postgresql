@@ -74,7 +74,7 @@ export function closePhotoModal() {
  */
 export function photoModalNext() {
   photoModalStore.update(state => {
-    if (!state.isOpen || state.items.length === 0) return state;
+    if (!state.isOpen || state.items.length === 0 || state.isPageTransitioning) return state;
     if (state.currentIndex < state.items.length - 1) {
       const nextIdx = state.currentIndex + 1;
       return {
@@ -83,7 +83,15 @@ export function photoModalNext() {
         activeItem: state.items[nextIdx]
       };
     } else if (state.onPageNext) {
-      state.onPageNext();
+      try {
+        state.onPageNext();
+      } catch (e) {
+        console.warn('Error onPageNext modal:', e);
+      }
+      return {
+        ...state,
+        isPageTransitioning: true
+      };
     }
     return state;
   });
@@ -94,7 +102,7 @@ export function photoModalNext() {
  */
 export function photoModalPrev() {
   photoModalStore.update(state => {
-    if (!state.isOpen || state.items.length === 0) return state;
+    if (!state.isOpen || state.items.length === 0 || state.isPageTransitioning) return state;
     if (state.currentIndex > 0) {
       const prevIdx = state.currentIndex - 1;
       return {
@@ -103,7 +111,15 @@ export function photoModalPrev() {
         activeItem: state.items[prevIdx]
       };
     } else if (state.onPagePrev) {
-      state.onPagePrev();
+      try {
+        state.onPagePrev();
+      } catch (e) {
+        console.warn('Error onPagePrev modal:', e);
+      }
+      return {
+        ...state,
+        isPageTransitioning: true
+      };
     }
     return state;
   });
@@ -116,7 +132,7 @@ export function updatePhotoModalItems({ items, currentPage, totalPages, totalCou
   photoModalStore.update(state => {
     if (!state.isOpen) return state;
     const newItems = Array.isArray(items) ? [...items] : state.items;
-    if (newItems.length === 0) return state;
+    if (newItems.length === 0) return { ...state, isPageTransitioning: false };
 
     let newIndex = state.currentIndex;
     if (position === 'first') {
@@ -131,6 +147,7 @@ export function updatePhotoModalItems({ items, currentPage, totalPages, totalCou
 
     return {
       ...state,
+      isPageTransitioning: false,
       items: newItems,
       currentIndex: newIndex,
       activeItem: newItems[newIndex] || state.activeItem,
