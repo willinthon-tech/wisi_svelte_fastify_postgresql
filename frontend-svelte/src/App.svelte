@@ -97,7 +97,7 @@
     currentUserStore,
     userSalasStore as authUserSalasStore,
   } from "./controllers/auth.store.js";
-  import { getCloudBaseUrl } from "./config/api.config.js";
+  import { getCloudBaseUrl, toBackendUrl } from "./config/api.config.js";
   import { onDestroy } from "svelte";
   import {
     initWebSocketConnection,
@@ -578,6 +578,13 @@
     }
     initLatestEventTime();
 
+    // Solicitar permiso para notificaciones nativas de escritorio (Windows / Navegador / PWA)
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+
     // Connect WebSocket for real-time live attendance notifications (NO HTTP POLLING!)
     initWebSocketConnection((rec) => {
       if (!$isAuthenticatedStore) return;
@@ -610,6 +617,35 @@
 
       // Alerta única superior: Entrada, Salida o Puerta / Otros
       triggerGlobalMarcajeToast(rec, base, isSync);
+
+      // Notificación nativa del Sistema Operativo (Windows / Escritorio / PWA)
+      // Permite recibir la alerta aunque el usuario esté en otra ventana o app
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        const empName = rec.nombre || `Empleado ${rec.employee_no || ''}`;
+        const actionType = String(rec.tipo_evento || rec.status || 'Marcaje').toUpperCase();
+        const salaName = rec.sala_nombre || 'Sala';
+        const timeStr = rec.hora || (rec.event_time ? String(rec.event_time).split(' ')[1] : '');
+
+        const title = isSync ? `[SYNC] ${empName}` : `🔔 WISI Space: ${empName}`;
+        const body = `${actionType} en ${salaName} (${timeStr})`;
+        const icon = rec.foto ? toBackendUrl(rec.foto) : (rec.id ? toBackendUrl(`/attlogs/${rec.id}.jpg`) : '/favicon.png');
+
+        try {
+          const sysNotif = new Notification(title, {
+            body,
+            icon,
+            badge: '/favicon.png',
+            tag: `attlog-${rec.id || Date.now()}`,
+            renotify: true
+          });
+          sysNotif.onclick = () => {
+            window.focus();
+            sysNotif.close();
+          };
+        } catch (e) {
+          // Ignorar si el sistema o navegador bloquea la notificación
+        }
+      }
 
       // Actualizar modal si está abierto
       handleRealtimeAttlogInPhotoModal(rec);

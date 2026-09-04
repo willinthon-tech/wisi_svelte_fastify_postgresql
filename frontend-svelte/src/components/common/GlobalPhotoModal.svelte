@@ -78,11 +78,35 @@
     return str.toUpperCase();
   }
 
+  function parseLocalDate(raw) {
+    if (!raw) return null;
+    let str = "";
+    if (raw instanceof Date) {
+      str = raw.toISOString().split("T")[0];
+    } else {
+      str = String(raw).trim();
+    }
+    const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      return new Date(year, month, day, 12, 0, 0);
+    }
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
   function formatDate(raw) {
     if (!raw) return "—";
     try {
-      const d = new Date(raw);
-      if (isNaN(d.getTime())) return String(raw).split("T")[0] || "—";
+      const str = raw instanceof Date ? raw.toISOString().split("T")[0] : String(raw).trim();
+      const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        return `${match[3]}/${match[2]}/${match[1]}`;
+      }
+      const d = parseLocalDate(raw);
+      if (!d || isNaN(d.getTime())) return "—";
       const day = String(d.getDate()).padStart(2, "0");
       const month = String(d.getMonth() + 1).padStart(2, "0");
       const year = d.getFullYear();
@@ -101,8 +125,8 @@
   function getEdad(fechaNac) {
     if (!fechaNac) return "";
     try {
-      const b = new Date(fechaNac);
-      if (isNaN(b.getTime())) return "";
+      const b = parseLocalDate(fechaNac);
+      if (!b || isNaN(b.getTime())) return "";
       const now = new Date();
       let age = now.getFullYear() - b.getFullYear();
       const m = now.getMonth() - b.getMonth();
@@ -116,8 +140,8 @@
   function getAntiguedad(fechaIngreso) {
     if (!fechaIngreso) return "";
     try {
-      const d = new Date(fechaIngreso);
-      if (isNaN(d.getTime())) return "";
+      const d = parseLocalDate(fechaIngreso);
+      if (!d || isNaN(d.getTime())) return "";
       const now = new Date();
       let years = now.getFullYear() - d.getFullYear();
       let months = now.getMonth() - d.getMonth();
@@ -576,7 +600,10 @@
     background: #ffffff;
     border-radius: 16px;
     width: 100%;
-    overflow: hidden;
+    max-height: 92vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.2);
     position: relative;
@@ -940,5 +967,31 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 640px) {
+    .global-modal-overlay {
+      padding: 10px;
+    }
+    .prev-btn {
+      left: 6px;
+      top: 50%;
+    }
+    .next-btn {
+      right: 6px;
+      top: 50%;
+    }
+    .modal-photo-area {
+      min-height: 220px;
+      padding: 10px;
+    }
+    .modal-main-img {
+      max-height: 260px;
+    }
+    .modal-info-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      padding: 12px 14px;
+      gap: 8px 12px;
+    }
   }
 </style>

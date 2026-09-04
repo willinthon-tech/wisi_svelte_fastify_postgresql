@@ -1,5 +1,6 @@
 import websocketPlugin from '@fastify/websocket';
 import { attlogEvents } from '../events/attlog.events.js';
+import { sendPushNotificationToAll } from '../services/push.service.js';
 
 // Active WebSocket client connections
 const activeClients = new Set();
@@ -90,5 +91,25 @@ export function broadcastNewAttlog(attlogData) {
 
 // Automatically subscribe to system-wide attlog events
 attlogEvents.on('new_attlog', (data) => {
+  // 1. Enviar a clientes WebSocket en primer plano
   broadcastNewAttlog(data);
+
+  // 2. Enviar Notificación Push FCM a Android (para recibir con app cerrada/segundo plano)
+  if (data) {
+    const empName = data.nombre || `Empleado ${data.employee_no || ''}`;
+    const actionType = String(data.tipo_evento || data.status || 'Marcaje').toUpperCase();
+    const salaName = data.sala_nombre || 'Sala';
+    const timeStr = data.hora || (data.event_time ? String(data.event_time).split(' ')[1] : '');
+
+    sendPushNotificationToAll({
+      title: `🔔 ${empName}`,
+      body: `${actionType} en ${salaName} (${timeStr})`,
+      data: {
+        attlog_id: String(data.id || ''),
+        empleado_id: String(data.empleado_id || ''),
+        sala_id: String(data.sala_id || ''),
+        tipo: String(data.tipo_evento || data.status || '')
+      }
+    }).catch(() => {});
+  }
 });

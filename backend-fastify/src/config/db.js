@@ -791,6 +791,18 @@ export async function initDb() {
         (1, 22, 5), (1, 22, 1), (1, 22, 3), (1, 22, 4), (1, 22, 2)
         ON CONFLICT DO NOTHING;
       `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS fcm_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER,
+          token TEXT UNIQUE NOT NULL,
+          platform VARCHAR(50) DEFAULT 'android',
+          activo BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `.catch(e => console.warn('Aviso creando tabla fcm_tokens:', e.message));
     }
 
     isPgConnected = true;

@@ -1,7 +1,8 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { masterCargosStore, masterSalasStore, masterDispositivosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let isOpen = false;
   export let item = null; // null for Create, employee object for Edit
@@ -178,7 +179,7 @@
 
     if (item && item.id) {
       id = item.id;
-      fotoUrl = item.foto || `/empleados/${item.id}.jpg`;
+      fotoUrl = item.foto ? toBackendUrl(item.foto) : (item.id ? toBackendUrl(`/empleados/${item.id}.jpg`) : '');
       nombre = item.nombre || '';
       
       const rawCed = String(item.cedula || '').trim().toUpperCase();
@@ -200,7 +201,7 @@
 
       // Load assigned devices from backend
       try {
-        const res = await fetch(`/api/master/empleados/${item.id}/dispositivos`);
+        const res = await fetch(toBackendUrl(`/api/master/empleados/${item.id}/dispositivos`));
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data)) {
@@ -257,7 +258,7 @@
         const q = new URLSearchParams({ cedula: fullCedula });
         if (id) q.set('excludeId', id);
 
-        const res = await fetch(`/api/master/empleados/check-cedula?${q.toString()}`);
+        const res = await fetch(toBackendUrl(`/api/master/empleados/check-cedula?${q.toString()}`));
         if (res.ok) {
           const json = await res.json();
           if (json.exists && json.empleado) {
@@ -310,13 +311,15 @@
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         cropperImg = img;
         cropperZoom = 1.0;
         cropperOffsetX = 0;
         cropperOffsetY = 0;
         isCropperOpen = true;
-        setTimeout(drawCropper, 60);
+        await tick();
+        drawCropper();
+        requestAnimationFrame(drawCropper);
       };
       img.src = event.target.result;
     };
@@ -394,7 +397,8 @@
   }
 
   function handleTouchStart(e) {
-    if (e.touches && e.touches.length > 0) {
+    if (e.touches && e.touches.length === 1) {
+      e.preventDefault();
       isDragging = true;
       dragStartX = e.touches[0].clientX;
       dragStartY = e.touches[0].clientY;
@@ -405,6 +409,7 @@
 
   function handleTouchMove(e) {
     if (!isDragging || !e.touches || e.touches.length === 0) return;
+    e.preventDefault();
     const dx = e.touches[0].clientX - dragStartX;
     const dy = e.touches[0].clientY - dragStartY;
     cropperOffsetX = initialOffsetX + dx;
@@ -419,12 +424,17 @@
   function handleWheel(e) {
     e.preventDefault();
     const delta = e.deltaY < 0 ? 0.08 : -0.08;
-    cropperZoom = Math.min(3.5, Math.max(1.0, cropperZoom + delta));
+    cropperZoom = Math.min(3.5, Math.max(1.0, +(cropperZoom + delta).toFixed(2)));
     drawCropper();
   }
 
   function handleZoomSlider(e) {
     cropperZoom = parseFloat(e.target.value);
+    drawCropper();
+  }
+
+  function stepZoom(delta) {
+    cropperZoom = Math.min(3.5, Math.max(1.0, +(cropperZoom + delta).toFixed(2)));
     drawCropper();
   }
 
@@ -812,6 +822,11 @@
       on:click|stopPropagation>
       
       <div class="cropper-card">
+        <div class="cropper-header">
+          <span class="cropper-title">Ajustar y Recortar Foto</span>
+          <button type="button" class="btn-close" on:click={cancelCropping}>✕</button>
+        </div>
+
         <div class="cropper-viewport">
           <!-- Interactive HTML5 Canvas -->
           <canvas 
@@ -823,34 +838,41 @@
             on:mousemove={handleMouseMove}
             on:mouseup={handleMouseUp}
             on:mouseleave={handleMouseUp}
-            on:touchstart|passive={handleTouchStart}
-            on:touchmove|passive={handleTouchMove}
+            on:touchstart={handleTouchStart}
+            on:touchmove={handleTouchMove}
             on:touchend={handleTouchEnd}
             on:wheel|preventDefault={handleWheel}
           ></canvas>
+        </div>
 
-          <!-- Vertical Zoom Slider with Green Thumb -->
-          <div class="zoom-slider-container">
-            <input 
-              type="range" 
-              min="1.0" 
-              max="3.5" 
-              step="0.05" 
-              value={cropperZoom} 
-              on:input={handleZoomSlider}
-              class="vertical-zoom-range" 
-              title="Ajustar zoom de la foto" 
-            />
-          </div>
+        <!-- Horizontal Zoom Toolbar -->
+        <div class="cropper-zoom-bar">
+          <button type="button" class="btn-zoom-step" on:click={() => stepZoom(-0.1)} title="Alejar">
+            －
+          </button>
+          <input 
+            type="range" 
+            min="1.0" 
+            max="3.5" 
+            step="0.05" 
+            value={cropperZoom} 
+            on:input={handleZoomSlider}
+            class="cropper-zoom-range" 
+            title="Ajustar zoom de la foto" 
+          />
+          <button type="button" class="btn-zoom-step" on:click={() => stepZoom(0.1)} title="Acercar">
+            ＋
+          </button>
+          <span class="zoom-pct-badge">{Math.round(cropperZoom * 100)}%</span>
         </div>
 
         <!-- Cropper Footer Buttons -->
         <div class="cropper-footer">
           <button type="button" class="btn-cropper-cancel" on:click={cancelCropping}>
-            Cancelar Edición
+            Cancelar
           </button>
           <button type="button" class="btn-cropper-confirm" on:click={processCroppedImage}>
-            Procesar Imagen
+            Aplicar y Recortar
           </button>
         </div>
       </div>
@@ -1327,125 +1349,185 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(15, 23, 42, 0.85);
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(4px);
     z-index: 99995;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 16px;
     box-sizing: border-box;
   }
 
   .cropper-card {
     background: #ffffff;
     border-radius: 14px;
-    max-width: 440px;
+    max-width: 400px;
     width: 100%;
     overflow: hidden;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
+    border: 1px solid #334155;
+  }
+
+  .cropper-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .cropper-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
   }
 
   .cropper-viewport {
     position: relative;
     width: 100%;
-    height: 330px;
-    background: #1e293b;
+    background: #0f172a;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    padding: 12px;
+    box-sizing: border-box;
   }
 
   .cropper-canvas {
     display: block;
+    max-width: 100%;
+    max-height: 280px;
+    height: auto;
+    aspect-ratio: 1 / 1;
     cursor: grab;
     user-select: none;
     touch-action: none;
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   }
 
   .cropper-canvas.is-dragging {
     cursor: grabbing;
   }
 
-  .zoom-slider-container {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    height: 180px;
+  .cropper-zoom-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .btn-zoom-step {
     width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 15px;
+    font-weight: 800;
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
   }
 
-  .vertical-zoom-range {
+  .btn-zoom-step:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .cropper-zoom-range {
+    flex: 1;
     -webkit-appearance: none;
     appearance: none;
-    width: 140px;
     height: 6px;
-    background: #475569;
+    background: #cbd5e1;
     border-radius: 4px;
     outline: none;
-    transform: rotate(-90deg);
     cursor: pointer;
   }
 
-  .vertical-zoom-range::-webkit-slider-thumb {
+  .cropper-zoom-range::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #16a34a;
     cursor: pointer;
     border: 2px solid #ffffff;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
   }
 
-  .vertical-zoom-range::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
+  .cropper-zoom-range::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: #16a34a;
     cursor: pointer;
     border: 2px solid #ffffff;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  }
+
+  .zoom-pct-badge {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #16a34a;
+    min-width: 42px;
+    text-align: right;
+    font-family: monospace;
   }
 
   .cropper-footer {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 12px;
-    padding: 16px 20px;
-    background: #f8fafc;
+    gap: 10px;
+    padding: 12px 18px;
+    background: #ffffff;
     border-top: 1px solid #e2e8f0;
   }
 
   .btn-cropper-cancel {
-    padding: 8px 18px;
+    padding: 8px 16px;
     border-radius: 8px;
-    border: none;
-    background: #64748b;
-    color: #ffffff;
-    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-cropper-cancel:hover {
+    background: #e2e8f0;
+    color: #0f172a;
   }
 
   .btn-cropper-confirm {
-    padding: 8px 20px;
+    padding: 8px 18px;
     border-radius: 8px;
     border: none;
     background: #16a34a;
     color: #ffffff;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.3);
+    transition: all 0.15s;
+  }
+
+  .btn-cropper-confirm:hover {
+    background: #15803d;
   }
 </style>

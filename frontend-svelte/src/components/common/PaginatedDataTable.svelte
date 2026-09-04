@@ -11,8 +11,12 @@
 
   function parseLocalDate(dateStr) {
     if (!dateStr) return null;
-    if (dateStr instanceof Date) return dateStr;
-    const str = String(dateStr).trim();
+    let str = '';
+    if (dateStr instanceof Date) {
+      str = dateStr.toISOString().split('T')[0];
+    } else {
+      str = String(dateStr).trim();
+    }
     const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (match) {
       const year = parseInt(match[1], 10);
@@ -26,12 +30,31 @@
 
   function formatDateDDMMYYYY(dateStr) {
     if (!dateStr) return '—';
-    const d = parseLocalDate(dateStr);
-    if (!d || isNaN(d.getTime())) return '—';
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
+    try {
+      const str = dateStr instanceof Date ? dateStr.toISOString().split('T')[0] : String(dateStr).trim();
+      const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        return `${match[3]}/${match[2]}/${match[1]}`;
+      }
+      const d = parseLocalDate(dateStr);
+      if (!d || isNaN(d.getTime())) return '—';
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return '—';
+    }
+  }
+
+  function formatDateForInput(dateVal) {
+    if (!dateVal) return '';
+    if (dateVal instanceof Date) {
+      return dateVal.toISOString().split('T')[0];
+    }
+    const str = String(dateVal).trim();
+    const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : '';
   }
 
   function calculateEdad(dateStr) {
@@ -699,6 +722,8 @@
     editingInlineId = item.id;
     inlineDraft = {
       ...item,
+      fecha_nacimiento: formatDateForInput(item.fecha_nacimiento),
+      fecha_ingreso: formatDateForInput(item.fecha_ingreso),
       hora_entrada: item.hora_entrada || '',
       hora_salida: item.hora_salida || '',
       color: item.color || '#FFFF99',
@@ -1009,7 +1034,7 @@
                           const empId = item.empleado_id || item.id;
                           if (!img.dataset.triedEmp && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
                             img.dataset.triedEmp = 'true';
-                            img.src = `/empleados/${empId}.jpg`;
+                            img.src = toBackendUrl(`/empleados/${empId}.jpg`);
                           } else {
                             img.style.display = 'none';
                             if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
@@ -2501,7 +2526,7 @@
                 const empId = itemToReincorporar?.empleado_id || itemToReincorporar?.id;
                 if (!img.dataset.triedEmp && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
                   img.dataset.triedEmp = 'true';
-                  img.src = `/empleados/${empId}.jpg`;
+                  img.src = toBackendUrl(`/empleados/${empId}.jpg`);
                 } else {
                   img.style.display = 'none';
                   if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';

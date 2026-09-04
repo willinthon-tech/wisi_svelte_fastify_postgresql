@@ -256,6 +256,20 @@ async function startServer() {
     fastify.get('/salas/:filename', serveSalaLogoWithFallback);
     fastify.get('/api/salas/:filename', serveSalaLogoWithFallback);
 
+    const handleStaticOptions = async (req, reply) => {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', '*');
+      return reply.status(204).send();
+    };
+
+    fastify.options('/empleados/:filename', handleStaticOptions);
+    fastify.options('/api/empleados/:filename', handleStaticOptions);
+    fastify.options('/attlogs/:filename', handleStaticOptions);
+    fastify.options('/api/attlogs/:filename', handleStaticOptions);
+    fastify.options('/salas/:filename', handleStaticOptions);
+    fastify.options('/api/salas/:filename', handleStaticOptions);
+
     // Root endpoint fallback
     /* fastify.get('/', async () => {
       return {

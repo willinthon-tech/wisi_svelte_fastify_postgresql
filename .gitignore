@@ -3,9 +3,14 @@ node_modules/
 **/node_modules/
 
 # Archivos de entorno y credenciales (secretos)
+.env
 .env.local
 .env.production
 *.env
+*service-account*.json
+service-account.json
+firebase-service-account.json
+backend-fastify/service-account.json
 
 # Archivos y carpetas de fotos / uploads en backend-fastify
 backend-fastify/attlogs/

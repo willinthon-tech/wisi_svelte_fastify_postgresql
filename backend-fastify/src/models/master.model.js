@@ -1129,7 +1129,9 @@ export async function getLatestAttlogsModel(
       SELECT a.id, a.attendancestatus, a.currentverifymode, a.employee_no, to_char(a.event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time,
              COALESCE(NULLIF(TRIM(e.nombre), ''), NULLIF(TRIM(a.nombre), ''), 'Empleado ' || a.employee_no) AS nombre,
              a.dispositivo_id, d.nombre AS dispositivo_nombre, d.sala_id, s.nombre AS sala_nombre,
-             e.id AS empleado_id, e.cedula, e.foto AS empleado_foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento,
+             e.id AS empleado_id, e.cedula, e.foto AS empleado_foto, e.sexo, 
+             to_char(e.fecha_ingreso, 'YYYY-MM-DD') AS fecha_ingreso, 
+             to_char(e.fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
              c.nombre AS cargo_nombre, ar.nombre AS area_nombre, dep.nombre AS departamento_nombre,
              a.has_photo,
              (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
@@ -1640,7 +1642,9 @@ export async function syncAttlogsModel(data) {
             SELECT a.id, a.attendancestatus, a.currentverifymode, a.employee_no, to_char(a.event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time,
                    COALESCE(NULLIF(TRIM(e.nombre), ''), NULLIF(TRIM(a.nombre), ''), 'Empleado ' || a.employee_no) AS nombre,
                    a.dispositivo_id, d.nombre AS dispositivo_nombre, d.sala_id, s.nombre AS sala_nombre,
-                   e.id AS empleado_id, e.cedula, e.foto AS empleado_foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento,
+                   e.id AS empleado_id, e.cedula, e.foto AS empleado_foto, e.sexo, 
+                   to_char(e.fecha_ingreso, 'YYYY-MM-DD') AS fecha_ingreso, 
+                   to_char(e.fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
                    c.nombre AS cargo_nombre, ar.nombre AS area_nombre, dep.nombre AS departamento_nombre,
                    a.has_photo,
                    (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
@@ -3112,7 +3116,11 @@ export async function getEmpleadosModel(params = {}) {
   let data;
   if (limit > 0) {
     data = await sql`
-      SELECT e.*, c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.id AS sala_id, s.nombre AS sala_nombre
+      SELECT e.id, e.foto, e.nombre, e.cedula, e.sexo, e.cargo_id, e.activo, e.motivo_desincorporacion,
+             e.created_at, e.updated_at,
+             to_char(e.fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
+             to_char(e.fecha_ingreso, 'YYYY-MM-DD') AS fecha_ingreso,
+             c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.id AS sala_id, s.nombre AS sala_nombre
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas a ON c.area_id = a.id
@@ -3124,7 +3132,11 @@ export async function getEmpleadosModel(params = {}) {
     `;
   } else {
     data = await sql`
-      SELECT e.*, c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.id AS sala_id, s.nombre AS sala_nombre
+      SELECT e.id, e.foto, e.nombre, e.cedula, e.sexo, e.cargo_id, e.activo, e.motivo_desincorporacion,
+             e.created_at, e.updated_at,
+             to_char(e.fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
+             to_char(e.fecha_ingreso, 'YYYY-MM-DD') AS fecha_ingreso,
+             c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.id AS sala_id, s.nombre AS sala_nombre
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas a ON c.area_id = a.id
@@ -3209,9 +3221,12 @@ export async function createEmpleadoModel(data) {
       }
     }
 
+    const fIngreso = data.fecha_ingreso ? String(data.fecha_ingreso).split('T')[0] : null;
+    const fNacimiento = data.fecha_nacimiento ? String(data.fecha_nacimiento).split('T')[0] : null;
+
     const rows = await sql`
       INSERT INTO empleados (id, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_id, activo, motivo_desincorporacion)
-      VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${data.fecha_ingreso || null}, ${data.fecha_nacimiento || null}, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
+      VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${fIngreso}, ${fNacimiento}, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
       RETURNING *
     `;
     const emp = rows[0];
@@ -3264,8 +3279,10 @@ export async function updateEmpleadoModel(id, data) {
     const foto = data.foto !== undefined ? data.foto : (data.fotoBase64 ? `/empleados/${eId}.jpg` : existing.foto);
     const nombre = data.nombre !== undefined ? data.nombre : existing.nombre;
     const cedula = data.cedula !== undefined ? data.cedula : existing.cedula;
-    const fecha_ingreso = data.fecha_ingreso !== undefined ? data.fecha_ingreso : existing.fecha_ingreso;
-    const fecha_nacimiento = data.fecha_nacimiento !== undefined ? data.fecha_nacimiento : existing.fecha_nacimiento;
+    const rawIngreso = data.fecha_ingreso !== undefined ? data.fecha_ingreso : existing.fecha_ingreso;
+    const fecha_ingreso = rawIngreso ? String(rawIngreso).split('T')[0] : null;
+    const rawNac = data.fecha_nacimiento !== undefined ? data.fecha_nacimiento : existing.fecha_nacimiento;
+    const fecha_nacimiento = rawNac ? String(rawNac).split('T')[0] : null;
     const sexo = data.sexo !== undefined ? data.sexo : existing.sexo;
     const cargo_id = data.cargo_id !== undefined ? (data.cargo_id ? Number(data.cargo_id) : null) : existing.cargo_id;
     const activo = data.activo !== undefined ? Boolean(data.activo) : existing.activo;

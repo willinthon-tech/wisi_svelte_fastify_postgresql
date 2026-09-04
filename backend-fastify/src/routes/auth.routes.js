@@ -1,4 +1,5 @@
 import { loginController, getMeController } from '../controllers/auth.controller.js';
+import { registerDeviceToken } from '../services/push.service.js';
 
 export default async function authRoutes(fastify, options) {
   fastify.post('/auth/login', loginController);
@@ -10,10 +11,7 @@ export default async function authRoutes(fastify, options) {
     const { user_id, token, platform } = body;
     request.log.info({ user_id, platform, tokenSnippet: token?.substring(0, 15) }, '[FCM] Dispositivo registrado para notificaciones');
     
-    global.__fcmTokens = global.__fcmTokens || new Set();
-    if (token) {
-      global.__fcmTokens.add(token);
-    }
+    await registerDeviceToken({ user_id, token, platform });
     return { success: true, message: 'Dispositivo vinculado a notificaciones push exitosamente' };
   });
 }

@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core';
+
 // Configuración Centralizada y Global de API y Endpoints WISI Space
 
 export const CLOUD_SERVER_HOST = 'willinthon.wisi.space';
@@ -8,18 +10,29 @@ export const CLOUD_SERVER_ORIGIN = `https://${CLOUD_SERVER_HOST}`;
  */
 export function isTauriApp() {
   if (typeof window === 'undefined') return false;
-  return Boolean(
-    window.__TAURI_INTERNALS__ ||
-    window.__TAURI__ ||
-    window.Capacitor ||
-    (window.location && (
-      window.location.hostname === 'tauri.localhost' ||
-      window.location.origin?.includes('tauri.localhost') ||
-      window.location.protocol === 'tauri:' ||
-      window.location.protocol === 'capacitor:' ||
-      (window.location.origin?.includes('localhost') && window.Capacitor)
-    ))
-  );
+  try {
+    if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+      return true;
+    }
+  } catch (e) {}
+  if (typeof window.Capacitor !== 'undefined') {
+    return true;
+  }
+  if (window.__TAURI_INTERNALS__ || window.__TAURI__) {
+    return true;
+  }
+  const loc = window.location;
+  if (loc) {
+    if (loc.hostname === 'tauri.localhost' || loc.origin?.includes('tauri.localhost') || loc.protocol === 'tauri:' || loc.protocol === 'capacitor:') {
+      return true;
+    }
+    // Android WebView en Capacitor carga comúnmente en https://localhost o http://localhost
+    const isAndroidUa = typeof navigator !== 'undefined' && navigator.userAgent && /Android|wv/i.test(navigator.userAgent);
+    if ((loc.hostname === 'localhost' || loc.origin?.includes('localhost')) && isAndroidUa) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export const isNativeApp = isTauriApp;
@@ -32,13 +45,13 @@ export function getCloudBaseUrl() {
       return savedCustomUrl.trim().replace(/\/+$/, '');
     }
 
-    // 2. Si estamos dentro de la app de escritorio Tauri instalada (.msi / .exe)
+    // 2. Si estamos dentro de la app nativa (Tauri en Windows o Capacitor en Android)
     if (isTauriApp()) {
       return CLOUD_SERVER_ORIGIN;
     }
 
     const { hostname, origin } = window.location;
-    // 3. Si estamos en desarrollo local en navegador web (localhost o 127.0.0.1)
+    // 3. Si estamos en desarrollo local en navegador web de PC (localhost o 127.0.0.1)
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:3030';
     }
@@ -121,7 +134,8 @@ export function setupGlobalFetchInterceptor() {
         targetUrl.startsWith('https://tauri.localhost') || 
         targetUrl.startsWith('tauri://localhost') ||
         targetUrl.startsWith('capacitor://localhost') ||
-        (window.Capacitor && (targetUrl.startsWith('http://localhost') || targetUrl.startsWith('https://localhost')))
+        targetUrl.startsWith('http://localhost') || 
+        targetUrl.startsWith('https://localhost')
       )) {
         try {
           const u = new URL(targetUrl);
