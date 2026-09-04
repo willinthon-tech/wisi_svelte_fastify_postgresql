@@ -105,12 +105,13 @@
 
   function getRecordPhoto(record) {
     if (!record) return "";
-    if (record.has_photo && record.id) {
-      return `/attlogs/${record.id}.jpg`;
+    // Prioridad 1 ABSOLUTA: Foto del evento de marcaje
+    if (record.id) {
+      return toBackendUrl(`/attlogs/${record.id}.jpg`);
     }
+    // Prioridad 2: Solo si no hay ID de marcaje, foto de personal
     const fallback = getFallbackProfilePhoto(record);
     if (fallback) return fallback;
-    if (record.id) return `/attlogs/${record.id}.jpg`;
     return "";
   }
 
@@ -755,7 +756,7 @@
                 on:error={(e) => {
                   const img = e.currentTarget;
                   const fallback = getFallbackProfilePhoto(latestRecord);
-                  if (!img.dataset.triedEmp && fallback && !img.src.endsWith(fallback)) {
+                  if (!img.dataset.triedEmp && fallback && img.src !== fallback && !img.src.endsWith(fallback)) {
                     img.dataset.triedEmp = 'true';
                     img.src = fallback;
                   } else {

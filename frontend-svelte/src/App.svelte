@@ -337,6 +337,7 @@
 
   // Alerta única global (Top-Right): Entrada, Salida o Puerta / Otros
   function triggerGlobalMarcajeToast(rec, base, isSync = false) {
+    const empFoto = rec.empleado_foto || rec.foto || (rec.empleado_id ? `/empleados/${rec.empleado_id}.jpg` : null);
     globalMarcajeAlert = {
       id: rec.id,
       nombre: toTitleCase(rec.nombre),
@@ -345,7 +346,8 @@
       cargo: rec.cargo_nombre || rec.cargo || "",
       dispositivo: rec.dispositivo_nombre || "Dispositivo",
       time: formatEventTime(rec.event_time),
-      photo: `${base}/attlogs/${rec.id}.jpg`,
+      photo: toBackendUrl(`/attlogs/${rec.id}.jpg`),
+      empPhoto: empFoto ? toBackendUrl(empFoto) : null,
       attendancestatus: rec.attendancestatus,
       currentverifymode: rec.currentverifymode || rec.currentverifymode_status || rec.currentVerifyMode,
       isSync: Boolean(isSync),
@@ -1070,8 +1072,14 @@
           alt="Marcaje"
           class="global-marcaje-avatar-img"
           on:error={(e) => {
-            e.target.style.display = "none";
-            if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = "flex";
+            const img = e.currentTarget;
+            if (!img.dataset.triedEmp && globalMarcajeAlert.empPhoto && img.src !== globalMarcajeAlert.empPhoto && !img.src.endsWith(globalMarcajeAlert.empPhoto)) {
+              img.dataset.triedEmp = "true";
+              img.src = globalMarcajeAlert.empPhoto;
+            } else {
+              img.style.display = "none";
+              if (img.nextElementSibling) img.nextElementSibling.style.display = "flex";
+            }
           }}
         />
         <div class="global-marcaje-avatar-fallback">

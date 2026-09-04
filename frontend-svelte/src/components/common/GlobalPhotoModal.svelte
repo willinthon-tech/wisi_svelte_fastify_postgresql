@@ -177,7 +177,7 @@
     if (!record) return "";
     
     // Si es un empleado o desincorporado (sin evento de marcaje), usa su foto de empleado
-    if (mode === 'empleado' || mode === 'desincorporado' || !record.event_time) {
+    if (mode === 'empleado' || mode === 'desincorporado') {
       if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
         return toBackendUrl(record.foto);
       }
@@ -186,11 +186,14 @@
       return "";
     }
 
-    // Para registros de marcaje (live_records, attlog, checkin_checkout, etc.)
-    if (record.has_photo && record.id) {
-      return toBackendUrl(`/attlogs/${record.id}.jpg`);
+    // Para cualquier registro de marcaje (último registro, alerta, marcajes_table, live_records, etc.)
+    // LA FOTO DEL MARCAJE / EVENTO TIENE PRIORIDAD ABSOLUTA
+    const attId = record.id || record.attlog_id;
+    if (attId) {
+      return toBackendUrl(`/attlogs/${attId}.jpg`);
     }
 
+    // Solo si el registro no tiene ID de marcaje pasa a la de personal
     if (record.empleado_foto && typeof record.empleado_foto === 'string' && record.empleado_foto.trim().length > 0) {
       return toBackendUrl(record.empleado_foto);
     }
@@ -201,7 +204,6 @@
       return toBackendUrl(`/empleados/${record.empleado_id}.jpg`);
     }
 
-    // Si no tiene foto de marcaje ni foto de empleado, retornar vacío de inmediato (0ms, sin 404s)
     return "";
   }
 
@@ -217,7 +219,8 @@
     if (!record) return "";
     const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
     if (resolvedPhotoUrlCache.has(key)) {
-      return resolvedPhotoUrlCache.get(key);
+      const cached = resolvedPhotoUrlCache.get(key);
+      if (cached) return cached;
     }
     return getPhotoUrl(record);
   }
@@ -246,9 +249,8 @@
     }
   }
 
-  // Sincronización de la foto activa actual
+  // Sincronización de la foto activa actual al navegar adelante o atrás
   $: if (item) {
-    const recordId = item.id || item.employee_no || item.cedula;
     const reqId = ++currentActivePhotoRequestId;
     const url = resolveItemPhoto(item);
     activePhotoUrl = url;
@@ -279,7 +281,7 @@
     }
   }
 
-  function handlePhotoErrorFallback(record, failedUrl, reqId) {
+  function handlePhotoErrorFallback(record, failedUrl, reqId = currentActivePhotoRequestId) {
     if (!record) return;
     const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
 
@@ -300,20 +302,19 @@
           isCurrentPhotoLoaded = true;
           isCurrentPhotoError = false;
         } else {
-          resolvedPhotoUrlCache.set(key, "");
-          activePhotoUrl = "";
-          isCurrentPhotoLoaded = false;
-          isCurrentPhotoError = true;
+          if (reqId === currentActivePhotoRequestId) {
+            activePhotoUrl = "";
+            isCurrentPhotoLoaded = false;
+            isCurrentPhotoError = true;
+          }
         }
       }).catch(() => {
         if (reqId !== currentActivePhotoRequestId) return;
-        resolvedPhotoUrlCache.set(key, "");
         activePhotoUrl = "";
         isCurrentPhotoLoaded = false;
         isCurrentPhotoError = true;
       });
     } else {
-      resolvedPhotoUrlCache.set(key, "");
       if (reqId === currentActivePhotoRequestId) {
         activePhotoUrl = "";
         isCurrentPhotoLoaded = false;
@@ -555,9 +556,10 @@
                 style="opacity: {isCurrentPhotoLoaded ? '1' : '0'}; transition: opacity 0.15s ease;"
                 on:load={() => {
                   isCurrentPhotoLoaded = true;
+                  isCurrentPhotoError = false;
                 }}
                 on:error={() => {
-                  handlePhotoErrorFallback(item, activePhotoUrl);
+                  handlePhotoErrorFallback(item, activePhotoUrl, currentActivePhotoRequestId);
                 }}
               />
             {/if}

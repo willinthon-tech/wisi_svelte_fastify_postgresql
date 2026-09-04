@@ -47,6 +47,8 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
         const payload = JSON.parse(event.data);
         if (payload.type === 'NEW_MARCAJE' && payload.data) {
           const rec = payload.data;
+          const status = String(rec.attendancestatus || rec.status || '').toLowerCase().trim();
+
           // Publicar en latestAttlogEventStore para la tarjeta unificada de último registro
           latestAttlogEventStore.set(rec);
 

@@ -20,12 +20,12 @@ export function getGlobalImageCache() {
  * Retorna true si la foto ya fue completamente descargada y decodificada en memoria
  */
 export function isPhotoLoaded(url) {
-  if (!url || typeof window === 'undefined') return true;
+  if (!url || typeof window === 'undefined') return false;
   const cache = getGlobalImageCache();
   const entry = cache.get(url);
   if (!entry) return false;
-  if (entry.hasError) return true; // Marcado como fallido, no hay que esperar
-  if (entry.loaded) return true;
+  if (entry.hasError) return false;
+  if (entry.loaded && !entry.hasError && entry.img && entry.img.naturalWidth > 0) return true;
   return Boolean(entry.img && entry.img.complete && entry.img.naturalWidth > 0);
 }
 
@@ -51,8 +51,8 @@ export function preloadPhoto(url) {
 
   if (cache.has(url)) {
     const entry = cache.get(url);
-    if (entry.loaded || entry.hasError) {
-      if (entry.img) entry.img.hasError = Boolean(entry.hasError);
+    if (entry.loaded && !entry.hasError && entry.img && entry.img.naturalWidth > 0) {
+      entry.img.hasError = false;
       return Promise.resolve(entry.img);
     }
     if (entry.promise) return entry.promise;
@@ -64,10 +64,12 @@ export function preloadPhoto(url) {
 
   const promise = new Promise((resolve) => {
     let settled = false;
+    let timeoutId = null;
 
     const onFinishSuccess = async () => {
       if (!settled) {
         settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
         try {
           if (typeof img.decode === 'function') {
             await img.decode();
@@ -84,6 +86,7 @@ export function preloadPhoto(url) {
     const onFinishError = () => {
       if (!settled) {
         settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
         img.hasError = true;
         cache.set(url, { img, loaded: true, hasError: true, promise: null });
         resolve(img);
@@ -93,8 +96,8 @@ export function preloadPhoto(url) {
     img.onload = onFinishSuccess;
     img.onerror = onFinishError;
 
-    // Timeout de seguridad de 800ms para no colgar la UI si la red es lenta o la imagen no existe
-    setTimeout(onFinishError, 800);
+    // Timeout de seguridad generoso de 10s para redes móviles o de baja velocidad
+    timeoutId = setTimeout(onFinishError, 10000);
   });
 
   cache.set(url, { img, loaded: false, hasError: false, promise });
