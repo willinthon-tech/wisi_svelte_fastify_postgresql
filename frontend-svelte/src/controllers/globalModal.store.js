@@ -11,7 +11,7 @@ function startTransitionSafetyTimer() {
       isPageTransitioning: false,
       pageTransitionDirection: null
     }));
-  }, 1500);
+  }, 1000);
 }
 
 function clearTransitionSafetyTimer() {
@@ -101,6 +101,8 @@ export function closePhotoModal() {
  * Avanza al siguiente elemento del modal
  */
 export function photoModalNext() {
+  let callback = null;
+
   photoModalStore.update(state => {
     if (!state.isOpen || state.items.length === 0 || state.isPageTransitioning) return state;
     if (state.currentIndex < state.items.length - 1) {
@@ -111,12 +113,8 @@ export function photoModalNext() {
         activeItem: state.items[nextIdx]
       };
     } else if (state.onPageNext && state.currentPage < state.totalPages - 1) {
+      callback = state.onPageNext;
       startTransitionSafetyTimer();
-      try {
-        state.onPageNext();
-      } catch (e) {
-        console.warn('Error onPageNext modal:', e);
-      }
       return {
         ...state,
         isPageTransitioning: true,
@@ -125,12 +123,28 @@ export function photoModalNext() {
     }
     return state;
   });
+
+  if (callback) {
+    try {
+      callback();
+    } catch (e) {
+      console.warn('Error onPageNext modal:', e);
+      clearTransitionSafetyTimer();
+      photoModalStore.update(s => ({
+        ...s,
+        isPageTransitioning: false,
+        pageTransitionDirection: null
+      }));
+    }
+  }
 }
 
 /**
  * Retrocede al elemento anterior del modal
  */
 export function photoModalPrev() {
+  let callback = null;
+
   photoModalStore.update(state => {
     if (!state.isOpen || state.items.length === 0 || state.isPageTransitioning) return state;
     if (state.currentIndex > 0) {
@@ -141,12 +155,8 @@ export function photoModalPrev() {
         activeItem: state.items[prevIdx]
       };
     } else if (state.onPagePrev && state.currentPage > 0) {
+      callback = state.onPagePrev;
       startTransitionSafetyTimer();
-      try {
-        state.onPagePrev();
-      } catch (e) {
-        console.warn('Error onPagePrev modal:', e);
-      }
       return {
         ...state,
         isPageTransitioning: true,
@@ -155,6 +165,20 @@ export function photoModalPrev() {
     }
     return state;
   });
+
+  if (callback) {
+    try {
+      callback();
+    } catch (e) {
+      console.warn('Error onPagePrev modal:', e);
+      clearTransitionSafetyTimer();
+      photoModalStore.update(s => ({
+        ...s,
+        isPageTransitioning: false,
+        pageTransitionDirection: null
+      }));
+    }
+  }
 }
 
 /**

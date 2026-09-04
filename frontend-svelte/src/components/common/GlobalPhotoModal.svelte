@@ -22,7 +22,6 @@
   let imgElement = null;
   let isCapturingScreenshot = false;
   let isDownloadingPhoto = false;
-  let isWaitingBatchLoad = false;
 
   $: isOpen = $photoModalStore.isOpen;
   $: item = $photoModalStore.activeItem;
@@ -34,7 +33,7 @@
   $: mode = $photoModalStore.mode;
   $: isPageTransitioning = $photoModalStore.isPageTransitioning;
   $: pageTransitionDirection = $photoModalStore.pageTransitionDirection;
-  $: showPageSpinner = isPageTransitioning || isWaitingBatchLoad;
+  $: showPageSpinner = isPageTransitioning;
   $: stInfo = getStatusBadge(item?.attendancestatus);
 
   $: isFirstPage = currentPage <= 0;
@@ -224,35 +223,6 @@
     return getPhotoUrl(record);
   }
 
-  // Activar espera de lote con temporizador de seguridad
-  let batchLoadingSafetyTimer = null;
-
-  function finishBatchLoad() {
-    isWaitingBatchLoad = false;
-    if (batchLoadingSafetyTimer) {
-      clearTimeout(batchLoadingSafetyTimer);
-      batchLoadingSafetyTimer = null;
-    }
-  }
-
-  function startBatchLoadWait() {
-    isWaitingBatchLoad = true;
-    if (batchLoadingSafetyTimer) clearTimeout(batchLoadingSafetyTimer);
-    // Timeout máximo absoluto de 800ms: NUNCA se queda pegado infinito
-    batchLoadingSafetyTimer = setTimeout(() => {
-      finishBatchLoad();
-    }, 800);
-  }
-
-  $: if (isPageTransitioning) {
-    startBatchLoadWait();
-  } else {
-    // Si ya no estamos en transición remota, cerrar la espera si la foto está disponible o falló
-    if (!activePhotoUrl || isPhotoLoaded(activePhotoUrl) || isCurrentPhotoLoaded || isCurrentPhotoError) {
-      finishBatchLoad();
-    }
-  }
-
   // Precargar en paralelo todo el lote de imágenes de la página actual
   let lastBatchPage = null;
   $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
@@ -285,11 +255,9 @@
     if (!url) {
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = true;
-      finishBatchLoad();
     } else if (isPhotoLoaded(url)) {
       isCurrentPhotoLoaded = true;
       isCurrentPhotoError = false;
-      finishBatchLoad();
     } else {
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = false;
@@ -298,26 +266,18 @@
           if (img && !img.hasError && img.naturalWidth > 0) {
             isCurrentPhotoLoaded = true;
             isCurrentPhotoError = false;
-            finishBatchLoad();
             const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
             resolvedPhotoUrlCache.set(key, url);
           } else {
             handlePhotoErrorFallback(item, url);
           }
-        } else {
-          finishBatchLoad();
         }
-      }).catch(() => {
-        finishBatchLoad();
-      });
+      }).catch(() => {});
     }
   }
 
   function handlePhotoErrorFallback(record, failedUrl) {
-    if (!record) {
-      finishBatchLoad();
-      return;
-    }
+    if (!record) return;
     const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
 
     const empFoto = record.empleado_foto || record.foto;
@@ -331,7 +291,6 @@
             isCurrentPhotoLoaded = true;
             isCurrentPhotoError = false;
           }
-          finishBatchLoad();
         } else {
           tryIdFallback(record, empFotoUrl);
         }
@@ -365,7 +324,6 @@
             isCurrentPhotoError = true;
           }
         }
-        finishBatchLoad();
       }).catch(() => {
         resolvedPhotoUrlCache.set(key, "");
         if (String(item?.id) === String(record.id)) {
@@ -373,7 +331,6 @@
           isCurrentPhotoLoaded = false;
           isCurrentPhotoError = true;
         }
-        finishBatchLoad();
       });
     } else {
       resolvedPhotoUrlCache.set(key, "");
@@ -382,7 +339,6 @@
         isCurrentPhotoLoaded = false;
         isCurrentPhotoError = true;
       }
-      finishBatchLoad();
     }
   }
 
@@ -597,6 +553,12 @@
               </div>
             {/if}
 
+            {#if !isCurrentPhotoLoaded && !isCurrentPhotoError && activePhotoUrl && !showPageSpinner}
+              <div class="photo-loading-skeleton" data-html2canvas-ignore="true">
+                <div class="skeleton-spinner"></div>
+              </div>
+            {/if}
+
             {#if activePhotoUrl && !isCurrentPhotoError}
               <img
                 bind:this={imgElement}
@@ -609,7 +571,6 @@
                 style="opacity: {isCurrentPhotoLoaded ? '1' : '0'}; transition: opacity 0.15s ease;"
                 on:load={() => {
                   isCurrentPhotoLoaded = true;
-                  finishBatchLoad();
                 }}
                 on:error={() => {
                   handlePhotoErrorFallback(item, activePhotoUrl);
@@ -992,6 +953,25 @@
     color: #94a3b8;
     font-size: 11.5px;
     font-weight: 500;
+  }
+
+  .photo-loading-skeleton {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .skeleton-spinner {
+    width: 34px;
+    height: 34px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spinPage 0.65s linear infinite;
   }
 
   .modal-main-img {

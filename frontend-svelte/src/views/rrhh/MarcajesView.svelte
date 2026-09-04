@@ -347,7 +347,7 @@
         pendingModalPageDirection = null;
         updatePhotoModalItems({
           items: attlogs,
-          currentPage: currentPage - 1,
+          currentPage: page - 1,
           totalPages: Math.ceil((totalCount || 0) / limit) || 1,
           totalCount,
           position: dir === 'next' ? 'first' : 'last'
@@ -492,8 +492,9 @@
       onPageNext: () => {
         if (currentPage < totalPages) {
           pendingModalPageDirection = 'next';
-          goToPage(currentPage + 1);
-          fetchAttlogs(currentPage, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
+          const target = currentPage + 1;
+          goToPage(target);
+          fetchAttlogs(target, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
         } else {
           updatePhotoModalItems();
         }
@@ -501,8 +502,9 @@
       onPagePrev: () => {
         if (currentPage > 1) {
           pendingModalPageDirection = 'prev';
-          goToPage(currentPage - 1);
-          fetchAttlogs(currentPage, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
+          const target = currentPage - 1;
+          goToPage(target);
+          fetchAttlogs(target, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
         } else {
           updatePhotoModalItems();
         }

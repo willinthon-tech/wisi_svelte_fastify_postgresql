@@ -812,10 +812,12 @@
   }
 
   let lastKnownItems = items;
+  let lastKnownPaginatedItems = paginatedItems;
   let pendingModalPageDirection = null;
 
-  $: if (items !== lastKnownItems) {
+  $: if (items !== lastKnownItems || paginatedItems !== lastKnownPaginatedItems) {
     lastKnownItems = items;
+    lastKnownPaginatedItems = paginatedItems;
     if ($photoModalStore.isOpen && ($photoModalStore.mode === 'empleado' || $photoModalStore.mode === 'desincorporado')) {
       if (pendingModalPageDirection && paginatedItems.length > 0) {
         const dir = pendingModalPageDirection;
