@@ -279,7 +279,7 @@
     // Si la página ya fue traída antes, entregarla a 0ms sin ir a la red
     if (attlogsPageCache.has(pageCacheKey)) {
       const cached = attlogsPageCache.get(pageCacheKey);
-      attlogs = cached.data;
+      attlogs = [...cached.data];
       totalCount = cached.total;
       isLoading = false;
       isInitialLoad = false;
@@ -478,6 +478,34 @@
     }
   }
 
+  function changePageWithModal(targetPage, direction) {
+    if (targetPage < 1 || targetPage > totalPages) {
+      updatePhotoModalItems();
+      return;
+    }
+    pendingModalPageDirection = direction;
+    currentPage = targetPage;
+    lastFetchKey = `${targetPage}_${pageSize}_${debouncedSearch}_${sortBy}_${sortDir}_${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${selectedDispositivos.join(",")}_${selectedVerifyModes.join(",")}_${selectedEstados.join(",")}_${selectedFotos.join(",")}_${selectedEstatusEmpleados.join(",")}_${selectedDepartamentos.join(",")}_${selectedAreas.join(",")}_${selectedCargos.join(",")}_${selectedSexo.join(",")}`;
+
+    const pageCacheKey = `pg_${targetPage}_${currentFilterCacheKey}`;
+    if (attlogsPageCache.has(pageCacheKey)) {
+      const cached = attlogsPageCache.get(pageCacheKey);
+      attlogs = [...cached.data];
+      totalCount = cached.total;
+      pendingModalPageDirection = null;
+      updatePhotoModalItems({
+        items: attlogs,
+        currentPage: targetPage - 1,
+        totalPages: Math.ceil((cached.total || 0) / pageSize) || 1,
+        totalCount: cached.total || 0,
+        position: direction === 'next' ? 'first' : 'last'
+      });
+      return;
+    }
+
+    fetchAttlogs(targetPage, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
+  }
+
   function openPhotoModal(index) {
     const item = attlogs[index] || null;
     if (!item) return;
@@ -491,20 +519,14 @@
       mode: 'marcajes_table',
       onPageNext: () => {
         if (currentPage < totalPages) {
-          pendingModalPageDirection = 'next';
-          const target = currentPage + 1;
-          goToPage(target);
-          fetchAttlogs(target, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
+          changePageWithModal(currentPage + 1, 'next');
         } else {
           updatePhotoModalItems();
         }
       },
       onPagePrev: () => {
         if (currentPage > 1) {
-          pendingModalPageDirection = 'prev';
-          const target = currentPage - 1;
-          goToPage(target);
-          fetchAttlogs(target, pageSize, debouncedSearch, sortBy, sortDir, assignedSalaIds);
+          changePageWithModal(currentPage - 1, 'prev');
         } else {
           updatePhotoModalItems();
         }

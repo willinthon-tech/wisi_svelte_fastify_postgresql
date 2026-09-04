@@ -383,13 +383,13 @@
 </script>
 
 <PaginatedDataTable 
-  {items}
+  bind:items
   existingItems={$masterEmpleadosStore || []}
   createFields={[]}
   customCreateModal={true}
-  {totalCount}
-  {currentPage}
-  {pageSize}
+  bind:totalCount
+  bind:currentPage
+  bind:pageSize
   isServerSide={true}
   {columns}
   bind:searchQuery

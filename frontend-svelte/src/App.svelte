@@ -224,112 +224,18 @@
 
   let latestKnownRealtimeTimeMs = null;
 
-  async function openAttlogModalFromAlert(alertData) {
+  function openAttlogModalFromAlert(alertData) {
     if (!alertData) return;
     const rec = alertData.rawRecord || alertData;
-    const pageSize = 10;
-
-    let targetPage = 0;
-    let targetIndex = 0;
-
-    try {
-      const base = getCloudBaseUrl().endsWith("/api") ? getCloudBaseUrl() : `${getCloudBaseUrl()}/api`;
-      const salaParam = assignedSalaIds && assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "";
-
-      // 1. Obtener la posición global real en el flujo global (sin filtro de estado)
-      try {
-        const qPos = new URLSearchParams();
-        if (salaParam) qPos.set("sala_ids", salaParam);
-        const posRes = await fetch(`${base}/attlogs/${rec.id}/position?${qPos.toString()}`);
-        if (posRes.ok) {
-          const posJson = await posRes.json();
-          if (posJson.success && posJson.data) {
-            const gIdx = posJson.data.globalIndex || 0;
-            targetPage = Math.floor(gIdx / pageSize);
-            targetIndex = gIdx % pageSize;
-          }
-        }
-      } catch (errPos) {
-        console.warn("No se pudo obtener posición de la alerta:", errPos);
-      }
-
-      // 2. Cargar la página correspondiente de la lista global
-      async function fetchAlertPage(page) {
-        const offset = page * pageSize;
-        const q = new URLSearchParams({
-          limit: String(pageSize),
-          offset: String(offset)
-        });
-        if (salaParam) q.set("sala_ids", salaParam);
-        const res = await fetch(`${base}/attlogs/latest?${q.toString()}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            return {
-              items: json.data,
-              totalCount: json.total || json.data.length,
-              totalPages: Math.ceil((json.total || json.data.length) / pageSize) || 1
-            };
-          }
-        }
-        return { items: [rec], totalCount: 1, totalPages: 1 };
-      }
-
-      const pData = await fetchAlertPage(targetPage);
-      let pageItems = pData.items;
-      let totalCount = pData.totalCount;
-      const totalPages = pData.totalPages;
-      let modalPage = targetPage;
-
-      let activeItem = pageItems[targetIndex] || rec;
-
-      openPhotoModal({
-        item: activeItem,
-        items: pageItems,
-        currentIndex: targetIndex,
-        currentPage: targetPage,
-        totalPages,
-        totalCount,
-        mode: 'all',
-        onPageNext: async () => {
-          if (modalPage + 1 < totalPages) {
-            modalPage++;
-            const nextPageData = await fetchAlertPage(modalPage);
-            updatePhotoModalItems({
-              items: nextPageData.items,
-              currentPage: modalPage,
-              totalPages: nextPageData.totalPages,
-              totalCount: nextPageData.totalCount,
-              position: 'first'
-            });
-          }
-        },
-        onPagePrev: async () => {
-          if (modalPage > 0) {
-            modalPage--;
-            const prevPageData = await fetchAlertPage(modalPage);
-            updatePhotoModalItems({
-              items: prevPageData.items,
-              currentPage: modalPage,
-              totalPages: prevPageData.totalPages,
-              totalCount: prevPageData.totalCount,
-              position: 'last'
-            });
-          }
-        }
-      });
-    } catch (e) {
-      console.warn("Error cargando lista global para modal desde alerta:", e);
-      openPhotoModal({
-        item: rec,
-        items: [rec],
-        currentIndex: 0,
-        currentPage: 0,
-        totalPages: 1,
-        totalCount: 1,
-        mode: 'all'
-      });
-    }
+    openPhotoModal({
+      item: rec,
+      items: [rec],
+      currentIndex: 0,
+      currentPage: 0,
+      totalPages: 1,
+      totalCount: 1,
+      mode: 'alerta'
+    });
   }
 
   let audioCtx = null;
@@ -638,9 +544,9 @@
 
         const title = isSync ? `[SYNC] ${empName}` : `${empName}`;
         const bodyLines = [];
+        bodyLines.push(`${statusBadge} - ${timeStr}`);
         if (salaName) bodyLines.push(`📍 Sala: ${salaName}`);
         if (cargoName) bodyLines.push(`💼 Cargo: ${cargoName}`);
-        bodyLines.push(`${statusBadge} - ${timeStr}`);
         const body = bodyLines.join('\n');
         const photoUrl = rec.id ? toBackendUrl(`/api/attlogs/${rec.id}.jpg`) : (rec.foto ? toBackendUrl(rec.foto) : '/favicon.png');
 

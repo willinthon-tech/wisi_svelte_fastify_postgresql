@@ -93,8 +93,8 @@ export function preloadPhoto(url) {
     img.onload = onFinishSuccess;
     img.onerror = onFinishError;
 
-    // Timeout de seguridad de 1.2 segundos para no colgar la UI si la red es lenta o la imagen no existe
-    setTimeout(onFinishError, 1200);
+    // Timeout de seguridad de 800ms para no colgar la UI si la red es lenta o la imagen no existe
+    setTimeout(onFinishError, 800);
   });
 
   cache.set(url, { img, loaded: false, hasError: false, promise });

@@ -11,7 +11,7 @@ function startTransitionSafetyTimer() {
       isPageTransitioning: false,
       pageTransitionDirection: null
     }));
-  }, 1000);
+  }, 3000);
 }
 
 function clearTransitionSafetyTimer() {
@@ -241,96 +241,44 @@ function inferItemMode(item) {
  */
 export function handleRealtimeAttlogInPhotoModal(newRecord) {
   if (!newRecord) return;
-  const st = String(newRecord.attendancestatus || "").toLowerCase().trim();
-  const isCheckInOut = st === "checkin" || st === "checkout";
-  const isUndefined = st === "undefined" || st === "otros";
 
   photoModalStore.update((s) => {
     if (!s.isOpen) return s;
 
-    // 1. Si el modal está en flujo checkin_checkout y llega un undefined/otro -> NO HACER NADA
-    if (s.mode === "checkin_checkout" && !isCheckInOut) {
-      return s;
-    }
-
-    // 2. Si el modal está en flujo undefined y llega un checkin/checkout -> NO HACER NADA
-    if (s.mode === "undefined" && !isUndefined) {
-      return s;
-    }
-
-    // 3. Si el modal es de empleados o desincorporados -> NO HACER NADA
-    if (s.mode !== "checkin_checkout" && s.mode !== "undefined" && s.mode !== "marcajes_table") {
-      return s;
-    }
-
-    const pageSize = 10;
-    const newTotalCount = (s.totalCount || 0) + 1;
-    const newTotalPages = Math.ceil(newTotalCount / pageSize) || 1;
-
-    // Caso 1: El usuario está en la posición 1 (Página 1, índice 0)
-    // -> Pasa a ver de inmediato el nuevo registro que acaba de llegar
-    if (s.currentPage === 0 && s.currentIndex === 0) {
-      const updatedItems = [
-        newRecord,
-        ...s.items.filter((a) => String(a.id) !== String(newRecord.id)),
-      ].slice(0, pageSize);
-
+    // 1. Si el modal está en modo 'ultimo_registro', se actualiza en vivo al nuevo marcaje (plácata, plácata)
+    if (s.mode === "ultimo_registro") {
       return {
         ...s,
-        items: updatedItems,
+        items: [newRecord],
         activeItem: newRecord,
         currentIndex: 0,
+        currentPage: 0,
+        totalPages: 1,
+        totalCount: 1,
+      };
+    }
+
+    // 2. En cualquier otro modo ('alerta', 'marcajes_table', 'empleado', 'desincorporado'),
+    // no se altera la visualización actual del usuario para que su navegación en el modal
+    // o su ficha de alerta se mantenga 100% estable y sin saltos accidentales.
+    if (s.mode === "marcajes_table") {
+      const pageSize = 10;
+      const newTotalCount = (s.totalCount || 0) + 1;
+      const newTotalPages = Math.ceil(newTotalCount / pageSize) || 1;
+      return {
+        ...s,
         totalCount: newTotalCount,
         totalPages: newTotalPages,
       };
     }
 
-    // Caso 2: El usuario está en otra posición (ej. índice 3) o en otra página
-    // -> Mantiene en pantalla EXACTAMENTE al mismo empleado/registro activo
-    const currentViewingId = s.activeItem?.id;
-
-    if (s.currentPage === 0) {
-      const extendedList = [
-        newRecord,
-        ...s.items.filter((a) => String(a.id) !== String(newRecord.id)),
-      ];
-      const newIdx = extendedList.findIndex(
-        (a) => String(a.id) === String(currentViewingId)
-      );
-
-      if (newIdx !== -1 && newIdx < pageSize) {
-        return {
-          ...s,
-          items: extendedList.slice(0, pageSize),
-          currentIndex: newIdx,
-          totalCount: newTotalCount,
-          totalPages: newTotalPages,
-        };
-      } else if (newIdx >= pageSize) {
-        // Empujado a la página 2
-        return {
-          ...s,
-          currentPage: 1,
-          items: extendedList.slice(pageSize, pageSize * 2),
-          currentIndex: 0,
-          totalCount: newTotalCount,
-          totalPages: newTotalPages,
-        };
-      }
-    }
-
-    // Si está en páginas >= 1, solo incrementa el totalCount
-    return {
-      ...s,
-      totalCount: newTotalCount,
-      totalPages: newTotalPages,
-    };
+    return s;
   });
 }
 
 /**
  * Abre el modal global apuntando a un marcaje específico mediante su ID (ej. al hacer click en notificación).
- * Sincroniza los datos completos del empleado y la posición real en el paginador.
+ * Sincroniza los datos completos del empleado en modo 'alerta' (1 de 1 fijo).
  */
 export async function openPhotoModalForAttlog(attlogId, initialRecord = null) {
   if (!attlogId && !initialRecord) return;
@@ -343,12 +291,14 @@ export async function openPhotoModalForAttlog(attlogId, initialRecord = null) {
       item: initialRecord,
       items: [initialRecord],
       currentIndex: 0,
+      currentPage: 0,
+      totalPages: 1,
       totalCount: 1,
-      mode: 'checkin_checkout'
+      mode: 'alerta'
     });
   }
 
-  // 2. Consultar al backend los datos enriquecidos y la posición para sincronización exacta
+  // 2. Consultar al backend los datos enriquecidos para sincronización exacta
   try {
     const cloudBase = getCloudBaseUrl();
     const res = await fetch(`${cloudBase}/api/attlogs/${validId}/detail`);
@@ -356,19 +306,14 @@ export async function openPhotoModalForAttlog(attlogId, initialRecord = null) {
       const json = await res.json();
       if (json.success && json.data) {
         const rec = json.data;
-        const pos = json.position;
-        const globalIndex = pos ? pos.globalIndex : 0;
-        const pageSize = 10;
-        const page = Math.floor(globalIndex / pageSize);
-
         openPhotoModal({
           item: rec,
           items: [rec],
           currentIndex: 0,
-          currentPage: page,
-          totalPages: pos ? Math.ceil(pos.position / pageSize) : 1,
-          totalCount: pos ? pos.position : 1,
-          mode: 'checkin_checkout'
+          currentPage: 0,
+          totalPages: 1,
+          totalCount: 1,
+          mode: 'alerta'
         });
       }
     }

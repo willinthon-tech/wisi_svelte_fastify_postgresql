@@ -118,15 +118,13 @@ attlogEvents.on('new_attlog', (data) => {
       timeStr = cleanTime.split(' ')[1] ? cleanTime.split(' ')[1].split('.')[0] : cleanTime;
     }
 
-    // Formato exacto solicitado para Android:
-    // Línea 1 (Título): Nombre
-    // Línea 2: Sala
-    // Línea 3: Cargo
-    // Línea 4: Entrada o Salida con hora
+    // Formato solicitado para Android:
+    // Preview (colapsado): Título: Nombre | Línea 1: Estado y Hora (nunca truncado)
+    // Expandido hacia abajo: Foto completa + Estado/Hora + Sala + Cargo
     const bodyLines = [];
+    bodyLines.push(`${statusBadge} - ${timeStr}`);
     bodyLines.push(`📍 Sala: ${salaName}`);
     bodyLines.push(`💼 Cargo: ${cargoName || 'Sin cargo asignado'}`);
-    bodyLines.push(`${statusBadge} - ${timeStr}`);
     const notificationBody = bodyLines.join('\n');
 
     let photoUrl = null;

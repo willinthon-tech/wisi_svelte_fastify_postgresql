@@ -537,11 +537,73 @@
     notifyServerFetch('size');
   }
 
-  function changePage(newPage) {
+  // In-memory cache for server-side pages (0ms instant backward and forward navigation)
+  const serverPageCache = new Map();
+  let lastServerCacheFilterKey = "";
+  $: currentServerCacheFilterKey = `${pageSize}_${(searchQuery || '').trim()}_${sortBy}_${sortDir}_${entityType}`;
+  $: if (currentServerCacheFilterKey !== lastServerCacheFilterKey) {
+    lastServerCacheFilterKey = currentServerCacheFilterKey;
+    serverPageCache.clear();
+  }
+
+  // Guardar páginas cargadas del servidor en la caché
+  $: if (isServerSide && items && items.length > 0) {
+    const cacheKey = `pg_${currentPage}_${currentServerCacheFilterKey}`;
+    serverPageCache.set(cacheKey, {
+      items: [...items],
+      totalCount,
+      totalPages
+    });
+  }
+
+  function changePage(newPage, modalDirection = null) {
     const targetPage = Number(newPage);
-    if (!isNaN(targetPage) && targetPage >= 1 && targetPage <= totalPages) {
-      currentPage = targetPage;
-      selectedIds = new Set();
+    if (isNaN(targetPage) || targetPage < 1 || targetPage > totalPages) {
+      if (modalDirection) {
+        updatePhotoModalItems();
+      }
+      return;
+    }
+
+    selectedIds = new Set();
+    currentPage = targetPage;
+
+    if (isServerSide) {
+      const cacheKey = `pg_${targetPage}_${currentServerCacheFilterKey}`;
+      if (serverPageCache.has(cacheKey)) {
+        const cached = serverPageCache.get(cacheKey);
+        items = [...cached.items];
+        lastKnownItems = items;
+        lastKnownPaginatedItems = items;
+        if (modalDirection && $photoModalStore.isOpen) {
+          pendingModalPageDirection = null;
+          updatePhotoModalItems({
+            items,
+            currentPage: targetPage - 1,
+            totalPages: totalPages || 1,
+            totalCount: displayTotalCount,
+            position: modalDirection === 'next' ? 'first' : 'last'
+          });
+        }
+        dispatch('pageChange', { page: targetPage, pageSize: Number(pageSize) || 10 });
+        return;
+      }
+
+      if (modalDirection) {
+        pendingModalPageDirection = modalDirection;
+      }
+      notifyServerFetch('page');
+    } else {
+      if (modalDirection && $photoModalStore.isOpen) {
+        const sliced = sortedItems.slice((targetPage - 1) * numPageSize, targetPage * numPageSize);
+        updatePhotoModalItems({
+          items: sliced,
+          currentPage: targetPage - 1,
+          totalPages,
+          totalCount: displayTotalCount,
+          position: modalDirection === 'next' ? 'first' : 'last'
+        });
+      }
       notifyServerFetch('page');
     }
   }
@@ -849,42 +911,17 @@
         const curr = Number(currentPage) || 1;
         const total = Number(totalPages) || 1;
         if (curr < total) {
-          const nextPg = curr + 1;
-          if (isServerSide) {
-            pendingModalPageDirection = 'next';
-            changePage(nextPg);
-          } else {
-            changePage(nextPg);
-            const nextItems = sortedItems.slice((nextPg - 1) * numPageSize, nextPg * numPageSize);
-            updatePhotoModalItems({
-              items: nextItems,
-              currentPage: nextPg - 1,
-              totalPages: total,
-              totalCount: displayTotalCount,
-              position: 'first'
-            });
-          }
+          changePage(curr + 1, 'next');
+        } else {
+          updatePhotoModalItems();
         }
       },
       onPagePrev: () => {
         const curr = Number(currentPage) || 1;
-        const total = Number(totalPages) || 1;
         if (curr > 1) {
-          const prevPg = curr - 1;
-          if (isServerSide) {
-            pendingModalPageDirection = 'prev';
-            changePage(prevPg);
-          } else {
-            changePage(prevPg);
-            const prevItems = sortedItems.slice((prevPg - 1) * numPageSize, prevPg * numPageSize);
-            updatePhotoModalItems({
-              items: prevItems,
-              currentPage: prevPg - 1,
-              totalPages: total,
-              totalCount: displayTotalCount,
-              position: 'last'
-            });
-          }
+          changePage(curr - 1, 'prev');
+        } else {
+          updatePhotoModalItems();
         }
       }
     });

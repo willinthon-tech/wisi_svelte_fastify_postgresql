@@ -284,10 +284,10 @@
 </script>
 
 <PaginatedDataTable 
-  {items}
-  {totalCount}
-  {currentPage}
-  {pageSize}
+  bind:items
+  bind:totalCount
+  bind:currentPage
+  bind:pageSize
   isServerSide={true}
   {columns}
   bind:searchQuery

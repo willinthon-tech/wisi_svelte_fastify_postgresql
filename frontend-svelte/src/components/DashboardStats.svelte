@@ -5,7 +5,6 @@
   }
 
   import { onMount, onDestroy } from "svelte";
-  import AttlogCarousel from "./AttlogCarousel.svelte";
   import { getCloudBaseUrl, toBackendUrl } from "../config/api.config.js";
   import { userSalasStore as masterUserSalasStore } from "../controllers/master.store.js";
   import { currentUserStore, userSalasStore as authUserSalasStore } from "../controllers/auth.store.js";
@@ -50,9 +49,7 @@
   let isFetchingBirthdays = false;
   let activeTabBirthday = "hoy"; // 'hoy' | 'proximos' | 'destacados'
   let activeCelebrantIdx = 0;
-  let activeDestacadoType = "mayor"; // 'mayor' | 'joven' | 'antiguo'
   let pollTimer = null;
-  let carouselRef = null;
 
   const monthNames = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -703,9 +700,15 @@
 
   function openAttlogModal(record) {
     if (!record) return;
-    window.dispatchEvent(
-      new CustomEvent("wisi:open-attlog-modal", { detail: record }),
-    );
+    openPhotoModal({
+      item: record,
+      items: [record],
+      currentIndex: 0,
+      currentPage: 0,
+      totalPages: 1,
+      totalCount: 1,
+      mode: 'ultimo_registro'
+    });
   }
 </script>
 
@@ -1392,9 +1395,6 @@
     </div>
 
   </div>
-
-  <!-- Second Row: Real-Time Attendance Carousel -->
-  <AttlogCarousel bind:this={carouselRef} />
 </div>
 
 <style>

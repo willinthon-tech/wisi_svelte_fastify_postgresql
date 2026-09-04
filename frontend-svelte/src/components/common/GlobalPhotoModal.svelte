@@ -40,15 +40,16 @@
   $: isLastPage = totalPages <= 1 || (currentPage >= totalPages - 1);
   $: isPrevDisabled = (currentIndex <= 0 && isFirstPage) || showPageSpinner;
   $: isNextDisabled = (currentIndex >= items.length - 1 && isLastPage) || showPageSpinner;
+  $: isSingleRecordMode = mode === 'ultimo_registro' || mode === 'alerta' || (totalPages <= 1 && items.length <= 1);
 
   // Atajos de teclado: Escape para cerrar, Flechas para navegar
   function handleKeyDown(e) {
     if (!isOpen || showPageSpinner) return;
     if (e.key === "Escape") {
       closePhotoModal();
-    } else if (e.key === "ArrowLeft" && !isPrevDisabled) {
+    } else if (e.key === "ArrowLeft" && !isPrevDisabled && !isSingleRecordMode) {
       photoModalPrev();
-    } else if (e.key === "ArrowRight" && !isNextDisabled) {
+    } else if (e.key === "ArrowRight" && !isNextDisabled && !isSingleRecordMode) {
       photoModalNext();
     }
   }
@@ -200,10 +201,7 @@
       return toBackendUrl(`/empleados/${record.empleado_id}.jpg`);
     }
 
-    if (record.id) {
-      return toBackendUrl(`/attlogs/${record.id}.jpg`);
-    }
-
+    // Si no tiene foto de marcaje ni foto de empleado, retornar vacío de inmediato (0ms, sin 404s)
     return "";
   }
 
@@ -213,6 +211,7 @@
   let activePhotoUrl = "";
   let isCurrentPhotoLoaded = false;
   let isCurrentPhotoError = false;
+  let currentActivePhotoRequestId = 0;
 
   function resolveItemPhoto(record) {
     if (!record) return "";
@@ -250,8 +249,10 @@
   // Sincronización de la foto activa actual
   $: if (item) {
     const recordId = item.id || item.employee_no || item.cedula;
+    const reqId = ++currentActivePhotoRequestId;
     const url = resolveItemPhoto(item);
     activePhotoUrl = url;
+
     if (!url) {
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = true;
@@ -262,79 +263,58 @@
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = false;
       preloadPhoto(url).then((img) => {
-        if (item && (item.id || item.employee_no || item.cedula) === recordId) {
-          if (img && !img.hasError && img.naturalWidth > 0) {
-            isCurrentPhotoLoaded = true;
-            isCurrentPhotoError = false;
-            const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
-            resolvedPhotoUrlCache.set(key, url);
-          } else {
-            handlePhotoErrorFallback(item, url);
-          }
+        if (reqId !== currentActivePhotoRequestId) return;
+        if (img && !img.hasError && img.naturalWidth > 0) {
+          isCurrentPhotoLoaded = true;
+          isCurrentPhotoError = false;
+          const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
+          resolvedPhotoUrlCache.set(key, url);
+        } else {
+          handlePhotoErrorFallback(item, url, reqId);
         }
-      }).catch(() => {});
+      }).catch(() => {
+        if (reqId !== currentActivePhotoRequestId) return;
+        handlePhotoErrorFallback(item, url, reqId);
+      });
     }
   }
 
-  function handlePhotoErrorFallback(record, failedUrl) {
+  function handlePhotoErrorFallback(record, failedUrl, reqId) {
     if (!record) return;
     const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
 
+    // Buscar si existe una foto de perfil de empleado alternativa que no sea la que falló
     const empFoto = record.empleado_foto || record.foto;
     const empFotoUrl = empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0 ? toBackendUrl(empFoto) : null;
-    if (empFotoUrl && empFotoUrl !== failedUrl) {
-      preloadPhoto(empFotoUrl).then((img) => {
-        if (img && !img.hasError && img.naturalWidth > 0) {
-          resolvedPhotoUrlCache.set(key, empFotoUrl);
-          if (String(item?.id) === String(record.id)) {
-            activePhotoUrl = empFotoUrl;
-            isCurrentPhotoLoaded = true;
-            isCurrentPhotoError = false;
-          }
-        } else {
-          tryIdFallback(record, empFotoUrl);
-        }
-      }).catch(() => {
-        tryIdFallback(record, empFotoUrl);
-      });
-      return;
-    }
-    tryIdFallback(record, failedUrl);
-  }
-
-  function tryIdFallback(record, previousUrl) {
-    const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
     const empId = record.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? record.id : null);
     const idUrl = empId ? toBackendUrl(`/empleados/${empId}.jpg`) : null;
 
-    if (idUrl && idUrl !== previousUrl) {
-      preloadPhoto(idUrl).then((img) => {
+    const fallbackUrl = (empFotoUrl && empFotoUrl !== failedUrl) ? empFotoUrl : (idUrl && idUrl !== failedUrl ? idUrl : null);
+
+    if (fallbackUrl && fallbackUrl !== failedUrl) {
+      preloadPhoto(fallbackUrl).then((img) => {
+        if (reqId !== currentActivePhotoRequestId) return;
         if (img && !img.hasError && img.naturalWidth > 0) {
-          resolvedPhotoUrlCache.set(key, idUrl);
-          if (String(item?.id) === String(record.id)) {
-            activePhotoUrl = idUrl;
-            isCurrentPhotoLoaded = true;
-            isCurrentPhotoError = false;
-          }
+          resolvedPhotoUrlCache.set(key, fallbackUrl);
+          activePhotoUrl = fallbackUrl;
+          isCurrentPhotoLoaded = true;
+          isCurrentPhotoError = false;
         } else {
           resolvedPhotoUrlCache.set(key, "");
-          if (String(item?.id) === String(record.id)) {
-            activePhotoUrl = "";
-            isCurrentPhotoLoaded = false;
-            isCurrentPhotoError = true;
-          }
-        }
-      }).catch(() => {
-        resolvedPhotoUrlCache.set(key, "");
-        if (String(item?.id) === String(record.id)) {
           activePhotoUrl = "";
           isCurrentPhotoLoaded = false;
           isCurrentPhotoError = true;
         }
+      }).catch(() => {
+        if (reqId !== currentActivePhotoRequestId) return;
+        resolvedPhotoUrlCache.set(key, "");
+        activePhotoUrl = "";
+        isCurrentPhotoLoaded = false;
+        isCurrentPhotoError = true;
       });
     } else {
       resolvedPhotoUrlCache.set(key, "");
-      if (String(item?.id) === String(record.id)) {
+      if (reqId === currentActivePhotoRequestId) {
         activePhotoUrl = "";
         isCurrentPhotoLoaded = false;
         isCurrentPhotoError = true;
@@ -485,15 +465,17 @@
   >
     <div class="global-modal-container">
       <!-- Botón Lateral Anterior (‹) -->
-      <button
-        type="button"
-        class="nav-btn-float prev-btn"
-        disabled={isPrevDisabled}
-        on:click={photoModalPrev}
-        title={isPrevDisabled ? (isPageTransitioning ? "Cargando página..." : "Primer registro") : "Ver anterior (Flecha Izquierda ‹)"}
-      >
-        ‹
-      </button>
+      {#if !isSingleRecordMode}
+        <button
+          type="button"
+          class="nav-btn-float prev-btn"
+          disabled={isPrevDisabled}
+          on:click={photoModalPrev}
+          title={isPrevDisabled ? (isPageTransitioning ? "Cargando página..." : "Primer registro") : "Ver anterior (Flecha Izquierda ‹)"}
+        >
+          ‹
+        </button>
+      {/if}
 
       <div bind:this={modalCardElement} class="global-modal-card">
         <!-- Header -->
@@ -510,22 +492,24 @@
             </div>
 
             <div data-html2canvas-ignore="true" class="header-right">
-              <div class="header-right-meta">
-                <span class="pagination-badge" class:pagination-badge-loading={showPageSpinner}>
-                  {#if showPageSpinner}
-                    ⏳ Cargando página...
-                  {:else}
-                    Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
-                  {/if}
-                </span>
-                <span class="index-badge">
-                  {#if showPageSpinner}
-                    Sincronizando...
-                  {:else}
-                    {currentIndex + 1} / {items.length}
-                  {/if}
-                </span>
-              </div>
+              {#if !isSingleRecordMode}
+                <div class="header-right-meta">
+                  <span class="pagination-badge" class:pagination-badge-loading={showPageSpinner}>
+                    {#if showPageSpinner}
+                      ⏳ Cargando página...
+                    {:else}
+                      Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
+                    {/if}
+                  </span>
+                  <span class="index-badge">
+                    {#if showPageSpinner}
+                      Sincronizando...
+                    {:else}
+                      {currentIndex + 1} / {items.length}
+                    {/if}
+                  </span>
+                </div>
+              {/if}
               <button
                 type="button"
                 class="btn-close-modal"
@@ -730,15 +714,17 @@
         </div>
 
       <!-- Botón Lateral Siguiente (›) -->
-      <button
-        type="button"
-        class="nav-btn-float next-btn"
-        disabled={isNextDisabled}
-        on:click={photoModalNext}
-        title={isNextDisabled ? "Último registro" : "Ver siguiente (Flecha Derecha ›)"}
-      >
-        ›
-      </button>
+      {#if !isSingleRecordMode}
+        <button
+          type="button"
+          class="nav-btn-float next-btn"
+          disabled={isNextDisabled}
+          on:click={photoModalNext}
+          title={isNextDisabled ? "Último registro" : "Ver siguiente (Flecha Derecha ›)"}
+        >
+          ›
+        </button>
+      {/if}
     </div>
   </div>
 {/if}
