@@ -178,15 +178,22 @@
     }
 
     // Para registros de marcaje (live_records, attlog, checkin_checkout, etc.)
-    if (record.id) {
+    if (record.has_photo && record.id) {
       return toBackendUrl(`/attlogs/${record.id}.jpg`);
     }
 
     if (record.empleado_foto && typeof record.empleado_foto === 'string' && record.empleado_foto.trim().length > 0) {
       return toBackendUrl(record.empleado_foto);
     }
+    if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
+      return toBackendUrl(record.foto);
+    }
     if (record.empleado_id) {
       return toBackendUrl(`/empleados/${record.empleado_id}.jpg`);
+    }
+
+    if (record.id) {
+      return toBackendUrl(`/attlogs/${record.id}.jpg`);
     }
 
     return "";
@@ -203,13 +210,35 @@
     }
   }
 
-  // Precargar TODAS las fotos del lote actual (los 10 o 20 registros) para que al navegar la respuesta sea inmediata (0ms)
+  // Caché persistente en memoria (RAM) para asegurar que las fotos del lote actual
+  // se mantengan decodificadas y listas para pintarse a 0ms sin ir a la red
+  const imageMemoryCache = new Map();
+
+  function preloadPhoto(url) {
+    if (!url || typeof window === "undefined") return;
+    if (imageMemoryCache.has(url)) return;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.decoding = "async";
+    img.src = url;
+    imageMemoryCache.set(url, img);
+  }
+
+  // Precargar TODAS las fotos del lote actual (los 10 registros visibles de la página)
+  // con CORS anónimo idéntico al tag <img> para respuesta instantánea (0ms)
   $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
     items.forEach((it) => {
       const u = getPhotoUrl(it);
-      if (u) {
-        const preImg = new Image();
-        preImg.src = u;
+      if (u) preloadPhoto(u);
+
+      const empFoto = it.empleado_foto || it.foto;
+      if (empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0) {
+        preloadPhoto(toBackendUrl(empFoto));
+      }
+      const empId = it.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? it.id : null);
+      if (empId) {
+        preloadPhoto(toBackendUrl(`/empleados/${empId}.jpg`));
       }
     });
   }
@@ -407,6 +436,8 @@
               bind:this={imgElement}
               src={photoSrc}
               crossorigin="anonymous"
+              decoding="async"
+              loading="eager"
               alt="Fotografía Ampliada"
               class="modal-main-img"
               on:load={(e) => {
