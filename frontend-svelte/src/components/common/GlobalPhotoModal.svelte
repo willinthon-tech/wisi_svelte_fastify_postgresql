@@ -22,6 +22,10 @@
   let imgElement = null;
   let isCapturingScreenshot = false;
   let isDownloadingPhoto = false;
+  let isNavigating = false;
+  let navCooldownTimer = null;
+  let isWaitingForPagePhoto = false;
+  let pagePhotoSafetyTimer = null;
 
   $: isOpen = $photoModalStore.isOpen;
   $: item = $photoModalStore.activeItem;
@@ -33,24 +37,76 @@
   $: mode = $photoModalStore.mode;
   $: isPageTransitioning = $photoModalStore.isPageTransitioning;
   $: pageTransitionDirection = $photoModalStore.pageTransitionDirection;
-  $: showPageSpinner = isPageTransitioning;
+
+  // Foto activa en proceso de carga inicial
+  $: isCurrentPhotoLoading = Boolean(activePhotoUrl && !isCurrentPhotoLoaded && !isCurrentPhotoError);
+
+  // Mantener el spinner de cambio de página hasta que la foto del registro entrante cargue o falle
+  $: if (isPageTransitioning) {
+    isWaitingForPagePhoto = true;
+    if (pagePhotoSafetyTimer) clearTimeout(pagePhotoSafetyTimer);
+    pagePhotoSafetyTimer = setTimeout(() => {
+      isWaitingForPagePhoto = false;
+    }, 5000);
+  }
+
+  $: if (isWaitingForPagePhoto && !isPageTransitioning) {
+    if (isCurrentPhotoLoaded || isCurrentPhotoError || !activePhotoUrl) {
+      if (pagePhotoSafetyTimer) {
+        clearTimeout(pagePhotoSafetyTimer);
+        pagePhotoSafetyTimer = null;
+      }
+      isWaitingForPagePhoto = false;
+    }
+  }
+
+  $: showPageSpinner = isPageTransitioning || isWaitingForPagePhoto;
   $: stInfo = getStatusBadge(item?.attendancestatus);
 
   $: isFirstPage = currentPage <= 0;
   $: isLastPage = totalPages <= 1 || (currentPage >= totalPages - 1);
-  $: isPrevDisabled = (currentIndex <= 0 && isFirstPage) || showPageSpinner;
-  $: isNextDisabled = (currentIndex >= items.length - 1 && isLastPage) || showPageSpinner;
+  $: isPrevDisabled = (currentIndex <= 0 && isFirstPage) || showPageSpinner || isCurrentPhotoLoading || isNavigating;
+  $: isNextDisabled = (currentIndex >= items.length - 1 && isLastPage) || showPageSpinner || isCurrentPhotoLoading || isNavigating;
   $: isSingleRecordMode = mode === 'ultimo_registro' || mode === 'alerta' || (totalPages <= 1 && items.length <= 1);
 
-  // Atajos de teclado: Escape para cerrar, Flechas para navegar
+  function safeNavigateNext() {
+    if (isNextDisabled || isCurrentPhotoLoading || isNavigating || showPageSpinner) return;
+    isNavigating = true;
+    photoModalNext();
+    if (navCooldownTimer) clearTimeout(navCooldownTimer);
+    navCooldownTimer = setTimeout(() => {
+      isNavigating = false;
+    }, 200);
+  }
+
+  function safeNavigatePrev() {
+    if (isPrevDisabled || isCurrentPhotoLoading || isNavigating || showPageSpinner) return;
+    isNavigating = true;
+    photoModalPrev();
+    if (navCooldownTimer) clearTimeout(navCooldownTimer);
+    navCooldownTimer = setTimeout(() => {
+      isNavigating = false;
+    }, 200);
+  }
+
+  // Atajos de teclado: Escape para cerrar, Flechas para navegar con control de repetición y carga
   function handleKeyDown(e) {
-    if (!isOpen || showPageSpinner) return;
+    if (!isOpen) return;
     if (e.key === "Escape") {
       closePhotoModal();
-    } else if (e.key === "ArrowLeft" && !isPrevDisabled && !isSingleRecordMode) {
-      photoModalPrev();
+      return;
+    }
+    if (showPageSpinner || isCurrentPhotoLoading || isNavigating) return;
+    if (e.repeat) {
+      e.preventDefault();
+      return;
+    }
+    if (e.key === "ArrowLeft" && !isPrevDisabled && !isSingleRecordMode) {
+      e.preventDefault();
+      safeNavigatePrev();
     } else if (e.key === "ArrowRight" && !isNextDisabled && !isSingleRecordMode) {
-      photoModalNext();
+      e.preventDefault();
+      safeNavigateNext();
     }
   }
 
@@ -60,6 +116,8 @@
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeyDown);
+    if (navCooldownTimer) clearTimeout(navCooldownTimer);
+    if (pagePhotoSafetyTimer) clearTimeout(pagePhotoSafetyTimer);
   });
 
   function cleanUtf8(str) {
@@ -225,7 +283,7 @@
     return getPhotoUrl(record);
   }
 
-  // Precargar en paralelo todo el lote de imágenes de la página actual
+  // Precargar en paralelo ÚNICAMENTE la foto principal del lote (sin sobrecargar red con fotos de personal)
   let lastBatchPage = null;
   $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
     if (currentPage !== lastBatchPage) {
@@ -235,17 +293,10 @@
       items.forEach((it) => {
         const u = getPhotoUrl(it);
         if (u) urlsToPreload.push(u);
-
-        const empFoto = it.empleado_foto || it.foto;
-        if (empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0) {
-          urlsToPreload.push(toBackendUrl(empFoto));
-        }
-        const empId = it.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? it.id : null);
-        if (empId) {
-          urlsToPreload.push(toBackendUrl(`/empleados/${empId}.jpg`));
-        }
       });
-      preloadPhotosBatch(urlsToPreload);
+      if (urlsToPreload.length > 0) {
+        preloadPhotosBatch(urlsToPreload);
+      }
     }
   }
 
@@ -471,8 +522,8 @@
           type="button"
           class="nav-btn-float prev-btn"
           disabled={isPrevDisabled}
-          on:click={photoModalPrev}
-          title={isPrevDisabled ? (isPageTransitioning ? "Cargando página..." : "Primer registro") : "Ver anterior (Flecha Izquierda ‹)"}
+          on:click={(e) => { e.currentTarget.blur(); safeNavigatePrev(); }}
+          title={isPrevDisabled ? (showPageSpinner ? "Cargando página..." : (isCurrentPhotoLoading ? "Cargando imagen..." : "Primer registro")) : "Ver anterior (Flecha Izquierda ‹)"}
         >
           ‹
         </button>
@@ -502,12 +553,29 @@
                       Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
                     {/if}
                   </span>
-                  <span class="index-badge">
-                    {#if showPageSpinner}
-                      Sincronizando...
-                    {:else}
-                      {currentIndex + 1} / {items.length}
+                  <div class="index-badge-group">
+                    {#if item && (item.id || item.attlog_id)}
+                      <span class="attlog-id-badge" title="ID del registro de marcaje">
+                        ID: #{item.id || item.attlog_id}
+                      </span>
+                    {:else if item && item.empleado_id}
+                      <span class="attlog-id-badge" title="ID del empleado">
+                        ID: #{item.empleado_id}
+                      </span>
                     {/if}
+                    <span class="index-badge">
+                      {#if showPageSpinner}
+                        Sincronizando...
+                      {:else}
+                        {currentIndex + 1} / {items.length}
+                      {/if}
+                    </span>
+                  </div>
+                </div>
+              {:else if item && (item.id || item.attlog_id)}
+                <div class="header-right-meta">
+                  <span class="attlog-id-badge" title="ID del registro de marcaje">
+                    ID: #{item.id || item.attlog_id}
                   </span>
                 </div>
               {/if}
@@ -721,8 +789,8 @@
           type="button"
           class="nav-btn-float next-btn"
           disabled={isNextDisabled}
-          on:click={photoModalNext}
-          title={isNextDisabled ? "Último registro" : "Ver siguiente (Flecha Derecha ›)"}
+          on:click={(e) => { e.currentTarget.blur(); safeNavigateNext(); }}
+          title={isNextDisabled ? (showPageSpinner ? "Cargando página..." : (isCurrentPhotoLoading ? "Cargando imagen..." : "Último registro")) : "Ver siguiente (Flecha Derecha ›)"}
         >
           ›
         </button>
@@ -856,6 +924,27 @@
   @keyframes pulseBadge {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.65; }
+  }
+
+  .index-badge-group {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .attlog-id-badge {
+    font-size: 11px;
+    font-weight: 800;
+    color: #1e40af;
+    background: #eff6ff;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid #bfdbfe;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
   }
 
   .index-badge {
