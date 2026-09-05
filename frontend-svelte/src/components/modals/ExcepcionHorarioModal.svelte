@@ -73,6 +73,14 @@
   }
 
   let pendingPunches = {};
+  let assignedPlantillasEmp = [];
+
+  function toMinutes(str) {
+    if (!str) return null;
+    const parts = String(str).trim().split(':').map(Number);
+    if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
+    return parts[0] * 60 + parts[1];
+  }
 
   async function fetchMarcajesRapidos() {
     if (!empleado || !dia) return;
@@ -84,6 +92,7 @@
       const json = await res.json();
       if (json && json.success) {
         marcajesContext = json.marcajesContext || [];
+        assignedPlantillasEmp = json.assignedPlantillas || [];
       }
     } catch (err) {
       console.error("Error fetching marcajes rapidos:", err);
@@ -129,33 +138,131 @@
   }
 
   function recalculateLocalEntryExit() {
-    marcajesContext = marcajesContext.map(ctx => {
-      const punches = (ctx.punches || []).map(p => ({
+    // Reset flags
+    marcajesContext = marcajesContext.map(ctx => ({
+      ...ctx,
+      punches: (ctx.punches || []).map(p => ({
         ...p,
         isUsedEntry: false,
-        isUsedExit: false
-      }));
+        isUsedExit: false,
+        consumed: false
+      }))
+    }));
 
-      const checkinPunches = punches.filter(p => p.isCheckIn);
-      const firstEntry = checkinPunches.length > 0 ? checkinPunches[0] : null;
+    for (let i = 0; i < marcajesContext.length; i++) {
+      const ctx = marcajesContext[i];
+      const nextCtx = i + 1 < marcajesContext.length ? marcajesContext[i + 1] : null;
 
-      if (firstEntry) {
-        firstEntry.isUsedEntry = true;
-        const remaining = punches.filter(p => p !== firstEntry && p.timestamp > firstEntry.timestamp && p.isCheckOut);
-        if (remaining.length > 0) {
-          const finalExit = remaining[remaining.length - 1];
-          const diffMins = Math.floor((finalExit.timestamp - firstEntry.timestamp) / (1000 * 60));
-          if (diffMins >= 5) {
-            finalExit.isUsedExit = true;
+      const availableToday = (ctx.punches || []).filter(p => !p.consumed);
+      const checkinPunches = availableToday.filter(p => p.isCheckIn || p.type === 'E');
+
+      // REGLA 1: No puede existir una salida sin entrada
+      if (checkinPunches.length === 0) {
+        continue;
+      }
+
+      // REGLA 2: Selección de Entrada
+      let targetPlantillas = [];
+      if (ctx.fechaStr === dia?.fechaStr && selectedValue && selectedValue.startsWith('PLANTILLA_')) {
+        const pId = Number(selectedValue.replace('PLANTILLA_', ''));
+        const pObj = (plantillasSala || []).find(p => Number(p.id) === pId);
+        if (pObj && pObj.hora_entrada) {
+          targetPlantillas = [pObj];
+        }
+      } else if (assignedPlantillasEmp && assignedPlantillasEmp.length > 0) {
+        targetPlantillas = assignedPlantillasEmp;
+      }
+
+      let selectedEntry = null;
+      let matchedPlantilla = null;
+
+      if (targetPlantillas.length === 0) {
+        // Horario Único: primer entrada del día
+        selectedEntry = checkinPunches[0];
+      } else {
+        // Horario Asignado: entrada más lógica cercana a una de las plantillas asignadas
+        let bestEntry = null;
+        let minEntryDiff = Infinity;
+        let bestPlant = null;
+
+        for (const cp of checkinPunches) {
+          const punchMins = toMinutes(cp.time);
+          for (const plant of targetPlantillas) {
+            if (!plant.hora_entrada) continue;
+            const plantMins = toMinutes(plant.hora_entrada);
+            let diff = Math.abs(punchMins - plantMins);
+            if (diff > 720) diff = 1440 - diff;
+            if (diff < minEntryDiff) {
+              minEntryDiff = diff;
+              bestEntry = cp;
+              bestPlant = plant;
+            }
+          }
+        }
+        selectedEntry = bestEntry || checkinPunches[0];
+        matchedPlantilla = bestPlant;
+      }
+
+      selectedEntry.isUsedEntry = true;
+      selectedEntry.consumed = true;
+
+      // REGLA 3: Selección de Salida
+      const sameDayCandidates = availableToday.filter(p => !p.consumed && (p.isCheckOut || p.type === 'S') && p.timestamp > selectedEntry.timestamp);
+
+      const nextDayPunches = nextCtx ? (nextCtx.punches || []) : [];
+      const nextDayFirstEntry = nextDayPunches.find(p => (p.isCheckIn || p.type === 'E') && !p.consumed);
+      const nextDayCandidates = nextDayPunches.filter(p => {
+        if (p.consumed) return false;
+        if (!p.isCheckOut && p.type !== 'S') return false;
+        if (p.timestamp <= selectedEntry.timestamp) return false;
+        // No chocar con el registro del día siguiente
+        if (nextDayFirstEntry && p.timestamp >= nextDayFirstEntry.timestamp) return false;
+        const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
+        return diffH >= 0 && diffH <= 18;
+      });
+
+      const allExitCandidates = [...sameDayCandidates, ...nextDayCandidates];
+      let selectedExit = null;
+
+      if (allExitCandidates.length > 0) {
+        if (matchedPlantilla && matchedPlantilla.hora_salida && matchedPlantilla.codigo !== 'U') {
+          const schedSalMins = toMinutes(matchedPlantilla.hora_salida);
+          let bestExit = null;
+          let minExitDiff = Infinity;
+
+          for (const cand of allExitCandidates) {
+            const candMins = toMinutes(cand.time);
+            let diff = Math.abs(candMins - schedSalMins);
+            if (diff > 720) diff = 1440 - diff;
+            if (diff < minExitDiff) {
+              minExitDiff = diff;
+              bestExit = cand;
+            }
+          }
+          selectedExit = bestExit || allExitCandidates[0];
+        } else {
+          const candidatesGte4h = allExitCandidates.filter(cand => {
+            const diffMins = Math.floor((cand.timestamp - selectedEntry.timestamp) / 60000);
+            return diffMins >= 240;
+          });
+
+          if (candidatesGte4h.length > 0) {
+            const firstValid = candidatesGte4h[0];
+            const cluster = candidatesGte4h.filter(c => Math.abs(c.timestamp - firstValid.timestamp) <= 15 * 60 * 1000);
+            selectedExit = cluster[cluster.length - 1];
+          } else {
+            selectedExit = allExitCandidates[0];
           }
         }
       }
 
-      return {
-        ...ctx,
-        punches
-      };
-    });
+      if (selectedExit) {
+        selectedExit.isUsedExit = true;
+        selectedExit.consumed = true;
+      }
+    }
+
+    marcajesContext = [...marcajesContext];
   }
 
   function closeModal() {

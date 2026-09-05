@@ -96,6 +96,309 @@ function findBestMatchingPlantilla(firstPunchMins, candidatesList, maxToleranceM
   return bestPlantilla;
 }
 
+// Plantillas Base del Sistema (Constantes Compartidas)
+export const BASE_PLANTILLA_LIBRE = {
+  id: 'SYS-L',
+  codigo: 'L',
+  nombre: 'Libre',
+  color: '#D9D9D9',
+  tipo: 'plantilla'
+};
+
+export const BASE_PLANTILLA_UNICO = {
+  id: 'SYS-U',
+  codigo: 'U',
+  nombre: 'Horario Único',
+  color: '#86EFAC',
+  tipo: 'horario'
+};
+
+/**
+ * Motor central de acotejo inteligente de asistencia:
+ * 1. "no puede existir una salida sin entrada".
+ * 2. Si no hay entrada válida (checkIn/E): No puede existir salida.
+ *    (Si tiene marcajes 'O' sin entrada, se marca ERROR con 0h trabajadas).
+ * 3. Selección de Entrada:
+ *    - Horario Único: primer entrada del día.
+ *    - Horario Asignado: entrada más lógica cercana a las plantillas asignadas.
+ * 4. Selección de Salida:
+ *    - Horario Asignado: salida más lógica cercana a hora_salida asignada.
+ *    - Horario Único: salida más lógica / más cercana >= 4h (en el día o día siguiente sin chocar con el día siguiente).
+ *    - Si no hay salidas >= 4h pero hay salida: toma la salida disponible (marcará ERROR por < 4h).
+ * 5. Clasificación:
+ *    - Menos de 4 horas (< 240m): ERROR.
+ *    - Antes de las 7:00 PM (19:00): DIURNO.
+ *    - Mayor a 7:00 PM y <= 11:00 PM (23:00): MIXTO (D) HH:MM - (N) HH:MM.
+ *    - Después de las 11:00 PM (> 23:00) o amanecida (cruce de día / <= 05:00 AM): NOCTURNO.
+ */
+export function pairDayAttendance({
+  punchesToday = [],
+  nextDayPunches = [],
+  targetPlantillas = [],
+  isExcepcion = false,
+  excepObj = null,
+  dateStr = '',
+  todayStr = ''
+}) {
+  let entradaStr = null;
+  let salidaStr = null;
+  let trabajadosMins = 0;
+  let marcajeStr = 'Sin Registros';
+  let resultadoStr = '';
+  let entBadge = null;
+  let salBadge = null;
+  let selectedEntry = null;
+  let selectedExit = null;
+  let matchedPlantilla = null;
+  let isNoEntryWithOtherPunches = false;
+
+  if (isExcepcion && excepObj) {
+    if (excepObj.es_libre || !excepObj.plantilla_horario_id) {
+      matchedPlantilla = null;
+    } else {
+      matchedPlantilla = {
+        id: excepObj.plantilla_horario_id,
+        codigo: excepObj.plantilla_codigo,
+        nombre: excepObj.plantilla_nombre,
+        hora_entrada: excepObj.hora_entrada,
+        hora_salida: excepObj.hora_salida,
+        color: excepObj.color,
+        tipo: excepObj.tipo
+      };
+    }
+  }
+
+  const availableToday = punchesToday.filter(p => !p.consumed);
+  const checkinPunches = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
+
+  // REGLA 1: No puede existir una salida sin entrada
+  if (checkinPunches.length === 0) {
+    const unconsumed = availableToday.filter(p => !p.consumed);
+    const hasOther = unconsumed.some(p => p.isOtherFlag || p.type === 'O' || p.isOther);
+
+    if (hasOther) {
+      const firstOther = unconsumed.find(p => p.isOtherFlag || p.type === 'O' || p.isOther) || unconsumed[0];
+      entradaStr = firstOther.timeStr || firstOther.time;
+      salidaStr = null;
+      marcajeStr = entradaStr;
+      trabajadosMins = 0;
+      isNoEntryWithOtherPunches = true;
+      resultadoStr = 'ERROR';
+    } else {
+      entradaStr = null;
+      salidaStr = null;
+      marcajeStr = 'Sin Registros';
+      if (!isExcepcion || (excepObj && excepObj.es_libre)) {
+        resultadoStr = 'LIBRE';
+      } else {
+        resultadoStr = excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'LIBRE';
+      }
+    }
+
+    return {
+      entradaStr,
+      salidaStr,
+      trabajadosMins,
+      marcajeStr,
+      resultadoStr,
+      entBadge: null,
+      salBadge: null,
+      selectedEntry: null,
+      selectedExit: null,
+      matchedPlantilla,
+      isNoEntryWithOtherPunches
+    };
+  }
+
+  // REGLA 2: Selección de la Entrada
+  const activePlantillas = matchedPlantilla
+    ? [matchedPlantilla]
+    : (targetPlantillas && targetPlantillas.length > 0 ? targetPlantillas : []);
+
+  if (activePlantillas.length === 0) {
+    // Horario Único: primer entrada del día
+    selectedEntry = checkinPunches[0];
+    if (!matchedPlantilla) {
+      matchedPlantilla = BASE_PLANTILLA_UNICO;
+    }
+  } else {
+    // Horario Asignado: entrada más lógica cercana a una de las plantillas asignadas
+    let bestEntry = null;
+    let minEntryDiff = Infinity;
+    let bestPlant = matchedPlantilla;
+
+    for (const cp of checkinPunches) {
+      const punchMins = cp.minsFromMidnight ?? toMinutes(cp.timeStr || cp.time);
+      for (const plant of activePlantillas) {
+        if (!plant.hora_entrada) continue;
+        const plantEntMins = toMinutes(plant.hora_entrada);
+        if (plantEntMins === null) continue;
+        let diff = Math.abs(punchMins - plantEntMins);
+        if (diff > 720) diff = 1440 - diff;
+        if (diff < minEntryDiff) {
+          minEntryDiff = diff;
+          bestEntry = cp;
+          bestPlant = plant;
+        }
+      }
+    }
+
+    selectedEntry = bestEntry || checkinPunches[0];
+    if (bestPlant) {
+      matchedPlantilla = bestPlant;
+    } else if (!matchedPlantilla) {
+      matchedPlantilla = activePlantillas[0];
+    }
+  }
+
+  selectedEntry.consumed = true;
+  selectedEntry.isUsedEntry = true;
+  entradaStr = selectedEntry.timeStr || selectedEntry.time;
+
+  // REGLA 3: Selección de la Salida
+  const sameDayCandidates = availableToday.filter(p => !p.consumed && (p.isCheckOutFlag || p.type === 'S' || p.isCheckOut) && p.timestamp > selectedEntry.timestamp);
+
+  // Candidatos día siguiente que no choquen con el registro del día siguiente
+  const nextDayFirstEntry = nextDayPunches.find(p => (p.isCheckInFlag || p.type === 'E' || p.isCheckIn) && !p.consumed);
+  const nextDayCandidates = nextDayPunches.filter(p => {
+    if (p.consumed) return false;
+    if (!p.isCheckOutFlag && p.type !== 'S' && !p.isCheckOut) return false;
+    if (p.timestamp <= selectedEntry.timestamp) return false;
+    // No chocar con el registro del día siguiente
+    if (nextDayFirstEntry && p.timestamp >= nextDayFirstEntry.timestamp) return false;
+    // Duración máxima razonable
+    const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
+    return diffH >= 0 && diffH <= 18;
+  });
+
+  const allExitCandidates = [...sameDayCandidates, ...nextDayCandidates];
+
+  if (allExitCandidates.length > 0) {
+    if (matchedPlantilla && matchedPlantilla.hora_salida && matchedPlantilla.codigo !== 'U') {
+      // Tiene horario asignado: la salida más lógica dependiendo de su horario asignado
+      const schedSalMins = toMinutes(matchedPlantilla.hora_salida);
+      let bestExit = null;
+      let minExitDiff = Infinity;
+
+      for (const cand of allExitCandidates) {
+        const candMins = cand.minsFromMidnight ?? toMinutes(cand.timeStr || cand.time);
+        let diff = Math.abs(candMins - schedSalMins);
+        if (diff > 720) diff = 1440 - diff;
+        if (diff < minExitDiff) {
+          minExitDiff = diff;
+          bestExit = cand;
+        }
+      }
+
+      selectedExit = bestExit || allExitCandidates[0];
+    } else {
+      // Horario Único: la más lógica, osea la más cercana >= 4 horas con respecto a la entrada
+      const candidatesGte4h = allExitCandidates.filter(cand => {
+        const diffMins = Math.floor((cand.timestamp - selectedEntry.timestamp) / 60000);
+        return diffMins >= 240;
+      });
+
+      if (candidatesGte4h.length > 0) {
+        // Primera salida >= 4h (o su cluster de marcajes dentro de los 15 minutos siguientes)
+        const firstValid = candidatesGte4h[0];
+        const cluster = candidatesGte4h.filter(c => Math.abs(c.timestamp - firstValid.timestamp) <= 15 * 60 * 1000);
+        selectedExit = cluster[cluster.length - 1];
+      } else {
+        // Si no hay ninguna >= 4h, tomar la primera salida disponible (se marcará ERROR por < 4h)
+        selectedExit = allExitCandidates[0];
+      }
+    }
+  }
+
+  if (selectedExit) {
+    selectedExit.consumed = true;
+    selectedExit.isUsedExit = true;
+    if (selectedExit.dateStr && selectedEntry.dateStr && selectedExit.dateStr !== selectedEntry.dateStr) {
+      selectedExit.isCrossDayExit = true;
+    }
+    salidaStr = selectedExit.timeStr || selectedExit.time;
+    trabajadosMins = Math.floor((selectedExit.timestamp - selectedEntry.timestamp) / 60000);
+    marcajeStr = `${entradaStr} - ${salidaStr}`;
+  } else {
+    salidaStr = null;
+    marcajeStr = `${entradaStr}`;
+  }
+
+  // REGLA 4: Clasificación del Turno
+  if (!salidaStr) {
+    if (dateStr >= todayStr) {
+      resultadoStr = 'EN ESPERA';
+    } else {
+      resultadoStr = 'ERROR';
+    }
+  } else {
+    const HORA_7PM = 19 * 60;   // 19:00 (7:00 PM)
+    const HORA_11PM = 23 * 60;  // 23:00 (11:00 PM)
+    const HORA_5AM = 5 * 60;    // 05:00 AM
+
+    const entMins = toMinutes(entradaStr);
+    const salMins = toMinutes(salidaStr);
+    const isCrossDay = selectedExit.isCrossDayExit || (selectedExit.dateStr && selectedEntry.dateStr && selectedExit.dateStr !== selectedEntry.dateStr);
+
+    if (trabajadosMins < 240) {
+      resultadoStr = 'ERROR';
+    } else {
+      const esNocturno = isCrossDay || salMins < entMins || salMins > HORA_11PM || salMins <= HORA_5AM;
+
+      if (esNocturno) {
+        resultadoStr = 'NOCTURNO';
+      } else if (salMins <= HORA_7PM) {
+        resultadoStr = 'DIURNO';
+      } else if (salMins > HORA_7PM && salMins <= HORA_11PM) {
+        const diurnasMins = Math.max(0, HORA_7PM - entMins);
+        const nocturnasMins = Math.max(0, salMins - HORA_7PM);
+        resultadoStr = `(D) ${toHHMM(diurnasMins)} - (N) ${toHHMM(nocturnasMins)}`;
+      } else {
+        resultadoStr = 'DIURNO';
+      }
+    }
+
+    // Badges de puntualidad si la plantilla tiene hora programada
+    if (matchedPlantilla && matchedPlantilla.hora_entrada) {
+      const schedEntMins = toMinutes(matchedPlantilla.hora_entrada);
+      if (schedEntMins !== null) {
+        const diffEnt = entMins - schedEntMins;
+        if (diffEnt > 0) {
+          entBadge = { text: toHHMM(diffEnt), isAlert: true, color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' };
+        } else {
+          entBadge = { text: toHHMM(Math.abs(diffEnt)), isAlert: false, color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' };
+        }
+      }
+    }
+
+    if (matchedPlantilla && matchedPlantilla.hora_salida && salidaStr) {
+      const schedSalMins = toMinutes(matchedPlantilla.hora_salida);
+      if (schedSalMins !== null) {
+        const diffSal = schedSalMins - salMins;
+        if (diffSal > 0) {
+          salBadge = { text: toHHMM(diffSal), isAlert: true, color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' };
+        } else {
+          salBadge = { text: toHHMM(Math.abs(diffSal)), isAlert: false, color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' };
+        }
+      }
+    }
+  }
+
+  return {
+    entradaStr,
+    salidaStr,
+    trabajadosMins,
+    marcajeStr,
+    resultadoStr,
+    entBadge,
+    salBadge,
+    selectedEntry,
+    selectedExit,
+    matchedPlantilla,
+    isNoEntryWithOtherPunches
+  };
+}
+
 export async function getMarcajePersonalReportModel(params = {}) {
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -364,23 +667,6 @@ export async function getMarcajePersonalReportModel(params = {}) {
     });
   });
 
-  // Base System Templates (Hardcoded defaults)
-  const BASE_PLANTILLA_LIBRE = {
-    id: 'SYS-L',
-    codigo: 'L',
-    nombre: 'Libre',
-    color: '#D9D9D9',
-    tipo: 'plantilla'
-  };
-
-  const BASE_PLANTILLA_UNICO = {
-    id: 'SYS-U',
-    codigo: 'U',
-    nombre: 'Horario Único',
-    color: '#86EFAC',
-    tipo: 'horario'
-  };
-
   // 6. Multi-Pass Attendance Calculation Engine for Individual Employees
   const evaluateSingleEmployee = async (emp) => {
     // Get individual assigned shift plantillas for this employee
@@ -399,229 +685,37 @@ export async function getMarcajePersonalReportModel(params = {}) {
     // Evaluate each day in date range
     const diasResult = diasDelMes.map((diaObj, dayIdx) => {
       const dateStr = diaObj.fechaStr;
-      const punchesToday = (empPunchesByDate.get(dateStr) || []).filter(p => !p.consumed);
+      const punchesToday = empPunchesByDate.get(dateStr) || [];
 
-      let entradaStr = null;
-      let salidaStr = null;
-      let trabajadosMins = 0;
-      let marcajeStr = 'Sin Registros';
-      let resultadoStr = '';
-      let entBadge = null;
-      let salBadge = null;
-      let isNoEntryWithOtherPunches = false;
+      const dCurr = new Date(`${dateStr}T00:00:00Z`);
+      dCurr.setUTCDate(dCurr.getUTCDate() + 1);
+      const nextDateStr = dCurr.toISOString().split('T')[0];
+      const nextDayPunches = empPunchesByDate.get(nextDateStr) || [];
 
       // Check for Excepcion Especial Override for this employee and date
       const exKey = `${emp.id}_${dateStr}`;
       const excepObj = excepcionesMap.get(exKey);
+      const isExcepcion = Boolean(excepObj);
+      const excepcionId = excepObj ? excepObj.id : null;
 
-      let isExcepcion = false;
-      let excepcionId = null;
-      let matchedPlantilla = null;
+      const paired = pairDayAttendance({
+        punchesToday,
+        nextDayPunches,
+        targetPlantillas: assignedPlantillas,
+        isExcepcion,
+        excepObj,
+        dateStr,
+        todayStr
+      });
 
-      if (excepObj) {
-        isExcepcion = true;
-        excepcionId = excepObj.id;
-        if (excepObj.es_libre || !excepObj.plantilla_horario_id) {
-          matchedPlantilla = null;
-        } else {
-          matchedPlantilla = {
-            id: excepObj.plantilla_horario_id,
-            codigo: excepObj.plantilla_codigo,
-            nombre: excepObj.plantilla_nombre,
-            hora_entrada: excepObj.hora_entrada,
-            hora_salida: excepObj.hora_salida,
-            color: excepObj.color,
-            tipo: excepObj.tipo
-          };
-        }
-      }
-
-      // --- LOGICA DE ENTRADA Y SALIDA ---
-      // Regla estricta: Solo tomar en cuenta para Entrada los marcajes con checkIn
-      // y para Salida los marcajes con checkOut posteriores a la Entrada.
-      if (punchesToday.length > 0) {
-        const checkinPunches = punchesToday.filter(p => p.isCheckInFlag);
-        const firstEntryPunch = checkinPunches.length > 0 ? checkinPunches[0] : null;
-
-        if (firstEntryPunch) {
-          entradaStr = firstEntryPunch.timeStr;
-          firstEntryPunch.consumed = true;
-
-          // Buscar la salida correspondiente posterior a la entrada con checkOut
-          const remainingPunches = punchesToday.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp);
-
-          if (remainingPunches.length > 0) {
-            const checkoutPunches = remainingPunches.filter(p => p.isCheckOutFlag);
-            const finalExitPunch = checkoutPunches.length > 0 
-              ? checkoutPunches[checkoutPunches.length - 1] 
-              : null;
-
-            if (finalExitPunch) {
-              const diffMins = Math.floor((finalExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
-              if (diffMins >= 5) {
-                salidaStr = finalExitPunch.timeStr;
-                trabajadosMins = diffMins;
-                finalExitPunch.consumed = true;
-                marcajeStr = `${entradaStr} - ${salidaStr}`;
-              } else {
-                marcajeStr = `${entradaStr}`;
-              }
-            } else {
-              marcajeStr = `${entradaStr}`;
-            }
-          } else if (firstEntryPunch.hours >= 15 && dayIdx + 1 < diasDelMes.length) {
-            // Posible turno nocturno que sale en la madrugada del día siguiente con checkOut
-            const nextDateStr = diasDelMes[dayIdx + 1].fechaStr;
-            const nextDayPunches = (empPunchesByDate.get(nextDateStr) || []).filter(p => !p.consumed);
-
-            if (nextDayPunches.length > 0) {
-              const morningExits = nextDayPunches.filter(p => p.hours <= 12 && p.isCheckOutFlag);
-              if (morningExits.length > 0) {
-                const nightExitPunch = morningExits[0];
-                const diffHours = (nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 3600);
-                if (diffHours >= 4 && diffHours <= 16) {
-                  salidaStr = nightExitPunch.timeStr;
-                  trabajadosMins = Math.floor((nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
-                  nightExitPunch.consumed = true;
-                  nightExitPunch.isCrossDayExit = true;
-                  marcajeStr = `${entradaStr} - ${salidaStr}`;
-                }
-              }
-            }
-          }
-
-          if (!salidaStr) {
-            marcajeStr = `${entradaStr}`;
-          }
-        } else {
-          // No hubo marcaje checkIn (Entrada)
-          const unconsumedPunches = punchesToday.filter(p => !p.consumed);
-          // Si sólo hay marcajes checkOut (salida), no se toma como error ni trabajo de hoy
-          // porque puede ser salida de la jornada nocturna de ayer:
-          const hasOtherPunches = unconsumedPunches.some(p => !p.isCheckOutFlag);
-
-          if (hasOtherPunches) {
-            // El empleado tiene marcajes tipo (O) u otros sin entrada válida:
-            // "no trabajo porque no marco entrada... pero marco algo... coloca asi como rojo (ERROR)"
-            const firstOther = unconsumedPunches.find(p => !p.isCheckOutFlag) || unconsumedPunches[0];
-            entradaStr = firstOther.timeStr;
-            const laterCheckouts = unconsumedPunches.filter(p => p !== firstOther && p.timestamp > firstOther.timestamp && p.isCheckOutFlag);
-            if (laterCheckouts.length > 0) {
-              const finalExit = laterCheckouts[laterCheckouts.length - 1];
-              salidaStr = finalExit.timeStr;
-              marcajeStr = `${entradaStr} - ${salidaStr}`;
-            } else {
-              salidaStr = null;
-              marcajeStr = entradaStr;
-            }
-            trabajadosMins = 0;
-            isNoEntryWithOtherPunches = true;
-          } else {
-            entradaStr = null;
-            salidaStr = null;
-            marcajeStr = 'Sin Registros';
-          }
-        }
-      }
-
-      // --- ASIGNACIÓN DE PLANTILLAS Y HORARIOS ---
-      if (!isExcepcion) {
-        if (hasCustomHorario) {
-          // El empleado TIENE horarios asignados: buscar el que mejor encaje con su entrada
-          if (entradaStr) {
-            const firstPunchMins = toMinutes(entradaStr);
-            matchedPlantilla = findBestMatchingPlantilla(firstPunchMins, assignedPlantillas, 240) || assignedPlantillas[0];
-          } else {
-            matchedPlantilla = null; // Día libre / sin marcaje
-          }
-        } else {
-          // El empleado NO tiene horarios definidos:
-          // Si tiene marcajes válidos -> Se asigna automáticamente Horario ÚNICO ('U')
-          // Si NO tiene marcajes -> Se asigna automáticamente LIBRE ('L')
-          if (entradaStr) {
-            matchedPlantilla = BASE_PLANTILLA_UNICO;
-          } else {
-            matchedPlantilla = null; // Se traduce a BASE_PLANTILLA_LIBRE
-          }
-        }
-      }
-
-      const isLibre = !matchedPlantilla;
-
-      // --- CALCULO DE RESULTADO Y BADGES ---
-      if (!matchedPlantilla) {
-        if (excepObj && excepObj.plantilla_codigo && excepObj.plantilla_codigo !== 'L') {
-          resultadoStr = excepObj.plantilla_nombre || excepObj.plantilla_codigo;
-        } else {
-          resultadoStr = 'LIBRE';
-        }
-        if (!entradaStr) {
-          marcajeStr = 'Sin Registros';
-        }
-      } else if (isNoEntryWithOtherPunches) {
-        // No marcó entrada (marcó O): se marca en ROJO como ERROR y 0 horas trabajadas
-        resultadoStr = 'ERROR';
-        trabajadosMins = 0;
-      } else if (entradaStr && !salidaStr) {
-        // Marcó entrada pero no marcó salida:
-        // Si el día es HOY o futuro (dateStr >= todayStr) -> EN ESPERA (jornada laboral activa)
-        // Si el día es PASADO (dateStr < todayStr) -> ERROR (falta marcaje salida)
-        if (dateStr >= todayStr) {
-          resultadoStr = 'EN ESPERA';
-        } else {
-          resultadoStr = 'ERROR';
-        }
-      } else if (entradaStr && salidaStr) {
-        const entMins = toMinutes(entradaStr);
-        const salMins = toMinutes(salidaStr);
-
-        const HORA_7PM = 19 * 60;  // 19:00 (7:00 PM)
-        const HORA_11PM = 23 * 60; // 23:00 (11:00 PM)
-        const HORA_5AM = 5 * 60;   // 05:00 AM
-
-        if (trabajadosMins < 240) {
-          resultadoStr = 'ERROR';
-        } else {
-          const esNocturno = salMins < entMins || salMins > HORA_11PM || salMins <= HORA_5AM;
-
-          if (esNocturno) {
-            resultadoStr = 'NOCTURNO';
-          } else if (salMins <= HORA_7PM) {
-            resultadoStr = 'DIURNO';
-          } else if (salMins > HORA_7PM && salMins <= HORA_11PM) {
-            const diurnasMins = Math.max(0, HORA_7PM - entMins);
-            const nocturnasMins = Math.max(0, salMins - HORA_7PM);
-            resultadoStr = `(D) ${toHHMM(diurnasMins)} - (N) ${toHHMM(nocturnasMins)}`;
-          } else {
-            resultadoStr = 'DIURNO';
-          }
-        }
-
-        // Badges de puntualidad si la plantilla tiene hora programada
-        if (matchedPlantilla && matchedPlantilla.hora_entrada) {
-          const schedEntMins = toMinutes(matchedPlantilla.hora_entrada);
-          if (schedEntMins !== null) {
-            const diffEnt = entMins - schedEntMins;
-            if (diffEnt > 0) {
-              entBadge = { text: toHHMM(diffEnt), isAlert: true, color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' };
-            } else {
-              entBadge = { text: toHHMM(Math.abs(diffEnt)), isAlert: false, color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' };
-            }
-          }
-        }
-
-        if (matchedPlantilla && matchedPlantilla.hora_salida && salidaStr) {
-          const schedSalMins = toMinutes(matchedPlantilla.hora_salida);
-          if (schedSalMins !== null) {
-            const diffSal = schedSalMins - salMins;
-            if (diffSal > 0) {
-              salBadge = { text: toHHMM(diffSal), isAlert: true, color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' };
-            } else {
-              salBadge = { text: toHHMM(Math.abs(diffSal)), isAlert: false, color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' };
-            }
-          }
-        }
-      }
+      const entradaStr = paired.entradaStr;
+      const salidaStr = paired.salidaStr;
+      const marcajeStr = paired.marcajeStr;
+      const trabajadosMins = paired.trabajadosMins;
+      const resultadoStr = paired.resultadoStr;
+      const matchedPlantilla = paired.matchedPlantilla;
+      let entBadge = paired.entBadge;
+      let salBadge = paired.salBadge;
 
       // Badges por defecto para días sin retraso o libres
       if (!entBadge) {
@@ -877,42 +971,45 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
     punchesByDate.set(fStr, list);
   });
 
-  // Determine which punches were actually taken as Entry and Exit for each day
-  // Regla estricta: Solo tomar en cuenta para acotejar los que tengan checkIn como Entrada y checkOut como Salida
-  const evaluateDayEntryExit = (dayStr, nextStr) => {
-    const list = punchesByDate.get(dayStr) || [];
-    if (list.length === 0) return;
-    const checkinPunches = list.filter(p => p.isCheckIn);
-    const firstEntryPunch = checkinPunches.length > 0 ? checkinPunches[0] : null;
+  // Obtener plantillas directamente asignadas al empleado y excepciones en el rango de 3 días
+  const directAssignments = await sql`
+    SELECT eph.empleado_id, ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
+    FROM empleados_plantillas_horarios eph
+    JOIN plantillas_horarios ph ON eph.plantilla_horario_id = ph.id
+    WHERE eph.empleado_id = ${empId}
+    ORDER BY ph.hora_entrada ASC, ph.codigo ASC
+  `;
 
-    if (firstEntryPunch) {
-      firstEntryPunch.isUsedEntry = true;
+  const excepciones = await sql`
+    SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.plantilla_horario_id, eh.es_libre,
+           ph.codigo AS plantilla_codigo, ph.nombre AS plantilla_nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
+    FROM excepciones_horarios eh
+    LEFT JOIN plantillas_horarios ph ON eh.plantilla_horario_id = ph.id
+    WHERE eh.empleado_id = ${empId}
+      AND eh.fecha = ANY(${[prevDateStr, dateStr, nextDateStr]}::date[])
+  `;
+  const exMap = new Map();
+  excepciones.forEach(ex => exMap.set(ex.fecha_str, ex));
 
-      // Remaining candidates on same day with checkOut
-      const remaining = list.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp && p.isCheckOut);
-      if (remaining.length > 0) {
-        const finalExitPunch = remaining[remaining.length - 1];
-        const diffMins = Math.floor((finalExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
-        if (diffMins >= 5) {
-          finalExitPunch.isUsedExit = true;
-        }
-      } else if (firstEntryPunch.hours >= 15 && nextStr) {
-        // Cross-day night shift exit on morning of next day with checkOut
-        const nextList = punchesByDate.get(nextStr) || [];
-        const morningPunches = nextList.filter(p => p.hours <= 12 && p.isCheckOut);
-        if (morningPunches.length > 0) {
-          const nightExitPunch = morningPunches[0];
-          const diffHours = (nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 3600);
-          if (diffHours >= 4 && diffHours <= 16) {
-            nightExitPunch.isUsedExit = true;
-          }
-        }
-      }
-    }
+  // Determine which punches were actually taken as Entry and Exit for each day using the exact same central engine
+  const evalDay = (dayStr, nextDayStr) => {
+    const punchesToday = punchesByDate.get(dayStr) || [];
+    const nextDayPunches = nextDayStr ? (punchesByDate.get(nextDayStr) || []) : [];
+    const excepObj = exMap.get(dayStr);
+    const isExcepcion = Boolean(excepObj);
+
+    pairDayAttendance({
+      punchesToday,
+      nextDayPunches,
+      targetPlantillas: directAssignments,
+      isExcepcion,
+      excepObj,
+      dateStr: dayStr
+    });
   };
 
-  evaluateDayEntryExit(prevDateStr, dateStr);
-  evaluateDayEntryExit(dateStr, nextDateStr);
+  evalDay(prevDateStr, dateStr);
+  evalDay(dateStr, nextDateStr);
 
   const getPunchesInfo = (fStr) => {
     const list = punchesByDate.get(fStr) || [];
@@ -950,7 +1047,8 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
 
   return {
     success: true,
-    marcajesContext
+    marcajesContext,
+    assignedPlantillas: directAssignments
   };
 }
 
