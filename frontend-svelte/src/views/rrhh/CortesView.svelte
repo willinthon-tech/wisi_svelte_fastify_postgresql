@@ -262,8 +262,8 @@
     />
   </div>
 
-  {#if hasActiveFilters}
-    <div slot="search-actions" class="search-actions-row">
+  <div slot="search-actions" class="search-actions-row">
+    {#if hasActiveFilters}
       <button
         type="button"
         on:click={clearAllFilters}
@@ -272,8 +272,8 @@
       >
         <span>✕</span> Limpiar Filtros ({totalFilters})
       </button>
-    </div>
-  {/if}
+    {/if}
+  </div>
 </PaginatedDataTable>
 
 <CorteEmpleadosModal
