@@ -54,28 +54,59 @@
   }
 
   $: currentDayIndex = (empleado?.dias || []).findIndex(d => d.fechaStr === dia?.fechaStr);
-  $: canPrevDay = currentDayIndex > 0;
-  $: canNextDay = currentDayIndex >= 0 && currentDayIndex < (empleado?.dias || []).length - 1;
+  $: totalDays = (empleado?.dias || []).length;
+  $: isFirstDayOfEmp = currentDayIndex <= 0;
+  $: isLastDayOfEmp = currentDayIndex >= totalDays - 1;
 
   $: currentEmpIndex = (empleadosList || []).findIndex(e => e.id === empleado?.id);
+  $: totalEmps = (empleadosList || []).length;
   $: canPrevEmp = currentEmpIndex > 0;
-  $: canNextEmp = currentEmpIndex >= 0 && currentEmpIndex < (empleadosList || []).length - 1;
+  $: canNextEmp = currentEmpIndex >= 0 && currentEmpIndex < totalEmps - 1;
+
+  // Navegación continua entre días y empleados:
+  $: canNextDayInEmp = !isLastDayOfEmp;
+  $: canWrapToNextEmp = isLastDayOfEmp && canNextEmp;
+  $: canGoNext = canNextDayInEmp || canWrapToNextEmp;
+
+  $: canPrevDayInEmp = !isFirstDayOfEmp;
+  $: canWrapToPrevEmp = isFirstDayOfEmp && canPrevEmp;
+  $: canGoPrev = canPrevDayInEmp || canWrapToPrevEmp;
 
   function goToPrevDay() {
-    if (!canPrevDay || !empleado?.dias) return;
-    const prevDia = empleado.dias[currentDayIndex - 1];
-    if (prevDia) {
-      dia = prevDia;
-      dispatch('changeDia', { dia: prevDia });
+    if (!empleado?.dias) return;
+    if (canPrevDayInEmp) {
+      const prevDia = empleado.dias[currentDayIndex - 1];
+      if (prevDia) {
+        dia = prevDia;
+        dispatch('changeDia', { dia: prevDia });
+      }
+    } else if (canWrapToPrevEmp) {
+      const prevEmp = empleadosList[currentEmpIndex - 1];
+      if (prevEmp && prevEmp.dias && prevEmp.dias.length > 0) {
+        const lastDiaOfPrev = prevEmp.dias[prevEmp.dias.length - 1];
+        empleado = prevEmp;
+        dia = lastDiaOfPrev;
+        dispatch('changeEmpleado', { empleado: prevEmp, dia: lastDiaOfPrev });
+      }
     }
   }
 
   function goToNextDay() {
-    if (!canNextDay || !empleado?.dias) return;
-    const nextDia = empleado.dias[currentDayIndex + 1];
-    if (nextDia) {
-      dia = nextDia;
-      dispatch('changeDia', { dia: nextDia });
+    if (!empleado?.dias) return;
+    if (canNextDayInEmp) {
+      const nextDia = empleado.dias[currentDayIndex + 1];
+      if (nextDia) {
+        dia = nextDia;
+        dispatch('changeDia', { dia: nextDia });
+      }
+    } else if (canWrapToNextEmp) {
+      const nextEmp = empleadosList[currentEmpIndex + 1];
+      if (nextEmp && nextEmp.dias && nextEmp.dias.length > 0) {
+        const firstDiaOfNext = nextEmp.dias[0];
+        empleado = nextEmp;
+        dia = firstDiaOfNext;
+        dispatch('changeEmpleado', { empleado: nextEmp, dia: firstDiaOfNext });
+      }
     }
   }
 
@@ -109,12 +140,12 @@
     if (isEditingInput) return;
 
     if (e.key === 'ArrowLeft') {
-      if (canPrevDay) {
+      if (canGoPrev) {
         e.preventDefault();
         goToPrevDay();
       }
     } else if (e.key === 'ArrowRight') {
-      if (canNextDay) {
+      if (canGoNext) {
         e.preventDefault();
         goToNextDay();
       }
@@ -570,7 +601,7 @@
       <div style="padding: 12px 18px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
         <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
           <!-- Foto Ligera del Empleado con Fallback de Inicial -->
-          <div style="width: 52px; height: 52px; border-radius: 50%; overflow: hidden; border: 2.5px solid #3b82f6; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.12); position: relative;">
+          <div style="width: 64px; height: 64px; border-radius: 50%; overflow: hidden; border: 2.5px solid #3b82f6; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.14); position: relative;">
             {#if getFotoUrl(empleado)}
               <img
                 src={getFotoUrl(empleado)}
@@ -582,11 +613,11 @@
                   if (fallback) fallback.style.display = 'flex';
                 }}
               />
-              <div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; background: #e0e7ff; color: #4338ca; font-size: 16px; font-weight: 900; text-transform: uppercase;">
+              <div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; background: #e0e7ff; color: #4338ca; font-size: 20px; font-weight: 900; text-transform: uppercase;">
                 {(empleado?.nombre || 'E').charAt(0).toUpperCase()}
               </div>
             {:else}
-              <div style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; background: #e0e7ff; color: #4338ca; font-size: 16px; font-weight: 900; text-transform: uppercase;">
+              <div style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; background: #e0e7ff; color: #4338ca; font-size: 20px; font-weight: 900; text-transform: uppercase;">
                 {(empleado?.nombre || 'E').charAt(0).toUpperCase()}
               </div>
             {/if}
@@ -840,8 +871,8 @@
               type="button"
               on:click={goToPrevEmp}
               disabled={!canPrevEmp}
-              title="Empleado anterior (↑ Flecha Arriba)"
-              class="btn-nav-arrow"
+              title={canPrevEmp ? 'Empleado anterior (↑ Flecha Arriba)' : 'No hay más empleados arriba'}
+              class="btn-nav-arrow {!canPrevEmp ? 'btn-nav-disabled-red' : ''}"
             >
               ▲
             </button>
@@ -850,9 +881,9 @@
               <button
                 type="button"
                 on:click={goToPrevDay}
-                disabled={!canPrevDay}
-                title="Día anterior (← Flecha Izquierda)"
-                class="btn-nav-arrow"
+                disabled={!canGoPrev}
+                title={canPrevDayInEmp ? 'Día anterior (← Flecha Izquierda)' : (canWrapToPrevEmp ? `Primer día del empleado. Clic para ir al último día de ${empleadosList[currentEmpIndex - 1]?.nombre || 'empleado anterior'} (←)` : 'Inicio de registros: no hay más días ni empleados')}
+                class="btn-nav-arrow {canWrapToPrevEmp ? 'btn-nav-wrap-gray' : ''} {!canGoPrev ? 'btn-nav-disabled-red' : ''}"
               >
                 ◀
               </button>
@@ -860,17 +891,17 @@
                 type="button"
                 on:click={goToNextEmp}
                 disabled={!canNextEmp}
-                title="Empleado siguiente (↓ Flecha Abajo)"
-                class="btn-nav-arrow"
+                title={canNextEmp ? 'Empleado siguiente (↓ Flecha Abajo)' : 'No hay más empleados abajo'}
+                class="btn-nav-arrow {!canNextEmp ? 'btn-nav-disabled-red' : ''}"
               >
                 ▼
               </button>
               <button
                 type="button"
                 on:click={goToNextDay}
-                disabled={!canNextDay}
-                title="Día siguiente (→ Flecha Derecha)"
-                class="btn-nav-arrow"
+                disabled={!canGoNext}
+                title={canNextDayInEmp ? 'Día siguiente (→ Flecha Derecha)' : (canWrapToNextEmp ? `Último día del empleado. Clic para ir al primer día de ${empleadosList[currentEmpIndex + 1]?.nombre || 'empleado siguiente'} (→)` : 'Fin de registros: no hay más días ni empleados')}
+                class="btn-nav-arrow {canWrapToNextEmp ? 'btn-nav-wrap-gray' : ''} {!canGoNext ? 'btn-nav-disabled-red' : ''}"
               >
                 ▶
               </button>
@@ -957,11 +988,33 @@
     background: #e2e8f0;
   }
 
+  /* Estado en gris cuando el botón pasa al primer/último día del siguiente/anterior empleado */
+  .btn-nav-arrow.btn-nav-wrap-gray {
+    background: #e2e8f0 !important;
+    border-color: #94a3b8 !important;
+    color: #334155 !important;
+  }
+
+  .btn-nav-arrow.btn-nav-wrap-gray:hover:not(:disabled) {
+    background: #cbd5e1 !important;
+    border-color: #64748b !important;
+    color: #0f172a !important;
+  }
+
   .btn-nav-arrow:disabled {
-    opacity: 0.35;
+    opacity: 0.55;
     cursor: not-allowed;
     background: #f8fafc;
     border-color: #e2e8f0;
     color: #94a3b8;
+  }
+
+  /* Estado rojizo cuando no hay más registros arriba o abajo (límite absoluto) */
+  .btn-nav-arrow.btn-nav-disabled-red:disabled {
+    opacity: 0.75 !important;
+    cursor: not-allowed !important;
+    background: #fef2f2 !important;
+    border-color: #fca5a5 !important;
+    color: #dc2626 !important;
   }
 </style>
