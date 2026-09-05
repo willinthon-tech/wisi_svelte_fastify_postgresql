@@ -389,6 +389,8 @@
         ...p,
         isUsedEntry: false,
         isUsedExit: false,
+        isActivePairEntry: false,
+        isActivePairExit: false,
         consumed: false
       }))
     }));
@@ -461,7 +463,6 @@
         matchedPlantilla = bestPlant;
       }
 
-      selectedEntry.isUsedEntry = true;
       selectedEntry.consumed = true;
 
       // REGLA 3: Selección de Salida (únicamente marcajes tipo 'S')
@@ -514,7 +515,6 @@
       }
 
       if (selectedExit) {
-        selectedExit.isUsedExit = true;
         selectedExit.consumed = true;
 
         // Consumir marcajes intermedios
@@ -528,6 +528,14 @@
             p.consumed = true;
           }
         });
+
+        // Solo destacar con color fuerte ("oscurito") si es el par válido (entrada Y salida) del DÍA SELECCIONADO
+        if (ctx.fechaStr === dia?.fechaStr) {
+          selectedEntry.isUsedEntry = true;
+          selectedEntry.isActivePairEntry = true;
+          selectedExit.isUsedExit = true;
+          selectedExit.isActivePairExit = true;
+        }
       }
     }
 
@@ -786,36 +794,38 @@
                             {#each ctx.punches as punch}
                               <div
                                 style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; padding: 2.5px 6px; border-radius: 6px; white-space: nowrap; transition: all 0.15s ease; {
-                                  punch.type === 'E' && punch.isUsedEntry
+                                  punch.isActivePairEntry
                                     ? 'background: #15803d; border: 1.5px solid #14532d; box-shadow: 0 2px 4px rgba(21, 128, 61, 0.35);'
-                                    : punch.type === 'S' && punch.isUsedExit
+                                    : punch.isActivePairExit
                                     ? 'background: #1d4ed8; border: 1.5px solid #1e3a8a; box-shadow: 0 2px 4px rgba(29, 78, 216, 0.35);'
                                     : punch.type === 'E'
-                                    ? 'background: #f0fdf4; border: 1px dashed #86efac;'
+                                    ? 'background: #f0fdf4; border: 1px solid #86efac;'
                                     : punch.type === 'S'
-                                    ? 'background: #eff6ff; border: 1px dashed #93c5fd;'
-                                    : 'background: #f1f5f9; border: 1px solid #cbd5e1;'
+                                    ? 'background: #eff6ff; border: 1px solid #93c5fd;'
+                                    : 'background: #f8fafc; border: 1px solid #cbd5e1;'
                                 }"
                                 title={
-                                  punch.type === 'E' && punch.isUsedEntry
-                                    ? 'Entrada tomada para el cálculo del turno'
-                                    : punch.type === 'S' && punch.isUsedExit
-                                    ? 'Salida tomada para el cálculo del turno'
-                                    : punch.type === 'O'
-                                    ? 'Marcaje tipo Otros (cambie a E o S si desea tomarlo)'
-                                    : 'Marcaje no cotejado'
+                                  punch.isActivePairEntry
+                                    ? 'Entrada tomada para el cálculo del turno del día seleccionado'
+                                    : punch.isActivePairExit
+                                    ? 'Salida tomada para el cálculo del turno del día seleccionado'
+                                    : punch.type === 'E'
+                                    ? 'Entrada registrada'
+                                    : punch.type === 'S'
+                                    ? 'Salida registrada'
+                                    : 'Marcaje tipo Otros'
                                 }
                               >
                                 <!-- Hora del marcaje -->
                                 <span
                                   style="font-size: 11.5px; font-weight: 900; {
-                                    (punch.type === 'E' && punch.isUsedEntry) || (punch.type === 'S' && punch.isUsedExit)
+                                    punch.isActivePairEntry || punch.isActivePairExit
                                       ? 'color: #ffffff;'
                                       : punch.type === 'E'
                                       ? 'color: #166534;'
                                       : punch.type === 'S'
                                       ? 'color: #1e40af;'
-                                      : 'color: #334155;'
+                                      : 'color: #475569;'
                                   }"
                                 >
                                   {punch.time}
@@ -826,9 +836,9 @@
                                   value={punch.type}
                                   on:change={(e) => handleLocalPunchChange(punch, e.target.value)}
                                   style="cursor: pointer; font-size: 10px; font-weight: 900; border-radius: 4px; padding: 1px 3px; outline: none; margin-left: 2px; {
-                                    punch.type === 'E' && punch.isUsedEntry
+                                    punch.isActivePairEntry
                                       ? 'background: #ffffff; color: #15803d; border: 1.5px solid #14532d;'
-                                      : punch.type === 'S' && punch.isUsedExit
+                                      : punch.isActivePairExit
                                       ? 'background: #ffffff; color: #1d4ed8; border: 1.5px solid #1e3a8a;'
                                       : punch.type === 'E'
                                       ? 'background: #ffffff; color: #166534; border: 1px solid #86efac;'
