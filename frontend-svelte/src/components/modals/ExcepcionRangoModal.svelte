@@ -11,7 +11,7 @@
 
   const dispatch = createEventDispatcher();
 
-  let selectedValue = 'BASE_L';
+  let selectedValue = '';
   let fechaDesde = '';
   let fechaHasta = '';
   let isSaving = false;
@@ -28,6 +28,13 @@
     const salaExcs = plantillasSala.filter(p => p.tipo === 'plantilla' && p.codigo !== 'L' && p.codigo !== 'U');
     if (salaExcs.length > 0) {
       plantillasExcepcion = salaExcs;
+      ensureSelectedValue();
+    }
+  }
+
+  function ensureSelectedValue() {
+    if ((!selectedValue || selectedValue === 'BASE_L') && plantillasExcepcion.length > 0) {
+      selectedValue = `PLANTILLA_${plantillasExcepcion[0].id}`;
     }
   }
 
@@ -49,10 +56,7 @@
       fechaHasta = new Date().toISOString().slice(0, 10);
     }
 
-    // Valor predeterminado
-    if (!selectedValue) {
-      selectedValue = 'BASE_L';
-    }
+    ensureSelectedValue();
   }
 
   async function fetchExceptions() {
@@ -64,6 +68,7 @@
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data)) {
         plantillasExcepcion = json.data.filter(p => p.codigo !== 'L' && p.codigo !== 'U');
+        ensureSelectedValue();
       }
     } catch (err) {
       console.error("Error loading room exceptions:", err);
@@ -114,6 +119,11 @@
       let plantillaId = null;
       if (selectedValue && selectedValue.startsWith('PLANTILLA_')) {
         plantillaId = Number(selectedValue.replace('PLANTILLA_', ''));
+      }
+
+      if (!plantillaId) {
+        triggerToast('Por favor selecciona una excepción de la lista.', 'warning');
+        return;
       }
 
       const payload = {
@@ -259,15 +269,15 @@
             bind:value={selectedValue}
             class="form-select"
           >
-            <!-- Opción Libre -->
-            <option value="BASE_L">[L] Libre</option>
-
-            <!-- Excepciones de la Sala del Empleado -->
-            {#each plantillasExcepcion as p}
-              <option value="PLANTILLA_{p.id}">
-                [{p.codigo}] {p.nombre}
-              </option>
-            {/each}
+            {#if plantillasExcepcion.length === 0}
+              <option value="" disabled>Cargando excepciones de la sala...</option>
+            {:else}
+              {#each plantillasExcepcion as p}
+                <option value="PLANTILLA_{p.id}">
+                  [{p.codigo}] {p.nombre}
+                </option>
+              {/each}
+            {/if}
           </select>
           <span class="form-hint">
             {#if loadingExceptions}
