@@ -15,12 +15,20 @@
   let fechaDesde = '';
   let fechaHasta = '';
   let isSaving = false;
+  let loadingExceptions = false;
 
-  let horariosEmpleado = [];
   let plantillasExcepcion = [];
 
   $: if (show && empleado) {
     initData();
+    fetchExceptions();
+  }
+
+  $: if (plantillasSala && plantillasSala.length > 0) {
+    const salaExcs = plantillasSala.filter(p => p.tipo === 'plantilla' && p.codigo !== 'L' && p.codigo !== 'U');
+    if (salaExcs.length > 0) {
+      plantillasExcepcion = salaExcs;
+    }
   }
 
   function initData() {
@@ -41,32 +49,26 @@
       fechaHasta = new Date().toISOString().slice(0, 10);
     }
 
-    // 2. Horarios asignados al empleado
-    const assignedMap = new Map();
-    (empleado?.horarios_asignados || []).forEach(h => {
-      if (h && h.id) assignedMap.set(Number(h.id), h);
-    });
-
-    if (assignedMap.size > 0) {
-      const foundInSala = (plantillasSala || []).filter(p => p.tipo === 'horario' && assignedMap.has(Number(p.id)));
-      const foundIds = new Set(foundInSala.map(p => Number(p.id)));
-      const missingFromSala = [];
-      assignedMap.forEach((h, id) => {
-        if (!foundIds.has(id) && (h.tipo === 'horario' || (!h.tipo && h.hora_entrada))) {
-          missingFromSala.push(h);
-        }
-      });
-      horariosEmpleado = [...foundInSala, ...missingFromSala];
-    } else {
-      horariosEmpleado = [];
-    }
-
-    // 3. Plantillas de excepción
-    plantillasExcepcion = (plantillasSala || []).filter(p => p.tipo === 'plantilla' && p.codigo !== 'L' && p.codigo !== 'U');
-
     // Valor predeterminado
     if (!selectedValue) {
       selectedValue = 'BASE_L';
+    }
+  }
+
+  async function fetchExceptions() {
+    const sId = empleado?.sala_id;
+    if (!sId) return;
+    loadingExceptions = true;
+    try {
+      const res = await fetch(`/api/master/plantillas-horarios?sala_ids=${sId}&tipo=plantilla&limit=1000`);
+      const json = await res.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        plantillasExcepcion = json.data.filter(p => p.codigo !== 'L' && p.codigo !== 'U');
+      }
+    } catch (err) {
+      console.error("Error loading room exceptions:", err);
+    } finally {
+      loadingExceptions = false;
     }
   }
 
@@ -250,42 +252,29 @@
         <!-- 1. Selección de la Excepción u Horario -->
         <div class="form-group">
           <label for="select-rango-excepcion" class="form-label">
-            Seleccionar Excepción o Horario a Asignar:
+            Seleccionar Excepción a Asignar:
           </label>
           <select 
             id="select-rango-excepcion"
             bind:value={selectedValue}
             class="form-select"
           >
-            <!-- Optgroup 1: Base -->
-            <optgroup label="⚙️ Plantillas Base del Sistema">
-              <option value="BASE_L">[L] Libre</option>
-            </optgroup>
+            <!-- Opción Libre -->
+            <option value="BASE_L">[L] Libre</option>
 
-            <!-- Optgroup 2: Horarios Asignados al Empleado -->
-            {#if horariosEmpleado.length > 0}
-              <optgroup label="⏰ Horarios Asignados al Empleado">
-                {#each horariosEmpleado as p}
-                  <option value="PLANTILLA_{p.id}">
-                    [{p.codigo}] {p.nombre} {getHorasFormat(p)}
-                  </option>
-                {/each}
-              </optgroup>
-            {/if}
-
-            <!-- Optgroup 3: Plantillas Tipo Excepción -->
-            {#if plantillasExcepcion.length > 0}
-              <optgroup label="📋 Plantillas Tipo Excepción (Falta, Permiso, Reposo, Vacaciones, etc.)">
-                {#each plantillasExcepcion as p}
-                  <option value="PLANTILLA_{p.id}">
-                    [{p.codigo}] {p.nombre}
-                  </option>
-                {/each}
-              </optgroup>
-            {/if}
+            <!-- Excepciones de la Sala del Empleado -->
+            {#each plantillasExcepcion as p}
+              <option value="PLANTILLA_{p.id}">
+                [{p.codigo}] {p.nombre}
+              </option>
+            {/each}
           </select>
           <span class="form-hint">
-            Esta excepción se establecerá para cada uno de los días del rango seleccionado.
+            {#if loadingExceptions}
+              Cargando excepciones de la sala...
+            {:else}
+              Esta excepción se establecerá para cada uno de los días del rango seleccionado.
+            {/if}
           </span>
         </div>
 

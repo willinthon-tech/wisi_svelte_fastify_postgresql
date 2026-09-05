@@ -317,11 +317,7 @@
   $: totalFilters =
     ((searchQuery || "").trim() ? 1 : 0) +
     selectedSalas.length +
-    selectedDepartamentos.length +
-    selectedAreas.length +
-    selectedCargos.length +
-    selectedSexo.length +
-    selectedDispositivoIds.length;
+    selectedDepartamentos.length;
 
   function clearAllFilters() {
     searchQuery = "";
@@ -340,16 +336,8 @@
       searchQuery = '';
     } else if (type === 'sala') {
       selectedSalas = selectedSalas.filter(x => x !== val && String(x) !== String(val));
-    } else if (type === 'dispositivo') {
-      selectedDispositivoIds = selectedDispositivoIds.filter(x => x !== val && String(x) !== String(val));
     } else if (type === 'departamento') {
       selectedDepartamentos = selectedDepartamentos.filter(x => x !== val && String(x) !== String(val));
-    } else if (type === 'area') {
-      selectedAreas = selectedAreas.filter(x => x !== val && String(x) !== String(val));
-    } else if (type === 'cargo') {
-      selectedCargos = selectedCargos.filter(x => x !== val && String(x) !== String(val));
-    } else if (type === 'sexo') {
-      selectedSexo = selectedSexo.filter(x => x !== val && String(x) !== String(val));
     }
     currentPage = 1;
   }
@@ -363,24 +351,9 @@
       const found = (filterOptions.salas || []).find(s => s.id === id || String(s.id) === String(id));
       chips.push({ type: 'sala', val: id, label: found ? found.nombre : `Sala #${id}`, category: 'Sala' });
     });
-    (selectedDispositivoIds || []).forEach(id => {
-      const found = (dispositivos || []).find(d => d.id === id || String(d.id) === String(id));
-      chips.push({ type: 'dispositivo', val: id, label: found ? (found.nombre || found.alias || `Dispositivo #${id}`) : `Disp #${id}`, category: 'Dispositivo' });
-    });
     (selectedDepartamentos || []).forEach(id => {
       const found = (filterOptions.departamentos || []).find(d => d.id === id || String(d.id) === String(id));
       chips.push({ type: 'departamento', val: id, label: found ? found.nombre : `Depto #${id}`, category: 'Depto' });
-    });
-    (selectedAreas || []).forEach(id => {
-      const found = (filterOptions.areas || []).find(a => a.id === id || String(a.id) === String(id));
-      chips.push({ type: 'area', val: id, label: found ? found.nombre : `Área #${id}`, category: 'Área' });
-    });
-    (selectedCargos || []).forEach(id => {
-      const found = (filterOptions.cargos || []).find(c => c.id === id || String(c.id) === String(id));
-      chips.push({ type: 'cargo', val: id, label: found ? found.nombre : `Cargo #${id}`, category: 'Cargo' });
-    });
-    (selectedSexo || []).forEach(s => {
-      chips.push({ type: 'sexo', val: s, label: s, category: 'Sexo' });
     });
     return chips;
   })();
@@ -777,20 +750,6 @@
         />
       </div>
 
-      <div class="date-control-item date-filter-multiselect">
-        <SmartMultiSelect
-          id="filter-reportes-dispositivos"
-          label="Dispositivos"
-          options={preparedDispositivos}
-          groupBy="sala_nombre"
-          bind:selectedValues={selectedDispositivoIds}
-          on:change={(e) => {
-            selectedDispositivoIds = e.detail;
-            currentPage = 1;
-          }}
-        />
-      </div>
-
       <!-- Zoom Controller Widget placed next to Buscar Marcajes button -->
       <div class="toolbar-zoom-widget">
         <div class="zoom-btn-group">
@@ -831,7 +790,7 @@
       </div>
     </div>
 
-    <!-- Row 2: Smart MultiSelect Filters (Salas, Departamento, Área, Cargo, Sexo) -->
+    <!-- Row 2: Smart MultiSelect Filters (Salas, Departamento) -->
     <div class="smart-filters-grid">
       <SmartMultiSelect
         id="filter-reportes-salas"
@@ -852,43 +811,6 @@
         bind:selectedValues={selectedDepartamentos}
         on:change={(e) => {
           selectedDepartamentos = e.detail;
-          currentPage = 1;
-        }}
-      />
-
-      <SmartMultiSelect
-        id="filter-reportes-areas"
-        label="Área"
-        options={filterOptions.areas}
-        groupParentBy="sala_nombre"
-        groupBy="departamento_nombre"
-        bind:selectedValues={selectedAreas}
-        on:change={(e) => {
-          selectedAreas = e.detail;
-          currentPage = 1;
-        }}
-      />
-
-      <SmartMultiSelect
-        id="filter-reportes-cargos"
-        label="Cargo"
-        options={preparedCargos}
-        groupParentBy="sala_nombre"
-        groupBy="subgroup_label"
-        bind:selectedValues={selectedCargos}
-        on:change={(e) => {
-          selectedCargos = e.detail;
-          currentPage = 1;
-        }}
-      />
-
-      <SmartMultiSelect
-        id="filter-reportes-sexo"
-        label="Sexo"
-        options={filterOptions.sexo}
-        bind:selectedValues={selectedSexo}
-        on:change={(e) => {
-          selectedSexo = e.detail;
           currentPage = 1;
         }}
       />
