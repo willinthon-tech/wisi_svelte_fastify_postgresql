@@ -1180,7 +1180,6 @@
   on:close={() => { showGenerarCorteModal = false; }}
   on:saved={() => {
     showGenerarCorteModal = false;
-    navigateToRoute("rrhh/cortes");
   }}
 />
 

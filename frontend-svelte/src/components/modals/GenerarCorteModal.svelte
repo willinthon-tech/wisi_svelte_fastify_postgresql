@@ -13,7 +13,8 @@
   const dispatch = createEventDispatcher();
 
   let salaId = selectedSalaId;
-  let isSaving = false;
+  let savingType = null; // 'guardar' | 'no_guardar' | null
+  $: isSaving = savingType !== null;
 
   $: if (isOpen) {
     salaId = selectedSalaId || (salas && salas.length > 0 ? salas[0].id : null);
@@ -23,13 +24,13 @@
     salaId = e.target.value;
   }
 
-  async function handleConfirm() {
+  async function handleGenerar(guardarVisible) {
     if (!fechaDesde || !fechaHasta) {
       triggerToast('Fechas no válidas para el corte', 'warning');
       return;
     }
 
-    isSaving = true;
+    savingType = guardarVisible ? 'guardar' : 'no_guardar';
     try {
       const salaObj = (salas || []).find(s => Number(s.id) === Number(salaId));
       const salaNombre = salaObj ? (salaObj.nombre_comercial || salaObj.nombre) : null;
@@ -40,7 +41,8 @@
         fecha_desde: fechaDesde,
         fecha_hasta: fechaHasta,
         total_empleados: totalEmpleados || 0,
-        data: payloadData || {}
+        data: payloadData || {},
+        visible: Boolean(guardarVisible)
       };
 
       const res = await fetch('/api/master/cortes', {
@@ -63,17 +65,42 @@
       }
 
       if (res.ok && json && json.success) {
-        triggerToast('🎉 Corte generado y guardado en el histórico exitosamente', 'success');
-        dispatch('saved', { corte: json.data });
+        const corteId = json.data?.id;
+        if (!guardarVisible) {
+          // Copiar enlace al portapapeles automáticamente
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          const shareUrl = `${origin}/#/reportes/rrhh/corte/${corteId}`;
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(shareUrl);
+            } else {
+              const input = document.createElement('input');
+              input.value = shareUrl;
+              document.body.appendChild(input);
+              input.select();
+              document.execCommand('copy');
+              document.body.removeChild(input);
+            }
+            triggerToast('🎉 Corte generado y enlace copiado al portapapeles', 'success');
+          } catch (errCopy) {
+            console.error('Error al copiar enlace:', errCopy);
+            prompt('Copia el siguiente enlace del reporte público:', shareUrl);
+            triggerToast('🎉 Corte generado exitosamente', 'success');
+          }
+        } else {
+          triggerToast('🎉 Corte generado y guardado en el histórico exitosamente', 'success');
+        }
+
+        dispatch('saved', { corte: json.data, visible: guardarVisible });
         dispatch('close');
       } else {
-        triggerToast(json?.error || `Error (${res.status}) al guardar el corte histórico`, 'error');
+        triggerToast(json?.error || `Error (${res.status}) al procesar el corte`, 'error');
       }
     } catch (err) {
       console.error('Error al generar corte:', err);
       triggerToast('Error de red o conexión al generar el corte', 'error');
     } finally {
-      isSaving = false;
+      savingType = null;
     }
   }
 
@@ -90,14 +117,13 @@
 </script>
 
 {#if isOpen}
-  <!-- Backdrop -->
+  <!-- Backdrop (sin cerrar al hacer click afuera) -->
   <div
     class="modal-backdrop"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
     on:keydown={handleKeydown}
-    on:click={handleCancel}
   >
     <div
       class="modal-card"
@@ -154,32 +180,42 @@
           </div>
           <div class="info-item">
             <span class="info-dot"></span>
-            <span><strong>Estado:</strong> Se creará una captura inmutable accesible desde <code class="route-code">/rrhh/cortes</code></span>
+            <span><strong>Opciones:</strong> Guardar en el listado de <code class="route-code">/rrhh/cortes</code> o solo generar enlace público para compartir</span>
           </div>
         </div>
       </div>
 
-      <!-- Footer Actions -->
+      <!-- Footer Actions: 2 botones (col-6 y col-6) -->
       <div class="modal-footer">
         <button
           type="button"
-          class="btn-cancel"
-          on:click={handleCancel}
+          class="btn-action btn-no-guardar"
+          on:click={() => handleGenerar(false)}
           disabled={isSaving}
+          title="Genera el corte inmutable con enlace público copiado al portapapeles, pero sin mostrarlo en el listado de cortes"
         >
-          Cancelar
+          {#if savingType === 'no_guardar'}
+            <span class="spinner-dot spinner-indigo"></span>
+            <span>Generando...</span>
+          {:else}
+            <span class="btn-icon">🔗</span>
+            <span>Generar y no guardar</span>
+          {/if}
         </button>
 
         <button
           type="button"
-          class="btn-confirm"
-          on:click={handleConfirm}
+          class="btn-action btn-guardar"
+          on:click={() => handleGenerar(true)}
           disabled={isSaving}
+          title="Genera y guarda el corte para que aparezca en el listado general de cortes históricos"
         >
-          {#if isSaving}
-            <span class="spinner-dot"></span> Guardando Histórico...
+          {#if savingType === 'guardar'}
+            <span class="spinner-dot"></span>
+            <span>Guardando...</span>
           {:else}
-            <span>💾 Confirmar y Guardar Corte</span>
+            <span class="btn-icon">💾</span>
+            <span>Generar y guardar</span>
           {/if}
         </button>
       </div>
@@ -214,7 +250,7 @@
     background: #ffffff;
     border-radius: 16px;
     width: 100%;
-    max-width: 540px;
+    max-width: 550px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     display: flex;
@@ -304,7 +340,6 @@
     letter-spacing: 0.3px;
   }
 
-  .text-input,
   .select-input {
     width: 100%;
     padding: 10px 14px;
@@ -318,7 +353,6 @@
     transition: border-color 0.15s;
   }
 
-  .text-input:focus,
   .select-input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
@@ -383,57 +417,67 @@
   }
 
   .modal-footer {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 12px;
-    padding: 14px 20px;
+    padding: 16px 20px;
     background: #f8fafc;
     border-top: 1px solid #e2e8f0;
+    box-sizing: border-box;
   }
 
-  .btn-cancel {
-    padding: 9px 18px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #475569;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-cancel:hover:not(:disabled) {
-    background: #f1f5f9;
-    color: #0f172a;
-  }
-
-  .btn-confirm {
-    padding: 9px 20px;
-    font-size: 13px;
-    font-weight: 800;
-    color: #ffffff;
-    background: #16a34a;
-    border: 1px solid #15803d;
-    border-radius: 8px;
-    cursor: pointer;
+  .btn-action {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
-    box-shadow: 0 2px 4px rgba(22, 163, 74, 0.2);
-    transition: all 0.15s;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
+    box-sizing: border-box;
+    text-align: center;
+    width: 100%;
   }
 
-  .btn-confirm:hover:not(:disabled) {
-    background: #15803d;
-    box-shadow: 0 4px 6px rgba(22, 163, 74, 0.3);
-  }
-
-  .btn-confirm:disabled,
-  .btn-cancel:disabled {
+  .btn-action:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .btn-no-guardar {
+    background: #eef2ff;
+    color: #4338ca;
+    border: 1.5px solid #818cf8;
+    box-shadow: 0 1px 3px rgba(99, 102, 241, 0.12);
+  }
+
+  .btn-no-guardar:hover:not(:disabled) {
+    background: #e0e7ff;
+    color: #3730a3;
+    border-color: #6366f1;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(99, 102, 241, 0.2);
+  }
+
+  .btn-guardar {
+    background: #16a34a;
+    color: #ffffff;
+    border: 1.5px solid #15803d;
+    box-shadow: 0 2px 4px rgba(22, 163, 74, 0.25);
+  }
+
+  .btn-guardar:hover:not(:disabled) {
+    background: #15803d;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(22, 163, 74, 0.35);
+  }
+
+  .btn-icon {
+    font-size: 15px;
   }
 
   .spinner-dot {
@@ -444,6 +488,11 @@
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
     display: inline-block;
+  }
+
+  .spinner-indigo {
+    border-color: #4338ca;
+    border-top-color: transparent;
   }
 
   @keyframes spin {

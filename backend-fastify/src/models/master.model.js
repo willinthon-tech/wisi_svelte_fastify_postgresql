@@ -4427,7 +4427,8 @@ export async function getCortesModel(options = {}) {
 
   if (isPgConnected && sql) {
     try {
-      const conds = [];
+      // Filtrar solo cortes con visible = TRUE (o NULL como TRUE para compatibilidad)
+      conds.push(sql`COALESCE(visible, TRUE) = TRUE`);
 
       if (options.userSalaIds && options.userSalaIds.length > 0) {
         conds.push(sql`sala_id = ANY(${options.userSalaIds})`);
@@ -4479,7 +4480,7 @@ export async function getCortesModel(options = {}) {
   }
 
   // Fallback in-memory
-  let items = [...(inMemoryData.cortes || [])];
+  let items = [...(inMemoryData.cortes || [])].filter(c => c.visible !== false && c.visible !== 0);
   if (options.userSalaIds && options.userSalaIds.length > 0) {
     items = items.filter(c => c.sala_id && options.userSalaIds.map(Number).includes(Number(c.sala_id)));
   }
@@ -4554,6 +4555,7 @@ export async function createCorteModel(payload = {}) {
     data
   } = payload;
 
+  const isVisible = (payload.visible === false || payload.visible === 0 || payload.visible === '0' || payload.visible === 'false') ? false : true;
   const jsonStr = typeof data === 'string' ? data : JSON.stringify(data || {});
 
   if (isPgConnected && sql) {
@@ -4565,16 +4567,18 @@ export async function createCorteModel(payload = {}) {
           fecha_desde, 
           fecha_hasta, 
           total_empleados, 
-          data
+          data,
+          visible
         ) VALUES (
           ${sala_id ? Number(sala_id) : null},
           ${sala_nombre || null},
           ${fecha_desde},
           ${fecha_hasta},
           ${total_empleados ? Number(total_empleados) : 0},
-          CAST(${jsonStr} AS JSONB)
+          CAST(${jsonStr} AS JSONB),
+          ${isVisible}
         )
-        RETURNING id, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at
+        RETURNING id, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, visible, created_at, updated_at
       `;
 
       if (rows && rows.length > 0) {
@@ -4604,6 +4608,7 @@ export async function createCorteModel(payload = {}) {
     fecha_hasta,
     total_empleados: total_empleados ? Number(total_empleados) : 0,
     data,
+    visible: isVisible,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };

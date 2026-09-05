@@ -634,10 +634,15 @@ export async function initDb() {
         fecha_hasta DATE NOT NULL,
         total_empleados INT DEFAULT 0,
         data JSONB,
+        visible BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    await sql`
+      ALTER TABLE cortes ADD COLUMN IF NOT EXISTS visible BOOLEAN DEFAULT TRUE;
+    `.catch(() => {});
 
     await sql`
       ALTER TABLE cortes DROP COLUMN IF EXISTS titulo;
