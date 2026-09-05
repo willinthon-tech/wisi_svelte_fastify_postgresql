@@ -567,10 +567,10 @@
     <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 580px; overflow: hidden; border: 1px solid #e2e8f0;">
       
       <!-- Header -->
-      <div style="padding: 14px 20px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="padding: 12px 18px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
           <!-- Foto Ligera del Empleado con Fallback de Inicial -->
-          <div style="width: 42px; height: 42px; border-radius: 50%; overflow: hidden; border: 2px solid #3b82f6; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.12); position: relative;">
+          <div style="width: 46px; height: 46px; border-radius: 50%; overflow: hidden; border: 2px solid #3b82f6; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.12); position: relative;">
             {#if getFotoUrl(empleado)}
               <img
                 src={getFotoUrl(empleado)}
@@ -591,29 +591,49 @@
               </div>
             {/if}
           </div>
-          <div>
-            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <h3 style="margin: 0; font-size: 14px; font-weight: 800; color: #0f172a;">
-                Excepción Especial de Horario
-              </h3>
-              <!-- Fecha en curso destacada en grande para máxima visibilidad -->
-              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 6px; background: #eff6ff; border: 1.5px solid #3b82f6; color: #1d4ed8; font-size: 13.5px; font-weight: 900; letter-spacing: 0.5px; box-shadow: 0 1px 2px rgba(59, 130, 246, 0.15);">
-                📅 {dia?.fechaStr || ''}
-              </span>
+
+          <!-- Información del Empleado apilada: Nombre arriba, Cédula abajo, Sala abajo, Cargo abajo -->
+          <div style="display: flex; flex-direction: column; gap: 1.5px; min-width: 0;">
+            <!-- 1. Nombre arriba -->
+            <h3 style="margin: 0; font-size: 13.5px; font-weight: 900; color: #0f172a; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title={empleado?.nombre || ''}>
+              {empleado?.nombre || 'Empleado'}
+            </h3>
+            
+            <!-- 2. Abajo la cédula -->
+            <div style="font-size: 11px; font-weight: 700; color: #475569; line-height: 1.2;">
+              {empleado?.cedula || (empleado?.id ? `ID: #${empleado.id}` : '')}
             </div>
-            <p style="margin: 3px 0 0 0; font-size: 11.5px; font-weight: 600; color: #475569;">
-              {empleado?.nombre || 'Empleado'} {empleado?.cedula ? `• ${empleado.cedula}` : ''}
-            </p>
+
+            <!-- 3. Abajo la sala -->
+            <div style="font-size: 10.5px; font-weight: 700; color: #64748b; line-height: 1.2;">
+              Sala: <span style="color: #1e293b; font-weight: 800;">{empleado?.sala_nombre || (plantillasSala && plantillasSala[0]?.sala_nombre) || 'Principal'}</span>
+            </div>
+
+            <!-- 4. Abajo el cargo -->
+            <div style="font-size: 10.5px; font-weight: 700; color: #64748b; line-height: 1.2;">
+              Cargo: <span style="color: #1e293b; font-weight: 800;">{empleado?.cargo_nombre || 'Sin Cargo'}</span>
+            </div>
           </div>
         </div>
 
-        <button 
-          on:click={closeModal} 
-          type="button" 
-          style="background: transparent; border: none; font-size: 18px; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 4px; line-height: 1;"
-        >
-          &times;
-        </button>
+        <!-- Derecha (otra esquina): Fecha y botón cerrar -->
+        <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+          <!-- 5. Fecha del otro lado en la otra esquina -->
+          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 7px; background: #eff6ff; border: 1.5px solid #3b82f6; color: #1d4ed8; font-size: 13px; font-weight: 900; letter-spacing: 0.5px; box-shadow: 0 1px 3px rgba(59, 130, 246, 0.15);">
+            📅 {dia?.fechaStr || ''}
+          </span>
+
+          <button 
+            on:click={closeModal} 
+            type="button" 
+            style="background: transparent; border: none; font-size: 20px; color: #94a3b8; cursor: pointer; padding: 4px 6px; border-radius: 4px; line-height: 1; transition: color 0.15s ease;"
+            on:mouseenter={(e) => e.currentTarget.style.color = '#0f172a'}
+            on:mouseleave={(e) => e.currentTarget.style.color = '#94a3b8'}
+            title="Cerrar (Esc)"
+          >
+            &times;
+          </button>
+        </div>
       </div>
 
       <!-- Body -->
