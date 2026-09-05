@@ -1748,16 +1748,39 @@ export async function syncAttlogsModel(data) {
       if (!log.employee_no || !log.event_time) continue;
       const verifyMode = log.currentVerifyMode || log.currentverifymode || log.verifyMode || log.verifymode || null;
       const hasPhoto = Boolean(log.foto_base64 && String(log.foto_base64).trim().length > 0);
-      const rows = await sql`
-        INSERT INTO attlogs (dispositivo_id, employee_no, event_time, nombre, attendancestatus, currentverifymode, has_photo)
-        VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}, ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode}, ${hasPhoto})
-        ON CONFLICT (dispositivo_id, employee_no, event_time)
-        DO UPDATE SET updated_at = CURRENT_TIMESTAMP,
-                      currentverifymode = COALESCE(EXCLUDED.currentverifymode, attlogs.currentverifymode),
-                      has_photo = CASE WHEN EXCLUDED.has_photo = TRUE THEN TRUE ELSE attlogs.has_photo END
-        RETURNING id
+      const normEmp = String(log.employee_no).trim().toUpperCase().replace(/V|-/g, '');
+
+      // 1. Evitar crear marcaje duplicado si ya existe un evento para el mismo empleado en el mismo segundo
+      const existingAtt = await sql`
+        SELECT id, has_photo FROM attlogs
+        WHERE REPLACE(REPLACE(UPPER(COALESCE(employee_no, '')), 'V', ''), '-', '') = ${normEmp}
+          AND event_time = ${log.event_time}::timestamp
+        LIMIT 1
       `;
-      const attlogId = rows[0]?.id;
+
+      let attlogId;
+      if (existingAtt.length > 0) {
+        attlogId = existingAtt[0].id;
+        await sql`
+          UPDATE attlogs
+          SET updated_at = CURRENT_TIMESTAMP,
+              currentverifymode = COALESCE(${verifyMode}, currentverifymode),
+              attendancestatus = COALESCE(${log.attendanceStatus || null}, attendancestatus),
+              has_photo = CASE WHEN ${hasPhoto} = TRUE THEN TRUE ELSE has_photo END
+          WHERE id = ${attlogId}
+        `;
+      } else {
+        const rows = await sql`
+          INSERT INTO attlogs (dispositivo_id, employee_no, event_time, nombre, attendancestatus, currentverifymode, has_photo)
+          VALUES (${Number(dispositivo_id)}, ${String(log.employee_no)}, ${log.event_time}, ${log.nombre || null}, ${log.attendanceStatus || null}, ${verifyMode}, ${hasPhoto})
+          ON CONFLICT (dispositivo_id, employee_no, event_time)
+          DO UPDATE SET updated_at = CURRENT_TIMESTAMP,
+                        currentverifymode = COALESCE(EXCLUDED.currentverifymode, attlogs.currentverifymode),
+                        has_photo = CASE WHEN EXCLUDED.has_photo = TRUE THEN TRUE ELSE attlogs.has_photo END
+          RETURNING id
+        `;
+        attlogId = rows[0]?.id;
+      }
       if (attlogId && log.foto_base64) {
         await saveAttlogPhoto(attlogId, log.foto_base64);
       }
@@ -3292,8 +3315,9 @@ export async function getEmpleadosModel(params = {}) {
 
 export async function checkEmpleadoCedulaModel(cedula, excludeId = null) {
   if (!isPgConnected || !sql || !cedula) return { exists: false };
-  const clean = String(cedula).trim().toUpperCase();
-  const cleanNum = clean.replace(/^[VE]/i, '');
+  const clean = String(cedula).trim();
+  const normCedula = clean.toUpperCase().replace(/V|-/g, '');
+  if (!normCedula) return { exists: false };
   const excId = excludeId ? Number(excludeId) : null;
 
   const rows = await sql`
@@ -3308,7 +3332,7 @@ export async function checkEmpleadoCedulaModel(cedula, excludeId = null) {
     LEFT JOIN areas a ON c.area_id = a.id
     LEFT JOIN departamentos d ON a.departamento_id = d.id
     LEFT JOIN salas s ON d.sala_id = s.id
-    WHERE (UPPER(e.cedula) = ${clean} OR e.cedula = ${cleanNum} OR e.cedula = ${'V' + cleanNum} OR e.cedula = ${'E' + cleanNum})
+    WHERE REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '') = ${normCedula}
       ${excId ? sql`AND e.id != ${excId}` : sql``}
     LIMIT 1
   `;
@@ -3340,6 +3364,19 @@ export async function getEmpleadoDispositivosModel(empleadoId) {
 
 export async function createEmpleadoModel(data) {
   if (isPgConnected && sql) {
+    if (data.cedula && String(data.cedula).trim()) {
+      const normCedula = String(data.cedula).trim().toUpperCase().replace(/V|-/g, '');
+      const existing = await sql`
+        SELECT id, nombre, cedula
+        FROM empleados
+        WHERE REPLACE(REPLACE(UPPER(COALESCE(cedula, '')), 'V', ''), '-', '') = ${normCedula}
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe un empleado registrado con la cédula ${data.cedula} (${existing[0].nombre})`);
+      }
+    }
+
     const nextIdRes = await sql`SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM empleados`;
     const nextId = Number(nextIdRes[0].next_id);
     const foto = data.foto || `/empleados/${nextId}.jpg`;
@@ -3399,6 +3436,22 @@ export async function updateEmpleadoModel(id, data) {
     if (currentRows.length === 0) throw new Error('Empleado no encontrado');
     const existing = currentRows[0];
 
+    // Validar cédula única si se está actualizando
+    const cedula = data.cedula !== undefined ? data.cedula : existing.cedula;
+    if (cedula && String(cedula).trim()) {
+      const normCedula = String(cedula).trim().toUpperCase().replace(/V|-/g, '');
+      const existingWithCedula = await sql`
+        SELECT id, nombre, cedula
+        FROM empleados
+        WHERE REPLACE(REPLACE(UPPER(COALESCE(cedula, '')), 'V', ''), '-', '') = ${normCedula}
+          AND id <> ${eId}
+        LIMIT 1
+      `;
+      if (existingWithCedula.length > 0) {
+        throw new Error(`Ya existe otro empleado registrado con la cédula ${cedula} (${existingWithCedula[0].nombre})`);
+      }
+    }
+
     // Guardar nueva foto en disco si viene en base64
     if (data.fotoBase64) {
       try {
@@ -3416,7 +3469,6 @@ export async function updateEmpleadoModel(id, data) {
 
     const foto = data.foto !== undefined ? data.foto : (data.fotoBase64 ? `/empleados/${eId}.jpg` : existing.foto);
     const nombre = data.nombre !== undefined ? data.nombre : existing.nombre;
-    const cedula = data.cedula !== undefined ? data.cedula : existing.cedula;
     const rawIngreso = data.fecha_ingreso !== undefined ? data.fecha_ingreso : existing.fecha_ingreso;
     const fecha_ingreso = rawIngreso ? String(rawIngreso).split('T')[0] : null;
     const rawNac = data.fecha_nacimiento !== undefined ? data.fecha_nacimiento : existing.fecha_nacimiento;

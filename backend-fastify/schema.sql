@@ -108,6 +108,11 @@ CREATE INDEX IF NOT EXISTS idx_attlogs_dispositivo ON attlogs(dispositivo_id);
 CREATE INDEX IF NOT EXISTS idx_attlogs_employee ON attlogs(employee_no);
 CREATE INDEX IF NOT EXISTS idx_attlogs_event_time ON attlogs(event_time);
 
+-- Restricción única de cédula para prevenir empleados duplicados
+CREATE UNIQUE INDEX IF NOT EXISTS uq_empleados_norm_cedula
+ON empleados (REPLACE(REPLACE(UPPER(COALESCE(cedula, '')), 'V', ''), '-', ''))
+WHERE NULLIF(TRIM(cedula), '') IS NOT NULL;
+
 -- Seed Data Inicial
 
 -- Insertar Grupos de Salas (Tipo de Instalación: SALA o GALPÓN)
