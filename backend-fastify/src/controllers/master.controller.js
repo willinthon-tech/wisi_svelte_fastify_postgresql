@@ -382,7 +382,17 @@ export async function getLatestAttlogs(request, reply) {
 
     const attlogs = await getLatestAttlogsModel(limit, offset, salaIds, search, sortBy, sortDir, filterOpts);
     const total = await getAttlogsCountModel(salaIds, search, filterOpts);
-    return reply.send({ success: true, data: attlogs, total, limit, offset });
+
+    // Strict uniqueness check on IDs
+    const seenIds = new Set();
+    const uniqueAttlogs = (attlogs || []).filter(item => {
+      if (!item || item.id === undefined || item.id === null) return false;
+      if (seenIds.has(item.id)) return false;
+      seenIds.add(item.id);
+      return true;
+    });
+
+    return reply.send({ success: true, data: uniqueAttlogs, total, limit, offset });
   } catch (err) {
     return reply.status(500).send({ success: false, error: err.message });
   }

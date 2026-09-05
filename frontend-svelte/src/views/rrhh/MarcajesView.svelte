@@ -333,9 +333,15 @@
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          attlogs = json.data;
+          const seen = new Set();
+          attlogs = json.data.filter(item => {
+            if (!item || item.id === undefined || item.id === null) return false;
+            if (seen.has(item.id)) return false;
+            seen.add(item.id);
+            return true;
+          });
           totalCount = json.total || 0;
-          attlogsPageCache.set(pageCacheKey, { data: json.data, total: json.total || 0 });
+          attlogsPageCache.set(pageCacheKey, { data: attlogs, total: totalCount });
         }
       }
     } catch (e) {

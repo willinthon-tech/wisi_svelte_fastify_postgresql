@@ -1125,7 +1125,7 @@ export async function getLatestAttlogsModel(
 
     const orderClause = sql.unsafe(`ORDER BY ${sortCol} ${orderDirection}, a.id DESC`);
 
-    return await sql`
+    const rows = await sql`
       SELECT a.id, a.attendancestatus, a.currentverifymode, a.employee_no, to_char(a.event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time,
              COALESCE(NULLIF(TRIM(e.nombre), ''), NULLIF(TRIM(a.nombre), ''), 'Empleado ' || a.employee_no) AS nombre,
              a.dispositivo_id, d.nombre AS dispositivo_nombre, d.sala_id, s.nombre AS sala_nombre,
@@ -1136,7 +1136,17 @@ export async function getLatestAttlogsModel(
              a.has_photo,
              (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
       FROM attlogs a
-      LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+      LEFT JOIN LATERAL (
+        SELECT e.id, e.cedula, e.nombre, e.foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento, e.cargo_id, e.activo
+        FROM empleados e
+        WHERE NULLIF(TRIM(a.employee_no), '') IS NOT NULL
+          AND (
+            REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+            OR a.employee_no = CAST(e.id AS TEXT)
+          )
+        ORDER BY e.activo DESC, e.id DESC
+        LIMIT 1
+      ) e ON TRUE
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas ar ON c.area_id = ar.id
       LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1146,10 +1156,29 @@ export async function getLatestAttlogsModel(
       ${orderClause}
       LIMIT ${numLimit} OFFSET ${numOffset}
     `;
+
+    // Deduplicate as defense in depth: guarantees strict ID uniqueness in backend output
+    const seenIds = new Set();
+    const uniqueRows = [];
+    for (const row of rows) {
+      if (!seenIds.has(row.id)) {
+        seenIds.add(row.id);
+        uniqueRows.push(row);
+      }
+    }
+    return uniqueRows;
   }
 
   let list = (inMemoryData.attlogs || []);
-  return list.slice(numOffset, numOffset + numLimit);
+  const seenIds = new Set();
+  const uniqueList = [];
+  for (const item of list) {
+    if (!seenIds.has(item.id)) {
+      seenIds.add(item.id);
+      uniqueList.push(item);
+    }
+  }
+  return uniqueList.slice(numOffset, numOffset + numLimit);
 }
 
 export async function getAttlogsCountModel(salaIds = null, search = '', filterOpts = {}) {
@@ -1165,11 +1194,21 @@ export async function getAttlogsCountModel(salaIds = null, search = '', filterOp
       : sql``;
 
     const res = await sql`
-      SELECT COUNT(*)::int AS total
+      SELECT COUNT(DISTINCT a.id)::int AS total
       FROM attlogs a
       LEFT JOIN dispositivos d ON a.dispositivo_id = d.id
       LEFT JOIN salas s ON d.sala_id = s.id
-      LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+      LEFT JOIN LATERAL (
+        SELECT e.id, e.cargo_id, e.activo, e.sexo
+        FROM empleados e
+        WHERE NULLIF(TRIM(a.employee_no), '') IS NOT NULL
+          AND (
+            REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+            OR a.employee_no = CAST(e.id AS TEXT)
+          )
+        ORDER BY e.activo DESC, e.id DESC
+        LIMIT 1
+      ) e ON TRUE
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas ar ON c.area_id = ar.id
       LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1183,6 +1222,20 @@ export async function getAttlogsCountModel(salaIds = null, search = '', filterOp
 
 export async function getAttlogsFilterOptionsModel(options = {}) {
   if (isPgConnected && sql) {
+    const lateralJoin = sql`
+      LEFT JOIN LATERAL (
+        SELECT e.id, e.cargo_id, e.activo, e.sexo
+        FROM empleados e
+        WHERE NULLIF(TRIM(a.employee_no), '') IS NOT NULL
+          AND (
+            REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+            OR a.employee_no = CAST(e.id AS TEXT)
+          )
+        ORDER BY e.activo DESC, e.id DESC
+        LIMIT 1
+      ) e ON TRUE
+    `;
+
     const [salasRes, devRes, estRes, vmRes, fotoRes, empStatusRes, sexoRes, depRes, areaRes, cargoRes] = await Promise.all([
       // 1. Salas Options: Always include all user's assigned salas, with dynamic matching count
       (async () => {
@@ -1197,11 +1250,11 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         }
 
         const countsRes = await sql`
-          SELECT s.id, COUNT(a.id)::int AS count
+          SELECT s.id, COUNT(DISTINCT a.id)::int AS count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           JOIN salas s ON d.sala_id = s.id
-          LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           LEFT JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1241,11 +1294,11 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         `;
 
         const countsRes = await sql`
-          SELECT d.id, COUNT(a.id)::int AS count
+          SELECT d.id, COUNT(DISTINCT a.id)::int AS count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           LEFT JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1271,13 +1324,13 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
-            SUM(CASE WHEN LOWER(a.attendancestatus) = 'checkin' THEN 1 ELSE 0 END)::int AS checkin_count,
-            SUM(CASE WHEN LOWER(a.attendancestatus) = 'checkout' THEN 1 ELSE 0 END)::int AS checkout_count,
-            SUM(CASE WHEN LOWER(COALESCE(a.attendancestatus, '')) NOT IN ('checkin', 'checkout') THEN 1 ELSE 0 END)::int AS undefined_count
+            COUNT(DISTINCT CASE WHEN LOWER(a.attendancestatus) = 'checkin' THEN a.id END)::int AS checkin_count,
+            COUNT(DISTINCT CASE WHEN LOWER(a.attendancestatus) = 'checkout' THEN a.id END)::int AS checkout_count,
+            COUNT(DISTINCT CASE WHEN LOWER(COALESCE(a.attendancestatus, '')) NOT IN ('checkin', 'checkout') THEN a.id END)::int AS undefined_count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           LEFT JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1298,21 +1351,21 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
-            SUM(CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) IN ('face', 'facial') THEN 1 ELSE 0 END)::int AS face_count,
-            SUM(CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) IN ('cardorface', 'faceorcard') THEN 1 ELSE 0 END)::int AS card_or_face_count,
-            SUM(CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) IN ('card', 'tarjeta', 'carnet') THEN 1 ELSE 0 END)::int AS card_count,
-            SUM(CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) LIKE '%finger%' OR LOWER(COALESCE(a.currentverifymode, '')) LIKE '%huella%' THEN 1 ELSE 0 END)::int AS finger_count,
-            SUM(CASE WHEN a.currentverifymode IS NULL OR (
+            COUNT(DISTINCT CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) IN ('face', 'facial') THEN a.id END)::int AS face_count,
+            COUNT(DISTINCT CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) IN ('cardorface', 'faceorcard') THEN a.id END)::int AS card_or_face_count,
+            COUNT(DISTINCT CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) IN ('card', 'tarjeta', 'carnet') THEN a.id END)::int AS card_count,
+            COUNT(DISTINCT CASE WHEN LOWER(COALESCE(a.currentverifymode, '')) LIKE '%finger%' OR LOWER(COALESCE(a.currentverifymode, '')) LIKE '%huella%' THEN a.id END)::int AS finger_count,
+            COUNT(DISTINCT CASE WHEN a.currentverifymode IS NULL OR (
               LOWER(COALESCE(a.currentverifymode, '')) NOT IN ('face', 'facial', 'card', 'tarjeta', 'carnet', 'cardorface', 'faceorcard') AND
               LOWER(COALESCE(a.currentverifymode, '')) NOT LIKE '%finger%' AND
               LOWER(COALESCE(a.currentverifymode, '')) NOT LIKE '%huella%' AND
               LOWER(COALESCE(a.currentverifymode, '')) NOT LIKE '%pw%' AND
               LOWER(COALESCE(a.currentverifymode, '')) NOT LIKE '%pass%'
-            ) THEN 1 ELSE 0 END)::int AS otros_count
+            ) THEN a.id END)::int AS otros_count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           LEFT JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1335,12 +1388,12 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
-            SUM(CASE WHEN a.has_photo = TRUE THEN 1 ELSE 0 END)::int AS con_foto_count,
-            SUM(CASE WHEN a.has_photo = FALSE OR a.has_photo IS NULL THEN 1 ELSE 0 END)::int AS sin_foto_count
+            COUNT(DISTINCT CASE WHEN a.has_photo = TRUE THEN a.id END)::int AS con_foto_count,
+            COUNT(DISTINCT CASE WHEN a.has_photo = FALSE OR a.has_photo IS NULL THEN a.id END)::int AS sin_foto_count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           LEFT JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1361,13 +1414,13 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
-            SUM(CASE WHEN e.activo = TRUE THEN 1 ELSE 0 END)::int AS activos_count,
-            SUM(CASE WHEN e.activo = FALSE THEN 1 ELSE 0 END)::int AS desincorporados_count,
-            SUM(CASE WHEN e.id IS NULL OR e.activo IS NULL THEN 1 ELSE 0 END)::int AS otros_count
+            COUNT(DISTINCT CASE WHEN e.activo = TRUE THEN a.id END)::int AS activos_count,
+            COUNT(DISTINCT CASE WHEN e.activo = FALSE THEN a.id END)::int AS desincorporados_count,
+            COUNT(DISTINCT CASE WHEN e.id IS NULL OR e.activo IS NULL THEN a.id END)::int AS otros_count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           LEFT JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1388,13 +1441,13 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
-            SUM(CASE WHEN LOWER(COALESCE(e.sexo, '')) IN ('f', 'femenino', 'mujer') THEN 1 ELSE 0 END)::int AS mujer_count,
-            SUM(CASE WHEN LOWER(COALESCE(e.sexo, '')) IN ('m', 'masculino', 'hombre') THEN 1 ELSE 0 END)::int AS hombre_count,
-            SUM(CASE WHEN e.id IS NULL OR e.sexo IS NULL OR LOWER(COALESCE(e.sexo, '')) NOT IN ('f', 'femenino', 'mujer', 'm', 'masculino', 'hombre') THEN 1 ELSE 0 END)::int AS otros_count
+            COUNT(DISTINCT CASE WHEN LOWER(COALESCE(e.sexo, '')) IN ('f', 'femenino', 'mujer') THEN a.id END)::int AS mujer_count,
+            COUNT(DISTINCT CASE WHEN LOWER(COALESCE(e.sexo, '')) IN ('m', 'masculino', 'hombre') THEN a.id END)::int AS hombre_count,
+            COUNT(DISTINCT CASE WHEN e.id IS NULL OR e.sexo IS NULL OR LOWER(COALESCE(e.sexo, '')) NOT IN ('f', 'femenino', 'mujer', 'm', 'masculino', 'hombre') THEN a.id END)::int AS otros_count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          LEFT JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           LEFT JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1418,11 +1471,11 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
             dep.id, 
             dep.nombre, 
             COALESCE(s_dep.nombre, s.nombre, 'Sin Sala') AS sala_nombre, 
-            COUNT(a.id)::int AS count
+            COUNT(DISTINCT a.id)::int AS count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           JOIN cargos c ON e.cargo_id = c.id
           JOIN areas ar ON c.area_id = ar.id
           JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1461,11 +1514,11 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
             ar.nombre, 
             COALESCE(dep.nombre, 'Sin Departamento') AS departamento_nombre, 
             COALESCE(s_dep.nombre, s.nombre, 'Sin Sala') AS sala_nombre,
-            COUNT(a.id)::int AS count
+            COUNT(DISTINCT a.id)::int AS count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           JOIN cargos c ON e.cargo_id = c.id
           JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1506,11 +1559,11 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
             COALESCE(ar.nombre, 'Sin Área') AS area_nombre, 
             COALESCE(dep.nombre, 'Sin Departamento') AS departamento_nombre,
             COALESCE(s_dep.nombre, s.nombre, 'Sin Sala') AS sala_nombre,
-            COUNT(a.id)::int AS count
+            COUNT(DISTINCT a.id)::int AS count
           FROM attlogs a
           JOIN dispositivos d ON a.dispositivo_id = d.id
           LEFT JOIN salas s ON d.sala_id = s.id
-          JOIN empleados e ON REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+          ${lateralJoin}
           JOIN cargos c ON e.cargo_id = c.id
           LEFT JOIN areas ar ON c.area_id = ar.id
           LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1649,7 +1702,17 @@ export async function getAttlogDetailModel(id) {
              e.sexo,
              (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
       FROM attlogs a
-      LEFT JOIN empleados e ON (a.employee_no = e.cedula OR a.employee_no = CAST(e.id AS TEXT) OR e.cedula = 'V' || a.employee_no OR e.cedula = REPLACE(a.employee_no, 'V', ''))
+      LEFT JOIN LATERAL (
+        SELECT e.id, e.cedula, e.nombre, e.foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento, e.cargo_id, e.activo
+        FROM empleados e
+        WHERE NULLIF(TRIM(a.employee_no), '') IS NOT NULL
+          AND (
+            REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+            OR a.employee_no = CAST(e.id AS TEXT)
+          )
+        ORDER BY e.activo DESC, e.id DESC
+        LIMIT 1
+      ) e ON TRUE
       LEFT JOIN cargos c ON e.cargo_id = c.id
       LEFT JOIN areas ar ON c.area_id = ar.id
       LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
@@ -1714,7 +1777,17 @@ export async function syncAttlogsModel(data) {
                    a.has_photo,
                    (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
             FROM attlogs a
-            LEFT JOIN empleados e ON (a.employee_no = e.cedula OR a.employee_no = CAST(e.id AS TEXT) OR e.cedula = 'V' || a.employee_no OR e.cedula = REPLACE(a.employee_no, 'V', ''))
+            LEFT JOIN LATERAL (
+              SELECT e.id, e.cedula, e.nombre, e.foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento, e.cargo_id, e.activo
+              FROM empleados e
+              WHERE NULLIF(TRIM(a.employee_no), '') IS NOT NULL
+                AND (
+                  REPLACE(REPLACE(UPPER(COALESCE(a.employee_no, '')), 'V', ''), '-', '') = REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '')
+                  OR a.employee_no = CAST(e.id AS TEXT)
+                )
+              ORDER BY e.activo DESC, e.id DESC
+              LIMIT 1
+            ) e ON TRUE
             LEFT JOIN cargos c ON e.cargo_id = c.id
             LEFT JOIN areas ar ON c.area_id = ar.id
             LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
