@@ -281,8 +281,33 @@ export async function getMarcajePersonalReportModel(params = {}) {
   maxDateEnd.setUTCDate(maxDateEnd.getUTCDate() + 1);
   const maxDateStr = `${maxDateEnd.toISOString().split('T')[0]} 23:59:59`;
 
-  // Match employee_no strictly with e.cedula as stored in PostgreSQL
-  const allCedulas = [...new Set(employees.map(e => String(e.cedula || '').trim()).filter(Boolean))];
+  // Match employee_no supporting all variations: cedula with 'V', without 'V', and employee id
+  const allCedulasSet = new Set();
+  const keyToEmpIdMap = new Map();
+
+  employees.forEach(e => {
+    if (e.id) {
+      const idStr = String(e.id);
+      allCedulasSet.add(idStr);
+      keyToEmpIdMap.set(idStr, e.id);
+    }
+    const rawCed = String(e.cedula || '').trim();
+    if (rawCed) {
+      allCedulasSet.add(rawCed);
+      keyToEmpIdMap.set(rawCed, e.id);
+
+      const cleanCed = rawCed.replace(/^V/i, '').trim();
+      if (cleanCed) {
+        allCedulasSet.add(cleanCed);
+        allCedulasSet.add(`V${cleanCed}`);
+        allCedulasSet.add(`v${cleanCed}`);
+        keyToEmpIdMap.set(cleanCed, e.id);
+        keyToEmpIdMap.set(`V${cleanCed}`.toUpperCase(), e.id);
+      }
+    }
+  });
+
+  const allCedulas = Array.from(allCedulasSet);
 
   let attlogWhere = [
     sql`employee_no = ANY(${allCedulas})`,
@@ -303,10 +328,14 @@ export async function getMarcajePersonalReportModel(params = {}) {
     ORDER BY event_time ASC
   `;
 
-  // Map attlogs by exact emp.cedula key and dateStr
+  // Map attlogs by employee ID and dateStr
   const logsByEmpAndDate = new Map();
   attlogs.forEach(log => {
     const rawEmpKey = String(log.employee_no || '').trim();
+    const cleanKey = rawEmpKey.replace(/^V/i, '').trim();
+    const empId = keyToEmpIdMap.get(rawEmpKey) || keyToEmpIdMap.get(cleanKey) || keyToEmpIdMap.get(`V${cleanKey}`.toUpperCase());
+    if (!empId) return;
+
     const parsed = parseAttlogTime(log.event_time);
     if (!parsed) return;
 
@@ -316,7 +345,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
     const isOtherFlag = !isCheckInFlag && !isCheckOutFlag;
     const type = isCheckInFlag ? 'E' : (isCheckOutFlag ? 'S' : 'O');
 
-    const fullKey = `${rawEmpKey}_${parsed.dateStr}`;
+    const fullKey = `${empId}_${parsed.dateStr}`;
     if (!logsByEmpAndDate.has(fullKey)) {
       logsByEmpAndDate.set(fullKey, []);
     }
@@ -351,17 +380,15 @@ export async function getMarcajePersonalReportModel(params = {}) {
 
   // 6. Multi-Pass Attendance Calculation Engine for Individual Employees
   const evaluateSingleEmployee = async (emp) => {
-    const empCedulaKey = String(emp.cedula || '').trim();
-
     // Get individual assigned shift plantillas for this employee
     const assignedPlantillas = empDirectPlantillasMap.get(emp.id) || [];
     const hasCustomHorario = assignedPlantillas.length > 0;
 
-    // Build raw punches list per day for this employee using exact e.cedula
+    // Build raw punches list per day for this employee using emp.id
     const empPunchesByDate = new Map();
     diasDelMes.forEach(diaObj => {
       const dateStr = diaObj.fechaStr;
-      const punchesToday = Array.from(logsByEmpAndDate.get(`${empCedulaKey}_${dateStr}`) || []);
+      const punchesToday = Array.from(logsByEmpAndDate.get(`${emp.id}_${dateStr}`) || []);
       punchesToday.sort((a, b) => a.timestamp - b.timestamp);
       empPunchesByDate.set(dateStr, punchesToday);
     });
@@ -720,8 +747,12 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   `;
   if (!emp) return { success: false, error: 'Empleado no encontrado' };
 
-  const empKey1 = String(emp.id);
-  const empKey2 = String(emp.cedula || '');
+  const rawCed = String(emp.cedula || '').trim();
+  const cleanCed = rawCed.replace(/^V/i, '').trim();
+  const cedWithV = `V${cleanCed}`;
+  const empIdStr = String(emp.id);
+
+  const empKeys = [...new Set([empIdStr, rawCed, cleanCed, cedWithV, `v${cleanCed}`].filter(Boolean))];
 
   const parts = cleanDateStr.split('-').map(Number);
   if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
@@ -742,13 +773,21 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   const config = await getConfiguracionModel();
   const tz = getDbTimezone(config);
 
-  const minDateStr = `${prevDateStr} 00:00:00`;
-  const maxDateStr = `${nextDateStr} 23:59:59`;
+  const dPrevSafe = new Date(dPrev);
+  dPrevSafe.setUTCDate(dPrevSafe.getUTCDate() - 1);
+  const dNextSafe = new Date(dNext);
+  dNextSafe.setUTCDate(dNextSafe.getUTCDate() + 1);
+
+  const minDateStr = `${dPrevSafe.toISOString().split('T')[0]} 00:00:00`;
+  const maxDateStr = `${dNextSafe.toISOString().split('T')[0]} 23:59:59`;
 
   const attlogs = await sql`
     SELECT id, employee_no, to_char(event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time, attendancestatus, currentverifymode
     FROM attlogs
-    WHERE (employee_no = ${empKey1} OR employee_no = ${empKey2})
+    WHERE (
+      employee_no = ANY(${empKeys})
+      OR (LENGTH(${cleanCed}) > 0 AND REPLACE(REPLACE(UPPER(employee_no), 'V', ''), '-', '') = ${cleanCed})
+    )
       AND (event_time AT TIME ZONE ${tz}) >= ${minDateStr}::timestamp
       AND (event_time AT TIME ZONE ${tz}) <= ${maxDateStr}::timestamp
     ORDER BY event_time ASC

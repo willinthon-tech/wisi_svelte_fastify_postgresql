@@ -199,7 +199,7 @@
 
 {#if show}
   <div style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background-color: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px); padding: 16px;">
-    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 420px; overflow: hidden; border: 1px solid #e2e8f0; animation: fadeIn 0.15s ease-out;">
+    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 550px; overflow: hidden; border: 1px solid #e2e8f0; animation: fadeIn 0.15s ease-out;">
       
       <!-- Header -->
       <div style="padding: 16px 20px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
@@ -290,8 +290,8 @@
             <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
               <thead>
                 <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 800;">
-                  <th style="padding: 6px 10px; width: 40%;">Día / Fecha</th>
-                  <th style="padding: 6px 10px; width: 60%;">Marcajes Registrados</th>
+                  <th style="padding: 6px 10px; width: 120px; white-space: nowrap;">Día / Fecha</th>
+                  <th style="padding: 6px 10px;">Marcajes Registrados</th>
                 </tr>
               </thead>
               <tbody>
@@ -304,16 +304,16 @@
                 {:else if marcajesContext && marcajesContext.length > 0}
                   {#each marcajesContext as ctx}
                     <tr style="border-bottom: 1px solid #f1f5f9; background-color: {ctx.fechaStr === dia?.fechaStr ? '#eff6ff' : '#ffffff'};">
-                      <td style="padding: 6px 10px; font-weight: {ctx.fechaStr === dia?.fechaStr ? '900' : '700'}; color: {ctx.fechaStr === dia?.fechaStr ? '#1d4ed8' : '#334155'};">
+                      <td style="padding: 6px 10px; font-weight: {ctx.fechaStr === dia?.fechaStr ? '900' : '700'}; color: {ctx.fechaStr === dia?.fechaStr ? '#1d4ed8' : '#334155'}; white-space: nowrap;">
                         {ctx.label}
                         <span style="display: block; font-size: 9.5px; color: #64748b; font-weight: 500;">{ctx.fechaStr}</span>
                       </td>
                       <td style="padding: 6px 10px; font-weight: 800; font-size: 11px;">
                         {#if ctx.punches && ctx.punches.length > 0}
-                          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                          <div style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: wrap;">
                             {#each ctx.punches as punch}
                               <div
-                                style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; padding: 2px 6px; border-radius: 6px; transition: all 0.15s ease; {
+                                style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; padding: 2px 6px; border-radius: 6px; white-space: nowrap; transition: all 0.15s ease; {
                                   punch.isUsedEntry
                                     ? 'background: #f0fdf4; border: 1.5px solid #86efac; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'
                                     : punch.isUsedExit
@@ -332,22 +332,9 @@
                                     : 'Marcaje no cotejado (cambie a E o S si desea tomarlo)'
                                 }
                               >
-                                <!-- Badge tipo: (E), (S) o (O) -->
-                                <span
-                                  style="font-size: 9.5px; font-weight: 900; border-radius: 3px; padding: 1px 4px; {
-                                    punch.type === 'E'
-                                      ? 'background: #86efac; color: #14532d;'
-                                      : punch.type === 'S'
-                                      ? 'background: #bfdbfe; color: #1e3a8a;'
-                                      : 'background: #e2e8f0; color: #475569;'
-                                  }"
-                                >
-                                  ({punch.type})
-                                </span>
-
                                 <!-- Hora del marcaje -->
                                 <span
-                                  style="font-size: 11px; font-weight: 900; {
+                                  style="font-size: 11.5px; font-weight: 800; {
                                     punch.isUsedEntry
                                       ? 'color: #14532d;'
                                       : punch.isUsedExit
@@ -371,11 +358,11 @@
                                     const targetStatus = val === 'E' ? 'checkIn' : (val === 'S' ? 'checkOut' : 'undefined');
                                     handleChangePunchType(punch, targetStatus);
                                   }}
-                                  style="cursor: pointer; font-size: 9px; font-weight: 800; border: 1px solid {
+                                  style="cursor: pointer; font-size: 10px; font-weight: 800; border: 1px solid {
                                     punch.type === 'E' ? '#86efac' : (punch.type === 'S' ? '#93c5fd' : '#cbd5e1')
                                   }; border-radius: 4px; background: #ffffff; color: {
                                     punch.type === 'E' ? '#166534' : (punch.type === 'S' ? '#1e40af' : '#475569')
-                                  }; padding: 1px 2px; outline: none; margin-left: 2px;"
+                                  }; padding: 1px 3px; outline: none; margin-left: 2px;"
                                   title="Corregir clasificación: E (Entrada), S (Salida), O (Otros)"
                                 >
                                   <option value="E">E</option>
