@@ -1061,6 +1061,20 @@
       tabindex="0"
       style="cursor: pointer;"
     >
+      <!-- Botón para cerrar la alerta -->
+      <button
+        type="button"
+        class="global-marcaje-close-btn"
+        on:click|stopPropagation={() => {
+          if (globalMarcajeAlertTimer) clearTimeout(globalMarcajeAlertTimer);
+          globalMarcajeAlert = null;
+        }}
+        title="Cerrar notificación"
+        aria-label="Cerrar notificación"
+      >
+        ✕
+      </button>
+
       <div
         class="global-marcaje-avatar-ring"
         class:global-marcaje-avatar-ring-checkin={(globalMarcajeAlert.attendancestatus || '').toLowerCase() === "checkin"}
@@ -1199,18 +1213,44 @@
     }
   }
   .global-marcaje-alert-card {
+    position: relative;
     background: linear-gradient(135deg, #ffffff, #ffffff);
     border-radius: 14px;
-    padding: 12px 18px;
-    /*box-shadow:
-      0 20px 25px -5px rgba(34, 197, 94, 0.25),
-      0 8px 10px -6px rgba(0, 0, 0, 0.1);*/
+    padding: 12px 30px 12px 18px;
     display: flex;
     align-items: center;
     gap: 14px;
     max-width: 380px;
     backdrop-filter: blur(8px);
     pointer-events: auto;
+  }
+  .global-marcaje-close-btn {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    padding: 0;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  .global-marcaje-close-btn:hover {
+    background: #fee2e2;
+    color: #dc2626;
+    border-color: #fca5a5;
+    transform: scale(1.1);
   }
   .global-marcaje-alert-card-undefined {
     border: 1.5px solid #f97316;
