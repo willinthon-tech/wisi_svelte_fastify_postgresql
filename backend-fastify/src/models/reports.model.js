@@ -101,7 +101,7 @@ export const BASE_PLANTILLA_LIBRE = {
   id: 'SYS-L',
   codigo: 'L',
   nombre: 'Libre',
-  color: '#dc2626',
+  color: '#D9D9D9',
   tipo: 'plantilla'
 };
 
@@ -169,20 +169,80 @@ export function pairDayAttendance({
   }
 
   const availableToday = punchesToday.filter(p => !p.consumed);
-  const explicitCheckins = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
+  const checkinPunches = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
   const otherPunches = availableToday.filter(p => p.isOtherFlag || p.type === 'O' || p.isOther);
 
-  // REGLA 1: Libre es que no haya marcajes en un día o que solo haya salidas (S) correspondientes al día de ayer.
-  // Mientras no haya un E ni un O en ese día, es LIBRE.
-  if (explicitCheckins.length === 0 && otherPunches.length === 0) {
-    entradaStr = null;
+  // REGLA 1: No puede existir una salida sin entrada
+  if (checkinPunches.length === 0) {
+    // Caso 1A: No hay ni 'E' ni 'O' (día sin marcajes o solo 'S' de ayer) -> LIBRE en GRIS
+    if (otherPunches.length === 0) {
+      entradaStr = null;
+      salidaStr = null;
+      marcajeStr = 'Sin Registros';
+      trabajadosMins = 0;
+      if (!isExcepcion || (excepObj && excepObj.es_libre)) {
+        resultadoStr = 'LIBRE';
+      } else {
+        resultadoStr = excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'LIBRE';
+      }
+
+      return {
+        entradaStr,
+        salidaStr,
+        trabajadosMins,
+        marcajeStr,
+        resultadoStr,
+        entBadge: null,
+        salBadge: null,
+        selectedEntry: null,
+        selectedExit: null,
+        matchedPlantilla: null, // Asignará L en gris (#D9D9D9)
+        isNoEntryWithOtherPunches: false
+      };
+    }
+
+    // Caso 1B: Hay registros 'O' pero NO hay 'E'.
+    // "ese dia viene siendo un u en rojo si el empleado no tiene horario asignado porque sino seria el horario mas cercano en rojo"
+    const firstOther = otherPunches[0];
+    entradaStr = firstOther.timeStr || firstOther.time;
     salidaStr = null;
-    marcajeStr = 'Sin Registros';
+    marcajeStr = entradaStr;
     trabajadosMins = 0;
-    if (!isExcepcion || (excepObj && excepObj.es_libre)) {
-      resultadoStr = 'LIBRE';
+    resultadoStr = 'ERROR';
+    isNoEntryWithOtherPunches = true;
+
+    const activePlantillas = matchedPlantilla
+      ? [matchedPlantilla]
+      : (targetPlantillas && targetPlantillas.length > 0 ? targetPlantillas : []);
+
+    if (activePlantillas.length === 0) {
+      // Sin horario asignado -> Horario Único (U) en ROJO
+      matchedPlantilla = {
+        ...BASE_PLANTILLA_UNICO,
+        color: '#dc2626'
+      };
     } else {
-      resultadoStr = excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'LIBRE';
+      // Con horario asignado -> El horario más cercano en ROJO
+      const punchMins = firstOther.minsFromMidnight ?? toMinutes(firstOther.timeStr || firstOther.time);
+      let bestPlant = activePlantillas[0];
+      let minDiff = Infinity;
+
+      for (const plant of activePlantillas) {
+        if (!plant.hora_entrada) continue;
+        const pEnt = toMinutes(plant.hora_entrada);
+        if (pEnt === null) continue;
+        let diff = Math.abs(punchMins - pEnt);
+        if (diff > 720) diff = 1440 - diff;
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestPlant = plant;
+        }
+      }
+
+      matchedPlantilla = {
+        ...bestPlant,
+        color: '#dc2626'
+      };
     }
 
     return {
@@ -193,25 +253,21 @@ export function pairDayAttendance({
       resultadoStr,
       entBadge: null,
       salBadge: null,
-      selectedEntry: null,
-      selectedExit: null,
-      matchedPlantilla: null,
-      isNoEntryWithOtherPunches: false
+      selectedEntry: null, // NO marcar ninguna 'O' como entrada
+      selectedExit: null,  // NO marcar ninguna 'O' como salida
+      matchedPlantilla,
+      isNoEntryWithOtherPunches: true
     };
   }
 
-  // REGLA 2: Selección de Entrada
-  // Si hay 'E', tomar 'E'. Si no hay 'E' pero hay 'O': cotejar con el horario asignado,
-  // y si no tiene nada asignado, es Horario Único.
-  const candidateEntries = explicitCheckins.length > 0 ? explicitCheckins : otherPunches;
-
+  // REGLA 2: Selección de la Entrada (cuando sí hay 'E')
   const activePlantillas = matchedPlantilla
     ? [matchedPlantilla]
     : (targetPlantillas && targetPlantillas.length > 0 ? targetPlantillas : []);
 
   if (activePlantillas.length === 0) {
     // Horario Único: primer entrada del día
-    selectedEntry = candidateEntries[0];
+    selectedEntry = checkinPunches[0];
     if (!matchedPlantilla) {
       matchedPlantilla = BASE_PLANTILLA_UNICO;
     }
@@ -221,7 +277,7 @@ export function pairDayAttendance({
     let minEntryDiff = Infinity;
     let bestPlant = matchedPlantilla;
 
-    for (const cp of candidateEntries) {
+    for (const cp of checkinPunches) {
       const punchMins = cp.minsFromMidnight ?? toMinutes(cp.timeStr || cp.time);
       for (const plant of activePlantillas) {
         if (!plant.hora_entrada) continue;
@@ -237,7 +293,7 @@ export function pairDayAttendance({
       }
     }
 
-    selectedEntry = bestEntry || candidateEntries[0];
+    selectedEntry = bestEntry || checkinPunches[0];
     if (bestPlant) {
       matchedPlantilla = bestPlant;
     } else if (!matchedPlantilla) {
@@ -249,11 +305,8 @@ export function pairDayAttendance({
   selectedEntry.isUsedEntry = true;
   entradaStr = selectedEntry.timeStr || selectedEntry.time;
 
-  // REGLA 3: Selección de la Salida
-  // Si hay marcajes explícitos 'S', priorizarlos; si no, permitir 'O' posteriores como salida
-  const sameDayS = availableToday.filter(p => !p.consumed && (p.isCheckOutFlag || p.type === 'S' || p.isCheckOut) && p.timestamp > selectedEntry.timestamp);
-  const sameDayAll = availableToday.filter(p => !p.consumed && p.timestamp > selectedEntry.timestamp && p.id !== selectedEntry.id);
-  const sameDayCandidates = sameDayS.length > 0 ? sameDayS : sameDayAll;
+  // REGLA 3: Selección de la Salida (únicamente marcajes tipo 'S')
+  const sameDayCandidates = availableToday.filter(p => !p.consumed && (p.isCheckOutFlag || p.type === 'S' || p.isCheckOut) && p.timestamp > selectedEntry.timestamp);
 
   // Candidatos día siguiente que no choquen con el registro del día siguiente
   const nextDayFirstEntry = nextDayPunches.find(p => (p.isCheckInFlag || p.type === 'E' || p.isCheckIn) && !p.consumed);
@@ -740,7 +793,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
 
       // Resolver código, color y tipo de plantilla para el badge
       let shiftCode = 'L';
-      let shiftColor = '#dc2626';
+      let shiftColor = '#D9D9D9';
       let shiftTipo = 'plantilla';
 
       if (matchedPlantilla) {
@@ -749,11 +802,11 @@ export async function getMarcajePersonalReportModel(params = {}) {
         shiftTipo = matchedPlantilla.tipo || 'horario';
       } else if (excepObj && excepObj.plantilla_codigo) {
         shiftCode = excepObj.plantilla_codigo;
-        shiftColor = excepObj.color || (excepObj.es_libre ? '#dc2626' : '#D9D9D9');
+        shiftColor = excepObj.color || '#D9D9D9';
         shiftTipo = excepObj.tipo || 'plantilla';
       } else {
         shiftCode = 'L';
-        shiftColor = '#dc2626';
+        shiftColor = '#D9D9D9';
         shiftTipo = 'plantilla';
       }
 

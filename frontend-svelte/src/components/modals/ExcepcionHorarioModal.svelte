@@ -154,18 +154,14 @@
       const nextCtx = i + 1 < marcajesContext.length ? marcajesContext[i + 1] : null;
 
       const availableToday = (ctx.punches || []).filter(p => !p.consumed);
-      const explicitCheckins = availableToday.filter(p => p.isCheckIn || p.type === 'E');
-      const otherPunches = availableToday.filter(p => p.isOther || p.type === 'O');
+      const checkinPunches = availableToday.filter(p => p.isCheckIn || p.type === 'E');
 
-      // REGLA 1: Si no hay ni 'E' ni 'O' (día sin marcajes o solo 'S' de ayer), es Libre
-      if (explicitCheckins.length === 0 && otherPunches.length === 0) {
+      // REGLA 1: No puede existir salida sin entrada. Si no hay 'E', no se coteja turno
+      if (checkinPunches.length === 0) {
         continue;
       }
 
-      // REGLA 2: Selección de Entrada
-      // Si hay 'E', tomar 'E'. Si no hay 'E' pero hay 'O': cotejar con horario asignado o Horario Único
-      const candidateEntries = explicitCheckins.length > 0 ? explicitCheckins : otherPunches;
-
+      // REGLA 2: Selección de Entrada (únicamente marcajes tipo 'E')
       let targetPlantillas = [];
       if (ctx.fechaStr === dia?.fechaStr && selectedValue && selectedValue.startsWith('PLANTILLA_')) {
         const pId = Number(selectedValue.replace('PLANTILLA_', ''));
@@ -182,14 +178,14 @@
 
       if (targetPlantillas.length === 0) {
         // Horario Único: primer entrada del día
-        selectedEntry = candidateEntries[0];
+        selectedEntry = checkinPunches[0];
       } else {
         // Horario Asignado: entrada más lógica cercana a una de las plantillas asignadas
         let bestEntry = null;
         let minEntryDiff = Infinity;
         let bestPlant = null;
 
-        for (const cp of candidateEntries) {
+        for (const cp of checkinPunches) {
           const punchMins = toMinutes(cp.time);
           for (const plant of targetPlantillas) {
             if (!plant.hora_entrada) continue;
@@ -203,21 +199,19 @@
             }
           }
         }
-        selectedEntry = bestEntry || candidateEntries[0];
+        selectedEntry = bestEntry || checkinPunches[0];
         matchedPlantilla = bestPlant;
       }
 
       selectedEntry.isUsedEntry = true;
       selectedEntry.consumed = true;
 
-      // REGLA 3: Selección de Salida
-      const sameDayS = availableToday.filter(p => !p.consumed && (p.isCheckOut || p.type === 'S') && p.timestamp > selectedEntry.timestamp);
-      const sameDayAll = availableToday.filter(p => !p.consumed && p.timestamp > selectedEntry.timestamp && p.id !== selectedEntry.id);
-      const sameDayCandidates = sameDayS.length > 0 ? sameDayS : sameDayAll;
+      // REGLA 3: Selección de Salida (únicamente marcajes tipo 'S')
+      const sameDayCandidates = availableToday.filter(p => !p.consumed && (p.isCheckOut || p.type === 'S') && p.timestamp > selectedEntry.timestamp);
 
       const nextDayPunches = nextCtx ? (nextCtx.punches || []) : [];
       const nextDayFirstEntry = nextDayPunches.find(p => (p.isCheckIn || p.type === 'E') && !p.consumed);
-      const nextDayS = nextDayPunches.filter(p => {
+      const nextDayCandidates = nextDayPunches.filter(p => {
         if (p.consumed) return false;
         if (!p.isCheckOut && p.type !== 'S') return false;
         if (p.timestamp <= selectedEntry.timestamp) return false;
@@ -225,14 +219,6 @@
         const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
         return diffH >= 0 && diffH <= 18;
       });
-      const nextDayAll = nextDayPunches.filter(p => {
-        if (p.consumed) return false;
-        if (p.timestamp <= selectedEntry.timestamp) return false;
-        if (nextDayFirstEntry && p.timestamp >= nextDayFirstEntry.timestamp) return false;
-        const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
-        return diffH >= 0 && diffH <= 18;
-      });
-      const nextDayCandidates = nextDayS.length > 0 ? nextDayS : nextDayAll;
 
       const allExitCandidates = [...sameDayCandidates, ...nextDayCandidates];
       let selectedExit = null;
@@ -529,9 +515,9 @@
                             {#each ctx.punches as punch}
                               <div
                                 style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; padding: 2.5px 6px; border-radius: 6px; white-space: nowrap; transition: all 0.15s ease; {
-                                  punch.isUsedEntry
+                                  punch.type === 'E' && punch.isUsedEntry
                                     ? 'background: #15803d; border: 1.5px solid #14532d; box-shadow: 0 2px 4px rgba(21, 128, 61, 0.35);'
-                                    : punch.isUsedExit
+                                    : punch.type === 'S' && punch.isUsedExit
                                     ? 'background: #1d4ed8; border: 1.5px solid #1e3a8a; box-shadow: 0 2px 4px rgba(29, 78, 216, 0.35);'
                                     : punch.type === 'E'
                                     ? 'background: #f0fdf4; border: 1px dashed #86efac;'
@@ -540,17 +526,19 @@
                                     : 'background: #f1f5f9; border: 1px solid #cbd5e1;'
                                 }"
                                 title={
-                                  punch.isUsedEntry
+                                  punch.type === 'E' && punch.isUsedEntry
                                     ? 'Entrada tomada para el cálculo del turno'
-                                    : punch.isUsedExit
+                                    : punch.type === 'S' && punch.isUsedExit
                                     ? 'Salida tomada para el cálculo del turno'
-                                    : 'Marcaje no cotejado (cambie a E o S si desea tomarlo)'
+                                    : punch.type === 'O'
+                                    ? 'Marcaje tipo Otros (cambie a E o S si desea tomarlo)'
+                                    : 'Marcaje no cotejado'
                                 }
                               >
                                 <!-- Hora del marcaje -->
                                 <span
                                   style="font-size: 11.5px; font-weight: 900; {
-                                    punch.isUsedEntry || punch.isUsedExit
+                                    (punch.type === 'E' && punch.isUsedEntry) || (punch.type === 'S' && punch.isUsedExit)
                                       ? 'color: #ffffff;'
                                       : punch.type === 'E'
                                       ? 'color: #166534;'
@@ -568,9 +556,9 @@
                                   disabled={loading}
                                   on:change={(e) => handleLocalPunchChange(punch, e.target.value)}
                                   style="cursor: pointer; font-size: 10px; font-weight: 900; border-radius: 4px; padding: 1px 3px; outline: none; margin-left: 2px; {
-                                    punch.isUsedEntry
+                                    punch.type === 'E' && punch.isUsedEntry
                                       ? 'background: #ffffff; color: #15803d; border: 1.5px solid #14532d;'
-                                      : punch.isUsedExit
+                                      : punch.type === 'S' && punch.isUsedExit
                                       ? 'background: #ffffff; color: #1d4ed8; border: 1.5px solid #1e3a8a;'
                                       : punch.type === 'E'
                                       ? 'background: #ffffff; color: #166534; border: 1px solid #86efac;'
