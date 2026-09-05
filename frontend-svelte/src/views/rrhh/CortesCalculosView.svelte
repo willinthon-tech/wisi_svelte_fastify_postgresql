@@ -740,16 +740,23 @@
               {#each filteredEmployees as emp, idx}
                 <tr class="data-row {idx % 2 === 0 ? 'even' : 'odd'}">
                   <td class="col-emp sticky-col">
-                    <div class="emp-cell">
-                      <img
-                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
-                        alt=""
-                        class="emp-avatar"
-                        on:error={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
-                      <div class="emp-info">
-                        <span class="emp-name">{emp.nombre}</span>
-                        <span class="emp-meta">{emp.cedula || emp.id} • {emp.cargo || 'Personal'}</span>
+                    <div class="emp-sticky-content">
+                      <div class="emp-avatar-box">
+                        <img
+                          src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
+                          alt=""
+                          class="emp-avatar-img"
+                          on:error={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      </div>
+                      <div class="emp-text-details">
+                        <span class="emp-name-text" title={emp.nombre}>{emp.nombre}</span>
+                        <span class="emp-cedula-pill" title={emp.cedula || `ID: #${emp.id}`}>
+                          {emp.cedula || `ID: #${emp.id}`}
+                        </span>
+                        <span class="emp-cargo-text" title={emp.cargo || 'Personal'}>
+                          {emp.cargo || 'Personal'}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -821,16 +828,23 @@
                 <tr class="data-row {idx % 2 === 0 ? 'even' : 'odd'}">
                   <!-- Empleado Sticky -->
                   <td class="col-emp sticky-col">
-                    <div class="emp-cell">
-                      <img
-                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
-                        alt=""
-                        class="emp-avatar"
-                        on:error={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
-                      <div class="emp-info">
-                        <span class="emp-name">{emp.nombre}</span>
-                        <span class="emp-meta">{emp.cedula || emp.id} • {emp.cargo || 'Personal'}</span>
+                    <div class="emp-sticky-content">
+                      <div class="emp-avatar-box">
+                        <img
+                          src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
+                          alt=""
+                          class="emp-avatar-img"
+                          on:error={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      </div>
+                      <div class="emp-text-details">
+                        <span class="emp-name-text" title={emp.nombre}>{emp.nombre}</span>
+                        <span class="emp-cedula-pill" title={emp.cedula || `ID: #${emp.id}`}>
+                          {emp.cedula || `ID: #${emp.id}`}
+                        </span>
+                        <span class="emp-cargo-text" title={emp.cargo || 'Personal'}>
+                          {emp.cargo || 'Personal'}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -1083,8 +1097,28 @@
     background: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 12px;
-    overflow-x: auto;
+    overflow: auto;
+    max-height: calc(100vh - 185px);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    position: relative;
+  }
+
+  .table-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .table-container::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+
+  .table-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+
+  .table-container::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
   }
 
   /* ===== TAB 1: MARCAJES MATRIX TABLE (Verde unificado como Cálculos y Puntualidad) ===== */
@@ -1106,6 +1140,9 @@
   }
 
   .th-month-group {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     background: #166534;
     text-align: center;
     padding: 6px 8px;
@@ -1117,6 +1154,7 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     line-height: 1.1;
+    box-sizing: border-box;
   }
 
   .header-days-tr {
@@ -1124,6 +1162,9 @@
   }
 
   .th-day-col {
+    position: sticky;
+    top: 25px;
+    z-index: 20;
     background: #15803d;
     text-align: center;
     width: 110px;
@@ -1159,12 +1200,13 @@
 
   .th-empleado-sticky {
     position: sticky;
+    top: 0;
     left: 0;
-    z-index: 35 !important;
+    z-index: 40 !important;
     background: #15803d !important;
-    width: 165px;
-    min-width: 165px;
-    max-width: 165px;
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
     padding: 8px 10px;
     box-sizing: border-box;
     border-right: 2px solid rgba(255, 255, 255, 0.25);
@@ -1180,17 +1222,18 @@
   .td-empleado-sticky {
     position: sticky;
     left: 0;
-    z-index: 10;
+    z-index: 15;
     background: #ffffff;
-    width: 165px;
-    min-width: 165px;
-    max-width: 165px;
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
     height: 58px;
     padding: 6px 8px;
     box-sizing: border-box;
     border-right: 2px solid #cbd5e1;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.04);
   }
 
   .tbody-emp-tr.even .td-empleado-sticky { background: #ffffff; }
@@ -1442,10 +1485,18 @@
 
   /* ===== TAB 2 & 3: CALCULOS & PUNTUALIDAD TABLES ===== */
   .calculos-table {
-    width: 100%;
-    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 11.5px;
     white-space: nowrap;
+  }
+
+  .calculos-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 25;
   }
 
   .calculos-table thead tr {
@@ -1453,16 +1504,25 @@
     color: #ffffff;
   }
 
-  .calculos-table th {
+  .calculos-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: #15803d;
     padding: 10px 12px;
     font-size: 11px;
     font-weight: 800;
     text-align: center;
     border-right: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: 2px solid #14532d;
     letter-spacing: 0.2px;
+    box-sizing: border-box;
   }
 
-  .puntualidad-table thead .super-header-tr {
+  .puntualidad-table thead .super-header-tr th {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     background: #15803d;
     color: #ffffff;
   }
@@ -1474,17 +1534,21 @@
     font-size: 11px;
     padding: 6px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .puntualidad-table thead .sub-header-tr {
-    background: #14532d;
-    color: #ffffff;
+    box-sizing: border-box;
   }
 
   .puntualidad-table thead .sub-header-tr th {
+    position: sticky;
+    top: 29px; /* Height of super-header row */
+    z-index: 20;
+    background: #14532d;
+    color: #ffffff;
     font-size: 10.5px;
     padding: 8px 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.15);
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: 2px solid #14532d;
+    box-sizing: border-box;
   }
 
   .calculos-table td {
@@ -1498,28 +1562,36 @@
   .data-row.odd { background: #f8fafc; }
   .data-row:hover { background: #f0fdf4; }
 
-  /* Sticky Employee Column */
+  /* Sticky Employee Column in Calculos & Puntualidad */
   .col-emp {
     text-align: left !important;
-    min-width: 220px;
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
+    box-sizing: border-box;
   }
 
   .sticky-col {
     position: sticky;
     left: 0;
-    background: inherit;
-    z-index: 10;
-    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+    z-index: 15;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.04);
   }
 
-  thead .sticky-col {
-    background: #15803d !important;
-    z-index: 20;
-  }
+  .data-row.even .sticky-col { background: #ffffff !important; }
+  .data-row.odd .sticky-col { background: #f8fafc !important; }
+  .data-row:hover .sticky-col { background: #f0fdf4 !important; }
 
+  thead .sticky-col,
+  thead th.sticky-col,
   .puntualidad-table thead .super-header-tr .sticky-col {
+    position: sticky;
+    top: 0;
+    left: 0;
     background: #15803d !important;
-    z-index: 20;
+    z-index: 40 !important;
+    border-right: 2px solid rgba(255, 255, 255, 0.25);
+    border-bottom: 2px solid #14532d;
   }
 
   .emp-cell {
