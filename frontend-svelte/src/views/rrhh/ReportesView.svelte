@@ -1005,12 +1005,13 @@
                         <button
                           type="button"
                           on:click={() => openExcepcionModal(emp, dia)}
-                          style="display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 14px; padding: 0 2px; border-radius: 2.5px; font-weight: 900; font-size: 8px; text-transform: uppercase; background-color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.shift ? (dia.shift.color || '#2563eb') : '#f1f5f9'))}; color: {dia.resultadoStr === 'ERROR' || dia.resultadoStr === 'EN ESPERA' ? '#ffffff' : (dia.shift && (dia.shift.codigo === 'U' || dia.shift.color === '#86EFAC' || dia.shift.color === '#D9D9D9') ? '#0f172a' : '#ffffff')}; box-shadow: 0 1px 2px rgba(0,0,0,0.06); flex-shrink: 0; border: {dia.isExcepcion ? '1.5px solid #7c3aed' : 'none'}; cursor: pointer; transition: transform 0.1s ease; position: relative;"
+                          class="btn-shift-badge"
+                          style="display: inline-flex; align-items: center; justify-content: center; min-width: calc(24px * var(--zoom-scale, 1)); height: calc(20px * var(--zoom-scale, 1)); padding: 0 calc(4px * var(--zoom-scale, 1)); border-radius: 4px; font-weight: 900; font-size: clamp(9px, calc(11px * var(--zoom-scale, 1)), 13px); text-transform: uppercase; background-color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.shift ? (dia.shift.color || '#2563eb') : '#f1f5f9'))}; color: {dia.resultadoStr === 'ERROR' || dia.resultadoStr === 'EN ESPERA' ? '#ffffff' : (dia.shift && (dia.shift.codigo === 'U' || dia.shift.color === '#86EFAC' || dia.shift.color === '#D9D9D9') ? '#0f172a' : '#ffffff')}; box-shadow: 0 1px 2px rgba(0,0,0,0.1); flex-shrink: 0; border: {dia.isExcepcion ? '2px solid #7c3aed' : '1px solid rgba(0,0,0,0.08)'}; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; position: relative;"
                           title={dia.isExcepcion ? '⚡ Excepción Especial Activa - Clic para cambiar' : (dia.shift ? (dia.shift.nombre || dia.shift.codigo) : 'Clic para asignar excepción')}
                         >
                           {dia.shift ? dia.shift.codigo : '-'}
                           {#if dia.isExcepcion}
-                            <span style="position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; background: #7c3aed; border-radius: 50%; border: 1px solid #ffffff;"></span>
+                            <span style="position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; background: #7c3aed; border-radius: 50%; border: 1.5px solid #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.2);"></span>
                           {/if}
                         </button>
 
@@ -1840,8 +1841,14 @@
     justify-content: space-between;
     width: 100%;
     gap: calc(2px * var(--zoom-scale, 1));
-    min-height: calc(14px * var(--zoom-scale, 1));
+    min-height: calc(20px * var(--zoom-scale, 1));
     overflow: hidden;
+  }
+
+  .btn-shift-badge:hover {
+    transform: scale(1.12);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+    z-index: 5;
   }
 
   .times-stack-center {
