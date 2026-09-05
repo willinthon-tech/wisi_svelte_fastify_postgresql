@@ -424,7 +424,7 @@
     if (tab === "settings") return "Diagnóstico del Sistema";
     if (tab === "rrhh/marcajes" || tab === "marcajes") return "Marcajes";
     if (tab === "rrhh/cortes" || tab === "cortes") return "Cortes";
-    if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Cálculos de Asistencia";
+    if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Reportes";
 
     if ($navMenuStore && Array.isArray($navMenuStore)) {
       for (const page of $navMenuStore) {

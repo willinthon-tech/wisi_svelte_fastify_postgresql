@@ -353,7 +353,7 @@
           on:click={() => activeTab = 'calculos'}
         >
           <span class="tab-icon">📊</span>
-          <span>Tabla Oficial de Cálculos y Novedades</span>
+          <span>Calculos</span>
           <span class="tab-badge">{processedEmployees.length}</span>
         </button>
 
@@ -363,7 +363,7 @@
           on:click={() => activeTab = 'puntualidad'}
         >
           <span class="tab-icon">⏱️</span>
-          <span>Score y Puntualidad de Asistencia</span>
+          <span>Puntualidad</span>
         </button>
       </div>
 
