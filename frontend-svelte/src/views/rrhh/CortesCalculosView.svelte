@@ -4,12 +4,14 @@
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
+  import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
 
   let corteId = null;
   let corte = null;
   let isLoading = true;
   let activeTab = 'marcajes'; // 'marcajes' | 'calculos' | 'puntualidad'
   let searchQuery = '';
+  let selectedDepartamentos = [];
 
   // Días y meses del corte
   let diasDelMes = [];
@@ -474,13 +476,49 @@
     });
   }
 
+  // Opciones dinámicas de Departamentos extraídas de los empleados asociados al corte
+  $: departamentoOptions = (() => {
+    if (!processedEmployees || processedEmployees.length === 0) return [];
+    const deptoMap = new Map();
+
+    processedEmployees.forEach(emp => {
+      const name = (emp.departamento_nombre || emp.departamento || '').trim();
+      const id = emp.departamento_id ? String(emp.departamento_id) : (name ? name.toLowerCase() : 'sin_depto');
+      const label = name || 'Sin Departamento';
+
+      if (!deptoMap.has(id)) {
+        deptoMap.set(id, { id, key: id, label, count: 0 });
+      }
+      deptoMap.get(id).count++;
+    });
+
+    return Array.from(deptoMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+  })();
+
   $: filteredEmployees = processedEmployees.filter(emp => {
+    // 1. Filtro por departamentos seleccionados
+    if (selectedDepartamentos && selectedDepartamentos.length > 0) {
+      const empDeptoId = emp.departamento_id ? String(emp.departamento_id) : '';
+      const empDeptoName = String(emp.departamento_nombre || emp.departamento || '').trim().toLowerCase();
+      
+      const matchesDepto = selectedDepartamentos.some(sel => {
+        const selStr = String(sel).trim();
+        if (empDeptoId && selStr === empDeptoId) return true;
+        if (empDeptoName && selStr.toLowerCase() === empDeptoName) return true;
+        if (selStr === 'sin_depto' && !empDeptoId && !empDeptoName) return true;
+        return false;
+      });
+      if (!matchesDepto) return false;
+    }
+
+    // 2. Filtro por término de búsqueda (nombre, cédula, cargo o departamento)
     if (!searchQuery.trim()) return true;
     const term = searchQuery.toLowerCase().trim();
     return (
       (emp.nombre || '').toLowerCase().includes(term) ||
       (emp.cedula || '').toLowerCase().includes(term) ||
-      (emp.cargo || '').toLowerCase().includes(term)
+      (emp.cargo || '').toLowerCase().includes(term) ||
+      (emp.departamento_nombre || '').toLowerCase().includes(term)
     );
   });
 </script>
@@ -512,8 +550,31 @@
           <span class="corte-fecha-badge">Desde: {formatDate(corte.fecha_desde)} - Hasta: {formatDate(corte.fecha_hasta)}</span>
           <div class="emp-counter-chip">
             <span class="emp-icon">👥</span>
-            <span class="emp-text"><strong>{processedEmployees.length}</strong> empleado(s)</span>
+            <span class="emp-text">
+              {#if selectedDepartamentos && selectedDepartamentos.length > 0}
+                <strong>{filteredEmployees.length}</strong> de {processedEmployees.length} empleado(s)
+              {:else}
+                <strong>{filteredEmployees.length}</strong> empleado(s)
+              {/if}
+            </span>
           </div>
+
+          <!-- Filtro MultiSelect de Departamentos asociados a los empleados del listado -->
+          {#if departamentoOptions.length > 0}
+            <div class="depto-multiselect-wrap">
+              <SmartMultiSelect
+                id="corte-filtro-departamentos"
+                label="Departamentos"
+                icon="🏢"
+                options={departamentoOptions}
+                bind:selectedValues={selectedDepartamentos}
+                placeholder="Filtrar departamentos..."
+                on:change={(e) => {
+                  selectedDepartamentos = e.detail;
+                }}
+              />
+            </div>
+          {/if}
         </div>
       </div>
 
@@ -929,6 +990,8 @@
     justify-content: space-between;
     gap: 16px;
     box-shadow: 0 10px 15px -3px rgba(88, 28, 135, 0.25);
+    position: relative;
+    z-index: 60;
   }
 
   .header-left {
@@ -986,6 +1049,47 @@
     color: #ffffff;
     font-size: 12px;
     font-weight: 700;
+  }
+
+  /* Filtro MultiSelect de Departamentos en Cabecera */
+  .depto-multiselect-wrap {
+    min-width: 190px;
+    max-width: 240px;
+    position: relative;
+    z-index: 70;
+  }
+
+  .depto-multiselect-wrap :global(.smart-multiselect-trigger) {
+    height: 31px !important;
+    background: #ffffff !important;
+    color: #581c87 !important;
+    font-weight: 800 !important;
+    font-size: 11.5px !important;
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+    padding: 0 10px !important;
+  }
+
+  .depto-multiselect-wrap :global(.smart-multiselect-trigger:hover) {
+    background: #fdf4ff !important;
+    border-color: #a855f7 !important;
+  }
+
+  .depto-multiselect-wrap :global(.smart-multiselect-trigger.active) {
+    background: #fdf4ff !important;
+    border-color: #a855f7 !important;
+    color: #581c87 !important;
+    box-shadow: 0 0 0 1px #a855f7 !important;
+  }
+
+  .depto-multiselect-wrap :global(.smart-multiselect-trigger .trigger-badge) {
+    background: #7c3aed !important;
+    color: #ffffff !important;
+  }
+
+  .depto-multiselect-wrap :global(.smart-multiselect-dropdown) {
+    z-index: 100 !important;
   }
 
   .header-right {
