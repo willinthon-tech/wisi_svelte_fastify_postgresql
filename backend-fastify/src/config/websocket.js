@@ -1,6 +1,6 @@
 import websocketPlugin from '@fastify/websocket';
 import { attlogEvents } from '../events/attlog.events.js';
-import { sendPushNotificationToAll } from '../services/push.service.js';
+import { sendPushNotificationForAttlog } from '../services/push.service.js';
 
 // Active WebSocket client connections
 const activeClients = new Set();
@@ -118,13 +118,15 @@ attlogEvents.on('new_attlog', (data) => {
       timeStr = cleanTime.split(' ')[1] ? cleanTime.split(' ')[1].split('.')[0] : cleanTime;
     }
 
-    // Formato solicitado para Android:
-    // Preview (colapsado): Título: Nombre | Línea 1: Estado y Hora (nunca truncado)
-    // Expandido hacia abajo: Foto completa + Estado/Hora + Sala + Cargo
-    const bodyLines = [];
-    bodyLines.push(`${statusBadge} - ${timeStr}`);
-    bodyLines.push(`📍 Sala: ${salaName}`);
-    bodyLines.push(`💼 Cargo: ${cargoName || 'Sin cargo asignado'}`);
+    // Formato estructurado para Android y Windows:
+    // Título limpio con Estado + Nombre: "🟢 ENTRADA • Juan Pérez"
+    // Cuerpo ordenado línea por línea (sin amontonar ni truncar)
+    const title = `${statusBadge} • ${empName}`;
+    const bodyLines = [
+      `🕒 Hora: ${timeStr}`,
+      `📍 Sala: ${salaName}`,
+      `💼 Cargo: ${cargoName || 'Sin cargo asignado'}`
+    ];
     const notificationBody = bodyLines.join('\n');
 
     let photoUrl = null;
@@ -138,8 +140,9 @@ attlogEvents.on('new_attlog', (data) => {
       photoUrl = `https://willinthon.wisi.space/api/empleados/${data.empleado_id}.jpg`;
     }
 
-    sendPushNotificationToAll({
-      title: `${empName}`,
+    sendPushNotificationForAttlog({
+      salaId: data.sala_id,
+      title,
       body: notificationBody,
       imageUrl: photoUrl,
       data: {

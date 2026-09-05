@@ -41,6 +41,38 @@ export async function initPushNotifications(userId, onNotificationReceived) {
       return;
     }
 
+    async function syncTokenWithBackend(tokenVal, uId) {
+      if (!tokenVal) return;
+      try {
+        localStorage.setItem('wisi_fcm_token', tokenVal);
+      } catch (e) {}
+
+      try {
+        const endpoint = toBackendUrl('/api/auth/fcm-token');
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: uId || null,
+            token: tokenVal,
+            platform: Capacitor.getPlatform(),
+            fecha: new Date().toISOString()
+          })
+        });
+        console.log('✅ [Push] Token FCM sincronizado exitosamente con user_id:', uId);
+      } catch (err) {
+        console.warn('⚠️ [Push] Error enviando FCM Token al servidor:', err);
+      }
+    }
+
+    // Si ya existe un token almacenado en este teléfono, vincularlo de inmediato con el usuario logueado
+    try {
+      const cachedToken = localStorage.getItem('wisi_fcm_token');
+      if (cachedToken && userId) {
+        syncTokenWithBackend(cachedToken, userId);
+      }
+    } catch (e) {}
+
     // 3. Registrar ante FCM (Firebase Cloud Messaging)
     await PushNotifications.register();
 
@@ -49,27 +81,7 @@ export async function initPushNotifications(userId, onNotificationReceived) {
 
     PushNotifications.addListener('registration', async (token) => {
       console.log('✅ [Push] FCM Token Registrado:', token.value);
-      try {
-        localStorage.setItem('wisi_fcm_token', token.value);
-      } catch (e) {}
-
-      // Enviar el token al backend usando la URL absoluta de la nube
-      try {
-        const endpoint = toBackendUrl('/api/auth/fcm-token');
-        await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: userId || null,
-            token: token.value,
-            platform: Capacitor.getPlatform(),
-            fecha: new Date().toISOString()
-          })
-        });
-        console.log('✅ [Push] Token FCM sincronizado exitosamente con el backend');
-      } catch (err) {
-        console.warn('⚠️ [Push] Error enviando FCM Token al servidor:', err);
-      }
+      await syncTokenWithBackend(token.value, userId);
     });
 
     PushNotifications.addListener('registrationError', (err) => {

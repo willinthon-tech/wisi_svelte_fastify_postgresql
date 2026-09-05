@@ -102,11 +102,52 @@ export async function registerDeviceToken({ user_id = null, token, platform = 'a
 }
 
 /**
+ * Envía una notificación push FCM filtrada estrictamente por la sala del marcaje.
+ * Solo reciben la notificación los usuarios que tienen asignada esa sala en `user_salas`
+ * o los administradores globales (user_id = 1).
+ */
+export async function sendPushNotificationForAttlog({ salaId = null, title, body, data = {}, imageUrl = null, icon = null }) {
+  let tokens = [];
+
+  if (isPgConnected && sql) {
+    try {
+      const numSalaId = salaId ? Number(salaId) : null;
+      if (numSalaId) {
+        // Consultar únicamente tokens de usuarios que tienen asignada esta sala o son administradores generales (user_id = 1)
+        const rows = await sql`
+          SELECT DISTINCT ft.token 
+          FROM fcm_tokens ft
+          WHERE ft.activo = TRUE 
+            AND ft.user_id IS NOT NULL
+            AND (
+              ft.user_id = 1
+              OR EXISTS (
+                SELECT 1 FROM user_salas us 
+                WHERE us.user_id = ft.user_id AND us.sala_id = ${numSalaId}
+              )
+            )
+        `;
+        tokens = rows.map(r => r.token);
+      } else {
+        // Sin sala específica, enviar a todos los usuarios activos
+        const rows = await sql`SELECT token FROM fcm_tokens WHERE activo = TRUE`;
+        tokens = rows.map(r => r.token);
+      }
+    } catch (err) {
+      console.warn('⚠️ [Push FCM] Error consultando tokens por sala:', err.message);
+      tokens = Array.from(inMemoryTokens);
+    }
+  } else {
+    tokens = Array.from(inMemoryTokens);
+  }
+
+  return executeMulticastSend({ tokens, title, body, data, imageUrl, icon });
+}
+
+/**
  * Envía una notificación push a todos los dispositivos móviles registrados vía Firebase Cloud Messaging (FCM).
- * Se despierta el teléfono y muestra el banner en la barra de notificaciones de Android, exactamente igual a WhatsApp.
  */
 export async function sendPushNotificationToAll({ title, body, data = {}, imageUrl = null, icon = null }) {
-  // 1. Obtener lista de tokens activos
   let tokens = [];
 
   if (isPgConnected && sql) {
@@ -121,6 +162,11 @@ export async function sendPushNotificationToAll({ title, body, data = {}, imageU
   } else {
     tokens = Array.from(inMemoryTokens);
   }
+
+  return executeMulticastSend({ tokens, title, body, data, imageUrl, icon });
+}
+
+async function executeMulticastSend({ tokens = [], title, body, data = {}, imageUrl = null, icon = null }) {
 
   // Filtrar tokens válidos y únicos
   tokens = Array.from(new Set(tokens.filter(Boolean)));

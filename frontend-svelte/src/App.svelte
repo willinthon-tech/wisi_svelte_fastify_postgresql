@@ -356,14 +356,12 @@
     if (globalMarcajeAlertTimer) clearTimeout(globalMarcajeAlertTimer);
     globalMarcajeAlertTimer = setTimeout(() => { globalMarcajeAlert = null; }, 10000);
 
-    // Reproducir sonido SOLO en tiempo real (NO en marcajes SYNC)
-    if (!isSync) {
-      const status = String(rec.attendancestatus || "").toLowerCase().trim();
-      if (status === "checkin" || status === "entrada") {
-        playCheckInSound();
-      } else if (status === "checkout" || status === "salida") {
-        playCheckOutSound();
-      }
+    // Reproducir sonido para todos los marcajes (incluyendo SYNC), respetando Entrada o Salida
+    const status = String(rec.attendancestatus || "").toLowerCase().trim();
+    if (status === "checkin" || status === "entrada") {
+      playCheckInSound();
+    } else if (status === "checkout" || status === "salida") {
+      playCheckOutSound();
     }
   }
 
@@ -487,11 +485,30 @@
     }
     initLatestEventTime();
 
-    // Solicitar permiso para notificaciones nativas de escritorio (Windows / Navegador / PWA)
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
-      }
+    // Solicitar permiso para notificaciones nativas de escritorio (Windows / Navegador / PWA / Tauri)
+    // Se enlaza a la primera interacción del usuario para evitar que Chrome/Edge lo bloqueen al cargar la página
+    if (typeof window !== 'undefined') {
+      const requestNativeNotifPermission = async () => {
+        try {
+          if (window.__TAURI_INTERNALS__) {
+            const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
+            let granted = await isPermissionGranted();
+            if (!granted) {
+              await requestPermission();
+            }
+          } else if ('Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+          }
+        } catch (e) {}
+      };
+
+      const handleUserGestureForNotif = () => {
+        requestNativeNotifPermission();
+        window.removeEventListener('click', handleUserGestureForNotif);
+        window.removeEventListener('keydown', handleUserGestureForNotif);
+      };
+      window.addEventListener('click', handleUserGestureForNotif, { once: true });
+      window.addEventListener('keydown', handleUserGestureForNotif, { once: true });
     }
 
     // Connect WebSocket for real-time live attendance notifications (NO HTTP POLLING!)
@@ -527,9 +544,9 @@
       // Alerta única superior: Entrada, Salida o Puerta / Otros
       triggerGlobalMarcajeToast(rec, base, isSync);
 
-      // Notificación nativa del Sistema Operativo (Windows / Escritorio / PWA)
+      // Notificación nativa del Sistema Operativo (Windows / Escritorio / PWA / Tauri)
       // Permite recibir la alerta aunque el usuario esté en otra ventana o app
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      const triggerDesktopNotification = async () => {
         const empName = rec.nombre || `Empleado ${rec.employee_no || ''}`;
         
         const rawStatus = String(rec.attendancestatus || rec.tipo_evento || rec.status || '').toLowerCase().trim();
@@ -544,32 +561,57 @@
         const salaName = rec.sala_nombre || 'Sala';
         const timeStr = rec.hora || (rec.event_time ? String(rec.event_time).split(' ')[1] : '');
 
-        const title = isSync ? `[SYNC] ${empName}` : `${empName}`;
-        const bodyLines = [];
-        bodyLines.push(`${statusBadge} - ${timeStr}`);
-        if (salaName) bodyLines.push(`📍 Sala: ${salaName}`);
-        if (cargoName) bodyLines.push(`💼 Cargo: ${cargoName}`);
+        const prefix = isSync ? '[SYNC] ' : '';
+        const title = `${prefix}${statusBadge} • ${empName}`;
+        const bodyLines = [
+          `🕒 Hora: ${timeStr}`,
+          `📍 Sala: ${salaName}`,
+          `💼 Cargo: ${cargoName || 'Sin cargo asignado'}`
+        ];
         const body = bodyLines.join('\n');
         const photoUrl = rec.id ? toBackendUrl(`/api/attlogs/${rec.id}.jpg`, { thumb: true }) : (rec.foto ? toBackendUrl(rec.foto, { thumb: true }) : '/favicon.png');
 
-        try {
-          const sysNotif = new Notification(title, {
-            body,
-            icon: photoUrl,
-            image: photoUrl,
-            badge: '/favicon.png',
-            tag: `attlog-${rec.id || Date.now()}`,
-            renotify: true
-          });
-          sysNotif.onclick = () => {
-            window.focus();
-            sysNotif.close();
-            openPhotoModalForAttlog(rec.id, rec);
-          };
-        } catch (e) {
-          // Ignorar si el sistema o navegador bloquea la notificación
+        // 1. Si corre en Tauri nativo en Windows
+        if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+          try {
+            const { sendNotification, isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
+            let hasPerm = await isPermissionGranted();
+            if (!hasPerm) {
+              const perm = await requestPermission();
+              hasPerm = perm === 'granted';
+            }
+            if (hasPerm) {
+              sendNotification({
+                title,
+                body,
+                icon: 'icons/128x128.png'
+              });
+              return;
+            }
+          } catch (tErr) {}
         }
-      }
+
+        // 2. Si corre en Navegador Web / PWA en Windows
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            const sysNotif = new Notification(title, {
+              body,
+              icon: photoUrl,
+              image: photoUrl,
+              badge: '/favicon.png',
+              tag: `attlog-${rec.id || Date.now()}`,
+              renotify: true
+            });
+            sysNotif.onclick = () => {
+              window.focus();
+              sysNotif.close();
+              openPhotoModalForAttlog(rec.id, rec);
+            };
+          } catch (e) {}
+        }
+      };
+
+      triggerDesktopNotification();
 
       // Actualizar modal si está abierto
       handleRealtimeAttlogInPhotoModal(rec);

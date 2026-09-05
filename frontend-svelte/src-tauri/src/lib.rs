@@ -24,6 +24,7 @@ fn save_file_to_downloads(app_handle: tauri::AppHandle, file_name: String, bytes
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_notification::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
