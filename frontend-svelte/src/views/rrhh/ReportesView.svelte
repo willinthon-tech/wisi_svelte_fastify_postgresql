@@ -684,7 +684,7 @@
       sala_nombre: emp.sala_nombre,
       departamento_id: emp.departamento_id,
       departamento_nombre: emp.departamento_nombre,
-      foto: emp.foto || `/empleados/${emp.id}.jpg`,
+      foto: (emp.foto && !String(emp.foto).startsWith("data:")) ? emp.foto : `/empleados/${emp.id}.jpg`,
       dias: (emp.dias || []).map(d => ({
         fechaStr: d.fechaStr,
         dayOfWeek: d.dayOfWeek,

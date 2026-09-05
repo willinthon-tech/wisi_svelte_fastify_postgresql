@@ -24,6 +24,31 @@
     salaId = e.target.value;
   }
 
+  async function compressPayload(rawObj) {
+    if (!rawObj) return {};
+    try {
+      const jsonStr = JSON.stringify(rawObj);
+      // Comprimir con GZIP si supera 80 KB para evitar límites de tamaño HTTP / NGINX (413)
+      if (jsonStr.length > 80 * 1024 && typeof CompressionStream !== 'undefined') {
+        const stream = new Blob([jsonStr]).stream();
+        const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
+        const response = new Response(compressedStream);
+        const arrayBuf = await response.arrayBuffer();
+        let binary = '';
+        const bytes = new Uint8Array(arrayBuf);
+        const chunk = 8192;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return 'gzip:' + btoa(binary);
+      }
+      return rawObj;
+    } catch (errComp) {
+      console.warn('Error al comprimir payload, usando directo:', errComp);
+      return rawObj;
+    }
+  }
+
   async function handleGenerar(guardarVisible) {
     if (!fechaDesde || !fechaHasta) {
       triggerToast('Fechas no válidas para el corte', 'warning');
@@ -35,13 +60,16 @@
       const salaObj = (salas || []).find(s => Number(s.id) === Number(salaId));
       const salaNombre = salaObj ? (salaObj.nombre_comercial || salaObj.nombre) : null;
 
+      // Optimizar y comprimir el payload del corte para transferencias ultra rápidas
+      const finalData = await compressPayload(payloadData || {});
+
       const body = {
         sala_id: salaId ? Number(salaId) : null,
         sala_nombre: salaNombre,
         fecha_desde: fechaDesde,
         fecha_hasta: fechaHasta,
         total_empleados: totalEmpleados || 0,
-        data: payloadData || {},
+        data: finalData,
         visible: Boolean(guardarVisible)
       };
 

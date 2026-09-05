@@ -27,6 +27,7 @@ export function toTitleCase(str) {
 
 import { sql, isPgConnected, inMemoryData } from '../config/db.js';
 import { attlogEvents } from '../events/attlog.events.js';
+import zlib from 'zlib';
 import fs from 'fs';
 import path from 'path';
 import http from 'http';
@@ -4517,12 +4518,22 @@ export async function getCorteByIdModel(id) {
       if (rows && rows.length > 0) {
         let corteData = rows[0].data;
         if (typeof corteData === 'string') {
-          try {
-            corteData = JSON.parse(corteData);
-            if (typeof corteData === 'string') {
-              corteData = JSON.parse(corteData);
+          if (corteData.startsWith('gzip:') || corteData.startsWith('H4sI')) {
+            try {
+              const cleanBase64 = corteData.replace(/^gzip:/, '');
+              const buf = Buffer.from(cleanBase64, 'base64');
+              corteData = JSON.parse(zlib.gunzipSync(buf).toString('utf-8'));
+            } catch (e) {
+              console.warn('Error gunzip in getCorteByIdModel:', e);
             }
-          } catch (e) {}
+          } else {
+            try {
+              corteData = JSON.parse(corteData);
+              if (typeof corteData === 'string') {
+                corteData = JSON.parse(corteData);
+              }
+            } catch (e) {}
+          }
         }
         return { success: true, data: { ...rows[0], data: corteData } };
       }
@@ -4536,9 +4547,17 @@ export async function getCorteByIdModel(id) {
   if (found) {
     let corteData = found.data;
     if (typeof corteData === 'string') {
-      try {
-        corteData = JSON.parse(corteData);
-      } catch (e) {}
+      if (corteData.startsWith('gzip:') || corteData.startsWith('H4sI')) {
+        try {
+          const cleanBase64 = corteData.replace(/^gzip:/, '');
+          const buf = Buffer.from(cleanBase64, 'base64');
+          corteData = JSON.parse(zlib.gunzipSync(buf).toString('utf-8'));
+        } catch (e) {}
+      } else {
+        try {
+          corteData = JSON.parse(corteData);
+        } catch (e) {}
+      }
     }
     return { success: true, data: { ...found, data: corteData } };
   }
@@ -4556,7 +4575,21 @@ export async function createCorteModel(payload = {}) {
   } = payload;
 
   const isVisible = (payload.visible === false || payload.visible === 0 || payload.visible === '0' || payload.visible === 'false') ? false : true;
-  const jsonStr = typeof data === 'string' ? data : JSON.stringify(data || {});
+
+  // Descomprimir payload si viene en formato gzip base64
+  let parsedData = data;
+  if (typeof parsedData === 'string' && (parsedData.startsWith('gzip:') || parsedData.startsWith('H4sI'))) {
+    try {
+      const cleanBase64 = parsedData.replace(/^gzip:/, '');
+      const buf = Buffer.from(cleanBase64, 'base64');
+      const decompressed = zlib.gunzipSync(buf);
+      parsedData = JSON.parse(decompressed.toString('utf-8'));
+    } catch (errDecomp) {
+      console.error('Error descomprimiendo corte data en backend:', errDecomp);
+    }
+  }
+
+  const jsonStr = typeof parsedData === 'string' ? parsedData : JSON.stringify(parsedData || {});
 
   if (isPgConnected && sql) {
     try {
@@ -4583,10 +4616,6 @@ export async function createCorteModel(payload = {}) {
 
       if (rows && rows.length > 0) {
         const created = rows[0];
-        let parsedData = data;
-        if (typeof parsedData === 'string') {
-          try { parsedData = JSON.parse(parsedData); } catch (e) {}
-        }
         if (!inMemoryData.cortes) inMemoryData.cortes = [];
         inMemoryData.cortes.unshift({ ...created, data: parsedData });
         return { success: true, data: created };
@@ -4607,7 +4636,7 @@ export async function createCorteModel(payload = {}) {
     fecha_desde,
     fecha_hasta,
     total_empleados: total_empleados ? Number(total_empleados) : 0,
-    data,
+    data: parsedData,
     visible: isVisible,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()

@@ -97,9 +97,9 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/master/cortes/:id', getCorteById);
   fastify.get('/api/master/cortes/:id', getCorteById);
 
-  fastify.post('/master/cortes', createCorte);
-  fastify.post('/api/master/cortes', createCorte);
-  fastify.post('/cortes', createCorte);
+  fastify.post('/master/cortes', { bodyLimit: 100 * 1024 * 1024 }, createCorte);
+  fastify.post('/api/master/cortes', { bodyLimit: 100 * 1024 * 1024 }, createCorte);
+  fastify.post('/cortes', { bodyLimit: 100 * 1024 * 1024 }, createCorte);
 
   fastify.delete('/master/cortes/:id', deleteCorte);
   fastify.delete('/api/master/cortes/:id', deleteCorte);
