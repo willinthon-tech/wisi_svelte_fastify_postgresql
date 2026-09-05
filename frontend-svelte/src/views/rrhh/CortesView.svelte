@@ -16,7 +16,10 @@
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
   import CorteEmpleadosModal from '../../components/modals/CorteEmpleadosModal.svelte';
-  import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
+  import { 
+    loadMasterStoresFromBackend, 
+    userSalasStore as masterUserSalasStore 
+  } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
@@ -29,11 +32,40 @@
     showEmpleadosModal = true;
   }
 
-  $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+  // Extract assigned sala IDs strictly for the logged-in user
+  $: assignedSalaIds = (function () {
+    const user = $currentUserStore;
+    const userId = user?.id;
+    if (!userId) return [];
+
+    // 1. Direct user.salas array
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas
+        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .filter(Boolean);
+    }
+
+    // 2. Master user salas map (userId -> [sala_ids])
+    const masterMap = $masterUserSalasStore;
+    if (masterMap && typeof masterMap === "object" && !Array.isArray(masterMap)) {
+      const userList = masterMap[userId] || masterMap[String(userId)];
+      if (Array.isArray(userList) && userList.length > 0) {
+        return userList
+          .map((s) => (typeof s === "object" ? s.id : Number(s)))
+          .filter(Boolean);
+      }
+    }
+
+    // 3. Auth user salas store
+    const authSalas = $authUserSalasStore;
+    if (Array.isArray(authSalas) && authSalas.length > 0) {
+      return authSalas
+        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .filter(Boolean);
+    }
+
+    return [];
+  })();
 
   // Initialize from persistent store
   let initial = {};
@@ -79,11 +111,21 @@
   };
 
   onMount(async () => {
+    await loadMasterStoresFromBackend();
     await Promise.all([
       fetchFilterOptions(),
       loadServerData(currentParams)
     ]);
   });
+
+  // Reactive reload when assigned rooms are resolved/changed
+  let lastAssignedSalasKey = null;
+  $: assignedSalasKey = (assignedSalaIds || []).slice().sort((a, b) => a - b).join(",");
+  $: if (assignedSalasKey !== lastAssignedSalasKey) {
+    lastAssignedSalasKey = assignedSalasKey;
+    loadServerData({ page: 1 });
+    fetchFilterOptions();
+  }
 
   // Fetch filter options when active filters change
   let lastFilterKey = "";
@@ -96,7 +138,11 @@
   async function fetchFilterOptions() {
     try {
       const q = new URLSearchParams();
-      if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
+      if (assignedSalaIds.length > 0) {
+        q.set("user_sala_ids", assignedSalaIds.join(","));
+      } else {
+        q.set("user_sala_ids", "-1");
+      }
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
@@ -124,6 +170,8 @@
       });
       if (assignedSalaIds && assignedSalaIds.length > 0) {
         q.set('user_sala_ids', assignedSalaIds.join(','));
+      } else {
+        q.set('user_sala_ids', '-1');
       }
       if (selectedSalas.length > 0) {
         q.set('sala_ids', selectedSalas.join(','));

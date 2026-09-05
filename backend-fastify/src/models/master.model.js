@@ -4430,7 +4430,7 @@ export async function getCortesModel(options = {}) {
       const conds = [];
 
       if (options.userSalaIds && options.userSalaIds.length > 0) {
-        conds.push(sql`(sala_id IS NULL OR sala_id = ANY(${options.userSalaIds}))`);
+        conds.push(sql`sala_id = ANY(${options.userSalaIds})`);
       }
 
       if (options.salaIds && options.salaIds.length > 0) {
@@ -4481,7 +4481,7 @@ export async function getCortesModel(options = {}) {
   // Fallback in-memory
   let items = [...(inMemoryData.cortes || [])];
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    items = items.filter(c => !c.sala_id || options.userSalaIds.map(Number).includes(Number(c.sala_id)));
+    items = items.filter(c => c.sala_id && options.userSalaIds.map(Number).includes(Number(c.sala_id)));
   }
   if (options.salaIds && options.salaIds.length > 0) {
     items = items.filter(c => options.salaIds.map(Number).includes(Number(c.sala_id)));
@@ -4635,6 +4635,29 @@ export async function deleteCorteModel(id) {
 
 export async function getCortesFilterOptionsModel(options = {}) {
   const salasMap = new Map();
+
+  if (isPgConnected && sql) {
+    try {
+      let rows;
+      if (options.userSalaIds && options.userSalaIds.length > 0) {
+        rows = await sql`SELECT id, nombre, nombre_comercial FROM salas WHERE id = ANY(${options.userSalaIds}) ORDER BY id ASC`;
+      } else {
+        rows = await sql`SELECT id, nombre, nombre_comercial FROM salas ORDER BY id ASC`;
+      }
+      rows.forEach(s => {
+        salasMap.set(Number(s.id), { id: s.id, nombre: s.nombre_comercial || s.nombre });
+      });
+      return {
+        success: true,
+        data: {
+          salas: Array.from(salasMap.values())
+        }
+      };
+    } catch (err) {
+      console.error('Error getCortesFilterOptionsModel en PG:', err);
+    }
+  }
+
   (inMemoryData.salas || []).forEach(s => {
     if (!options.userSalaIds || options.userSalaIds.map(Number).includes(Number(s.id))) {
       salasMap.set(Number(s.id), { id: s.id, nombre: s.nombre_comercial || s.nombre });

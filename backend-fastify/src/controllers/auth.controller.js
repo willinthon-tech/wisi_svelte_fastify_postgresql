@@ -50,7 +50,8 @@ export async function loginController(request, reply) {
       user: {
         id: user.id,
         nombre_apellido: user.nombre_apellido,
-        usuario: user.usuario
+        usuario: user.usuario,
+        salas
       },
       salas,
       menu
@@ -93,7 +94,8 @@ export async function getMeController(request, reply) {
       user: {
         id: user.id,
         nombre_apellido: user.nombre_apellido,
-        usuario: user.usuario
+        usuario: user.usuario,
+        salas
       },
       salas,
       menu

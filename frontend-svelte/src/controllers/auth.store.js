@@ -8,19 +8,19 @@ const initialAuth = typeof localStorage !== 'undefined' ? localStorage.getItem('
 const initialUser = (typeof localStorage !== 'undefined' && localStorage.getItem('wisi_user')) 
   ? JSON.parse(localStorage.getItem('wisi_user')) 
   : null;
+const initialSalas = (() => {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('wisi_salas');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+})();
 
 export const currentUserStore = writable(initialUser);
 export const isAuthenticatedStore = writable(initialAuth);
-
-export const userSalasStore = writable([
-  { id: 1, nombre: 'Monagas Royal Casino', nombre_comercial: 'Monagas Royal Casino, C.A.' },
-  { id: 2, nombre: 'Roralma', nombre_comercial: 'Casino Roralma Inn' },
-  { id: 3, nombre: 'Gan Casino PLC', nombre_comercial: 'Gan Casino PLC' },
-  { id: 4, nombre: 'Charaima', nombre_comercial: 'Charaima' },
-  { id: 5, nombre: 'Caribe Plaza', nombre_comercial: 'Caribe Plaza' },
-  { id: 6, nombre: 'Gran Casino El Marques', nombre_comercial: 'Gran Casino El Marques' },
-  { id: 7, nombre: 'Gran Casino San Cristobal', nombre_comercial: 'Gran Casino San Cristobal' }
-]);
+export const userSalasStore = writable(initialSalas);
 export const selectedSalaStore = writable(1);
 
 export const navMenuStore = writable([
@@ -91,7 +91,12 @@ export async function loginUserStore(usuario, password) {
   try {
     const data = await loginAuthModel(usuario, password);
     currentUserStore.set(data.user);
-    if (data.salas) userSalasStore.set(data.salas);
+    if (data.salas) {
+      userSalasStore.set(data.salas);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('wisi_salas', JSON.stringify(data.salas));
+      }
+    }
     if (data.menu) navMenuStore.set(data.menu);
     isAuthenticatedStore.set(true);
 
@@ -140,10 +145,12 @@ export async function loginUserStore(usuario, password) {
 export function logoutUserStore() {
   isAuthenticatedStore.set(false);
   currentUserStore.set(null);
+  userSalasStore.set([]);
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('wisi_auth');
     localStorage.removeItem('wisi_user');
     localStorage.removeItem('wisi_token');
+    localStorage.removeItem('wisi_salas');
   }
 }
 
@@ -151,6 +158,7 @@ export async function loadUserSession() {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('wisi_auth') !== 'true') {
     isAuthenticatedStore.set(false);
     currentUserStore.set(null);
+    userSalasStore.set([]);
     return;
   }
 
@@ -162,7 +170,12 @@ export async function loadUserSession() {
         localStorage.setItem('wisi_user', JSON.stringify(data.user));
       }
     }
-    if (data.salas) userSalasStore.set(data.salas);
+    if (data.salas) {
+      userSalasStore.set(data.salas);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('wisi_salas', JSON.stringify(data.salas));
+      }
+    }
     if (data.menu) navMenuStore.set(data.menu);
     isAuthenticatedStore.set(true);
   } catch (err) {
