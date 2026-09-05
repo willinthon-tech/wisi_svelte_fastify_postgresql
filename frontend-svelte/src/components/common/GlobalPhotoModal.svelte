@@ -13,7 +13,8 @@
   import {
     preloadPhoto,
     isPhotoLoaded,
-    preloadPhotosBatch
+    preloadPhotosBatch,
+    getCachedBlobUrl
   } from "../../utils/photoPreloader.js";
 
   const backendUrl = getCloudBaseUrl();
@@ -280,10 +281,18 @@
       const cached = resolvedPhotoUrlCache.get(key);
       if (cached) return cached;
     }
-    return getPhotoUrl(record);
+    const rawUrl = getPhotoUrl(record);
+    if (!rawUrl) return "";
+    // Si ya fue descargada y convertida en Blob ObjectURL en memoria RAM, usarla de inmediato (0ms, 0 red)
+    const blobUrl = getCachedBlobUrl(rawUrl);
+    if (blobUrl && blobUrl.startsWith('blob:')) {
+      resolvedPhotoUrlCache.set(key, blobUrl);
+      return blobUrl;
+    }
+    return rawUrl;
   }
 
-  // Precargar en paralelo ÚNICAMENTE la foto principal del lote (sin sobrecargar red con fotos de personal)
+  // Precargar en paralelo ÚNICAMENTE la foto principal del lote a Blob ObjectURLs en RAM
   let lastBatchPage = null;
   $: if (isOpen && items && items.length > 0 && typeof window !== 'undefined') {
     if (currentPage !== lastBatchPage) {
@@ -295,7 +304,20 @@
         if (u) urlsToPreload.push(u);
       });
       if (urlsToPreload.length > 0) {
-        preloadPhotosBatch(urlsToPreload);
+        preloadPhotosBatch(urlsToPreload).then(() => {
+          // Si el item activo ya obtuvo su BlobURL en RAM, asignarlo directamente sin tocar la red
+          if (item) {
+            const raw = getPhotoUrl(item);
+            const b = getCachedBlobUrl(raw);
+            if (b && b.startsWith('blob:') && activePhotoUrl !== b) {
+              activePhotoUrl = b;
+              isCurrentPhotoLoaded = true;
+              isCurrentPhotoError = false;
+              const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
+              resolvedPhotoUrlCache.set(key, b);
+            }
+          }
+        });
       }
     }
   }
@@ -309,19 +331,23 @@
     if (!url) {
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = true;
-    } else if (isPhotoLoaded(url)) {
+    } else if (url.startsWith('blob:') || isPhotoLoaded(url)) {
       isCurrentPhotoLoaded = true;
       isCurrentPhotoError = false;
+      const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
+      resolvedPhotoUrlCache.set(key, url);
     } else {
       isCurrentPhotoLoaded = false;
       isCurrentPhotoError = false;
-      preloadPhoto(url).then((img) => {
+      preloadPhoto(url).then((entry) => {
         if (reqId !== currentActivePhotoRequestId) return;
-        if (img && !img.hasError && img.naturalWidth > 0) {
+        if (entry && !entry.hasError) {
+          const finalUrl = entry.blobUrl || url;
+          activePhotoUrl = finalUrl;
           isCurrentPhotoLoaded = true;
           isCurrentPhotoError = false;
           const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
-          resolvedPhotoUrlCache.set(key, url);
+          resolvedPhotoUrlCache.set(key, finalUrl);
         } else {
           handlePhotoErrorFallback(item, url, reqId);
         }
@@ -345,11 +371,12 @@
     const fallbackUrl = (empFotoUrl && empFotoUrl !== failedUrl) ? empFotoUrl : (idUrl && idUrl !== failedUrl ? idUrl : null);
 
     if (fallbackUrl && fallbackUrl !== failedUrl) {
-      preloadPhoto(fallbackUrl).then((img) => {
+      preloadPhoto(fallbackUrl).then((entry) => {
         if (reqId !== currentActivePhotoRequestId) return;
-        if (img && !img.hasError && img.naturalWidth > 0) {
-          resolvedPhotoUrlCache.set(key, fallbackUrl);
-          activePhotoUrl = fallbackUrl;
+        if (entry && !entry.hasError) {
+          const finalUrl = entry.blobUrl || fallbackUrl;
+          resolvedPhotoUrlCache.set(key, finalUrl);
+          activePhotoUrl = finalUrl;
           isCurrentPhotoLoaded = true;
           isCurrentPhotoError = false;
         } else {

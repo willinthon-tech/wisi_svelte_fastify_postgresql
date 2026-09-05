@@ -1,11 +1,12 @@
 /**
  * Gestor Global y Persistente de Precarga de Fotografías WISI
- * Almacena en window.__wisiGlobalPhotoCache los objetos Image decodificados en RAM
- * para garantizar que la navegación entre fotos en modales sea instantánea (0ms).
+ * Almacena en window.__wisiGlobalBlobCache los Blob ObjectURLs decodificados en RAM
+ * para garantizar que la navegación entre fotos sea instantánea (0ms) y NO repita peticiones de red.
  */
 
-if (typeof window !== 'undefined' && !window.__wisiGlobalPhotoCache) {
-  window.__wisiGlobalPhotoCache = new Map();
+if (typeof window !== 'undefined') {
+  if (!window.__wisiGlobalPhotoCache) window.__wisiGlobalPhotoCache = new Map();
+  if (!window.__wisiGlobalBlobCache) window.__wisiGlobalBlobCache = new Map();
 }
 
 export function getGlobalImageCache() {
@@ -16,97 +17,158 @@ export function getGlobalImageCache() {
   return new Map();
 }
 
+export function getGlobalBlobCache() {
+  if (typeof window !== 'undefined') {
+    if (!window.__wisiGlobalBlobCache) window.__wisiGlobalBlobCache = new Map();
+    return window.__wisiGlobalBlobCache;
+  }
+  return new Map();
+}
+
 /**
- * Retorna true si la foto ya fue completamente descargada y decodificada en memoria
+ * Retorna el ObjectURL local en memoria si ya fue precargado, o el URL original
+ */
+export function getCachedBlobUrl(url) {
+  if (!url || typeof window === 'undefined') return url;
+  if (url.startsWith('blob:')) return url;
+  const blobCache = getGlobalBlobCache();
+  if (blobCache.has(url)) {
+    return blobCache.get(url);
+  }
+  return url;
+}
+
+/**
+ * Retorna true si la foto ya fue completamente descargada y está lista en memoria
  */
 export function isPhotoLoaded(url) {
   if (!url || typeof window === 'undefined') return false;
+  if (url.startsWith('blob:')) return true;
+  const blobCache = getGlobalBlobCache();
+  if (blobCache.has(url)) return true;
+
   const cache = getGlobalImageCache();
   const entry = cache.get(url);
   if (!entry) return false;
   if (entry.hasError) return false;
-  if (entry.loaded && !entry.hasError && entry.img && entry.img.naturalWidth > 0) return true;
-  return Boolean(entry.img && entry.img.complete && entry.img.naturalWidth > 0);
+  return Boolean(entry.loaded);
 }
 
 /**
- * Retorna el elemento Image si ya está cargado con éxito, o null
+ * Retorna el elemento Image o BlobURL si ya está cargado con éxito, o null
  */
 export function getLoadedImage(url) {
   if (!url || typeof window === 'undefined') return null;
+  const blobCache = getGlobalBlobCache();
+  if (blobCache.has(url)) return blobCache.get(url);
+
   const cache = getGlobalImageCache();
   const entry = cache.get(url);
-  if (entry && entry.loaded && !entry.hasError && entry.img && entry.img.naturalWidth > 0) {
-    return entry.img;
+  if (entry && entry.loaded && !entry.hasError) {
+    return entry.blobUrl || entry.img || null;
   }
   return null;
 }
 
 /**
- * Precarga y decodifica una imagen en RAM
+ * Precarga y convierte una foto a Blob ObjectURL persistente en RAM
  */
 export function preloadPhoto(url) {
-  if (!url || typeof window === 'undefined') return Promise.resolve(null);
-  const cache = getGlobalImageCache();
+  if (!url || typeof window === 'undefined') {
+    return Promise.resolve({ url, blobUrl: url, loaded: true, hasError: false });
+  }
 
+  if (url.startsWith('blob:')) {
+    return Promise.resolve({ url, blobUrl: url, loaded: true, hasError: false });
+  }
+
+  const blobCache = getGlobalBlobCache();
+  if (blobCache.has(url)) {
+    const bUrl = blobCache.get(url);
+    return Promise.resolve({ url, blobUrl: bUrl, loaded: true, hasError: false });
+  }
+
+  const cache = getGlobalImageCache();
   if (cache.has(url)) {
     const entry = cache.get(url);
-    if (entry.loaded && !entry.hasError && entry.img && entry.img.naturalWidth > 0) {
-      entry.img.hasError = false;
-      return Promise.resolve(entry.img);
+    if (entry.loaded && !entry.hasError && entry.blobUrl) {
+      return Promise.resolve(entry);
     }
     if (entry.promise) return entry.promise;
   }
 
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.decoding = 'async';
-
-  const promise = new Promise((resolve) => {
-    let settled = false;
+  const promise = (async () => {
     let timeoutId = null;
+    try {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      timeoutId = setTimeout(() => {
+        if (controller) controller.abort();
+      }, 10000);
 
-    const onFinishSuccess = async () => {
-      if (!settled) {
-        settled = true;
-        if (timeoutId) clearTimeout(timeoutId);
-        try {
-          if (typeof img.decode === 'function') {
-            await img.decode();
-          }
-        } catch {
-          // Ignorar fallo de decode
+      const fetchOptions = {
+        mode: 'cors',
+        credentials: 'omit'
+      };
+      if (controller) fetchOptions.signal = controller.signal;
+
+      const res = await fetch(url, fetchOptions);
+      if (timeoutId) clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      if (!blob || blob.size === 0) {
+        throw new Error('Empty photo blob');
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
+      blobCache.set(url, blobUrl);
+
+      // Decodificar imagen para calentamiento de GPU/RAM
+      const img = new Image();
+      img.src = blobUrl;
+      try {
+        if (typeof img.decode === 'function') {
+          await img.decode();
         }
-        img.hasError = false;
-        cache.set(url, { img, loaded: true, hasError: false, promise: null });
-        resolve(img);
+      } catch {
+        // Ignorar si decode falla
       }
-    };
 
-    const onFinishError = () => {
-      if (!settled) {
-        settled = true;
-        if (timeoutId) clearTimeout(timeoutId);
-        img.hasError = true;
-        cache.set(url, { img, loaded: true, hasError: true, promise: null });
-        resolve(img);
-      }
-    };
+      const successEntry = {
+        url,
+        blobUrl,
+        img,
+        loaded: true,
+        hasError: false,
+        naturalWidth: img.naturalWidth || 100,
+        promise: null
+      };
+      cache.set(url, successEntry);
+      return successEntry;
+    } catch (err) {
+      if (timeoutId) clearTimeout(timeoutId);
+      const errorEntry = {
+        url,
+        blobUrl: null,
+        img: null,
+        loaded: true,
+        hasError: true,
+        promise: null
+      };
+      cache.set(url, errorEntry);
+      return errorEntry;
+    }
+  })();
 
-    img.onload = onFinishSuccess;
-    img.onerror = onFinishError;
-
-    // Timeout de seguridad generoso de 10s para redes móviles o de baja velocidad
-    timeoutId = setTimeout(onFinishError, 10000);
-  });
-
-  cache.set(url, { img, loaded: false, hasError: false, promise });
-  img.src = url;
+  cache.set(url, { url, blobUrl: null, loaded: false, hasError: false, promise });
   return promise;
 }
 
 /**
- * Precarga en paralelo un lote de URLs de imágenes
+ * Precarga en paralelo un lote de URLs de imágenes a Blob ObjectURLs
  */
 export function preloadPhotosBatch(urls = []) {
   if (!Array.isArray(urls) || urls.length === 0) return Promise.resolve();

@@ -141,9 +141,14 @@ async function startServer() {
       for (const dir of searchDirs) {
         const fullPath = path.join(dir, filename);
         if (fs.existsSync(fullPath)) {
+          const stat = fs.statSync(fullPath);
           reply.header('Access-Control-Allow-Origin', '*');
           reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-          reply.header('Cache-Control', 'public, max-age=2592000, immutable');
+          reply.header('Access-Control-Allow-Headers', '*');
+          reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+          reply.header('Content-Length', stat.size);
+          reply.header('Last-Modified', stat.mtime.toUTCString());
+          reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
           if (filename.endsWith('.png')) reply.type('image/png');
           else if (filename.endsWith('.svg')) reply.type('image/svg+xml');
           else reply.type('image/jpeg');
@@ -192,9 +197,14 @@ async function startServer() {
               for (const dir of searchDirs) {
                 const altPath = path.join(dir, cand);
                 if (fs.existsSync(altPath)) {
+                  const stat = fs.statSync(altPath);
                   reply.header('Access-Control-Allow-Origin', '*');
                   reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-                  reply.header('Cache-Control', 'public, max-age=2592000, immutable');
+                  reply.header('Access-Control-Allow-Headers', '*');
+                  reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+                  reply.header('Content-Length', stat.size);
+                  reply.header('Last-Modified', stat.mtime.toUTCString());
+                  reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
                   reply.type('image/jpeg');
                   return fs.createReadStream(altPath);
                 }

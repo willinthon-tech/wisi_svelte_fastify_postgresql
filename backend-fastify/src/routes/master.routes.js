@@ -263,9 +263,14 @@ export default async function masterRoutes(fastify, options) {
     for (const dir of attlogDirs) {
       const fullPath = path.join(dir, filename);
       if (fs.existsSync(fullPath)) {
+        const stat = fs.statSync(fullPath);
         reply.header('Access-Control-Allow-Origin', '*');
         reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        reply.header('Cache-Control', 'public, max-age=2592000, immutable');
+        reply.header('Access-Control-Allow-Headers', '*');
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Content-Length', stat.size);
+        reply.header('Last-Modified', stat.mtime.toUTCString());
+        reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
         reply.type('image/jpeg');
         return fs.createReadStream(fullPath);
       }
@@ -316,9 +321,14 @@ export default async function masterRoutes(fastify, options) {
             for (const dir of empSearchDirs) {
               const altPath = path.join(dir, cand);
               if (fs.existsSync(altPath)) {
+                const stat = fs.statSync(altPath);
                 reply.header('Access-Control-Allow-Origin', '*');
                 reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-                reply.header('Cache-Control', 'public, max-age=2592000, immutable');
+                reply.header('Access-Control-Allow-Headers', '*');
+                reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+                reply.header('Content-Length', stat.size);
+                reply.header('Last-Modified', stat.mtime.toUTCString());
+                reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
                 reply.type('image/jpeg');
                 return fs.createReadStream(altPath);
               }
