@@ -154,14 +154,18 @@
       const nextCtx = i + 1 < marcajesContext.length ? marcajesContext[i + 1] : null;
 
       const availableToday = (ctx.punches || []).filter(p => !p.consumed);
-      const checkinPunches = availableToday.filter(p => p.isCheckIn || p.type === 'E');
+      const explicitCheckins = availableToday.filter(p => p.isCheckIn || p.type === 'E');
+      const otherPunches = availableToday.filter(p => p.isOther || p.type === 'O');
 
-      // REGLA 1: No puede existir una salida sin entrada
-      if (checkinPunches.length === 0) {
+      // REGLA 1: Si no hay ni 'E' ni 'O' (día sin marcajes o solo 'S' de ayer), es Libre
+      if (explicitCheckins.length === 0 && otherPunches.length === 0) {
         continue;
       }
 
       // REGLA 2: Selección de Entrada
+      // Si hay 'E', tomar 'E'. Si no hay 'E' pero hay 'O': cotejar con horario asignado o Horario Único
+      const candidateEntries = explicitCheckins.length > 0 ? explicitCheckins : otherPunches;
+
       let targetPlantillas = [];
       if (ctx.fechaStr === dia?.fechaStr && selectedValue && selectedValue.startsWith('PLANTILLA_')) {
         const pId = Number(selectedValue.replace('PLANTILLA_', ''));
@@ -178,14 +182,14 @@
 
       if (targetPlantillas.length === 0) {
         // Horario Único: primer entrada del día
-        selectedEntry = checkinPunches[0];
+        selectedEntry = candidateEntries[0];
       } else {
         // Horario Asignado: entrada más lógica cercana a una de las plantillas asignadas
         let bestEntry = null;
         let minEntryDiff = Infinity;
         let bestPlant = null;
 
-        for (const cp of checkinPunches) {
+        for (const cp of candidateEntries) {
           const punchMins = toMinutes(cp.time);
           for (const plant of targetPlantillas) {
             if (!plant.hora_entrada) continue;
@@ -199,7 +203,7 @@
             }
           }
         }
-        selectedEntry = bestEntry || checkinPunches[0];
+        selectedEntry = bestEntry || candidateEntries[0];
         matchedPlantilla = bestPlant;
       }
 
@@ -207,19 +211,28 @@
       selectedEntry.consumed = true;
 
       // REGLA 3: Selección de Salida
-      const sameDayCandidates = availableToday.filter(p => !p.consumed && (p.isCheckOut || p.type === 'S') && p.timestamp > selectedEntry.timestamp);
+      const sameDayS = availableToday.filter(p => !p.consumed && (p.isCheckOut || p.type === 'S') && p.timestamp > selectedEntry.timestamp);
+      const sameDayAll = availableToday.filter(p => !p.consumed && p.timestamp > selectedEntry.timestamp && p.id !== selectedEntry.id);
+      const sameDayCandidates = sameDayS.length > 0 ? sameDayS : sameDayAll;
 
       const nextDayPunches = nextCtx ? (nextCtx.punches || []) : [];
       const nextDayFirstEntry = nextDayPunches.find(p => (p.isCheckIn || p.type === 'E') && !p.consumed);
-      const nextDayCandidates = nextDayPunches.filter(p => {
+      const nextDayS = nextDayPunches.filter(p => {
         if (p.consumed) return false;
         if (!p.isCheckOut && p.type !== 'S') return false;
         if (p.timestamp <= selectedEntry.timestamp) return false;
-        // No chocar con el registro del día siguiente
         if (nextDayFirstEntry && p.timestamp >= nextDayFirstEntry.timestamp) return false;
         const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
         return diffH >= 0 && diffH <= 18;
       });
+      const nextDayAll = nextDayPunches.filter(p => {
+        if (p.consumed) return false;
+        if (p.timestamp <= selectedEntry.timestamp) return false;
+        if (nextDayFirstEntry && p.timestamp >= nextDayFirstEntry.timestamp) return false;
+        const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
+        return diffH >= 0 && diffH <= 18;
+      });
+      const nextDayCandidates = nextDayS.length > 0 ? nextDayS : nextDayAll;
 
       const allExitCandidates = [...sameDayCandidates, ...nextDayCandidates];
       let selectedExit = null;
@@ -259,6 +272,18 @@
       if (selectedExit) {
         selectedExit.isUsedExit = true;
         selectedExit.consumed = true;
+
+        // Consumir marcajes intermedios
+        (ctx.punches || []).forEach(p => {
+          if (p.timestamp >= selectedEntry.timestamp && p.timestamp <= selectedExit.timestamp) {
+            p.consumed = true;
+          }
+        });
+        (nextDayPunches || []).forEach(p => {
+          if (p.timestamp >= selectedEntry.timestamp && p.timestamp <= selectedExit.timestamp) {
+            p.consumed = true;
+          }
+        });
       }
     }
 

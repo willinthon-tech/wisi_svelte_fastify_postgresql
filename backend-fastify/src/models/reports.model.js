@@ -101,7 +101,7 @@ export const BASE_PLANTILLA_LIBRE = {
   id: 'SYS-L',
   codigo: 'L',
   nombre: 'Libre',
-  color: '#D9D9D9',
+  color: '#dc2626',
   tipo: 'plantilla'
 };
 
@@ -169,30 +169,20 @@ export function pairDayAttendance({
   }
 
   const availableToday = punchesToday.filter(p => !p.consumed);
-  const checkinPunches = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
+  const explicitCheckins = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
+  const otherPunches = availableToday.filter(p => p.isOtherFlag || p.type === 'O' || p.isOther);
 
-  // REGLA 1: No puede existir una salida sin entrada
-  if (checkinPunches.length === 0) {
-    const unconsumed = availableToday.filter(p => !p.consumed);
-    const hasOther = unconsumed.some(p => p.isOtherFlag || p.type === 'O' || p.isOther);
-
-    if (hasOther) {
-      const firstOther = unconsumed.find(p => p.isOtherFlag || p.type === 'O' || p.isOther) || unconsumed[0];
-      entradaStr = firstOther.timeStr || firstOther.time;
-      salidaStr = null;
-      marcajeStr = entradaStr;
-      trabajadosMins = 0;
-      isNoEntryWithOtherPunches = true;
-      resultadoStr = 'ERROR';
+  // REGLA 1: Libre es que no haya marcajes en un día o que solo haya salidas (S) correspondientes al día de ayer.
+  // Mientras no haya un E ni un O en ese día, es LIBRE.
+  if (explicitCheckins.length === 0 && otherPunches.length === 0) {
+    entradaStr = null;
+    salidaStr = null;
+    marcajeStr = 'Sin Registros';
+    trabajadosMins = 0;
+    if (!isExcepcion || (excepObj && excepObj.es_libre)) {
+      resultadoStr = 'LIBRE';
     } else {
-      entradaStr = null;
-      salidaStr = null;
-      marcajeStr = 'Sin Registros';
-      if (!isExcepcion || (excepObj && excepObj.es_libre)) {
-        resultadoStr = 'LIBRE';
-      } else {
-        resultadoStr = excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'LIBRE';
-      }
+      resultadoStr = excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'LIBRE';
     }
 
     return {
@@ -205,19 +195,23 @@ export function pairDayAttendance({
       salBadge: null,
       selectedEntry: null,
       selectedExit: null,
-      matchedPlantilla,
-      isNoEntryWithOtherPunches
+      matchedPlantilla: null,
+      isNoEntryWithOtherPunches: false
     };
   }
 
-  // REGLA 2: Selección de la Entrada
+  // REGLA 2: Selección de Entrada
+  // Si hay 'E', tomar 'E'. Si no hay 'E' pero hay 'O': cotejar con el horario asignado,
+  // y si no tiene nada asignado, es Horario Único.
+  const candidateEntries = explicitCheckins.length > 0 ? explicitCheckins : otherPunches;
+
   const activePlantillas = matchedPlantilla
     ? [matchedPlantilla]
     : (targetPlantillas && targetPlantillas.length > 0 ? targetPlantillas : []);
 
   if (activePlantillas.length === 0) {
     // Horario Único: primer entrada del día
-    selectedEntry = checkinPunches[0];
+    selectedEntry = candidateEntries[0];
     if (!matchedPlantilla) {
       matchedPlantilla = BASE_PLANTILLA_UNICO;
     }
@@ -227,7 +221,7 @@ export function pairDayAttendance({
     let minEntryDiff = Infinity;
     let bestPlant = matchedPlantilla;
 
-    for (const cp of checkinPunches) {
+    for (const cp of candidateEntries) {
       const punchMins = cp.minsFromMidnight ?? toMinutes(cp.timeStr || cp.time);
       for (const plant of activePlantillas) {
         if (!plant.hora_entrada) continue;
@@ -243,7 +237,7 @@ export function pairDayAttendance({
       }
     }
 
-    selectedEntry = bestEntry || checkinPunches[0];
+    selectedEntry = bestEntry || candidateEntries[0];
     if (bestPlant) {
       matchedPlantilla = bestPlant;
     } else if (!matchedPlantilla) {
@@ -256,26 +250,35 @@ export function pairDayAttendance({
   entradaStr = selectedEntry.timeStr || selectedEntry.time;
 
   // REGLA 3: Selección de la Salida
-  const sameDayCandidates = availableToday.filter(p => !p.consumed && (p.isCheckOutFlag || p.type === 'S' || p.isCheckOut) && p.timestamp > selectedEntry.timestamp);
+  // Si hay marcajes explícitos 'S', priorizarlos; si no, permitir 'O' posteriores como salida
+  const sameDayS = availableToday.filter(p => !p.consumed && (p.isCheckOutFlag || p.type === 'S' || p.isCheckOut) && p.timestamp > selectedEntry.timestamp);
+  const sameDayAll = availableToday.filter(p => !p.consumed && p.timestamp > selectedEntry.timestamp && p.id !== selectedEntry.id);
+  const sameDayCandidates = sameDayS.length > 0 ? sameDayS : sameDayAll;
 
   // Candidatos día siguiente que no choquen con el registro del día siguiente
   const nextDayFirstEntry = nextDayPunches.find(p => (p.isCheckInFlag || p.type === 'E' || p.isCheckIn) && !p.consumed);
-  const nextDayCandidates = nextDayPunches.filter(p => {
+  const nextDayS = nextDayPunches.filter(p => {
     if (p.consumed) return false;
     if (!p.isCheckOutFlag && p.type !== 'S' && !p.isCheckOut) return false;
     if (p.timestamp <= selectedEntry.timestamp) return false;
-    // No chocar con el registro del día siguiente
     if (nextDayFirstEntry && p.timestamp >= nextDayFirstEntry.timestamp) return false;
-    // Duración máxima razonable
     const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
     return diffH >= 0 && diffH <= 18;
   });
+  const nextDayAll = nextDayPunches.filter(p => {
+    if (p.consumed) return false;
+    if (p.timestamp <= selectedEntry.timestamp) return false;
+    if (nextDayFirstEntry && p.timestamp >= nextDayFirstEntry.timestamp) return false;
+    const diffH = (p.timestamp - selectedEntry.timestamp) / (1000 * 3600);
+    return diffH >= 0 && diffH <= 18;
+  });
+  const nextDayCandidates = nextDayS.length > 0 ? nextDayS : nextDayAll;
 
   const allExitCandidates = [...sameDayCandidates, ...nextDayCandidates];
 
   if (allExitCandidates.length > 0) {
     if (matchedPlantilla && matchedPlantilla.hora_salida && matchedPlantilla.codigo !== 'U') {
-      // Tiene horario asignado: la salida más lógica dependiendo de su horario asignado
+      // Horario Asignado: la salida más lógica dependiendo de su horario asignado
       const schedSalMins = toMinutes(matchedPlantilla.hora_salida);
       let bestExit = null;
       let minExitDiff = Infinity;
@@ -292,19 +295,17 @@ export function pairDayAttendance({
 
       selectedExit = bestExit || allExitCandidates[0];
     } else {
-      // Horario Único: la más lógica, osea la más cercana >= 4 horas con respecto a la entrada
+      // Horario Único: la más lógica >= 4 horas con respecto a la entrada
       const candidatesGte4h = allExitCandidates.filter(cand => {
         const diffMins = Math.floor((cand.timestamp - selectedEntry.timestamp) / 60000);
         return diffMins >= 240;
       });
 
       if (candidatesGte4h.length > 0) {
-        // Primera salida >= 4h (o su cluster de marcajes dentro de los 15 minutos siguientes)
         const firstValid = candidatesGte4h[0];
         const cluster = candidatesGte4h.filter(c => Math.abs(c.timestamp - firstValid.timestamp) <= 15 * 60 * 1000);
         selectedExit = cluster[cluster.length - 1];
       } else {
-        // Si no hay ninguna >= 4h, tomar la primera salida disponible (se marcará ERROR por < 4h)
         selectedExit = allExitCandidates[0];
       }
     }
@@ -319,6 +320,18 @@ export function pairDayAttendance({
     salidaStr = selectedExit.timeStr || selectedExit.time;
     trabajadosMins = Math.floor((selectedExit.timestamp - selectedEntry.timestamp) / 60000);
     marcajeStr = `${entradaStr} - ${salidaStr}`;
+
+    // Consumir todos los marcajes intermedios entre la entrada y la salida para no dejar marcajes huérfanos
+    punchesToday.forEach(p => {
+      if (p.timestamp >= selectedEntry.timestamp && p.timestamp <= selectedExit.timestamp) {
+        p.consumed = true;
+      }
+    });
+    nextDayPunches.forEach(p => {
+      if (p.timestamp >= selectedEntry.timestamp && p.timestamp <= selectedExit.timestamp) {
+        p.consumed = true;
+      }
+    });
   } else {
     salidaStr = null;
     marcajeStr = `${entradaStr}`;
@@ -727,7 +740,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
 
       // Resolver código, color y tipo de plantilla para el badge
       let shiftCode = 'L';
-      let shiftColor = '#D9D9D9';
+      let shiftColor = '#dc2626';
       let shiftTipo = 'plantilla';
 
       if (matchedPlantilla) {
@@ -736,11 +749,11 @@ export async function getMarcajePersonalReportModel(params = {}) {
         shiftTipo = matchedPlantilla.tipo || 'horario';
       } else if (excepObj && excepObj.plantilla_codigo) {
         shiftCode = excepObj.plantilla_codigo;
-        shiftColor = excepObj.color || '#D9D9D9';
+        shiftColor = excepObj.color || (excepObj.es_libre ? '#dc2626' : '#D9D9D9');
         shiftTipo = excepObj.tipo || 'plantilla';
       } else {
         shiftCode = 'L';
-        shiftColor = '#D9D9D9';
+        shiftColor = '#dc2626';
         shiftTipo = 'plantilla';
       }
 

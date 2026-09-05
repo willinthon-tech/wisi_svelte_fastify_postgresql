@@ -1006,7 +1006,7 @@
                           type="button"
                           on:click={() => openExcepcionModal(emp, dia)}
                           class="btn-shift-badge"
-                          style="display: inline-flex; align-items: center; justify-content: center; min-width: calc(24px * var(--zoom-scale, 1)); height: calc(20px * var(--zoom-scale, 1)); padding: 0 calc(4px * var(--zoom-scale, 1)); border-radius: 4px; font-weight: 900; font-size: clamp(9px, calc(11px * var(--zoom-scale, 1)), 13px); text-transform: uppercase; background-color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.shift ? (dia.shift.color || '#2563eb') : '#f1f5f9'))}; color: {dia.resultadoStr === 'ERROR' || dia.resultadoStr === 'EN ESPERA' ? '#ffffff' : (dia.shift && (dia.shift.codigo === 'U' || dia.shift.color === '#86EFAC' || dia.shift.color === '#D9D9D9') ? '#0f172a' : '#ffffff')}; box-shadow: 0 1px 2px rgba(0,0,0,0.1); flex-shrink: 0; border: {dia.isExcepcion ? '2px solid #7c3aed' : '1px solid rgba(0,0,0,0.08)'}; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; position: relative;"
+                          style="display: inline-flex; align-items: center; justify-content: center; min-width: calc(24px * var(--zoom-scale, 1)); height: calc(20px * var(--zoom-scale, 1)); padding: 0 calc(4px * var(--zoom-scale, 1)); border-radius: 4px; font-weight: 900; font-size: clamp(9px, calc(11px * var(--zoom-scale, 1)), 13px); text-transform: uppercase; background-color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.shift ? (dia.shift.color || '#dc2626') : '#dc2626'))}; color: {dia.resultadoStr === 'ERROR' || dia.resultadoStr === 'EN ESPERA' || (dia.shift && (dia.shift.codigo === 'L' || dia.shift.color === '#dc2626')) ? '#ffffff' : (dia.shift && (dia.shift.codigo === 'U' || dia.shift.color === '#86EFAC' || dia.shift.color === '#D9D9D9') ? '#0f172a' : '#ffffff')}; box-shadow: 0 1px 2px rgba(0,0,0,0.1); flex-shrink: 0; border: {dia.isExcepcion ? '2px solid #7c3aed' : '1px solid rgba(0,0,0,0.08)'}; cursor: pointer; transition: transform 0.12s ease, box-shadow 0.12s ease; position: relative;"
                           title={dia.isExcepcion ? '⚡ Excepción Especial Activa - Clic para cambiar' : (dia.shift ? (dia.shift.nombre || dia.shift.codigo) : 'Clic para asignar excepción')}
                         >
                           {dia.shift ? dia.shift.codigo : '-'}
@@ -1038,7 +1038,7 @@
                       <!-- Middle Row: Result Status Title -->
                       <div
                         class="result-status-title"
-                        style="color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.resultadoStr === 'LIBRE' ? '#475569' : '#0f172a'))};"
+                        style="color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.resultadoStr === 'LIBRE' ? '#dc2626' : '#0f172a'))};"
                       >
                         {#if dayColWidth < 70 && dia.resultadoStr && dia.resultadoStr.includes('(D)') && dia.resultadoStr.includes('(N)')}
                           <div class="mixed-status-stack">
