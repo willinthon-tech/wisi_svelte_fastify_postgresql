@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let show = false;
   export let empleado = null;
@@ -510,6 +511,22 @@
     }
     return '';
   }
+
+  function getFotoUrl(emp) {
+    if (!emp) return null;
+    let foto = emp.foto;
+    if (!foto && emp.id) foto = `${emp.id}.jpg`;
+    if (!foto) return null;
+
+    if (foto.startsWith('http') || foto.startsWith('data:')) return foto;
+
+    let cleanFoto = String(foto)
+      .replace(/^\/+/, '')
+      .replace(/^empleados\//, '')
+      .replace(/^photos\//, '')
+      .trim();
+    return toBackendUrl(`/empleados/${cleanFoto}`, { thumb: true });
+  }
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />
@@ -520,9 +537,28 @@
       
       <!-- Header -->
       <div style="padding: 14px 20px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <div style="width: 36px; height: 36px; border-radius: 50%; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0;">
-            ⚡
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <!-- Foto Ligera del Empleado con Fallback de Inicial -->
+          <div style="width: 42px; height: 42px; border-radius: 50%; overflow: hidden; border: 2px solid #3b82f6; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.12); position: relative;">
+            {#if getFotoUrl(empleado)}
+              <img
+                src={getFotoUrl(empleado)}
+                alt={empleado?.nombre || 'Empleado'}
+                style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;"
+                on:error={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.nextElementSibling;
+                  if (fallback) fallback.style.display = 'flex';
+                }}
+              />
+              <div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; background: #e0e7ff; color: #4338ca; font-size: 15px; font-weight: 900; text-transform: uppercase;">
+                {(empleado?.nombre || 'E').charAt(0).toUpperCase()}
+              </div>
+            {:else}
+              <div style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; background: #e0e7ff; color: #4338ca; font-size: 15px; font-weight: 900; text-transform: uppercase;">
+                {(empleado?.nombre || 'E').charAt(0).toUpperCase()}
+              </div>
+            {/if}
           </div>
           <div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
