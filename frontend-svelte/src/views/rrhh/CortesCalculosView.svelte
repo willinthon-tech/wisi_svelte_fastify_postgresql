@@ -15,6 +15,22 @@
   let diasDelMes = [];
   let mesesAgrupados = [];
 
+  // Fechas patrias base nacionales
+  const BASE_FERIADOS = [
+    { mes: 1, dia: 1, nombre: 'Año Nuevo' },
+    { mes: 4, dia: 19, nombre: 'Declaración de la Independencia' },
+    { mes: 5, dia: 1, nombre: 'Día del Trabajador' },
+    { mes: 6, dia: 24, nombre: 'Batalla de Carabobo' },
+    { mes: 7, dia: 5, nombre: 'Día de la Independencia' },
+    { mes: 7, dia: 24, nombre: 'Natalicio del Libertador Simón Bolívar' },
+    { mes: 10, dia: 12, nombre: 'Día de la Resistencia Indígena' },
+    { mes: 12, dia: 24, nombre: 'Víspera de Navidad' },
+    { mes: 12, dia: 25, nombre: 'Navidad' },
+    { mes: 12, dia: 31, nombre: 'Fin de Año' }
+  ];
+
+  let allCalendarFeriados = [];
+
   // Cálculos procesados de los empleados
   let processedEmployees = [];
 
@@ -44,6 +60,17 @@
   async function loadCorteData(id) {
     isLoading = true;
     try {
+      // Cargar feriados del calendario (excluyendo cumpleaños)
+      try {
+        const resFer = await fetch('/api/master/calendario?limit=500');
+        const jsonFer = await resFer.json();
+        if (jsonFer) {
+          allCalendarFeriados = jsonFer.data || jsonFer.items || (Array.isArray(jsonFer) ? jsonFer : []);
+        }
+      } catch (e) {
+        console.warn('Error cargando feriados del calendario:', e);
+      }
+
       const res = await fetch(`/api/master/cortes/${id}`);
       const json = await res.json();
       if (json && json.success && json.data) {
@@ -58,6 +85,30 @@
     } finally {
       isLoading = false;
     }
+  }
+
+  function isDayFeriado(fechaStr, emp) {
+    if (!fechaStr) return false;
+    const parts = String(fechaStr).split('-');
+    if (parts.length < 3) return false;
+    const mes = parseInt(parts[1], 10);
+    const dia = parseInt(parts[2], 10);
+
+    // 1. Fechas Patrias Base Nacionales
+    if (BASE_FERIADOS.some(bf => bf.mes === mes && bf.dia === dia)) {
+      return true;
+    }
+
+    // 2. Feriados de sala en base de datos (no aplica cumpleaños)
+    const empSalaId = emp && emp.sala_id ? Number(emp.sala_id) : (corte && corte.sala_id ? Number(corte.sala_id) : null);
+    return allCalendarFeriados.some(f => {
+      if (Number(f.mes) !== mes || Number(f.dia) !== dia) return false;
+      const fTipo = String(f.tipo || f.tipo_evento || '').toUpperCase();
+      if (fTipo === 'CUMPLEANOS' || fTipo === 'CUMPLEAÑOS' || f.empleado_id) return false;
+      if (!f.sala_id) return true; // Feriado global de todas las salas
+      if (empSalaId && Number(f.sala_id) === empSalaId) return true; // Feriado de la sala del empleado
+      return false;
+    });
   }
 
   function getEntradaSalidaTimes(marcajeStr) {
@@ -190,14 +241,14 @@
       let nocturnosCount = 0;
       let horasDiurnasMins = 0;
       let horasNocturnasMins = 0;
+      let diferenciaHorasMins = 0;
       let totalTrabajadosMins = 0;
       let domingosCount = 0;
       let feriadosCount = 0;
 
-      // Novedades y excepciones específicas
+      // Novedades y excepciones específicas creadas por el usuario
       let faltaInjustificadaCount = 0;
       let justificativoCount = 0;
-      let libreCount = 0;
       let nuevoIngresoCount = 0;
       let permisoNoRemuneradoCount = 0;
       let permisoRemuneradoCount = 0;
@@ -209,7 +260,6 @@
 
       // Métricas de asistencia
       let diasAsistidos = 0;
-      let horasEsperadasMins = 0;
 
       // Métricas de Puntualidad (Contadores y Sumadores)
       let entradaTempranaCount = 0;
@@ -224,45 +274,75 @@
       dias.forEach(dia => {
         const resStr = String(dia.resultadoStr || '').toUpperCase().trim();
         const shiftCode = String((dia.shift && dia.shift.codigo) || '').toUpperCase().trim();
+        const shiftNombre = String((dia.shift && dia.shift.nombre) || '').toUpperCase().trim();
         const mins = Number(dia.trabajadosMins) || 0;
 
-        // Días de la semana y feriados
-        const fechaObj = new Date(dia.fechaStr + 'T00:00:00');
-        const isSunday = fechaObj.getDay() === 0;
-        const isFeriado = Boolean(dia.isFeriado || dia.feriadoNombre);
+        // Días de la semana (Domingo) y Feriados
+        let isSunday = false;
+        if (dia.fechaStr) {
+          const parts = String(dia.fechaStr).split('-');
+          if (parts.length >= 3) {
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            const dNum = parseInt(parts[2], 10);
+            const dateObj = new Date(Date.UTC(y, m, dNum));
+            isSunday = dateObj.getUTCDay() === 0;
+          }
+        }
+        const isFeriado = isDayFeriado(dia.fechaStr, emp);
 
         // Si trabajó
         if (mins > 0 && resStr !== 'LIBRE') {
           totalTrabajadosMins += mins;
           diasAsistidos++;
 
+          // Domingo trabajado
           if (isSunday) domingosCount++;
+
+          // Feriado trabajado (nacionales y de su sala, sin cumpleaños)
           if (isFeriado) feriadosCount++;
 
-          // Diurnos vs Nocturnos
-          if (resStr.includes('NOCTURNO')) {
-            nocturnosCount++;
-            horasNocturnasMins += mins;
-          } else if (resStr.includes('DIURNO') && !resStr.includes('(N)')) {
+          // 1) DIURNOS: contador de días donde la etiqueta dice DIURNO
+          if (resStr === 'DIURNO') {
             diurnosCount++;
-            horasDiurnasMins += mins;
-          } else if (resStr.includes('(D)') && resStr.includes('(N)')) {
-            diurnosCount++;
+          }
+          // 2) NOCTURNO: contador de días donde la etiqueta dice NOCTURNO
+          else if (resStr === 'NOCTURNO') {
             nocturnosCount++;
-            const matchD = resStr.match(/\(D\)\s*(\d{2}):(\d{2})/);
-            const matchN = resStr.match(/\(N\)\s*(\d{2}):(\d{2})/);
+          }
+          // 3) y 4) HORAS DIURNAS Y NOCTURNAS: de los turnos mixtos (D) HH:MM - (N) HH:MM
+          else if (resStr.includes('(D)') && resStr.includes('(N)')) {
+            const matchD = resStr.match(/\(D\)\s*(\d{1,2}):(\d{2})/);
+            const matchN = resStr.match(/\(N\)\s*(\d{1,2}):(\d{2})/);
             if (matchD && matchN) {
               const dM = parseInt(matchD[1], 10) * 60 + parseInt(matchD[2], 10);
               const nM = parseInt(matchN[1], 10) * 60 + parseInt(matchN[2], 10);
               horasDiurnasMins += dM;
               horasNocturnasMins += nM;
-            } else {
-              horasDiurnasMins += Math.floor(mins / 2);
-              horasNocturnasMins += Math.ceil(mins / 2);
             }
-          } else {
-            diurnosCount++;
-            horasDiurnasMins += mins;
+          }
+
+          // 5) DIFERENCIA DE HORAS: sumatoria de horas desde las 2am hasta la salida (turnos que cruzan las 2am)
+          const times = getEntradaSalidaTimes(dia.marcajeStr);
+          if (times.entrada && times.salida) {
+            const entM = toMinutes(times.entrada);
+            const salM = toMinutes(times.salida);
+            if (entM !== null && salM !== null) {
+              // Si cruzó medianoche (ej: entra 22:00 y sale 05:30)
+              if (salM < entM) {
+                // Las 2:00 AM son 120 minutos
+                if (salM > 120) {
+                  diferenciaHorasMins += (salM - 120);
+                }
+              } else if (resStr.includes('NOCTURNO')) {
+                // Si la jornada nocturna inició después de medianoche
+                if (entM < 120 && salM > 120 && salM <= 12 * 60) {
+                  diferenciaHorasMins += (salM - 120);
+                } else if (entM >= 120 && entM < 6 * 60 && salM > entM && salM <= 12 * 60) {
+                  diferenciaHorasMins += (salM - entM);
+                }
+              }
+            }
           }
 
           // === Puntualidad: ENTRADA (Temprana vs Tarde) ===
@@ -334,48 +414,29 @@
           }
         }
 
-        // Horas esperadas por plantilla asignada
-        if (dia.shift && dia.shift.hora_entrada && dia.shift.hora_salida) {
-          const [eh, em] = dia.shift.hora_entrada.split(':').map(Number);
-          const [sh, sm] = dia.shift.hora_salida.split(':').map(Number);
-          let dur = ((sh * 60 + sm) - (eh * 60 + em));
-          if (dur < 0) dur += 24 * 60;
-          horasEsperadasMins += dur;
-        } else if (mins > 0) {
-          horasEsperadasMins += 8 * 60;
-        }
-
         // Conteo de novedades y excepciones
-        if (shiftCode === 'FI' || resStr.includes('INJUSTIFICADA') || resStr.includes('FALTA INJUSTIFICADA')) {
+        if (shiftCode === 'FI' || resStr.includes('INJUSTIFICADA') || shiftNombre.includes('INJUSTIFICADA')) {
           faltaInjustificadaCount++;
-        } else if (shiftCode === 'FJ' || resStr.includes('JUSTIFICADO') || resStr.includes('CONSTANCIA')) {
+        } else if (shiftCode === 'FJ' || resStr.includes('JUSTIFICAD') || shiftNombre.includes('JUSTIFICAD') || resStr.includes('CONSTANCIA')) {
           justificativoCount++;
-        } else if (shiftCode === 'L' || resStr === 'LIBRE') {
-          libreCount++;
-        } else if (shiftCode === 'NI' || resStr.includes('NUEVO INGRESO')) {
+        } else if (shiftCode === 'NI' || resStr.includes('NUEVO INGRESO') || shiftNombre.includes('NUEVO INGRESO')) {
           nuevoIngresoCount++;
-        } else if (shiftCode === 'PNR' || resStr.includes('NO REMUNERADO')) {
+        } else if (shiftCode === 'PNR' || resStr.includes('NO REMUNERADO') || shiftNombre.includes('NO REMUNERADO')) {
           permisoNoRemuneradoCount++;
-        } else if (shiftCode === 'PR' || resStr.includes('PERMISO REMUNERADO')) {
+        } else if (shiftCode === 'PR' || (resStr.includes('PERMISO') && !resStr.includes('NO REMUNERADO')) || (shiftNombre.includes('PERMISO') && !shiftNombre.includes('NO REMUNERADO'))) {
           permisoRemuneradoCount++;
-        } else if (shiftCode === 'IVSS' || resStr.includes('REPOSO') || resStr.includes('IVSS')) {
+        } else if (shiftCode === 'IVSS' || resStr.includes('REPOSO') || resStr.includes('IVSS') || shiftNombre.includes('REPOSO')) {
           reposoIvssCount++;
-        } else if (shiftCode === 'RET' || resStr.includes('RETIRADO')) {
+        } else if (shiftCode === 'RET' || resStr.includes('RETIRADO') || shiftNombre.includes('RETIRADO')) {
           retiradoCount++;
-        } else if (shiftCode === 'SUS' || resStr.includes('SUSPENDIDO')) {
+        } else if (shiftCode === 'SUS' || resStr.includes('SUSPENDIDO') || shiftNombre.includes('SUSPENDIDO')) {
           suspendidoCount++;
-        } else if (shiftCode === 'OTRO' || resStr.includes('OTRO NEGOCIO')) {
+        } else if (shiftCode === 'OTRO' || resStr.includes('OTRO NEGOCIO') || shiftNombre.includes('OTRO NEGOCIO')) {
           otroNegocioCount++;
-        } else if (shiftCode === 'VAC' || resStr.includes('VACACIONES')) {
+        } else if (shiftCode === 'VAC' || resStr.includes('VACACION') || shiftNombre.includes('VACACION')) {
           vacacionesCount++;
         }
       });
-
-      // Diferencia de Horas (trabajadas - esperadas)
-      const diffMins = totalTrabajadosMins - horasEsperadasMins;
-      const diffSign = diffMins >= 0 ? '+' : '-';
-      const absDiffMins = Math.abs(diffMins);
-      const diffHorasStr = `${diffSign}${toHHMM(absDiffMins)}`;
 
       return {
         ...emp,
@@ -383,15 +444,12 @@
         nocturnosCount,
         horasDiurnasStr: toHHMM(horasDiurnasMins),
         horasNocturnasStr: toHHMM(horasNocturnasMins),
-        totalTrabajadosStr: toHHMM(totalTrabajadosMins),
-        horasEsperadasStr: toHHMM(horasEsperadasMins),
-        diffHorasStr,
-        diffMins,
+        diffHorasStr: toHHMM(diferenciaHorasMins),
+        diferenciaHorasMins,
         domingosCount,
         feriadosCount,
         faltaInjustificadaCount,
         justificativoCount,
-        libreCount,
         nuevoIngresoCount,
         permisoNoRemuneradoCount,
         permisoRemuneradoCount,
@@ -645,23 +703,22 @@
       </div>
     {/if}
 
-    <!-- TAB 2: Tabla Oficial de Cálculos (19 Columnas exactas) -->
+    <!-- TAB 2: Tabla Oficial de Cálculos (Sin columna Libre) -->
     {#if activeTab === 'calculos'}
       <div class="table-container">
         <table class="calculos-table">
           <thead>
             <tr>
               <th class="col-emp sticky-col">Empleado</th>
-              <th class="col-num" title="Días Diurnos">Diurnos</th>
-              <th class="col-num" title="Días Nocturnos">Nocturnos</th>
-              <th class="col-hours" title="Horas Diurnas Acumuladas">Horas Diurnas</th>
-              <th class="col-hours" title="Horas Nocturnas Acumuladas">Horas Nocturnas</th>
-              <th class="col-hours" title="Diferencia de Horas">Diferencia Horas</th>
+              <th class="col-num" title="Total Días Diurnos">Diurnos</th>
+              <th class="col-num" title="Total Días Nocturnos">Nocturnos</th>
+              <th class="col-hours" title="Horas Diurnas de Turnos Mixtos">Horas Diurnas</th>
+              <th class="col-hours" title="Horas Nocturnas de Turnos Mixtos">Horas Nocturnas</th>
+              <th class="col-hours" title="Diferencia de Horas (Sumatoria de horas trabajadas desde las 2:00 AM hasta la salida)">Diferencia Horas</th>
               <th class="col-num" title="Domingos Trabajados">Domingos</th>
-              <th class="col-num" title="Días Feriados Trabajados">Feriados</th>
+              <th class="col-num" title="Días Feriados Trabajados (Nacionales y de Sala)">Feriados</th>
               <th class="col-num alert-col" title="Falta Injustificada">Falta Injustificada</th>
               <th class="col-num" title="Justificativo (Falta Justificada, con constancia)">Justificativo (Falta Justificada, con constancia)</th>
-              <th class="col-num" title="Días Libres">Libre</th>
               <th class="col-num" title="Nuevo Ingreso">Nuevo Ingreso</th>
               <th class="col-num" title="Permiso No Remunerado">Permiso No Remunerado</th>
               <th class="col-num" title="Permiso Remunerado">Permiso Remunerado</th>
@@ -675,7 +732,7 @@
           <tbody>
             {#if filteredEmployees.length === 0}
               <tr>
-                <td colspan="19" class="empty-row">
+                <td colspan="18" class="empty-row">
                   No se encontraron empleados en este corte histórico.
                 </td>
               </tr>
@@ -700,14 +757,13 @@
                   <td class="col-num {emp.nocturnosCount > 0 ? 'val-active' : ''}">{emp.nocturnosCount || 0}</td>
                   <td class="col-hours font-mono">{emp.horasDiurnasStr}</td>
                   <td class="col-hours font-mono">{emp.horasNocturnasStr}</td>
-                  <td class="col-hours font-mono {emp.diffMins < 0 ? 'diff-neg' : (emp.diffMins > 0 ? 'diff-pos' : '')}">
+                  <td class="col-hours font-mono {emp.diferenciaHorasMins > 0 ? 'diff-pos' : ''}">
                     {emp.diffHorasStr}
                   </td>
                   <td class="col-num {emp.domingosCount > 0 ? 'val-sunday' : ''}">{emp.domingosCount || 0}</td>
                   <td class="col-num {emp.feriadosCount > 0 ? 'val-feriado' : ''}">{emp.feriadosCount || 0}</td>
                   <td class="col-num {emp.faltaInjustificadaCount > 0 ? 'val-falta' : ''}">{emp.faltaInjustificadaCount || 0}</td>
                   <td class="col-num {emp.justificativoCount > 0 ? 'val-active' : ''}">{emp.justificativoCount || 0}</td>
-                  <td class="col-num">{emp.libreCount || 0}</td>
                   <td class="col-num">{emp.nuevoIngresoCount || 0}</td>
                   <td class="col-num">{emp.permisoNoRemuneradoCount || 0}</td>
                   <td class="col-num">{emp.permisoRemuneradoCount || 0}</td>
@@ -1509,7 +1565,6 @@
   .val-feriado { color: #0284c7; font-weight: 800; }
   .val-falta { color: #dc2626; font-weight: 900; background: #fef2f2; }
 
-  .diff-neg { color: #dc2626; font-weight: 800; }
   .diff-pos { color: #16a34a; font-weight: 800; }
 
   .text-red { color: #dc2626; font-weight: 800; }
