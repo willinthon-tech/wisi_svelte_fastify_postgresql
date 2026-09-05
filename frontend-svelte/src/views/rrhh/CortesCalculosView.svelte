@@ -8,8 +8,12 @@
   let corteId = null;
   let corte = null;
   let isLoading = true;
-  let activeTab = 'calculos'; // 'calculos' | 'puntualidad'
+  let activeTab = 'marcajes'; // 'marcajes' | 'calculos' | 'puntualidad'
   let searchQuery = '';
+
+  // Días y meses del corte
+  let diasDelMes = [];
+  let mesesAgrupados = [];
 
   // Cálculos procesados de los empleados
   let processedEmployees = [];
@@ -56,6 +60,47 @@
     }
   }
 
+  function getEntradaSalidaTimes(marcajeStr) {
+    if (!marcajeStr || marcajeStr === "Sin Registros") return { entrada: null, salida: null };
+    const clean = String(marcajeStr).replace(/ - (Sin descanso|Descanso Automático|Con descanso)/gi, "").trim();
+    const parts = clean.split("-").map((s) => s.trim());
+    if (parts.length >= 2) {
+      return { entrada: parts[0], salida: parts[1] };
+    } else if (parts.length === 1 && parts[0]) {
+      return { entrada: parts[0], salida: null };
+    }
+    return { entrada: null, salida: null };
+  }
+
+  function toMinutes(timeStr) {
+    if (!timeStr) return null;
+    const parts = String(timeStr).split(':');
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(h) && !isNaN(m)) return h * 60 + m;
+    }
+    return null;
+  }
+
+  function toHHMM(totalMinutes) {
+    if (!totalMinutes || isNaN(totalMinutes) || totalMinutes <= 0) return '00:00';
+    const h = Math.floor(totalMinutes / 60);
+    const m = Math.floor(totalMinutes % 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function formatDate(dStr) {
+    if (!dStr) return '';
+    const parts = String(dStr).split('T')[0].split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return dStr;
+  }
+
+  function handleBack() {
+    navigateToRoute('rrhh/cortes');
+  }
+
   function computeCalculos(corteObj) {
     if (!corteObj) return;
     let snapshotData = corteObj.data || {};
@@ -84,8 +129,60 @@
       }
     }
 
-    const diasDelMes = snapshotData.diasDelMes || (snapshotData.reportData && snapshotData.reportData.diasDelMes) || [];
+    // 1. Construir lista de días y cabecera de meses
+    const MESES = [
+      "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+      "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+    ];
+    const DIAS = ["D", "L", "M", "M", "J", "V", "S"];
 
+    let savedDiasDelMes = snapshotData.diasDelMes || (snapshotData.reportData && snapshotData.reportData.diasDelMes) || [];
+    if (!savedDiasDelMes || savedDiasDelMes.length === 0) {
+      if (rawEmpleados.length > 0 && rawEmpleados[0].dias && rawEmpleados[0].dias.length > 0) {
+        savedDiasDelMes = rawEmpleados[0].dias.map(d => {
+          const parts = String(d.fechaStr).split('-');
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const dayNum = parseInt(parts[2], 10);
+          const dateObj = new Date(Date.UTC(y, m, dayNum));
+          return {
+            fechaStr: d.fechaStr,
+            num: dayNum,
+            diaSemana: DIAS[dateObj.getUTCDay()],
+            rawDate: d.fechaStr
+          };
+        });
+      }
+    }
+
+    diasDelMes = savedDiasDelMes;
+
+    // Calcular meses agrupados para el colspan superior
+    const monthsMap = new Map();
+    diasDelMes.forEach(d => {
+      let mIndex = null;
+      let anio = '';
+      if (d.fechaStr) {
+        const parts = d.fechaStr.split('-');
+        if (parts.length >= 2) {
+          anio = parts[0];
+          mIndex = parseInt(parts[1], 10) - 1;
+        }
+      } else if (d.rawDate) {
+        const dt = new Date(d.rawDate);
+        mIndex = dt.getUTCMonth();
+        anio = dt.getUTCFullYear();
+      }
+      const key = (mIndex !== null && mIndex >= 0 && mIndex < 12) ? `${MESES[mIndex]} ${anio}`.trim() : 'PERÍODO';
+      monthsMap.set(key, (monthsMap.get(key) || 0) + 1);
+    });
+
+    mesesAgrupados = Array.from(monthsMap.entries()).map(([nombre, colspan]) => ({
+      nombre,
+      colspan
+    }));
+
+    // 2. Procesar cálculos y puntualidad por empleado
     processedEmployees = rawEmpleados.map(emp => {
       const dias = emp.dias || [];
 
@@ -110,14 +207,19 @@
       let otroNegocioCount = 0;
       let vacacionesCount = 0;
 
-      // Métricas de puntualidad y score
+      // Métricas de asistencia
       let diasAsistidos = 0;
-      let aTiempoCount = 0;
-      let retrasosCount = 0;
-      let retrasosMins = 0;
-      let salidasTempranasCount = 0;
-      let salidasTempranasMins = 0;
       let horasEsperadasMins = 0;
+
+      // Métricas de Puntualidad (Contadores y Sumadores)
+      let entradaTempranaCount = 0;
+      let entradaTempranaMins = 0;
+      let entradaTardeCount = 0;
+      let entradaTardeMins = 0;
+      let salidaTempranaCount = 0;
+      let salidaTempranaMins = 0;
+      let salidaTardeCount = 0;
+      let salidaTardeMins = 0;
 
       dias.forEach(dia => {
         const resStr = String(dia.resultadoStr || '').toUpperCase().trim();
@@ -147,12 +249,11 @@
           } else if (resStr.includes('(D)') && resStr.includes('(N)')) {
             diurnosCount++;
             nocturnosCount++;
-            // Desglosar si viene formateado como (D) HH:MM - (N) HH:MM
             const matchD = resStr.match(/\(D\)\s*(\d{2}):(\d{2})/);
             const matchN = resStr.match(/\(N\)\s*(\d{2}):(\d{2})/);
             if (matchD && matchN) {
-              const dM = parseInt(matchD[1]) * 60 + parseInt(matchD[2]);
-              const nM = parseInt(matchN[1]) * 60 + parseInt(matchN[2]);
+              const dM = parseInt(matchD[1], 10) * 60 + parseInt(matchD[2], 10);
+              const nM = parseInt(matchN[1], 10) * 60 + parseInt(matchN[2], 10);
               horasDiurnasMins += dM;
               horasNocturnasMins += nM;
             } else {
@@ -164,25 +265,72 @@
             horasDiurnasMins += mins;
           }
 
-          // Métricas de puntualidad
-          if (dia.entBadge) {
-            const entText = String(dia.entBadge.text || '00:00');
-            const [h, m] = entText.split(':').map(Number);
-            const badgeMins = (h || 0) * 60 + (m || 0);
-
-            if (dia.entBadge.isAlert) {
-              retrasosCount++;
-              retrasosMins += badgeMins;
-            } else {
-              aTiempoCount++;
+          // === Puntualidad: ENTRADA (Temprana vs Tarde) ===
+          let entDiffFound = false;
+          if (dia.entBadge && dia.entBadge.text && dia.entBadge.text !== '00:00') {
+            const [eh, em] = String(dia.entBadge.text).split(':').map(Number);
+            const badgeMins = (eh || 0) * 60 + (em || 0);
+            if (badgeMins > 0) {
+              entDiffFound = true;
+              if (dia.entBadge.isAlert) {
+                entradaTardeCount++;
+                entradaTardeMins += badgeMins;
+              } else {
+                entradaTempranaCount++;
+                entradaTempranaMins += badgeMins;
+              }
+            }
+          }
+          if (!entDiffFound && dia.shift && dia.shift.hora_entrada && dia.marcajeStr) {
+            const times = getEntradaSalidaTimes(dia.marcajeStr);
+            if (times.entrada) {
+              const schedMins = toMinutes(dia.shift.hora_entrada);
+              const realMins = toMinutes(times.entrada);
+              if (schedMins !== null && realMins !== null) {
+                const diff = realMins - schedMins;
+                if (diff > 0) {
+                  entradaTardeCount++;
+                  entradaTardeMins += diff;
+                } else if (diff < 0) {
+                  entradaTempranaCount++;
+                  entradaTempranaMins += Math.abs(diff);
+                }
+              }
             }
           }
 
-          if (dia.salBadge && dia.salBadge.isAlert) {
-            const salText = String(dia.salBadge.text || '00:00');
-            const [sh, sm] = salText.split(':').map(Number);
-            salidasTempranasCount++;
-            salidasTempranasMins += (sh || 0) * 60 + (sm || 0);
+          // === Puntualidad: SALIDA (Temprana vs Tarde) ===
+          let salDiffFound = false;
+          if (dia.salBadge && dia.salBadge.text && dia.salBadge.text !== '00:00') {
+            const [sh, sm] = String(dia.salBadge.text).split(':').map(Number);
+            const badgeMins = (sh || 0) * 60 + (sm || 0);
+            if (badgeMins > 0) {
+              salDiffFound = true;
+              if (dia.salBadge.isAlert) {
+                salidaTempranaCount++;
+                salidaTempranaMins += badgeMins;
+              } else {
+                salidaTardeCount++;
+                salidaTardeMins += badgeMins;
+              }
+            }
+          }
+          if (!salDiffFound && dia.shift && dia.shift.hora_salida && dia.marcajeStr) {
+            const times = getEntradaSalidaTimes(dia.marcajeStr);
+            if (times.salida) {
+              const schedMins = toMinutes(dia.shift.hora_salida);
+              const realMins = toMinutes(times.salida);
+              if (schedMins !== null && realMins !== null) {
+                const diff = schedMins - realMins;
+                if (diff > 0) {
+                  salidaTempranaCount++;
+                  salidaTempranaMins += diff;
+                } else if (diff < 0) {
+                  salidaTardeCount++;
+                  salidaTardeMins += Math.abs(diff);
+                }
+              }
+            }
           }
         }
 
@@ -194,7 +342,7 @@
           if (dur < 0) dur += 24 * 60;
           horasEsperadasMins += dur;
         } else if (mins > 0) {
-          horasEsperadasMins += 8 * 60; // Base estándar 8h
+          horasEsperadasMins += 8 * 60;
         }
 
         // Conteo de novedades y excepciones
@@ -229,15 +377,6 @@
       const absDiffMins = Math.abs(diffMins);
       const diffHorasStr = `${diffSign}${toHHMM(absDiffMins)}`;
 
-      // Score de Asistencia y Puntualidad (0 a 100%)
-      const totalEvaluados = diasAsistidos + faltaInjustificadaCount;
-      let scorePuntualidad = 100;
-      if (totalEvaluados > 0) {
-        const penalizacionFaltas = (faltaInjustificadaCount / totalEvaluados) * 50;
-        const penalizacionRetrasos = Math.min(30, (retrasosMins / 60) * 5);
-        scorePuntualidad = Math.max(0, Math.round(100 - penalizacionFaltas - penalizacionRetrasos));
-      }
-
       return {
         ...emp,
         diurnosCount,
@@ -262,36 +401,19 @@
         otroNegocioCount,
         vacacionesCount,
         diasAsistidos,
-        aTiempoCount,
-        retrasosCount,
-        retrasosStr: toHHMM(retrasosMins),
-        salidasTempranasCount,
-        salidasTempranasStr: toHHMM(salidasTempranasMins),
-        scorePuntualidad
+        // Puntualidad solicitada
+        diasTrabajados: diasAsistidos,
+        horasTrabajadasStr: toHHMM(totalTrabajadosMins),
+        entradaTempranaCount,
+        entradaTardeCount,
+        salidaTempranaCount,
+        salidaTardeCount,
+        entradaTempranaStr: toHHMM(entradaTempranaMins),
+        entradaTardeStr: toHHMM(entradaTardeMins),
+        salidaTempranaStr: toHHMM(salidaTempranaMins),
+        salidaTardeStr: toHHMM(salidaTardeMins)
       };
     });
-  }
-
-  function toHHMM(totalMinutes) {
-    if (!totalMinutes || isNaN(totalMinutes) || totalMinutes <= 0) return '00:00';
-    const h = Math.floor(totalMinutes / 60);
-    const m = Math.floor(totalMinutes % 60);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-
-  function formatDate(dStr) {
-    if (!dStr) return '';
-    const parts = String(dStr).split('T')[0].split('-');
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    return dStr;
-  }
-
-  function handlePrint() {
-    window.print();
-  }
-
-  function handleBack() {
-    navigateToRoute('rrhh/cortes');
   }
 
   $: filteredEmployees = processedEmployees.filter(emp => {
@@ -323,7 +445,7 @@
     </div>
   {:else}
 
-    <!-- Purple Header matching Image 2 -->
+    <!-- Purple Header -->
     <div class="purple-header-card">
       <div class="header-left">
         <div class="header-badge-row">
@@ -347,6 +469,14 @@
     <!-- Navigation Tabs & Search Controls -->
     <div class="toolbar-card no-print">
       <div class="tabs-group">
+        <button
+          type="button"
+          class="tab-btn {activeTab === 'marcajes' ? 'active' : ''}"
+          on:click={() => activeTab = 'marcajes'}
+        >
+          <span>Marcajes</span>
+        </button>
+
         <button
           type="button"
           class="tab-btn {activeTab === 'calculos' ? 'active' : ''}"
@@ -377,7 +507,145 @@
       </div>
     </div>
 
-    <!-- Tab 1: Tabla Oficial de Cálculos (19 Columnas exactas - Verde Imagen 2) -->
+    <!-- TAB 1: Marcajes (Histórico Congelado de Asistencia - Matriz Fija) -->
+    {#if activeTab === 'marcajes'}
+      <div class="table-container matrix-container">
+        <table class="report-matrix-table">
+          <thead>
+            <!-- Fila 1: Grupos de Meses con Colspan -->
+            <tr class="header-months-tr">
+              <th rowspan="2" class="th-empleado-sticky">
+                EMPLEADO
+              </th>
+              {#each mesesAgrupados as mes}
+                <th
+                  colspan={mes.colspan}
+                  class="th-month-group"
+                  title={mes.nombre}
+                >
+                  {mes.nombre}
+                </th>
+              {/each}
+            </tr>
+
+            <!-- Fila 2: Días del Mes (Número y Letra) -->
+            <tr class="header-days-tr">
+              {#each diasDelMes as dia}
+                <th class="th-day-col">
+                  <div class="th-day-inner">
+                    <span class="day-num">{dia.num}</span>
+                    <span class="day-letter">{dia.diaSemana}</span>
+                  </div>
+                </th>
+              {/each}
+            </tr>
+          </thead>
+
+          <tbody>
+            {#if filteredEmployees.length === 0}
+              <tr>
+                <td colspan={diasDelMes.length + 1} class="empty-row">
+                  No se encontraron empleados registrados en este corte histórico.
+                </td>
+              </tr>
+            {:else}
+              {#each filteredEmployees as emp, idx (emp.id || idx)}
+                <tr class="tbody-emp-tr {idx % 2 === 0 ? 'even' : 'odd'}">
+                  
+                  <!-- Columna Sticky Izquierda del Empleado -->
+                  <td class="td-empleado-sticky">
+                    <div class="emp-sticky-content">
+                      <div class="emp-avatar-box">
+                        <img
+                          src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
+                          alt=""
+                          class="emp-avatar-img"
+                          on:error={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      </div>
+                      <div class="emp-text-details">
+                        <span class="emp-name-text" title={emp.nombre}>{emp.nombre}</span>
+                        <span class="emp-cedula-pill" title={emp.cedula || `ID: #${emp.id}`}>
+                          {emp.cedula || `ID: #${emp.id}`}
+                        </span>
+                        <span class="emp-cargo-text" title={emp.cargo || 'Personal'}>
+                          {emp.cargo || 'Personal'}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Celdas de cada Día del Corte -->
+                  {#each (emp.dias || []) as dia}
+                    {@const times = getEntradaSalidaTimes(dia.marcajeStr)}
+                    <td class="td-day-matrix-cell">
+                      <div class="day-cell-inner-wrap">
+                        
+                        <!-- Top Row: [ Turno ] [ Horas Entrada / Salida ] [ Horas Trabajadas ] -->
+                        <div class="day-top-row">
+                          <div
+                            class="shift-badge-static"
+                            style="background-color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.shift ? (dia.shift.color || '#D9D9D9') : '#D9D9D9'))}; color: {dia.resultadoStr === 'ERROR' || dia.resultadoStr === 'EN ESPERA' ? '#ffffff' : (dia.shift && (dia.shift.codigo === 'L' || dia.shift.color === '#D9D9D9' || dia.shift.codigo === 'U' || dia.shift.color === '#86EFAC') ? '#0f172a' : '#ffffff')};"
+                            title={dia.shift ? (dia.shift.nombre || dia.shift.codigo) : 'Sin plantilla'}
+                          >
+                            {dia.shift ? dia.shift.codigo : '-'}
+                          </div>
+
+                          <div class="times-stack-center">
+                            {#if times.entrada && dia.resultadoStr !== 'LIBRE'}
+                              <span>{times.entrada}</span>
+                              {#if times.salida}
+                                <span>{times.salida}</span>
+                              {/if}
+                            {:else}
+                              <span class="bars-empty">||||||</span>
+                            {/if}
+                          </div>
+
+                          <div class="worked-hours-pill {dia.resultadoStr === 'ERROR' ? 'error' : (dia.resultadoStr === 'EN ESPERA' ? 'espera' : (dia.trabajadosMins > 0 && dia.resultadoStr !== 'LIBRE' ? 'active' : 'zero'))}">
+                            {dia.trabajadoStr || "00:00"}
+                          </div>
+                        </div>
+
+                        <!-- Middle Row: Resultado / Novedad -->
+                        <div
+                          class="result-status-title"
+                          style="color: {dia.resultadoStr === 'ERROR' ? '#dc2626' : (dia.resultadoStr === 'EN ESPERA' ? '#2563eb' : (dia.resultadoStr === 'LIBRE' ? '#475569' : '#0f172a'))};"
+                        >
+                          {@html (dia.resultadoStr || "").replace(/\(\s*D\s*\)/gi, "(D)").replace(/\(\s*N\s*\)/gi, "(N)")}
+                        </div>
+
+                        <!-- Bottom Row: [ entBadge (Entrada) ] & [ salBadge (Salida) ] -->
+                        <div class="badges-bottom-row">
+                          <div
+                            class="ent-sal-pill {dia.entBadge && dia.entBadge.isAlert ? 'alert' : (dia.entBadge && dia.entBadge.text !== '00:00' ? 'ok' : 'neutral')}"
+                            style="background-color: {dia.entBadge ? (dia.entBadge.isAlert ? '#fff1f2' : '#f0fdf4') : '#f8fafc'}; color: {dia.entBadge ? (dia.entBadge.isAlert ? '#dc2626' : '#166534') : '#94a3b8'}; border: 1px solid {dia.entBadge ? (dia.entBadge.isAlert ? '#fecdd3' : '#bbf7d0') : '#e2e8f0'};"
+                            title="Entrada: {dia.entBadge && dia.entBadge.isAlert ? 'Retraso' : 'Temprana'}"
+                          >
+                            {dia.entBadge ? dia.entBadge.text : "00:00"}
+                          </div>
+
+                          <div
+                            class="ent-sal-pill {dia.salBadge && dia.salBadge.isAlert ? 'alert' : (dia.salBadge && dia.salBadge.text !== '00:00' ? 'ok' : 'neutral')}"
+                            style="background-color: {dia.salBadge ? (dia.salBadge.isAlert ? '#fff1f2' : '#f0fdf4') : '#f8fafc'}; color: {dia.salBadge ? (dia.salBadge.isAlert ? '#dc2626' : '#166534') : '#94a3b8'}; border: 1px solid {dia.salBadge ? (dia.salBadge.isAlert ? '#fecdd3' : '#bbf7d0') : '#e2e8f0'};"
+                            title="Salida: {dia.salBadge && dia.salBadge.isAlert ? 'Temprana' : 'Tarde'}"
+                          >
+                            {dia.salBadge ? dia.salBadge.text : "00:00"}
+                          </div>
+                        </div>
+
+                      </div>
+                    </td>
+                  {/each}
+                </tr>
+              {/each}
+            {/if}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    <!-- TAB 2: Tabla Oficial de Cálculos (19 Columnas exactas) -->
     {#if activeTab === 'calculos'}
       <div class="table-container">
         <table class="calculos-table">
@@ -420,11 +688,11 @@
                         src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
                         alt=""
                         class="emp-avatar"
-                        on:error={(e) => { e.target.style.display = 'none'; }}
+                        on:error={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                       <div class="emp-info">
                         <span class="emp-name">{emp.nombre}</span>
-                        <span class="emp-meta">V-{emp.cedula || emp.id} • {emp.cargo || 'Personal'}</span>
+                        <span class="emp-meta">{emp.cedula || emp.id} • {emp.cargo || 'Personal'}</span>
                       </div>
                     </div>
                   </td>
@@ -456,77 +724,111 @@
       </div>
     {/if}
 
-    <!-- Tab 2: Score y Puntualidad Detallada -->
+    <!-- TAB 3: Puntualidad (Contadores y Sumadores de Entrada/Salida) -->
     {#if activeTab === 'puntualidad'}
-      <div class="score-container">
+      <div class="table-container">
+        <table class="calculos-table puntualidad-table">
+          <thead>
+            <!-- Fila Superior de Encabezados -->
+            <tr class="super-header-tr">
+              <th rowspan="2" class="col-emp sticky-col">Empleado</th>
+              <th rowspan="2" class="col-num" title="Total de días trabajados">Días Trabajados</th>
+              <th rowspan="2" class="col-hours" title="Total de horas acumuladas trabajadas">Horas Trabajadas</th>
+              <th colspan="4" class="col-super-group">Contadores (Días)</th>
+              <th colspan="4" class="col-super-group">Sumadores (Tiempo Excedente)</th>
+            </tr>
 
-        <div class="table-container">
-          <table class="calculos-table score-table">
-            <thead>
+            <!-- Fila Inferior de Columnas Específicas -->
+            <tr class="sub-header-tr">
+              <!-- Contadores -->
+              <th class="col-num" title="Días con Entrada Temprana">Entrada Temprana</th>
+              <th class="col-num" title="Días con Entrada Tarde (Retraso)">Entrada Tarde</th>
+              <th class="col-num" title="Días con Salida Temprana">Salida Temprana</th>
+              <th class="col-num" title="Días con Salida Tarde">Salida Tarde</th>
+              <!-- Sumadores -->
+              <th class="col-hours" title="Tiempo acumulado de entrada antes de turno">Entrada Temprana</th>
+              <th class="col-hours" title="Tiempo acumulado de retraso en entrada">Entrada Tarde</th>
+              <th class="col-hours" title="Tiempo acumulado de salida antes de hora">Salida Temprana</th>
+              <th class="col-hours" title="Tiempo acumulado después de hora de salida">Salida Tarde</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {#if filteredEmployees.length === 0}
               <tr>
-                <th class="col-emp sticky-col">Empleado</th>
-                <th class="col-num">Días Asistidos</th>
-                <th class="col-num">A Tiempo</th>
-                <th class="col-num">Retrasos</th>
-                <th class="col-hours">Minutos Retraso</th>
-                <th class="col-num">Salidas Tempranas</th>
-                <th class="col-hours">Minutos Sal. Temprana</th>
-                <th class="col-hours">Horas Trabajadas</th>
-                <th class="col-score">Score de Asistencia</th>
-                <th class="col-status">Estatus</th>
+                <td colspan="11" class="empty-row">
+                  No se encontraron empleados en este corte histórico.
+                </td>
               </tr>
-            </thead>
-            <tbody>
+            {:else}
               {#each filteredEmployees as emp, idx}
                 <tr class="data-row {idx % 2 === 0 ? 'even' : 'odd'}">
+                  <!-- Empleado Sticky -->
                   <td class="col-emp sticky-col">
                     <div class="emp-cell">
                       <img
                         src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
                         alt=""
                         class="emp-avatar"
-                        on:error={(e) => { e.target.style.display = 'none'; }}
+                        on:error={(e) => { e.currentTarget.style.display = 'none'; }}
                       />
                       <div class="emp-info">
                         <span class="emp-name">{emp.nombre}</span>
-                        <span class="emp-meta">V-{emp.cedula || emp.id} • {emp.cargo || 'Personal'}</span>
+                        <span class="emp-meta">{emp.cedula || emp.id} • {emp.cargo || 'Personal'}</span>
                       </div>
                     </div>
                   </td>
-                  <td class="col-num font-bold">{emp.diasAsistidos}</td>
-                  <td class="col-num val-active font-bold">{emp.aTiempoCount}</td>
-                  <td class="col-num {emp.retrasosCount > 0 ? 'val-falta' : ''} font-bold">{emp.retrasosCount}</td>
-                  <td class="col-hours font-mono {emp.retrasosCount > 0 ? 'text-red' : ''}">{emp.retrasosStr}</td>
-                  <td class="col-num {emp.salidasTempranasCount > 0 ? 'val-falta' : ''} font-bold">{emp.salidasTempranasCount}</td>
-                  <td class="col-hours font-mono {emp.salidasTempranasCount > 0 ? 'text-red' : ''}">{emp.salidasTempranasStr}</td>
-                  <td class="col-hours font-mono font-bold">{emp.totalTrabajadosStr}</td>
-                  <td class="col-score">
-                    <div class="score-bar-wrapper">
-                      <div class="score-bar-bg">
-                        <div
-                          class="score-bar-fill {emp.scorePuntualidad >= 85 ? 'fill-green' : (emp.scorePuntualidad >= 65 ? 'fill-yellow' : 'fill-red')}"
-                          style="width: {emp.scorePuntualidad}%;"
-                        ></div>
-                      </div>
-                      <span class="score-percent-text">{emp.scorePuntualidad}%</span>
-                    </div>
+
+                  <!-- 1) Días Trabajados -->
+                  <td class="col-num font-bold">{emp.diasTrabajados}</td>
+
+                  <!-- 2) Horas Trabajadas -->
+                  <td class="col-hours font-mono font-bold">{emp.horasTrabajadasStr}</td>
+
+                  <!-- 3) Contador Entrada Temprana -->
+                  <td class="col-num font-bold {emp.entradaTempranaCount > 0 ? 'val-active' : ''}">
+                    {emp.entradaTempranaCount}
                   </td>
-                  <td class="col-status">
-                    {#if emp.scorePuntualidad >= 90}
-                      <span class="status-badge badge-excelente">🌟 Excelente</span>
-                    {:else if emp.scorePuntualidad >= 75}
-                      <span class="status-badge badge-bueno">🟢 Bueno</span>
-                    {:else if emp.scorePuntualidad >= 60}
-                      <span class="status-badge badge-regular">⚠️ Regular</span>
-                    {:else}
-                      <span class="status-badge badge-alerta">🚨 Alerta</span>
-                    {/if}
+
+                  <!-- 4) Contador Entrada Tarde -->
+                  <td class="col-num font-bold {emp.entradaTardeCount > 0 ? 'val-falta' : ''}">
+                    {emp.entradaTardeCount}
+                  </td>
+
+                  <!-- 5) Contador Salida Temprana -->
+                  <td class="col-num font-bold {emp.salidaTempranaCount > 0 ? 'val-falta' : ''}">
+                    {emp.salidaTempranaCount}
+                  </td>
+
+                  <!-- 6) Contador Salida Tarde -->
+                  <td class="col-num font-bold {emp.salidaTardeCount > 0 ? 'val-active' : ''}">
+                    {emp.salidaTardeCount}
+                  </td>
+
+                  <!-- 7) Sumador Entrada Temprana -->
+                  <td class="col-hours font-mono {emp.entradaTempranaStr !== '00:00' ? 'text-green' : ''}">
+                    {emp.entradaTempranaStr}
+                  </td>
+
+                  <!-- 8) Sumador Entrada Tarde -->
+                  <td class="col-hours font-mono {emp.entradaTardeStr !== '00:00' ? 'text-red' : ''}">
+                    {emp.entradaTardeStr}
+                  </td>
+
+                  <!-- 9) Sumador Salida Temprana -->
+                  <td class="col-hours font-mono {emp.salidaTempranaStr !== '00:00' ? 'text-red' : ''}">
+                    {emp.salidaTempranaStr}
+                  </td>
+
+                  <!-- 10) Sumador Salida Tarde -->
+                  <td class="col-hours font-mono {emp.salidaTardeStr !== '00:00' ? 'text-green' : ''}">
+                    {emp.salidaTardeStr}
                   </td>
                 </tr>
               {/each}
-            </tbody>
-          </table>
-        </div>
+            {/if}
+          </tbody>
+        </table>
       </div>
     {/if}
 
@@ -546,7 +848,7 @@
     min-height: calc(100vh - 70px);
   }
 
-  /* Purple Header matching Image 2 */
+  /* Purple Header */
   .purple-header-card {
     background: linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7c3aed 100%);
     color: #ffffff;
@@ -645,14 +947,14 @@
   /* Toolbar and Tabs */
   .toolbar-card {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #cbd5e1;
     border-radius: 12px;
     padding: 10px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    gap: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
   .tabs-group {
@@ -662,13 +964,13 @@
   }
 
   .tab-btn {
-    padding: 8px 16px;
-    border-radius: 8px;
-    border: 1px solid transparent;
+    border: 1px solid #cbd5e1;
     background: #f1f5f9;
     color: #475569;
+    border-radius: 8px;
+    padding: 8px 18px;
     font-size: 12.5px;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -686,15 +988,6 @@
     color: #ffffff;
     border-color: #166534;
     box-shadow: 0 2px 4px rgba(21, 128, 61, 0.25);
-  }
-
-  .tab-badge {
-    background: rgba(0, 0, 0, 0.15);
-    color: inherit;
-    font-size: 11px;
-    font-weight: 800;
-    padding: 1px 6px;
-    border-radius: 6px;
   }
 
   .search-wrap {
@@ -729,7 +1022,7 @@
     font-size: 13px;
   }
 
-  /* Table Container */
+  /* Table Containers */
   .table-container {
     background: #ffffff;
     border: 1px solid #cbd5e1;
@@ -738,6 +1031,351 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   }
 
+  .matrix-container {
+    max-height: calc(100vh - 210px);
+  }
+
+  /* ===== TAB 1: MARCAJES MATRIX TABLE ===== */
+  .report-matrix-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .report-matrix-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+  }
+
+  .th-month-group {
+    background: #f1f5f9;
+    text-align: center;
+    padding: 3px 6px;
+    font-size: 9.5px;
+    font-weight: 800;
+    color: #1e293b;
+    border-right: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    line-height: 1.1;
+  }
+
+  .th-day-col {
+    background: #f8fafc;
+    text-align: center;
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+    padding: 4px 2px;
+    border-right: 1px solid #e2e8f0;
+    border-bottom: 2px solid #cbd5e1;
+    box-sizing: border-box;
+  }
+
+  .th-day-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    line-height: 1.1;
+  }
+
+  .day-num {
+    font-weight: 900;
+    font-size: 12px;
+    color: #0f172a;
+  }
+
+  .day-letter {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .th-empleado-sticky {
+    position: sticky;
+    left: 0;
+    z-index: 35 !important;
+    background: #f8fafc !important;
+    width: 165px;
+    min-width: 165px;
+    max-width: 165px;
+    padding: 6px 8px;
+    box-sizing: border-box;
+    border-right: 2px solid #cbd5e1;
+    border-bottom: 2px solid #cbd5e1;
+    vertical-align: middle;
+    font-size: 11px;
+    font-weight: 900;
+    color: #0f172a;
+    letter-spacing: 0.5px;
+    text-align: center;
+  }
+
+  .td-empleado-sticky {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background: #ffffff;
+    width: 165px;
+    min-width: 165px;
+    max-width: 165px;
+    height: 58px;
+    padding: 6px 8px;
+    box-sizing: border-box;
+    border-right: 2px solid #cbd5e1;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  .emp-sticky-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .emp-avatar-box {
+    flex-shrink: 0;
+  }
+
+  .emp-avatar-img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid #cbd5e1;
+    display: block;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .emp-text-details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1.5px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .emp-name-text {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+
+  .emp-cedula-pill {
+    font-size: 8px;
+    color: #334155;
+    font-weight: 800;
+    background: #f1f5f9;
+    padding: 0px 5px;
+    line-height: 13px;
+    height: 13px;
+    border-radius: 3px;
+    white-space: nowrap;
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .emp-cargo-text {
+    font-size: 8px;
+    color: #2563eb;
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    line-height: 1.1;
+  }
+
+  .td-day-matrix-cell {
+    padding: 4px 2px;
+    text-align: center;
+    width: 110px;
+    min-width: 110px;
+    max-width: 110px;
+    height: 58px;
+    box-sizing: border-box;
+    border-right: 1px solid #f1f5f9;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  .day-cell-inner-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+    width: 100%;
+    gap: 1px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .day-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 2px;
+    min-height: 18px;
+    overflow: hidden;
+  }
+
+  .shift-badge-static {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-weight: 900;
+    font-size: 10px;
+    text-transform: uppercase;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .times-stack-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.05;
+    font-size: 7.5px;
+    font-weight: 800;
+    color: #0f172a;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .bars-empty {
+    color: #cbd5e1;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+
+  .worked-hours-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    border-radius: 2.5px;
+    font-size: 8px;
+    height: 13px;
+    line-height: 1;
+    flex-shrink: 0;
+    max-width: 48%;
+    overflow: hidden;
+  }
+
+  .worked-hours-pill.active {
+    font-weight: 800;
+    background-color: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+  }
+
+  .worked-hours-pill.error {
+    font-weight: 800;
+    background-color: #fff1f2;
+    color: #dc2626;
+    border: 1px solid #fecdd3;
+  }
+
+  .worked-hours-pill.espera {
+    font-weight: 800;
+    background-color: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+  }
+
+  .worked-hours-pill.zero {
+    font-weight: 700;
+    background-color: #f8fafc;
+    color: #94a3b8;
+    border: 1px solid #e2e8f0;
+  }
+
+  .result-status-title {
+    font-size: 7.5px;
+    font-weight: 800;
+    line-height: 1.1;
+    white-space: normal;
+    overflow: hidden;
+    width: 100%;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 1px 0;
+    padding: 0;
+  }
+
+  .badges-bottom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 2px;
+  }
+
+  .ent-sal-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    height: 12px;
+    border-radius: 2px;
+    font-size: 7px;
+    font-weight: 800;
+    line-height: 1;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .ent-sal-pill.alert {
+    background-color: #fff1f2 !important;
+    color: #dc2626 !important;
+    border: 1px solid #fecdd3 !important;
+    font-weight: 900;
+  }
+
+  .ent-sal-pill.ok {
+    background-color: #f0fdf4 !important;
+    color: #166534 !important;
+    border: 1px solid #bbf7d0 !important;
+    font-weight: 800;
+  }
+
+  .ent-sal-pill.neutral {
+    background-color: #f8fafc !important;
+    color: #94a3b8 !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  /* ===== TAB 2 & 3: CALCULOS & PUNTUALIDAD TABLES ===== */
   .calculos-table {
     width: 100%;
     border-collapse: collapse;
@@ -745,7 +1383,6 @@
     white-space: nowrap;
   }
 
-  /* Green Table Header matching Image 2 */
   .calculos-table thead tr {
     background: #15803d;
     color: #ffffff;
@@ -758,92 +1395,94 @@
     text-align: center;
     border-right: 1px solid rgba(255, 255, 255, 0.15);
     letter-spacing: 0.2px;
-    user-select: none;
   }
 
-  .sticky-col {
-    position: sticky;
-    left: 0;
-    z-index: 2;
+  .puntualidad-table thead .super-header-tr {
+    background: #15803d;
+    color: #ffffff;
   }
 
-  .calculos-table thead .sticky-col {
+  .col-super-group {
+    background: #166534 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 11px;
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .puntualidad-table thead .sub-header-tr {
     background: #14532d;
-    z-index: 3;
+    color: #ffffff;
   }
 
+  .puntualidad-table thead .sub-header-tr th {
+    font-size: 10.5px;
+    padding: 8px 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .calculos-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #f1f5f9;
+    text-align: center;
+  }
+
+  .data-row.even { background: #ffffff; }
+  .data-row.odd { background: #f8fafc; }
+  .data-row:hover { background: #f0fdf4; }
+
+  /* Sticky Employee Column */
   .col-emp {
     text-align: left !important;
     min-width: 220px;
   }
 
-  .col-num {
-    min-width: 60px;
+  .sticky-col {
+    position: sticky;
+    left: 0;
+    background: inherit;
+    z-index: 10;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
   }
 
-  .col-hours {
-    min-width: 85px;
+  thead .sticky-col {
+    background: #15803d !important;
+    z-index: 20;
   }
 
-  .calculos-table td {
-    padding: 6px 10px;
-    border-bottom: 1px solid #e2e8f0;
-    border-right: 1px solid #f1f5f9;
-    text-align: center;
-    color: #1e293b;
+  .puntualidad-table thead .super-header-tr .sticky-col {
+    background: #15803d !important;
+    z-index: 20;
   }
 
-  .data-row.even {
-    background: #ffffff;
-  }
-
-  .data-row.odd {
-    background: #f8fafc;
-  }
-
-  .data-row:hover {
-    background: #f1f5f9;
-  }
-
-  .data-row.even .sticky-col {
-    background: #ffffff;
-  }
-
-  .data-row.odd .sticky-col {
-    background: #f8fafc;
-  }
-
-  .data-row:hover .sticky-col {
-    background: #f1f5f9;
-  }
-
-  /* Employee Cell */
   .emp-cell {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .emp-avatar {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     object-fit: cover;
-    border: 1.5px solid #cbd5e1;
-    background: #e2e8f0;
+    border: 2px solid #cbd5e1;
+    background: #f1f5f9;
   }
 
   .emp-info {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    line-height: 1.15;
+    gap: 1px;
+    text-align: left;
   }
 
   .emp-name {
-    font-size: 11.5px;
     font-weight: 800;
     color: #0f172a;
+    font-size: 12px;
   }
 
   .emp-meta {
@@ -852,122 +1491,37 @@
     font-weight: 600;
   }
 
-  /* Cell Highlight Utilities */
-  .font-mono {
-    font-family: monospace;
-    font-size: 11.5px;
+  .col-num {
     font-weight: 700;
+    min-width: 60px;
   }
 
-  .font-bold {
-    font-weight: 800;
+  .col-hours {
+    font-weight: 700;
+    min-width: 90px;
   }
 
-  .val-active {
-    background: #ecfdf5;
-    color: #15803d;
-    font-weight: 800;
-  }
+  .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .font-bold { font-weight: 800; }
 
-  .val-sunday {
-    background: #eff6ff;
-    color: #1d4ed8;
-    font-weight: 800;
-  }
+  .val-active { color: #16a34a; font-weight: 800; }
+  .val-sunday { color: #7c3aed; font-weight: 800; }
+  .val-feriado { color: #0284c7; font-weight: 800; }
+  .val-falta { color: #dc2626; font-weight: 900; background: #fef2f2; }
 
-  .val-feriado {
-    background: #f5f3ff;
-    color: #6b21a8;
-    font-weight: 800;
-  }
+  .diff-neg { color: #dc2626; font-weight: 800; }
+  .diff-pos { color: #16a34a; font-weight: 800; }
 
-  .val-falta {
-    background: #fef2f2;
-    color: #dc2626;
-    font-weight: 800;
-  }
-
-  .diff-pos {
-    color: #15803d;
-    font-weight: 800;
-  }
-
-  .diff-neg {
-    color: #dc2626;
-    font-weight: 800;
-  }
-
-  .text-red {
-    color: #dc2626;
-  }
+  .text-red { color: #dc2626; font-weight: 800; }
+  .text-green { color: #16a34a; font-weight: 800; }
 
   .empty-row {
-    padding: 30px !important;
+    padding: 40px !important;
     text-align: center;
     color: #64748b;
     font-size: 13px;
-    font-style: italic;
+    font-weight: 600;
   }
-
-  /* Score Tab */
-  .score-container {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .col-score {
-    min-width: 140px;
-  }
-
-  .col-status {
-    min-width: 110px;
-  }
-
-  .score-bar-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .score-bar-bg {
-    flex: 1;
-    height: 8px;
-    background: #e2e8f0;
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .score-bar-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.3s ease;
-  }
-
-  .fill-green { background: #16a34a; }
-  .fill-yellow { background: #eab308; }
-  .fill-red { background: #dc2626; }
-
-  .score-percent-text {
-    font-size: 11.5px;
-    font-weight: 800;
-    color: #0f172a;
-    width: 34px;
-    text-align: right;
-  }
-
-  .status-badge {
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 800;
-    display: inline-block;
-  }
-
-  .badge-excelente { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-  .badge-bueno { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
-  .badge-regular { background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
-  .badge-alerta { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 
   /* States */
   .loading-state, .error-state {
@@ -1020,7 +1574,7 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    .calculos-table thead tr {
+    .calculos-table thead tr, .report-matrix-table thead tr {
       background: #15803d !important;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
