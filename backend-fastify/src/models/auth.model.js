@@ -44,7 +44,7 @@ export async function getUserNavMenuModel(userId) {
 
     const modules = await sql`
       SELECT DISTINCT m.id, m.nombre, m.icono, m.ruta, m.page_id,
-             STRING_AGG(perm.nombre, ',') as permisos
+             STRING_AGG(DISTINCT perm.nombre, ',') as permisos
       FROM modulos m
       INNER JOIN user_module_permissions ump ON m.id = ump.module_id
       INNER JOIN permissions perm ON ump.permission_id = perm.id

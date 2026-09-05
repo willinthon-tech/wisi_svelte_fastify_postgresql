@@ -607,12 +607,6 @@
                     <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
                       <div style="display: flex; align-items: center; justify-content: space-between;">
                         <span style="font-size: 13px; font-weight: 700; color: #0f172a;">{mod.nombre}</span>
-                        <button 
-                          type="button" 
-                          on:click={() => navigateToRoute(mod.ruta ? mod.ruta.replace(/^\//, '') : '')}
-                          style="background: none; border: none; font-size: 11px; color: #2563eb; font-weight: 700; cursor: pointer; text-decoration: underline; padding: 0;">
-                          Ir »
-                        </button>
                       </div>
 
                       {#if mod.ruta}
@@ -628,7 +622,7 @@
 
                       <!-- Permisos Badges -->
                       <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;">
-                        {#each (mod.permisos || []) as perm}
+                        {#each [...new Set(mod.permisos || [])] as perm}
                           <span style="
                             padding: 1px 6px; 
                             border-radius: 4px; 

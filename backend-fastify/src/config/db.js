@@ -444,7 +444,8 @@ export async function initDb() {
         module_id INTEGER REFERENCES modulos(id) ON DELETE CASCADE,
         permission_id INTEGER REFERENCES permissions(id) ON DELETE CASCADE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uk_user_module_perm UNIQUE (user_id, module_id, permission_id)
       );
     `;
 
@@ -656,7 +657,7 @@ export async function initDb() {
     await sql`
       INSERT INTO user_module_permissions (user_id, module_id, permission_id) VALUES
       (1, 36, 1), (1, 36, 2), (1, 36, 3), (1, 36, 4), (1, 36, 5)
-      ON CONFLICT DO NOTHING;
+      ON CONFLICT (user_id, module_id, permission_id) DO NOTHING;
     `.catch(() => {});
 
     // Actualizar nombre y ruta de módulo 31 a Calendario
