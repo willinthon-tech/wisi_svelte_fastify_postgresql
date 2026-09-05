@@ -318,7 +318,7 @@
       <h3>Corte no encontrado</h3>
       <p>No se pudo cargar la información del corte histórico solicitado.</p>
       <button type="button" class="btn-back" on:click={handleBack}>
-        ← Volver a Cortes
+        Volver
       </button>
     </div>
   {:else}
@@ -329,25 +329,17 @@
         <div class="header-badge-row">
           <span class="corte-id-badge">Corte #{corte.id}</span>
           <span class="corte-sala-badge">{corte.sala_nombre || 'General'}</span>
+          <span class="corte-fecha-badge">Desde: {formatDate(corte.fecha_desde)} - Hasta: {formatDate(corte.fecha_hasta)}</span>
+          <div class="emp-counter-chip">
+            <span class="emp-icon">👥</span>
+            <span class="emp-text"><strong>{processedEmployees.length}</strong> empleado(s)</span>
+          </div>
         </div>
-        <h1 class="header-title">Calculos</h1>
-        <p class="header-subtitle">
-          {corte.sala_nombre || 'Casino'} - Desde: {formatDate(corte.fecha_desde)} - Hasta: {formatDate(corte.fecha_hasta)}
-        </p>
       </div>
 
       <div class="header-right">
-        <div class="emp-counter-chip">
-          <span class="emp-icon">👥</span>
-          <span class="emp-text"><strong>{processedEmployees.length}</strong> empleado(s)</span>
-        </div>
-
-        <button type="button" class="btn-print" on:click={handlePrint} title="Imprimir reporte oficial">
-          <span>🖨️</span> Imprimir
-        </button>
-
         <button type="button" class="btn-volver" on:click={handleBack} title="Volver al listado de cortes">
-          <span>←</span> Volver a Cortes
+          Volver
         </button>
       </div>
     </div>
@@ -593,98 +585,76 @@
     background: linear-gradient(135deg, #581c87 0%, #6b21a8 50%, #7c3aed 100%);
     color: #ffffff;
     border-radius: 14px;
-    padding: 20px 24px;
+    padding: 16px 22px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
     box-shadow: 0 10px 15px -3px rgba(88, 28, 135, 0.25);
   }
 
   .header-left {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    flex: 1;
   }
 
   .header-badge-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .corte-id-badge {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.22);
     color: #ffffff;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 6px;
+    padding: 5px 10px;
+    border-radius: 8px;
     letter-spacing: 0.5px;
   }
 
   .corte-sala-badge {
     background: #ffffff;
     color: #581c87;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 800;
-    padding: 2px 8px;
-    border-radius: 6px;
+    padding: 5px 12px;
+    border-radius: 8px;
     text-transform: uppercase;
   }
 
-  .header-title {
-    font-size: 26px;
-    font-weight: 900;
-    letter-spacing: -0.5px;
-    margin: 4px 0 0 0;
-    line-height: 1.1;
+  .corte-fecha-badge {
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
   }
 
-  .header-subtitle {
-    font-size: 13.5px;
-    color: #e9d5ff;
-    font-weight: 600;
-    margin: 0;
+  .emp-counter-chip {
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    padding: 5px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
   }
 
   .header-right {
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-
-  .emp-counter-chip {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 10px;
-    padding: 8px 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #ffffff;
-    font-size: 13px;
-  }
-
-  .btn-print {
-    background: #ffffff;
-    color: #581c87;
-    border: none;
-    border-radius: 9px;
-    padding: 9px 18px;
-    font-size: 13px;
-    font-weight: 800;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: all 0.15s ease;
-  }
-
-  .btn-print:hover {
-    background: #f3e8ff;
-    transform: translateY(-1px);
+    flex-shrink: 0;
   }
 
   .btn-volver {
@@ -692,13 +662,13 @@
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 9px;
-    padding: 9px 18px;
+    padding: 8px 20px;
     font-size: 13px;
     font-weight: 800;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
     transition: all 0.15s ease;
   }
 
