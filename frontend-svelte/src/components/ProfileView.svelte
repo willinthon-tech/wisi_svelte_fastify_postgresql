@@ -161,17 +161,18 @@
         departamentos_autorizados: assignedDepartamentos.map((d) => ({
           id: d.id,
           nombre: d.nombre,
-          sala_id: d.sala_id
+          sala_id: d.sala_id,
+          sala_nombre: detailedSalas.find(s => Number(s.id) === Number(d.sala_id))?.nombre || `Sala #${d.sala_id}`
         })),
         dispositivos_biometricos: assignedDispositivos.map((dev) => ({
           id: dev.id,
           nombre: dev.nombre,
           sala_id: dev.sala_id,
-          ip_remota: dev.ip_remota || 'N/A',
-          ip_local: dev.ip_local || 'N/A'
+          sala_nombre: detailedSalas.find(s => Number(s.id) === Number(dev.sala_id))?.nombre || `Sala #${dev.sala_id}`
         })),
         modulos_y_permisos: userPages.map((p) => ({
           categoria: p.nombre,
+          salas_aplicables: detailedSalas.map(s => s.nombre),
           modulos: (p.modulos || []).map((m) => ({
             id: m.id,
             nombre: m.nombre,
@@ -456,7 +457,7 @@
             <span class="material-icons" style="font-size: 20px; color: #10b981;">business</span>
             <span>Departamentos Autorizados ({assignedDepartamentos.length})</span>
           </h3>
-          <span style="font-size: 11.5px; color: #64748b; font-weight: 600;">Pertenecientes a sus salas</span>
+          <span style="font-size: 11.5px; color: #64748b; font-weight: 600;">Específicos por Sala</span>
         </div>
 
         {#if assignedDepartamentos.length === 0}
@@ -464,11 +465,34 @@
             No se encontraron departamentos registrados en las salas asignadas.
           </div>
         {:else}
-          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-            {#each assignedDepartamentos as dep}
-              <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12.5px; font-weight: 700; color: #1e293b;">
-                <span style="color: #10b981;">🏢</span>
-                <span>{dep.nombre}</span>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            {#each detailedSalas as sala}
+              {@const depsInSala = assignedDepartamentos.filter(d => Number(d.sala_id) === Number(sala.id))}
+              <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; background: #f8fafc;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 13.5px; font-weight: 800; color: #0f172a;">📍 Sala: {sala.nombre}</span>
+                    <span style="background: #2563eb; color: #ffffff; padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 800;">
+                      ID: #{sala.id}
+                    </span>
+                  </div>
+                  <span style="font-size: 11px; color: #64748b; font-weight: 600;">
+                    {depsInSala.length} {depsInSala.length === 1 ? 'departamento' : 'departamentos'}
+                  </span>
+                </div>
+
+                {#if depsInSala.length === 0}
+                  <span style="font-size: 12px; color: #94a3b8; font-style: italic;">Sin departamentos configurados para esta sala.</span>
+                {:else}
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    {#each depsInSala as dep}
+                      <div style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 700; color: #1e293b; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                        <span style="color: #10b981;">🏢</span>
+                        <span>{dep.nombre}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -494,23 +518,23 @@
             <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; text-align: left;">
               <thead>
                 <tr style="border-bottom: 2px solid #e2e8f0; color: #475569;">
+                  <th style="padding: 8px 12px;">ID</th>
                   <th style="padding: 8px 12px;">Equipo / Reloj</th>
-                  <th style="padding: 8px 12px;">Sala</th>
-                  <th style="padding: 8px 12px;">IP Remota / Local</th>
+                  <th style="padding: 8px 12px;">Sala Asignada</th>
                   <th style="padding: 8px 12px; text-align: center;">Estatus</th>
                 </tr>
               </thead>
               <tbody>
                 {#each assignedDispositivos as dev}
                   <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 10px 12px; font-family: monospace; font-weight: 700; color: #64748b;">
+                      #{dev.id}
+                    </td>
                     <td style="padding: 10px 12px; font-weight: 700; color: #0f172a;">
                       📟 {dev.nombre}
                     </td>
-                    <td style="padding: 10px 12px; color: #475569;">
-                      {detailedSalas.find(s => Number(s.id) === Number(dev.sala_id))?.nombre || `Sala #${dev.sala_id}`}
-                    </td>
-                    <td style="padding: 10px 12px; font-family: monospace; font-size: 12px; color: #2563eb;">
-                      {dev.ip_remota || dev.ip_local || 'Automático (Push)'}
+                    <td style="padding: 10px 12px; color: #334155; font-weight: 600;">
+                      📍 {detailedSalas.find(s => Number(s.id) === Number(dev.sala_id))?.nombre || `Sala #${dev.sala_id}`}
                     </td>
                     <td style="padding: 10px 12px; text-align: center;">
                       <span style="background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">
@@ -532,7 +556,30 @@
             <span class="material-icons" style="font-size: 20px; color: #8b5cf6;">verified_user</span>
             <span>Módulos y Permisos de Acceso ({totalModulosCount})</span>
           </h3>
-          <span style="font-size: 11.5px; color: #64748b; font-weight: 600;">Control por Módulo</span>
+          <span style="font-size: 11.5px; color: #64748b; font-weight: 600;">Control por Módulo y Sala</span>
+        </div>
+
+        <!-- Banner de alcance de salas para los permisos -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #8b5cf6; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="material-icons" style="font-size: 18px; color: #8b5cf6;">domain</span>
+            <span style="font-size: 12.5px; color: #1e293b; font-weight: 700;">
+              Salas autorizadas para operar estos módulos:
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            {#if detailedSalas.length === 0}
+              <span style="font-size: 12px; color: #94a3b8; font-style: italic;">Sin salas asignadas</span>
+            {:else}
+              {#each detailedSalas as sala}
+                <span style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 2px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 800; display: inline-flex; align-items: center; gap: 4px;">
+                  <span>📍</span>
+                  <span>{sala.nombre}</span>
+                  <span style="color: #60a5fa; font-size: 10px;">(#{sala.id})</span>
+                </span>
+              {/each}
+            {/if}
+          </div>
         </div>
 
         {#if userPages.length === 0}
@@ -543,10 +590,16 @@
           <div style="display: flex; flex-direction: column; gap: 16px;">
             {#each userPages as page}
               <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; background: #f8fafc;">
-                <div style="font-size: 13px; font-weight: 800; color: #1e293b; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                  <span style="color: #8b5cf6;">📂</span>
-                  <span>{page.nombre}</span>
-                  <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">({(page.modulos || []).length} módulos)</span>
+                <div style="font-size: 13px; font-weight: 800; color: #1e293b; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="color: #8b5cf6;">📂</span>
+                    <span>{page.nombre}</span>
+                    <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">({(page.modulos || []).length} módulos)</span>
+                  </div>
+                  <div style="font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 4px;">
+                    <span>Salas asignadas:</span>
+                    <strong style="color: #0f172a;">{detailedSalas.map(s => s.nombre).join(', ') || 'Ninguna'}</strong>
+                  </div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px;">
@@ -562,12 +615,19 @@
                         </button>
                       </div>
 
-                      <div style="font-size: 11px; color: #64748b; font-family: monospace;">
-                        {mod.ruta || 'N/A'}
+                      {#if mod.ruta}
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                          <span style="font-size: 11px; color: #64748b; font-family: monospace;">{mod.ruta}</span>
+                        </div>
+                      {/if}
+
+                      <div style="font-size: 10.5px; color: #475569; display: flex; align-items: center; gap: 4px; background: #f8fafc; padding: 3px 6px; border-radius: 4px; border: 1px solid #f1f5f9;">
+                        <span style="color: #64748b;">📍 Sala:</span>
+                        <strong style="color: #0f172a;">{detailedSalas.map(s => s.nombre).join(', ') || 'Sin sala'}</strong>
                       </div>
 
                       <!-- Permisos Badges -->
-                      <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                      <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;">
                         {#each (mod.permisos || []) as perm}
                           <span style="
                             padding: 1px 6px; 
