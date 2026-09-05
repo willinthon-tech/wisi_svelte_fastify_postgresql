@@ -483,6 +483,17 @@
         console.warn("No se pudo obtener último event_time:", e);
       }
     }
+
+    async function getTauriNotificationPlugin() {
+      if (typeof window === 'undefined' || !window.__TAURI_INTERNALS__) return null;
+      try {
+        const dynamicImport = new Function('mod', 'return import(mod)');
+        return await dynamicImport('@tauri-apps/plugin-notification');
+      } catch (e) {
+        return null;
+      }
+    }
+
     initLatestEventTime();
 
     // Solicitar permiso para notificaciones nativas de escritorio (Windows / Navegador / PWA / Tauri)
@@ -490,11 +501,11 @@
     if (typeof window !== 'undefined') {
       const requestNativeNotifPermission = async () => {
         try {
-          if (window.__TAURI_INTERNALS__) {
-            const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
-            let granted = await isPermissionGranted();
+          const tauriNotif = await getTauriNotificationPlugin();
+          if (tauriNotif) {
+            let granted = await tauriNotif.isPermissionGranted();
             if (!granted) {
-              await requestPermission();
+              await tauriNotif.requestPermission();
             }
           } else if ('Notification' in window && Notification.permission === 'default') {
             await Notification.requestPermission();
@@ -572,16 +583,16 @@
         const photoUrl = rec.id ? toBackendUrl(`/api/attlogs/${rec.id}.jpg`, { thumb: true }) : (rec.foto ? toBackendUrl(rec.foto, { thumb: true }) : '/favicon.png');
 
         // 1. Si corre en Tauri nativo en Windows
-        if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+        const tauriNotif = await getTauriNotificationPlugin();
+        if (tauriNotif) {
           try {
-            const { sendNotification, isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
-            let hasPerm = await isPermissionGranted();
+            let hasPerm = await tauriNotif.isPermissionGranted();
             if (!hasPerm) {
-              const perm = await requestPermission();
+              const perm = await tauriNotif.requestPermission();
               hasPerm = perm === 'granted';
             }
             if (hasPerm) {
-              sendNotification({
+              tauriNotif.sendNotification({
                 title,
                 body,
                 icon: 'icons/128x128.png'
