@@ -76,6 +76,39 @@
     }
   }
 
+  let updatingPunchId = null;
+
+  async function handleChangePunchType(punch, targetStatus) {
+    if (!punch || !punch.id) {
+      triggerToast("Identificador de marcaje no disponible", "warning");
+      return;
+    }
+    updatingPunchId = punch.id;
+    try {
+      const res = await fetch(`/api/reports/attlogs/${punch.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus })
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        const label = targetStatus === 'checkIn' ? '(E) Entrada' : (targetStatus === 'checkOut' ? '(S) Salida' : '(O) Otros');
+        triggerToast(`Marcaje ${punch.time} actualizado a ${label}`, "success");
+        // Refrescar los marcajes rápidos y re-cotejar inmediatamente
+        await fetchMarcajesRapidos();
+        // Notificar a ReportesView para actualizar la cuadrícula en vivo
+        dispatch("punchUpdated");
+      } else {
+        triggerToast(json?.error || "Error al actualizar estado del marcaje", "error");
+      }
+    } catch (err) {
+      console.error("Error updating punch type:", err);
+      triggerToast("Error al actualizar marcaje", "error");
+    } finally {
+      updatingPunchId = null;
+    }
+  }
+
   function closeModal() {
     show = false;
     dispatch('close');
@@ -279,25 +312,77 @@
                         {#if ctx.punches && ctx.punches.length > 0}
                           <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                             {#each ctx.punches as punch}
-                              {#if punch.isUsedEntry}
-                                <!-- Entrada TOMADA para el cálculo del día: Verde destacado -->
-                                <span style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; background: #f0fdf4; border: 1.5px solid #86efac; padding: 2px 6px; border-radius: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);" title="Entrada tomada para el turno">
-                                  <span style="font-size: 9.5px; font-weight: 900; background: #86efac; color: #14532d; border-radius: 3px; padding: 0 3px;">(E)</span>
-                                  <span style="color: #14532d; font-size: 11px; font-weight: 900;">{punch.time}</span>
+                              <div
+                                style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; padding: 2px 6px; border-radius: 6px; transition: all 0.15s ease; {
+                                  punch.isUsedEntry
+                                    ? 'background: #f0fdf4; border: 1.5px solid #86efac; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'
+                                    : punch.isUsedExit
+                                    ? 'background: #eff6ff; border: 1.5px solid #93c5fd; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'
+                                    : punch.type === 'E'
+                                    ? 'background: #f0fdf4; border: 1px solid #bbf7d0;'
+                                    : punch.type === 'S'
+                                    ? 'background: #eff6ff; border: 1px solid #bfdbfe;'
+                                    : 'background: #f8fafc; border: 1px solid #cbd5e1;'
+                                }"
+                                title={
+                                  punch.isUsedEntry
+                                    ? 'Entrada tomada para el cálculo del turno'
+                                    : punch.isUsedExit
+                                    ? 'Salida tomada para el cálculo del turno'
+                                    : 'Marcaje no cotejado (cambie a E o S si desea tomarlo)'
+                                }
+                              >
+                                <!-- Badge tipo: (E), (S) o (O) -->
+                                <span
+                                  style="font-size: 9.5px; font-weight: 900; border-radius: 3px; padding: 1px 4px; {
+                                    punch.type === 'E'
+                                      ? 'background: #86efac; color: #14532d;'
+                                      : punch.type === 'S'
+                                      ? 'background: #bfdbfe; color: #1e3a8a;'
+                                      : 'background: #e2e8f0; color: #475569;'
+                                  }"
+                                >
+                                  ({punch.type})
                                 </span>
-                              {:else if punch.isUsedExit}
-                                <!-- Salida TOMADA para el cálculo del turno (mismo día o día siguiente): Azul destacado -->
-                                <span style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; background: #eff6ff; border: 1.5px solid #93c5fd; padding: 2px 6px; border-radius: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);" title="Salida tomada para el turno">
-                                  <span style="font-size: 9.5px; font-weight: 900; background: #bfdbfe; color: #1e3a8a; border-radius: 3px; padding: 0 3px;">(S)</span>
-                                  <span style="color: #1e3a8a; font-size: 11px; font-weight: 900;">{punch.time}</span>
+
+                                <!-- Hora del marcaje -->
+                                <span
+                                  style="font-size: 11px; font-weight: 900; {
+                                    punch.isUsedEntry
+                                      ? 'color: #14532d;'
+                                      : punch.isUsedExit
+                                      ? 'color: #1e3a8a;'
+                                      : punch.type === 'E'
+                                      ? 'color: #166534;'
+                                      : punch.type === 'S'
+                                      ? 'color: #1e40af;'
+                                      : 'color: #334155;'
+                                  }"
+                                >
+                                  {punch.time}
                                 </span>
-                              {:else}
-                                <!-- Marcaje NO tomado o de otro día: Texto simple y limpio sin bordes ni colores -->
-                                <span style="display: inline-flex; align-items: center; gap: 3px; font-family: monospace; padding: 2px 4px;" title="Marcaje informativo">
-                                  <span style="font-size: 9.5px; font-weight: 700; color: #64748b;">({punch.type})</span>
-                                  <span style="color: #334155; font-size: 11px; font-weight: 600;">{punch.time}</span>
-                                </span>
-                              {/if}
+
+                                <!-- Selector desplegable para cambiar tipo E, S o O -->
+                                <select
+                                  value={punch.type}
+                                  disabled={updatingPunchId === punch.id}
+                                  on:change={(e) => {
+                                    const val = e.target.value;
+                                    const targetStatus = val === 'E' ? 'checkIn' : (val === 'S' ? 'checkOut' : 'undefined');
+                                    handleChangePunchType(punch, targetStatus);
+                                  }}
+                                  style="cursor: pointer; font-size: 9px; font-weight: 800; border: 1px solid {
+                                    punch.type === 'E' ? '#86efac' : (punch.type === 'S' ? '#93c5fd' : '#cbd5e1')
+                                  }; border-radius: 4px; background: #ffffff; color: {
+                                    punch.type === 'E' ? '#166534' : (punch.type === 'S' ? '#1e40af' : '#475569')
+                                  }; padding: 1px 2px; outline: none; margin-left: 2px;"
+                                  title="Corregir clasificación: E (Entrada), S (Salida), O (Otros)"
+                                >
+                                  <option value="E">E</option>
+                                  <option value="S">S</option>
+                                  <option value="O">O</option>
+                                </select>
+                              </div>
                             {/each}
                           </div>
                         {:else}

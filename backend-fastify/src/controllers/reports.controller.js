@@ -2,7 +2,8 @@ import {
   getMarcajePersonalReportModel,
   saveExcepcionHorarioModel,
   deleteExcepcionHorarioModel,
-  getMarcajesRapidosModel
+  getMarcajesRapidosModel,
+  updateAttlogStatusModel
 } from '../models/reports.model.js';
 import { attlogEvents } from '../events/attlog.events.js';
 
@@ -102,3 +103,23 @@ export async function getMarcajesRapidos(req, reply) {
     });
   }
 }
+
+export async function updateAttlogStatus(req, reply) {
+  try {
+    const { id } = req.params;
+    const { status } = req.body || {};
+    const result = await updateAttlogStatusModel(id, status);
+    if (result.success) {
+      attlogEvents.emit('attlog_updated', result.data);
+    }
+    return reply.send(result);
+  } catch (error) {
+    req.log.error(error);
+    return reply.status(500).send({
+      success: false,
+      error: 'Error al actualizar estado del marcaje',
+      details: error.message
+    });
+  }
+}
+

@@ -1152,6 +1152,7 @@
   dia={activeDiaExcepcion}
   plantillasSala={plantillasSalaExcepcion}
   on:saved={handleExcepcionSaved}
+  on:punchUpdated={() => fetchReporteData(true)}
 />
 
 <!-- Modal para Generar y Guardar Histórico de Corte -->

@@ -287,14 +287,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
   let attlogWhere = [
     sql`employee_no = ANY(${allCedulas})`,
     sql`(event_time AT TIME ZONE ${tz}) >= ${minDateStr}::timestamp`,
-    sql`(event_time AT TIME ZONE ${tz}) <= ${maxDateStr}::timestamp`,
-    sql`(
-      LOWER(COALESCE(attendancestatus, '')) LIKE '%checkin%' OR
-      LOWER(COALESCE(attendancestatus, '')) LIKE '%checkout%' OR
-      LOWER(COALESCE(attendancestatus, '')) LIKE '%entrada%' OR
-      LOWER(COALESCE(attendancestatus, '')) LIKE '%salida%' OR
-      COALESCE(attendancestatus, '') IN ('0', '1')
-    )`
+    sql`(event_time AT TIME ZONE ${tz}) <= ${maxDateStr}::timestamp`
   ];
 
   if (dispositivoIds && dispositivoIds.length > 0) {
@@ -320,6 +313,8 @@ export async function getMarcajePersonalReportModel(params = {}) {
     const rawStatus = String(log.attendancestatus || '').toLowerCase().trim();
     const isCheckInFlag = rawStatus.includes('checkin') || rawStatus.includes('entrada') || rawStatus === '0';
     const isCheckOutFlag = rawStatus.includes('checkout') || rawStatus.includes('salida') || rawStatus === '1';
+    const isOtherFlag = !isCheckInFlag && !isCheckOutFlag;
+    const type = isCheckInFlag ? 'E' : (isCheckOutFlag ? 'S' : 'O');
 
     const fullKey = `${rawEmpKey}_${parsed.dateStr}`;
     if (!logsByEmpAndDate.has(fullKey)) {
@@ -327,9 +322,12 @@ export async function getMarcajePersonalReportModel(params = {}) {
     }
     logsByEmpAndDate.get(fullKey).push({
       ...parsed,
+      id: log.id,
       isCheckInFlag,
       isCheckOutFlag,
-      rawStatus,
+      isOtherFlag,
+      type,
+      rawStatus: log.attendancestatus,
       consumed: false
     });
   });
@@ -408,59 +406,66 @@ export async function getMarcajePersonalReportModel(params = {}) {
       }
 
       // --- LOGICA DE ENTRADA Y SALIDA ---
-      // Regla: No puede haber salida sin que exista antes una entrada.
-      // Si hay múltiples entradas, se toma la PRIMERA entrada del día.
+      // Regla estricta: Solo tomar en cuenta para Entrada los marcajes con checkIn
+      // y para Salida los marcajes con checkOut posteriores a la Entrada.
       if (punchesToday.length > 0) {
-        // Buscar la primera entrada válida (marcada explícitamente como checkin o el primer marcaje del día)
         const checkinPunches = punchesToday.filter(p => p.isCheckInFlag);
-        const firstEntryPunch = checkinPunches.length > 0 ? checkinPunches[0] : punchesToday[0];
+        const firstEntryPunch = checkinPunches.length > 0 ? checkinPunches[0] : null;
 
-        entradaStr = firstEntryPunch.timeStr;
-        firstEntryPunch.consumed = true;
+        if (firstEntryPunch) {
+          entradaStr = firstEntryPunch.timeStr;
+          firstEntryPunch.consumed = true;
 
-        // Buscar la salida correspondiente posterior a la entrada
-        const remainingPunches = punchesToday.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp);
+          // Buscar la salida correspondiente posterior a la entrada con checkOut
+          const remainingPunches = punchesToday.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp);
 
-        if (remainingPunches.length > 0) {
-          // Filtrar candidatos a salida (marcados como checkout o los últimos del día)
-          const checkoutPunches = remainingPunches.filter(p => p.isCheckOutFlag);
-          const finalExitPunch = checkoutPunches.length > 0 
-            ? checkoutPunches[checkoutPunches.length - 1] 
-            : remainingPunches[remainingPunches.length - 1];
+          if (remainingPunches.length > 0) {
+            const checkoutPunches = remainingPunches.filter(p => p.isCheckOutFlag);
+            const finalExitPunch = checkoutPunches.length > 0 
+              ? checkoutPunches[checkoutPunches.length - 1] 
+              : null;
 
-          // Verificar que haya transcurrido al menos un tiempo mínimo razonable (ej. > 5 min)
-          const diffMins = Math.floor((finalExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
-          if (diffMins >= 5) {
-            salidaStr = finalExitPunch.timeStr;
-            trabajadosMins = diffMins;
-            finalExitPunch.consumed = true;
-            marcajeStr = `${entradaStr} - ${salidaStr}`;
-          } else {
-            marcajeStr = `${entradaStr}`;
-          }
-        } else if (firstEntryPunch.hours >= 15 && dayIdx + 1 < diasDelMes.length) {
-          // Posible turno nocturno que sale en la madrugada del día siguiente
-          const nextDateStr = diasDelMes[dayIdx + 1].fechaStr;
-          const nextDayPunches = (empPunchesByDate.get(nextDateStr) || []).filter(p => !p.consumed);
-
-          if (nextDayPunches.length > 0) {
-            const morningExits = nextDayPunches.filter(p => p.hours <= 12);
-            if (morningExits.length > 0) {
-              const nightExitPunch = morningExits[0];
-              const diffHours = (nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 3600);
-              if (diffHours >= 4 && diffHours <= 16) {
-                salidaStr = nightExitPunch.timeStr;
-                trabajadosMins = Math.floor((nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
-                nightExitPunch.consumed = true;
-                nightExitPunch.isCrossDayExit = true;
+            if (finalExitPunch) {
+              const diffMins = Math.floor((finalExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
+              if (diffMins >= 5) {
+                salidaStr = finalExitPunch.timeStr;
+                trabajadosMins = diffMins;
+                finalExitPunch.consumed = true;
                 marcajeStr = `${entradaStr} - ${salidaStr}`;
+              } else {
+                marcajeStr = `${entradaStr}`;
+              }
+            } else {
+              marcajeStr = `${entradaStr}`;
+            }
+          } else if (firstEntryPunch.hours >= 15 && dayIdx + 1 < diasDelMes.length) {
+            // Posible turno nocturno que sale en la madrugada del día siguiente con checkOut
+            const nextDateStr = diasDelMes[dayIdx + 1].fechaStr;
+            const nextDayPunches = (empPunchesByDate.get(nextDateStr) || []).filter(p => !p.consumed);
+
+            if (nextDayPunches.length > 0) {
+              const morningExits = nextDayPunches.filter(p => p.hours <= 12 && p.isCheckOutFlag);
+              if (morningExits.length > 0) {
+                const nightExitPunch = morningExits[0];
+                const diffHours = (nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 3600);
+                if (diffHours >= 4 && diffHours <= 16) {
+                  salidaStr = nightExitPunch.timeStr;
+                  trabajadosMins = Math.floor((nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
+                  nightExitPunch.consumed = true;
+                  nightExitPunch.isCrossDayExit = true;
+                  marcajeStr = `${entradaStr} - ${salidaStr}`;
+                }
               }
             }
           }
-        }
 
-        if (!salidaStr) {
-          marcajeStr = `${entradaStr}`;
+          if (!salidaStr) {
+            marcajeStr = `${entradaStr}`;
+          }
+        } else {
+          entradaStr = null;
+          salidaStr = null;
+          marcajeStr = 'Sin Registros';
         }
       }
 
@@ -741,17 +746,11 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   const maxDateStr = `${nextDateStr} 23:59:59`;
 
   const attlogs = await sql`
-    SELECT employee_no, to_char(event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time, attendancestatus, currentverifymode
+    SELECT id, employee_no, to_char(event_time AT TIME ZONE ${tz}, 'YYYY-MM-DD HH24:MI:SS') AS event_time, attendancestatus, currentverifymode
     FROM attlogs
     WHERE (employee_no = ${empKey1} OR employee_no = ${empKey2})
       AND (event_time AT TIME ZONE ${tz}) >= ${minDateStr}::timestamp
       AND (event_time AT TIME ZONE ${tz}) <= ${maxDateStr}::timestamp
-      AND (
-        LOWER(COALESCE(attendancestatus, '')) LIKE '%checkin%' OR
-        LOWER(COALESCE(attendancestatus, '')) LIKE '%checkout%' OR
-        LOWER(COALESCE(attendancestatus, '')) LIKE '%entrada%' OR
-        LOWER(COALESCE(attendancestatus, '')) LIKE '%salida%'
-      )
     ORDER BY event_time ASC
   `;
 
@@ -769,10 +768,12 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
     const rawStatus = String(log.attendancestatus || '').toLowerCase().trim();
     const isCheckOut = rawStatus.includes('checkout') || rawStatus.includes('salida') || rawStatus === '1';
     const isCheckIn = rawStatus.includes('checkin') || rawStatus.includes('entrada') || rawStatus === '0';
-    const type = isCheckOut ? 'S' : 'E';
-    const tipoTexto = isCheckOut ? 'Salida' : 'Entrada';
+    const isOther = !isCheckIn && !isCheckOut;
+    const type = isCheckIn ? 'E' : (isCheckOut ? 'S' : 'O');
+    const tipoTexto = isCheckIn ? 'Entrada' : (isCheckOut ? 'Salida' : 'Otros');
 
     punchesByDate.get(parsed.dateStr).push({
+      id: log.id,
       time: parsed.timeStr,
       timestamp: parsed.timestamp,
       hours: parsed.hours,
@@ -780,9 +781,10 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
       dateStr: parsed.dateStr,
       type,
       tipoTexto,
-      rawStatus,
+      rawStatus: log.attendancestatus,
       isCheckIn,
       isCheckOut,
+      isOther,
       isUsedEntry: false,
       isUsedExit: false
     });
@@ -796,34 +798,33 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   });
 
   // Determine which punches were actually taken as Entry and Exit for the SELECTED DAY ONLY (dateStr)
+  // Regla estricta: Solo tomar en cuenta para acotejar los que tengan checkIn como Entrada y checkOut como Salida
   const currList = punchesByDate.get(dateStr) || [];
   if (currList.length > 0) {
-    // First Entry on Selected Day
     const checkinPunches = currList.filter(p => p.isCheckIn);
-    const firstEntryPunch = checkinPunches.length > 0 ? checkinPunches[0] : currList[0];
-    firstEntryPunch.isUsedEntry = true;
+    const firstEntryPunch = checkinPunches.length > 0 ? checkinPunches[0] : null;
 
-    // Remaining candidates on same day
-    const remaining = currList.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp);
-    if (remaining.length > 0) {
-      const checkoutPunches = remaining.filter(p => p.isCheckOut);
-      const finalExitPunch = checkoutPunches.length > 0 
-        ? checkoutPunches[checkoutPunches.length - 1] 
-        : remaining[remaining.length - 1];
+    if (firstEntryPunch) {
+      firstEntryPunch.isUsedEntry = true;
 
-      const diffMins = Math.floor((finalExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
-      if (diffMins >= 5) {
-        finalExitPunch.isUsedExit = true;
-      }
-    } else if (firstEntryPunch.hours >= 15) {
-      // Possible cross-day night shift exit on morning of next day
-      const nextList = punchesByDate.get(nextDateStr) || [];
-      const morningPunches = nextList.filter(p => p.hours <= 12);
-      if (morningPunches.length > 0) {
-        const nightExitPunch = morningPunches[0];
-        const diffHours = (nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 3600);
-        if (diffHours >= 4 && diffHours <= 16) {
-          nightExitPunch.isUsedExit = true;
+      // Remaining candidates on same day with checkOut
+      const remaining = currList.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp && p.isCheckOut);
+      if (remaining.length > 0) {
+        const finalExitPunch = remaining[remaining.length - 1];
+        const diffMins = Math.floor((finalExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
+        if (diffMins >= 5) {
+          finalExitPunch.isUsedExit = true;
+        }
+      } else if (firstEntryPunch.hours >= 15) {
+        // Cross-day night shift exit on morning of next day with checkOut
+        const nextList = punchesByDate.get(nextDateStr) || [];
+        const morningPunches = nextList.filter(p => p.hours <= 12 && p.isCheckOut);
+        if (morningPunches.length > 0) {
+          const nightExitPunch = morningPunches[0];
+          const diffHours = (nightExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 3600);
+          if (diffHours >= 4 && diffHours <= 16) {
+            nightExitPunch.isUsedExit = true;
+          }
         }
       }
     }
@@ -834,6 +835,7 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
     if (list.length === 0) return { punches: [], marcajesStr: 'Sin Registros' };
 
     const formattedList = list.map(p => ({
+      id: p.id,
       time: p.time,
       timestamp: p.timestamp,
       type: p.type,
@@ -865,5 +867,36 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   return {
     success: true,
     marcajesContext
+  };
+}
+
+export async function updateAttlogStatusModel(id, status) {
+  if (!sql) {
+    return { success: false, error: 'Base de datos desconectada' };
+  }
+  let targetStatus = 'undefined';
+  const clean = String(status || '').trim().toLowerCase();
+  if (clean === 'checkin' || clean === 'e' || clean === '0' || clean === 'entrada') {
+    targetStatus = 'checkIn';
+  } else if (clean === 'checkout' || clean === 's' || clean === '1' || clean === 'salida') {
+    targetStatus = 'checkOut';
+  } else {
+    targetStatus = 'undefined';
+  }
+
+  const result = await sql`
+    UPDATE attlogs
+    SET attendancestatus = ${targetStatus}
+    WHERE id = ${id}
+    RETURNING id, employee_no, to_char(event_time, 'YYYY-MM-DD HH24:MI:SS') AS event_time, attendancestatus
+  `;
+
+  if (!result || result.length === 0) {
+    return { success: false, error: 'Marcaje no encontrado' };
+  }
+
+  return {
+    success: true,
+    data: result[0]
   };
 }

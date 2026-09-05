@@ -2,7 +2,8 @@ import {
   getMarcajePersonalReport,
   saveExcepcionHorario,
   deleteExcepcionHorario,
-  getMarcajesRapidos
+  getMarcajesRapidos,
+  updateAttlogStatus
 } from '../controllers/reports.controller.js';
 
 export async function reportsRoutes(fastify, opts) {
@@ -10,4 +11,6 @@ export async function reportsRoutes(fastify, opts) {
   fastify.get('/api/reports/marcajes-rapidos', getMarcajesRapidos);
   fastify.post('/api/reports/excepciones', saveExcepcionHorario);
   fastify.delete('/api/reports/excepciones/:id', deleteExcepcionHorario);
+  fastify.put('/api/reports/attlogs/:id/status', updateAttlogStatus);
 }
+
