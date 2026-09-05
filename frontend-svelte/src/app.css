@@ -96,6 +96,16 @@ html, body {
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.5px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1023px) {
+  .sidebar-logo {
+    padding-top: max(env(safe-area-inset-top, 0px), 32px);
+    padding-bottom: 8px;
+    height: auto;
+    min-height: calc(var(--header-height) + 26px);
+  }
 }
 
 .sidebar-logo-icon {
@@ -218,17 +228,31 @@ html, body {
 
 /* Clean White Top Navbar Header */
 .top-navbar {
-  height: var(--header-height);
+  min-height: var(--header-height);
   background-color: var(--header-bg);
   border-bottom: 1px solid var(--header-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
+  padding-top: env(safe-area-inset-top, 0px);
   position: sticky;
   top: 0;
   z-index: 30;
   width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1023px) {
+  .top-navbar {
+    /* En móviles garantizamos suficiente espacio superior para que la barra de estado de Android (reloj, wifi, batería) no tape ni interfiera con los botones */
+    padding-top: max(env(safe-area-inset-top, 0px), 36px);
+    padding-bottom: 10px;
+    padding-left: 14px;
+    padding-right: 14px;
+    height: auto;
+    min-height: calc(var(--header-height) + 30px);
+  }
 }
 
 .header-left {
