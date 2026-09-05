@@ -408,6 +408,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
       let resultadoStr = '';
       let entBadge = null;
       let salBadge = null;
+      let isNoEntryWithOtherPunches = false;
 
       // Check for Excepcion Especial Override for this employee and date
       const exKey = `${emp.id}_${dateStr}`;
@@ -493,9 +494,33 @@ export async function getMarcajePersonalReportModel(params = {}) {
             marcajeStr = `${entradaStr}`;
           }
         } else {
-          entradaStr = null;
-          salidaStr = null;
-          marcajeStr = 'Sin Registros';
+          // No hubo marcaje checkIn (Entrada)
+          const unconsumedPunches = punchesToday.filter(p => !p.consumed);
+          // Si sólo hay marcajes checkOut (salida), no se toma como error ni trabajo de hoy
+          // porque puede ser salida de la jornada nocturna de ayer:
+          const hasOtherPunches = unconsumedPunches.some(p => !p.isCheckOutFlag);
+
+          if (hasOtherPunches) {
+            // El empleado tiene marcajes tipo (O) u otros sin entrada válida:
+            // "no trabajo porque no marco entrada... pero marco algo... coloca asi como rojo (ERROR)"
+            const firstOther = unconsumedPunches.find(p => !p.isCheckOutFlag) || unconsumedPunches[0];
+            entradaStr = firstOther.timeStr;
+            const laterCheckouts = unconsumedPunches.filter(p => p !== firstOther && p.timestamp > firstOther.timestamp && p.isCheckOutFlag);
+            if (laterCheckouts.length > 0) {
+              const finalExit = laterCheckouts[laterCheckouts.length - 1];
+              salidaStr = finalExit.timeStr;
+              marcajeStr = `${entradaStr} - ${salidaStr}`;
+            } else {
+              salidaStr = null;
+              marcajeStr = entradaStr;
+            }
+            trabajadosMins = 0;
+            isNoEntryWithOtherPunches = true;
+          } else {
+            entradaStr = null;
+            salidaStr = null;
+            marcajeStr = 'Sin Registros';
+          }
         }
       }
 
@@ -533,6 +558,10 @@ export async function getMarcajePersonalReportModel(params = {}) {
         if (!entradaStr) {
           marcajeStr = 'Sin Registros';
         }
+      } else if (isNoEntryWithOtherPunches) {
+        // No marcó entrada (marcó O): se marca en ROJO como ERROR y 0 horas trabajadas
+        resultadoStr = 'ERROR';
+        trabajadosMins = 0;
       } else if (entradaStr && !salidaStr) {
         // Marcó entrada pero no marcó salida:
         // Si el día es HOY o futuro (dateStr >= todayStr) -> EN ESPERA (jornada laboral activa)
