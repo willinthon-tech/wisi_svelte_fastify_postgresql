@@ -72,10 +72,13 @@
     }
   }
 
+  let pendingPunches = {};
+
   async function fetchMarcajesRapidos() {
     if (!empleado || !dia) return;
     marcajesLoading = true;
     marcajesContext = [];
+    pendingPunches = {};
     try {
       const res = await fetch(`/api/reports/marcajes-rapidos?empleado_id=${empleado.id}&fecha=${dia.fechaStr}`);
       const json = await res.json();
@@ -89,88 +92,145 @@
     }
   }
 
-  let updatingPunchId = null;
+  function handleLocalPunchChange(punch, newType) {
+    if (!punch || !punch.id) return;
+    const targetStatus = newType === 'E' ? 'checkIn' : (newType === 'S' ? 'checkOut' : 'undefined');
 
-  async function handleChangePunchType(punch, targetStatus) {
-    if (!punch || !punch.id) {
-      triggerToast("Identificador de marcaje no disponible", "warning");
-      return;
-    }
-    updatingPunchId = punch.id;
-    try {
-      const res = await fetch(`/api/reports/attlogs/${punch.id}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: targetStatus })
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        const label = targetStatus === 'checkIn' ? '(E) Entrada' : (targetStatus === 'checkOut' ? '(S) Salida' : '(O) Otros');
-        triggerToast(`Marcaje ${punch.time} actualizado a ${label}`, "success");
-        // Refrescar los marcajes rápidos y re-cotejar inmediatamente
-        await fetchMarcajesRapidos();
-        // Notificar a ReportesView para actualizar la cuadrícula en vivo
-        dispatch("punchUpdated");
-      } else {
-        triggerToast(json?.error || "Error al actualizar estado del marcaje", "error");
+    // Registrar cambio pendiente
+    pendingPunches = {
+      ...pendingPunches,
+      [punch.id]: {
+        id: punch.id,
+        targetStatus,
+        newType,
+        time: punch.time
       }
-    } catch (err) {
-      console.error("Error updating punch type:", err);
-      triggerToast("Error al actualizar marcaje", "error");
-    } finally {
-      updatingPunchId = null;
-    }
+    };
+
+    // Actualizar reactivamente el contexto local para que el selector y los colores reflejen el cambio
+    marcajesContext = marcajesContext.map(ctx => ({
+      ...ctx,
+      punches: (ctx.punches || []).map(p => {
+        if (p.id === punch.id) {
+          return {
+            ...p,
+            type: newType,
+            tipoTexto: newType === 'E' ? 'Entrada' : (newType === 'S' ? 'Salida' : 'Otros'),
+            isCheckIn: newType === 'E',
+            isCheckOut: newType === 'S',
+            isOther: newType === 'O'
+          };
+        }
+        return p;
+      })
+    }));
+
+    recalculateLocalEntryExit();
+  }
+
+  function recalculateLocalEntryExit() {
+    marcajesContext = marcajesContext.map(ctx => {
+      const punches = (ctx.punches || []).map(p => ({
+        ...p,
+        isUsedEntry: false,
+        isUsedExit: false
+      }));
+
+      const checkinPunches = punches.filter(p => p.isCheckIn);
+      const firstEntry = checkinPunches.length > 0 ? checkinPunches[0] : null;
+
+      if (firstEntry) {
+        firstEntry.isUsedEntry = true;
+        const remaining = punches.filter(p => p !== firstEntry && p.timestamp > firstEntry.timestamp && p.isCheckOut);
+        if (remaining.length > 0) {
+          const finalExit = remaining[remaining.length - 1];
+          const diffMins = Math.floor((finalExit.timestamp - firstEntry.timestamp) / (1000 * 60));
+          if (diffMins >= 5) {
+            finalExit.isUsedExit = true;
+          }
+        }
+      }
+
+      return {
+        ...ctx,
+        punches
+      };
+    });
   }
 
   function closeModal() {
+    pendingPunches = {};
     show = false;
     dispatch('close');
   }
 
   async function handleSave() {
-    if (!empleado || !dia || !selectedValue) {
-      triggerToast('Seleccione una plantilla u horario', 'warning');
+    if (!empleado || !dia) return;
+
+    const punchUpdates = Object.values(pendingPunches);
+    const hasPendingPunches = punchUpdates.length > 0;
+    const isBaseU = selectedValue === 'BASE_U';
+
+    if (isBaseU && !hasPendingPunches) {
+      triggerToast('El Horario Único es automático del sistema. Seleccione un horario o excepción válida para guardar.', 'warning');
       return;
     }
-    if (selectedValue === 'BASE_U') {
-      triggerToast('El Horario Único es automático del sistema. Seleccione un horario o excepción válida.', 'warning');
-      return;
-    }
+
     loading = true;
     try {
-      let plantillaId = null;
-      let isLibre = false;
-
-      if (selectedValue === 'BASE_L') {
-        plantillaId = null;
-        isLibre = true;
-      } else {
-        plantillaId = Number(selectedValue.replace('PLANTILLA_', ''));
-        const pObj = (plantillasSala || []).find(p => Number(p.id) === Number(plantillaId));
-        isLibre = pObj ? (pObj.codigo === 'L' || pObj.tipo === 'plantilla' || (!pObj.hora_entrada && !pObj.hora_salida)) : false;
+      // 1. Guardar cambios en marcajes pendientes en la base de datos
+      if (hasPendingPunches) {
+        for (const p of punchUpdates) {
+          const resPunch = await fetch(`/api/reports/attlogs/${p.id}/status`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: p.targetStatus })
+          });
+          const punchJson = await resPunch.json();
+          if (!punchJson || !punchJson.success) {
+            throw new Error(punchJson?.error || `Error al actualizar marcaje ${p.time}`);
+          }
+        }
+        pendingPunches = {};
       }
 
-      const payload = {
-        empleado_id: empleado.id,
-        fecha: dia.fechaStr,
-        plantilla_horario_id: plantillaId,
-        es_libre: isLibre
-      };
+      // 2. Guardar excepción de horario seleccionada (si no es BASE_U)
+      if (!isBaseU && selectedValue) {
+        let plantillaId = null;
+        let isLibre = false;
 
-      const res = await fetch('/api/reports/excepciones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+        if (selectedValue === 'BASE_L') {
+          plantillaId = null;
+          isLibre = true;
+        } else {
+          plantillaId = Number(selectedValue.replace('PLANTILLA_', ''));
+          const pObj = (plantillasSala || []).find(p => Number(p.id) === Number(plantillaId));
+          isLibre = pObj ? (pObj.codigo === 'L' || pObj.tipo === 'plantilla' || (!pObj.hora_entrada && !pObj.hora_salida)) : false;
+        }
 
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Excepción especial guardada correctamente', 'success');
-        show = false;
-        dispatch('saved');
-      } else {
-        throw new Error(json.error || 'Error al guardar la excepción');
+        const payload = {
+          empleado_id: empleado.id,
+          fecha: dia.fechaStr,
+          plantilla_horario_id: plantillaId,
+          es_libre: isLibre
+        };
+
+        const res = await fetch('/api/reports/excepciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+        if (!json || !json.success) {
+          throw new Error(json.error || 'Error al guardar la excepción');
+        }
       }
+
+      triggerToast('Cambios guardados correctamente', 'success');
+      show = false;
+      dispatch('punchUpdated');
+      dispatch('saved');
     } catch (err) {
       console.error(err);
       triggerToast(`Error: ${err.message}`, 'error');
@@ -373,12 +433,8 @@
                                 <!-- Selector desplegable para cambiar tipo E, S o O -->
                                 <select
                                   value={punch.type}
-                                  disabled={updatingPunchId === punch.id}
-                                  on:change={(e) => {
-                                    const val = e.target.value;
-                                    const targetStatus = val === 'E' ? 'checkIn' : (val === 'S' ? 'checkOut' : 'undefined');
-                                    handleChangePunchType(punch, targetStatus);
-                                  }}
+                                  disabled={loading}
+                                  on:change={(e) => handleLocalPunchChange(punch, e.target.value)}
                                   style="cursor: pointer; font-size: 10px; font-weight: 900; border-radius: 4px; padding: 1px 3px; outline: none; margin-left: 2px; {
                                     punch.isUsedEntry
                                       ? 'background: #ffffff; color: #15803d; border: 1.5px solid #14532d;'
@@ -438,7 +494,7 @@
           type="button"
           style="padding: 8px 16px; font-size: 11.5px; font-weight: 800; color: #ffffff; background: #2563eb; border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
         >
-          {loading ? 'Guardando...' : 'Guardar Excepción'}
+          {loading ? 'Guardando...' : 'Guardar'}
         </button>
       </div>
 
