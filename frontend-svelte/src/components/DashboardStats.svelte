@@ -1216,10 +1216,10 @@
 
       <div style="padding:12px 16px;flex:1;display:flex;flex-direction:column;gap:10px;">
         <!-- Row: Total Marcajes + 3 Botones de Hora debajo | Recuadro Pico 10M arriba a la derecha -->
-        <div style="display: flex; justify-content: space-between; align-items: stretch; gap: 14px; flex-wrap: wrap;">
+        <div class="afluencia-top-row">
           <!-- Izquierda: Total Marcajes + Interruptor Mayor/Menor + Recuadro con 3 botones de horas -->
-          <div style="flex-shrink: 0; min-width: 170px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <div class="afluencia-summary-box">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
               <div>
                 <span style="font-size: 10px; font-weight: 700; color: #64748b; display: block; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Total Marcajes</span>
                 <span style="font-size: 26px; font-weight: 900; color: #0f172a; line-height: 1;">{statsData.total}</span>
@@ -1261,12 +1261,12 @@
 
             <!-- Recuadro de 3 botones (las 3 horas del bloque seleccionado) -->
             {#if selectedBlock?.hours && selectedBlock.hours.length > 0}
-              <div style="background: #f8fafc; padding: 4px 6px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 3px;">
+              <div style="background: #f8fafc; padding: 5px 8px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 4px; width: 100%;">
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase;">
                   <span>Horas:</span>
                   <span style="color: #0284c7; font-weight: 900;">{selectedBlock.shortLabel}</span>
                 </div>
-                <div style="display: flex; gap: 3px;">
+                <div style="display: flex; gap: 4px; width: 100%;">
                   {#each selectedBlock.hours as hr}
                     {@const isTargetHour = hr.hour === targetSlotInSelectedBlock?.hour}
                     {@const isHourActive = activeHourObj?.hour === hr.hour}
@@ -1294,7 +1294,7 @@
           </div>
 
           <!-- Derecha: Recuadro Pico / Mínimo 10M con sus 6 botones de 10 min -->
-          <div style="flex: 1; min-width: 280px; background: #f8fafc; padding: 8px 12px; border-radius: 10px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; gap: 6px;">
+          <div class="afluencia-peak-box">
             <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 8px; border-bottom: 1px solid #edf2f7; padding-bottom: 4px;">
               <span style="font-size: 9.5px; font-weight: 800; color: #475569; text-transform: uppercase; display: flex; align-items: center; gap: 4px;">
                 <span>{afluenciaMode === 'min' ? '📉' : '🔥'}</span>
@@ -1430,6 +1430,39 @@
     .dashboard-kpi-grid {
       grid-template-columns: 1fr;
     }
+  }
+
+  .afluencia-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .afluencia-summary-box {
+    flex: 1 1 240px;
+    min-width: 200px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .afluencia-peak-box {
+    flex: 1 1 290px;
+    min-width: 260px;
+    width: 100%;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 6px;
   }
 
   .glow-flashing-card {

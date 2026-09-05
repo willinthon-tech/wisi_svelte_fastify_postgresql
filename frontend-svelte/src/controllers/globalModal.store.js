@@ -109,6 +109,7 @@ export function photoModalNext() {
       const nextIdx = state.currentIndex + 1;
       return {
         ...state,
+        pageTransitionDirection: null,
         currentIndex: nextIdx,
         activeItem: state.items[nextIdx]
       };
@@ -151,6 +152,7 @@ export function photoModalPrev() {
       const prevIdx = state.currentIndex - 1;
       return {
         ...state,
+        pageTransitionDirection: null,
         currentIndex: prevIdx,
         activeItem: state.items[prevIdx]
       };
@@ -208,10 +210,11 @@ export function updatePhotoModalItems({ items, currentPage, totalPages, totalCou
       }
     }
 
+    const preservedDirection = state.pageTransitionDirection || (position === 'last' ? 'prev' : (position === 'first' ? 'next' : null));
     return {
       ...state,
       isPageTransitioning: false,
-      pageTransitionDirection: null,
+      pageTransitionDirection: preservedDirection,
       items: newItems,
       currentIndex: newIndex,
       activeItem: newItems[newIndex] || state.activeItem,

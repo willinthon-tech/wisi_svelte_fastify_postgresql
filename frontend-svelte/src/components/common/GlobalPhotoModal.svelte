@@ -39,6 +39,11 @@
   $: isPageTransitioning = $photoModalStore.isPageTransitioning;
   $: pageTransitionDirection = $photoModalStore.pageTransitionDirection;
 
+  let activePageTransitionDirection = 'next';
+  $: if (pageTransitionDirection) {
+    activePageTransitionDirection = pageTransitionDirection;
+  }
+
   // Foto activa en proceso de carga inicial
   $: isCurrentPhotoLoading = Boolean(activePhotoUrl && !isCurrentPhotoLoaded && !isCurrentPhotoError);
 
@@ -73,6 +78,7 @@
   function safeNavigateNext() {
     if (isNextDisabled || isCurrentPhotoLoading || isNavigating || showPageSpinner) return;
     isNavigating = true;
+    activePageTransitionDirection = 'next';
     photoModalNext();
     if (navCooldownTimer) clearTimeout(navCooldownTimer);
     navCooldownTimer = setTimeout(() => {
@@ -83,6 +89,7 @@
   function safeNavigatePrev() {
     if (isPrevDisabled || isCurrentPhotoLoading || isNavigating || showPageSpinner) return;
     isNavigating = true;
+    activePageTransitionDirection = 'prev';
     photoModalPrev();
     if (navCooldownTimer) clearTimeout(navCooldownTimer);
     navCooldownTimer = setTimeout(() => {
@@ -623,10 +630,10 @@
               <div class="page-transition-overlay" data-html2canvas-ignore="true">
                 <div class="page-transition-spinner"></div>
                 <div class="page-transition-text">
-                  {#if pageTransitionDirection === 'next'}
-                    Cargando página siguiente...
-                  {:else}
+                  {#if (pageTransitionDirection || activePageTransitionDirection) === 'prev'}
                     Cargando página anterior...
+                  {:else}
+                    Cargando página siguiente...
                   {/if}
                 </div>
                 <div class="page-transition-sub">Preparando registros e imágenes</div>
