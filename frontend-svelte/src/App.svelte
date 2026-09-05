@@ -346,8 +346,8 @@
       cargo: rec.cargo_nombre || rec.cargo || "",
       dispositivo: rec.dispositivo_nombre || "Dispositivo",
       time: formatEventTime(rec.event_time),
-      photo: toBackendUrl(`/attlogs/${rec.id}.jpg`),
-      empPhoto: empFoto ? toBackendUrl(empFoto) : null,
+      photo: toBackendUrl(`/attlogs/${rec.id}.jpg`, { thumb: true }),
+      empPhoto: empFoto ? toBackendUrl(empFoto, { thumb: true }) : null,
       attendancestatus: rec.attendancestatus,
       currentverifymode: rec.currentverifymode || rec.currentverifymode_status || rec.currentVerifyMode,
       isSync: Boolean(isSync),
@@ -550,7 +550,7 @@
         if (salaName) bodyLines.push(`📍 Sala: ${salaName}`);
         if (cargoName) bodyLines.push(`💼 Cargo: ${cargoName}`);
         const body = bodyLines.join('\n');
-        const photoUrl = rec.id ? toBackendUrl(`/api/attlogs/${rec.id}.jpg`) : (rec.foto ? toBackendUrl(rec.foto) : '/favicon.png');
+        const photoUrl = rec.id ? toBackendUrl(`/api/attlogs/${rec.id}.jpg`, { thumb: true }) : (rec.foto ? toBackendUrl(rec.foto, { thumb: true }) : '/favicon.png');
 
         try {
           const sysNotif = new Notification(title, {

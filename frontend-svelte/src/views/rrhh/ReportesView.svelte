@@ -583,7 +583,7 @@
       .replace(/^empleados\//, "")
       .replace(/^photos\//, "")
       .trim();
-    return toBackendUrl(`/empleados/${cleanFoto}`);
+    return toBackendUrl(`/empleados/${cleanFoto}`, { thumb: true });
   }
 
   function getEntradaSalidaTimes(marcajeStr) {

@@ -137,7 +137,7 @@
       record.foto ||
       (record.empleado_id ? `/empleados/${record.empleado_id}.jpg` : null);
     if (!empFoto) return null;
-    return toBackendUrl(empFoto);
+    return toBackendUrl(empFoto, { thumb: true });
   }
 
   // Extract assigned sala IDs strictly for the logged in user
@@ -185,7 +185,7 @@
 
   function getPhotoUrl(id) {
     if (!id) return "";
-    return toBackendUrl(`/attlogs/${id}.jpg`);
+    return toBackendUrl(`/attlogs/${id}.jpg`, { thumb: true });
   }
 
   // Precarga automática en segundo plano de las fotos de los 10 marcajes visibles en pantalla

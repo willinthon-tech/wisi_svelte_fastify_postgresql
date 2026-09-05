@@ -428,7 +428,7 @@
                   <td class="col-emp sticky-col">
                     <div class="emp-cell">
                       <img
-                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`)}
+                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
                         alt=""
                         class="emp-avatar"
                         on:error={(e) => { e.target.style.display = 'none'; }}
@@ -524,7 +524,7 @@
                   <td class="col-emp sticky-col">
                     <div class="emp-cell">
                       <img
-                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`)}
+                        src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
                         alt=""
                         class="emp-avatar"
                         on:error={(e) => { e.target.style.display = 'none'; }}

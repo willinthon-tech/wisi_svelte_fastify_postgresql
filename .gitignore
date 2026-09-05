@@ -17,6 +17,8 @@ backend-fastify/attlogs/
 backend-fastify/attlogs/*
 backend-fastify/empleados/
 backend-fastify/empleados/*
+backend-fastify/cache_thumbs/
+backend-fastify/cache_thumbs/*
 backend-fastify/scratch/
 
 # Archivos de compilación / dist / build

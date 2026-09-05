@@ -179,7 +179,7 @@
 
     if (item && item.id) {
       id = item.id;
-      fotoUrl = item.foto ? toBackendUrl(item.foto) : (item.id ? toBackendUrl(`/empleados/${item.id}.jpg`) : '');
+      fotoUrl = item.foto ? toBackendUrl(item.foto, { preview: true }) : (item.id ? toBackendUrl(`/empleados/${item.id}.jpg`, { preview: true }) : '');
       nombre = item.nombre || '';
       
       const rawCed = String(item.cedula || '').trim().toUpperCase();

@@ -13,7 +13,14 @@ import { syncAttlogs, handleZkIclockCdata } from './controllers/master.controlle
 import { initDb } from './config/db.js';
 
 import { initWebsockets } from './config/websocket.js';
+import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
 
+const cacheThumbsDir = path.join(process.cwd(), 'cache_thumbs');
+if (!fs.existsSync(cacheThumbsDir)) {
+  fs.mkdirSync(cacheThumbsDir, { recursive: true });
+}
 
 //SERVIR SERVIDOR WILLINTHON
 import fastifyStatic from '@fastify/static';
@@ -109,13 +116,131 @@ async function startServer() {
       <path d="M 24 108 C 24 84, 40 76, 64 76 C 88 76, 104 84, 104 108 Z" fill="#94a3b8"/>
     </svg>`;
 
+    const deliverOptimizedImage = async (foundPath, filename, req, reply) => {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', '*');
+
+      const stat = fs.statSync(foundPath);
+      const isPng = filename.endsWith('.png') || foundPath.endsWith('.png');
+      const isSvg = filename.endsWith('.svg') || foundPath.endsWith('.svg');
+
+      // Si es SVG, se entrega directo como vector
+      if (isSvg) {
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Content-Length', stat.size);
+        reply.type('image/svg+xml');
+        return fs.createReadStream(foundPath);
+      }
+
+      const q = req.query || {};
+      const isOriginalRequested = q.original === '1' || q.download === '1' || q.full === '1';
+
+      // Si el cliente pide explícitamente el archivo original para descargar o generar carnet:
+      if (isOriginalRequested) {
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Content-Length', stat.size);
+        reply.header('Last-Modified', stat.mtime.toUTCString());
+        reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
+        if (q.download === '1') {
+          reply.header('Content-Disposition', `attachment; filename="${path.basename(foundPath)}"`);
+        }
+        reply.type(isPng ? 'image/png' : 'image/jpeg');
+        return fs.createReadStream(foundPath);
+      }
+
+      // Parámetros de degradado y optimización para visualización web
+      let targetW = 600;
+      let targetH = 600;
+      let targetQ = 80;
+      let fitMode = 'inside';
+
+      if (q.thumb === '1' || q.size === 'thumb') {
+        // Miniatura ultra-liviana para tablas, dashboard y alertas: ~2.6 KB
+        targetW = 120;
+        targetH = 120;
+        targetQ = 60;
+        fitMode = 'cover';
+      } else if (q.preview === '1' || q.size === 'preview') {
+        // Previsualización nítida y liviana para modales: ~16 KB
+        targetW = 480;
+        targetH = 480;
+        targetQ = 75;
+        fitMode = 'inside';
+      } else {
+        if (q.w) targetW = parseInt(q.w, 10) || 600;
+        if (q.h) targetH = parseInt(q.h, 10) || 600;
+        if (q.q) targetQ = parseInt(q.q, 10) || 80;
+      }
+
+      // Comprobar caché en disco para respuesta sub-milisegundo (0ms)
+      const baseName = path.basename(foundPath, path.extname(foundPath));
+      const cacheExt = isPng ? '.png' : '.jpg';
+      const cacheFileName = `${baseName}_${targetW}x${targetH}_q${targetQ}_${fitMode}${cacheExt}`;
+      const cacheFilePath = path.join(cacheThumbsDir, cacheFileName);
+
+      const clientEtag = req.headers['if-none-match'];
+      const targetEtag = `"${stat.size}-${Math.floor(stat.mtimeMs)}-${targetW}x${targetH}q${targetQ}"`;
+
+      if (clientEtag && clientEtag === targetEtag) {
+        return reply.status(304).send();
+      }
+
+      if (fs.existsSync(cacheFilePath)) {
+        try {
+          const cacheStat = fs.statSync(cacheFilePath);
+          if (cacheStat.mtimeMs >= stat.mtimeMs) {
+            reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+            reply.header('Content-Length', cacheStat.size);
+            reply.header('Last-Modified', cacheStat.mtime.toUTCString());
+            reply.header('ETag', targetEtag);
+            reply.type(isPng ? 'image/png' : 'image/jpeg');
+            return fs.createReadStream(cacheFilePath);
+          }
+        } catch (e) {
+          // Si falla lectura de caché, re-procesa
+        }
+      }
+
+      // Procesar al vuelo con sharp y rotación automática EXIF
+      try {
+        let sharpInst = sharp(foundPath).rotate();
+        if (fitMode === 'cover') {
+          sharpInst = sharpInst.resize(targetW, targetH, { fit: 'cover', position: 'center' });
+        } else {
+          sharpInst = sharpInst.resize(targetW, targetH, { fit: 'inside', withoutEnlargement: true });
+        }
+
+        let outputBuf;
+        if (isPng) {
+          outputBuf = await sharpInst.png({ compressionLevel: 8 }).toBuffer();
+        } else {
+          outputBuf = await sharpInst.jpeg({ quality: targetQ, progressive: true }).toBuffer();
+        }
+
+        // Guardar en caché asíncronamente
+        fs.writeFile(cacheFilePath, outputBuf, () => {});
+
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Content-Length', outputBuf.length);
+        reply.header('ETag', targetEtag);
+        reply.type(isPng ? 'image/png' : 'image/jpeg');
+        return reply.send(outputBuf);
+      } catch (err) {
+        console.warn('Sharp processing failed, serving original file:', err.message);
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Content-Length', stat.size);
+        reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
+        reply.type(isPng ? 'image/png' : 'image/jpeg');
+        return fs.createReadStream(foundPath);
+      }
+    };
+
     const servePhotoWithFallback = async (req, reply) => {
       reply.header('Access-Control-Allow-Origin', '*');
       reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
       reply.header('Access-Control-Allow-Headers', '*');
 
-      const fs = await import('fs');
-      const path = await import('path');
       const { sql, isPgConnected } = await import('./config/db.js');
 
       let filename = req.params.filename || req.params.id || '';
@@ -141,18 +266,7 @@ async function startServer() {
       for (const dir of searchDirs) {
         const fullPath = path.join(dir, filename);
         if (fs.existsSync(fullPath)) {
-          const stat = fs.statSync(fullPath);
-          reply.header('Access-Control-Allow-Origin', '*');
-          reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-          reply.header('Access-Control-Allow-Headers', '*');
-          reply.header('Cache-Control', 'public, max-age=31536000, immutable');
-          reply.header('Content-Length', stat.size);
-          reply.header('Last-Modified', stat.mtime.toUTCString());
-          reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
-          if (filename.endsWith('.png')) reply.type('image/png');
-          else if (filename.endsWith('.svg')) reply.type('image/svg+xml');
-          else reply.type('image/jpeg');
-          return fs.createReadStream(fullPath);
+          return deliverOptimizedImage(fullPath, filename, req, reply);
         }
       }
 
@@ -197,16 +311,7 @@ async function startServer() {
               for (const dir of searchDirs) {
                 const altPath = path.join(dir, cand);
                 if (fs.existsSync(altPath)) {
-                  const stat = fs.statSync(altPath);
-                  reply.header('Access-Control-Allow-Origin', '*');
-                  reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-                  reply.header('Access-Control-Allow-Headers', '*');
-                  reply.header('Cache-Control', 'public, max-age=31536000, immutable');
-                  reply.header('Content-Length', stat.size);
-                  reply.header('Last-Modified', stat.mtime.toUTCString());
-                  reply.header('ETag', `"${stat.size}-${Math.floor(stat.mtimeMs)}"`);
-                  reply.type('image/jpeg');
-                  return fs.createReadStream(altPath);
+                  return deliverOptimizedImage(altPath, cand, req, reply);
                 }
               }
             }
@@ -275,6 +380,10 @@ async function startServer() {
     fastify.get('/api/empleados/:filename', servePhotoWithFallback);
     fastify.get('/attlogs/:filename', servePhotoWithFallback);
     fastify.get('/api/attlogs/:filename', servePhotoWithFallback);
+    fastify.get('/attlogs/:id/image', servePhotoWithFallback);
+    fastify.get('/api/attlogs/:id/image', servePhotoWithFallback);
+    fastify.get('/attlogs/photo/:id', servePhotoWithFallback);
+    fastify.get('/api/attlogs/photo/:id', servePhotoWithFallback);
     fastify.get('/salas/:filename', serveSalaLogoWithFallback);
     fastify.get('/api/salas/:filename', serveSalaLogoWithFallback);
 

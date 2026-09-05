@@ -619,14 +619,14 @@
     notifyServerFetch('sort');
   }
 
-  function getPhotoUrl(item) {
+  function getPhotoUrl(item, opts = { thumb: true }) {
     if (!item) return '';
     if (item.foto && typeof item.foto === 'string' && item.foto.trim().length > 0) {
-      return toBackendUrl(item.foto);
+      return toBackendUrl(item.foto, opts);
     }
     const empId = item.empleado_id || item.id;
     if (empId) {
-      return toBackendUrl(`/empleados/${empId}.jpg`);
+      return toBackendUrl(`/empleados/${empId}.jpg`, opts);
     }
     return '';
   }
@@ -634,7 +634,7 @@
   // Precarga en segundo plano de las fotos visibles en la página actual para respuesta instantánea (0ms)
   $: if (paginatedItems && paginatedItems.length > 0 && typeof window !== 'undefined') {
     paginatedItems.forEach(item => {
-      const url = getPhotoUrl(item);
+      const url = getPhotoUrl(item, { thumb: true });
       if (url) {
         const img = new Image();
         img.src = url;
@@ -648,20 +648,17 @@
       if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
       return parts[0].substring(0, 2).toUpperCase();
     }
-    if (cedula) return String(cedula).substring(0, 2).toUpperCase();
-    return 'EM';
+    if (cedula) return String(cedula).slice(-2);
+    return '??';
   }
 
-  function formatDate(val) {
-    if (!val || val === '—') return '—';
+  function formatDateValue(val) {
+    if (!val) return '—';
     try {
       const d = new Date(val);
       if (isNaN(d.getTime())) return String(val).split('T')[0];
-      const day = String(d.getUTCDate()).padStart(2, '0');
-      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const year = d.getUTCFullYear();
-      return `${day}/${month}/${year}`;
-    } catch (e) {
+      return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
       return String(val).split('T')[0];
     }
   }
@@ -669,7 +666,7 @@
   async function downloadPhoto(item) {
     if (!item) return;
     try {
-      const url = getPhotoUrl(item);
+      const url = getPhotoUrl(item, { original: true });
       if (!url) return;
       const res = await fetch(url);
       if (!res.ok) throw new Error("No se pudo obtener la imagen");
@@ -1074,9 +1071,9 @@
                         on:error={(e) => { 
                           const img = e.target;
                           const empId = item.empleado_id || item.id;
-                          if (!img.dataset.triedEmp && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
+                          if (!img.dataset.triedEmp && empId && !img.src.includes(`/empleados/${empId}.jpg`)) {
                             img.dataset.triedEmp = 'true';
-                            img.src = toBackendUrl(`/empleados/${empId}.jpg`);
+                            img.src = toBackendUrl(`/empleados/${empId}.jpg`, { thumb: true });
                           } else {
                             img.style.display = 'none';
                             if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
@@ -2566,9 +2563,9 @@
               on:error={(e) => { 
                 const img = e.target;
                 const empId = itemToReincorporar?.empleado_id || itemToReincorporar?.id;
-                if (!img.dataset.triedEmp && empId && !img.src.endsWith(`/empleados/${empId}.jpg`)) {
+                if (!img.dataset.triedEmp && empId && !img.src.includes(`/empleados/${empId}.jpg`)) {
                   img.dataset.triedEmp = 'true';
-                  img.src = toBackendUrl(`/empleados/${empId}.jpg`);
+                  img.src = toBackendUrl(`/empleados/${empId}.jpg`, { thumb: true });
                 } else {
                   img.style.display = 'none';
                   if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';

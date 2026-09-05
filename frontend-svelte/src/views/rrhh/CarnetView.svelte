@@ -451,7 +451,7 @@
     if (foto.startsWith('/empleados/')) {
       foto = '/api' + foto;
     }
-    return toBackendUrl(foto);
+    return toBackendUrl(foto, { original: true });
   }
 
   $: empPhotoResolved = currentEmp ? getEmpPhotoUrl(currentEmp) : DEFAULT_AVATAR_PLACEHOLDER;

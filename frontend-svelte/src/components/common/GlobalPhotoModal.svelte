@@ -6,7 +6,7 @@
     photoModalNext,
     photoModalPrev
   } from "../../controllers/globalModal.store.js";
-  import { getCloudBaseUrl, toBackendUrl } from "../../config/api.config.js";
+  import { getCloudBaseUrl, toBackendUrl, toBackendPreviewUrl, toBackendOriginalUrl } from "../../config/api.config.js";
   import html2canvas from "html2canvas";
   import { saveOrShareFile } from "../../utils/fileSaver.js";
   import { triggerToast } from "../../controllers/ui.store.js";
@@ -239,16 +239,16 @@
     }
   }
 
-  function getPhotoUrl(record) {
+  function getPhotoUrl(record, opts = { preview: true }) {
     if (!record) return "";
     
     // Si es un empleado o desincorporado (sin evento de marcaje), usa su foto de empleado
     if (mode === 'empleado' || mode === 'desincorporado') {
       if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
-        return toBackendUrl(record.foto);
+        return toBackendUrl(record.foto, opts);
       }
       const empId = record.empleado_id || record.id;
-      if (empId) return toBackendUrl(`/empleados/${empId}.jpg`);
+      if (empId) return toBackendUrl(`/empleados/${empId}.jpg`, opts);
       return "";
     }
 
@@ -256,21 +256,25 @@
     // LA FOTO DEL MARCAJE / EVENTO TIENE PRIORIDAD ABSOLUTA
     const attId = record.id || record.attlog_id;
     if (attId) {
-      return toBackendUrl(`/attlogs/${attId}.jpg`);
+      return toBackendUrl(`/attlogs/${attId}.jpg`, opts);
     }
 
     // Solo si el registro no tiene ID de marcaje pasa a la de personal
     if (record.empleado_foto && typeof record.empleado_foto === 'string' && record.empleado_foto.trim().length > 0) {
-      return toBackendUrl(record.empleado_foto);
+      return toBackendUrl(record.empleado_foto, opts);
     }
     if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
-      return toBackendUrl(record.foto);
+      return toBackendUrl(record.foto, opts);
     }
     if (record.empleado_id) {
-      return toBackendUrl(`/empleados/${record.empleado_id}.jpg`);
+      return toBackendUrl(`/empleados/${record.empleado_id}.jpg`, opts);
     }
 
     return "";
+  }
+
+  function getOriginalPhotoUrl(record) {
+    return getPhotoUrl(record, { original: true });
   }
 
   // Caché de URLs resueltas por cada registro para garantizar retroceso instantáneo (0ms)
@@ -371,9 +375,9 @@
 
     // Buscar si existe una foto de perfil de empleado alternativa que no sea la que falló
     const empFoto = record.empleado_foto || record.foto;
-    const empFotoUrl = empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0 ? toBackendUrl(empFoto) : null;
+    const empFotoUrl = empFoto && typeof empFoto === 'string' && empFoto.trim().length > 0 ? toBackendPreviewUrl(empFoto) : null;
     const empId = record.empleado_id || (mode === 'empleado' || mode === 'desincorporado' ? record.id : null);
-    const idUrl = empId ? toBackendUrl(`/empleados/${empId}.jpg`) : null;
+    const idUrl = empId ? toBackendPreviewUrl(`/empleados/${empId}.jpg`) : null;
 
     const fallbackUrl = (empFotoUrl && empFotoUrl !== failedUrl) ? empFotoUrl : (idUrl && idUrl !== failedUrl ? idUrl : null);
 
@@ -432,6 +436,30 @@
   async function captureModalScreenshot() {
     if (isCapturingScreenshot || !modalCardElement) return;
     isCapturingScreenshot = true;
+
+    // Cargar la imagen original en alta resolución para que el capture quede con máxima nitidez
+    const origUrl = getOriginalPhotoUrl(item);
+    const prevSrc = imgElement ? imgElement.src : null;
+    let swappedToOriginal = false;
+
+    if (origUrl && imgElement && !origUrl.startsWith('data:')) {
+      try {
+        const testImg = new Image();
+        testImg.crossOrigin = "anonymous";
+        await new Promise((resolve) => {
+          testImg.onload = resolve;
+          testImg.onerror = resolve;
+          testImg.src = origUrl;
+        });
+        if (testImg.naturalWidth > 0) {
+          imgElement.src = origUrl;
+          swappedToOriginal = true;
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+      } catch (e) {
+        // En caso de fallo de red, continuar con la imagen actual
+      }
+    }
 
     try {
       const scaleFactor = Math.max(2, window.devicePixelRatio || 2);
@@ -505,6 +533,9 @@
       console.error("Error al capturar screenshot de la ficha:", err);
       triggerToast("Error al capturar ficha: " + (err.message || err), "error");
     } finally {
+      if (swappedToOriginal && imgElement && prevSrc) {
+        imgElement.src = prevSrc;
+      }
       isCapturingScreenshot = false;
     }
   }
@@ -513,7 +544,7 @@
     if (!item || isDownloadingPhoto) return;
     isDownloadingPhoto = true;
     try {
-      const url = activePhotoUrl || getPhotoUrl(item);
+      const url = getOriginalPhotoUrl(item) || activePhotoUrl || getPhotoUrl(item);
       if (!url) throw new Error("URL de fotografía no disponible");
 
       const res = await fetch(url);

@@ -63,8 +63,7 @@
       record.foto ||
       (record.empleado_id ? `/empleados/${record.empleado_id}.jpg` : null);
     if (!empFoto) return null;
-    if (empFoto.startsWith("http")) return empFoto;
-    return empFoto.startsWith("/") ? empFoto : `/${empFoto}`;
+    return toBackendUrl(empFoto, { thumb: true });
   }
 
   // Extract assigned sala IDs strictly for the logged in user
@@ -118,7 +117,7 @@
 
   function getPhotoUrl(id) {
     if (!id) return "";
-    return toBackendUrl(`/attlogs/${id}.jpg`);
+    return toBackendUrl(`/attlogs/${id}.jpg`, { thumb: true });
   }
 
   const carouselPageCache = new Map();
@@ -785,10 +784,10 @@
                   const empId = log.empleado_id;
                   if (!img.dataset.triedProfile && empFoto) {
                     img.dataset.triedProfile = "true";
-                    img.src = empFoto.startsWith("http") ? empFoto : `${backendUrl}${empFoto.startsWith("/") ? "" : "/"}${empFoto}`;
+                    img.src = toBackendUrl(empFoto, { thumb: true });
                   } else if (!img.dataset.triedProfile && empId) {
                     img.dataset.triedProfile = "true";
-                    img.src = `${backendUrl}/empleados/${empId}.jpg`;
+                    img.src = toBackendUrl(`/empleados/${empId}.jpg`, { thumb: true });
                   } else {
                     img.style.display = "none";
                     if (img.nextElementSibling)

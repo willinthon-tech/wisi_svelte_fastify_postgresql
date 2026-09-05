@@ -87,35 +87,91 @@ export function getWsUrl() {
 }
 
 /**
+/**
  * Convierte cualquier ruta relativa de backend o multimedia (ej: /empleados/12.jpg, /attlogs/5.jpg)
  * en una URL absoluta que apunta directamente al servidor cloud en la VPS.
+ * Soporta opciones de optimización/degradado para visualización (?thumb=1, ?preview=1) y original (?original=1).
  */
-export function toBackendUrl(path) {
+export function toBackendUrl(path, options = {}) {
   if (!path || typeof path !== 'string') return '';
   const clean = path.trim();
   if (clean.startsWith('data:') || clean.startsWith('blob:')) return clean;
+
+  const base = getCloudBaseUrl();
+  let normalized = clean;
+
   if (clean.startsWith('http://') || clean.startsWith('https://')) {
     if (clean.includes('willinthon.wisi.space')) {
-      return clean
+      normalized = clean
         .replace('willinthon.wisi.space/attlogs/', 'willinthon.wisi.space/api/attlogs/')
         .replace('willinthon.wisi.space/empleados/', 'willinthon.wisi.space/api/empleados/')
         .replace('willinthon.wisi.space/salas/', 'willinthon.wisi.space/api/salas/');
+    } else {
+      return clean;
     }
-    return clean;
-  }
-  const base = getCloudBaseUrl();
-  let normalized = clean.startsWith('/') ? clean : `/${clean}`;
+  } else {
+    normalized = clean.startsWith('/') ? clean : `/${clean}`;
 
-  // Asegurar que las rutas de fotografías pasen por /api/ para que Fastify inyecte cabeceras CORS
-  if (normalized.startsWith('/attlogs/') && !normalized.startsWith('/api/attlogs/')) {
-    normalized = `/api${normalized}`;
-  } else if (normalized.startsWith('/empleados/') && !normalized.startsWith('/api/empleados/')) {
-    normalized = `/api${normalized}`;
-  } else if (normalized.startsWith('/salas/') && !normalized.startsWith('/api/salas/')) {
-    normalized = `/api${normalized}`;
+    // Asegurar que las rutas de fotografías pasen por /api/ para que Fastify inyecte cabeceras CORS
+    if (normalized.startsWith('/attlogs/') && !normalized.startsWith('/api/attlogs/')) {
+      normalized = `/api${normalized}`;
+    } else if (normalized.startsWith('/empleados/') && !normalized.startsWith('/api/empleados/')) {
+      normalized = `/api${normalized}`;
+    } else if (normalized.startsWith('/salas/') && !normalized.startsWith('/api/salas/')) {
+      normalized = `/api${normalized}`;
+    }
+
+    normalized = `${base}${normalized}`;
   }
 
-  return `${base}${normalized}`;
+  // Adjuntar parámetros de optimización para fotos de empleados o marcajes
+  if (options && typeof options === 'object') {
+    const isImageRoute = normalized.includes('/empleados/') || normalized.includes('/attlogs/');
+    if (isImageRoute) {
+      try {
+        const urlObj = new URL(normalized);
+        if (options.original || options.download) {
+          urlObj.searchParams.set('original', '1');
+          urlObj.searchParams.delete('thumb');
+          urlObj.searchParams.delete('preview');
+        } else if (options.thumb) {
+          urlObj.searchParams.set('thumb', '1');
+          urlObj.searchParams.delete('original');
+        } else if (options.preview) {
+          urlObj.searchParams.set('preview', '1');
+          urlObj.searchParams.delete('original');
+        }
+        if (options.w) urlObj.searchParams.set('w', String(options.w));
+        if (options.q) urlObj.searchParams.set('q', String(options.q));
+        return urlObj.toString();
+      } catch (e) {
+        // Fallback si URL constructor fallase
+      }
+    }
+  }
+
+  return normalized;
+}
+
+/**
+ * Retorna la URL optimizada como miniatura ultra-liviana (~2.6 KB) para tablas, dashboard y alertas.
+ */
+export function toBackendThumbUrl(path) {
+  return toBackendUrl(path, { thumb: true });
+}
+
+/**
+ * Retorna la URL optimizada para previsualización nítida y liviana (~16 KB) en modales de fotos.
+ */
+export function toBackendPreviewUrl(path) {
+  return toBackendUrl(path, { preview: true });
+}
+
+/**
+ * Retorna la URL original de máxima resolución y calidad intacta para descargas y carnets.
+ */
+export function toBackendOriginalUrl(path) {
+  return toBackendUrl(path, { original: true });
 }
 
 /**
