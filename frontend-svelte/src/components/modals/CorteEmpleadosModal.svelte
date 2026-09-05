@@ -1,6 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
-  import { toBackendUrl } from '../../controllers/master.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let isOpen = false;
   export let corte = null;
