@@ -13,7 +13,8 @@
   let selectedValue = '';
 
   let horariosEmpleado = [];
-  let plantillasEspeciales = [];
+  let otrosHorariosSala = [];
+  let plantillasExcepcion = [];
 
   let marcajesLoading = false;
   let marcajesContext = [];
@@ -27,18 +28,33 @@
   }
 
   function initModalData() {
-    // Filter 1: Horarios asignados al empleado (tipo === 'horario')
-    const assignedIds = new Set((empleado?.horarios_asignados || []).map(h => Number(h.id)));
-    if (assignedIds.size > 0) {
-      horariosEmpleado = (plantillasSala || []).filter(p => p.tipo === 'horario' && assignedIds.has(Number(p.id)));
+    // 1. Mapeo de IDs de horarios directamente asignados al empleado
+    const assignedMap = new Map();
+    (empleado?.horarios_asignados || []).forEach(h => {
+      if (h && h.id) assignedMap.set(Number(h.id), h);
+    });
+
+    // 2. Horarios asignados al empleado (tipo === 'horario')
+    if (assignedMap.size > 0) {
+      const foundInSala = (plantillasSala || []).filter(p => p.tipo === 'horario' && assignedMap.has(Number(p.id)));
+      const foundIds = new Set(foundInSala.map(p => Number(p.id)));
+      const missingFromSala = [];
+      assignedMap.forEach((h, id) => {
+        if (!foundIds.has(id) && (h.tipo === 'horario' || (!h.tipo && h.hora_entrada))) {
+          missingFromSala.push(h);
+        }
+      });
+      horariosEmpleado = [...foundInSala, ...missingFromSala];
+      otrosHorariosSala = (plantillasSala || []).filter(p => p.tipo === 'horario' && !assignedMap.has(Number(p.id)));
     } else {
       horariosEmpleado = [];
+      otrosHorariosSala = (plantillasSala || []).filter(p => p.tipo === 'horario');
     }
 
-    // Filter 2: Plantillas Especiales / Conceptos de sala (excluyendo L y U base)
-    plantillasEspeciales = (plantillasSala || []).filter(p => p.codigo !== 'L' && p.codigo !== 'U');
+    // 3. Plantillas Tipo Excepción (tipo === 'plantilla', excluyendo códigos base L y U)
+    plantillasExcepcion = (plantillasSala || []).filter(p => p.tipo === 'plantilla' && p.codigo !== 'L' && p.codigo !== 'U');
 
-    // Pre-select current plantilla if active
+    // Pre-selección del valor según el estado actual del día
     const currentCodigo = dia?.shift?.codigo || '';
     if (currentCodigo === 'L') {
       selectedValue = 'BASE_L';
@@ -119,6 +135,10 @@
       triggerToast('Seleccione una plantilla u horario', 'warning');
       return;
     }
+    if (selectedValue === 'BASE_U') {
+      triggerToast('El Horario Único es automático del sistema. Seleccione un horario o excepción válida.', 'warning');
+      return;
+    }
     loading = true;
     try {
       let plantillaId = null;
@@ -127,10 +147,6 @@
       if (selectedValue === 'BASE_L') {
         plantillaId = null;
         isLibre = true;
-      } else if (selectedValue === 'BASE_U') {
-        const pU = (plantillasSala || []).find(p => p.codigo === 'U');
-        plantillaId = pU ? Number(pU.id) : null;
-        isLibre = false;
       } else {
         plantillaId = Number(selectedValue.replace('PLANTILLA_', ''));
         const pObj = (plantillasSala || []).find(p => Number(p.id) === Number(plantillaId));
@@ -229,7 +245,7 @@
       <!-- Body -->
       <div style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
         
-        <!-- Select with 3 Optgroups: Plantillas Base del Sistema, Horarios Asignados & Plantillas Especiales -->
+        <!-- Select with clear Optgroups: Plantillas Base, Horarios Asignados al Empleado, Horarios de Sala, Plantillas Tipo Excepción -->
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <label for="select-excepcion-horario" style="font-size: 12px; font-weight: 800; color: #1e293b;">
             Seleccionar Excepción o Horario:
@@ -239,15 +255,15 @@
             bind:value={selectedValue}
             style="width: 100%; padding: 9px 12px; font-size: 12px; font-weight: 700; color: #0f172a; background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; cursor: pointer;"
           >
-            <!-- Optgroup 1: Plantillas Base del Sistema (Hardcoded L y U) -->
+            <!-- Optgroup 1: Plantillas Base del Sistema -->
             <optgroup label="⚙️ Plantillas Base del Sistema">
               <option value="BASE_L">[L] Libre</option>
-              <option value="BASE_U">[U] Horario Único</option>
+              <option value="BASE_U" disabled>[U] Horario Único (Asignado automáticamente por el sistema)</option>
             </optgroup>
 
-            <!-- Optgroup 2: Horarios Asignados al Empleado -->
+            <!-- Optgroup 2: Horarios Asignados al Empleado (tipo 'horario') -->
             {#if horariosEmpleado.length > 0}
-              <optgroup label="⏰ Horarios Asignados del Empleado">
+              <optgroup label="⏰ Horarios Asignados al Empleado">
                 {#each horariosEmpleado as p}
                   <option value="PLANTILLA_{p.id}">
                     [{p.codigo}] {p.nombre} {getHorasFormat(p)}
@@ -256,12 +272,23 @@
               </optgroup>
             {/if}
 
-            <!-- Optgroup 3: Plantillas Especiales y Conceptos -->
-            {#if plantillasEspeciales.length > 0}
-              <optgroup label="📋 Plantillas Especiales y Conceptos">
-                {#each plantillasEspeciales as p}
+            <!-- Optgroup 3: Horarios de Turno de la Sala (otros horarios tipo 'horario' de la sala) -->
+            {#if otrosHorariosSala.length > 0}
+              <optgroup label="⏰ {horariosEmpleado.length > 0 ? 'Otros Horarios de Turno de la Sala' : 'Horarios de Turno de la Sala'}">
+                {#each otrosHorariosSala as p}
                   <option value="PLANTILLA_{p.id}">
                     [{p.codigo}] {p.nombre} {getHorasFormat(p)}
+                  </option>
+                {/each}
+              </optgroup>
+            {/if}
+
+            <!-- Optgroup 4: Plantillas Tipo Excepción (tipo 'plantilla': Falta, Permiso, Reposo, etc.) -->
+            {#if plantillasExcepcion.length > 0}
+              <optgroup label="📋 Plantillas Tipo Excepción (Falta, Permiso, Reposo, etc.)">
+                {#each plantillasExcepcion as p}
+                  <option value="PLANTILLA_{p.id}">
+                    [{p.codigo}] {p.nombre}
                   </option>
                 {/each}
               </optgroup>
