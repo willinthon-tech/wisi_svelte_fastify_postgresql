@@ -6,7 +6,9 @@
   import { toBackendUrl } from '../../config/api.config.js';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
 
-  let corteId = null;
+  export let isPublic = false;
+  export let corteId = null;
+
   let corte = null;
   let isLoading = true;
   let activeTab = 'marcajes'; // 'marcajes' | 'calculos' | 'puntualidad'
@@ -36,18 +38,53 @@
   // Cálculos procesados de los empleados
   let processedEmployees = [];
 
+  async function copyPublicLink() {
+    if (!corte || !corte.id) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}/#/reportes/rrhh/corte/${corte.id}`;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const input = document.createElement('input');
+        input.value = shareUrl;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      triggerToast('Enlace copiado al portapapeles', 'success');
+    } catch (err) {
+      console.error('Error al copiar enlace:', err);
+      prompt('Copia el siguiente enlace del reporte público:', shareUrl);
+    }
+  }
+
   onMount(async () => {
-    // 1. Obtener ID del store o de la URL hash (#/rrhh/cortes/calculos?id=X)
-    let id = null;
-    const unsub = selectedCorteStore.subscribe(val => {
-      if (val && val.id) id = val.id;
-    });
-    unsub();
+    // 1. Obtener ID de prop, del store o de la URL hash / pathname
+    let id = corteId;
+    if (!id) {
+      const unsub = selectedCorteStore.subscribe(val => {
+        if (val && val.id) id = val.id;
+      });
+      unsub();
+    }
 
     if (!id && typeof window !== 'undefined') {
       const hash = window.location.hash || '';
-      const match = hash.match(/[?&]id=(\d+)/);
-      if (match) id = match[1];
+      const matchHashPublic = hash.match(/reportes\/rrhh\/corte\/(\d+)/i);
+      if (matchHashPublic) id = matchHashPublic[1];
+
+      if (!id) {
+        const matchHashId = hash.match(/[?&]id=(\d+)/);
+        if (matchHashId) id = matchHashId[1];
+      }
+
+      if (!id) {
+        const path = window.location.pathname || '';
+        const matchPath = path.match(/reportes\/rrhh\/corte\/(\d+)/i);
+        if (matchPath) id = matchPath[1];
+      }
     }
 
     if (id) {
@@ -64,7 +101,7 @@
     try {
       // Cargar feriados del calendario (excluyendo cumpleaños)
       try {
-        const resFer = await fetch('/api/master/calendario?limit=500');
+        const resFer = await fetch(toBackendUrl('/api/master/calendario?limit=500'));
         const jsonFer = await resFer.json();
         if (jsonFer) {
           allCalendarFeriados = jsonFer.data || jsonFer.items || (Array.isArray(jsonFer) ? jsonFer : []);
@@ -73,7 +110,7 @@
         console.warn('Error cargando feriados del calendario:', e);
       }
 
-      const res = await fetch(`/api/master/cortes/${id}`);
+      const res = await fetch(toBackendUrl(`/api/master/cortes/${id}`));
       const json = await res.json();
       if (json && json.success && json.data) {
         corte = json.data;
@@ -579,9 +616,22 @@
       </div>
 
       <div class="header-right">
-        <button type="button" class="btn-volver" on:click={handleBack} title="Volver al listado de cortes">
-          Volver
+        <button type="button" class="btn-compartir-header" on:click={copyPublicLink} title="Copiar enlace de este reporte al portapapeles">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+          Compartir
         </button>
+
+        {#if !isPublic}
+          <button type="button" class="btn-volver" on:click={handleBack} title="Volver al listado de cortes">
+            Volver
+          </button>
+        {/if}
       </div>
     </div>
 
@@ -972,11 +1022,10 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 16px;
+    padding: 0;
     width: 100%;
     box-sizing: border-box;
-    background: #f8fafc;
-    min-height: calc(100vh - 70px);
+    background: transparent;
   }
 
   /* Purple Header */
@@ -1095,8 +1144,27 @@
   .header-right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-shrink: 0;
+  }
+
+  .btn-compartir-header {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 9px;
+    padding: 8px 16px;
+    font-size: 12.5px;
+    font-weight: 800;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+
+  .btn-compartir-header:hover {
+    background: rgba(255, 255, 255, 0.35);
   }
 
   .btn-volver {
@@ -1655,11 +1723,13 @@
     box-sizing: border-box;
   }
 
-  .calculos-table td {
-    padding: 9px 12px;
+  .calculos-table td,
+  .puntualidad-table td {
+    padding: 8px 10px;
     border-bottom: 1px solid #e2e8f0;
     border-right: 1px solid #f1f5f9;
     text-align: center;
+    vertical-align: middle;
   }
 
   .data-row.even { background: #ffffff; }
@@ -1673,6 +1743,9 @@
     min-width: 200px;
     max-width: 200px;
     box-sizing: border-box;
+    padding: 6px 8px !important;
+    height: 58px;
+    vertical-align: middle;
   }
 
   .sticky-col {

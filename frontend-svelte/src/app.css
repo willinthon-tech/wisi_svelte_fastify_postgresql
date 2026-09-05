@@ -346,6 +346,10 @@ html, body {
   margin: 0 auto;
 }
 
+.content-body.corte-view-fluid {
+  max-width: 100%;
+}
+
 .page-header {
   display: flex;
   align-items: center;

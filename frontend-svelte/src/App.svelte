@@ -655,13 +655,30 @@
       triggerToast("Error al eliminar elemento", "error");
     }
   }
+
+  function getPublicCorteId(route) {
+    const clean = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
+    const match = clean.match(/reportes\/rrhh\/corte\/(\d+)/i);
+    return match ? match[1] : null;
+  }
+
+  $: cleanPublicRoute = $currentRouteStore ? String($currentRouteStore).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
+  $: isCortePublicRoute = cleanPublicRoute.startsWith('reportes/rrhh/corte/');
+  $: publicCorteId = getPublicCorteId(cleanPublicRoute);
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
 
-{#if $currentRouteStore === "willinthontech" || isPublicRoute($currentRouteStore)}
-  <!-- Standalone Secret Master Admin Panel (No Login Required) -->
-  <MasterAdminView />
+{#if isPublicRoute($currentRouteStore)}
+  {#if $currentRouteStore === "willinthontech"}
+    <!-- Standalone Secret Master Admin Panel (No Login Required) -->
+    <MasterAdminView />
+  {:else if isCortePublicRoute}
+    <!-- Standalone Public Report View (No Sidebar, No Navbar, No Page Title) -->
+    <div class="standalone-public-report">
+      <CortesCalculosView isPublic={true} corteId={publicCorteId} />
+    </div>
+  {/if}
 {:else if $isAuthenticatedStore}
   <!-- Main Application Layout when Authenticated -->
   <div
@@ -684,29 +701,34 @@
       <OfflineBanner />
 
       <!-- Content Body -->
-      <main class="content-body">
+      <main
+        class="content-body"
+        class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos')}
+      >
         <!-- Page Title Header without breadcrumbs -->
-        <div
-          class="page-header"
-          style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;"
-        >
-          <div>
-            <h1 class="page-title" style="margin: 0;">
-              {getTabTitle($currentRouteStore)}
-            </h1>
-          </div>
+        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos'}
+          <div
+            class="page-header"
+            style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;"
+          >
+            <div>
+              <h1 class="page-title" style="margin: 0;">
+                {getTabTitle($currentRouteStore)}
+              </h1>
+            </div>
 
-          {#if !isBuiltInTab($currentRouteStore)}
-            <button
-              on:click={openCreateModalUI}
-              type="button"
-              class="btn-flow"
-              style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3); white-space: nowrap;"
-            >
-              {getNewRecordButtonLabel($currentRouteStore)}
-            </button>
-          {/if}
-        </div>
+            {#if !isBuiltInTab($currentRouteStore)}
+              <button
+                on:click={openCreateModalUI}
+                type="button"
+                class="btn-flow"
+                style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3); white-space: nowrap;"
+              >
+                {getNewRecordButtonLabel($currentRouteStore)}
+              </button>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Hash Router Views -->
 
@@ -1445,5 +1467,13 @@
     color: #92756b;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+  }
+
+  .standalone-public-report {
+    min-height: 100vh;
+    width: 100%;
+    background: #f8fafc;
+    padding: 16px 20px;
+    box-sizing: border-box;
   }
 </style>

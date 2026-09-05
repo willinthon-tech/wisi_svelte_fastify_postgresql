@@ -1325,16 +1325,33 @@
                     </button>
 
                   {:else if col.type === 'corte_actions'}
-                    <!-- Botón Ver Reporte de Corte Histórico -->
+                    <!-- Botones de Acción de Corte Histórico -->
                     <div style="display: flex; align-items: center; gap: 8px;">
                       <button 
                         type="button" 
                         on:click={() => dispatch('verCalculos', item)}
-                        style="padding: 6px 14px; border-radius: 8px; border: 1px solid #7c3aed; background: #7c3aed; color: #ffffff; font-size: 12px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(124, 58, 237, 0.25); transition: all 0.15s ease;"
+                        style="padding: 6px 14px; border-radius: 8px; border: 1px solid #7c3aed; background: #7c3aed; color: #ffffff; font-size: 12px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(124, 58, 237, 0.25); transition: all 0.15s ease;"
                         on:mouseenter={(e) => e.currentTarget.style.background = '#6d28d9'}
                         on:mouseleave={(e) => e.currentTarget.style.background = '#7c3aed'}
                         title="Ver reporte completo de cálculos de asistencia">
-                        <span>📊</span> Ver Reporte
+                        Ver Reporte
+                      </button>
+
+                      <button 
+                        type="button" 
+                        on:click={() => dispatch('compartirCorte', item)}
+                        style="padding: 6px 12px; border-radius: 8px; border: 1.5px solid #6366f1; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 2px rgba(99, 102, 241, 0.15); transition: all 0.15s ease;"
+                        on:mouseenter={(e) => { e.currentTarget.style.background = '#e0e7ff'; e.currentTarget.style.color = '#3730a3'; }}
+                        on:mouseleave={(e) => { e.currentTarget.style.background = '#eef2ff'; e.currentTarget.style.color = '#4338ca'; }}
+                        title="Copiar enlace público del reporte al portapapeles">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="18" cy="5" r="3"></circle>
+                          <circle cx="6" cy="12" r="3"></circle>
+                          <circle cx="18" cy="19" r="3"></circle>
+                          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                        </svg>
+                        Compartir
                       </button>
                     </div>
 

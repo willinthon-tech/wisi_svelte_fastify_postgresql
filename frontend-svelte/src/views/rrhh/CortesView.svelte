@@ -175,6 +175,29 @@
     navigateToRoute(`rrhh/cortes/calculos?id=${corte.id}`);
   }
 
+  async function handleCompartirCorte(event) {
+    const corte = event.detail;
+    if (!corte || !corte.id) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}/#/reportes/rrhh/corte/${corte.id}`;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const input = document.createElement('input');
+        input.value = shareUrl;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      triggerToast('Enlace copiado al portapapeles', 'success');
+    } catch (err) {
+      console.error('Error al copiar enlace de corte:', err);
+      prompt('Copia el siguiente enlace del reporte público:', shareUrl);
+    }
+  }
+
   async function handleDelete(event) {
     const { id, onResult } = event.detail;
     try {
@@ -247,6 +270,7 @@
   on:delete={handleDelete}
   on:batchDelete={handleBatchDelete}
   on:verCalculos={handleVerCalculos}
+  on:compartirCorte={handleCompartirCorte}
   on:verEmpleadosCorte={handleVerEmpleadosCorte}
 >
   <div slot="filters" class="smart-filters-grid">
