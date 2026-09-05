@@ -228,11 +228,6 @@
       });
     }
   }
-
-  function handleNuevoCorte() {
-    // Redirige a la vista de Registros donde se configuran los filtros, excepciones y se genera el corte
-    navigateToRoute('rrhh/registros');
-  }
 </script>
 
 <PaginatedDataTable 
@@ -267,8 +262,8 @@
     />
   </div>
 
-  <div slot="search-actions" class="search-actions-row">
-    {#if hasActiveFilters}
+  {#if hasActiveFilters}
+    <div slot="search-actions" class="search-actions-row">
       <button
         type="button"
         on:click={clearAllFilters}
@@ -277,17 +272,8 @@
       >
         <span>✕</span> Limpiar Filtros ({totalFilters})
       </button>
-    {/if}
-
-    <button
-      type="button"
-      on:click={handleNuevoCorte}
-      class="btn-nuevo-corte"
-      title="Ir a vista de Registros para generar un nuevo corte histórico"
-    >
-      <span>➕</span> Generar Nuevo Corte
-    </button>
-  </div>
+    </div>
+  {/if}
 </PaginatedDataTable>
 
 <CorteEmpleadosModal
@@ -329,27 +315,5 @@
     transition: all 0.15s ease;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     white-space: nowrap;
-  }
-
-  .btn-nuevo-corte {
-    padding: 7px 16px;
-    font-size: 12.5px;
-    font-weight: 800;
-    color: #ffffff;
-    border: 1px solid #2563eb;
-    border-radius: 8px;
-    background: #2563eb;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease;
-    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
-    white-space: nowrap;
-  }
-
-  .btn-nuevo-corte:hover {
-    background: #1d4ed8;
-    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
   }
 </style>
