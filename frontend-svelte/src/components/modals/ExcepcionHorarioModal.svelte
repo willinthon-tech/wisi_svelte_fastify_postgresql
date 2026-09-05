@@ -192,7 +192,6 @@
     }
 
     initialSelectedValue = selectedValue;
-    scheduleModified = false;
   }
 
   function toMinutes(str) {
