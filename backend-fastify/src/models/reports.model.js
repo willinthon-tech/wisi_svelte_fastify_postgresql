@@ -153,8 +153,20 @@ export function pairDayAttendance({
   let isNoEntryWithOtherPunches = false;
 
   if (isExcepcion && excepObj) {
-    if (excepObj.es_libre || !excepObj.plantilla_horario_id) {
-      matchedPlantilla = null;
+    if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
+      return {
+        entradaStr: null,
+        salidaStr: null,
+        trabajadosMins: 0,
+        marcajeStr: 'Sin Registros',
+        resultadoStr: 'LIBRE',
+        entBadge: null,
+        salBadge: null,
+        selectedEntry: null,
+        selectedExit: null,
+        matchedPlantilla: BASE_PLANTILLA_LIBRE,
+        isNoEntryWithOtherPunches: false
+      };
     } else {
       matchedPlantilla = {
         id: excepObj.plantilla_horario_id,
@@ -165,6 +177,22 @@ export function pairDayAttendance({
         color: excepObj.color,
         tipo: excepObj.tipo
       };
+
+      if (!excepObj.hora_entrada && !excepObj.hora_salida) {
+        return {
+          entradaStr: null,
+          salidaStr: null,
+          trabajadosMins: 0,
+          marcajeStr: 'Sin Registros',
+          resultadoStr: excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'EXCEPCIÓN',
+          entBadge: null,
+          salBadge: null,
+          selectedEntry: null,
+          selectedExit: null,
+          matchedPlantilla,
+          isNoEntryWithOtherPunches: false
+        };
+      }
     }
   }
 
@@ -796,7 +824,11 @@ export async function getMarcajePersonalReportModel(params = {}) {
       let shiftColor = '#D9D9D9';
       let shiftTipo = 'plantilla';
 
-      if (matchedPlantilla) {
+      if (isExcepcion && excepObj && (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre)) {
+        shiftCode = 'L';
+        shiftColor = '#D9D9D9';
+        shiftTipo = 'plantilla';
+      } else if (matchedPlantilla) {
         shiftCode = matchedPlantilla.codigo || 'U';
         shiftColor = matchedPlantilla.color || '#86EFAC';
         shiftTipo = matchedPlantilla.tipo || 'horario';

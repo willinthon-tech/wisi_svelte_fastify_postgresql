@@ -11,6 +11,8 @@
 
   let loading = false;
   let selectedValue = '';
+  let initialSelectedValue = '';
+  let scheduleModified = false;
 
   let horariosEmpleado = [];
   let plantillasExcepcion = [];
@@ -70,6 +72,9 @@
     } else {
       selectedValue = 'BASE_L';
     }
+
+    initialSelectedValue = selectedValue;
+    scheduleModified = false;
   }
 
   let pendingPunches = {};
@@ -137,6 +142,11 @@
     recalculateLocalEntryExit();
   }
 
+  function handleScheduleSelectChange() {
+    scheduleModified = (selectedValue !== initialSelectedValue);
+    recalculateLocalEntryExit();
+  }
+
   function recalculateLocalEntryExit() {
     // Reset flags
     marcajesContext = marcajesContext.map(ctx => ({
@@ -159,6 +169,20 @@
       // REGLA 1: No puede existir salida sin entrada. Si no hay 'E', no se coteja turno
       if (checkinPunches.length === 0) {
         continue;
+      }
+
+      // Si este día se seleccionó como Libre o una plantilla sin horas, no cotejar turno
+      if (ctx.fechaStr === dia?.fechaStr) {
+        if (selectedValue === 'BASE_L') {
+          continue;
+        }
+        if (selectedValue && selectedValue.startsWith('PLANTILLA_')) {
+          const pId = Number(selectedValue.replace('PLANTILLA_', ''));
+          const pObj = (plantillasSala || []).find(p => Number(p.id) === pId);
+          if (pObj && !pObj.hora_entrada && !pObj.hora_salida) {
+            continue;
+          }
+        }
       }
 
       // REGLA 2: Selección de Entrada (únicamente marcajes tipo 'E')
@@ -289,8 +313,14 @@
     const hasPendingPunches = punchUpdates.length > 0;
     const isBaseU = selectedValue === 'BASE_U';
 
-    if (isBaseU && !hasPendingPunches) {
+    if (scheduleModified && isBaseU && !hasPendingPunches) {
       triggerToast('El Horario Único es automático del sistema. Seleccione un horario o excepción válida para guardar.', 'warning');
+      return;
+    }
+
+    if (!scheduleModified && !hasPendingPunches) {
+      triggerToast('No se detectaron cambios para guardar.', 'info');
+      closeModal();
       return;
     }
 
@@ -312,8 +342,8 @@
         pendingPunches = {};
       }
 
-      // 2. Guardar excepción de horario seleccionada (si no es BASE_U)
-      if (!isBaseU && selectedValue) {
+      // 2. Guardar excepción de horario seleccionada (ÚNICAMENTE si el usuario modificó el select de horario)
+      if (scheduleModified && !isBaseU && selectedValue) {
         let plantillaId = null;
         let isLibre = false;
 
@@ -428,6 +458,7 @@
           <select 
             id="select-excepcion-horario"
             bind:value={selectedValue}
+            on:change={handleScheduleSelectChange}
             style="width: 100%; padding: 8px 10px; font-size: 11.5px; font-weight: 700; color: #0f172a; background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; cursor: pointer;"
           >
             <!-- Optgroup 1: Plantillas Base del Sistema -->
