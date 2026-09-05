@@ -212,7 +212,7 @@
 
 {#if show}
   <div style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background-color: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px); padding: 16px;">
-    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 550px; overflow: hidden; border: 1px solid #e2e8f0; animation: fadeIn 0.15s ease-out;">
+    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 580px; overflow: hidden; border: 1px solid #e2e8f0; animation: fadeIn 0.15s ease-out;">
       
       <!-- Header -->
       <div style="padding: 16px 20px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
@@ -250,12 +250,12 @@
           <select 
             id="select-excepcion-horario"
             bind:value={selectedValue}
-            style="width: 100%; padding: 9px 12px; font-size: 12px; font-weight: 700; color: #0f172a; background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; cursor: pointer;"
+            style="width: 100%; padding: 8px 10px; font-size: 11.5px; font-weight: 700; color: #0f172a; background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; cursor: pointer;"
           >
             <!-- Optgroup 1: Plantillas Base del Sistema -->
             <optgroup label="⚙️ Plantillas Base del Sistema">
               <option value="BASE_L">[L] Libre</option>
-              <option value="BASE_U" disabled>[U] Horario Único (Asignado automáticamente por el sistema)</option>
+              <option value="BASE_U" disabled style="font-size: 10.5px;">[U] Horario Único (Asignado automáticamente por el sistema si no le establecen uno)</option>
             </optgroup>
 
             <!-- Optgroup 2: Horarios Asignados al Empleado (tipo 'horario') -->
