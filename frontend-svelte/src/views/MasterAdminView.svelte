@@ -1337,6 +1337,28 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         </h1>
       </div>
     </div>
+
+    <div>
+      <button
+        on:click={() => navigateToRoute("profile")}
+        type="button"
+        style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 700; color: #f8fafc; background: #1e293b; border: 1px solid #475569; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);"
+        on:mouseenter={(e) => {
+          e.currentTarget.style.background = "#2563eb";
+          e.currentTarget.style.borderColor = "#3b82f6";
+          e.currentTarget.style.transform = "translateY(-1px)";
+        }}
+        on:mouseleave={(e) => {
+          e.currentTarget.style.background = "#1e293b";
+          e.currentTarget.style.borderColor = "#475569";
+          e.currentTarget.style.transform = "translateY(0)";
+        }}
+        title="Volver a la vista de Perfil"
+      >
+        <span class="material-icons" style="font-size: 18px; color: #38bdf8;">arrow_back</span>
+        <span>Volver a Perfil</span>
+      </button>
+    </div>
   </div>
 
   <!-- Master Tabs Bar -->
