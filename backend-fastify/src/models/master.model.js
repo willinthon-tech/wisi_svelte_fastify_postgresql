@@ -4440,7 +4440,6 @@ export async function getCortesModel(options = {}) {
       if (search) {
         const term = `%${search}%`;
         conds.push(sql`(
-          LOWER(COALESCE(titulo, '')) LIKE ${term} OR
           LOWER(COALESCE(sala_nombre, '')) LIKE ${term} OR
           CAST(id AS TEXT) LIKE ${term}
         )`);
@@ -4453,7 +4452,6 @@ export async function getCortesModel(options = {}) {
         sql`
           SELECT 
             id, 
-            titulo, 
             sala_id, 
             sala_nombre, 
             fecha_desde, 
@@ -4490,7 +4488,6 @@ export async function getCortesModel(options = {}) {
   }
   if (search) {
     items = items.filter(c => 
-      (c.titulo || '').toLowerCase().includes(search) ||
       (c.sala_nombre || '').toLowerCase().includes(search) ||
       String(c.id).includes(search)
     );
@@ -4549,7 +4546,6 @@ export async function getCorteByIdModel(id) {
 
 export async function createCorteModel(payload = {}) {
   const {
-    titulo,
     sala_id,
     sala_nombre,
     fecha_desde,
@@ -4564,7 +4560,6 @@ export async function createCorteModel(payload = {}) {
     try {
       const rows = await sql`
         INSERT INTO cortes (
-          titulo, 
           sala_id, 
           sala_nombre, 
           fecha_desde, 
@@ -4572,7 +4567,6 @@ export async function createCorteModel(payload = {}) {
           total_empleados, 
           data
         ) VALUES (
-          ${titulo || 'Corte de Asistencia'},
           ${sala_id ? Number(sala_id) : null},
           ${sala_nombre || null},
           ${fecha_desde},
@@ -4580,7 +4574,7 @@ export async function createCorteModel(payload = {}) {
           ${total_empleados ? Number(total_empleados) : 0},
           CAST(${jsonStr} AS JSONB)
         )
-        RETURNING id, titulo, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at
+        RETURNING id, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at
       `;
 
       if (rows && rows.length > 0) {
@@ -4604,7 +4598,6 @@ export async function createCorteModel(payload = {}) {
   const nextId = inMemoryData.cortes.length > 0 ? Math.max(...inMemoryData.cortes.map(c => Number(c.id) || 0)) + 1 : 1;
   const newCorte = {
     id: nextId,
-    titulo: titulo || 'Corte de Asistencia',
     sala_id: sala_id ? Number(sala_id) : null,
     sala_nombre: sala_nombre || null,
     fecha_desde,

@@ -15,10 +15,19 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
+  import CorteEmpleadosModal from '../../components/modals/CorteEmpleadosModal.svelte';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+
+  let showEmpleadosModal = false;
+  let selectedCorteParaEmpleados = null;
+
+  function handleVerEmpleadosCorte(event) {
+    selectedCorteParaEmpleados = event.detail;
+    showEmpleadosModal = true;
+  }
 
   $: userSalasMap = $masterUserSalasStore || {};
   $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
@@ -153,11 +162,10 @@
 
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
-    { key: 'titulo', label: 'Título del Corte', bold: true, sortable: true, editable: false },
-    { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false },
     { key: 'fecha_rango', label: 'Período Evaluado', sortable: true, editable: false },
+    { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false },
     { key: 'total_empleados', label: 'Empleados', type: 'corte_empleados_badge', sortable: true, editable: false },
-    { key: 'calculos_btn', label: 'Cálculos y Scores', type: 'corte_actions', editable: false }
+    { key: 'calculos_btn', label: 'Reporte', type: 'corte_actions', editable: false }
   ];
 
   function handleVerCalculos(event) {
@@ -237,13 +245,14 @@
   {columns}
   createFields={[]}
   bind:searchQuery
-  searchPlaceholder="Buscar cortes por título, sala o ID..."
+  searchPlaceholder="Buscar cortes por sala o ID..."
   entityType="corte"
   actions={{ edit: false, delete: true }}
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:delete={handleDelete}
   on:batchDelete={handleBatchDelete}
   on:verCalculos={handleVerCalculos}
+  on:verEmpleadosCorte={handleVerEmpleadosCorte}
 >
   <div slot="filters" class="smart-filters-grid">
     <SmartMultiSelect
@@ -280,6 +289,15 @@
     </button>
   </div>
 </PaginatedDataTable>
+
+<CorteEmpleadosModal
+  isOpen={showEmpleadosModal}
+  corte={selectedCorteParaEmpleados}
+  on:close={() => {
+    showEmpleadosModal = false;
+    selectedCorteParaEmpleados = null;
+  }}
+/>
 
 <style>
   .smart-filters-grid {

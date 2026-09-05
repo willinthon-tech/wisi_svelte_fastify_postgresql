@@ -12,30 +12,18 @@
 
   const dispatch = createEventDispatcher();
 
-  let titulo = '';
   let salaId = selectedSalaId;
   let isSaving = false;
 
-  // Actualizar título sugerido reactivamente al abrir o cambiar parámetros
   $: if (isOpen) {
     salaId = selectedSalaId || (salas && salas.length > 0 ? salas[0].id : null);
-    const salaObj = (salas || []).find(s => Number(s.id) === Number(salaId));
-    const salaNombre = salaObj ? (salaObj.nombre_comercial || salaObj.nombre) : 'Todas las salas';
-    titulo = `${salaNombre} - Desde: ${fechaDesde} - Hasta: ${fechaHasta}`;
   }
 
   function handleSalaChange(e) {
     salaId = e.target.value;
-    const salaObj = (salas || []).find(s => Number(s.id) === Number(salaId));
-    const salaNombre = salaObj ? (salaObj.nombre_comercial || salaObj.nombre) : 'Corte General';
-    titulo = `${salaNombre} - Desde: ${fechaDesde} - Hasta: ${fechaHasta}`;
   }
 
   async function handleConfirm() {
-    if (!titulo || !titulo.trim()) {
-      triggerToast('El título del corte es obligatorio', 'warning');
-      return;
-    }
     if (!fechaDesde || !fechaHasta) {
       triggerToast('Fechas no válidas para el corte', 'warning');
       return;
@@ -47,7 +35,6 @@
       const salaNombre = salaObj ? (salaObj.nombre_comercial || salaObj.nombre) : null;
 
       const body = {
-        titulo: titulo.trim(),
         sala_id: salaId ? Number(salaId) : null,
         sala_nombre: salaNombre,
         fecha_desde: fechaDesde,
@@ -136,19 +123,6 @@
           Al generar este corte, se congelará y guardará el histórico completo con todos los empleados evaluados, turnos, excepciones y horas calculadas en este rango de fechas.
         </p>
 
-        <!-- Form Fields -->
-        <div class="form-group">
-          <label for="corte-titulo" class="input-label">Título del Corte:</label>
-          <input
-            id="corte-titulo"
-            type="text"
-            bind:value={titulo}
-            placeholder="Ej. Monagas Royal Casino - Desde: 2026-09-01 - Hasta: 2026-09-15"
-            class="text-input"
-            disabled={isSaving}
-          />
-        </div>
-
         <div class="form-row">
           <div class="form-group flex-1">
             <label for="corte-sala" class="input-label">Sala Asignada:</label>
@@ -200,7 +174,7 @@
           type="button"
           class="btn-confirm"
           on:click={handleConfirm}
-          disabled={isSaving || !titulo.trim()}
+          disabled={isSaving}
         >
           {#if isSaving}
             <span class="spinner-dot"></span> Guardando Histórico...

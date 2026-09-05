@@ -628,7 +628,6 @@ export async function initDb() {
     await sql`
       CREATE TABLE IF NOT EXISTS cortes (
         id SERIAL PRIMARY KEY,
-        titulo VARCHAR(255) NOT NULL,
         sala_id INT REFERENCES salas(id) ON DELETE SET NULL,
         sala_nombre VARCHAR(255),
         fecha_desde DATE NOT NULL,
@@ -639,6 +638,11 @@ export async function initDb() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    await sql`
+      ALTER TABLE cortes DROP COLUMN IF EXISTS titulo;
+    `.catch(() => {});
+
 
     // Registrar módulo 36 Cortes
     await sql`

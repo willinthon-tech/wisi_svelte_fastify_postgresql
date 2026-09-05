@@ -1390,9 +1390,6 @@ export async function getCorteById(request, reply) {
 export async function createCorte(request, reply) {
   try {
     const body = request.body || {};
-    if (!body.titulo || !body.titulo.trim()) {
-      return reply.status(400).send({ success: false, error: 'El título del corte es obligatorio' });
-    }
     if (!body.fecha_desde || !body.fecha_hasta) {
       return reply.status(400).send({ success: false, error: 'Las fechas desde y hasta son obligatorias' });
     }

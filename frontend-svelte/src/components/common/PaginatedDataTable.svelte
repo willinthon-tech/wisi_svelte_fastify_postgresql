@@ -1313,13 +1313,19 @@
                     </span>
 
                   {:else if col.type === 'corte_empleados_badge'}
-                    <!-- Empleados badge en Corte Histórico -->
-                    <span style="display: inline-flex; align-items: center; gap: 5px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 800;">
+                    <!-- Empleados badge en Corte Histórico (Clic abre modal rápido) -->
+                    <button
+                      type="button"
+                      on:click|stopPropagation={() => dispatch('verEmpleadosCorte', item)}
+                      style="display: inline-flex; align-items: center; gap: 6px; background: #eff6ff; color: #1d4ed8; border: 1.5px solid #3b82f6; padding: 4px 12px; border-radius: 12px; font-size: 11.5px; font-weight: 800; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(59, 130, 246, 0.12);"
+                      on:mouseenter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                      on:mouseleave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.transform = 'none'; }}
+                      title="Ver lista de empleados incluidos en este corte">
                       👥 {item.total_empleados || 0} empleados
-                    </span>
+                    </button>
 
                   {:else if col.type === 'corte_actions'}
-                    <!-- Botón Ver Cálculos de Corte Histórico -->
+                    <!-- Botón Ver Reporte de Corte Histórico -->
                     <div style="display: flex; align-items: center; gap: 8px;">
                       <button 
                         type="button" 
@@ -1327,8 +1333,8 @@
                         style="padding: 6px 14px; border-radius: 8px; border: 1px solid #7c3aed; background: #7c3aed; color: #ffffff; font-size: 12px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(124, 58, 237, 0.25); transition: all 0.15s ease;"
                         on:mouseenter={(e) => e.currentTarget.style.background = '#6d28d9'}
                         on:mouseleave={(e) => e.currentTarget.style.background = '#7c3aed'}
-                        title="Ver desglose completo de cálculos de asistencia">
-                        <span>📊</span> Ver Cálculos
+                        title="Ver reporte completo de cálculos de asistencia">
+                        <span>📊</span> Ver Reporte
                       </button>
                     </div>
 
