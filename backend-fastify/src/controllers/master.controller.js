@@ -16,7 +16,8 @@ import {
   getDepartamentoEmpleadosCiclosModel, updateDepartamentoEmpleadosCiclosModel,
   getFeriadosModel, getFeriadosFilterOptionsModel, createFeriadoModel, updateFeriadoModel, deleteFeriadoModel,
   getCumpleanosModel, getCarnetsModel,
-  getCortesModel, getCorteByIdModel, createCorteModel, deleteCorteModel, getCortesFilterOptionsModel
+  getCortesModel, getCorteByIdModel, createCorteModel, deleteCorteModel, getCortesFilterOptionsModel,
+  getDescargasModel, getLatestDescargasModel, createDescargaUploadModel, deleteDescargaModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1426,3 +1427,45 @@ export async function getCortesFilterOptions(request, reply) {
     return reply.status(500).send({ success: false, error: err.message });
   }
 }
+
+export async function getDescargas(request, reply) {
+  try {
+    const res = await getDescargasModel();
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getLatestDescargas(request, reply) {
+  try {
+    const res = await getLatestDescargasModel();
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function uploadDescarga(request, reply) {
+  try {
+    const body = request.body || {};
+    if (!body.fileBase64 || !body.filename) {
+      return reply.status(400).send({ success: false, error: 'Debe proporcionar archivo y nombre' });
+    }
+    const res = await createDescargaUploadModel(body);
+    return reply.status(201).send(res);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteDescarga(request, reply) {
+  try {
+    const { id } = request.params;
+    const res = await deleteDescargaModel(id);
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+

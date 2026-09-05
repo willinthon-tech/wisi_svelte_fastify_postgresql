@@ -16,9 +16,41 @@
   let isDownloading = false;
   let showDownloadModal = false;
 
+  let latestDownloads = {
+    android: null,
+    windows: null
+  };
+
+  $: androidFile = latestDownloads.android?.archivo || 'app-wisi.apk';
+  $: androidPeso = latestDownloads.android?.peso || '6.5 MB';
+  $: androidVer = latestDownloads.android?.version_num ? `v${latestDownloads.android.version_num}` : 'v1';
+
+  $: windowsFile = latestDownloads.windows?.archivo || 'app-wisi.exe';
+  $: windowsPeso = latestDownloads.windows?.peso || '2.3 MB';
+  $: windowsFormato = (latestDownloads.windows?.formato || 'exe').toUpperCase();
+  $: windowsVer = latestDownloads.windows?.version_num ? `v${latestDownloads.windows.version_num}` : 'v1';
+
+  async function loadLatestDownloads() {
+    try {
+      const res = await fetch('/api/master/descargas/latest');
+      const json = await res.json();
+      if (json && json.success && json.data) {
+        latestDownloads = json.data;
+      }
+    } catch (e) {
+      console.warn('Error loading latest downloads:', e);
+    }
+  }
+
+  function openDownloadModal() {
+    loadLatestDownloads();
+    showDownloadModal = true;
+  }
+
   onMount(async () => {
     try {
       await loadMasterStoresFromBackend();
+      loadLatestDownloads();
     } catch (e) {
       console.warn('Error loading master stores in profile:', e);
     }
@@ -199,7 +231,7 @@
         <!-- 2. Botón de Descarga (Abre modal de descarga Android / Windows) -->
         <button 
           type="button"
-          on:click={() => (showDownloadModal = true)} 
+          on:click={openDownloadModal} 
           class="btn-flow-sec"
           style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; cursor: pointer; background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; transition: all 0.15s ease;"
           title="Descargar instalador para Android o Windows">
@@ -544,11 +576,10 @@
   </div>
 </div>
 
-<!-- Modal de Descargas: Android / Windows -->
+<!-- Modal de Descargas: Android / Windows (No se cierra al hacer clic afuera) -->
 {#if showDownloadModal}
   <div 
     class="modal-backdrop"
-    on:click={() => (showDownloadModal = false)}
     role="presentation"
     style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(5px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px;"
   >
@@ -573,7 +604,7 @@
         <button 
           type="button" 
           on:click={() => (showDownloadModal = false)}
-          style="background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"
+          style="background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;"
           title="Cerrar modal">
           <span class="material-icons" style="font-size: 20px;">close</span>
         </button>
@@ -590,15 +621,18 @@
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="font-weight: 800; font-size: 15px; color: #0f172a;">Versión Android</span>
-                <span style="font-size: 10px; font-weight: 700; background: #dcfce7; color: #166534; padding: 2px 7px; border-radius: 6px;">APK • 6.5 MB</span>
+                <span style="font-size: 10px; font-weight: 700; background: #dcfce7; color: #166534; padding: 2px 7px; border-radius: 6px;">APK • {androidPeso}</span>
               </div>
               <p style="margin: 4px 0 0; font-size: 12px; color: #64748b; line-height: 1.3;">Para smartphones y tablets Android (v7.0+)</p>
+              <div style="font-size: 11px; color: #94a3b8; font-family: monospace; margin-top: 2px;">
+                {androidVer} • {androidFile}
+              </div>
             </div>
           </div>
           <a 
-            href="/downloads/app-wisi.apk" 
-            download="app-wisi.apk"
-            on:click={() => triggerToast('Iniciando descarga de APK para Android...', 'info')}
+            href="/downloads/{androidFile}" 
+            download="{androidFile}"
+            on:click={() => triggerToast(`Iniciando descarga de ${androidFile}...`, 'info')}
             style="display: inline-flex; align-items: center; gap: 6px; background: #10b981; color: #ffffff; padding: 9px 15px; border-radius: 8px; font-weight: 700; font-size: 12.5px; text-decoration: none; box-shadow: 0 2px 6px rgba(16,185,129,0.3); transition: all 0.15s ease; white-space: nowrap;">
             <span class="material-icons" style="font-size: 18px;">download</span>
             <span>Descargar</span>
@@ -614,15 +648,18 @@
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="font-weight: 800; font-size: 15px; color: #0f172a;">Versión Windows</span>
-                <span style="font-size: 10px; font-weight: 700; background: #dbeafe; color: #1e40af; padding: 2px 7px; border-radius: 6px;">EXE • 2.3 MB</span>
+                <span style="font-size: 10px; font-weight: 700; background: #dbeafe; color: #1e40af; padding: 2px 7px; border-radius: 6px;">{windowsFormato} • {windowsPeso}</span>
               </div>
               <p style="margin: 4px 0 0; font-size: 12px; color: #64748b; line-height: 1.3;">Para computadoras Windows 10 y 11 (64-bit)</p>
+              <div style="font-size: 11px; color: #94a3b8; font-family: monospace; margin-top: 2px;">
+                {windowsVer} • {windowsFile}
+              </div>
             </div>
           </div>
           <a 
-            href="/downloads/app-wisi.exe" 
-            download="app-wisi.exe"
-            on:click={() => triggerToast('Iniciando descarga de instalador para Windows...', 'info')}
+            href="/downloads/{windowsFile}" 
+            download="{windowsFile}"
+            on:click={() => triggerToast(`Iniciando descarga de ${windowsFile}...`, 'info')}
             style="display: inline-flex; align-items: center; gap: 6px; background: #2563eb; color: #ffffff; padding: 9px 15px; border-radius: 8px; font-weight: 700; font-size: 12.5px; text-decoration: none; box-shadow: 0 2px 6px rgba(37,99,235,0.3); transition: all 0.15s ease; white-space: nowrap;">
             <span class="material-icons" style="font-size: 18px;">download</span>
             <span>Descargar</span>

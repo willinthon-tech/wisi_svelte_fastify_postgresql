@@ -261,6 +261,7 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('paginas', masterPaginasStore),
     fetchEntity('modulos', masterModulosStore),
     fetchEntity('dispositivos', masterDispositivosStore),
+    fetchEntity('descargas', masterDescargasStore),
     fetchUserSalas(),
     fetchUserPerms()
   ]);
@@ -397,4 +398,29 @@ export const masterUsuariosActions = createMasterEntityActions(masterUsuariosSto
 export const masterPlantillasHorariosStore = writable(loadStore('plantillas_horarios_v1', []));
 masterPlantillasHorariosStore.subscribe(val => saveStore('plantillas_horarios_v1', val));
 export const masterPlantillasHorariosActions = createMasterEntityActions(masterPlantillasHorariosStore, 'plantillas-horarios');
+
+export const masterDescargasStore = writable(loadStore('descargas_v1', []));
+masterDescargasStore.subscribe(val => saveStore('descargas_v1', val));
+export const masterDescargasActions = {
+  ...createMasterEntityActions(masterDescargasStore, 'descargas'),
+  upload: async ({ fileBase64, filename, size, sizeText }) => {
+    try {
+      const res = await fetch('/api/master/descargas/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileBase64, filename, size, sizeText })
+      });
+      const json = await res.json();
+      if (!res.ok || (json && json.success === false)) {
+        throw new Error(json.error || 'Error al subir instalador');
+      }
+      await loadMasterStoresFromBackend();
+      return json.data;
+    } catch (err) {
+      console.warn('Backend sync error for descarga upload:', err);
+      throw err;
+    }
+  }
+};
+
 

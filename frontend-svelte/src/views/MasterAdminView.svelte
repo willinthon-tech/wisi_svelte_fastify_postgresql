@@ -19,6 +19,8 @@
     masterDispositivosActions,
     masterUsuariosStore,
     masterUsuariosActions,
+    masterDescargasStore,
+    masterDescargasActions,
     userSalasStore,
     userModulePermissionsStore,
     loadMasterStoresFromBackend,
@@ -138,6 +140,21 @@
   let isCreateModalOpen = false;
   let createForm = {};
 
+  // Create Descarga Modal state
+  let isCreateDescargaModalOpen = false;
+  let selectedFile = null;
+  let detectedInfo = {
+    formato: '',
+    plataforma: '',
+    pesoText: '',
+    pesoBytes: 0,
+    fecha: '',
+    versionProyectada: 1,
+    nombreProyectado: ''
+  };
+  let isUploadingDescarga = false;
+  let uploadError = '';
+
   // Selected User for Permisos y Asignaciones
   function getSingularEntity(tab) {
     if (tab === "salas") return "sala";
@@ -145,6 +162,7 @@
     if (tab === "modulos") return "módulo";
     if (tab === "dispositivos") return "dispositivo";
     if (tab === "usuarios") return "usuario";
+    if (tab === "descargas") return "descarga";
     if (tab === "departamentos") return "departamento";
     if (tab === "areas") return "área";
     if (tab === "cargos") return "cargo";
@@ -748,7 +766,109 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     return s ? s.nombre : `Sala #${salaId}`;
   }
 
+  function handleFileSelected(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    selectedFile = file;
+    uploadError = '';
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    let formato = ext;
+    let plataforma = 'windows';
+
+    if (ext === 'apk') {
+      plataforma = 'android';
+      formato = 'apk';
+    } else if (ext === 'exe' || ext === 'msi') {
+      plataforma = 'windows';
+      formato = ext;
+    } else {
+      uploadError = `Formato .${ext} no soportado. Debe ser .apk (Android) o .exe / .msi (Windows).`;
+      selectedFile = null;
+      return;
+    }
+
+    const bytes = file.size;
+    let pesoText = '';
+    if (bytes >= 1024 * 1024) {
+      pesoText = `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    } else {
+      pesoText = `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    const currentRecords = $masterDescargasStore || [];
+    const countForPlatform = currentRecords.filter(d => d.plataforma === plataforma).length;
+    const versionProyectada = countForPlatform + 1;
+
+    detectedInfo = {
+      formato,
+      plataforma,
+      pesoText,
+      pesoBytes: bytes,
+      fecha: new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' }),
+      versionProyectada,
+      nombreProyectado: `app-wisi-${plataforma}-v${versionProyectada}-c[id].${formato}`
+    };
+  }
+
+  async function submitUploadDescarga() {
+    if (!selectedFile) {
+      uploadError = 'Selecciona un archivo instalador antes de guardar';
+      return;
+    }
+    isUploadingDescarga = true;
+    uploadError = '';
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = reader.result.split(',')[1];
+          const result = await masterDescargasActions.upload({
+            fileBase64: base64,
+            filename: selectedFile.name,
+            size: detectedInfo.pesoBytes,
+            sizeText: detectedInfo.pesoText
+          });
+          triggerToast(`✅ Instalador ${result.archivo} importado y registrado exitosamente`, 'success');
+          isCreateDescargaModalOpen = false;
+          selectedFile = null;
+        } catch (err) {
+          uploadError = err.message || 'Error al subir instalador';
+          triggerToast(uploadError, 'error');
+        } finally {
+          isUploadingDescarga = false;
+        }
+      };
+      reader.onerror = () => {
+        uploadError = 'Error al leer el archivo en el navegador';
+        isUploadingDescarga = false;
+      };
+      reader.readAsDataURL(selectedFile);
+    } catch (err) {
+      uploadError = err.message || 'Error al procesar el archivo';
+      isUploadingDescarga = false;
+    }
+  }
+
   function openCreateModal() {
+    if (activeTab === "descargas") {
+      selectedFile = null;
+      detectedInfo = {
+        formato: '',
+        plataforma: '',
+        pesoText: '',
+        pesoBytes: 0,
+        fecha: '',
+        versionProyectada: 1,
+        nombreProyectado: ''
+      };
+      uploadError = '';
+      isCreateDescargaModalOpen = true;
+      return;
+    }
+
     if (activeTab === "salas") {
       createForm = {
         nombre: "",
@@ -1017,6 +1137,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     modulos: masterModulosActions,
     dispositivos: masterDispositivosActions,
     usuarios: masterUsuariosActions,
+    descargas: masterDescargasActions,
   };
 
   $: currentItems =
@@ -1038,7 +1159,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                     ? $masterDispositivosStore
                     : activeTab === "usuarios"
                       ? $masterUsuariosStore
-                      : [];
+                      : activeTab === "descargas"
+                        ? $masterDescargasStore
+                        : [];
 
   $: filteredItems = currentItems
     ? currentItems.filter((i) => {
@@ -1331,6 +1454,23 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         : '#94a3b8'};"
     >
       Ajustes
+    </button>
+
+    <button
+      on:click={() => {
+        activeTab = "descargas";
+        searchQuery = "";
+        editingInlineId = null;
+      }}
+      type="button"
+      style="padding: 10px 18px; border-radius: 8px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; background: {activeTab ===
+      'descargas'
+        ? '#2563eb'
+        : '#1e293b'}; color: {activeTab === 'descargas'
+        ? '#ffffff'
+        : '#94a3b8'};"
+    >
+      Descargas ({$masterDescargasStore.length})
     </button>
 
     <!-- Tab del Agente WISI Sync (Oculta temporalmente para el modo Nube Directa, conservada para el futuro) -->
@@ -2286,6 +2426,12 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 <th style="padding: 10px 14px;">Nombre y Apellido</th>
                 <th style="padding: 10px 14px;">Usuario</th>
                 <th style="padding: 10px 14px;">Contraseña</th>
+              {:else if activeTab === "descargas"}
+                <th style="padding: 10px 14px;">Plataforma</th>
+                <th style="padding: 10px 14px;">Formato</th>
+                <th style="padding: 10px 14px;">Archivo</th>
+                <th style="padding: 10px 14px;">Peso</th>
+                <th style="padding: 10px 14px;">Fecha</th>
               {/if}
 
               <th style="padding: 10px 14px; text-align: right;">Acciones</th>
@@ -2514,6 +2660,32 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         style="padding: 3px 6px;"
                       />{:else}<span>••••••</span>{/if}</td
                   >
+                {:else if activeTab === "descargas"}
+                  <td style="padding: 8px 14px;">
+                    {#if item.plataforma === 'android'}
+                      <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 800; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;">
+                        🤖 ANDROID
+                      </span>
+                    {:else}
+                      <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 800; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;">
+                        🪟 WINDOWS
+                      </span>
+                    {/if}
+                  </td>
+                  <td style="padding: 8px 14px;">
+                    <span style="padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 11.5px; font-weight: 800; background: #f1f5f9; color: #475569;">
+                      .{item.formato ? item.formato.toUpperCase() : ''}
+                    </span>
+                  </td>
+                  <td style="padding: 8px 14px; font-family: monospace; font-size: 12.5px; font-weight: 600; color: #0f172a;">
+                    {item.archivo}
+                  </td>
+                  <td style="padding: 8px 14px; font-size: 12.5px; font-weight: 700; color: #475569;">
+                    {item.peso || '—'}
+                  </td>
+                  <td style="padding: 8px 14px; font-size: 12px; color: #64748b;">
+                    {item.fecha ? new Date(item.fecha).toLocaleString('es-VE', { timeZone: 'America/Caracas' }) : '—'}
+                  </td>
                 {/if}
 
                 <!-- Actions -->
@@ -2536,7 +2708,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       title="Cancelar">❌</button
                     >
                   {:else}
-                    {#if activeTab === "dispositivos"}
+                    {#if activeTab === "descargas"}
+                      <a
+                        href="/downloads/{item.archivo}"
+                        download="{item.archivo}"
+                        class="btn-flow-sec"
+                        style="padding: 4px 8px; font-size: 12px; color: #2563eb; border-color: #93c5fd; background: #eff6ff; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 700;"
+                        title="Descargar instalador"
+                      >
+                        ⬇ Descargar
+                      </a>
+                    {:else if activeTab === "dispositivos"}
                       <button
                         on:click={() => executeDirectIsapiInjection(item)}
                         type="button"
@@ -2552,13 +2734,15 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         {/if}
                       </button>
                     {/if}
-                    <button
-                      on:click={() => startInlineEdit(item)}
-                      type="button"
-                      class="btn-flow-sec"
-                      style="padding: 4px 8px; font-size: 12px;"
-                      title="Editar">Editar</button
-                    >
+                    {#if activeTab !== "descargas"}
+                      <button
+                        on:click={() => startInlineEdit(item)}
+                        type="button"
+                        class="btn-flow-sec"
+                        style="padding: 4px 8px; font-size: 12px;"
+                        title="Editar">Editar</button
+                      >
+                    {/if}
                     <button
                       on:click={() => promptDelete(item)}
                       type="button"
@@ -3075,6 +3259,139 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
             ⏳ Enviando por ISAPI (Digest)...
           {:else}
             🚀 Inyectar por ISAPI (Digest)
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal para Importar y Registrar Descarga -->
+{#if isCreateDescargaModalOpen}
+  <div
+    style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); z-index: 999999; display: flex; align-items: center; justify-content: center; padding: 16px;"
+  >
+    <div
+      style="background: #ffffff; border-radius: 14px; width: 100%; max-width: 540px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45); border: 1px solid #cbd5e1; color: #0f172a;"
+    >
+      <div
+        style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; background: #f8fafc;"
+      >
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 20px;">📦</span>
+          <div>
+            <h3 style="margin: 0; font-size: 15.5px; font-weight: 800; color: #0f172a;">
+              Importar Instalador de Aplicación
+            </h3>
+            <span style="font-size: 12px; color: #64748b;">
+              Detección automática de formato, plataforma, peso y versión
+            </span>
+          </div>
+        </div>
+        <button
+          on:click={() => (isCreateDescargaModalOpen = false)}
+          type="button"
+          style="background: none; border: none; font-size: 18px; cursor: pointer; color: #94a3b8; padding: 4px;"
+          title="Cerrar"
+        >✕</button>
+      </div>
+
+      <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+        <!-- Selector de archivo -->
+        <div>
+          <label
+            for="descarga-file-input"
+            style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;"
+          >
+            * Seleccionar Archivo Instalador (.apk, .exe, .msi)
+          </label>
+          <input
+            id="descarga-file-input"
+            type="file"
+            accept=".apk,.exe,.msi"
+            on:change={handleFileSelected}
+            style="width: 100%; padding: 10px 12px; border: 2px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; font-size: 13px; cursor: pointer;"
+          />
+          <span style="display: block; font-size: 11.5px; color: #64748b; margin-top: 4px;">
+            Formatos admitidos: <strong>.apk</strong> para Android | <strong>.exe</strong> o <strong>.msi</strong> para Windows
+          </span>
+        </div>
+
+        {#if uploadError}
+          <div style="background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; padding: 10px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600;">
+            ⚠️ {uploadError}
+          </div>
+        {/if}
+
+        {#if selectedFile && detectedInfo.plataforma}
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
+              <span>Metadatos Detectados</span>
+              {#if detectedInfo.plataforma === 'android'}
+                <span style="padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 800; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;">
+                  🤖 ANDROID
+                </span>
+              {:else}
+                <span style="padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 800; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;">
+                  🪟 WINDOWS
+                </span>
+              {/if}
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12.5px;">
+              <div>
+                <span style="color: #64748b; display: block; font-size: 11px;">Formato:</span>
+                <strong style="font-family: monospace; font-size: 13px;">.{detectedInfo.formato.toUpperCase()}</strong>
+              </div>
+              <div>
+                <span style="color: #64748b; display: block; font-size: 11px;">Peso / Tamaño:</span>
+                <strong>{detectedInfo.pesoText}</strong>
+              </div>
+              <div>
+                <span style="color: #64748b; display: block; font-size: 11px;">Versión Proyectada:</span>
+                <strong style="color: #2563eb;">v{detectedInfo.versionProyectada}</strong>
+              </div>
+              <div>
+                <span style="color: #64748b; display: block; font-size: 11px;">Fecha de Registro:</span>
+                <span style="font-size: 11.5px;">{detectedInfo.fecha}</span>
+              </div>
+            </div>
+
+            <div style="margin-top: 4px;">
+              <span style="color: #64748b; display: block; font-size: 11px; margin-bottom: 4px;">Nombre que se asignará en el Servidor:</span>
+              <div style="background: #0f172a; color: #38bdf8; font-family: monospace; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; word-break: break-all;">
+                app-wisi-{detectedInfo.plataforma}-v{detectedInfo.versionProyectada}-c[id].{detectedInfo.formato}
+              </div>
+              <span style="font-size: 10.5px; color: #94a3b8; display: block; margin-top: 2px;">
+                * El [id] final será asignado por el ID auto-incremental de la base de datos al guardar.
+              </span>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <div
+        style="padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; align-items: center; justify-content: flex-end; gap: 10px;"
+      >
+        <button
+          on:click={() => (isCreateDescargaModalOpen = false)}
+          type="button"
+          class="btn-flow-sec"
+          style="padding: 8px 16px; font-size: 13px;"
+        >
+          Cancelar
+        </button>
+        <button
+          on:click={submitUploadDescarga}
+          disabled={!selectedFile || isUploadingDescarga}
+          type="button"
+          class="btn-flow"
+          style="padding: 8px 18px; font-size: 13px; font-weight: 800; background: #2563eb; color: #ffffff;"
+        >
+          {#if isUploadingDescarga}
+            ⏳ Importando y guardando...
+          {:else}
+            💾 Importar y Registrar
           {/if}
         </button>
       </div>

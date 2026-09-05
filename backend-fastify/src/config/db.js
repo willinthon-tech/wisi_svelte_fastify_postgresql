@@ -20,6 +20,10 @@ export let inMemoryData = {
     { clave: 'timezone_display', valor: 'America/Caracas -4' }
   ],
   cortes: [],
+  descargas: [
+    { id: 1, plataforma: 'android', formato: 'apk', archivo: 'app-wisi-android-v1-c1.apk', peso: '6.5 MB', peso_bytes: 6574550, version_num: 1, fecha: new Date().toISOString() },
+    { id: 2, plataforma: 'windows', formato: 'exe', archivo: 'app-wisi-windows-v1-c2.exe', peso: '2.3 MB', peso_bytes: 2379534, version_num: 1, fecha: new Date().toISOString() }
+  ],
   usuarios: [
     {
       id: 1,
@@ -478,6 +482,37 @@ export async function initDb() {
         ('timezone_display', 'America/Caracas -4')
       ON CONFLICT (clave) DO NOTHING;
     `;
+
+    // 11.1 Table descargas
+    await sql`
+      CREATE TABLE IF NOT EXISTS descargas (
+        id SERIAL PRIMARY KEY,
+        plataforma VARCHAR(50) NOT NULL,
+        formato VARCHAR(20) NOT NULL,
+        archivo VARCHAR(255) NOT NULL,
+        peso VARCHAR(50) NOT NULL,
+        peso_bytes BIGINT NOT NULL DEFAULT 0,
+        version_num INTEGER NOT NULL DEFAULT 1,
+        fecha TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    try {
+      const existingDescargas = await sql`SELECT count(*)::int as count FROM descargas`;
+      if (existingDescargas[0]?.count === 0) {
+        await sql`
+          INSERT INTO descargas (id, plataforma, formato, archivo, peso, peso_bytes, version_num, fecha)
+          VALUES 
+            (1, 'android', 'apk', 'app-wisi-android-v1-c1.apk', '6.5 MB', 6574550, 1, CURRENT_TIMESTAMP),
+            (2, 'windows', 'exe', 'app-wisi-windows-v1-c2.exe', '2.3 MB', 2379534, 1, CURRENT_TIMESTAMP)
+          ON CONFLICT (id) DO NOTHING;
+        `;
+        await sql`SELECT setval('descargas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM descargas));`.catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Error checking or seeding descargas:', e);
+    }
 
     // 12. Table departamentos
     await sql`

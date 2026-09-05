@@ -4656,5 +4656,182 @@ export async function getCortesFilterOptionsModel(options = {}) {
   };
 }
 
+// ==================== DESCARGAS MODEL ====================
+
+export async function getDescargasModel() {
+  if (isPgConnected && sql) {
+    try {
+      const rows = await sql`
+        SELECT * FROM descargas 
+        ORDER BY id DESC
+      `;
+      return { success: true, data: rows };
+    } catch (err) {
+      console.error('Error getDescargasModel:', err);
+      throw err;
+    }
+  }
+  return { success: true, data: inMemoryData.descargas || [] };
+}
+
+export async function getLatestDescargasModel() {
+  if (isPgConnected && sql) {
+    try {
+      const androidRows = await sql`
+        SELECT * FROM descargas 
+        WHERE plataforma = 'android' 
+        ORDER BY id DESC LIMIT 1
+      `;
+      const windowsRows = await sql`
+        SELECT * FROM descargas 
+        WHERE plataforma = 'windows' 
+        ORDER BY id DESC LIMIT 1
+      `;
+      return {
+        success: true,
+        data: {
+          android: androidRows[0] || null,
+          windows: windowsRows[0] || null
+        }
+      };
+    } catch (err) {
+      console.error('Error getLatestDescargasModel:', err);
+      throw err;
+    }
+  }
+
+  const list = inMemoryData.descargas || [];
+  const android = list.filter(d => d.plataforma === 'android').slice(-1)[0] || null;
+  const windows = list.filter(d => d.plataforma === 'windows').slice(-1)[0] || null;
+  return { success: true, data: { android, windows } };
+}
+
+export async function createDescargaUploadModel({ fileBase64, filename, size, sizeText }) {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  if (!fileBase64) {
+    throw new Error('No se recibió el contenido del archivo');
+  }
+
+  // 1. Detect extension and format
+  const ext = path.extname(filename || '').toLowerCase().replace('.', '');
+  let formato = ext;
+  let plataforma = 'windows';
+
+  if (ext === 'apk') {
+    plataforma = 'android';
+    formato = 'apk';
+  } else if (ext === 'exe' || ext === 'msi') {
+    plataforma = 'windows';
+    formato = ext;
+  } else {
+    throw new Error(`Formato .${ext} no soportado. Debe ser .apk (Android) o .exe / .msi (Windows)`);
+  }
+
+  // 2. Decode file buffer and calculate real size
+  const cleanBase64 = String(fileBase64).replace(/^data:.*?;base64,/, '');
+  const buffer = Buffer.from(cleanBase64, 'base64');
+  const pesoBytes = buffer.length;
+
+  let pesoFormateado = sizeText;
+  if (!pesoFormateado) {
+    if (pesoBytes >= 1024 * 1024) {
+      pesoFormateado = `${(pesoBytes / (1024 * 1024)).toFixed(1)} MB`;
+    } else {
+      pesoFormateado = `${(pesoBytes / 1024).toFixed(1)} KB`;
+    }
+  }
+
+  // 3. Calculate sequential version count for this platform
+  let versionNum = 1;
+  if (isPgConnected && sql) {
+    const countRes = await sql`
+      SELECT COUNT(*)::int AS count 
+      FROM descargas 
+      WHERE plataforma = ${plataforma}
+    `;
+    versionNum = (countRes[0]?.count || 0) + 1;
+
+    // 4. Insert initial record to get generated ID
+    const inserted = await sql`
+      INSERT INTO descargas (plataforma, formato, archivo, peso, peso_bytes, version_num, fecha)
+      VALUES (${plataforma}, ${formato}, 'temp', ${pesoFormateado}, ${pesoBytes}, ${versionNum}, CURRENT_TIMESTAMP)
+      RETURNING id, fecha
+    `;
+    const recordId = inserted[0].id;
+
+    // 5. Generate official filename: app-wisi-{plataforma}-v{conteo}-c{id}.{formato}
+    const finalFilename = `app-wisi-${plataforma}-v${versionNum}-c${recordId}.${formato}`;
+
+    // 6. Write file to disk in backend-fastify/downloads
+    const downloadsDir = path.join(process.cwd(), 'downloads');
+    if (!fs.existsSync(downloadsDir)) {
+      fs.mkdirSync(downloadsDir, { recursive: true });
+    }
+    const finalFilePath = path.join(downloadsDir, finalFilename);
+    fs.writeFileSync(finalFilePath, buffer);
+
+    // 7. Update row with final filename
+    const updated = await sql`
+      UPDATE descargas 
+      SET archivo = ${finalFilename} 
+      WHERE id = ${recordId}
+      RETURNING *
+    `;
+
+    return { success: true, data: updated[0] };
+  }
+
+  // Fallback in-memory
+  if (!inMemoryData.descargas) inMemoryData.descargas = [];
+  versionNum = inMemoryData.descargas.filter(d => d.plataforma === plataforma).length + 1;
+  const nextId = inMemoryData.descargas.length > 0 ? Math.max(...inMemoryData.descargas.map(d => Number(d.id) || 0)) + 1 : 1;
+  const finalFilename = `app-wisi-${plataforma}-v${versionNum}-c${nextId}.${formato}`;
+
+  const downloadsDir = path.join(process.cwd(), 'downloads');
+  if (!fs.existsSync(downloadsDir)) {
+    fs.mkdirSync(downloadsDir, { recursive: true });
+  }
+  fs.writeFileSync(path.join(downloadsDir, finalFilename), buffer);
+
+  const newDescarga = {
+    id: nextId,
+    plataforma,
+    formato,
+    archivo: finalFilename,
+    peso: pesoFormateado,
+    peso_bytes: pesoBytes,
+    version_num: versionNum,
+    fecha: new Date().toISOString()
+  };
+  inMemoryData.descargas.unshift(newDescarga);
+  return { success: true, data: newDescarga };
+}
+
+export async function deleteDescargaModel(id) {
+  const numId = Number(id);
+  const fs = await import('fs');
+  const path = await import('path');
+
+  if (isPgConnected && sql) {
+    const existing = await sql`SELECT archivo FROM descargas WHERE id = ${numId}`;
+    if (existing.length > 0 && existing[0].archivo) {
+      const filePath = path.join(process.cwd(), 'downloads', existing[0].archivo);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch (e) {}
+      }
+    }
+    await sql`DELETE FROM descargas WHERE id = ${numId}`;
+    return { success: true };
+  }
+
+  if (inMemoryData.descargas) {
+    inMemoryData.descargas = inMemoryData.descargas.filter(d => Number(d.id) !== numId);
+  }
+  return { success: true };
+}
+
+
 
 

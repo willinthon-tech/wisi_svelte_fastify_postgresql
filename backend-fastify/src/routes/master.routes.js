@@ -17,7 +17,8 @@ import {
   getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado,
   getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado,
   getCumpleanos, getCarnets,
-  getCortes, getCorteById, createCorte, deleteCorte, getCortesFilterOptions
+  getCortes, getCorteById, createCorte, deleteCorte, getCortesFilterOptions,
+  getDescargas, getLatestDescargas, uploadDescarga, deleteDescarga
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -356,4 +357,14 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/attlogs/:id.jpg', serveAttlogImage);
   fastify.get('/api/attlogs/:id.jpg', serveAttlogImage);
   fastify.get('/master/attlogs/:id.jpg', serveAttlogImage);
+
+  // Módulo de Descargas
+  fastify.get('/master/descargas', getDescargas);
+  fastify.get('/api/master/descargas', getDescargas);
+  fastify.get('/master/descargas/latest', getLatestDescargas);
+  fastify.get('/api/master/descargas/latest', getLatestDescargas);
+  fastify.post('/master/descargas/upload', uploadDescarga);
+  fastify.post('/api/master/descargas/upload', uploadDescarga);
+  fastify.delete('/master/descargas/:id', deleteDescarga);
+  fastify.delete('/api/master/descargas/:id', deleteDescarga);
 }
