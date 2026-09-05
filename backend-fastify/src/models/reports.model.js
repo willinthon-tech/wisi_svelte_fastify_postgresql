@@ -296,13 +296,16 @@ export async function getMarcajePersonalReportModel(params = {}) {
       allCedulasSet.add(rawCed);
       keyToEmpIdMap.set(rawCed, e.id);
 
-      const cleanCed = rawCed.replace(/^V/i, '').trim();
+      const cleanCed = rawCed.replace(/^[VE]/i, '').trim();
       if (cleanCed) {
         allCedulasSet.add(cleanCed);
         allCedulasSet.add(`V${cleanCed}`);
         allCedulasSet.add(`v${cleanCed}`);
+        allCedulasSet.add(`E${cleanCed}`);
+        allCedulasSet.add(`e${cleanCed}`);
         keyToEmpIdMap.set(cleanCed, e.id);
         keyToEmpIdMap.set(`V${cleanCed}`.toUpperCase(), e.id);
+        keyToEmpIdMap.set(`E${cleanCed}`.toUpperCase(), e.id);
       }
     }
   });
@@ -332,8 +335,8 @@ export async function getMarcajePersonalReportModel(params = {}) {
   const logsByEmpAndDate = new Map();
   attlogs.forEach(log => {
     const rawEmpKey = String(log.employee_no || '').trim();
-    const cleanKey = rawEmpKey.replace(/^V/i, '').trim();
-    const empId = keyToEmpIdMap.get(rawEmpKey) || keyToEmpIdMap.get(cleanKey) || keyToEmpIdMap.get(`V${cleanKey}`.toUpperCase());
+    const cleanKey = rawEmpKey.replace(/^[VE]/i, '').trim();
+    const empId = keyToEmpIdMap.get(rawEmpKey) || keyToEmpIdMap.get(cleanKey) || keyToEmpIdMap.get(`V${cleanKey}`.toUpperCase()) || keyToEmpIdMap.get(`E${cleanKey}`.toUpperCase());
     if (!empId) return;
 
     const parsed = parseAttlogTime(log.event_time);
@@ -748,11 +751,20 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   if (!emp) return { success: false, error: 'Empleado no encontrado' };
 
   const rawCed = String(emp.cedula || '').trim();
-  const cleanCed = rawCed.replace(/^V/i, '').trim();
+  const cleanCed = rawCed.replace(/^[VE]/i, '').trim();
   const cedWithV = `V${cleanCed}`;
+  const cedWithE = `E${cleanCed}`;
   const empIdStr = String(emp.id);
 
-  const empKeys = [...new Set([empIdStr, rawCed, cleanCed, cedWithV, `v${cleanCed}`].filter(Boolean))];
+  const empKeys = [...new Set([
+    empIdStr,
+    rawCed,
+    cleanCed,
+    cedWithV,
+    cedWithE,
+    `v${cleanCed}`,
+    `e${cleanCed}`
+  ].filter(Boolean))];
 
   const parts = cleanDateStr.split('-').map(Number);
   if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
@@ -786,7 +798,7 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
     FROM attlogs
     WHERE (
       employee_no = ANY(${empKeys})
-      OR (LENGTH(${cleanCed}) > 0 AND REPLACE(REPLACE(UPPER(employee_no), 'V', ''), '-', '') = ${cleanCed})
+      OR (LENGTH(${cleanCed}) > 0 AND REPLACE(REPLACE(REPLACE(UPPER(employee_no), 'V', ''), 'E', ''), '-', '') = ${cleanCed})
     )
       AND (event_time AT TIME ZONE ${tz}) >= ${minDateStr}::timestamp
       AND (event_time AT TIME ZONE ${tz}) <= ${maxDateStr}::timestamp
@@ -836,27 +848,28 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
     punchesByDate.set(fStr, list);
   });
 
-  // Determine which punches were actually taken as Entry and Exit for the SELECTED DAY ONLY (dateStr)
+  // Determine which punches were actually taken as Entry and Exit for each day
   // Regla estricta: Solo tomar en cuenta para acotejar los que tengan checkIn como Entrada y checkOut como Salida
-  const currList = punchesByDate.get(dateStr) || [];
-  if (currList.length > 0) {
-    const checkinPunches = currList.filter(p => p.isCheckIn);
+  const evaluateDayEntryExit = (dayStr, nextStr) => {
+    const list = punchesByDate.get(dayStr) || [];
+    if (list.length === 0) return;
+    const checkinPunches = list.filter(p => p.isCheckIn);
     const firstEntryPunch = checkinPunches.length > 0 ? checkinPunches[0] : null;
 
     if (firstEntryPunch) {
       firstEntryPunch.isUsedEntry = true;
 
       // Remaining candidates on same day with checkOut
-      const remaining = currList.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp && p.isCheckOut);
+      const remaining = list.filter(p => p !== firstEntryPunch && p.timestamp > firstEntryPunch.timestamp && p.isCheckOut);
       if (remaining.length > 0) {
         const finalExitPunch = remaining[remaining.length - 1];
         const diffMins = Math.floor((finalExitPunch.timestamp - firstEntryPunch.timestamp) / (1000 * 60));
         if (diffMins >= 5) {
           finalExitPunch.isUsedExit = true;
         }
-      } else if (firstEntryPunch.hours >= 15) {
+      } else if (firstEntryPunch.hours >= 15 && nextStr) {
         // Cross-day night shift exit on morning of next day with checkOut
-        const nextList = punchesByDate.get(nextDateStr) || [];
+        const nextList = punchesByDate.get(nextStr) || [];
         const morningPunches = nextList.filter(p => p.hours <= 12 && p.isCheckOut);
         if (morningPunches.length > 0) {
           const nightExitPunch = morningPunches[0];
@@ -867,7 +880,10 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
         }
       }
     }
-  }
+  };
+
+  evaluateDayEntryExit(prevDateStr, dateStr);
+  evaluateDayEntryExit(dateStr, nextDateStr);
 
   const getPunchesInfo = (fStr) => {
     const list = punchesByDate.get(fStr) || [];

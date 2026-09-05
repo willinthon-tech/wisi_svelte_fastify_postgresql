@@ -283,9 +283,19 @@
 
         <!-- Tabla de Marcajes Rápidos (On Demand) -->
         <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 4px;">
-          <span style="font-size: 11.5px; font-weight: 800; color: #334155; display: flex; align-items: center; gap: 5px;">
-            📌 Marcajes Rápidos del Empleado:
-          </span>
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;">
+            <span style="font-size: 11.5px; font-weight: 800; color: #334155; display: flex; align-items: center; gap: 5px;">
+              📌 Marcajes Rápidos del Empleado:
+            </span>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 800;">
+              <span style="display: inline-flex; align-items: center; gap: 3px; color: #15803d;">
+                <span style="width: 9px; height: 9px; border-radius: 2.5px; background: #15803d; display: inline-block;"></span> Entrada
+              </span>
+              <span style="display: inline-flex; align-items: center; gap: 3px; color: #1d4ed8;">
+                <span style="width: 9px; height: 9px; border-radius: 2.5px; background: #1d4ed8; display: inline-block;"></span> Salida
+              </span>
+            </div>
+          </div>
           <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
             <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
               <thead>
@@ -313,16 +323,16 @@
                           <div style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: wrap;">
                             {#each ctx.punches as punch}
                               <div
-                                style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; padding: 2px 6px; border-radius: 6px; white-space: nowrap; transition: all 0.15s ease; {
+                                style="display: inline-flex; align-items: center; gap: 4px; font-family: monospace; padding: 2.5px 6px; border-radius: 6px; white-space: nowrap; transition: all 0.15s ease; {
                                   punch.isUsedEntry
-                                    ? 'background: #f0fdf4; border: 1.5px solid #86efac; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'
+                                    ? 'background: #15803d; border: 1.5px solid #14532d; box-shadow: 0 2px 4px rgba(21, 128, 61, 0.35);'
                                     : punch.isUsedExit
-                                    ? 'background: #eff6ff; border: 1.5px solid #93c5fd; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'
+                                    ? 'background: #1d4ed8; border: 1.5px solid #1e3a8a; box-shadow: 0 2px 4px rgba(29, 78, 216, 0.35);'
                                     : punch.type === 'E'
-                                    ? 'background: #f0fdf4; border: 1px solid #bbf7d0;'
+                                    ? 'background: #f0fdf4; border: 1px dashed #86efac;'
                                     : punch.type === 'S'
-                                    ? 'background: #eff6ff; border: 1px solid #bfdbfe;'
-                                    : 'background: #f8fafc; border: 1px solid #cbd5e1;'
+                                    ? 'background: #eff6ff; border: 1px dashed #93c5fd;'
+                                    : 'background: #f1f5f9; border: 1px solid #cbd5e1;'
                                 }"
                                 title={
                                   punch.isUsedEntry
@@ -334,11 +344,9 @@
                               >
                                 <!-- Hora del marcaje -->
                                 <span
-                                  style="font-size: 11.5px; font-weight: 800; {
-                                    punch.isUsedEntry
-                                      ? 'color: #14532d;'
-                                      : punch.isUsedExit
-                                      ? 'color: #1e3a8a;'
+                                  style="font-size: 11.5px; font-weight: 900; {
+                                    punch.isUsedEntry || punch.isUsedExit
+                                      ? 'color: #ffffff;'
                                       : punch.type === 'E'
                                       ? 'color: #166534;'
                                       : punch.type === 'S'
@@ -358,11 +366,17 @@
                                     const targetStatus = val === 'E' ? 'checkIn' : (val === 'S' ? 'checkOut' : 'undefined');
                                     handleChangePunchType(punch, targetStatus);
                                   }}
-                                  style="cursor: pointer; font-size: 10px; font-weight: 800; border: 1px solid {
-                                    punch.type === 'E' ? '#86efac' : (punch.type === 'S' ? '#93c5fd' : '#cbd5e1')
-                                  }; border-radius: 4px; background: #ffffff; color: {
-                                    punch.type === 'E' ? '#166534' : (punch.type === 'S' ? '#1e40af' : '#475569')
-                                  }; padding: 1px 3px; outline: none; margin-left: 2px;"
+                                  style="cursor: pointer; font-size: 10px; font-weight: 900; border-radius: 4px; padding: 1px 3px; outline: none; margin-left: 2px; {
+                                    punch.isUsedEntry
+                                      ? 'background: #ffffff; color: #15803d; border: 1.5px solid #14532d;'
+                                      : punch.isUsedExit
+                                      ? 'background: #ffffff; color: #1d4ed8; border: 1.5px solid #1e3a8a;'
+                                      : punch.type === 'E'
+                                      ? 'background: #ffffff; color: #166534; border: 1px solid #86efac;'
+                                      : punch.type === 'S'
+                                      ? 'background: #ffffff; color: #1e40af; border: 1px solid #93c5fd;'
+                                      : 'background: #ffffff; color: #475569; border: 1px solid #cbd5e1;'
+                                  }"
                                   title="Corregir clasificación: E (Entrada), S (Salida), O (Otros)"
                                 >
                                   <option value="E">E</option>
