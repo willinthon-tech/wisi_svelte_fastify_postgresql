@@ -567,7 +567,7 @@
 
     <!-- TAB 1: Marcajes (Histórico Congelado de Asistencia - Matriz Fija) -->
     {#if activeTab === 'marcajes'}
-      <div class="table-container matrix-container">
+      <div class="table-container">
         <table class="report-matrix-table">
           <thead>
             <!-- Fila 1: Grupos de Meses con Colspan -->
@@ -1087,11 +1087,7 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   }
 
-  .matrix-container {
-    max-height: calc(100vh - 210px);
-  }
-
-  /* ===== TAB 1: MARCAJES MATRIX TABLE ===== */
+  /* ===== TAB 1: MARCAJES MATRIX TABLE (Verde unificado como Cálculos y Puntualidad) ===== */
   .report-matrix-table {
     width: max-content;
     min-width: 100%;
@@ -1105,30 +1101,39 @@
     z-index: 25;
   }
 
+  .header-months-tr {
+    background: #166534;
+  }
+
   .th-month-group {
-    background: #f1f5f9;
+    background: #166534;
     text-align: center;
-    padding: 3px 6px;
-    font-size: 9.5px;
+    padding: 6px 8px;
+    font-size: 10.5px;
     font-weight: 800;
-    color: #1e293b;
-    border-right: 1px solid #cbd5e1;
-    border-bottom: 1px solid #cbd5e1;
+    color: #ffffff;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.5px;
     line-height: 1.1;
   }
 
+  .header-days-tr {
+    background: #15803d;
+  }
+
   .th-day-col {
-    background: #f8fafc;
+    background: #15803d;
     text-align: center;
     width: 110px;
     min-width: 110px;
     max-width: 110px;
-    padding: 4px 2px;
-    border-right: 1px solid #e2e8f0;
-    border-bottom: 2px solid #cbd5e1;
+    padding: 6px 2px;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: 2px solid #14532d;
     box-sizing: border-box;
+    color: #ffffff;
   }
 
   .th-day-inner {
@@ -1142,12 +1147,12 @@
   .day-num {
     font-weight: 900;
     font-size: 12px;
-    color: #0f172a;
+    color: #ffffff;
   }
 
   .day-letter {
-    font-size: 11px;
-    color: #64748b;
+    font-size: 10.5px;
+    color: #dcfce7;
     font-weight: 800;
     text-transform: uppercase;
   }
@@ -1156,18 +1161,18 @@
     position: sticky;
     left: 0;
     z-index: 35 !important;
-    background: #f8fafc !important;
+    background: #15803d !important;
     width: 165px;
     min-width: 165px;
     max-width: 165px;
-    padding: 6px 8px;
+    padding: 8px 10px;
     box-sizing: border-box;
-    border-right: 2px solid #cbd5e1;
-    border-bottom: 2px solid #cbd5e1;
+    border-right: 2px solid rgba(255, 255, 255, 0.25);
+    border-bottom: 2px solid #14532d;
     vertical-align: middle;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 900;
-    color: #0f172a;
+    color: #ffffff !important;
     letter-spacing: 0.5px;
     text-align: center;
   }
@@ -1187,6 +1192,10 @@
     border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
   }
+
+  .tbody-emp-tr.even .td-empleado-sticky { background: #ffffff; }
+  .tbody-emp-tr.odd .td-empleado-sticky { background: #f8fafc; }
+  .tbody-emp-tr:hover .td-empleado-sticky { background: #f0fdf4; }
 
   .emp-sticky-content {
     display: flex;
