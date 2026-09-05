@@ -154,14 +154,17 @@
   let activeEmpleadoExcepcion = null;
   let activeDiaExcepcion = null;
   let plantillasSalaExcepcion = [];
+  let currentLoadedSalaId = null;
 
   async function loadPlantillasSala(salaId) {
     if (!salaId) return;
+    if (currentLoadedSalaId === Number(salaId) && plantillasSalaExcepcion.length > 0) return;
     try {
       const res = await fetch(`/api/master/plantillas-horarios?sala_ids=${salaId}&limit=1000`);
       const json = await res.json();
       if (json && json.success) {
         plantillasSalaExcepcion = json.data || [];
+        currentLoadedSalaId = Number(salaId);
       }
     } catch (e) {
       console.error(e);
@@ -176,8 +179,16 @@
     showExcepcionModal = true;
   }
 
+  let silentRefreshTimer = null;
+  function scheduleSilentReportRefresh() {
+    if (silentRefreshTimer) clearTimeout(silentRefreshTimer);
+    silentRefreshTimer = setTimeout(() => {
+      fetchReporteData(true);
+    }, 250);
+  }
+
   function handleExcepcionSaved() {
-    fetchReporteData(true);
+    scheduleSilentReportRefresh();
   }
 
   function handleModalChangeEmpleado(e) {
@@ -1194,7 +1205,7 @@
   on:changeEmpleado={handleModalChangeEmpleado}
   on:changeDia={handleModalChangeDia}
   on:saved={handleExcepcionSaved}
-  on:punchUpdated={() => fetchReporteData(true)}
+  on:punchUpdated={scheduleSilentReportRefresh}
 />
 
 <!-- Modal para Generar y Guardar Histórico de Corte -->

@@ -153,12 +153,16 @@ export function pairDayAttendance({
   let isNoEntryWithOtherPunches = false;
 
   if (isExcepcion && excepObj) {
+    const rawMarcaje = punchesToday.length > 0
+      ? punchesToday.map(p => p.timeStr || p.time).join(', ')
+      : 'Sin Registros';
+
     if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
       return {
         entradaStr: null,
         salidaStr: null,
         trabajadosMins: 0,
-        marcajeStr: 'Sin Registros',
+        marcajeStr: rawMarcaje,
         resultadoStr: 'LIBRE',
         entBadge: null,
         salBadge: null,
@@ -183,7 +187,7 @@ export function pairDayAttendance({
           entradaStr: null,
           salidaStr: null,
           trabajadosMins: 0,
-          marcajeStr: 'Sin Registros',
+          marcajeStr: rawMarcaje,
           resultadoStr: excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'EXCEPCIÓN',
           entBadge: null,
           salBadge: null,
@@ -792,10 +796,24 @@ export async function getMarcajePersonalReportModel(params = {}) {
       const isExcepcion = Boolean(excepObj);
       const excepcionId = excepObj ? excepObj.id : null;
 
+      // When an exception with specific hours exists, targetPlantillas must be ONLY this exception plantilla
+      let effectiveTargetPlantillas = assignedPlantillas;
+      if (isExcepcion && excepObj && excepObj.hora_entrada && excepObj.hora_salida) {
+        effectiveTargetPlantillas = [{
+          id: excepObj.plantilla_horario_id,
+          codigo: excepObj.plantilla_codigo,
+          nombre: excepObj.plantilla_nombre,
+          hora_entrada: excepObj.hora_entrada,
+          hora_salida: excepObj.hora_salida,
+          color: excepObj.color,
+          tipo: excepObj.tipo
+        }];
+      }
+
       const paired = pairDayAttendance({
         punchesToday,
         nextDayPunches,
-        targetPlantillas: assignedPlantillas,
+        targetPlantillas: effectiveTargetPlantillas,
         isExcepcion,
         excepObj,
         dateStr,
@@ -820,22 +838,28 @@ export async function getMarcajePersonalReportModel(params = {}) {
       }
 
       // Resolver código, color y tipo de plantilla para el badge
+      let shiftId = null;
       let shiftCode = 'L';
       let shiftColor = '#D9D9D9';
       let shiftTipo = 'plantilla';
 
-      if (isExcepcion && excepObj && (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre)) {
-        shiftCode = 'L';
-        shiftColor = '#D9D9D9';
-        shiftTipo = 'plantilla';
+      if (isExcepcion && excepObj) {
+        if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
+          shiftId = null;
+          shiftCode = 'L';
+          shiftColor = '#D9D9D9';
+          shiftTipo = 'plantilla';
+        } else {
+          shiftId = excepObj.plantilla_horario_id;
+          shiftCode = excepObj.plantilla_codigo || 'EX';
+          shiftColor = excepObj.color || '#FDE047';
+          shiftTipo = excepObj.tipo || 'plantilla';
+        }
       } else if (matchedPlantilla) {
+        shiftId = matchedPlantilla.id;
         shiftCode = matchedPlantilla.codigo || 'U';
         shiftColor = matchedPlantilla.color || '#86EFAC';
         shiftTipo = matchedPlantilla.tipo || 'horario';
-      } else if (excepObj && excepObj.plantilla_codigo) {
-        shiftCode = excepObj.plantilla_codigo;
-        shiftColor = excepObj.color || '#D9D9D9';
-        shiftTipo = excepObj.tipo || 'plantilla';
       } else {
         shiftCode = 'L';
         shiftColor = '#D9D9D9';
@@ -847,6 +871,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
         isExcepcion,
         excepcionId,
         shift: {
+          id: shiftId,
           codigo: shiftCode,
           color: shiftColor,
           tipo: shiftTipo
@@ -926,8 +951,8 @@ export async function saveExcepcionHorarioModel(data) {
 
   let es_libre = false;
   if (plantilla_horario_id) {
-    const [p] = await sql`SELECT codigo, tipo, hora_entrada, hora_salida FROM plantillas_horarios WHERE id = ${plantilla_horario_id}`;
-    if (p && (p.codigo === 'L' || p.tipo === 'plantilla' || (!p.hora_entrada && !p.hora_salida))) {
+    const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM plantillas_horarios WHERE id = ${plantilla_horario_id}`;
+    if (p && (p.codigo === 'L' || (p.nombre && p.nombre.toUpperCase() === 'LIBRE'))) {
       es_libre = true;
     }
   } else {

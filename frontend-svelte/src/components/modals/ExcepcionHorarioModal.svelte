@@ -14,20 +14,43 @@
   let loading = false;
   let selectedValue = '';
   let initialSelectedValue = '';
-  let scheduleModified = false;
 
   let horariosEmpleado = [];
   let plantillasExcepcion = [];
 
   let marcajesLoading = false;
   let marcajesContext = [];
+  let assignedPlantillasEmp = [];
 
-  $: if (show && dia && plantillasSala) {
-    initModalData();
+  let saveStatusText = '';
+  let saveStatusType = 'idle'; // 'idle' | 'saving' | 'saved' | 'error'
+  let saveStatusTimer = null;
+
+  function showStatus(text, type = 'saved', duration = 1800) {
+    saveStatusText = text;
+    saveStatusType = type;
+    if (saveStatusTimer) clearTimeout(saveStatusTimer);
+    if (duration > 0) {
+      saveStatusTimer = setTimeout(() => {
+        saveStatusType = 'idle';
+        saveStatusText = '';
+      }, duration);
+    }
   }
 
-  $: if (show && dia && empleado) {
-    fetchMarcajesRapidos();
+  let lastLoadedEmpId = null;
+  let lastLoadedFechaStr = null;
+  let currentFetchId = 0;
+
+  $: if (show && dia && plantillasSala) {
+    const currentEmpId = empleado?.id;
+    const currentFechaStr = dia?.fechaStr;
+    if (currentEmpId !== lastLoadedEmpId || currentFechaStr !== lastLoadedFechaStr) {
+      lastLoadedEmpId = currentEmpId;
+      lastLoadedFechaStr = currentFechaStr;
+      initModalData();
+      fetchMarcajesRapidos();
+    }
   }
 
   $: currentDayIndex = (empleado?.dias || []).findIndex(d => d.fechaStr === dia?.fechaStr);
@@ -141,31 +164,36 @@
     plantillasExcepcion = (plantillasSala || []).filter(p => p.tipo === 'plantilla' && p.codigo !== 'L' && p.codigo !== 'U');
 
     // Pre-selección del valor según el estado actual del día
-    const currentCodigo = dia?.shift?.codigo || '';
-    if (currentCodigo === 'L') {
-      selectedValue = 'BASE_L';
-    } else if (currentCodigo === 'U') {
-      selectedValue = 'BASE_U';
-    } else if (dia && dia.isExcepcion && dia.shift) {
-      if (dia.shift.id) {
+    if (dia && dia.isExcepcion) {
+      if (dia.shift && dia.shift.id) {
         selectedValue = `PLANTILLA_${dia.shift.id}`;
-      } else {
+      } else if (dia.shift && dia.shift.codigo === 'L') {
+        selectedValue = 'BASE_L';
+      } else if (dia.shift && dia.shift.codigo) {
         const pMatch = (plantillasSala || []).find(p => p.codigo === dia.shift.codigo);
         selectedValue = pMatch ? `PLANTILLA_${pMatch.id}` : 'BASE_L';
+      } else {
+        selectedValue = 'BASE_L';
       }
-    } else if (dia && dia.shift && dia.shift.codigo) {
-      const pMatch = (plantillasSala || []).find(p => p.codigo === dia.shift.codigo);
-      selectedValue = pMatch ? `PLANTILLA_${pMatch.id}` : 'BASE_L';
     } else {
-      selectedValue = 'BASE_L';
+      const currentCodigo = dia?.shift?.codigo || '';
+      if (currentCodigo === 'L') {
+        selectedValue = 'BASE_L';
+      } else if (currentCodigo === 'U') {
+        selectedValue = 'BASE_U';
+      } else if (dia && dia.shift && dia.shift.id) {
+        selectedValue = `PLANTILLA_${dia.shift.id}`;
+      } else if (dia && dia.shift && dia.shift.codigo) {
+        const pMatch = (plantillasSala || []).find(p => p.codigo === dia.shift.codigo);
+        selectedValue = pMatch ? `PLANTILLA_${pMatch.id}` : 'BASE_L';
+      } else {
+        selectedValue = 'BASE_L';
+      }
     }
 
     initialSelectedValue = selectedValue;
     scheduleModified = false;
   }
-
-  let pendingPunches = {};
-  let assignedPlantillasEmp = [];
 
   function toMinutes(str) {
     if (!str) return null;
@@ -176,39 +204,33 @@
 
   async function fetchMarcajesRapidos() {
     if (!empleado || !dia) return;
+    const thisFetchId = ++currentFetchId;
     marcajesLoading = true;
-    marcajesContext = [];
-    pendingPunches = {};
     try {
       const res = await fetch(`/api/reports/marcajes-rapidos?empleado_id=${empleado.id}&fecha=${dia.fechaStr}`);
       const json = await res.json();
+      if (thisFetchId !== currentFetchId) return;
       if (json && json.success) {
         marcajesContext = json.marcajesContext || [];
         assignedPlantillasEmp = json.assignedPlantillas || [];
+        recalculateLocalEntryExit();
       }
     } catch (err) {
-      console.error("Error fetching marcajes rapidos:", err);
+      if (thisFetchId === currentFetchId) {
+        console.error("Error fetching marcajes rapidos:", err);
+      }
     } finally {
-      marcajesLoading = false;
+      if (thisFetchId === currentFetchId) {
+        marcajesLoading = false;
+      }
     }
   }
 
-  function handleLocalPunchChange(punch, newType) {
+  async function handleLocalPunchChange(punch, newType) {
     if (!punch || !punch.id) return;
     const targetStatus = newType === 'E' ? 'checkIn' : (newType === 'S' ? 'checkOut' : 'undefined');
 
-    // Registrar cambio pendiente
-    pendingPunches = {
-      ...pendingPunches,
-      [punch.id]: {
-        id: punch.id,
-        targetStatus,
-        newType,
-        time: punch.time
-      }
-    };
-
-    // Actualizar reactivamente el contexto local para que el selector y los colores reflejen el cambio
+    // 1. Actualización inmediata y reactiva del contexto local
     marcajesContext = marcajesContext.map(ctx => ({
       ...ctx,
       punches: (ctx.punches || []).map(p => {
@@ -227,13 +249,105 @@
     }));
 
     recalculateLocalEntryExit();
+
+    // 2. Guardado inmediato en segundo plano
+    showStatus('Guardando marcaje...', 'saving', 0);
+    try {
+      const res = await fetch(`/api/reports/attlogs/${punch.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus })
+      });
+      const json = await res.json();
+      if (!json || !json.success) {
+        throw new Error(json?.error || 'Error al actualizar marcaje');
+      }
+      showStatus('✓ Marcaje guardado', 'saved', 1500);
+      dispatch('punchUpdated', { punchId: punch.id, targetStatus });
+    } catch (err) {
+      console.error("Error updating punch status:", err);
+      showStatus('Error al guardar marcaje', 'error', 2500);
+      triggerToast(`Error al guardar marcaje: ${err.message}`, 'error');
+    }
   }
 
-  function handleScheduleSelectChange(e) {
-    scheduleModified = (selectedValue !== initialSelectedValue);
-    recalculateLocalEntryExit();
+  async function handleScheduleSelectChange(e) {
     if (e && e.target && typeof e.target.blur === 'function') {
       e.target.blur();
+    }
+    const newVal = selectedValue;
+    if (newVal === 'BASE_U') {
+      triggerToast('El Horario Único es asignado automáticamente por el sistema.', 'info');
+      selectedValue = initialSelectedValue;
+      return;
+    }
+    if (newVal === initialSelectedValue) {
+      return;
+    }
+    await autoSaveSchedule(newVal);
+  }
+
+  async function autoSaveSchedule(val) {
+    if (!empleado || !dia) return;
+    showStatus('Guardando...', 'saving', 0);
+    try {
+      let plantillaId = null;
+      let isLibre = false;
+      let selectedShiftObj = null;
+
+      if (val === 'BASE_L') {
+        plantillaId = null;
+        isLibre = true;
+        selectedShiftObj = {
+          id: null,
+          codigo: 'L',
+          nombre: 'Libre',
+          color: '#D9D9D9',
+          es_libre: true
+        };
+      } else {
+        plantillaId = Number(val.replace('PLANTILLA_', ''));
+        const pObj = (plantillasSala || []).find(p => Number(p.id) === Number(plantillaId));
+        isLibre = pObj ? (pObj.codigo === 'L' || pObj.nombre?.toUpperCase() === 'LIBRE') : false;
+        selectedShiftObj = pObj ? { ...pObj, es_libre: isLibre } : null;
+      }
+
+      // Actualización optimista local
+      dia.isExcepcion = true;
+      if (selectedShiftObj) {
+        dia.shift = selectedShiftObj;
+      }
+      initialSelectedValue = val;
+      recalculateLocalEntryExit();
+
+      const payload = {
+        empleado_id: empleado.id,
+        fecha: dia.fechaStr,
+        plantilla_horario_id: plantillaId,
+        es_libre: isLibre
+      };
+
+      const res = await fetch('/api/reports/excepciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json();
+      if (!json || !json.success) {
+        throw new Error(json?.error || 'Error al guardar la excepción');
+      }
+
+      if (json.data && json.data.id) {
+        dia.excepcionId = json.data.id;
+      }
+
+      showStatus('✓ Guardado', 'saved', 1500);
+      dispatch('saved', { dia, empleado });
+    } catch (err) {
+      console.error("Error auto-saving schedule:", err);
+      showStatus('Error al guardar', 'error', 2500);
+      triggerToast(`Error: ${err.message}`, 'error');
     }
   }
 
@@ -391,117 +505,35 @@
   }
 
   function closeModal() {
-    pendingPunches = {};
+    lastLoadedEmpId = null;
+    lastLoadedFechaStr = null;
     show = false;
     dispatch('close');
   }
 
-  async function handleSave() {
-    if (!empleado || !dia) return;
-
-    const punchUpdates = Object.values(pendingPunches);
-    const hasPendingPunches = punchUpdates.length > 0;
-    const isBaseU = selectedValue === 'BASE_U';
-
-    if (scheduleModified && isBaseU && !hasPendingPunches) {
-      triggerToast('El Horario Único es automático del sistema. Seleccione un horario o excepción válida para guardar.', 'warning');
-      return;
-    }
-
-    if (!scheduleModified && !hasPendingPunches) {
-      triggerToast('No se detectaron cambios para guardar.', 'info');
-      closeModal();
-      return;
-    }
-
-    loading = true;
-    try {
-      // 1. Guardar cambios en marcajes pendientes en la base de datos
-      if (hasPendingPunches) {
-        for (const p of punchUpdates) {
-          const resPunch = await fetch(`/api/reports/attlogs/${p.id}/status`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: p.targetStatus })
-          });
-          const punchJson = await resPunch.json();
-          if (!punchJson || !punchJson.success) {
-            throw new Error(punchJson?.error || `Error al actualizar marcaje ${p.time}`);
-          }
-        }
-        pendingPunches = {};
-      }
-
-      // 2. Guardar excepción de horario seleccionada (ÚNICAMENTE si el usuario modificó el select de horario)
-      if (scheduleModified && !isBaseU && selectedValue) {
-        let plantillaId = null;
-        let isLibre = false;
-
-        if (selectedValue === 'BASE_L') {
-          plantillaId = null;
-          isLibre = true;
-        } else {
-          plantillaId = Number(selectedValue.replace('PLANTILLA_', ''));
-          const pObj = (plantillasSala || []).find(p => Number(p.id) === Number(plantillaId));
-          isLibre = pObj ? (pObj.codigo === 'L' || pObj.tipo === 'plantilla' || (!pObj.hora_entrada && !pObj.hora_salida)) : false;
-        }
-
-        const payload = {
-          empleado_id: empleado.id,
-          fecha: dia.fechaStr,
-          plantilla_horario_id: plantillaId,
-          es_libre: isLibre
-        };
-
-        const res = await fetch('/api/reports/excepciones', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        const json = await res.json();
-        if (!json || !json.success) {
-          throw new Error(json.error || 'Error al guardar la excepción');
-        }
-      }
-
-      triggerToast('Cambios guardados correctamente', 'success');
-      // No cerramos el modal a petición del usuario para que pueda seguir navegando entre días/empleados
-      scheduleModified = false;
-      initialSelectedValue = selectedValue;
-      dispatch('punchUpdated');
-      dispatch('saved');
-      await fetchMarcajesRapidos();
-    } catch (err) {
-      console.error(err);
-      triggerToast(`Error: ${err.message}`, 'error');
-    } finally {
-      loading = false;
-    }
-  }
-
   async function handleDelete() {
     if (!dia || !dia.excepcionId) return;
-    loading = true;
+    showStatus('Borrando excepción...', 'saving', 0);
     try {
       const res = await fetch(`/api/reports/excepciones/${dia.excepcionId}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (json && json.success) {
+        dia.isExcepcion = false;
+        dia.excepcionId = null;
+        showStatus('✓ Excepción eliminada', 'saved', 1500);
         triggerToast('Excepción eliminada correctamente', 'success');
-        scheduleModified = false;
-        dispatch('saved');
         initModalData();
-        await fetchMarcajesRapidos();
+        recalculateLocalEntryExit();
+        dispatch('saved', { dia, empleado });
       } else {
         throw new Error(json.error || 'Error al eliminar la excepción');
       }
     } catch (err) {
       console.error(err);
+      showStatus('Error al eliminar', 'error', 2500);
       triggerToast(`Error: ${err.message}`, 'error');
-    } finally {
-      loading = false;
     }
   }
 
@@ -533,7 +565,7 @@
 
 {#if show}
   <div style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background-color: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px); padding: 16px;">
-    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 580px; overflow: hidden; border: 1px solid #e2e8f0; animation: fadeIn 0.15s ease-out;">
+    <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 580px; overflow: hidden; border: 1px solid #e2e8f0;">
       
       <!-- Header -->
       <div style="padding: 14px 20px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
@@ -590,9 +622,18 @@
         
         <!-- Select with clear Optgroups: Plantillas Base, Horarios Asignados al Empleado, Horarios de Sala, Plantillas Tipo Excepción -->
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <label for="select-excepcion-horario" style="font-size: 12px; font-weight: 800; color: #1e293b;">
-            Seleccionar Excepción o Horario:
-          </label>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+            <label for="select-excepcion-horario" style="font-size: 12px; font-weight: 800; color: #1e293b;">
+              Seleccionar Excepción o Horario:
+            </label>
+            {#if saveStatusType !== 'idle'}
+              <span style="font-size: 11px; font-weight: 800; transition: all 0.2s ease; {
+                saveStatusType === 'saving' ? 'color: #2563eb;' : saveStatusType === 'saved' ? 'color: #16a34a;' : 'color: #dc2626;'
+              }">
+                {saveStatusText}
+              </span>
+            {/if}
+          </div>
           <select 
             id="select-excepcion-horario"
             bind:value={selectedValue}
@@ -633,7 +674,7 @@
         {#if dia?.isExcepcion && dia?.excepcionId}
           <button
             on:click={handleDelete}
-            disabled={loading}
+            disabled={saveStatusType === 'saving'}
             type="button"
             style="width: 100%; padding: 8px 12px; font-size: 11.5px; font-weight: 800; color: #dc2626; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px;"
           >
@@ -646,6 +687,9 @@
           <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px;">
             <span style="font-size: 11.5px; font-weight: 800; color: #334155; display: flex; align-items: center; gap: 5px;">
               📌 Marcajes Rápidos del Empleado:
+              {#if marcajesLoading}
+                <span style="font-size: 10px; color: #2563eb; font-weight: 600;">(actualizando...)</span>
+              {/if}
             </span>
             <div style="display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 800;">
               <span style="display: inline-flex; align-items: center; gap: 3px; color: #15803d;">
@@ -656,7 +700,7 @@
               </span>
             </div>
           </div>
-          <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+          <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.03); min-height: 125px;">
             <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
               <thead>
                 <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 800;">
@@ -664,11 +708,11 @@
                   <th style="padding: 6px 10px;">Marcajes Registrados</th>
                 </tr>
               </thead>
-              <tbody>
-                {#if marcajesLoading}
+              <tbody style="transition: opacity 0.15s ease; {marcajesLoading ? 'opacity: 0.55;' : 'opacity: 1;'}">
+                {#if marcajesLoading && marcajesContext.length === 0}
                   <tr>
-                    <td colspan="2" style="padding: 12px; text-align: center; color: #64748b; font-size: 11px;">
-                      ⏳ Cargando marcajes...
+                    <td colspan="2" style="padding: 24px 12px; text-align: center; color: #64748b; font-size: 11.5px; font-weight: 600;">
+                      Cargando marcajes...
                     </td>
                   </tr>
                 {:else if marcajesContext && marcajesContext.length > 0}
@@ -722,7 +766,6 @@
                                 <!-- Selector desplegable para cambiar tipo E, S o O -->
                                 <select
                                   value={punch.type}
-                                  disabled={loading}
                                   on:change={(e) => handleLocalPunchChange(punch, e.target.value)}
                                   style="cursor: pointer; font-size: 10px; font-weight: 900; border-radius: 4px; padding: 1px 3px; outline: none; margin-left: 2px; {
                                     punch.type === 'E' && punch.isUsedEntry
@@ -766,7 +809,7 @@
 
       </div>
 
-      <!-- Footer Actions: Navigation Buttons (Left) & Action Buttons (Right) -->
+      <!-- Footer Actions: Navigation Buttons (Left) & Salir Button with Auto-save Status (Right) -->
       <div style="padding: 10px 18px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
         
         <!-- Left: D-Pad Navigation Buttons (Matching Keyboard Arrow Cluster) -->
@@ -776,7 +819,7 @@
             <button
               type="button"
               on:click={goToPrevEmp}
-              disabled={!canPrevEmp || loading}
+              disabled={!canPrevEmp}
               title="Empleado anterior (↑ Flecha Arriba)"
               class="btn-nav-arrow"
             >
@@ -787,7 +830,7 @@
               <button
                 type="button"
                 on:click={goToPrevDay}
-                disabled={!canPrevDay || loading}
+                disabled={!canPrevDay}
                 title="Día anterior (← Flecha Izquierda)"
                 class="btn-nav-arrow"
               >
@@ -796,7 +839,7 @@
               <button
                 type="button"
                 on:click={goToNextEmp}
-                disabled={!canNextEmp || loading}
+                disabled={!canNextEmp}
                 title="Empleado siguiente (↓ Flecha Abajo)"
                 class="btn-nav-arrow"
               >
@@ -805,7 +848,7 @@
               <button
                 type="button"
                 on:click={goToNextDay}
-                disabled={!canNextDay || loading}
+                disabled={!canNextDay}
                 title="Día siguiente (→ Flecha Derecha)"
                 class="btn-nav-arrow"
               >
@@ -831,24 +874,28 @@
           </div>
         </div>
 
-        <!-- Right: Salir & Guardar Buttons -->
+        <!-- Right: Status Indicator & Salir Button -->
         <div style="display: flex; align-items: center; gap: 8px;">
-          <button
-            on:click={closeModal}
-            disabled={loading}
-            type="button"
-            style="padding: 8px 14px; font-size: 11.5px; font-weight: 700; color: #475569; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;"
-          >
-            Salir
-          </button>
+          {#if saveStatusType !== 'idle'}
+            <div style="display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 6px; transition: all 0.2s ease; {
+              saveStatusType === 'saving'
+                ? 'background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;'
+                : saveStatusType === 'saved'
+                ? 'background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;'
+                : 'background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;'
+            }">
+              <span>{saveStatusText}</span>
+            </div>
+          {/if}
 
           <button
-            on:click={handleSave}
-            disabled={loading}
+            on:click={closeModal}
             type="button"
-            style="padding: 8px 16px; font-size: 11.5px; font-weight: 800; color: #ffffff; background: #2563eb; border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
+            style="padding: 8px 18px; font-size: 12px; font-weight: 800; color: #334155; background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 6px; cursor: pointer; transition: all 0.15s ease;"
+            on:mouseenter={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}
+            on:mouseleave={(e) => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
           >
-            {loading ? 'Guardando...' : 'Guardar'}
+            Salir
           </button>
         </div>
 
