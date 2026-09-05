@@ -14,6 +14,7 @@
 
   let activeTab = 'info';
   let isDownloading = false;
+  let showDownloadModal = false;
 
   onMount(async () => {
     try {
@@ -155,33 +156,29 @@
   <div class="flow-card" style="padding: 0; overflow: hidden; position: relative; border-radius: 14px; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);">
     <!-- Vibrant Deep Slate & Blue Gradient Banner -->
     <div style="height: 140px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #1d4ed8 100%); position: relative;">
-      <div style="position: absolute; right: 20px; top: 15px; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.12); backdrop-filter: blur(4px); padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.2); color: #ffffff; font-size: 11.5px; font-weight: 700;">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
-        <span>WISI Space • Sesión Activa</span>
-      </div>
     </div>
     
     <div style="padding: 16px 24px 20px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; background: #ffffff;">
-      <!-- Avatar & User Title -->
+      <!-- Avatar with WISI Logo & User Title -->
       <div style="display: flex; align-items: flex-end; gap: 18px; margin-top: -55px;">
-        <div style="width: 90px; height: 90px; border-radius: 50%; background: linear-gradient(135deg, #2563eb, #1e40af); color: #ffffff; font-size: 32px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 4px solid #ffffff; box-shadow: 0 6px 16px rgba(0,0,0,0.18); z-index: 10; letter-spacing: 1px;">
-          {userInitials}
+        <div style="width: 90px; height: 90px; border-radius: 50%; background: #ffffff; display: flex; align-items: center; justify-content: center; border: 4px solid #ffffff; box-shadow: 0 6px 16px rgba(0,0,0,0.18); z-index: 10; padding: 8px; overflow: hidden;">
+          <img 
+            src="/logo.png" 
+            alt="WISI Logo" 
+            style="width: 100%; height: 100%; object-fit: contain;" 
+            on:error={(e) => { e.currentTarget.src = '/pwa-192x192.png'; }}
+          />
         </div>
         <div>
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;">
               {user.nombre_apellido || user.usuario || 'Usuario'}
             </h2>
-            <span style="background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-              {user.id === 1 ? 'Superadministrador' : 'Operador de Sala'}
-            </span>
           </div>
           <p style="font-size: 13px; color: #64748b; margin: 4px 0 0; display: flex; align-items: center; gap: 6px;">
             <strong style="color: #059669;">@{user.usuario || 'usuario'}</strong>
             <span>•</span>
             <span>ID: #{user.id || '1'}</span>
-            <span>•</span>
-            <span>Asignación: {detailedSalas.map(s => s.nombre).join(', ') || 'Sin Sala'}</span>
           </p>
         </div>
       </div>
@@ -199,16 +196,15 @@
           <span>Información</span>
         </button>
 
-        <!-- 2. Botón de Descarga -->
+        <!-- 2. Botón de Descarga (Abre modal de descarga Android / Windows) -->
         <button 
           type="button"
-          on:click={handleDownloadFicha} 
+          on:click={() => (showDownloadModal = true)} 
           class="btn-flow-sec"
-          disabled={isDownloading}
           style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; cursor: pointer; background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; transition: all 0.15s ease;"
-          title="Descargar ficha técnica de usuario con salas, departamentos y permisos">
+          title="Descargar instalador para Android o Windows">
           <span class="material-icons" style="font-size: 18px; color: #2563eb;">download</span>
-          <span>{isDownloading ? 'Generando...' : 'Descarga'}</span>
+          <span>Descarga</span>
         </button>
 
         <!-- 3. Botón de Administración (Redirige a 'willinthontech') -->
@@ -297,11 +293,6 @@
           <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
             <span style="color: #64748b; font-weight: 600;">Usuario:</span>
             <span style="font-weight: 700; color: #059669;">@{user.usuario || 'N/A'}</span>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
-            <span style="color: #64748b; font-weight: 600;">Nivel:</span>
-            <span style="font-weight: 700; color: #2563eb;">{user.id === 1 ? 'Superadmin' : 'Operador Asignado'}</span>
           </div>
 
           <div style="display: flex; justify-content: space-between; padding-bottom: 4px;">
@@ -552,3 +543,102 @@
     </div>
   </div>
 </div>
+
+<!-- Modal de Descargas: Android / Windows -->
+{#if showDownloadModal}
+  <div 
+    class="modal-backdrop"
+    on:click={() => (showDownloadModal = false)}
+    role="presentation"
+    style="position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(5px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px;"
+  >
+    <div 
+      class="modal-card"
+      on:click|stopPropagation
+      role="dialog"
+      aria-modal="true"
+      style="background: #ffffff; width: 100%; max-width: 520px; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35); overflow: hidden; display: flex; flex-direction: column; border: 1px solid rgba(226, 232, 240, 0.8);"
+    >
+      <!-- Modal Header -->
+      <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center;">
+            <span class="material-icons" style="font-size: 24px; color: #38bdf8;">cloud_download</span>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #ffffff; line-height: 1.2;">Centro de Descargas WISI Space</h3>
+            <p style="margin: 3px 0 0; font-size: 12px; color: #94a3b8;">Instaladores oficiales de la aplicación</p>
+          </div>
+        </div>
+        <button 
+          type="button" 
+          on:click={() => (showDownloadModal = false)}
+          style="background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center;"
+          title="Cerrar modal">
+          <span class="material-icons" style="font-size: 20px;">close</span>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div style="padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <!-- Android Option -->
+        <div style="border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: #f8fafc;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; display: flex; align-items: center; justify-content: center; color: #059669; flex-shrink: 0;">
+              <span class="material-icons" style="font-size: 28px;">android</span>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 15px; color: #0f172a;">Versión Android</span>
+                <span style="font-size: 10px; font-weight: 700; background: #dcfce7; color: #166534; padding: 2px 7px; border-radius: 6px;">APK • 6.5 MB</span>
+              </div>
+              <p style="margin: 4px 0 0; font-size: 12px; color: #64748b; line-height: 1.3;">Para smartphones y tablets Android (v7.0+)</p>
+            </div>
+          </div>
+          <a 
+            href="/downloads/app-wisi.apk" 
+            download="app-wisi.apk"
+            on:click={() => triggerToast('Iniciando descarga de APK para Android...', 'info')}
+            style="display: inline-flex; align-items: center; gap: 6px; background: #10b981; color: #ffffff; padding: 9px 15px; border-radius: 8px; font-weight: 700; font-size: 12.5px; text-decoration: none; box-shadow: 0 2px 6px rgba(16,185,129,0.3); transition: all 0.15s ease; white-space: nowrap;">
+            <span class="material-icons" style="font-size: 18px;">download</span>
+            <span>Descargar</span>
+          </a>
+        </div>
+
+        <!-- Windows Option -->
+        <div style="border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 14px; background: #f8fafc;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 48px; height: 48px; border-radius: 12px; background: #eff6ff; border: 1px solid #bfdbfe; display: flex; align-items: center; justify-content: center; color: #2563eb; flex-shrink: 0;">
+              <span class="material-icons" style="font-size: 28px;">desktop_windows</span>
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 15px; color: #0f172a;">Versión Windows</span>
+                <span style="font-size: 10px; font-weight: 700; background: #dbeafe; color: #1e40af; padding: 2px 7px; border-radius: 6px;">EXE • 2.3 MB</span>
+              </div>
+              <p style="margin: 4px 0 0; font-size: 12px; color: #64748b; line-height: 1.3;">Para computadoras Windows 10 y 11 (64-bit)</p>
+            </div>
+          </div>
+          <a 
+            href="/downloads/app-wisi.exe" 
+            download="app-wisi.exe"
+            on:click={() => triggerToast('Iniciando descarga de instalador para Windows...', 'info')}
+            style="display: inline-flex; align-items: center; gap: 6px; background: #2563eb; color: #ffffff; padding: 9px 15px; border-radius: 8px; font-weight: 700; font-size: 12.5px; text-decoration: none; box-shadow: 0 2px 6px rgba(37,99,235,0.3); transition: all 0.15s ease; white-space: nowrap;">
+            <span class="material-icons" style="font-size: 18px;">download</span>
+            <span>Descargar</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 12px 24px; display: flex; justify-content: flex-end; align-items: center;">
+        <button 
+          type="button" 
+          on:click={() => (showDownloadModal = false)}
+          style="background: #ffffff; color: #475569; border: 1px solid #cbd5e1; padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer;">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

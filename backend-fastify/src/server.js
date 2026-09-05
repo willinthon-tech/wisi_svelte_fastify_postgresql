@@ -278,6 +278,42 @@ async function startServer() {
     fastify.get('/salas/:filename', serveSalaLogoWithFallback);
     fastify.get('/api/salas/:filename', serveSalaLogoWithFallback);
 
+    const serveDownloadFile = async (req, reply) => {
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', '*');
+
+      const fs = await import('fs');
+      const path = await import('path');
+      const filename = path.basename(req.params.filename || '');
+      const downloadsDir = path.join(process.cwd(), 'downloads');
+      const filePath = path.join(downloadsDir, filename);
+
+      if (!filename || !fs.existsSync(filePath)) {
+        return reply.status(404).send({ error: 'Instalador no encontrado' });
+      }
+
+      const stat = fs.statSync(filePath);
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      reply.header('Content-Length', stat.size);
+      reply.header('Cache-Control', 'public, max-age=86400');
+
+      if (filename.endsWith('.apk')) {
+        reply.type('application/vnd.android.package-archive');
+      } else if (filename.endsWith('.exe')) {
+        reply.type('application/vnd.microsoft.portable-executable');
+      } else if (filename.endsWith('.msi')) {
+        reply.type('application/x-msi');
+      } else {
+        reply.type('application/octet-stream');
+      }
+
+      return fs.createReadStream(filePath);
+    };
+
+    fastify.get('/downloads/:filename', serveDownloadFile);
+    fastify.get('/api/downloads/:filename', serveDownloadFile);
+
     const handleStaticOptions = async (req, reply) => {
       reply.header('Access-Control-Allow-Origin', '*');
       reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -291,6 +327,8 @@ async function startServer() {
     fastify.options('/api/attlogs/:filename', handleStaticOptions);
     fastify.options('/salas/:filename', handleStaticOptions);
     fastify.options('/api/salas/:filename', handleStaticOptions);
+    fastify.options('/downloads/:filename', handleStaticOptions);
+    fastify.options('/api/downloads/:filename', handleStaticOptions);
 
     // Root endpoint fallback
     /* fastify.get('/', async () => {
