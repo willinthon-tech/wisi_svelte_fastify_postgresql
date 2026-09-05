@@ -38,28 +38,6 @@
   // Cálculos procesados de los empleados
   let processedEmployees = [];
 
-  async function copyPublicLink() {
-    if (!corte || !corte.id) return;
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const shareUrl = `${origin}/#/reportes/rrhh/corte/${corte.id}`;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-      } else {
-        const input = document.createElement('input');
-        input.value = shareUrl;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
-      }
-      triggerToast('Enlace copiado al portapapeles', 'success');
-    } catch (err) {
-      console.error('Error al copiar enlace:', err);
-      prompt('Copia el siguiente enlace del reporte público:', shareUrl);
-    }
-  }
-
   onMount(async () => {
     // 1. Obtener ID de prop, del store o de la URL hash / pathname
     let id = corteId;
@@ -615,24 +593,13 @@
         </div>
       </div>
 
-      <div class="header-right">
-        <button type="button" class="btn-compartir-header" on:click={copyPublicLink} title="Copiar enlace de este reporte al portapapeles">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="18" cy="5" r="3"></circle>
-            <circle cx="6" cy="12" r="3"></circle>
-            <circle cx="18" cy="19" r="3"></circle>
-            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-          </svg>
-          Compartir
-        </button>
-
-        {#if !isPublic}
+      {#if !isPublic}
+        <div class="header-right">
           <button type="button" class="btn-volver" on:click={handleBack} title="Volver al listado de cortes">
             Volver
           </button>
-        {/if}
-      </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Navigation Tabs & Search Controls -->
@@ -1146,25 +1113,6 @@
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
-  }
-
-  .btn-compartir-header {
-    background: rgba(255, 255, 255, 0.22);
-    color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    border-radius: 9px;
-    padding: 8px 16px;
-    font-size: 12.5px;
-    font-weight: 800;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease;
-  }
-
-  .btn-compartir-header:hover {
-    background: rgba(255, 255, 255, 0.35);
   }
 
   .btn-volver {
