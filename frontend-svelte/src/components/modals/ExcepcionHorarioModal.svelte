@@ -6,6 +6,7 @@
   export let empleado = null;
   export let dia = null;
   export let plantillasSala = [];
+  export let empleadosList = [];
 
   const dispatch = createEventDispatcher();
 
@@ -26,6 +27,91 @@
 
   $: if (show && dia && empleado) {
     fetchMarcajesRapidos();
+  }
+
+  $: currentDayIndex = (empleado?.dias || []).findIndex(d => d.fechaStr === dia?.fechaStr);
+  $: canPrevDay = currentDayIndex > 0;
+  $: canNextDay = currentDayIndex >= 0 && currentDayIndex < (empleado?.dias || []).length - 1;
+
+  $: currentEmpIndex = (empleadosList || []).findIndex(e => e.id === empleado?.id);
+  $: canPrevEmp = currentEmpIndex > 0;
+  $: canNextEmp = currentEmpIndex >= 0 && currentEmpIndex < (empleadosList || []).length - 1;
+
+  function goToPrevDay() {
+    if (!canPrevDay || !empleado?.dias) return;
+    const prevDia = empleado.dias[currentDayIndex - 1];
+    if (prevDia) {
+      dia = prevDia;
+      dispatch('changeDia', { dia: prevDia });
+    }
+  }
+
+  function goToNextDay() {
+    if (!canNextDay || !empleado?.dias) return;
+    const nextDia = empleado.dias[currentDayIndex + 1];
+    if (nextDia) {
+      dia = nextDia;
+      dispatch('changeDia', { dia: nextDia });
+    }
+  }
+
+  function goToPrevEmp() {
+    if (!canPrevEmp || !empleadosList) return;
+    const prevEmp = empleadosList[currentEmpIndex - 1];
+    if (prevEmp) {
+      const matchingDia = (prevEmp.dias || []).find(d => d.fechaStr === dia?.fechaStr) || (prevEmp.dias ? prevEmp.dias[0] : null);
+      empleado = prevEmp;
+      dia = matchingDia;
+      dispatch('changeEmpleado', { empleado: prevEmp, dia: matchingDia });
+    }
+  }
+
+  function goToNextEmp() {
+    if (!canNextEmp || !empleadosList) return;
+    const nextEmp = empleadosList[currentEmpIndex + 1];
+    if (nextEmp) {
+      const matchingDia = (nextEmp.dias || []).find(d => d.fechaStr === dia?.fechaStr) || (nextEmp.dias ? nextEmp.dias[0] : null);
+      empleado = nextEmp;
+      dia = matchingDia;
+      dispatch('changeEmpleado', { empleado: nextEmp, dia: matchingDia });
+    }
+  }
+
+  function handleKeyDown(e) {
+    if (!show) return;
+
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    const isEditingInput = tag === 'input' || tag === 'textarea';
+    if (isEditingInput) return;
+
+    if (e.key === 'ArrowLeft') {
+      if (canPrevDay) {
+        e.preventDefault();
+        goToPrevDay();
+      }
+    } else if (e.key === 'ArrowRight') {
+      if (canNextDay) {
+        e.preventDefault();
+        goToNextDay();
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (tag !== 'select') {
+        if (canPrevEmp) {
+          e.preventDefault();
+          goToPrevEmp();
+        }
+      }
+    } else if (e.key === 'ArrowDown') {
+      if (tag !== 'select') {
+        if (canNextEmp) {
+          e.preventDefault();
+          goToNextEmp();
+        }
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeModal();
+    }
   }
 
   function initModalData() {
@@ -142,9 +228,12 @@
     recalculateLocalEntryExit();
   }
 
-  function handleScheduleSelectChange() {
+  function handleScheduleSelectChange(e) {
     scheduleModified = (selectedValue !== initialSelectedValue);
     recalculateLocalEntryExit();
+    if (e && e.target && typeof e.target.blur === 'function') {
+      e.target.blur();
+    }
   }
 
   function recalculateLocalEntryExit() {
@@ -376,9 +465,12 @@
       }
 
       triggerToast('Cambios guardados correctamente', 'success');
-      show = false;
+      // No cerramos el modal a petición del usuario para que pueda seguir navegando entre días/empleados
+      scheduleModified = false;
+      initialSelectedValue = selectedValue;
       dispatch('punchUpdated');
       dispatch('saved');
+      await fetchMarcajesRapidos();
     } catch (err) {
       console.error(err);
       triggerToast(`Error: ${err.message}`, 'error');
@@ -397,8 +489,10 @@
       const json = await res.json();
       if (json && json.success) {
         triggerToast('Excepción eliminada correctamente', 'success');
-        show = false;
+        scheduleModified = false;
         dispatch('saved');
+        initModalData();
+        await fetchMarcajesRapidos();
       } else {
         throw new Error(json.error || 'Error al eliminar la excepción');
       }
@@ -418,22 +512,30 @@
   }
 </script>
 
+<svelte:window on:keydown={handleKeyDown} />
+
 {#if show}
   <div style="position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background-color: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px); padding: 16px;">
     <div style="background: #ffffff; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); width: 100%; max-width: 580px; overflow: hidden; border: 1px solid #e2e8f0; animation: fadeIn 0.15s ease-out;">
       
       <!-- Header -->
-      <div style="padding: 16px 20px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+      <div style="padding: 14px 20px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <div style="width: 36px; height: 36px; border-radius: 50%; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0;">
             ⚡
           </div>
           <div>
-            <h3 style="margin: 0; font-size: 14px; font-weight: 800; color: #0f172a;">
-              Excepción Especial de Horario
-            </h3>
-            <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b;">
-              {empleado?.nombre || 'Empleado'} &bull; <strong style="color: #2563eb;">{dia?.fechaStr || ''}</strong>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <h3 style="margin: 0; font-size: 14px; font-weight: 800; color: #0f172a;">
+                Excepción Especial de Horario
+              </h3>
+              <!-- Fecha en curso destacada en grande para máxima visibilidad -->
+              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 6px; background: #eff6ff; border: 1.5px solid #3b82f6; color: #1d4ed8; font-size: 13.5px; font-weight: 900; letter-spacing: 0.5px; box-shadow: 0 1px 2px rgba(59, 130, 246, 0.15);">
+                📅 {dia?.fechaStr || ''}
+              </span>
+            </div>
+            <p style="margin: 3px 0 0 0; font-size: 11.5px; font-weight: 600; color: #475569;">
+              {empleado?.nombre || 'Empleado'} {empleado?.cedula ? `• ${empleado.cedula}` : ''}
             </p>
           </div>
         </div>
@@ -628,27 +730,135 @@
 
       </div>
 
-      <!-- Footer Actions -->
-      <div style="padding: 14px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
-        <button
-          on:click={closeModal}
-          disabled={loading}
-          type="button"
-          style="padding: 8px 14px; font-size: 11.5px; font-weight: 700; color: #475569; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;"
-        >
-          Salir
-        </button>
+      <!-- Footer Actions: Navigation Buttons (Left) & Action Buttons (Right) -->
+      <div style="padding: 10px 18px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+        
+        <!-- Left: D-Pad Navigation Buttons (Matching Keyboard Arrow Cluster) -->
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <!-- Up: Empleado anterior -->
+            <button
+              type="button"
+              on:click={goToPrevEmp}
+              disabled={!canPrevEmp || loading}
+              title="Empleado anterior (↑ Flecha Arriba)"
+              class="btn-nav-arrow"
+            >
+              ▲
+            </button>
+            <!-- Row: Left (Día anterior), Down (Empleado siguiente), Right (Día siguiente) -->
+            <div style="display: flex; align-items: center; gap: 2px;">
+              <button
+                type="button"
+                on:click={goToPrevDay}
+                disabled={!canPrevDay || loading}
+                title="Día anterior (← Flecha Izquierda)"
+                class="btn-nav-arrow"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                on:click={goToNextEmp}
+                disabled={!canNextEmp || loading}
+                title="Empleado siguiente (↓ Flecha Abajo)"
+                class="btn-nav-arrow"
+              >
+                ▼
+              </button>
+              <button
+                type="button"
+                on:click={goToNextDay}
+                disabled={!canNextDay || loading}
+                title="Día siguiente (→ Flecha Derecha)"
+                class="btn-nav-arrow"
+              >
+                ▶
+              </button>
+            </div>
+          </div>
 
-        <button
-          on:click={handleSave}
-          disabled={loading}
-          type="button"
-          style="padding: 8px 16px; font-size: 11.5px; font-weight: 800; color: #ffffff; background: #2563eb; border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
-        >
-          {loading ? 'Guardando...' : 'Guardar'}
-        </button>
+          <!-- Position Indicators -->
+          <div style="display: flex; flex-direction: column; gap: 2px; font-size: 10.5px; font-weight: 700; color: #64748b;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="color: #475569; font-size: 10px; text-transform: uppercase;">Día:</span>
+              <span style="color: #2563eb; background: #eff6ff; padding: 1px 6px; border-radius: 4px; border: 1px solid #bfdbfe; font-weight: 800; font-size: 11px;">
+                {currentDayIndex >= 0 ? currentDayIndex + 1 : 1} / {(empleado?.dias || []).length || 1}
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="color: #475569; font-size: 10px; text-transform: uppercase;">Emp:</span>
+              <span style="color: #059669; background: #ecfdf5; padding: 1px 6px; border-radius: 4px; border: 1px solid #a7f3d0; font-weight: 800; font-size: 11px;">
+                {currentEmpIndex >= 0 ? currentEmpIndex + 1 : 1} / {(empleadosList || []).length || 1}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Salir & Guardar Buttons -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button
+            on:click={closeModal}
+            disabled={loading}
+            type="button"
+            style="padding: 8px 14px; font-size: 11.5px; font-weight: 700; color: #475569; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer;"
+          >
+            Salir
+          </button>
+
+          <button
+            on:click={handleSave}
+            disabled={loading}
+            type="button"
+            style="padding: 8px 16px; font-size: 11.5px; font-weight: 800; color: #ffffff; background: #2563eb; border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.1);"
+          >
+            {loading ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+
       </div>
 
     </div>
   </div>
 {/if}
+
+<style>
+  .btn-nav-arrow {
+    width: 28px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 900;
+    border-radius: 5px;
+    border: 1.5px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+
+  .btn-nav-arrow:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+  }
+
+  .btn-nav-arrow:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+    background: #e2e8f0;
+  }
+
+  .btn-nav-arrow:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+  }
+</style>

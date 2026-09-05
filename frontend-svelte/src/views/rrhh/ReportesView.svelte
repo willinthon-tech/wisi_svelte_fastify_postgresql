@@ -180,6 +180,27 @@
     fetchReporteData(true);
   }
 
+  function handleModalChangeEmpleado(e) {
+    const { empleado: newEmp, dia: newDia } = e.detail;
+    activeEmpleadoExcepcion = newEmp;
+    activeDiaExcepcion = newDia;
+    const targetSalaId = newEmp.sala_id || selectedSalas[0] || 1;
+    loadPlantillasSala(targetSalaId);
+
+    // Sincronizar paginación de la tabla de fondo
+    const empIdx = filteredEmployees.findIndex(emp => emp.id === newEmp.id);
+    if (empIdx !== -1 && pageSize < 999999) {
+      const targetPage = Math.floor(empIdx / pageSize) + 1;
+      if (currentPage !== targetPage) {
+        currentPage = targetPage;
+      }
+    }
+  }
+
+  function handleModalChangeDia(e) {
+    activeDiaExcepcion = e.detail.dia;
+  }
+
   function handleFechaDesdeChange() {
     updateInitialDaysHeader();
   }
@@ -555,7 +576,24 @@
           allEvaluatedEmployees = flat;
         }
 
-        currentPage = 1;
+        if (!silent) {
+          currentPage = 1;
+        }
+
+        // Si el modal de excepción está abierto, sincronizar activeEmpleadoExcepcion y activeDiaExcepcion con la nueva data evaluada
+        if (showExcepcionModal && activeEmpleadoExcepcion) {
+          const freshEmp = allEvaluatedEmployees.find(e => e.id === activeEmpleadoExcepcion.id);
+          if (freshEmp) {
+            activeEmpleadoExcepcion = freshEmp;
+            if (activeDiaExcepcion) {
+              const freshDia = (freshEmp.dias || []).find(d => d.fechaStr === activeDiaExcepcion.fechaStr);
+              if (freshDia) {
+                activeDiaExcepcion = freshDia;
+              }
+            }
+          }
+        }
+
         hasSearched = true;
       } else {
         triggerToast(json?.error || "Error al obtener el reporte", "error");
@@ -1149,9 +1187,12 @@
 <!-- Modal para Asignar / Cambiar Excepción Especial de Horario -->
 <ExcepcionHorarioModal
   bind:show={showExcepcionModal}
-  empleado={activeEmpleadoExcepcion}
-  dia={activeDiaExcepcion}
+  bind:empleado={activeEmpleadoExcepcion}
+  bind:dia={activeDiaExcepcion}
   plantillasSala={plantillasSalaExcepcion}
+  empleadosList={filteredEmployees}
+  on:changeEmpleado={handleModalChangeEmpleado}
+  on:changeDia={handleModalChangeDia}
   on:saved={handleExcepcionSaved}
   on:punchUpdated={() => fetchReporteData(true)}
 />
