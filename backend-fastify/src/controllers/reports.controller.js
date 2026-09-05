@@ -1,6 +1,7 @@
 import { 
   getMarcajePersonalReportModel,
   saveExcepcionHorarioModel,
+  saveExcepcionRangoHorarioModel,
   deleteExcepcionHorarioModel,
   getMarcajesRapidosModel,
   updateAttlogStatusModel
@@ -23,7 +24,7 @@ export async function getMarcajePersonalReport(req, reply) {
       cargo_id, 
       cargo_ids,
       sexo, 
-      search 
+      busqueda 
     } = req.query;
 
     const result = await getMarcajePersonalReportModel({
@@ -40,7 +41,7 @@ export async function getMarcajePersonalReport(req, reply) {
       cargo_id,
       cargo_ids,
       sexo,
-      search
+      busqueda
     });
 
     return reply.send(result);
@@ -66,6 +67,23 @@ export async function saveExcepcionHorario(req, reply) {
     return reply.status(500).send({
       success: false,
       error: 'Error al guardar la excepción de horario',
+      details: error.message
+    });
+  }
+}
+
+export async function saveExcepcionRangoHorario(req, reply) {
+  try {
+    const result = await saveExcepcionRangoHorarioModel(req.body);
+    if (result.success) {
+      attlogEvents.emit('excepcion_updated', { empleado_id: req.body.empleado_id, count: result.count });
+    }
+    return reply.send(result);
+  } catch (error) {
+    req.log.error(error);
+    return reply.status(500).send({
+      success: false,
+      error: 'Error al guardar la excepción por rango de días',
       details: error.message
     });
   }

@@ -601,7 +601,14 @@
       <div style="padding: 12px 18px; background: linear-gradient(to right, #f8fafc, #f1f5f9); border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
         <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
           <!-- Foto Ligera del Empleado con Fallback de Inicial -->
-          <div style="width: 64px; height: 64px; border-radius: 50%; overflow: hidden; border: 2.5px solid #3b82f6; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.14); position: relative;">
+          <div 
+            style="width: 64px; height: 64px; border-radius: 50%; overflow: hidden; border: 2.5px solid #3b82f6; background: #e2e8f0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.14); position: relative; cursor: pointer; transition: transform 0.15s ease;"
+            title="Clic para asignar excepción por rango de varios días"
+            role="button"
+            tabindex="0"
+            on:click={() => dispatch('openRangoModal', { empleado })}
+            on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') dispatch('openRangoModal', { empleado }); }}
+          >
             {#if getFotoUrl(empleado)}
               <img
                 src={getFotoUrl(empleado)}

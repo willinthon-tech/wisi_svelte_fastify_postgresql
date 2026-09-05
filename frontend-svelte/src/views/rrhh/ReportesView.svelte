@@ -34,6 +34,7 @@
   import { navigateToRoute } from "../../controllers/router.store.js";
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
   import ExcepcionHorarioModal from "../../components/modals/ExcepcionHorarioModal.svelte";
+  import ExcepcionRangoModal from "../../components/modals/ExcepcionRangoModal.svelte";
   import GenerarCorteModal from "../../components/modals/GenerarCorteModal.svelte";
 
   export let items = [];
@@ -188,6 +189,22 @@
   }
 
   function handleExcepcionSaved() {
+    scheduleSilentReportRefresh();
+  }
+
+  // Excepcion Rango Modal State (Multi-Día)
+  let showExcepcionRangoModal = false;
+  let activeEmpleadoRango = null;
+
+  function openExcepcionRangoModal(emp) {
+    if (!emp) return;
+    activeEmpleadoRango = emp;
+    const targetSalaId = emp.sala_id || selectedSalas[0] || 1;
+    loadPlantillasSala(targetSalaId);
+    showExcepcionRangoModal = true;
+  }
+
+  function handleExcepcionRangoSaved() {
     scheduleSilentReportRefresh();
   }
 
@@ -1006,7 +1023,14 @@
                 <!-- Fixed Sticky Employee Column (Clear 165px) -->
                 <td class="td-empleado-sticky">
                   <div class="emp-sticky-content">
-                    <div class="emp-avatar-box">
+                    <div 
+                      class="emp-avatar-box emp-avatar-clickable"
+                      on:click|stopPropagation={() => openExcepcionRangoModal(emp)}
+                      title="Clic en la foto para asignar excepción de varios días a {emp.nombre}"
+                      role="button"
+                      tabindex="0"
+                      on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openExcepcionRangoModal(emp); }}
+                    >
                       {#if getFotoUrl(emp)}
                         <img
                           src={getFotoUrl(emp)}
@@ -1206,6 +1230,20 @@
   on:changeDia={handleModalChangeDia}
   on:saved={handleExcepcionSaved}
   on:punchUpdated={scheduleSilentReportRefresh}
+  on:openRangoModal={(e) => {
+    showExcepcionModal = false;
+    openExcepcionRangoModal(e.detail.empleado);
+  }}
+/>
+
+<!-- Modal para Asignar Excepción por Rango de Varios Días -->
+<ExcepcionRangoModal
+  bind:show={showExcepcionRangoModal}
+  empleado={activeEmpleadoRango}
+  plantillasSala={plantillasSalaExcepcion}
+  defaultFechaDesde={fechaDesde}
+  defaultFechaHasta={fechaHasta}
+  on:saved={handleExcepcionRangoSaved}
 />
 
 <!-- Modal para Generar y Guardar Histórico de Corte -->
@@ -1693,6 +1731,22 @@
 
   .emp-avatar-box {
     flex-shrink: 0;
+  }
+
+  .emp-avatar-box.emp-avatar-clickable {
+    cursor: pointer;
+    border-radius: 50%;
+    transition: transform 0.15s ease, filter 0.15s ease;
+  }
+
+  .emp-avatar-box.emp-avatar-clickable:hover {
+    transform: scale(1.16);
+    filter: drop-shadow(0 2px 5px rgba(59, 130, 246, 0.45));
+  }
+
+  .emp-avatar-box.emp-avatar-clickable:hover .emp-avatar-img,
+  .emp-avatar-box.emp-avatar-clickable:hover .emp-avatar-fallback {
+    border-color: #2563eb !important;
   }
 
   .emp-avatar-img {

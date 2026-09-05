@@ -973,6 +973,53 @@ export async function saveExcepcionHorarioModel(data) {
   return { success: true, data: row };
 }
 
+export async function saveExcepcionRangoHorarioModel(data) {
+  if (!isPgConnected || !sql) return { success: false, error: 'Base de datos no conectada' };
+  const empleado_id = Number(data.empleado_id);
+  const fecha_desde = String(data.fecha_desde || '').trim();
+  const fecha_hasta = String(data.fecha_hasta || '').trim();
+  const plantilla_horario_id = data.plantilla_horario_id ? Number(data.plantilla_horario_id) : null;
+  const observacion = data.observacion ? String(data.observacion).trim() : null;
+
+  if (!empleado_id || !fecha_desde || !fecha_hasta) {
+    return { success: false, error: 'empleado_id, fecha_desde y fecha_hasta son requeridos' };
+  }
+
+  if (fecha_desde > fecha_hasta) {
+    return { success: false, error: 'La fecha de inicio no puede ser posterior a la fecha final' };
+  }
+
+  let es_libre = false;
+  if (plantilla_horario_id) {
+    const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM plantillas_horarios WHERE id = ${plantilla_horario_id}`;
+    if (p && (p.codigo === 'L' || (p.nombre && p.nombre.toUpperCase() === 'LIBRE'))) {
+      es_libre = true;
+    }
+  } else {
+    es_libre = true;
+  }
+
+  const rows = await sql`
+    INSERT INTO excepciones_horarios (empleado_id, fecha, plantilla_horario_id, es_libre, observacion, updated_at)
+    SELECT 
+      ${empleado_id}, 
+      d::date, 
+      ${plantilla_horario_id}, 
+      ${es_libre}, 
+      ${observacion}, 
+      CURRENT_TIMESTAMP
+    FROM generate_series(${fecha_desde}::date, ${fecha_hasta}::date, '1 day'::interval) d
+    ON CONFLICT (empleado_id, fecha) DO UPDATE
+    SET plantilla_horario_id = EXCLUDED.plantilla_horario_id,
+        es_libre = EXCLUDED.es_libre,
+        observacion = EXCLUDED.observacion,
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING *
+  `;
+
+  return { success: true, count: rows.length, data: rows };
+}
+
 export async function deleteExcepcionHorarioModel(id) {
   if (!isPgConnected || !sql) return { success: false, error: 'Base de datos no conectada' };
   const eId = Number(id);
