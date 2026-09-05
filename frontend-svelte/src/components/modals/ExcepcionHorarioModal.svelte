@@ -592,30 +592,26 @@
             {/if}
           </div>
 
-          <!-- Información del Empleado: Nombre arriba, Sala, Cargo, y Cédula debajo de cargo con estilos -->
-          <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+          <!-- Información del Empleado: Nombre arriba, Sala, Cargo, y solo Cédula con estilo pill debajo -->
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
             <!-- 1. Nombre arriba -->
             <h3 style="margin: 0; font-size: 13.5px; font-weight: 900; color: #0f172a; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title={empleado?.nombre || ''}>
               {empleado?.nombre || 'Empleado'}
             </h3>
             
-            <!-- 2. Sala con estilo badge -->
-            <div style="display: flex; align-items: center; gap: 4px; line-height: 1;">
-              <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 5px; background: #f0fdf4; border: 1px solid #86efac; color: #166534; font-size: 10px; font-weight: 800; letter-spacing: 0.2px;">
-                🏢 {empleado?.sala_nombre || (plantillasSala && plantillasSala[0]?.sala_nombre) || 'Principal'}
-              </span>
+            <!-- 2. Sala abajo como texto normal -->
+            <div style="font-size: 11px; font-weight: 700; color: #64748b; line-height: 1.2;">
+              Sala: <span style="color: #1e293b; font-weight: 800;">{empleado?.sala_nombre || (plantillasSala && plantillasSala[0]?.sala_nombre) || 'Principal'}</span>
             </div>
 
-            <!-- 3. Cargo con estilo badge -->
-            <div style="display: flex; align-items: center; gap: 4px; line-height: 1;">
-              <span style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 5px; background: #f5f3ff; border: 1px solid #c4b5fd; color: #5b21b6; font-size: 10px; font-weight: 800; letter-spacing: 0.2px;">
-                💼 {empleado?.cargo_nombre || 'Sin Cargo'}
-              </span>
+            <!-- 3. Cargo abajo como texto normal -->
+            <div style="font-size: 11px; font-weight: 700; color: #64748b; line-height: 1.2;">
+              Cargo: <span style="color: #1e293b; font-weight: 800;">{empleado?.cargo_nombre || 'Sin Cargo'}</span>
             </div>
 
-            <!-- 4. Cédula debajo de cargo con estilo pill como la fecha -->
-            <div style="display: flex; align-items: center; gap: 4px; line-height: 1;">
-              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2.5px 8px; border-radius: 6px; background: #f8fafc; border: 1.5px solid #64748b; color: #0f172a; font-size: 11px; font-weight: 900; letter-spacing: 0.4px; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">
+            <!-- 4. Cédula debajo de cargo con estilo pill exactamente como la fecha -->
+            <div style="margin-top: 2px;">
+              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; background: #eff6ff; border: 1.5px solid #3b82f6; color: #1d4ed8; font-size: 11px; font-weight: 900; letter-spacing: 0.4px; box-shadow: 0 1px 2px rgba(59, 130, 246, 0.15);">
                 🪪 {empleado?.cedula || (empleado?.id ? `ID: #${empleado.id}` : '')}
               </span>
             </div>
