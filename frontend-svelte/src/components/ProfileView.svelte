@@ -30,6 +30,28 @@
   $: windowsFormato = (latestDownloads.windows?.formato || 'exe').toUpperCase();
   $: windowsVer = latestDownloads.windows?.version_num ? `v${latestDownloads.windows.version_num}` : 'v1';
 
+  function formatFecha(d) {
+    if (!d) return '';
+    try {
+      const date = new Date(d);
+      if (isNaN(date.getTime())) return '';
+      return date.toLocaleString('es-VE', {
+        timeZone: 'America/Caracas',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch {
+      return '';
+    }
+  }
+
+  $: androidFecha = formatFecha(latestDownloads.android?.fecha);
+  $: windowsFecha = formatFecha(latestDownloads.windows?.fecha);
+
   async function loadLatestDownloads() {
     try {
       const res = await fetch('/api/master/descargas/latest');
@@ -627,6 +649,12 @@
               <div style="font-size: 11px; color: #94a3b8; font-family: monospace; margin-top: 2px;">
                 {androidVer} • {androidFile}
               </div>
+              {#if androidFecha}
+                <div style="font-size: 11px; color: #64748b; margin-top: 3px; display: flex; align-items: center; gap: 4px;">
+                  <span class="material-icons" style="font-size: 13px; color: #94a3b8;">schedule</span>
+                  <span>Subido el {androidFecha}</span>
+                </div>
+              {/if}
             </div>
           </div>
           <a 
@@ -654,6 +682,12 @@
               <div style="font-size: 11px; color: #94a3b8; font-family: monospace; margin-top: 2px;">
                 {windowsVer} • {windowsFile}
               </div>
+              {#if windowsFecha}
+                <div style="font-size: 11px; color: #64748b; margin-top: 3px; display: flex; align-items: center; gap: 4px;">
+                  <span class="material-icons" style="font-size: 13px; color: #94a3b8;">schedule</span>
+                  <span>Subido el {windowsFecha}</span>
+                </div>
+              {/if}
             </div>
           </div>
           <a 
