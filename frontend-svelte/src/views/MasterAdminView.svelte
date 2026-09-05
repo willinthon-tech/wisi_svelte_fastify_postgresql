@@ -112,9 +112,40 @@
     }
   }
 
+  // Pin access lock state (Memory-only, resets on navigation or page refresh)
+  const MASTER_ACCESS_PIN = "25047058";
+  let isUnlocked = false;
+  let enteredPin = "";
+  let pinError = "";
+  let showPin = false;
+  let pinInputRef = null;
+
+  function handleUnlock() {
+    pinError = "";
+    if (!enteredPin || enteredPin.trim() === "") {
+      pinError = "Por favor ingrese la clave de acceso.";
+      if (pinInputRef) pinInputRef.focus();
+      return;
+    }
+    if (enteredPin.trim() === MASTER_ACCESS_PIN) {
+      isUnlocked = true;
+      enteredPin = "";
+      pinError = "";
+      // Únicamente al colocar la clave correcta se cargan los datos de la vista
+      loadSystemConfig();
+      loadMasterStoresFromBackend();
+    } else {
+      pinError = "Clave incorrecta. Acceso denegado.";
+      enteredPin = "";
+      if (pinInputRef) pinInputRef.focus();
+    }
+  }
+
   onMount(() => {
-    loadSystemConfig();
-    loadMasterStoresFromBackend();
+    // Nada se carga aquí para garantizar cero llamadas de red o datos previos
+    if (pinInputRef) {
+      setTimeout(() => pinInputRef?.focus(), 100);
+    }
   });
 
   // Delete modal state
@@ -1321,9 +1352,126 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   }
 </script>
 
-<div
-  style="min-height: 100vh; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 24px;"
->
+{#if !isUnlocked}
+  <!-- PANTALLA DE ACCESO RESTRINGIDO (LOCK SCREEN) -->
+  <div
+    style="min-height: 100vh; background: #0b1120; display: flex; align-items: center; justify-content: center; padding: 20px; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"
+  >
+    <div
+      style="width: 100%; max-width: 440px; background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 20px; padding: 36px 30px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05); text-align: center; box-sizing: border-box;"
+    >
+      <!-- Shield / Lock Badge -->
+      <div
+        style="width: 68px; height: 68px; border-radius: 50%; background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, rgba(30, 41, 59, 0.8) 100%); border: 1.5px solid rgba(56, 189, 248, 0.35); display: flex; align-items: center; justify-content: center; margin: 0 auto 22px auto; box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);"
+      >
+        <span class="material-icons" style="font-size: 34px; color: #38bdf8;">lock</span>
+      </div>
+
+      <!-- Title & Subtitle -->
+      <h1
+        style="margin: 0 0 8px 0; font-size: 23px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, #60a5fa, #38bdf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"
+      >
+        Centro de Administración
+      </h1>
+      <p
+        style="margin: 0 0 26px 0; font-size: 13.5px; color: #94a3b8; line-height: 1.5;"
+      >
+        Acceso restringido. Ingrese la clave de seguridad para desbloquear y cargar el panel.
+      </p>
+
+      <!-- Pin Form -->
+      <form on:submit|preventDefault={handleUnlock} style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="position: relative; width: 100%; box-sizing: border-box;">
+          <span
+            class="material-icons"
+            style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 20px; color: #64748b; pointer-events: none;"
+          >
+            key
+          </span>
+          <input
+            bind:this={pinInputRef}
+            type={showPin ? "text" : "password"}
+            bind:value={enteredPin}
+            placeholder="Ingrese la clave..."
+            autocomplete="off"
+            style="width: 100%; box-sizing: border-box; padding: 13px 48px 13px 44px; background: #090e1a; border: 1.5px solid {pinError ? '#ef4444' : '#334155'}; border-radius: 10px; color: #f8fafc; font-size: 16px; letter-spacing: {showPin ? '1px' : '3px'}; text-align: center; outline: none; transition: all 0.2s ease; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);"
+            on:focus={(e) => {
+              if (!pinError) e.currentTarget.style.borderColor = '#38bdf8';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(56, 189, 248, 0.2)';
+            }}
+            on:blur={(e) => {
+              if (!pinError) e.currentTarget.style.borderColor = '#334155';
+              e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(0, 0, 0, 0.4)';
+            }}
+          />
+          <button
+            type="button"
+            on:click={() => (showPin = !showPin)}
+            style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; transition: color 0.2s;"
+            on:mouseenter={(e) => (e.currentTarget.style.color = '#94a3b8')}
+            on:mouseleave={(e) => (e.currentTarget.style.color = '#64748b')}
+            title={showPin ? "Ocultar clave" : "Mostrar clave"}
+          >
+            <span class="material-icons" style="font-size: 20px;">
+              {showPin ? "visibility_off" : "visibility"}
+            </span>
+          </button>
+        </div>
+
+        {#if pinError}
+          <div
+            style="display: flex; align-items: center; justify-content: center; gap: 6px; color: #f87171; font-size: 13px; font-weight: 600; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 8px 12px;"
+          >
+            <span class="material-icons" style="font-size: 16px;">error_outline</span>
+            <span>{pinError}</span>
+          </div>
+        {/if}
+
+        <button
+          type="submit"
+          style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px; margin-top: 4px; background: linear-gradient(135deg, #2563eb, #3b82f6); border: none; border-radius: 10px; color: #ffffff; font-size: 14.5px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4); transition: all 0.2s ease;"
+          on:mouseenter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #1d4ed8, #2563eb)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(37, 99, 235, 0.5)';
+          }}
+          on:mouseleave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb, #3b82f6)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 16px rgba(37, 99, 235, 0.4)';
+          }}
+        >
+          <span class="material-icons" style="font-size: 19px;">lock_open</span>
+          <span>Desbloquear Panel</span>
+        </button>
+
+        <div style="margin-top: 8px; border-top: 1px solid #334155; padding-top: 16px;">
+          <button
+            type="button"
+            on:click={() => navigateToRoute("profile")}
+            style="display: inline-flex; align-items: center; justify-content: center; gap: 7px; width: 100%; padding: 10px; background: transparent; border: 1px solid #475569; border-radius: 9px; color: #cbd5e1; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;"
+            on:mouseenter={(e) => {
+              e.currentTarget.style.background = '#1e293b';
+              e.currentTarget.style.borderColor = '#64748b';
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            on:mouseleave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = '#475569';
+              e.currentTarget.style.color = '#cbd5e1';
+            }}
+          >
+            <span class="material-icons" style="font-size: 17px; color: #38bdf8;">arrow_back</span>
+            <span>Volver a Perfil</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{:else}
+  <div
+    style="min-height: 100vh; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 24px;"
+  >
   <!-- Master Header Banner -->
   <div
     style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 14px; padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);"
@@ -3419,4 +3567,5 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       </div>
     </div>
   </div>
+{/if}
 {/if}
