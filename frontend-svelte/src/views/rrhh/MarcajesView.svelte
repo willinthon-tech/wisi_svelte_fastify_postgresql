@@ -115,6 +115,14 @@
     sexo: []
   };
 
+  $: preparedCargos = (filterOptions.cargos || []).map((c) => ({
+    ...c,
+    subgroup_label:
+      c.departamento_nombre && c.area_nombre
+        ? `${c.departamento_nombre} › ${c.area_nombre}`
+        : c.area_nombre || c.departamento_nombre || "Sin Área",
+  }));
+
   // Search Debounce Timer
   let searchTimeout = null;
 

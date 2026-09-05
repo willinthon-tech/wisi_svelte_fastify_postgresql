@@ -1465,6 +1465,12 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
       // 8. Departamentos (Grouped by Sala)
       (async () => {
         const conds = buildAttlogConditions({ ...options, skipDepartamentos: true });
+        if (options.userSalaIds && options.userSalaIds.length > 0) {
+          conds.push(sql`dep.sala_id = ANY(${options.userSalaIds})`);
+        }
+        if (options.salaIds && options.salaIds.length > 0) {
+          conds.push(sql`dep.sala_id = ANY(${options.salaIds})`);
+        }
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
@@ -1507,6 +1513,12 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
       // 9. Áreas (Grouped by Departamento and Sala)
       (async () => {
         const conds = buildAttlogConditions({ ...options, skipAreas: true });
+        if (options.userSalaIds && options.userSalaIds.length > 0) {
+          conds.push(sql`dep.sala_id = ANY(${options.userSalaIds})`);
+        }
+        if (options.salaIds && options.salaIds.length > 0) {
+          conds.push(sql`dep.sala_id = ANY(${options.salaIds})`);
+        }
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
@@ -1521,7 +1533,7 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
           ${lateralJoin}
           JOIN cargos c ON e.cargo_id = c.id
           JOIN areas ar ON c.area_id = ar.id
-          LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
+          JOIN departamentos dep ON ar.departamento_id = dep.id
           LEFT JOIN salas s_dep ON dep.sala_id = s_dep.id
           ${where}
           GROUP BY ar.id, ar.nombre, dep.nombre, s_dep.nombre, s.nombre
@@ -1551,6 +1563,12 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
       // 10. Cargos (Grouped by Área, Departamento and Sala)
       (async () => {
         const conds = buildAttlogConditions({ ...options, skipCargos: true });
+        if (options.userSalaIds && options.userSalaIds.length > 0) {
+          conds.push(sql`dep.sala_id = ANY(${options.userSalaIds})`);
+        }
+        if (options.salaIds && options.salaIds.length > 0) {
+          conds.push(sql`dep.sala_id = ANY(${options.salaIds})`);
+        }
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
         const res = await sql`
           SELECT 
@@ -2405,12 +2423,12 @@ export function buildAreaConditions(options = {}) {
 
   // 1. Restricción por salas asignadas al usuario logueado
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`s.id = ANY(${options.userSalaIds})`);
+    conds.push(sql`d.sala_id = ANY(${options.userSalaIds})`);
   }
 
   // 2. Salas seleccionadas
   if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
-    conds.push(sql`s.id = ANY(${options.salaIds})`);
+    conds.push(sql`d.sala_id = ANY(${options.salaIds})`);
   }
 
   // 3. Departamentos seleccionados
@@ -2656,12 +2674,12 @@ export function buildCargoConditions(options = {}) {
 
   // 1. Restricción por salas asignadas al usuario logueado
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`s.id = ANY(${options.userSalaIds})`);
+    conds.push(sql`d.sala_id = ANY(${options.userSalaIds})`);
   }
 
   // 2. Salas seleccionadas
   if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
-    conds.push(sql`s.id = ANY(${options.salaIds})`);
+    conds.push(sql`d.sala_id = ANY(${options.salaIds})`);
   }
 
   // 3. Departamentos seleccionados
@@ -2956,12 +2974,12 @@ export function buildEmpleadoConditions(options = {}) {
 
   // 1. Restricción por salas asignadas al usuario logueado
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`s.id = ANY(${options.userSalaIds})`);
+    conds.push(sql`d.sala_id = ANY(${options.userSalaIds})`);
   }
 
   // 2. Salas seleccionadas
   if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
-    conds.push(sql`s.id = ANY(${options.salaIds})`);
+    conds.push(sql`d.sala_id = ANY(${options.salaIds})`);
   }
 
   // 3. Departamentos seleccionados
