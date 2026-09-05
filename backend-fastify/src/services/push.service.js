@@ -215,6 +215,7 @@ async function executeMulticastSend({ tokens = [], title, body, data = {}, image
   try {
     const messaging = getMessaging();
     const response = await messaging.sendEachForMulticast(message);
+    console.log(`📡 [PUSH FCM] Notificación enviada a ${tokens.length} dispositivo(s). Éxitos: ${response.successCount} | Fallos: ${response.failureCount}`);
 
     // Limpiar tokens inválidos o desinstalados
     if (response.failureCount > 0 && isPgConnected && sql) {
