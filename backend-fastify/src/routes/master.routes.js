@@ -254,14 +254,13 @@ export default async function masterRoutes(fastify, options) {
     const cleanTerm = String(id).replace(/\.[^/.]+$/, "").replace(/^#/, "").trim();
     const filename = `${cleanTerm}.jpg`;
 
-    const searchDirs = [
+    const attlogDirs = [
       path.join(process.cwd(), 'attlogs'),
-      path.join(process.cwd(), 'empleados'),
       path.join(process.cwd(), 'photos')
     ];
 
-    // 1. Direct file match on disk
-    for (const dir of searchDirs) {
+    // 1. Direct file match on disk for attlog event photo
+    for (const dir of attlogDirs) {
       const fullPath = path.join(dir, filename);
       if (fs.existsSync(fullPath)) {
         reply.header('Access-Control-Allow-Origin', '*');
@@ -307,8 +306,14 @@ export default async function masterRoutes(fastify, options) {
             emp.foto ? path.basename(emp.foto) : null
           ].filter(Boolean);
 
+          const empSearchDirs = [
+            path.join(process.cwd(), 'empleados'),
+            path.join(process.cwd(), 'attlogs'),
+            path.join(process.cwd(), 'photos')
+          ];
+
           for (const cand of candidateFiles) {
-            for (const dir of searchDirs) {
+            for (const dir of empSearchDirs) {
               const altPath = path.join(dir, cand);
               if (fs.existsSync(altPath)) {
                 reply.header('Access-Control-Allow-Origin', '*');

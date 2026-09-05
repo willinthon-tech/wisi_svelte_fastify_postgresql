@@ -124,12 +124,18 @@ async function startServer() {
       }
 
       // Directories to search for exact filename
-      const searchDirs = [
-        path.join(process.cwd(), 'attlogs'),
-        path.join(process.cwd(), 'empleados'),
-        path.join(process.cwd(), 'salas'),
-        path.join(process.cwd(), 'photos')
-      ];
+      const isAttlogReq = req.url.includes('/attlogs');
+      const isEmpleadoReq = req.url.includes('/empleados');
+      const searchDirs = isAttlogReq
+        ? [path.join(process.cwd(), 'attlogs'), path.join(process.cwd(), 'photos')]
+        : isEmpleadoReq
+          ? [path.join(process.cwd(), 'empleados')]
+          : [
+              path.join(process.cwd(), 'attlogs'),
+              path.join(process.cwd(), 'empleados'),
+              path.join(process.cwd(), 'salas'),
+              path.join(process.cwd(), 'photos')
+            ];
 
       // 1. Direct file match on disk
       for (const dir of searchDirs) {
