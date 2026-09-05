@@ -352,9 +352,7 @@
           class="tab-btn {activeTab === 'calculos' ? 'active' : ''}"
           on:click={() => activeTab = 'calculos'}
         >
-          <span class="tab-icon">📊</span>
           <span>Calculos</span>
-          <span class="tab-badge">{processedEmployees.length}</span>
         </button>
 
         <button
@@ -362,7 +360,6 @@
           class="tab-btn {activeTab === 'puntualidad' ? 'active' : ''}"
           on:click={() => activeTab = 'puntualidad'}
         >
-          <span class="tab-icon">⏱️</span>
           <span>Puntualidad</span>
         </button>
       </div>
@@ -462,37 +459,6 @@
     <!-- Tab 2: Score y Puntualidad Detallada -->
     {#if activeTab === 'puntualidad'}
       <div class="score-container">
-        <div class="score-summary-grid">
-          <div class="score-kpi-card">
-            <span class="kpi-label">Total Empleados Evaluados</span>
-            <span class="kpi-value text-blue">{filteredEmployees.length}</span>
-            <span class="kpi-sub">En este corte histórico</span>
-          </div>
-
-          <div class="score-kpi-card">
-            <span class="kpi-label">Promedio de Puntualidad</span>
-            <span class="kpi-value text-green">
-              {filteredEmployees.length > 0 ? Math.round(filteredEmployees.reduce((acc, e) => acc + e.scorePuntualidad, 0) / filteredEmployees.length) : 100}%
-            </span>
-            <span class="kpi-sub">Índice general de la sala</span>
-          </div>
-
-          <div class="score-kpi-card">
-            <span class="kpi-label">Total Retrasos Acumulados</span>
-            <span class="kpi-value text-red">
-              {filteredEmployees.reduce((acc, e) => acc + e.retrasosCount, 0)}
-            </span>
-            <span class="kpi-sub">Incidencias de entrada tarde</span>
-          </div>
-
-          <div class="score-kpi-card">
-            <span class="kpi-label">Faltas Injustificadas</span>
-            <span class="kpi-value text-orange">
-              {filteredEmployees.reduce((acc, e) => acc + e.faltaInjustificadaCount, 0)}
-            </span>
-            <span class="kpi-sub">Sin justificación médica/laboral</span>
-          </div>
-        </div>
 
         <div class="table-container">
           <table class="calculos-table score-table">
@@ -948,45 +914,6 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-  }
-
-  .score-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
-  }
-
-  .score-kpi-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 14px 18px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  }
-
-  .kpi-label {
-    font-size: 11.5px;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-  }
-
-  .kpi-value {
-    font-size: 24px;
-    font-weight: 900;
-    line-height: 1.2;
-    margin: 4px 0;
-  }
-
-  .text-blue { color: #2563eb; }
-  .text-green { color: #16a34a; }
-  .text-orange { color: #ea580c; }
-
-  .kpi-sub {
-    font-size: 11px;
-    color: #94a3b8;
   }
 
   .col-score {
