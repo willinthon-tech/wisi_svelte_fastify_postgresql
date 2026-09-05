@@ -13,7 +13,6 @@
   let selectedValue = '';
 
   let horariosEmpleado = [];
-  let otrosHorariosSala = [];
   let plantillasExcepcion = [];
 
   let marcajesLoading = false;
@@ -45,10 +44,8 @@
         }
       });
       horariosEmpleado = [...foundInSala, ...missingFromSala];
-      otrosHorariosSala = (plantillasSala || []).filter(p => p.tipo === 'horario' && !assignedMap.has(Number(p.id)));
     } else {
       horariosEmpleado = [];
-      otrosHorariosSala = (plantillasSala || []).filter(p => p.tipo === 'horario');
     }
 
     // 3. Plantillas Tipo Excepción (tipo === 'plantilla', excluyendo códigos base L y U)
@@ -272,18 +269,7 @@
               </optgroup>
             {/if}
 
-            <!-- Optgroup 3: Horarios de Turno de la Sala (otros horarios tipo 'horario' de la sala) -->
-            {#if otrosHorariosSala.length > 0}
-              <optgroup label="⏰ {horariosEmpleado.length > 0 ? 'Otros Horarios de Turno de la Sala' : 'Horarios de Turno de la Sala'}">
-                {#each otrosHorariosSala as p}
-                  <option value="PLANTILLA_{p.id}">
-                    [{p.codigo}] {p.nombre} {getHorasFormat(p)}
-                  </option>
-                {/each}
-              </optgroup>
-            {/if}
-
-            <!-- Optgroup 4: Plantillas Tipo Excepción (tipo 'plantilla': Falta, Permiso, Reposo, etc.) -->
+            <!-- Optgroup 3: Plantillas Tipo Excepción (tipo 'plantilla': Falta, Permiso, Reposo, etc.) -->
             {#if plantillasExcepcion.length > 0}
               <optgroup label="📋 Plantillas Tipo Excepción (Falta, Permiso, Reposo, etc.)">
                 {#each plantillasExcepcion as p}
