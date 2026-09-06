@@ -5681,10 +5681,14 @@ export async function createModeloModel(data) {
   if (!cleanName) throw new Error('El nombre del modelo es obligatorio');
 
   if (isPgConnected && sql) {
+    const marcaCond = marcaId !== null 
+      ? sql`marca_id = ${marcaId}` 
+      : sql`marca_id IS NULL`;
+
     const existing = await sql`
       SELECT id FROM modelos 
       WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
-        AND ((marca_id = ${marcaId}) OR (${marcaId} IS NULL AND marca_id IS NULL))
+        AND ${marcaCond}
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -5731,14 +5735,15 @@ export async function updateModeloModel(id, data) {
 
   if (isPgConnected && sql) {
     if (cleanName) {
+      const marcaCond = marcaId !== undefined
+        ? (marcaId !== null ? sql`marca_id = ${marcaId}` : sql`marca_id IS NULL`)
+        : sql`1=1`;
+
       const existing = await sql`
         SELECT id FROM modelos 
         WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
           AND id != ${mId}
-          AND (
-            (${marcaId !== undefined ? marcaId : null} IS NOT NULL AND marca_id = ${marcaId !== undefined ? marcaId : null})
-            OR (${marcaId === null} AND marca_id IS NULL)
-          )
+          AND ${marcaCond}
         LIMIT 1
       `;
       if (existing.length > 0) {
