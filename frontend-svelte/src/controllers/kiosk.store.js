@@ -14,6 +14,7 @@ const initialKiosk = typeof localStorage !== 'undefined' && hasAndroidKioskBridg
   : false;
 
 export const isKioskModeStore = writable(initialKiosk);
+export const isKioskPasswordModalOpenStore = writable(false);
 
 // Sincronizar salida de pantalla completa en navegadores con la tecla Esc
 if (typeof document !== 'undefined') {
@@ -95,8 +96,25 @@ export function exitKioskMode() {
   applyKioskState(false, true);
 }
 
-export function toggleKioskMode() {
+export function requestExitKioskMode() {
+  isKioskPasswordModalOpenStore.set(true);
+}
+
+/**
+ * Manejador del botón de Modo Kiosco:
+ * - Si está apagado: se activa de inmediato.
+ * - Si está encendido: exige la contraseña del usuario antes de desactivar.
+ */
+export function handleKioskToggleClick() {
   let current = false;
   isKioskModeStore.subscribe(val => current = val)();
-  applyKioskState(!current, true);
+  if (current) {
+    requestExitKioskMode();
+  } else {
+    enterKioskMode();
+  }
+}
+
+export function toggleKioskMode() {
+  handleKioskToggleClick();
 }

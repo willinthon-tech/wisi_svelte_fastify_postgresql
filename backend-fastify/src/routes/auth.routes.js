@@ -1,8 +1,9 @@
-import { loginController, getMeController } from '../controllers/auth.controller.js';
+import { loginController, getMeController, verifyPasswordController } from '../controllers/auth.controller.js';
 import { registerDeviceToken, unregisterDeviceToken } from '../services/push.service.js';
 
 export default async function authRoutes(fastify, options) {
   fastify.post('/auth/login', loginController);
+  fastify.post('/auth/verify-password', verifyPasswordController);
   fastify.get('/auth/me', getMeController);
 
   // Registro de Token FCM para Notificaciones Push de Android

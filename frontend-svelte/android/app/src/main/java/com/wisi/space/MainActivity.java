@@ -1,5 +1,6 @@
 package com.wisi.space;
 
+import android.app.ActivityManager;
 import android.app.DownloadManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
@@ -13,6 +14,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -53,6 +55,16 @@ public class MainActivity extends BridgeActivity {
 
             webView.addJavascriptInterface(new KioskBridge(), "AndroidKiosk");
         }
+
+        // 5. En tablets y dispositivos antiguos, auto-ocultar barras de navegación si se deslizan
+        View decorView = getWindow().getDecorView();
+        decorView.setOnSystemUiVisibilityChangeListener(visibility -> {
+            if (isKiosk && ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0 || (visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)) {
+                decorView.postDelayed(() -> {
+                    if (isKiosk) setImmersiveMode(true);
+                }, 300);
+            }
+        });
     }
 
     private void requestInitialPermissions() {
@@ -241,28 +253,57 @@ public class MainActivity extends BridgeActivity {
         isKiosk = enable;
         setImmersiveMode(enable);
 
-        // Si la app está provisionada como Device Owner (Empresarial)
+        // Si la app está provisionada como Device Owner (Empresarial por comando ADB)
         try {
             DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
             ComponentName adminComponent = new ComponentName(this, KioskDeviceAdminReceiver.class);
             if (dpm != null && dpm.isDeviceOwnerApp(getPackageName())) {
                 if (enable) {
                     dpm.setLockTaskPackages(adminComponent, new String[]{getPackageName()});
+                    startLockTask();
+                } else {
+                    stopLockTask();
                 }
             }
         } catch (Exception ignored) {}
 
-        // Fijar pantalla (Screen Pinning / Lock Task)
-        try {
-            if (enable) {
-                startLockTask();
-                Toast.makeText(this, "🔒 Modo Kiosco 100% activado", Toast.LENGTH_SHORT).show();
-            } else {
-                stopLockTask();
-                Toast.makeText(this, "🔓 Modo Kiosco desactivado", Toast.LENGTH_SHORT).show();
+        if (enable) {
+            Toast.makeText(this, "🔒 Modo Kiosco activado", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "🔓 Modo Kiosco desactivado", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (isKiosk) {
+            // Bloquea el botón Atrás / triangulito de navegación en tablets y teléfonos
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (isKiosk) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                return true; // Intercepta y anula el botón Atrás
             }
-        } catch (Exception e) {
-            // startLockTask puede no estar permitido en ciertos emuladores sin configurar device owner
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (isKiosk) {
+            try {
+                ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+                if (am != null) {
+                    am.moveTaskToFront(getTaskId(), 0);
+                }
+            } catch (Exception ignored) {}
         }
     }
 

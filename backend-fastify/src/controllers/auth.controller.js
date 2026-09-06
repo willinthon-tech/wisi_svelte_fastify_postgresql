@@ -105,3 +105,28 @@ export async function getMeController(request, reply) {
     return reply.status(500).send({ success: false, error: 'Error al consultar información de usuario' });
   }
 }
+
+export async function verifyPasswordController(request, reply) {
+  try {
+    const { usuario, password } = parseBody(request.body);
+    if (!usuario || !password) {
+      return reply.status(400).send({ success: false, error: 'Usuario y contraseña son requeridos' });
+    }
+
+    const user = await findUserByUsername(usuario.trim());
+    if (!user) {
+      return reply.status(401).send({ success: false, error: 'Usuario no encontrado' });
+    }
+
+    const isMatch = user.password === password.trim();
+    if (!isMatch) {
+      return reply.status(401).send({ success: false, error: 'Contraseña incorrecta' });
+    }
+
+    return reply.send({ success: true, message: 'Contraseña validada exitosamente' });
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: 'Error al verificar contraseña' });
+  }
+}
+

@@ -125,6 +125,7 @@
   import { fetchHealthModel } from "./models/health.model.js";
   import { initPushNotifications } from "./services/push.service.js";
   import { initKioskMode, isKioskModeStore, toggleKioskMode } from "./controllers/kiosk.store.js";
+  import KioskExitModal from "./components/modals/KioskExitModal.svelte";
 
   // Registrar Notificaciones Push nativas cuando el usuario está autenticado en Android
   $: if ($isAuthenticatedStore && $currentUserStore?.id) {
@@ -1236,6 +1237,9 @@
 
 <!-- Modal Global Unificado de Fotografías y Fichas -->
 <GlobalPhotoModal />
+
+<!-- Modal de Validación de Contraseña para Salir de Modo Kiosco -->
+<KioskExitModal />
 
 <style>
   :global(*::-webkit-scrollbar) {
