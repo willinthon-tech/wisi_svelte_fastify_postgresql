@@ -1,6 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
-  import { currentUserStore, logoutUserStore } from '../controllers/auth.store.js';
+  import { currentUserStore } from '../controllers/auth.store.js';
   import { triggerToast } from '../controllers/ui.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
   import { isKioskModeStore, toggleKioskMode } from '../controllers/kiosk.store.js';
@@ -9,12 +9,6 @@
 
   function goToProfile() {
     navigateToRoute('profile');
-  }
-
-  function handleLogout(e) {
-    e.stopPropagation();
-    logoutUserStore();
-    triggerToast('Sesión cerrada correctamente', 'info');
   }
 
   let isRefreshing = false;
@@ -117,12 +111,6 @@
         <span style="font-size: 11px; color: #10b981; font-weight: 600;">
           @{$currentUserStore?.usuario || 'wilinthon'}
         </span>
-        <button 
-          on:click|stopPropagation={handleLogout}
-          type="button"
-          style="font-size: 11px; color: #ef4444; font-weight: 700; text-decoration: underline; background: none; border: none; padding: 0; margin-top: 3px; cursor: pointer; text-align: left;">
-          Cerrar Sesión
-        </button>
       </div>
     </div>
   </div>

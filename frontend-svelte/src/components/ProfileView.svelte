@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { currentUserStore, userSalasStore, navMenuStore } from '../controllers/auth.store.js';
+  import { currentUserStore, userSalasStore, navMenuStore, logoutUserStore } from '../controllers/auth.store.js';
   import { 
     masterSalasStore, 
     masterDepartamentosStore, 
@@ -206,6 +206,11 @@
   function goToAdminPanel() {
     navigateToRoute('willinthontech');
   }
+
+  function handleLogout() {
+    logoutUserStore();
+    triggerToast('Sesión cerrada correctamente', 'info');
+  }
 </script>
 
 <div style="display: flex; flex-direction: column; gap: 20px; max-width: 1400px; margin: 0 auto; width: 100%;">
@@ -273,6 +278,17 @@
           title="Ir al Panel de Administración Master (willinthontech)">
           <span class="material-icons" style="font-size: 18px; color: #38bdf8;">admin_panel_settings</span>
           <span>Administración</span>
+        </button>
+
+        <!-- 4. Botón Cerrar Sesión (al lado de Administración) -->
+        <button 
+          type="button"
+          on:click={handleLogout} 
+          class="btn-flow-sec"
+          style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; font-size: 13px; font-weight: 700; border-radius: 8px; cursor: pointer; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; box-shadow: 0 1px 3px rgba(220,38,38,0.1); transition: all 0.15s ease;"
+          title="Cerrar sesión de WISI Space">
+          <span class="material-icons" style="font-size: 18px; color: #dc2626;">logout</span>
+          <span>Cerrar Sesión</span>
         </button>
       </div>
     </div>
