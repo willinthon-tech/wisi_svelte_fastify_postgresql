@@ -2465,7 +2465,8 @@
                     {#if subField.type === 'select'}
                       <select 
                         id={`create_subfield_${subField.key}`}
-                        bind:value={createDraft[subField.key]}
+                        value={createDraft[subField.key] ?? ''}
+                        on:change={(e) => { createDraft[subField.key] = e.target.value; }}
                         required={subField.required}
                         style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
                       >
@@ -2482,7 +2483,8 @@
                         step={subField.type === 'time' ? '1' : undefined}
                         min={subField.min}
                         max={subField.max}
-                        bind:value={createDraft[subField.key]}
+                        value={createDraft[subField.key] ?? ''}
+                        on:input={(e) => { createDraft[subField.key] = e.target.value; }}
                         placeholder={subField.placeholder || ''}
                         required={subField.required}
                         style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
