@@ -864,38 +864,6 @@
       }
     });
 
-    // SSE fallback
-    try {
-      const base = backendUrl.endsWith("/api")
-        ? backendUrl
-        : `${backendUrl}/api`;
-      eventSource = new EventSource(`${base}/attlogs/stream`);
-      eventSource.onerror = () => {
-        // Fallback silencioso: EventSource reintenta automáticamente según la directiva retry
-      };
-      eventSource.addEventListener("new_attlog", () => {
-        attlogsPageCache.clear();
-        totalCount = totalCount + 1;
-        if (
-          currentPage === 1 &&
-          !debouncedSearch &&
-          selectedModalIndex === null
-        ) {
-          fetchAttlogs(
-            currentPage,
-            pageSize,
-            debouncedSearch,
-            sortBy,
-            sortDir,
-            assignedSalaIds,
-            true, // silent
-            true  // force
-          );
-        }
-      });
-    } catch (err) {
-      // Ignorar fallback SSE si falla la inicialización
-    }
   });
 
   $: preparedCargos = (filterOptions.cargos || []).map(c => ({
@@ -907,7 +875,6 @@
 
   onDestroy(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
-    if (eventSource) eventSource.close();
     if (unsubscribeLatestAttlog) unsubscribeLatestAttlog();
     window.removeEventListener("keydown", handleKeyDown);
   });
