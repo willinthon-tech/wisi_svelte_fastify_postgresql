@@ -227,7 +227,7 @@ public class MainActivity extends BridgeActivity {
             if (controller != null) {
                 if (enable) {
                     controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_DEFAULT);
                 } else {
                     controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
                 }
@@ -295,24 +295,62 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (isKiosk) {
+            bringAppToFront();
+        }
+    }
+
+    @Override
     public void onPause() {
         super.onPause();
         if (isKiosk) {
-            try {
-                ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-                if (am != null) {
-                    am.moveTaskToFront(getTaskId(), 0);
-                }
-            } catch (Exception ignored) {}
+            bringAppToFront();
         }
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && isKiosk) {
+        if (isKiosk) {
             setImmersiveMode(true);
+            if (!hasFocus) {
+                // Si el usuario deslizó desde arriba para abrir notificaciones / ajustes rápidos
+                try {
+                    Object statusBarService = getSystemService("statusbar");
+                    if (statusBarService != null) {
+                        Class<?> statusBarManager = Class.forName("android.app.StatusBarManager");
+                        java.lang.reflect.Method collapse = statusBarManager.getMethod("collapsePanels");
+                        collapse.invoke(statusBarService);
+                    }
+                } catch (Exception ignored) {
+                    try {
+                        Intent closeDialogs = new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+                        sendBroadcast(closeDialogs);
+                    } catch (Exception ignored2) {}
+                }
+                bringAppToFront();
+            }
         }
+    }
+
+    private void bringAppToFront() {
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) {
+                am.moveTaskToFront(getTaskId(), ActivityManager.MOVE_TASK_NO_USER_ACTION);
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT 
+                | Intent.FLAG_ACTIVITY_SINGLE_TOP 
+                | Intent.FLAG_ACTIVITY_NEW_TASK 
+                | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(intent);
+        } catch (Exception ignored) {}
     }
 
     @Override
