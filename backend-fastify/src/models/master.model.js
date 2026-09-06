@@ -5325,10 +5325,17 @@ export async function updateMesaModel(id, data) {
   const mId = Number(id);
   const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
   const juegoId = data.juego_id ? Number(data.juego_id) : null;
-  const salaId = data.sala_id ? Number(data.sala_id) : null;
+  let salaId = data.sala_id ? Number(data.sala_id) : null;
   const active = data.active !== undefined ? Number(data.active) : null;
 
   if (isPgConnected && sql) {
+    if (cleanName && !salaId) {
+      const cur = await sql`SELECT sala_id FROM mesas WHERE id = ${mId} LIMIT 1`;
+      if (cur.length > 0) {
+        salaId = cur[0].sala_id;
+      }
+    }
+
     if (cleanName) {
       const existing = await sql`
         SELECT id FROM mesas 

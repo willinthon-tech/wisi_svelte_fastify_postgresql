@@ -168,8 +168,8 @@
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: true },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala Asignada', sortable: true, editable: true, options: filteredSalasStore },
-    { key: 'juego_nombre', keyId: 'juego_id', label: 'Juego Asignado', sortable: true, editable: true, options: globalJuegosStore }
+    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala Asignada', sortable: true, editable: false },
+    { key: 'juego_nombre', keyId: 'juego_id', label: 'Juego Asignado', sortable: true, editable: false }
   ];
 
   $: createFields = [
@@ -207,12 +207,12 @@
       if (res && res.blocked) {
         onResult(res);
       } else {
-        triggerToast('Mesa movida a Mesas Borradas', 'success');
+        triggerToast('Mesa desincorporada exitosamente', 'success');
         onResult({ success: true });
         await loadServerData();
       }
     } catch (err) {
-      triggerToast(`Error al eliminar mesa: ${err.message}`, 'error');
+      triggerToast(`Error al desincorporar mesa: ${err.message}`, 'error');
     }
   }
 
@@ -238,7 +238,7 @@
           blocked.push({
             id,
             name: `ID: ${id}`,
-            reason: res?.error || 'No se pudo eliminar por restricciones de datos',
+            reason: res?.error || 'No se pudo desincorporar',
             dependencies: []
           });
         }
@@ -274,6 +274,12 @@
   searchPlaceholder="Buscar mesas por nombre, sala, juego o ID..."
   entityType="mesa"
   uniqueByField="sala_id"
+  actions={{ 
+    edit: true, 
+    delete: true, 
+    deleteLabel: 'Desincorporar', 
+    deleteTitle: 'Desincorporar Mesa' 
+  }}
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:create={handleCreate}
   on:saveInline={handleSaveInline}

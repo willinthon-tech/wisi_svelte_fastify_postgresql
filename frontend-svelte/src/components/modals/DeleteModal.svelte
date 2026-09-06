@@ -4,9 +4,11 @@
   export let isOpen = false;
   export let item = null;
   export let entityType = 'registro';
+  export let actionLabel = '';
 
   const dispatch = createEventDispatcher();
 
+  $: isDesincorporar = actionLabel === 'Desincorporar';
   $: displayName = item ? (item.nombre || item.title || item.nombre_comercial || item.usuario || item.name || 'Sin nombre') : '';
   $: displayId = item ? item.id : '';
 
@@ -32,7 +34,7 @@
       <!-- Modal Header -->
       <div class="modal-header">
         <div class="modal-title">
-          <span style="color: #d97706;">⚠️</span> Confirmar Eliminación
+          <span style="color: #d97706;">⚠️</span> {isDesincorporar ? 'Confirmar Desincorporación' : 'Confirmar Eliminación'}
         </div>
         <button type="button" class="close-btn" on:click={handleCancel}>✕</button>
       </div>
@@ -40,7 +42,11 @@
       <!-- Modal Body -->
       <div class="modal-body">
         <h4 class="question-text">
-          ¿Está seguro de que desea eliminar esta {entityType.toLowerCase()}?
+          {#if isDesincorporar}
+            ¿Está seguro de que desea desincorporar esta {entityType.toLowerCase()}?
+          {:else}
+            ¿Está seguro de que desea eliminar esta {entityType.toLowerCase()}?
+          {/if}
         </h4>
 
         <!-- Highlight Box (Yellow Left Border) -->
@@ -49,15 +55,27 @@
           <span class="entity-value">{displayName} (ID: {displayId})</span>
         </div>
 
-        <!-- Red Alert Box -->
-        <div class="red-alert-box">
-          <div class="alert-title">
-            <span>⚠️</span> Esta acción no se puede deshacer.
+        {#if isDesincorporar}
+          <!-- Amber Info Box for Soft Delete -->
+          <div class="amber-alert-box">
+            <div class="alert-title-amber">
+              <span>ℹ️</span> Desincorporación de Registro
+            </div>
+            <div class="alert-subtext-amber">
+              La {entityType.toLowerCase()} pasará al estado inactivo (active = 0) y podrá ser consultada y restaurada en cualquier momento desde la sección de mesas borradas.
+            </div>
           </div>
-          <div class="alert-subtext">
-            Esta acción eliminará permanentemente el {entityType.toLowerCase()} y todos sus datos asociados.
+        {:else}
+          <!-- Red Alert Box -->
+          <div class="red-alert-box">
+            <div class="alert-title">
+              <span>⚠️</span> Esta acción no se puede deshacer.
+            </div>
+            <div class="alert-subtext">
+              Esta acción eliminará permanentemente el {entityType.toLowerCase()} y todos sus datos asociados.
+            </div>
           </div>
-        </div>
+        {/if}
       </div>
 
       <!-- Modal Footer -->
@@ -65,8 +83,11 @@
         <button type="button" class="btn-cancel" on:click={handleCancel}>
           Cancelar
         </button>
-        <button type="button" class="btn-confirm" on:click={handleConfirm}>
-          Sí, Confirmar
+        <button 
+          type="button" 
+          class={isDesincorporar ? 'btn-confirm-desincorporar' : 'btn-confirm'} 
+          on:click={handleConfirm}>
+          {isDesincorporar ? 'Sí, Desincorporar' : 'Sí, Confirmar'}
         </button>
       </div>
     </div>
@@ -232,5 +253,47 @@
 
   .btn-confirm:hover {
     background: #b91c1c;
+  }
+
+  .amber-alert-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .alert-title-amber {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #b45309;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .alert-subtext-amber {
+    font-size: 12.5px;
+    color: #92400e;
+    line-height: 1.4;
+  }
+
+  .btn-confirm-desincorporar {
+    padding: 8px 20px;
+    background: #d97706;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    box-shadow: 0 2px 4px rgba(217, 119, 6, 0.25);
+  }
+
+  .btn-confirm-desincorporar:hover {
+    background: #b45309;
   }
 </style>

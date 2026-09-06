@@ -1009,7 +1009,7 @@
           {/if}
 
           {#if actions.delete !== false}
-            <button type="button" on:click={handleBatchDelete} class="btn-batch btn-batch-delete">
+            <button type="button" on:click={handleBatchDelete} class="btn-batch {actions.deleteLabel === 'Desincorporar' ? 'btn-batch-desincorporate' : 'btn-batch-delete'}">
               {actions.deleteLabel || 'Eliminar'}
             </button>
           {/if}
@@ -1570,8 +1570,8 @@
                       {:else}
                         <button 
                           type="button"
-                          class="btn-action btn-delete"
-                          title={actions.deleteTitle || "Eliminar"}
+                          class="btn-action {actions.deleteLabel === 'Desincorporar' ? 'btn-desincorporate' : 'btn-delete'}"
+                          title={actions.deleteTitle || (actions.deleteLabel === 'Desincorporar' ? 'Desincorporar' : 'Eliminar')}
                           on:click={() => promptDelete(item)}>
                           {actions.deleteLabel || "Eliminar"}
                         </button>
@@ -1646,6 +1646,7 @@
   isOpen={isDeleteModalOpen}
   item={itemToDelete}
   {entityType}
+  actionLabel={actions.deleteLabel}
   on:confirm={handleConfirmDelete}
   on:close={() => (isDeleteModalOpen = false)}
 />
@@ -1662,6 +1663,7 @@
   isOpen={isBatchConfirmOpen}
   count={selectedIds.size}
   {entityType}
+  actionLabel={actions.deleteLabel}
   isDeleting={isBatchDeleting}
   on:confirm={confirmBatchDelete}
   on:close={() => (isBatchConfirmOpen = false)}

@@ -4,9 +4,12 @@
   export let isOpen = false;
   export let count = 0;
   export let entityType = 'registro';
+  export let actionLabel = '';
   export let isDeleting = false;
 
   const dispatch = createEventDispatcher();
+
+  $: isDesincorporar = actionLabel === 'Desincorporar';
 
   function handleConfirm() {
     dispatch('confirm');
@@ -26,6 +29,7 @@
     if (s === 'horario') return 'horarios';
     if (s === 'empleado') return 'empleados';
     if (s === 'sala') return 'salas';
+    if (s === 'mesa') return 'mesas';
     if (s === 'dispositivo') return 'dispositivos';
     return s.endsWith('s') ? s : `${s}s`;
   }
@@ -44,7 +48,7 @@
       <div class="modal-header">
         <div class="modal-title">
           <span class="warning-icon">⚠️</span>
-          <span>Confirmar Eliminación en Lote</span>
+          <span>{isDesincorporar ? 'Confirmar Desincorporación en Lote' : 'Confirmar Eliminación en Lote'}</span>
         </div>
         {#if !isDeleting}
           <button type="button" class="close-btn" on:click={handleCancel}>✕</button>
@@ -54,22 +58,37 @@
       <!-- Body -->
       <div class="modal-body">
         <h4 class="question-text">
-          ¿Está seguro de que desea eliminar los <strong>{count}</strong> {getPlural(entityType, count)} seleccionados?
+          {#if isDesincorporar}
+            ¿Está seguro de que desea desincorporar los <strong>{count}</strong> {getPlural(entityType, count)} seleccionados?
+          {:else}
+            ¿Está seguro de que desea eliminar los <strong>{count}</strong> {getPlural(entityType, count)} seleccionados?
+          {/if}
         </h4>
 
-        <!-- Warning Alert Box -->
-        <div class="alert-box">
-          <div class="alert-title">
-            <span>🛡️</span> Protección de Integridad de Datos
+        {#if isDesincorporar}
+          <div class="alert-box" style="background: #fffbeb; border: 1px solid #fde68a;">
+            <div class="alert-title" style="color: #b45309;">
+              <span>ℹ️</span> Desincorporación (Inactivar en Lote)
+            </div>
+            <div class="alert-text" style="color: #92400e;">
+              El sistema pasará los elementos seleccionados a estado inactivo (active = 0). Podrán ser consultados y restaurados en cualquier momento desde la sección correspondiente.
+            </div>
           </div>
-          <div class="alert-text">
-            El sistema intentará eliminar cada elemento. Si algún registro tiene referencias activas en otras tablas (como áreas, cargos o empleados asignados), <strong>no será eliminado</strong> para proteger la integridad de los datos y se le presentará un informe detallado al finalizar.
+        {:else}
+          <!-- Warning Alert Box -->
+          <div class="alert-box">
+            <div class="alert-title">
+              <span>🛡️</span> Protección de Integridad de Datos
+            </div>
+            <div class="alert-text">
+              El sistema intentará eliminar cada elemento. Si algún registro tiene referencias activas en otras tablas (como áreas, cargos o empleados asignados), <strong>no será eliminado</strong> para proteger la integridad de los datos y se le presentará un informe detallado al finalizar.
+            </div>
           </div>
-        </div>
 
-        <div class="action-permanent-note">
-          <span>⚠️</span> Los elementos sin dependencias serán eliminados de forma permanente.
-        </div>
+          <div class="action-permanent-note">
+            <span>⚠️</span> Los elementos sin dependencias serán eliminados de forma permanente.
+          </div>
+        {/if}
       </div>
 
       <!-- Footer -->
@@ -84,14 +103,14 @@
 
         <button 
           type="button" 
-          class="btn-confirm" 
+          class={isDesincorporar ? 'btn-confirm-desincorporar' : 'btn-confirm'} 
           disabled={isDeleting}
           on:click={handleConfirm}>
           {#if isDeleting}
             <span class="spinner"></span>
-            <span>Eliminando...</span>
+            <span>{isDesincorporar ? 'Desincorporando...' : 'Eliminando...'}</span>
           {:else}
-            <span>Sí, Proceder con la Eliminación</span>
+            <span>{isDesincorporar ? 'Sí, Proceder con la Desincorporación' : 'Sí, Proceder con la Eliminación'}</span>
           {/if}
         </button>
       </div>
@@ -277,6 +296,32 @@
   }
 
   .btn-confirm:disabled, .btn-cancel:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-confirm-desincorporar {
+    padding: 9px 20px;
+    background: #d97706;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(217, 119, 6, 0.25);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s;
+  }
+
+  .btn-confirm-desincorporar:hover:not(:disabled) {
+    background: #b45309;
+    transform: translateY(-1px);
+  }
+
+  .btn-confirm-desincorporar:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
