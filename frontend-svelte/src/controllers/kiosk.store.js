@@ -1,9 +1,6 @@
 import { writable } from 'svelte/store';
 import { triggerToast } from './ui.store.js';
 
-const initialKiosk = typeof localStorage !== 'undefined' ? localStorage.getItem('wisi_kiosk_mode') === 'true' : false;
-export const isKioskModeStore = writable(initialKiosk);
-
 /**
  * Detecta si la interfaz nativa de Kiosco de Android está disponible
  */
@@ -11,15 +8,38 @@ export function hasAndroidKioskBridge() {
   return typeof window !== 'undefined' && typeof window.AndroidKiosk !== 'undefined';
 }
 
+// En Web y Desktop inicializa en false para evitar bloqueos no deseados
+const initialKiosk = typeof localStorage !== 'undefined' && hasAndroidKioskBridge() 
+  ? localStorage.getItem('wisi_kiosk_mode') === 'true' 
+  : false;
+
+export const isKioskModeStore = writable(initialKiosk);
+
+// Sincronizar salida de pantalla completa en navegadores con la tecla Esc
+if (typeof document !== 'undefined') {
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && !hasAndroidKioskBridge()) {
+      isKioskModeStore.set(false);
+      try { localStorage.removeItem('wisi_kiosk_mode'); } catch (e) {}
+    }
+  });
+}
+
 /**
- * Inicializa el estado de Modo Kiosco al arrancar la aplicación
+ * Inicializa el estado de Modo Kiosco al arrancar la aplicación (solo en Android nativo)
  */
 export function initKioskMode() {
   if (typeof window === 'undefined') return;
 
-  const saved = localStorage.getItem('wisi_kiosk_mode') === 'true';
-  if (saved) {
-    applyKioskState(true, false);
+  if (hasAndroidKioskBridge()) {
+    const saved = localStorage.getItem('wisi_kiosk_mode') === 'true';
+    if (saved) {
+      applyKioskState(true, false);
+    }
+  } else {
+    // Limpiar residuos en web
+    try { localStorage.removeItem('wisi_kiosk_mode'); } catch (e) {}
+    isKioskModeStore.set(false);
   }
 }
 
@@ -31,7 +51,11 @@ function applyKioskState(enable, notify = true) {
 
   isKioskModeStore.set(enable);
   try {
-    localStorage.setItem('wisi_kiosk_mode', enable ? 'true' : 'false');
+    if (enable) {
+      localStorage.setItem('wisi_kiosk_mode', 'true');
+    } else {
+      localStorage.removeItem('wisi_kiosk_mode');
+    }
   } catch (e) {}
 
   // 1. Si estamos en Android nativo con el puente AndroidKiosk
@@ -53,12 +77,12 @@ function applyKioskState(enable, notify = true) {
       if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
-      if (notify) triggerToast('🔒 Modo Pantalla Completa activado', 'info');
+      if (notify) triggerToast('🔒 Pantalla Completa activada', 'info');
     } else {
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
       }
-      if (notify) triggerToast('🔓 Modo Pantalla Completa desactivado', 'info');
+      if (notify) triggerToast('🔓 Pantalla Completa desactivada', 'info');
     }
   } catch (e) {}
 }

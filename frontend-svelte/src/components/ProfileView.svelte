@@ -11,7 +11,6 @@
   import { triggerToast } from '../controllers/ui.store.js';
   import { toBackendUrl } from '../config/api.config.js';
   import { handleDownloadApp } from '../utils/download.utils.js';
-  import { isKioskModeStore, toggleKioskMode } from '../controllers/kiosk.store.js';
 
   export let healthStatus = {};
 
@@ -265,18 +264,7 @@
           <span>Descarga</span>
         </button>
 
-        <!-- 3. Botón de Modo Kiosco 100% -->
-        <button 
-          type="button"
-          on:click={toggleKioskMode} 
-          class="btn-flow-sec"
-          style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all 0.15s ease; {$isKioskModeStore ? 'background: #ecfdf5; color: #059669; border: 1.5px solid #10b981;' : 'background: #f8fafc; color: #475569; border: 1px solid #cbd5e1;'}"
-          title={$isKioskModeStore ? 'Desactivar Modo Kiosco 100%' : 'Activar Modo Kiosco 100% (Pantalla Completa e Inmersiva)'}>
-          <span class="material-icons" style="font-size: 18px; color: {$isKioskModeStore ? '#10b981' : '#64748b'};">{$isKioskModeStore ? 'lock' : 'fullscreen'}</span>
-          <span>{$isKioskModeStore ? 'Kiosco Activo' : 'Modo Kiosco'}</span>
-        </button>
-
-        <!-- 4. Botón de Administración (Redirige a 'willinthontech') -->
+        <!-- 3. Botón de Administración (Redirige a 'willinthontech') -->
         <button 
           type="button"
           on:click={goToAdminPanel} 
@@ -402,47 +390,6 @@
             <span style="font-weight: 700; color: #10b981;">{healthStatus.status || 'OK Online'}</span>
           </div>
         </div>
-      </div>
-
-      <!-- Kiosk Mode Card for Android & Display Management -->
-      <div class="flow-card" style="padding: 20px; background: #ffffff; border: 1.5px solid {$isKioskModeStore ? '#86efac' : '#e2e8f0'};">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-          <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 8px;">
-            <span class="material-icons" style="font-size: 20px; color: {$isKioskModeStore ? '#10b981' : '#2563eb'};">{$isKioskModeStore ? 'lock' : 'devices'}</span>
-            <span>Modo Kiosco 100%</span>
-          </h3>
-          <span style="font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 12px; {$isKioskModeStore ? 'background: #dcfce7; color: #15803d;' : 'background: #f1f5f9; color: #64748b;'}">
-            {$isKioskModeStore ? '🔒 ACTIVADO' : '🔓 DESACTIVADO'}
-          </span>
-        </div>
-
-        <p style="font-size: 12px; color: #64748b; margin: 0 0 14px; line-height: 1.4;">
-          Convierte este dispositivo en un terminal dedicado 100% inmersivo para registro de asistencia o uso operativo continuo.
-        </p>
-
-        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #475569; margin-bottom: 16px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="material-icons" style="font-size: 16px; color: #10b981;">check_circle</span>
-            <span>Pantalla siempre encendida sin suspenderse</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="material-icons" style="font-size: 16px; color: #10b981;">check_circle</span>
-            <span>Oculta barras del sistema (inmersión total)</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="material-icons" style="font-size: 16px; color: #10b981;">check_circle</span>
-            <span>Fijación de app (bloquea botones inicio/recientes)</span>
-          </div>
-        </div>
-
-        <button 
-          type="button" 
-          on:click={toggleKioskMode}
-          class="btn-flow"
-          style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; font-size: 13px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all 0.15s ease; {$isKioskModeStore ? 'background: #ef4444; color: #ffffff; border: 1px solid #dc2626;' : 'background: #10b981; color: #ffffff; border: 1px solid #059669;'}">
-          <span class="material-icons" style="font-size: 18px;">{$isKioskModeStore ? 'lock_open' : 'screen_lock_portrait'}</span>
-          <span>{$isKioskModeStore ? 'Salir del Modo Kiosco' : 'Activar Modo Kiosco 100%'}</span>
-        </button>
       </div>
     </div>
 
