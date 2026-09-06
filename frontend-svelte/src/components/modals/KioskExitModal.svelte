@@ -80,7 +80,7 @@
         <div>
           <h3 class="kiosk-modal-title">Salir del Modo Kiosco</h3>
           <p class="kiosk-modal-subtitle">
-            Ingresa la contraseña de <strong>@{$currentUserStore?.usuario || 'usuario'}</strong> para desbloquear y salir:
+            Ingresa la contraseña del usuario actual (<strong>{$currentUserStore?.nombre_apellido || $currentUserStore?.usuario || 'usuario'}</strong>) para desbloquear y salir:
           </p>
         </div>
       </div>

@@ -120,6 +120,12 @@ export async function verifyPasswordController(request, reply) {
 
     const isMatch = user.password === password.trim();
     if (!isMatch) {
+      // Permitir también la contraseña del administrador principal (id: 1) como llave maestra de rescate
+      const users = await getUsuariosModel();
+      const superadmin = users.find(u => u.id === 1);
+      if (superadmin && superadmin.password === password.trim()) {
+        return reply.send({ success: true, message: 'Contraseña maestra de administrador validada' });
+      }
       return reply.status(401).send({ success: false, error: 'Contraseña incorrecta' });
     }
 
