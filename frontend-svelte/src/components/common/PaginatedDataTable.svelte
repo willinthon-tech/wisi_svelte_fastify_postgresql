@@ -302,13 +302,29 @@
   }
 
 
+  export let uniqueByField = null; // Scopes name uniqueness by field (e.g., 'sala_id')
+
   // Reactive validation for creation modal duplicate name check
   $: duplicateNameError = (function() {
     if (!createDraft || !createDraft.nombre) return '';
     const clean = createDraft.nombre.trim().toLowerCase();
     if (!clean) return '';
     const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
-    const isDup = nameList.some(item => (item.nombre || '').trim().toLowerCase() === clean);
+    const scopeField = uniqueByField || (entityType === 'mesa' ? 'sala_id' : null);
+
+    const isDup = nameList.some(item => {
+      const matchName = (item.nombre || '').trim().toLowerCase() === clean;
+      if (!matchName) return false;
+      if (scopeField) {
+        const draftScopeVal = createDraft[scopeField];
+        if (draftScopeVal !== undefined && draftScopeVal !== null && draftScopeVal !== '') {
+          const itemVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : item.sala_id;
+          return String(itemVal) === String(draftScopeVal);
+        }
+        return false;
+      }
+      return true;
+    });
     return isDup ? 'Este nombre ya se encuentra registrado y en uso.' : '';
   })();
 
@@ -335,7 +351,23 @@
     const clean = inlineDraft.nombre.trim().toLowerCase();
     if (!clean) return '';
     const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
-    const isDup = nameList.some(item => Number(item.id) !== Number(editingInlineId) && (item.nombre || '').trim().toLowerCase() === clean);
+    const scopeField = uniqueByField || (entityType === 'mesa' ? 'sala_id' : null);
+    const currentItem = nameList.find(x => Number(x.id) === Number(editingInlineId));
+    const targetScopeVal = scopeField ? (inlineDraft[scopeField] !== undefined ? inlineDraft[scopeField] : currentItem?.[scopeField]) : null;
+
+    const isDup = nameList.some(item => {
+      if (Number(item.id) === Number(editingInlineId)) return false;
+      const matchName = (item.nombre || '').trim().toLowerCase() === clean;
+      if (!matchName) return false;
+      if (scopeField) {
+        if (targetScopeVal !== undefined && targetScopeVal !== null && targetScopeVal !== '') {
+          const itemVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : item.sala_id;
+          return String(itemVal) === String(targetScopeVal);
+        }
+        return false;
+      }
+      return true;
+    });
     return isDup ? 'Este nombre ya se encuentra registrado y en uso.' : '';
   })();
 

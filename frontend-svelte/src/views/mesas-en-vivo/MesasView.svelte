@@ -273,6 +273,7 @@
   bind:searchQuery
   searchPlaceholder="Buscar mesas por nombre, sala, juego o ID..."
   entityType="mesa"
+  uniqueByField="sala_id"
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:create={handleCreate}
   on:saveInline={handleSaveInline}
