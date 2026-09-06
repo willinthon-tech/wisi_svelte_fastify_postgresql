@@ -124,6 +124,7 @@
 
   import { fetchHealthModel } from "./models/health.model.js";
   import { initPushNotifications } from "./services/push.service.js";
+  import { initKioskMode, isKioskModeStore, toggleKioskMode } from "./controllers/kiosk.store.js";
 
   // Registrar Notificaciones Push nativas cuando el usuario está autenticado en Android
   $: if ($isAuthenticatedStore && $currentUserStore?.id) {
@@ -460,6 +461,7 @@
 
   onMount(async () => {
     initRouter();
+    initKioskMode();
     loadMasterStoresFromBackend();
     await loadUserSession();
     await refreshData();
@@ -1235,8 +1237,19 @@
 <!-- Modal Global Unificado de Fotografías y Fichas -->
 <GlobalPhotoModal />
 
-<!-- Notificación y Botón Nativo de Instalación PWA (Android / Escritorio) -->
-<PwaInstallPrompt />
+<!-- Botón flotante sutil para salir del Modo Kiosco si el usuario o admin lo requiere -->
+{#if $isKioskModeStore}
+  <button
+    type="button"
+    on:click={toggleKioskMode}
+    class="kiosk-floating-exit-btn"
+    title="Salir del Modo Kiosco"
+    aria-label="Salir del Modo Kiosco"
+  >
+    <span class="material-icons" style="font-size: 16px;">fullscreen_exit</span>
+    <span>Salir Kiosco</span>
+  </button>
+{/if}
 
 <style>
   :global(*::-webkit-scrollbar) {
@@ -1528,5 +1541,32 @@
     background: #f8fafc;
     padding: 16px 20px;
     box-sizing: border-box;
+  }
+
+  .kiosk-floating-exit-btn {
+    position: fixed;
+    bottom: 14px;
+    left: 14px;
+    z-index: 9999999;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    color: #ffffff;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    opacity: 0.45;
+    transition: all 0.2s ease;
+  }
+  .kiosk-floating-exit-btn:hover {
+    opacity: 1;
+    background: #0f172a;
+    transform: scale(1.05);
   }
 </style>

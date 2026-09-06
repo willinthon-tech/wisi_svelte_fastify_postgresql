@@ -39,6 +39,7 @@
     AGENT_SYNC_ENDPOINT_URL,
     toBackendUrl,
   } from "../config/api.config.js";
+  import { handleDownloadApp } from "../utils/download.utils.js";
 
   // Tab order: Salas -> Páginas -> Módulos -> Dispositivos -> Usuarios -> Permisos y Asignaciones -> Ajustes de Sistema
   let activeTab = "salas";
@@ -2880,15 +2881,15 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                     >
                   {:else}
                     {#if activeTab === "descargas"}
-                      <a
-                        href={toBackendUrl('/api/downloads/' + item.archivo)}
-                        download="{item.archivo}"
+                      <button
+                        type="button"
+                        on:click={() => handleDownloadApp(toBackendUrl('/api/downloads/' + item.archivo), item.archivo, item.archivo?.endsWith('.apk') ? 'application/vnd.android.package-archive' : 'application/octet-stream')}
                         class="btn-flow-sec"
-                        style="padding: 4px 8px; font-size: 12px; color: #2563eb; border-color: #93c5fd; background: #eff6ff; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 700;"
+                        style="padding: 4px 8px; font-size: 12px; color: #2563eb; border-color: #93c5fd; background: #eff6ff; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; cursor: pointer; border-radius: 6px;"
                         title="Descargar instalador"
                       >
                         ⬇ Descargar
-                      </a>
+                      </button>
                     {:else if activeTab === "dispositivos"}
                       <button
                         on:click={() => executeDirectIsapiInjection(item)}

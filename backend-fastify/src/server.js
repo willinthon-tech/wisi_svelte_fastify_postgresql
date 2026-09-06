@@ -420,6 +420,8 @@ async function startServer() {
       }
 
       const stat = fs.statSync(resolvedFilePath);
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Headers', '*');
       reply.header('Content-Disposition', `attachment; filename="${filename}"`);
       reply.header('Content-Length', stat.size);
       reply.header('Cache-Control', 'public, max-age=86400');
