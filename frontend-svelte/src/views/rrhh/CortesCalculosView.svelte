@@ -3,7 +3,7 @@
   import { selectedCorteStore } from './CortesView.svelte';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { toBackendUrl } from '../../config/api.config.js';
+  import { toBackendUrl, toEmployeePhotoUrl } from '../../config/api.config.js';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
 
   export let isPublic = false;
@@ -692,12 +692,25 @@
                   <td class="td-empleado-sticky">
                     <div class="emp-sticky-content">
                       <div class="emp-avatar-box">
-                        <img
-                          src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
-                          alt=""
-                          class="emp-avatar-img"
-                          on:error={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
+                        {#if toEmployeePhotoUrl(emp, emp.id)}
+                          <img
+                            src={toEmployeePhotoUrl(emp, emp.id)}
+                            alt={emp.nombre || 'Empleado'}
+                            class="emp-avatar-img"
+                            on:error={(e) => { 
+                              e.currentTarget.style.display = 'none'; 
+                              const fb = e.currentTarget.nextElementSibling;
+                              if (fb) fb.style.display = 'flex';
+                            }}
+                          />
+                          <div class="emp-avatar-fallback" style="display: none;">
+                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
+                          </div>
+                        {:else}
+                          <div class="emp-avatar-fallback">
+                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
+                          </div>
+                        {/if}
                       </div>
                       <div class="emp-text-details">
                         <span class="emp-name-text" title={emp.nombre}>{emp.nombre}</span>
@@ -820,12 +833,25 @@
                   <td class="col-emp sticky-col">
                     <div class="emp-sticky-content">
                       <div class="emp-avatar-box">
-                        <img
-                          src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
-                          alt=""
-                          class="emp-avatar-img"
-                          on:error={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
+                        {#if toEmployeePhotoUrl(emp, emp.id)}
+                          <img
+                            src={toEmployeePhotoUrl(emp, emp.id)}
+                            alt={emp.nombre || 'Empleado'}
+                            class="emp-avatar-img"
+                            on:error={(e) => { 
+                              e.currentTarget.style.display = 'none'; 
+                              const fb = e.currentTarget.nextElementSibling;
+                              if (fb) fb.style.display = 'flex';
+                            }}
+                          />
+                          <div class="emp-avatar-fallback" style="display: none;">
+                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
+                          </div>
+                        {:else}
+                          <div class="emp-avatar-fallback">
+                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
+                          </div>
+                        {/if}
                       </div>
                       <div class="emp-text-details">
                         <span class="emp-name-text" title={emp.nombre}>{emp.nombre}</span>
@@ -908,12 +934,25 @@
                   <td class="col-emp sticky-col">
                     <div class="emp-sticky-content">
                       <div class="emp-avatar-box">
-                        <img
-                          src={toBackendUrl(emp.foto || `/empleados/${emp.id}.jpg`, { thumb: true })}
-                          alt=""
-                          class="emp-avatar-img"
-                          on:error={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
+                        {#if toEmployeePhotoUrl(emp, emp.id)}
+                          <img
+                            src={toEmployeePhotoUrl(emp, emp.id)}
+                            alt={emp.nombre || 'Empleado'}
+                            class="emp-avatar-img"
+                            on:error={(e) => { 
+                              e.currentTarget.style.display = 'none'; 
+                              const fb = e.currentTarget.nextElementSibling;
+                              if (fb) fb.style.display = 'flex';
+                            }}
+                          />
+                          <div class="emp-avatar-fallback" style="display: none;">
+                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
+                          </div>
+                        {:else}
+                          <div class="emp-avatar-fallback">
+                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
+                          </div>
+                        {/if}
                       </div>
                       <div class="emp-text-details">
                         <span class="emp-name-text" title={emp.nombre}>{emp.nombre}</span>
@@ -1379,6 +1418,21 @@
     object-fit: cover;
     border: 1.5px solid #cbd5e1;
     display: block;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .emp-avatar-fallback {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #475569;
+    font-weight: 800;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid #cbd5e1;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 

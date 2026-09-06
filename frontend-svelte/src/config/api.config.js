@@ -11,8 +11,9 @@ export const CLOUD_SERVER_ORIGIN = `https://${CLOUD_SERVER_HOST}`;
 export function isTauriApp() {
   if (typeof window === 'undefined') return false;
   try {
-    if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
-      return true;
+    if (typeof Capacitor !== 'undefined') {
+      if (Capacitor.isNativePlatform && Capacitor.isNativePlatform()) return true;
+      if (Capacitor.getPlatform && Capacitor.getPlatform() !== 'web') return true;
     }
   } catch (e) {}
   if (typeof window.Capacitor !== 'undefined') {
@@ -26,9 +27,9 @@ export function isTauriApp() {
     if (loc.hostname === 'tauri.localhost' || loc.origin?.includes('tauri.localhost') || loc.protocol === 'tauri:' || loc.protocol === 'capacitor:') {
       return true;
     }
-    // Android WebView en Capacitor carga comúnmente en https://localhost o http://localhost
-    const isAndroidUa = typeof navigator !== 'undefined' && navigator.userAgent && /Android|wv/i.test(navigator.userAgent);
-    if ((loc.hostname === 'localhost' || loc.origin?.includes('localhost')) && isAndroidUa) {
+    // Android WebView en Capacitor carga en https://localhost o http://localhost
+    const isAndroid = typeof navigator !== 'undefined' && navigator.userAgent && /Android/i.test(navigator.userAgent);
+    if ((loc.hostname === 'localhost' || loc.origin?.includes('localhost')) && isAndroid) {
       return true;
     }
   }
@@ -172,6 +173,41 @@ export function toBackendPreviewUrl(path) {
  */
 export function toBackendOriginalUrl(path) {
   return toBackendUrl(path, { original: true });
+}
+
+/**
+ * Resuelve la URL absoluta al backend para la fotografía de un empleado.
+ * Funciona de forma idéntica en Web, Android (Capacitor) y Windows (Tauri).
+ * Acepta un objeto empleado, una ruta de foto en BD, o un ID numérico.
+ */
+export function toEmployeePhotoUrl(empOrFoto, id = null, options = { thumb: true }) {
+  if (!empOrFoto && !id) return '';
+  let foto = '';
+  if (typeof empOrFoto === 'string') {
+    foto = empOrFoto.trim();
+  } else if (empOrFoto && typeof empOrFoto === 'object') {
+    foto = empOrFoto.foto || empOrFoto.empleado_foto || '';
+    if (!id) id = empOrFoto.id || empOrFoto.empleado_id;
+  }
+  if (!foto && id) {
+    foto = `${id}.jpg`;
+  }
+  if (!foto) return '';
+  if (foto.startsWith('data:') || foto.startsWith('blob:')) return foto;
+
+  let cleanFoto = String(foto)
+    .replace(/^\/+/, '')
+    .replace(/^api\//, '')
+    .replace(/^empleados\//, '')
+    .replace(/^photos\//, '')
+    .trim();
+
+  if (!cleanFoto) {
+    if (id) cleanFoto = `${id}.jpg`;
+    else return '';
+  }
+
+  return toBackendUrl(`/empleados/${cleanFoto}`, options);
 }
 
 /**

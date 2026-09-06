@@ -16,6 +16,7 @@
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { toEmployeePhotoUrl } from '../../config/api.config.js';
 
   // Extraer las salas asignadas estrictamente para el usuario logueado
   $: assignedSalaIds = (function () {
@@ -672,7 +673,7 @@
             title: emp.nombre,
             cedula: emp.cedula,
             age,
-            foto: emp.foto,
+            foto: toEmployeePhotoUrl(emp, emp.id),
             salaNombre: emp.sala_nombre,
             cargoNombre: emp.cargo_nombre
           });
@@ -905,11 +906,18 @@
                     title="{evt.title} (cumple {evt.age} años) - {evt.salaNombre} ({evt.cargoNombre})"
                   >
                     <img 
-                      src="{evt.foto}" 
+                      src="{evt.foto || toEmployeePhotoUrl(evt, evt.id)}" 
                       alt="{evt.title}" 
                       class="cal-avatar-img"
-                      on:error={(e) => { e.currentTarget.src = '/user.png'; }}
+                      on:error={(e) => { 
+                        e.currentTarget.style.display = 'none';
+                        const fb = e.currentTarget.nextElementSibling;
+                        if (fb) fb.style.display = 'flex';
+                      }}
                     />
+                    <div class="cal-avatar-fallback" style="display: none;">
+                      {(evt.title || 'E').charAt(0).toUpperCase()}
+                    </div>
                     {#if evt.age !== null && evt.age > 0}
                       <span class="cal-age-single-green">{evt.age}</span>
                     {/if}
@@ -1035,11 +1043,18 @@
               {#each selectedDayModalData.cumples as c}
                 <div class="modal-cumple-item-card">
                   <img 
-                    src="{c.foto}" 
+                    src="{c.foto || toEmployeePhotoUrl(c, c.id)}" 
                     alt="{c.title}" 
                     class="modal-emp-img" 
-                    on:error={(e) => { e.currentTarget.src = '/user.png'; }}
+                    on:error={(e) => { 
+                      e.currentTarget.style.display = 'none';
+                      const fb = e.currentTarget.nextElementSibling;
+                      if (fb) fb.style.display = 'flex';
+                    }}
                   />
+                  <div class="modal-emp-fallback" style="display: none;">
+                    {(c.title || 'E').charAt(0).toUpperCase()}
+                  </div>
                   <div class="modal-emp-details">
                     <div class="modal-emp-top">
                       <span class="modal-emp-name">{c.title}</span>
@@ -1445,6 +1460,21 @@
     background: #cbd5e1;
     flex-shrink: 0;
     border: 1px solid #e2e8f0;
+  }
+
+  .cal-avatar-fallback {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 9px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #cbd5e1;
+    flex-shrink: 0;
   }
 
   .cal-age-single-green {
@@ -2011,6 +2041,21 @@
     border-radius: 50%;
     object-fit: cover;
     background: #cbd5e1;
+    border: 2px solid #e2e8f0;
+    flex-shrink: 0;
+  }
+
+  .modal-emp-fallback {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #e0e7ff;
+    color: #3b82f6;
+    font-size: 16px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: 2px solid #e2e8f0;
     flex-shrink: 0;
   }

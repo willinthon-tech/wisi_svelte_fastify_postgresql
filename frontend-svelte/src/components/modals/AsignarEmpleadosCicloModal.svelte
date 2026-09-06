@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { toEmployeePhotoUrl } from '../../config/api.config.js';
 
   export let show = false;
   export let department = null;
@@ -255,11 +256,23 @@
                     <!-- Empleado info -->
                     <td style="padding: 10px 14px;">
                       <div style="display: flex; align-items: center; gap: 10px;">
-                        {#if emp.foto}
-                          <img src={emp.foto} alt="" style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1px solid #cbd5e1;" />
+                        {#if toEmployeePhotoUrl(emp, emp.empleado_id)}
+                          <img 
+                            src={toEmployeePhotoUrl(emp, emp.empleado_id)} 
+                            alt={emp.empleado_nombre || 'Empleado'} 
+                            style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1px solid #cbd5e1; background: #e2e8f0;" 
+                            on:error={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const fallback = e.currentTarget.nextElementSibling;
+                              if (fallback) fallback.style.display = 'flex';
+                            }}
+                          />
+                          <div style="display: none; width: 34px; height: 34px; border-radius: 50%; background: #e2e8f0; color: #475569; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; border: 1px solid #cbd5e1;">
+                            {emp.empleado_nombre ? emp.empleado_nombre[0].toUpperCase() : 'E'}
+                          </div>
                         {:else}
-                          <div style="width: 34px; height: 34px; border-radius: 50%; background: #e2e8f0; color: #475569; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px;">
-                            {emp.empleado_nombre ? emp.empleado_nombre[0] : 'E'}
+                          <div style="width: 34px; height: 34px; border-radius: 50%; background: #e2e8f0; color: #475569; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; border: 1px solid #cbd5e1;">
+                            {emp.empleado_nombre ? emp.empleado_nombre[0].toUpperCase() : 'E'}
                           </div>
                         {/if}
                         <div>
