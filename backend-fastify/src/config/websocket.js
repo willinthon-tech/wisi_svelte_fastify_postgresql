@@ -69,7 +69,12 @@ export async function initWebsockets(fastify) {
  * Broadcasts a new attendance log event to all connected WebSocket clients
  */
 export function broadcastNewAttlog(attlogData) {
-  if (activeClients.size === 0) return;
+  const empName = attlogData?.nombre || attlogData?.employee_no || '?';
+  if (activeClients.size === 0) {
+    console.log(`\x1b[33m⚠️  [WEBSOCKET]\x1b[0m Evento listo para emitir pero no hay clientes WS conectados | emp: ${empName}`);
+    return;
+  }
+  console.log(`\x1b[36m⚡ [WEBSOCKET]\x1b[0m Emitiendo a ${activeClients.size} cliente(s) | emp: ${empName}`);
 
   const payload = JSON.stringify({
     type: 'NEW_MARCAJE',
