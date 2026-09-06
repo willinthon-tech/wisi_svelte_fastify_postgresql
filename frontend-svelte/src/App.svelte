@@ -969,86 +969,23 @@
             on:saveInline={handleSaveInline}
           />
         {:else if $currentRouteStore === "configuracion/estados" || $currentRouteStore === "estados"}
-          <EstadosView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <EstadosView />
         {:else if $currentRouteStore === "configuracion/sociedades" || $currentRouteStore === "sociedades"}
-          <SociedadesView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <SociedadesView />
         {:else if $currentRouteStore === "configuracion/valores" || $currentRouteStore === "valores"}
-          <ValoresView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <ValoresView />
         {:else if $currentRouteStore === "configuracion/juegos-maquinas" || $currentRouteStore === "maquinas/juegos" || $currentRouteStore === "juegos-maquinas"}
-          <MaquinasJuegosView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <MaquinasJuegosView />
         {:else if $currentRouteStore === "configuracion/marcas" || $currentRouteStore === "marcas"}
-          <MarcasView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <MarcasView />
         {:else if $currentRouteStore === "configuracion/modelos" || $currentRouteStore === "modelos"}
-          <ModelosView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <ModelosView />
         {:else if $currentRouteStore === "configuracion/tipos" || $currentRouteStore === "tipos"}
-          <TiposView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <TiposView />
         {:else if $currentRouteStore === "configuracion/modos" || $currentRouteStore === "modos"}
-          <ModosView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <ModosView />
         {:else if $currentRouteStore === "configuracion/legal" || $currentRouteStore === "legal"}
-          <LegalView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <LegalView />
 
           <!-- MESAS EN VIVO Module Views -->
         {:else if $currentRouteStore === "mesas-en-vivo/mesas" || $currentRouteStore === "mesas"}
@@ -1061,14 +998,7 @@
             on:saveInline={handleSaveInline}
           />
         {:else if $currentRouteStore === "configuracion/juegos" || $currentRouteStore === "mesas-en-vivo/juegos" || $currentRouteStore === "mesas/juegos"}
-          <MesasJuegosView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+          <MesasJuegosView />
         {:else if $currentRouteStore === "mesas-en-vivo/mesas-borradas"}
           <MesasBorradasView
             items={$itemsStore}

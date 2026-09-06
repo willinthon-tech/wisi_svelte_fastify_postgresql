@@ -5415,8 +5415,395 @@ export async function purgeMesaModel(id) {
   return await deleteEntityDynamic('mesas', 'mesa', id);
 }
 
+// =========================================================================
+// 🎰 MODELOS PARA CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
+// =========================================================================
 
+function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
+  return {
+    get: async function(params = {}) {
+      if (!isPgConnected || !sql) {
+        let list = inMemoryData[memKey] || [];
+        const search = String(params.search || '').trim().toLowerCase();
+        if (search) {
+          list = list.filter(i => (i.nombre || '').toLowerCase().includes(search));
+        }
+        return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+      }
 
+      const page = Math.max(1, Number(params.page) || 1);
+      const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+      const limit = hasLimit ? Number(params.limit) : 0;
+      const offset = hasLimit ? (page - 1) * limit : 0;
+      const search = String(params.search || '').trim().toLowerCase();
+      const sortBy = params.sortBy === 'nombre' ? 'nombre' : 'id';
+      const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
+      const searchPattern = `%${search}%`;
+      const whereClause = search
+        ? sql`WHERE LOWER(nombre) LIKE ${searchPattern} OR id::text LIKE ${searchPattern}`
+        : sql``;
 
+      const countRes = await sql`
+        SELECT COUNT(id)::int AS total
+        FROM ${sql(tableName)}
+        ${whereClause}
+      `;
+      const total = countRes[0]?.total || 0;
 
+      const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, id DESC`);
+
+      let data;
+      if (limit > 0) {
+        data = await sql`
+          SELECT *
+          FROM ${sql(tableName)}
+          ${whereClause}
+          ${orderClause}
+          LIMIT ${limit} OFFSET ${offset}
+        `;
+      } else {
+        data = await sql`
+          SELECT *
+          FROM ${sql(tableName)}
+          ${whereClause}
+          ${orderClause}
+        `;
+      }
+
+      data = data.map(r => ({ ...r, nombre: toTitleCase(r.nombre) }));
+      const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+
+      return { success: true, data, total, page, limit, totalPages };
+    },
+
+    create: async function(data) {
+      const cleanName = (data.nombre || '').trim();
+      if (!cleanName) throw new Error(`El nombre de ${entityLabel} es obligatorio`);
+
+      if (isPgConnected && sql) {
+        const existing = await sql`
+          SELECT id FROM ${sql(tableName)} 
+          WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName})
+          LIMIT 1
+        `;
+        if (existing.length > 0) {
+          throw new Error(`Ya existe un registro de ${entityLabel} con el nombre "${toTitleCase(cleanName)}"`);
+        }
+
+        const rows = await sql`
+          INSERT INTO ${sql(tableName)} (nombre)
+          VALUES (${cleanName})
+          RETURNING *
+        `;
+        return { ...rows[0], nombre: toTitleCase(rows[0].nombre) };
+      } else {
+        const list = inMemoryData[memKey] || [];
+        const cleanLower = cleanName.toLowerCase();
+        if (list.some(i => (i.nombre || '').trim().toLowerCase() === cleanLower)) {
+          throw new Error(`Ya existe un registro de ${entityLabel} con el nombre "${toTitleCase(cleanName)}"`);
+        }
+        const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
+        const newItem = {
+          id: nextId,
+          nombre: toTitleCase(cleanName),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        inMemoryData[memKey] = [newItem, ...list];
+        return newItem;
+      }
+    },
+
+    update: async function(id, data) {
+      const rId = Number(id);
+      const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
+
+      if (isPgConnected && sql) {
+        if (cleanName) {
+          const existing = await sql`
+            SELECT id FROM ${sql(tableName)} 
+            WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND id != ${rId}
+            LIMIT 1
+          `;
+          if (existing.length > 0) {
+            throw new Error(`Ya existe otro registro de ${entityLabel} con el nombre "${toTitleCase(cleanName)}"`);
+          }
+        }
+
+        const rows = await sql`
+          UPDATE ${sql(tableName)}
+          SET 
+            nombre = COALESCE(${cleanName}, nombre),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${rId}
+          RETURNING *
+        `;
+        return rows[0] ? { ...rows[0], nombre: toTitleCase(rows[0].nombre) } : null;
+      } else {
+        const list = inMemoryData[memKey] || [];
+        const idx = list.findIndex(i => i.id === rId);
+        if (idx !== -1) {
+          list[idx] = { ...list[idx], ...data, updated_at: new Date().toISOString() };
+          if (cleanName) list[idx].nombre = toTitleCase(cleanName);
+          return list[idx];
+        }
+        return null;
+      }
+    },
+
+    delete: async function(id) {
+      return await deleteEntityDynamic(tableName, entityLabel, id);
+    }
+  };
+}
+
+// 1. ESTADOS
+const estadosCrud = buildSimpleConfigCrud('estados', 'estado');
+export const getEstadosModel = estadosCrud.get;
+export const createEstadoModel = estadosCrud.create;
+export const updateEstadoModel = estadosCrud.update;
+export const deleteEstadoModel = estadosCrud.delete;
+
+// 2. SOCIEDADES
+const sociedadesCrud = buildSimpleConfigCrud('sociedades', 'sociedad');
+export const getSociedadesModel = sociedadesCrud.get;
+export const createSociedadModel = sociedadesCrud.create;
+export const updateSociedadModel = sociedadesCrud.update;
+export const deleteSociedadModel = sociedadesCrud.delete;
+
+// 3. VALORES
+const valoresCrud = buildSimpleConfigCrud('valores', 'valor');
+export const getValoresModel = valoresCrud.get;
+export const createValorModel = valoresCrud.create;
+export const updateValorModel = valoresCrud.update;
+export const deleteValorModel = valoresCrud.delete;
+
+// 4. JUEGOS MÁQUINAS
+const juegosMaquinasCrud = buildSimpleConfigCrud('juegos_maquinas', 'juego de máquinas', 'juegos_maquinas');
+export const getJuegosMaquinasModel = juegosMaquinasCrud.get;
+export const createJuegoMaquinaModel = juegosMaquinasCrud.create;
+export const updateJuegoMaquinaModel = juegosMaquinasCrud.update;
+export const deleteJuegoMaquinaModel = juegosMaquinasCrud.delete;
+
+// 5. MARCAS (Con validación de dependencia en modelos)
+const marcasCrud = buildSimpleConfigCrud('marcas', 'marca');
+export const getMarcasModel = marcasCrud.get;
+export const createMarcaModel = marcasCrud.create;
+export const updateMarcaModel = marcasCrud.update;
+export async function deleteMarcaModel(id) {
+  const mId = Number(id);
+  if (isPgConnected && sql) {
+    const modelosCount = await sql`SELECT count(*)::int AS count FROM modelos WHERE marca_id = ${mId}`;
+    if (modelosCount[0]?.count > 0) {
+      const row = await sql`SELECT nombre FROM marcas WHERE id = ${mId}`;
+      return {
+        success: false,
+        blocked: true,
+        entityType: 'marca',
+        entityName: row[0]?.nombre || `ID: ${mId}`,
+        entityId: mId,
+        message: `No se puede eliminar la marca porque tiene ${modelosCount[0].count} modelo(s) asociado(s). Elimine o reasigne primero los modelos vinculados.`,
+        dependencies: [{ label: 'Modelos Vinculados', count: modelosCount[0].count }]
+      };
+    }
+  }
+  return await deleteEntityDynamic('marcas', 'marca', id);
+}
+
+// 6. MODELOS (Con marca_id y JOIN a marcas)
+export async function getModelosModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    let list = inMemoryData.modelos || [];
+    const search = String(params.search || '').trim().toLowerCase();
+    if (search) {
+      list = list.filter(m => (m.nombre || '').toLowerCase().includes(search) || (m.marca_nombre || '').toLowerCase().includes(search));
+    }
+    return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+  }
+
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const sortBy = params.sortBy === 'nombre' ? 'm.nombre' : (params.sortBy === 'marca_nombre' ? 'ma.nombre' : 'm.id');
+  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  const searchPattern = `%${search}%`;
+  const whereClause = search
+    ? sql`WHERE LOWER(m.nombre) LIKE ${searchPattern} OR LOWER(ma.nombre) LIKE ${searchPattern} OR m.id::text LIKE ${searchPattern}`
+    : sql``;
+
+  const countRes = await sql`
+    SELECT COUNT(m.id)::int AS total
+    FROM modelos m
+    LEFT JOIN marcas ma ON m.marca_id = ma.id
+    ${whereClause}
+  `;
+  const total = countRes[0]?.total || 0;
+
+  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, m.id DESC`);
+
+  let data;
+  if (limit > 0) {
+    data = await sql`
+      SELECT m.*, ma.nombre AS marca_nombre
+      FROM modelos m
+      LEFT JOIN marcas ma ON m.marca_id = ma.id
+      ${whereClause}
+      ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  } else {
+    data = await sql`
+      SELECT m.*, ma.nombre AS marca_nombre
+      FROM modelos m
+      LEFT JOIN marcas ma ON m.marca_id = ma.id
+      ${whereClause}
+      ${orderClause}
+    `;
+  }
+
+  data = data.map(r => ({
+    ...r,
+    nombre: toTitleCase(r.nombre),
+    marca_nombre: r.marca_nombre ? toTitleCase(r.marca_nombre) : 'Sin Marca'
+  }));
+  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+
+  return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function createModeloModel(data) {
+  const cleanName = (data.nombre || '').trim();
+  const marcaId = data.marca_id ? Number(data.marca_id) : null;
+  if (!cleanName) throw new Error('El nombre del modelo es obligatorio');
+
+  if (isPgConnected && sql) {
+    const existing = await sql`
+      SELECT id FROM modelos 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+        AND ((marca_id = ${marcaId}) OR (${marcaId} IS NULL AND marca_id IS NULL))
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe un modelo con el nombre "${toTitleCase(cleanName)}" para esta marca`);
+    }
+
+    const rows = await sql`
+      INSERT INTO modelos (nombre, marca_id)
+      VALUES (${cleanName}, ${marcaId})
+      RETURNING *
+    `;
+    const full = await sql`
+      SELECT m.*, ma.nombre AS marca_nombre
+      FROM modelos m
+      LEFT JOIN marcas ma ON m.marca_id = ma.id
+      WHERE m.id = ${rows[0].id}
+    `;
+    return {
+      ...full[0],
+      nombre: toTitleCase(full[0].nombre),
+      marca_nombre: full[0].marca_nombre ? toTitleCase(full[0].marca_nombre) : 'Sin Marca'
+    };
+  } else {
+    const list = inMemoryData.modelos || [];
+    const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
+    const marca = (inMemoryData.marcas || []).find(ma => ma.id === marcaId);
+    const newModelo = {
+      id: nextId,
+      nombre: toTitleCase(cleanName),
+      marca_id: marcaId,
+      marca_nombre: marca ? toTitleCase(marca.nombre) : 'Sin Marca',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.modelos = [newModelo, ...list];
+    return newModelo;
+  }
+}
+
+export async function updateModeloModel(id, data) {
+  const mId = Number(id);
+  const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
+  const marcaId = data.marca_id !== undefined ? (data.marca_id ? Number(data.marca_id) : null) : undefined;
+
+  if (isPgConnected && sql) {
+    if (cleanName) {
+      const existing = await sql`
+        SELECT id FROM modelos 
+        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+          AND id != ${mId}
+          AND (
+            (${marcaId !== undefined ? marcaId : null} IS NOT NULL AND marca_id = ${marcaId !== undefined ? marcaId : null})
+            OR (${marcaId === null} AND marca_id IS NULL)
+          )
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe otro modelo con el nombre "${toTitleCase(cleanName)}" para esta marca`);
+      }
+    }
+
+    await sql`
+      UPDATE modelos
+      SET 
+        nombre = COALESCE(${cleanName}, nombre),
+        marca_id = ${marcaId !== undefined ? marcaId : sql`marca_id`},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${mId}
+    `;
+
+    const full = await sql`
+      SELECT m.*, ma.nombre AS marca_nombre
+      FROM modelos m
+      LEFT JOIN marcas ma ON m.marca_id = ma.id
+      WHERE m.id = ${mId}
+    `;
+    return full[0] ? {
+      ...full[0],
+      nombre: toTitleCase(full[0].nombre),
+      marca_nombre: full[0].marca_nombre ? toTitleCase(full[0].marca_nombre) : 'Sin Marca'
+    } : null;
+  } else {
+    const list = inMemoryData.modelos || [];
+    const idx = list.findIndex(i => i.id === mId);
+    if (idx !== -1) {
+      if (cleanName) list[idx].nombre = toTitleCase(cleanName);
+      if (marcaId !== undefined) {
+        list[idx].marca_id = marcaId;
+        const marca = (inMemoryData.marcas || []).find(ma => ma.id === marcaId);
+        list[idx].marca_nombre = marca ? toTitleCase(marca.nombre) : 'Sin Marca';
+      }
+      list[idx].updated_at = new Date().toISOString();
+      return list[idx];
+    }
+    return null;
+  }
+}
+
+export async function deleteModeloModel(id) {
+  return await deleteEntityDynamic('modelos', 'modelo', id);
+}
+
+// 7. TIPOS
+const tiposCrud = buildSimpleConfigCrud('tipos', 'tipo');
+export const getTiposModel = tiposCrud.get;
+export const createTipoModel = tiposCrud.create;
+export const updateTipoModel = tiposCrud.update;
+export const deleteTipoModel = tiposCrud.delete;
+
+// 8. MODOS
+const modosCrud = buildSimpleConfigCrud('modos', 'modo');
+export const getModosModel = modosCrud.get;
+export const createModoModel = modosCrud.create;
+export const updateModoModel = modosCrud.update;
+export const deleteModoModel = modosCrud.delete;
+
+// 9. LEGAL
+const legalCrud = buildSimpleConfigCrud('legal', 'legal');
+export const getLegalModel = legalCrud.get;
+export const createLegalModel = legalCrud.create;
+export const updateLegalModel = legalCrud.update;
+export const deleteLegalModel = legalCrud.delete;

@@ -17,10 +17,18 @@ import {
   getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado,
   getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado,
   getCumpleanos, getCarnets,
-  getCortes, getCorteById, createCorte, deleteCorte, getCortesFilterOptions,
   getDescargas, getLatestDescargas, uploadDescarga, deleteDescarga,
   getJuegos, getJuegosFilterOptions, createJuego, updateJuego, deleteJuego,
-  getMesas, getMesasFilterOptions, createMesa, updateMesa, deleteMesa, restoreMesa, purgeMesa
+  getMesas, getMesasFilterOptions, createMesa, updateMesa, deleteMesa, restoreMesa, purgeMesa,
+  getEstados, createEstado, updateEstado, deleteEstado,
+  getSociedades, createSociedad, updateSociedad, deleteSociedad,
+  getValores, createValor, updateValor, deleteValor,
+  getJuegosMaquinas, createJuegoMaquina, updateJuegoMaquina, deleteJuegoMaquina,
+  getMarcas, createMarca, updateMarca, deleteMarca,
+  getModelos, createModelo, updateModelo, deleteModelo,
+  getTipos, createTipo, updateTipo, deleteTipo,
+  getModos, createModo, updateModo, deleteModo,
+  getLegal, createLegal, updateLegal, deleteLegal
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -187,6 +195,99 @@ export default async function masterRoutes(fastify, options) {
   fastify.delete('/master/mesas/:id/purge', purgeMesa);
   fastify.delete('/api/master/mesas/:id/purge', purgeMesa);
 
+  // ==========================================
+  // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
+  // ==========================================
+
+  // 1. Estados
+  fastify.get('/master/estados', getEstados);
+  fastify.get('/api/master/estados', getEstados);
+  fastify.post('/master/estados', createEstado);
+  fastify.post('/api/master/estados', createEstado);
+  fastify.put('/master/estados/:id', updateEstado);
+  fastify.put('/api/master/estados/:id', updateEstado);
+  fastify.delete('/master/estados/:id', deleteEstado);
+  fastify.delete('/api/master/estados/:id', deleteEstado);
+
+  // 2. Sociedades
+  fastify.get('/master/sociedades', getSociedades);
+  fastify.get('/api/master/sociedades', getSociedades);
+  fastify.post('/master/sociedades', createSociedad);
+  fastify.post('/api/master/sociedades', createSociedad);
+  fastify.put('/master/sociedades/:id', updateSociedad);
+  fastify.put('/api/master/sociedades/:id', updateSociedad);
+  fastify.delete('/master/sociedades/:id', deleteSociedad);
+  fastify.delete('/api/master/sociedades/:id', deleteSociedad);
+
+  // 3. Valores
+  fastify.get('/master/valores', getValores);
+  fastify.get('/api/master/valores', getValores);
+  fastify.post('/master/valores', createValor);
+  fastify.post('/api/master/valores', createValor);
+  fastify.put('/master/valores/:id', updateValor);
+  fastify.put('/api/master/valores/:id', updateValor);
+  fastify.delete('/master/valores/:id', deleteValor);
+  fastify.delete('/api/master/valores/:id', deleteValor);
+
+  // 4. Juegos Máquinas
+  fastify.get('/master/juegos-maquinas', getJuegosMaquinas);
+  fastify.get('/api/master/juegos-maquinas', getJuegosMaquinas);
+  fastify.post('/master/juegos-maquinas', createJuegoMaquina);
+  fastify.post('/api/master/juegos-maquinas', createJuegoMaquina);
+  fastify.put('/master/juegos-maquinas/:id', updateJuegoMaquina);
+  fastify.put('/api/master/juegos-maquinas/:id', updateJuegoMaquina);
+  fastify.delete('/master/juegos-maquinas/:id', deleteJuegoMaquina);
+  fastify.delete('/api/master/juegos-maquinas/:id', deleteJuegoMaquina);
+
+  // 5. Marcas
+  fastify.get('/master/marcas', getMarcas);
+  fastify.get('/api/master/marcas', getMarcas);
+  fastify.post('/master/marcas', createMarca);
+  fastify.post('/api/master/marcas', createMarca);
+  fastify.put('/master/marcas/:id', updateMarca);
+  fastify.put('/api/master/marcas/:id', updateMarca);
+  fastify.delete('/master/marcas/:id', deleteMarca);
+  fastify.delete('/api/master/marcas/:id', deleteMarca);
+
+  // 6. Modelos
+  fastify.get('/master/modelos', getModelos);
+  fastify.get('/api/master/modelos', getModelos);
+  fastify.post('/master/modelos', createModelo);
+  fastify.post('/api/master/modelos', createModelo);
+  fastify.put('/master/modelos/:id', updateModelo);
+  fastify.put('/api/master/modelos/:id', updateModelo);
+  fastify.delete('/master/modelos/:id', deleteModelo);
+  fastify.delete('/api/master/modelos/:id', deleteModelo);
+
+  // 7. Tipos
+  fastify.get('/master/tipos', getTipos);
+  fastify.get('/api/master/tipos', getTipos);
+  fastify.post('/master/tipos', createTipo);
+  fastify.post('/api/master/tipos', createTipo);
+  fastify.put('/master/tipos/:id', updateTipo);
+  fastify.put('/api/master/tipos/:id', updateTipo);
+  fastify.delete('/master/tipos/:id', deleteTipo);
+  fastify.delete('/api/master/tipos/:id', deleteTipo);
+
+  // 8. Modos
+  fastify.get('/master/modos', getModos);
+  fastify.get('/api/master/modos', getModos);
+  fastify.post('/master/modos', createModo);
+  fastify.post('/api/master/modos', createModo);
+  fastify.put('/master/modos/:id', updateModo);
+  fastify.put('/api/master/modos/:id', updateModo);
+  fastify.delete('/master/modos/:id', deleteModo);
+  fastify.delete('/api/master/modos/:id', deleteModo);
+
+  // 9. Legal
+  fastify.get('/master/legal', getLegal);
+  fastify.get('/api/master/legal', getLegal);
+  fastify.post('/master/legal', createLegal);
+  fastify.post('/api/master/legal', createLegal);
+  fastify.put('/master/legal/:id', updateLegal);
+  fastify.put('/api/master/legal/:id', updateLegal);
+  fastify.delete('/master/legal/:id', deleteLegal);
+  fastify.delete('/api/master/legal/:id', deleteLegal);
 
 
   // Áreas

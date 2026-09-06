@@ -265,6 +265,15 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('descargas', masterDescargasStore),
     fetchEntity('juegos', masterJuegosStore),
     fetchEntity('mesas', masterMesasStore),
+    fetchEntity('estados', masterEstadosStore),
+    fetchEntity('sociedades', masterSociedadesStore),
+    fetchEntity('valores', masterValoresStore),
+    fetchEntity('juegos-maquinas', masterJuegosMaquinasStore),
+    fetchEntity('marcas', masterMarcasStore),
+    fetchEntity('modelos', masterModelosStore),
+    fetchEntity('tipos', masterTiposStore),
+    fetchEntity('modos', masterModosStore),
+    fetchEntity('legal', masterLegalStore),
     fetchUserSalas(),
     fetchUserPerms()
   ]);
@@ -465,4 +474,36 @@ export const masterDescargasActions = {
   }
 };
 
+// =========================================================================
+// 🎰 STORES Y ACCIONES DE CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
+// =========================================================================
 
+export const masterEstadosStore = writable(loadStore('estados_v1', []));
+export const masterSociedadesStore = writable(loadStore('sociedades_v1', []));
+export const masterValoresStore = writable(loadStore('valores_v1', []));
+export const masterJuegosMaquinasStore = writable(loadStore('juegos_maquinas_v1', []));
+export const masterMarcasStore = writable(loadStore('marcas_v1', []));
+export const masterModelosStore = writable(loadStore('modelos_v1', []));
+export const masterTiposStore = writable(loadStore('tipos_v1', []));
+export const masterModosStore = writable(loadStore('modos_v1', []));
+export const masterLegalStore = writable(loadStore('legal_v1', []));
+
+masterEstadosStore.subscribe(val => saveStore('estados_v1', val));
+masterSociedadesStore.subscribe(val => saveStore('sociedades_v1', val));
+masterValoresStore.subscribe(val => saveStore('valores_v1', val));
+masterJuegosMaquinasStore.subscribe(val => saveStore('juegos_maquinas_v1', val));
+masterMarcasStore.subscribe(val => saveStore('marcas_v1', val));
+masterModelosStore.subscribe(val => saveStore('modelos_v1', val));
+masterTiposStore.subscribe(val => saveStore('tipos_v1', val));
+masterModosStore.subscribe(val => saveStore('modos_v1', val));
+masterLegalStore.subscribe(val => saveStore('legal_v1', val));
+
+export const masterEstadosActions = createMasterEntityActions(masterEstadosStore, 'estados');
+export const masterSociedadesActions = createMasterEntityActions(masterSociedadesStore, 'sociedades');
+export const masterValoresActions = createMasterEntityActions(masterValoresStore, 'valores');
+export const masterJuegosMaquinasActions = createMasterEntityActions(masterJuegosMaquinasStore, 'juegos-maquinas');
+export const masterMarcasActions = createMasterEntityActions(masterMarcasStore, 'marcas');
+export const masterModelosActions = createMasterEntityActions(masterModelosStore, 'modelos');
+export const masterTiposActions = createMasterEntityActions(masterTiposStore, 'tipos');
+export const masterModosActions = createMasterEntityActions(masterModosStore, 'modos');
+export const masterLegalActions = createMasterEntityActions(masterLegalStore, 'legal');

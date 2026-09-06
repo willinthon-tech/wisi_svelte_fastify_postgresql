@@ -19,7 +19,16 @@ import {
   getCortesModel, getCorteByIdModel, createCorteModel, deleteCorteModel, getCortesFilterOptionsModel,
   getDescargasModel, getLatestDescargasModel, createDescargaUploadModel, deleteDescargaModel,
   getJuegosModel, getJuegosFilterOptionsModel, createJuegoModel, updateJuegoModel, deleteJuegoModel,
-  getMesasModel, getMesasFilterOptionsModel, createMesaModel, updateMesaModel, softDeleteMesaModel, restoreMesaModel, purgeMesaModel
+  getMesasModel, getMesasFilterOptionsModel, createMesaModel, updateMesaModel, softDeleteMesaModel, restoreMesaModel, purgeMesaModel,
+  getEstadosModel, createEstadoModel, updateEstadoModel, deleteEstadoModel,
+  getSociedadesModel, createSociedadModel, updateSociedadModel, deleteSociedadModel,
+  getValoresModel, createValorModel, updateValorModel, deleteValorModel,
+  getJuegosMaquinasModel, createJuegoMaquinaModel, updateJuegoMaquinaModel, deleteJuegoMaquinaModel,
+  getMarcasModel, createMarcaModel, updateMarcaModel, deleteMarcaModel,
+  getModelosModel, createModeloModel, updateModeloModel, deleteModeloModel,
+  getTiposModel, createTipoModel, updateTipoModel, deleteTipoModel,
+  getModosModel, createModoModel, updateModoModel, deleteModoModel,
+  getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1627,3 +1636,106 @@ export async function deleteDescarga(request, reply) {
   }
 }
 
+// =========================================================================
+// 🎰 CONTROLADORES DE CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
+// =========================================================================
+
+function buildCrudControllers(getModel, createModel, updateModel, deleteModel) {
+  return {
+    get: async function(request, reply) {
+      const result = await getModel(request.query);
+      return reply.send(result);
+    },
+    create: async function(request, reply) {
+      try {
+        const data = parseBody(request.body);
+        const result = await createModel(data);
+        return reply.status(201).send({ success: true, data: result });
+      } catch (err) {
+        return reply.status(400).send({ success: false, error: err.message });
+      }
+    },
+    update: async function(request, reply) {
+      try {
+        const { id } = request.params;
+        const data = parseBody(request.body);
+        const result = await updateModel(id, data);
+        return reply.send({ success: true, data: result });
+      } catch (err) {
+        return reply.status(400).send({ success: false, error: err.message });
+      }
+    },
+    delete: async function(request, reply) {
+      try {
+        const { id } = request.params;
+        const result = await deleteModel(id);
+        return reply.send(result);
+      } catch (err) {
+        return reply.status(400).send({ success: false, error: err.message });
+      }
+    }
+  };
+}
+
+// 1. Estados
+const estadosCtrl = buildCrudControllers(getEstadosModel, createEstadoModel, updateEstadoModel, deleteEstadoModel);
+export const getEstados = estadosCtrl.get;
+export const createEstado = estadosCtrl.create;
+export const updateEstado = estadosCtrl.update;
+export const deleteEstado = estadosCtrl.delete;
+
+// 2. Sociedades
+const sociedadesCtrl = buildCrudControllers(getSociedadesModel, createSociedadModel, updateSociedadModel, deleteSociedadModel);
+export const getSociedades = sociedadesCtrl.get;
+export const createSociedad = sociedadesCtrl.create;
+export const updateSociedad = sociedadesCtrl.update;
+export const deleteSociedad = sociedadesCtrl.delete;
+
+// 3. Valores
+const valoresCtrl = buildCrudControllers(getValoresModel, createValorModel, updateValorModel, deleteValorModel);
+export const getValores = valoresCtrl.get;
+export const createValor = valoresCtrl.create;
+export const updateValor = valoresCtrl.update;
+export const deleteValor = valoresCtrl.delete;
+
+// 4. Juegos Máquinas
+const juegosMaquinasCtrl = buildCrudControllers(getJuegosMaquinasModel, createJuegoMaquinaModel, updateJuegoMaquinaModel, deleteJuegoMaquinaModel);
+export const getJuegosMaquinas = juegosMaquinasCtrl.get;
+export const createJuegoMaquina = juegosMaquinasCtrl.create;
+export const updateJuegoMaquina = juegosMaquinasCtrl.update;
+export const deleteJuegoMaquina = juegosMaquinasCtrl.delete;
+
+// 5. Marcas
+const marcasCtrl = buildCrudControllers(getMarcasModel, createMarcaModel, updateMarcaModel, deleteMarcaModel);
+export const getMarcas = marcasCtrl.get;
+export const createMarca = marcasCtrl.create;
+export const updateMarca = marcasCtrl.update;
+export const deleteMarca = marcasCtrl.delete;
+
+// 6. Modelos
+const modelosCtrl = buildCrudControllers(getModelosModel, createModeloModel, updateModeloModel, deleteModeloModel);
+export const getModelos = modelosCtrl.get;
+export const createModelo = modelosCtrl.create;
+export const updateModelo = modelosCtrl.update;
+export const deleteModelo = modelosCtrl.delete;
+
+// 7. Tipos
+const tiposCtrl = buildCrudControllers(getTiposModel, createTipoModel, updateTipoModel, deleteTipoModel);
+export const getTipos = tiposCtrl.get;
+export const createTipo = tiposCtrl.create;
+export const updateTipo = tiposCtrl.update;
+export const deleteTipo = tiposCtrl.delete;
+
+// 8. Modos
+const modosCtrl = buildCrudControllers(getModosModel, createModoModel, updateModoModel, deleteModoModel);
+export const getModos = modosCtrl.get;
+export const createModo = modosCtrl.create;
+export const updateModo = modosCtrl.update;
+export const deleteModo = modosCtrl.delete;
+
+// 9. Legal
+const legalCtrl = buildCrudControllers(getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel);
+export const getLegal = legalCtrl.get;
+export const createLegal = legalCtrl.create;
+export const updateLegal = legalCtrl.update;
+export const deleteLegal = legalCtrl.delete;

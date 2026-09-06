@@ -20,6 +20,15 @@ export let inMemoryData = {
     { clave: 'timezone_display', valor: 'America/Caracas -4' }
   ],
   cortes: [],
+  estados: [],
+  sociedades: [],
+  valores: [],
+  juegos_maquinas: [],
+  marcas: [],
+  modelos: [],
+  tipos: [],
+  modos: [],
+  legal: [],
   descargas: [
     { id: 1, plataforma: 'android', formato: 'apk', archivo: 'app-wisi-android-v1-c1.apk', peso: '6.5 MB', peso_bytes: 6574550, version_num: 1, fecha: new Date().toISOString() },
     { id: 2, plataforma: 'windows', formato: 'exe', archivo: 'app-wisi-windows-v1-c2.exe', peso: '2.3 MB', peso_bytes: 2379534, version_num: 1, fecha: new Date().toISOString() }
@@ -739,6 +748,90 @@ export async function initDb() {
     await sql`CREATE INDEX IF NOT EXISTS idx_mesas_juego_id ON mesas(juego_id);`.catch(() => {});
     await sql`CREATE INDEX IF NOT EXISTS idx_mesas_active ON mesas(active);`.catch(() => {});
 
+    // Tablas de Configuración de Máquinas
+    await sql`
+      CREATE TABLE IF NOT EXISTS estados (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS sociedades (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS valores (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS juegos_maquinas (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS marcas (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS modelos (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL,
+        marca_id INT REFERENCES marcas(id) ON DELETE SET NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_modelos_nombre_marca UNIQUE (nombre, marca_id)
+      );
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_modelos_marca_id ON modelos(marca_id);`.catch(() => {});
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS tipos (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS modos (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS legal (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
 
     // Existing wisi_items table
     await sql`
