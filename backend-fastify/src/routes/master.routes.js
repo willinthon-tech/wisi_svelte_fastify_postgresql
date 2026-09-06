@@ -254,8 +254,8 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/api/master/descargas', getDescargas);
   fastify.get('/master/descargas/latest', getLatestDescargas);
   fastify.get('/api/master/descargas/latest', getLatestDescargas);
-  fastify.post('/master/descargas/upload', uploadDescarga);
-  fastify.post('/api/master/descargas/upload', uploadDescarga);
+  fastify.post('/master/descargas/upload', { bodyLimit: 250 * 1024 * 1024 }, uploadDescarga);
+  fastify.post('/api/master/descargas/upload', { bodyLimit: 250 * 1024 * 1024 }, uploadDescarga);
   fastify.delete('/master/descargas/:id', deleteDescarga);
   fastify.delete('/api/master/descargas/:id', deleteDescarga);
 }

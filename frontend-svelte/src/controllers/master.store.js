@@ -1,5 +1,6 @@
 import { get } from 'svelte/store';
 import { currentUserStore, userSalasStore as authUserSalasStore } from './auth.store.js';
+import { toBackendUrl } from '../config/api.config.js';
 
 export function getUserModuleActions(route) {
   const user = get(currentUserStore);
@@ -405,11 +406,14 @@ export const masterDescargasActions = {
   ...createMasterEntityActions(masterDescargasStore, 'descargas'),
   upload: async ({ fileBase64, filename, size, sizeText }) => {
     try {
-      const res = await fetch('/api/master/descargas/upload', {
+      const res = await fetch(toBackendUrl('/api/master/descargas/upload'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileBase64, filename, size, sizeText })
       });
+      if (res.status === 413) {
+        throw new Error('El instalador es demasiado pesado para el servidor web (Error 413). Se requiere aumentar client_max_body_size en NGINX.');
+      }
       const json = await res.json();
       if (!res.ok || (json && json.success === false)) {
         throw new Error(json.error || 'Error al subir instalador');
