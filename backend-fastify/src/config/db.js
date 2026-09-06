@@ -104,7 +104,7 @@ export let inMemoryData = {
     { id: 14, nombre: 'Estados', icono: 'settings', ruta: '/configuracion/estados', page_id: 3 },
     { id: 15, nombre: 'Sociedades', icono: 'settings', ruta: '/configuracion/sociedades', page_id: 3 },
     { id: 16, nombre: 'Valores', icono: 'settings', ruta: '/configuracion/valores', page_id: 3 },
-    { id: 17, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos', page_id: 3 },
+    { id: 17, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos-maquinas', page_id: 3 },
     { id: 18, nombre: 'Marcas', icono: 'settings', ruta: '/configuracion/marcas', page_id: 3 },
     { id: 19, nombre: 'Modelos', icono: 'settings', ruta: '/configuracion/modelos', page_id: 3 },
     { id: 20, nombre: 'Tipos', icono: 'settings', ruta: '/configuracion/tipos', page_id: 3 },
@@ -112,9 +112,8 @@ export let inMemoryData = {
     { id: 22, nombre: 'Legal', icono: 'settings', ruta: '/configuracion/legal', page_id: 3 },
     // Módulos de MESAS EN VIVO (page_id = 7)
     { id: 12, nombre: 'Mesas', icono: 'settings', ruta: '/mesas-en-vivo/mesas', page_id: 7 },
-    { id: 35, nombre: 'Mesas Borradas', icono: 'settings', ruta: '/mesas-en-vivo/mesas-borradas', page_id: 7 },
-    // Módulos de CONFIGURACION (page_id = 8)
-    { id: 34, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos', page_id: 8 }
+    { id: 34, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos', page_id: 7 },
+    { id: 35, nombre: 'Mesas Borradas', icono: 'settings', ruta: '/mesas-en-vivo/mesas-borradas', page_id: 7 }
   ],
   dispositivos: [
     { id: 3, nombre: 'Marcaje Personal ( Monagas )', sala_id: 1, ip_local: null, ip_remota: '186.167.73.66:8027', ip_panel: null, usuario: 'admin', clave: 'S0p0rt3S0p0rt3', marcaje_inicio: '2025-01-01T00:00:00', marcaje_fin: '2030-12-31T23:59:59' },
@@ -816,7 +815,7 @@ export async function initDb() {
         (14, 'Estados', 'settings', '/configuracion/estados', 3),
         (15, 'Sociedades', 'settings', '/configuracion/sociedades', 3),
         (16, 'Valores', 'settings', '/configuracion/valores', 3),
-        (17, 'Juegos', 'settings', '/configuracion/juegos', 3),
+        (17, 'Juegos', 'settings', '/configuracion/juegos-maquinas', 3),
         (18, 'Marcas', 'settings', '/configuracion/marcas', 3),
         (19, 'Modelos', 'settings', '/configuracion/modelos', 3),
         (20, 'Tipos', 'settings', '/configuracion/tipos', 3),
@@ -831,6 +830,11 @@ export async function initDb() {
         UPDATE modulos 
         SET nombre = 'Registros', ruta = '/rrhh/registros' 
         WHERE id = 26 OR LOWER(nombre) = 'reportes';
+      `;
+      await sql`
+        UPDATE modulos 
+        SET ruta = '/configuracion/juegos-maquinas' 
+        WHERE id = 17 OR (LOWER(nombre) = 'juegos' AND page_id = 3);
       `;
       await sql`
         INSERT INTO permissions (id, nombre) VALUES
