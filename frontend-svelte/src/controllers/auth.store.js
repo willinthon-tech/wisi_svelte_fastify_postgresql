@@ -143,6 +143,10 @@ export async function loginUserStore(usuario, password) {
 }
 
 export function logoutUserStore() {
+  try {
+    import('../services/push.service.js').then(m => m.unregisterPushNotifications?.()).catch(() => {});
+  } catch (e) {}
+
   isAuthenticatedStore.set(false);
   currentUserStore.set(null);
   userSalasStore.set([]);

@@ -9,6 +9,7 @@
   } from '../controllers/master.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
   import { triggerToast } from '../controllers/ui.store.js';
+  import { toBackendUrl } from '../config/api.config.js';
 
   export let healthStatus = {};
 
@@ -712,7 +713,7 @@
             </div>
           </div>
           <a 
-            href="/downloads/{androidFile}" 
+            href={toBackendUrl('/api/downloads/' + androidFile)} 
             download="{androidFile}"
             on:click={() => triggerToast(`Iniciando descarga de ${androidFile}...`, 'info')}
             style="display: inline-flex; align-items: center; gap: 6px; background: #10b981; color: #ffffff; padding: 9px 15px; border-radius: 8px; font-weight: 700; font-size: 12.5px; text-decoration: none; box-shadow: 0 2px 6px rgba(16,185,129,0.3); transition: all 0.15s ease; white-space: nowrap;">
@@ -745,7 +746,7 @@
             </div>
           </div>
           <a 
-            href="/downloads/{windowsFile}" 
+            href={toBackendUrl('/api/downloads/' + windowsFile)} 
             download="{windowsFile}"
             on:click={() => triggerToast(`Iniciando descarga de ${windowsFile}...`, 'info')}
             style="display: inline-flex; align-items: center; gap: 6px; background: #2563eb; color: #ffffff; padding: 9px 15px; border-radius: 8px; font-weight: 700; font-size: 12.5px; text-decoration: none; box-shadow: 0 2px 6px rgba(37,99,235,0.3); transition: all 0.15s ease; white-space: nowrap;">

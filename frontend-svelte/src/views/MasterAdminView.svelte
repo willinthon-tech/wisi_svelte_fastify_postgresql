@@ -37,6 +37,7 @@
   import {
     getCloudBaseUrl,
     AGENT_SYNC_ENDPOINT_URL,
+    toBackendUrl,
   } from "../config/api.config.js";
 
   // Tab order: Salas -> Páginas -> Módulos -> Dispositivos -> Usuarios -> Permisos y Asignaciones -> Ajustes de Sistema
@@ -2880,7 +2881,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                   {:else}
                     {#if activeTab === "descargas"}
                       <a
-                        href="/downloads/{item.archivo}"
+                        href={toBackendUrl('/api/downloads/' + item.archivo)}
                         download="{item.archivo}"
                         class="btn-flow-sec"
                         style="padding: 4px 8px; font-size: 12px; color: #2563eb; border-color: #93c5fd; background: #eff6ff; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 700;"

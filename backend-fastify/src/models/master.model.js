@@ -4814,13 +4814,20 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
     // 5. Generate official filename: app-wisi-{plataforma}-v{conteo}-c{id}.{formato}
     const finalFilename = `app-wisi-${plataforma}-v${versionNum}-c${recordId}.${formato}`;
 
-    // 6. Write file to disk in backend-fastify/downloads
-    const downloadsDir = path.join(process.cwd(), 'downloads');
-    if (!fs.existsSync(downloadsDir)) {
-      fs.mkdirSync(downloadsDir, { recursive: true });
+    // 6. Write file to disk in candidate downloads directories
+    const { fileURLToPath } = await import('url');
+    const targetDirs = [
+      path.join(process.cwd(), 'downloads'),
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'downloads'),
+      '/var/www/wisi/backend-fastify/downloads',
+      '/var/www/wisi/downloads'
+    ];
+    for (const d of targetDirs) {
+      try {
+        if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+        fs.writeFileSync(path.join(d, finalFilename), buffer);
+      } catch (e) {}
     }
-    const finalFilePath = path.join(downloadsDir, finalFilename);
-    fs.writeFileSync(finalFilePath, buffer);
 
     // 7. Update row with final filename
     const updated = await sql`

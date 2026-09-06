@@ -395,14 +395,31 @@ async function startServer() {
       const fs = await import('fs');
       const path = await import('path');
       const filename = path.basename(req.params.filename || '');
-      const downloadsDir = path.join(process.cwd(), 'downloads');
-      const filePath = path.join(downloadsDir, filename);
+      
+      const candidateDirs = [
+        path.resolve(__dirname, '..', 'downloads'),
+        path.join(process.cwd(), 'downloads'),
+        path.join(process.cwd(), 'backend-fastify', 'downloads'),
+        '/var/www/wisi/backend-fastify/downloads',
+        '/var/www/wisi/downloads'
+      ];
 
-      if (!filename || !fs.existsSync(filePath)) {
+      let resolvedFilePath = null;
+      for (const d of candidateDirs) {
+        try {
+          const candidate = path.join(d, filename);
+          if (fs.existsSync(candidate)) {
+            resolvedFilePath = candidate;
+            break;
+          }
+        } catch (e) {}
+      }
+
+      if (!filename || !resolvedFilePath || !fs.existsSync(resolvedFilePath)) {
         return reply.status(404).send({ error: 'Instalador no encontrado' });
       }
 
-      const stat = fs.statSync(filePath);
+      const stat = fs.statSync(resolvedFilePath);
       reply.header('Content-Disposition', `attachment; filename="${filename}"`);
       reply.header('Content-Length', stat.size);
       reply.header('Cache-Control', 'public, max-age=86400');
@@ -417,7 +434,7 @@ async function startServer() {
         reply.type('application/octet-stream');
       }
 
-      return fs.createReadStream(filePath);
+      return reply.send(fs.createReadStream(resolvedFilePath));
     };
 
     fastify.get('/downloads/:filename', serveDownloadFile);

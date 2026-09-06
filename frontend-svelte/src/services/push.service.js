@@ -110,3 +110,21 @@ export async function initPushNotifications(userId, onNotificationReceived) {
     console.warn('⚠️ [Push] No se pudo inicializar Push Notifications en este dispositivo:', error);
   }
 }
+
+/**
+ * Desregistra el dispositivo del backend al cerrar sesión
+ */
+export async function unregisterPushNotifications() {
+  if (typeof window === 'undefined') return;
+  try {
+    const token = localStorage.getItem('wisi_fcm_token');
+    if (token) {
+      const endpoint = toBackendUrl('/api/auth/fcm-token/unregister');
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      }).catch(() => {});
+    }
+  } catch (e) {}
+}

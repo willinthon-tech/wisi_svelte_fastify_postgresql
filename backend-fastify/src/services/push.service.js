@@ -90,7 +90,7 @@ export async function registerDeviceToken({ user_id = null, token, platform = 'a
         VALUES (${user_id}, ${cleanToken}, ${platform}, TRUE, NOW())
         ON CONFLICT (token) 
         DO UPDATE SET 
-          user_id = COALESCE(EXCLUDED.user_id, fcm_tokens.user_id),
+          user_id = EXCLUDED.user_id,
           platform = EXCLUDED.platform,
           activo = TRUE,
           updated_at = NOW();
@@ -102,9 +102,30 @@ export async function registerDeviceToken({ user_id = null, token, platform = 'a
 }
 
 /**
+ * Desactiva el token FCM de un dispositivo al cerrar sesión
+ */
+export async function unregisterDeviceToken({ token }) {
+  if (!token || typeof token !== 'string') return;
+  const cleanToken = token.trim();
+  inMemoryTokens.delete(cleanToken);
+
+  if (isPgConnected && sql) {
+    try {
+      await sql`
+        UPDATE fcm_tokens 
+        SET activo = FALSE, updated_at = NOW() 
+        WHERE token = ${cleanToken};
+      `;
+    } catch (err) {
+      console.warn('⚠️ [Push FCM] Error desactivando token en PostgreSQL:', err.message);
+    }
+  }
+}
+
+/**
  * Envía una notificación push FCM filtrada estrictamente por la sala del marcaje.
- * Solo reciben la notificación los usuarios que tienen asignada esa sala en `user_salas`
- * o los administradores globales (user_id = 1).
+ * Solo reciben la notificación los usuarios que tienen asignada esa sala en `user_salas`,
+ * o aquellos que no tienen ninguna restricción de salas configurada en `user_salas`.
  */
 export async function sendPushNotificationForAttlog({ salaId = null, title, body, data = {}, imageUrl = null, icon = null }) {
   let tokens = [];
@@ -113,17 +134,21 @@ export async function sendPushNotificationForAttlog({ salaId = null, title, body
     try {
       const numSalaId = salaId ? Number(salaId) : null;
       if (numSalaId) {
-        // Consultar únicamente tokens de usuarios que tienen asignada esta sala o son administradores generales (user_id = 1)
+        // Consultar únicamente tokens de usuarios que tienen asignada esta sala
+        // o usuarios que no tienen ninguna sala en user_salas (acceso global irrestricto)
         const rows = await sql`
           SELECT DISTINCT ft.token 
           FROM fcm_tokens ft
           WHERE ft.activo = TRUE 
             AND ft.user_id IS NOT NULL
             AND (
-              ft.user_id = 1
-              OR EXISTS (
+              EXISTS (
                 SELECT 1 FROM user_salas us 
                 WHERE us.user_id = ft.user_id AND us.sala_id = ${numSalaId}
+              )
+              OR NOT EXISTS (
+                SELECT 1 FROM user_salas us 
+                WHERE us.user_id = ft.user_id
               )
             )
         `;
@@ -135,7 +160,7 @@ export async function sendPushNotificationForAttlog({ salaId = null, title, body
       }
     } catch (err) {
       console.warn('⚠️ [Push FCM] Error consultando tokens por sala:', err.message);
-      tokens = Array.from(inMemoryTokens);
+      tokens = [];
     }
   } else {
     tokens = Array.from(inMemoryTokens);

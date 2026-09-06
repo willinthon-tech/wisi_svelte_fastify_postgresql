@@ -1,5 +1,5 @@
 import { loginController, getMeController } from '../controllers/auth.controller.js';
-import { registerDeviceToken } from '../services/push.service.js';
+import { registerDeviceToken, unregisterDeviceToken } from '../services/push.service.js';
 
 export default async function authRoutes(fastify, options) {
   fastify.post('/auth/login', loginController);
@@ -13,5 +13,13 @@ export default async function authRoutes(fastify, options) {
     
     await registerDeviceToken({ user_id, token, platform });
     return { success: true, message: 'Dispositivo vinculado a notificaciones push exitosamente' };
+  });
+
+  // Desvincular Token FCM al cerrar sesión
+  fastify.post('/auth/fcm-token/unregister', async (request, reply) => {
+    const body = typeof request.body === 'string' ? JSON.parse(request.body) : (request.body || {});
+    const { token } = body;
+    await unregisterDeviceToken({ token });
+    return { success: true, message: 'Dispositivo desvinculado exitosamente' };
   });
 }
