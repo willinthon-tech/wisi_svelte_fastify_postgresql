@@ -946,7 +946,7 @@
           <CortesCalculosView />
 
           <!-- MAQUINAS Module Views -->
-        {:else if $currentRouteStore === "maquinas/maquinas" || $currentRouteStore === "maquinas"}
+        {:else if $currentRouteStore === "configuracion/maquinas" || $currentRouteStore === "maquinas"}
           <MaquinasView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -955,7 +955,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/estados" || $currentRouteStore === "estados"}
+        {:else if $currentRouteStore === "configuracion/estados" || $currentRouteStore === "estados"}
           <EstadosView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -964,7 +964,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/sociedades" || $currentRouteStore === "sociedades"}
+        {:else if $currentRouteStore === "configuracion/sociedades" || $currentRouteStore === "sociedades"}
           <SociedadesView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -973,7 +973,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/valores" || $currentRouteStore === "valores"}
+        {:else if $currentRouteStore === "configuracion/valores" || $currentRouteStore === "valores"}
           <ValoresView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -982,7 +982,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/juegos" || $currentRouteStore === "juegos"}
+        {:else if $currentRouteStore === "configuracion/juegos" || $currentRouteStore === "juegos"}
           <MaquinasJuegosView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -991,7 +991,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/marcas" || $currentRouteStore === "marcas"}
+        {:else if $currentRouteStore === "configuracion/marcas" || $currentRouteStore === "marcas"}
           <MarcasView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -1000,7 +1000,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/modelos" || $currentRouteStore === "modelos"}
+        {:else if $currentRouteStore === "configuracion/modelos" || $currentRouteStore === "modelos"}
           <ModelosView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -1009,7 +1009,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/tipos" || $currentRouteStore === "tipos"}
+        {:else if $currentRouteStore === "configuracion/tipos" || $currentRouteStore === "tipos"}
           <TiposView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -1018,7 +1018,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/modos" || $currentRouteStore === "modos"}
+        {:else if $currentRouteStore === "configuracion/modos" || $currentRouteStore === "modos"}
           <ModosView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -1027,7 +1027,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "maquinas/legal" || $currentRouteStore === "legal"}
+        {:else if $currentRouteStore === "configuracion/legal" || $currentRouteStore === "legal"}
           <LegalView
             items={$itemsStore}
             on:toggle={handleToggle}

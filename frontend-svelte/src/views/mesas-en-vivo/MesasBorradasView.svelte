@@ -189,66 +189,7 @@
     await loadServerData();
   }
 
-  async function handleDelete(event) {
-    const { id, onResult } = event.detail;
-    try {
-      const res = await masterMesasActions.purge(id);
-      if (res && res.blocked) {
-        onResult(res);
-      } else {
-        triggerToast('Mesa eliminada definitivamente de la base de datos', 'success');
-        onResult({ success: true });
-        await loadServerData();
-      }
-    } catch (err) {
-      triggerToast(`Error al purgar mesa: ${err.message}`, 'error');
-    }
-  }
 
-  async function handleBatchDelete(event) {
-    const { ids, onResult } = event.detail;
-    const deleted = [];
-    const blocked = [];
-    const errors = [];
-
-    for (const id of ids) {
-      try {
-        const res = await masterMesasActions.purge(id);
-        if (res && res.blocked) {
-          blocked.push({
-            id,
-            name: res.entityName || `ID: ${id}`,
-            reason: res.message || 'Tiene elementos asociados en la base de datos',
-            dependencies: res.dependencies || []
-          });
-        } else if (res && (res.success || res.id)) {
-          deleted.push({ id });
-        } else {
-          blocked.push({
-            id,
-            name: `ID: ${id}`,
-            reason: res?.error || 'No se pudo eliminar definitivamente',
-            dependencies: []
-          });
-        }
-      } catch (err) {
-        errors.push({ id, error: err.message });
-      }
-    }
-
-    await loadServerData();
-
-    if (onResult) {
-      onResult({
-        deleted,
-        blocked,
-        errors,
-        total: ids.length,
-        entityType: 'mesa borrada'
-      });
-    }
-  }
-</script>
 
 <PaginatedDataTable 
   {items}
@@ -260,11 +201,9 @@
   {columns}
   actions={{ 
     edit: false, 
-    delete: true, 
+    delete: false, 
     restore: true, 
-    restoreLabel: 'Restaurar', 
-    deleteLabel: 'Eliminar Definitivo',
-    deleteTitle: 'Eliminar permanentemente de la base de datos' 
+    restoreLabel: 'Restaurar'
   }}
   createFields={[]}
   bind:searchQuery
@@ -273,8 +212,6 @@
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:restore={handleRestore}
   on:batchRestore={handleBatchRestore}
-  on:delete={handleDelete}
-  on:batchDelete={handleBatchDelete}
 >
   <div slot="filters" class="smart-filters-grid">
     <SmartMultiSelect
