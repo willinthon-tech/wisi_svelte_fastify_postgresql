@@ -1780,6 +1780,7 @@ export async function syncAttlogsModel(data) {
       let attlogId;
       if (existingAtt.length > 0) {
         attlogId = existingAtt[0].id;
+        console.log(`\x1b[33m⚠️  [ATTLOG]\x1b[0m Marcaje duplicado detectado (id: ${attlogId}) para emp: ${log.employee_no} @ ${log.event_time} - se actualiza pero NO se emite evento`);
         await sql`
           UPDATE attlogs
           SET updated_at = CURRENT_TIMESTAMP,
@@ -1863,6 +1864,8 @@ export async function syncAttlogsModel(data) {
           sala_nombre: data.sala_nombre,
           dispositivo_nombre: data.dispositivo_nombre
         });
+        const empName = fullRecord?.nombre || log.nombre || log.employee_no;
+        console.log(`\x1b[32m🟢 [ATTLOG]\x1b[0m Evento emitido | emp: ${empName} | sala: ${fullRecord?.sala_nombre || data.sala_nombre} | status: ${fullRecord?.attendancestatus || log.attendanceStatus} | id: ${attlogId}`);
       }
       count++;
     }

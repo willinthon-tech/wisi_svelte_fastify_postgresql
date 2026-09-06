@@ -622,12 +622,13 @@ export async function syncAttlogs(request, reply) {
     const extracted = extractHikvisionPushData(body, rawStr);
 
     if (!extracted || !extracted.empNo) {
+      console.log(`\x1b[33m⚠️  [HIKVISION]\x1b[0m No se extrajo empNo del payload. CallerIp: ${callerIp} | Content-Type: ${request.headers['content-type']} | BodyBytes: ${rawBuf ? rawBuf.length : 'N/A'} | BodyPreview: ${rawStr.substring(0, 300)}`);
       return reply.status(200).send({ status: "OK", statusCode: 1, statusString: "OK" });
     }
 
     // Log real-time biometric event cleanly
     const evtInfo = extracted.subEventType ? `(Evento: ${extracted.subEventType})` : '';
-    //console.log(`\x1b[32m🟢`);
+    console.log(`\x1b[36m📡 [HIKVISION]\x1b[0m Evento recibido | empNo: ${extracted.empNo} | status: ${extracted.attendanceStatus} | verifyMode: ${extracted.currentVerifyMode} | devIp: ${extracted.deviceIp || 'N/A'} | callerIp: ${callerIp} ${evtInfo}`);
 
     const dispositivos = await getCachedDispositivos();
     let matchedDev = null;
@@ -660,6 +661,9 @@ export async function syncAttlogs(request, reply) {
     // 4. Fallback: Si no coincide ninguna IP local específica, asignar al dispositivo más apropiado sin descartar
     if (!matchedDev && dispositivos.length > 0) {
       matchedDev = dispositivos[0];
+      console.log(`\x1b[33m⚠️  [HIKVISION]\x1b[0m No se encontró dispositivo para IP ${callerIp}. Fallback → ${matchedDev.nombre}`);
+    } else if (matchedDev) {
+      console.log(`\x1b[32m🟢 [HIKVISION]\x1b[0m Dispositivo matched: ${matchedDev.nombre} (sala: ${matchedDev.sala_nombre || matchedDev.sala_id})`);
     }
 
     const devNombre = matchedDev ? (matchedDev.nombre || `Biométrico (${matchedDev.ip_local || callerIp})`) : 'Biométrico';
