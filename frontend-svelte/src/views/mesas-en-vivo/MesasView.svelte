@@ -158,32 +158,24 @@
     loadServerData({ page: 1, search: "" });
   }
 
-  $: filteredJuegosStore = ($masterJuegosStore || [])
-    .filter(j => {
-      if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-      return !j.sala_id || assignedSalaIds.map(Number).includes(Number(j.sala_id));
-    })
-    .map(j => {
-      const sala = ($masterSalasStore || []).find(s => Number(s.id) === Number(j.sala_id));
-      const salaName = sala ? ` (${sala.nombre})` : '';
-      return {
-        id: j.id,
-        nombre: `${j.nombre}${salaName}`,
-        rawNombre: j.nombre,
-        sala_id: j.sala_id
-      };
-    });
+  $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
+    if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
+    return assignedSalaIds.map(Number).includes(Number(s.id));
+  });
+
+  $: globalJuegosStore = $masterJuegosStore || [];
 
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: true },
-    { key: 'juego_nombre', keyId: 'juego_id', label: 'Juego Asignado', sortable: true, editable: true, options: filteredJuegosStore },
-    { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false }
+    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala Asignada', sortable: true, editable: true, options: filteredSalasStore },
+    { key: 'juego_nombre', keyId: 'juego_id', label: 'Juego Asignado', sortable: true, editable: true, options: globalJuegosStore }
   ];
 
   $: createFields = [
     { key: 'nombre', label: 'Nombre de la Mesa', type: 'text', placeholder: 'Ej. Mesa 01', required: true },
-    { key: 'juego_id', label: 'Juego Asignado', type: 'select', options: filteredJuegosStore, required: true }
+    { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true },
+    { key: 'juego_id', label: 'Juego Asignado', type: 'select', options: globalJuegosStore, required: true }
   ];
 
   async function handleCreate(event) {
@@ -279,7 +271,7 @@
   {columns}
   {createFields}
   bind:searchQuery
-  searchPlaceholder="Buscar mesas por nombre, juego, sala o ID..."
+  searchPlaceholder="Buscar mesas por nombre, sala, juego o ID..."
   entityType="mesa"
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:create={handleCreate}

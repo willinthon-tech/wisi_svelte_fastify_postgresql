@@ -159,8 +159,8 @@
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: false },
-    { key: 'juego_nombre', label: 'Juego Asignado', sortable: true, editable: false },
-    { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false }
+    { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false },
+    { key: 'juego_nombre', label: 'Juego Asignado', sortable: true, editable: false }
   ];
 
   async function handleRestore(event) {

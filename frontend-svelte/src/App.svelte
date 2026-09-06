@@ -1047,7 +1047,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "mesas-en-vivo/juegos"}
+        {:else if $currentRouteStore === "configuracion/juegos" || $currentRouteStore === "mesas-en-vivo/juegos"}
           <MesasJuegosView
             items={$itemsStore}
             on:toggle={handleToggle}

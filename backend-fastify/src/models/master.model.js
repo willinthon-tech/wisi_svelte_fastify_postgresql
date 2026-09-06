@@ -4897,22 +4897,11 @@ export async function deleteDescargaModel(id) {
 export function buildJuegoConditions(options = {}) {
   const conds = [];
 
-  // 1. Restricción por salas asignadas al usuario logueado
-  if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`j.sala_id = ANY(${options.userSalaIds})`);
-  }
-
-  // 2. Salas seleccionadas en el filtro
-  if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
-    conds.push(sql`j.sala_id = ANY(${options.salaIds})`);
-  }
-
-  // 3. Búsqueda por texto
+  // Búsqueda por texto
   if (options.search && String(options.search).trim()) {
     const term = `%${String(options.search).trim().toLowerCase()}%`;
     conds.push(sql`(
       LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
-      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
       CAST(j.id AS TEXT) LIKE ${term}
     )`);
   }
@@ -4921,47 +4910,9 @@ export function buildJuegoConditions(options = {}) {
 }
 
 export async function getJuegosFilterOptionsModel(options = {}) {
-  if (!isPgConnected || !sql) {
-    return {
-      success: true,
-      data: { salas: [] }
-    };
-  }
-
-  const conds = buildJuegoConditions({ ...options, skipSalas: true });
-  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
-
-  let allSalas;
-  if (options.userSalaIds && options.userSalaIds.length > 0) {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
-  } else {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
-  }
-
-  const countsRes = await sql`
-    SELECT j.sala_id AS id, COUNT(j.id)::int AS count
-    FROM juegos j
-    LEFT JOIN salas s ON j.sala_id = s.id
-    ${where}
-    GROUP BY j.sala_id
-  `;
-  const countMap = new Map(countsRes.map(r => [r.id, r.count]));
-  const activeSalas = new Set((options.salaIds || []).map(Number));
-
-  const salas = allSalas
-    .map(s => ({
-      id: s.id,
-      nombre: s.nombre,
-      count: countMap.get(s.id) || 0
-    }))
-    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
-    .sort((a, b) => b.count - a.count);
-
   return {
     success: true,
-    data: {
-      salas
-    }
+    data: {}
   };
 }
 
@@ -4978,28 +4929,12 @@ export async function getJuegosModel(params = {}) {
   const sortBy = params.sortBy || 'id';
   const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-  // Parse filters
-  let userSalaIds = null;
-  if (params.user_sala_ids) {
-    userSalaIds = String(params.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-  }
-  let salaIds = null;
-  if (params.sala_ids) {
-    salaIds = String(params.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-  }
-
-  const conds = buildJuegoConditions({
-    userSalaIds,
-    salaIds,
-    search
-  });
-
+  const conds = buildJuegoConditions({ search });
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
     'id': 'j.id',
-    'nombre': 'j.nombre',
-    'sala_nombre': 's.nombre'
+    'nombre': 'j.nombre'
   };
 
   const orderCol = allowedSortColumns[sortBy] || 'j.id';
@@ -5007,7 +4942,6 @@ export async function getJuegosModel(params = {}) {
   const countRes = await sql`
     SELECT COUNT(j.id)::int AS total
     FROM juegos j
-    LEFT JOIN salas s ON j.sala_id = s.id
     ${where}
   `;
   const total = countRes[0]?.total || 0;
@@ -5017,18 +4951,16 @@ export async function getJuegosModel(params = {}) {
   let data;
   if (limit > 0) {
     data = await sql`
-      SELECT j.*, s.nombre AS sala_nombre
+      SELECT j.*
       FROM juegos j
-      LEFT JOIN salas s ON j.sala_id = s.id
       ${where}
       ${orderClause}
       LIMIT ${limit} OFFSET ${offset}
     `;
   } else {
     data = await sql`
-      SELECT j.*, s.nombre AS sala_nombre
+      SELECT j.*
       FROM juegos j
-      LEFT JOIN salas s ON j.sala_id = s.id
       ${where}
       ${orderClause}
     `;
@@ -5043,35 +4975,33 @@ export async function getJuegosModel(params = {}) {
 export async function createJuegoModel(data) {
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre del juego es obligatorio');
-  if (!data.sala_id) throw new Error('Debe seleccionar una sala para el juego');
 
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM juegos 
-      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND sala_id = ${Number(data.sala_id)}
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName})
       LIMIT 1
     `;
     if (existing.length > 0) {
-      throw new Error(`Ya existe un juego registrado con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+      throw new Error(`Ya existe un juego registrado con el nombre "${toTitleCase(cleanName)}"`);
     }
 
     const rows = await sql`
-      INSERT INTO juegos (nombre, sala_id)
-      VALUES (${cleanName}, ${Number(data.sala_id)})
+      INSERT INTO juegos (nombre)
+      VALUES (${cleanName})
       RETURNING *
     `;
     return rows[0];
   } else {
     const cleanLower = cleanName.toLowerCase();
-    const existing = (inMemoryData.juegos || []).find(j => (j.nombre || '').trim().toLowerCase() === cleanLower && Number(j.sala_id) === Number(data.sala_id));
+    const existing = (inMemoryData.juegos || []).find(j => (j.nombre || '').trim().toLowerCase() === cleanLower);
     if (existing) {
-      throw new Error(`Ya existe un juego registrado con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+      throw new Error(`Ya existe un juego registrado con el nombre "${toTitleCase(cleanName)}"`);
     }
     const nextId = (inMemoryData.juegos?.length || 0) > 0 ? Math.max(...inMemoryData.juegos.map(j => j.id)) + 1 : 1;
     const newJuego = {
       id: nextId,
       nombre: cleanName,
-      sala_id: Number(data.sala_id),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -5084,19 +5014,16 @@ export async function createJuegoModel(data) {
 export async function updateJuegoModel(id, data) {
   const jId = Number(id);
   const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
-  const salaId = data.sala_id ? Number(data.sala_id) : null;
 
   if (isPgConnected && sql) {
     if (cleanName) {
       const existing = await sql`
         SELECT id FROM juegos 
-        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
-          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
-          AND id != ${jId}
+        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND id != ${jId}
         LIMIT 1
       `;
       if (existing.length > 0) {
-        throw new Error(`Ya existe otro juego registrado con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+        throw new Error(`Ya existe otro juego registrado con el nombre "${toTitleCase(cleanName)}"`);
       }
     }
 
@@ -5104,7 +5031,6 @@ export async function updateJuegoModel(id, data) {
       UPDATE juegos
       SET 
         nombre = COALESCE(${cleanName}, nombre),
-        sala_id = COALESCE(${salaId}, sala_id),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${jId}
       RETURNING *
@@ -5133,7 +5059,7 @@ export async function deleteJuegoModel(id) {
         entityType: 'juego',
         entityName: jNameRes[0]?.nombre || `ID: ${jId}`,
         entityId: jId,
-        message: `No se puede eliminar el juego porque tiene ${mesasCount[0].count} mesa(s) asociada(s). Elimine primero las mesas vinculadas.`,
+        message: `No se puede eliminar el juego porque tiene ${mesasCount[0].count} mesa(s) asociada(s). Elimine o reasigne primero las mesas vinculadas.`,
         dependencies: [{ label: 'Mesas Vinculadas', count: mesasCount[0].count }]
       };
     }
@@ -5160,12 +5086,12 @@ export function buildMesaConditions(options = {}) {
 
   // 2. Restricción por salas asignadas al usuario logueado
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`j.sala_id = ANY(${options.userSalaIds})`);
+    conds.push(sql`m.sala_id = ANY(${options.userSalaIds})`);
   }
 
   // 3. Salas seleccionadas en el filtro
   if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
-    conds.push(sql`j.sala_id = ANY(${options.salaIds})`);
+    conds.push(sql`m.sala_id = ANY(${options.salaIds})`);
   }
 
   // 4. Juegos seleccionados en el filtro
@@ -5209,12 +5135,12 @@ export async function getMesasFilterOptionsModel(options = {}) {
   }
 
   const countsSalasRes = await sql`
-    SELECT j.sala_id AS id, COUNT(m.id)::int AS count
+    SELECT m.sala_id AS id, COUNT(m.id)::int AS count
     FROM mesas m
-    JOIN juegos j ON m.juego_id = j.id
-    LEFT JOIN salas s ON j.sala_id = s.id
+    LEFT JOIN salas s ON m.sala_id = s.id
+    LEFT JOIN juegos j ON m.juego_id = j.id
     ${whereSalas}
-    GROUP BY j.sala_id
+    GROUP BY m.sala_id
   `;
   const countSalasMap = new Map(countsSalasRes.map(r => [r.id, r.count]));
   const activeSalas = new Set((options.salaIds || []).map(Number));
@@ -5232,18 +5158,13 @@ export async function getMesasFilterOptionsModel(options = {}) {
   const condsJuegos = buildMesaConditions({ ...options, skipJuegos: true, active });
   const whereJuegos = condsJuegos.length > 0 ? sql`WHERE ${condsJuegos.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
-  let allJuegos;
-  if (options.userSalaIds && options.userSalaIds.length > 0) {
-    allJuegos = await sql`SELECT j.id, j.nombre, j.sala_id FROM juegos j WHERE j.sala_id = ANY(${options.userSalaIds}) ORDER BY j.nombre ASC`;
-  } else {
-    allJuegos = await sql`SELECT j.id, j.nombre, j.sala_id FROM juegos j ORDER BY j.nombre ASC`;
-  }
+  const allJuegos = await sql`SELECT j.id, j.nombre FROM juegos j ORDER BY j.nombre ASC`;
 
   const countsJuegosRes = await sql`
     SELECT m.juego_id AS id, COUNT(m.id)::int AS count
     FROM mesas m
-    JOIN juegos j ON m.juego_id = j.id
-    LEFT JOIN salas s ON j.sala_id = s.id
+    LEFT JOIN salas s ON m.sala_id = s.id
+    LEFT JOIN juegos j ON m.juego_id = j.id
     ${whereJuegos}
     GROUP BY m.juego_id
   `;
@@ -5254,7 +5175,6 @@ export async function getMesasFilterOptionsModel(options = {}) {
     .map(j => ({
       id: j.id,
       nombre: j.nombre,
-      sala_id: j.sala_id,
       count: countJuegosMap.get(j.id) || 0
     }))
     .filter(j => j.count > 0 || activeJuegos.has(Number(j.id)))
@@ -5321,8 +5241,8 @@ export async function getMesasModel(params = {}) {
   const countRes = await sql`
     SELECT COUNT(m.id)::int AS total
     FROM mesas m
+    LEFT JOIN salas s ON m.sala_id = s.id
     JOIN juegos j ON m.juego_id = j.id
-    LEFT JOIN salas s ON j.sala_id = s.id
     ${where}
   `;
   const total = countRes[0]?.total || 0;
@@ -5334,8 +5254,8 @@ export async function getMesasModel(params = {}) {
     data = await sql`
       SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre
       FROM mesas m
+      LEFT JOIN salas s ON m.sala_id = s.id
       JOIN juegos j ON m.juego_id = j.id
-      LEFT JOIN salas s ON j.sala_id = s.id
       ${where}
       ${orderClause}
       LIMIT ${limit} OFFSET ${offset}
@@ -5344,8 +5264,8 @@ export async function getMesasModel(params = {}) {
     data = await sql`
       SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre
       FROM mesas m
+      LEFT JOIN salas s ON m.sala_id = s.id
       JOIN juegos j ON m.juego_id = j.id
-      LEFT JOIN salas s ON j.sala_id = s.id
       ${where}
       ${orderClause}
     `;
@@ -5361,34 +5281,36 @@ export async function createMesaModel(data) {
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre de la mesa es obligatorio');
   if (!data.juego_id) throw new Error('Debe seleccionar un juego para la mesa');
+  if (!data.sala_id) throw new Error('Debe seleccionar una sala para la mesa');
 
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM mesas 
-      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND juego_id = ${Number(data.juego_id)}
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND sala_id = ${Number(data.sala_id)}
       LIMIT 1
     `;
     if (existing.length > 0) {
-      throw new Error(`Ya existe una mesa registrada con el nombre "${toTitleCase(cleanName)}" en este juego`);
+      throw new Error(`Ya existe una mesa registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
     }
 
     const rows = await sql`
-      INSERT INTO mesas (nombre, juego_id, active)
-      VALUES (${cleanName}, ${Number(data.juego_id)}, 1)
+      INSERT INTO mesas (nombre, juego_id, sala_id, active)
+      VALUES (${cleanName}, ${Number(data.juego_id)}, ${Number(data.sala_id)}, 1)
       RETURNING *
     `;
     return rows[0];
   } else {
     const cleanLower = cleanName.toLowerCase();
-    const existing = (inMemoryData.mesas || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && Number(m.juego_id) === Number(data.juego_id));
+    const existing = (inMemoryData.mesas || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && Number(m.sala_id) === Number(data.sala_id));
     if (existing) {
-      throw new Error(`Ya existe una mesa registrada con el nombre "${toTitleCase(cleanName)}" en este juego`);
+      throw new Error(`Ya existe una mesa registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
     }
     const nextId = (inMemoryData.mesas?.length || 0) > 0 ? Math.max(...inMemoryData.mesas.map(m => m.id)) + 1 : 1;
     const newMesa = {
       id: nextId,
       nombre: cleanName,
       juego_id: Number(data.juego_id),
+      sala_id: Number(data.sala_id),
       active: 1,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -5403,6 +5325,7 @@ export async function updateMesaModel(id, data) {
   const mId = Number(id);
   const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
   const juegoId = data.juego_id ? Number(data.juego_id) : null;
+  const salaId = data.sala_id ? Number(data.sala_id) : null;
   const active = data.active !== undefined ? Number(data.active) : null;
 
   if (isPgConnected && sql) {
@@ -5410,12 +5333,12 @@ export async function updateMesaModel(id, data) {
       const existing = await sql`
         SELECT id FROM mesas 
         WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
-          AND (${juegoId}::int IS NULL OR juego_id = ${juegoId})
+          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
           AND id != ${mId}
         LIMIT 1
       `;
       if (existing.length > 0) {
-        throw new Error(`Ya existe otra mesa registrada con el nombre "${toTitleCase(cleanName)}"`);
+        throw new Error(`Ya existe otra mesa registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
       }
     }
 
@@ -5424,6 +5347,7 @@ export async function updateMesaModel(id, data) {
       SET 
         nombre = COALESCE(${cleanName}, nombre),
         juego_id = COALESCE(${juegoId}, juego_id),
+        sala_id = COALESCE(${salaId}, sala_id),
         active = COALESCE(${active}, active),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${mId}

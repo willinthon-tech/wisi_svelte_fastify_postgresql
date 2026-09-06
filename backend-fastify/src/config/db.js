@@ -78,7 +78,8 @@ export let inMemoryData = {
     { id: 1, nombre: 'CECOM' },
     { id: 2, nombre: 'RRHH' },
     { id: 3, nombre: 'MAQUINAS' },
-    { id: 7, nombre: 'MESAS EN VIVO' }
+    { id: 7, nombre: 'MESAS EN VIVO' },
+    { id: 8, nombre: 'CONFIGURACION' }
   ],
   modulos: [
     // Módulos de CECOM (page_id = 1)
@@ -111,8 +112,9 @@ export let inMemoryData = {
     { id: 22, nombre: 'Legal', icono: 'settings', ruta: '/maquinas/legal', page_id: 3 },
     // Módulos de MESAS EN VIVO (page_id = 7)
     { id: 12, nombre: 'Mesas', icono: 'settings', ruta: '/mesas-en-vivo/mesas', page_id: 7 },
-    { id: 34, nombre: 'Juegos', icono: 'settings', ruta: '/mesas-en-vivo/juegos', page_id: 7 },
-    { id: 35, nombre: 'Mesas Borradas', icono: 'settings', ruta: '/mesas-en-vivo/mesas-borradas', page_id: 7 }
+    { id: 35, nombre: 'Mesas Borradas', icono: 'settings', ruta: '/mesas-en-vivo/mesas-borradas', page_id: 7 },
+    // Módulos de CONFIGURACION (page_id = 8)
+    { id: 34, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos', page_id: 8 }
   ],
   dispositivos: [
     { id: 3, nombre: 'Marcaje Personal ( Monagas )', sala_id: 1, ip_local: null, ip_remota: '186.167.73.66:8027', ip_panel: null, usuario: 'admin', clave: 'S0p0rt3S0p0rt3', marcaje_inicio: '2025-01-01T00:00:00', marcaje_fin: '2030-12-31T23:59:59' },
