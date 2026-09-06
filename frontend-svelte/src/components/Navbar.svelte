@@ -3,7 +3,6 @@
   import { currentUserStore } from '../controllers/auth.store.js';
   import { triggerToast } from '../controllers/ui.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
-  import { isKioskModeStore, toggleKioskMode } from '../controllers/kiosk.store.js';
 
   const dispatch = createEventDispatcher();
 
@@ -66,16 +65,6 @@
   </div>
 
   <div class="header-right" style="display: flex; align-items: center; gap: 12px;">
-    <!-- Botón Modo Kiosco 100% -->
-    <button 
-      type="button" 
-      class="btn-kiosk-mode {$isKioskModeStore ? 'is-active' : ''}" 
-      on:click={toggleKioskMode} 
-      title={$isKioskModeStore ? 'Salir del Modo Kiosco' : 'Activar Modo Kiosco 100% (Pantalla Completa)'}
-      aria-label="Modo Kiosco">
-      <span class="material-icons" style="font-size: 20px;">{$isKioskModeStore ? 'fullscreen_exit' : 'fullscreen'}</span>
-    </button>
-
     <!-- Botón Recargar / Hard Refresh (Ctrl + F5) -->
     <button 
       type="button" 
@@ -117,37 +106,6 @@
 </header>
 
 <style>
-  .btn-kiosk-mode {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: #f1f5f9;
-    color: #475569;
-    border: 1px solid #cbd5e1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.18s ease;
-    padding: 0;
-    margin: 0;
-    outline: none;
-    flex-shrink: 0;
-  }
-
-  .btn-kiosk-mode:hover {
-    transform: scale(1.08);
-    background: #e2e8f0;
-    color: #0f172a;
-  }
-
-  .btn-kiosk-mode.is-active {
-    background: linear-gradient(135deg, #059669, #10b981);
-    color: #ffffff;
-    border: none;
-    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
-  }
-
   .btn-hard-refresh {
     width: 36px;
     height: 36px;

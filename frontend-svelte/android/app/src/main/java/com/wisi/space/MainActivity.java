@@ -32,6 +32,7 @@ public class MainActivity extends BridgeActivity {
     private static final String DEFAULT_HOST = "https://willinthon.wisi.space";
     private boolean isKiosk = false;
     private BroadcastReceiver downloadReceiver;
+    private BroadcastReceiver kioskCommandReceiver;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -65,6 +66,9 @@ public class MainActivity extends BridgeActivity {
                 }, 300);
             }
         });
+
+        // 6. Registrar receptor de comandos ADB para activar/desactivar Kiosco remotamente
+        registerKioskCommandReceiver();
     }
 
     private void requestInitialPermissions() {
@@ -354,11 +358,68 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    public void onResume() {
+        super.onResume();
+        checkAndApplyDeviceOwnerKiosk();
+    }
+
+    private boolean isKioskEnabledInPrefs() {
+        return getSharedPreferences("wisi_kiosk_prefs", Context.MODE_PRIVATE)
+            .getBoolean("kiosk_active", true);
+    }
+
+    private void setKioskEnabledInPrefs(boolean active) {
+        getSharedPreferences("wisi_kiosk_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("kiosk_active", active)
+            .apply();
+    }
+
+    private void checkAndApplyDeviceOwnerKiosk() {
+        try {
+            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            if (dpm != null && dpm.isDeviceOwnerApp(getPackageName())) {
+                ComponentName adminComponent = new ComponentName(this, KioskDeviceAdminReceiver.class);
+                dpm.setLockTaskPackages(adminComponent, new String[]{getPackageName()});
+                if (isKioskEnabledInPrefs()) {
+                    runOnUiThread(() -> enableKioskMode(true));
+                } else {
+                    runOnUiThread(() -> enableKioskMode(false));
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void registerKioskCommandReceiver() {
+        try {
+            kioskCommandReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    boolean enable = intent.getBooleanExtra("enable", true);
+                    setKioskEnabledInPrefs(enable);
+                    runOnUiThread(() -> enableKioskMode(enable));
+                }
+            };
+            IntentFilter filter = new IntentFilter("com.wisi.space.ACTION_KIOSK");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(kioskCommandReceiver, filter, Context.RECEIVER_EXPORTED);
+            } else {
+                registerReceiver(kioskCommandReceiver, filter);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
     public void onDestroy() {
         super.onDestroy();
         if (downloadReceiver != null) {
             try {
                 unregisterReceiver(downloadReceiver);
+            } catch (Exception ignored) {}
+        }
+        if (kioskCommandReceiver != null) {
+            try {
+                unregisterReceiver(kioskCommandReceiver);
             } catch (Exception ignored) {}
         }
     }
