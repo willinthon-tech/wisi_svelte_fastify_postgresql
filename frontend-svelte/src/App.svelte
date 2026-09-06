@@ -460,7 +460,6 @@
 
   onMount(async () => {
     initRouter();
-    initKioskMode();
     loadMasterStoresFromBackend();
     await loadUserSession();
     await refreshData();

@@ -188,8 +188,7 @@
     triggerToast(`${count} mesas restauradas exitosamente`, 'success');
     await loadServerData();
   }
-
-
+</script>
 
 <PaginatedDataTable 
   {items}

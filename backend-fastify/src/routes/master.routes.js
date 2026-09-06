@@ -252,20 +252,32 @@ export default async function masterRoutes(fastify, options) {
 
   // Streaming en tiempo real para marcajes (Server-Sent Events)
   const streamAttlogs = (request, reply) => {
+    reply.hijack();
     reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
+    reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
     reply.raw.setHeader('Connection', 'keep-alive');
+    reply.raw.setHeader('X-Accel-Buffering', 'no');
     reply.raw.setHeader('Access-Control-Allow-Origin', '*');
 
-    reply.raw.write('retry: 3000\n\n');
+    reply.raw.write('retry: 5000\n\n');
+
+    // Heartbeat ping cada 15 segundos para evitar que Nginx / proxies cierren por inactividad
+    const keepAlive = setInterval(() => {
+      if (!reply.raw.writableEnded && !reply.raw.destroyed) {
+        reply.raw.write(': ping\n\n');
+      }
+    }, 15000);
 
     const onNewAttlog = (data) => {
-      reply.raw.write(`event: new_attlog\ndata: ${JSON.stringify(data)}\n\n`);
+      if (!reply.raw.writableEnded && !reply.raw.destroyed) {
+        reply.raw.write(`event: new_attlog\ndata: ${JSON.stringify(data)}\n\n`);
+      }
     };
 
     attlogEvents.on('new_attlog', onNewAttlog);
 
     request.raw.on('close', () => {
+      clearInterval(keepAlive);
       attlogEvents.removeListener('new_attlog', onNewAttlog);
     });
   };

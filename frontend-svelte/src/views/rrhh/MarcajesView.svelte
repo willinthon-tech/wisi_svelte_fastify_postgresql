@@ -870,6 +870,9 @@
         ? backendUrl
         : `${backendUrl}/api`;
       eventSource = new EventSource(`${base}/attlogs/stream`);
+      eventSource.onerror = () => {
+        // Fallback silencioso: EventSource reintenta automáticamente según la directiva retry
+      };
       eventSource.addEventListener("new_attlog", () => {
         attlogsPageCache.clear();
         totalCount = totalCount + 1;
@@ -891,7 +894,7 @@
         }
       });
     } catch (err) {
-      console.warn("SSE EventSource warning:", err);
+      // Ignorar fallback SSE si falla la inicialización
     }
   });
 
