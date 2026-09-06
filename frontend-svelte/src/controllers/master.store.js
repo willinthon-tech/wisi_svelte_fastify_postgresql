@@ -507,3 +507,12 @@ export const masterModelosActions = createMasterEntityActions(masterModelosStore
 export const masterTiposActions = createMasterEntityActions(masterTiposStore, 'tipos');
 export const masterModosActions = createMasterEntityActions(masterModosStore, 'modos');
 export const masterLegalActions = createMasterEntityActions(masterLegalStore, 'legal');
+
+export const masterExcepcionesStore = writable(loadStore('excepciones_v1', []));
+export const masterFechasPatriasStore = writable(loadStore('fechas_patrias_v1', []));
+
+masterExcepcionesStore.subscribe(val => saveStore('excepciones_v1', val));
+masterFechasPatriasStore.subscribe(val => saveStore('fechas_patrias_v1', val));
+
+export const masterExcepcionesActions = createMasterEntityActions(masterExcepcionesStore, 'excepciones');
+export const masterFechasPatriasActions = createMasterEntityActions(masterFechasPatriasStore, 'fechas-patrias');

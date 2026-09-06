@@ -29,7 +29,9 @@ import {
   getModelos, createModelo, updateModelo, deleteModelo,
   getTipos, createTipo, updateTipo, deleteTipo,
   getModos, createModo, updateModo, deleteModo,
-  getLegal, createLegal, updateLegal, deleteLegal
+  getLegal, createLegal, updateLegal, deleteLegal,
+  getExcepciones, createExcepcion, updateExcepcion, deleteExcepcion,
+  getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -289,6 +291,26 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/legal/:id', updateLegal);
   fastify.delete('/master/legal/:id', deleteLegal);
   fastify.delete('/api/master/legal/:id', deleteLegal);
+
+  // 10. Excepciones
+  fastify.get('/master/excepciones', getExcepciones);
+  fastify.get('/api/master/excepciones', getExcepciones);
+  fastify.post('/master/excepciones', createExcepcion);
+  fastify.post('/api/master/excepciones', createExcepcion);
+  fastify.put('/master/excepciones/:id', updateExcepcion);
+  fastify.put('/api/master/excepciones/:id', updateExcepcion);
+  fastify.delete('/master/excepciones/:id', deleteExcepcion);
+  fastify.delete('/api/master/excepciones/:id', deleteExcepcion);
+
+  // 11. Fechas Patrias
+  fastify.get('/master/fechas-patrias', getFechasPatrias);
+  fastify.get('/api/master/fechas-patrias', getFechasPatrias);
+  fastify.post('/master/fechas-patrias', createFechaPatria);
+  fastify.post('/api/master/fechas-patrias', createFechaPatria);
+  fastify.put('/master/fechas-patrias/:id', updateFechaPatria);
+  fastify.put('/api/master/fechas-patrias/:id', updateFechaPatria);
+  fastify.delete('/master/fechas-patrias/:id', deleteFechaPatria);
+  fastify.delete('/api/master/fechas-patrias/:id', deleteFechaPatria);
 
 
   // Áreas

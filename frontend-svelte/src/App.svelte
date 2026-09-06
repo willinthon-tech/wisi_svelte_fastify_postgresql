@@ -57,6 +57,8 @@
   import TiposView from "./views/maquinas/TiposView.svelte";
   import ModosView from "./views/maquinas/ModosView.svelte";
   import LegalView from "./views/maquinas/LegalView.svelte";
+  import ExcepcionesConfigView from "./views/rrhh/ExcepcionesConfigView.svelte";
+  import FechasPatriasConfigView from "./views/rrhh/FechasPatriasConfigView.svelte";
 
   // Import MESAS EN VIVO Views
   import MesasView from "./views/mesas-en-vivo/MesasView.svelte";
@@ -986,6 +988,10 @@
           <ModosView />
         {:else if $currentRouteStore === "configuracion/legal" || $currentRouteStore === "legal"}
           <LegalView />
+        {:else if $currentRouteStore === "configuracion/excepciones" || $currentRouteStore === "excepciones"}
+          <ExcepcionesConfigView />
+        {:else if $currentRouteStore === "configuracion/fechas-patrias" || $currentRouteStore === "fechas-patrias"}
+          <FechasPatriasConfigView />
 
           <!-- MESAS EN VIVO Module Views -->
         {:else if $currentRouteStore === "mesas-en-vivo/mesas" || $currentRouteStore === "mesas"}

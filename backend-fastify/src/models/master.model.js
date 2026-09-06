@@ -5812,3 +5812,232 @@ export const getLegalModel = legalCrud.get;
 export const createLegalModel = legalCrud.create;
 export const updateLegalModel = legalCrud.update;
 export const deleteLegalModel = legalCrud.delete;
+
+// 10. EXCEPCIONES (CONF.M: RRHH)
+export async function getExcepcionesModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    let list = inMemoryData.excepciones || [];
+    const search = String(params.search || '').trim().toLowerCase();
+    if (search) {
+      list = list.filter(i => 
+        (i.codigo || '').toLowerCase().includes(search) || 
+        (i.descripcion || '').toLowerCase().includes(search) ||
+        (i.tipo || '').toLowerCase().includes(search)
+      );
+    }
+    return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+  }
+
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const validSorts = ['codigo', 'descripcion', 'color', 'tipo', 'id'];
+  const sortBy = validSorts.includes(params.sortBy) ? params.sortBy : 'id';
+  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  const searchPattern = `%${search}%`;
+  const whereClause = search
+    ? sql`WHERE LOWER(codigo) LIKE ${searchPattern} OR LOWER(descripcion) LIKE ${searchPattern} OR LOWER(tipo) LIKE ${searchPattern} OR id::text LIKE ${searchPattern}`
+    : sql``;
+
+  const countRes = await sql`SELECT COUNT(id)::int AS total FROM excepciones ${whereClause}`;
+  const total = countRes[0]?.total || 0;
+  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, id DESC`);
+
+  let data;
+  if (limit > 0) {
+    data = await sql`SELECT * FROM excepciones ${whereClause} ${orderClause} LIMIT ${limit} OFFSET ${offset}`;
+  } else {
+    data = await sql`SELECT * FROM excepciones ${whereClause} ${orderClause}`;
+  }
+  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+  return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function createExcepcionModel(data) {
+  const codigo = (data.codigo || '').trim().toUpperCase();
+  const descripcion = (data.descripcion || '').trim();
+  const color = (data.color || '#3B82F6').trim();
+  const tipo = (data.tipo || 'Asignable').trim();
+
+  if (!codigo || !descripcion) {
+    throw new Error('El código y la descripción de la excepción son obligatorios');
+  }
+
+  if (isPgConnected && sql) {
+    const existing = await sql`SELECT id FROM excepciones WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) LIMIT 1`;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe una excepción con el código "${codigo}"`);
+    }
+    const rows = await sql`
+      INSERT INTO excepciones (codigo, descripcion, color, tipo)
+      VALUES (${codigo}, ${descripcion}, ${color}, ${tipo})
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const list = inMemoryData.excepciones || [];
+    const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
+    const newItem = { id: nextId, codigo, descripcion, color, tipo, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    inMemoryData.excepciones = [newItem, ...list];
+    return newItem;
+  }
+}
+
+export async function updateExcepcionModel(id, data) {
+  const eId = Number(id);
+  const codigo = data.codigo !== undefined ? String(data.codigo).trim().toUpperCase() : null;
+  const descripcion = data.descripcion !== undefined ? String(data.descripcion).trim() : null;
+  const color = data.color !== undefined ? String(data.color).trim() : null;
+  const tipo = data.tipo !== undefined ? String(data.tipo).trim() : null;
+
+  if (isPgConnected && sql) {
+    if (codigo) {
+      const existing = await sql`SELECT id FROM excepciones WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) AND id != ${eId} LIMIT 1`;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe otra excepción con el código "${codigo}"`);
+      }
+    }
+    const rows = await sql`
+      UPDATE excepciones
+      SET
+        codigo = COALESCE(${codigo}, codigo),
+        descripcion = COALESCE(${descripcion}, descripcion),
+        color = COALESCE(${color}, color),
+        tipo = COALESCE(${tipo}, tipo),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${eId}
+      RETURNING *
+    `;
+    return rows[0] || null;
+  } else {
+    const list = inMemoryData.excepciones || [];
+    const idx = list.findIndex(i => i.id === eId);
+    if (idx !== -1) {
+      if (codigo) list[idx].codigo = codigo;
+      if (descripcion) list[idx].descripcion = descripcion;
+      if (color) list[idx].color = color;
+      if (tipo) list[idx].tipo = tipo;
+      list[idx].updated_at = new Date().toISOString();
+      return list[idx];
+    }
+    return null;
+  }
+}
+
+export async function deleteExcepcionModel(id) {
+  return await deleteEntityDynamic('excepciones', 'excepción', id);
+}
+
+// 11. FECHAS PATRIAS (CONF.M: RRHH)
+export async function getFechasPatriasModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    let list = inMemoryData.fechas_patrias || [];
+    const search = String(params.search || '').trim().toLowerCase();
+    if (search) {
+      list = list.filter(i => (i.descripcion || '').toLowerCase().includes(search));
+    }
+    return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+  }
+
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const validSorts = ['descripcion', 'dia', 'mes', 'id'];
+  const sortBy = validSorts.includes(params.sortBy) ? params.sortBy : 'mes, dia';
+  const sortDir = (params.sortDir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+
+  const searchPattern = `%${search}%`;
+  const whereClause = search
+    ? sql`WHERE LOWER(descripcion) LIKE ${searchPattern} OR dia::text LIKE ${searchPattern} OR mes::text LIKE ${searchPattern} OR id::text LIKE ${searchPattern}`
+    : sql``;
+
+  const countRes = await sql`SELECT COUNT(id)::int AS total FROM fechas_patrias ${whereClause}`;
+  const total = countRes[0]?.total || 0;
+  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, id ASC`);
+
+  let data;
+  if (limit > 0) {
+    data = await sql`SELECT * FROM fechas_patrias ${whereClause} ${orderClause} LIMIT ${limit} OFFSET ${offset}`;
+  } else {
+    data = await sql`SELECT * FROM fechas_patrias ${whereClause} ${orderClause}`;
+  }
+  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+  return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function createFechaPatriaModel(data) {
+  const descripcion = (data.descripcion || '').trim();
+  const dia = Number(data.dia);
+  const mes = Number(data.mes);
+
+  if (!descripcion) throw new Error('La descripción de la fecha patria es obligatoria');
+  if (isNaN(dia) || dia < 1 || dia > 31) throw new Error('El día debe ser un número entre 1 y 31');
+  if (isNaN(mes) || mes < 1 || mes > 12) throw new Error('El mes debe ser un número entre 1 y 12');
+
+  if (isPgConnected && sql) {
+    const existing = await sql`
+      SELECT id FROM fechas_patrias 
+      WHERE dia = ${dia} AND mes = ${mes} AND LOWER(TRIM(descripcion)) = LOWER(${descripcion}) 
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe una fecha patria registrada para este día y mes con la misma descripción`);
+    }
+    const rows = await sql`
+      INSERT INTO fechas_patrias (descripcion, dia, mes)
+      VALUES (${descripcion}, ${dia}, ${mes})
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const list = inMemoryData.fechas_patrias || [];
+    const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
+    const newItem = { id: nextId, descripcion, dia, mes, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    inMemoryData.fechas_patrias = [newItem, ...list];
+    return newItem;
+  }
+}
+
+export async function updateFechaPatriaModel(id, data) {
+  const fId = Number(id);
+  const descripcion = data.descripcion !== undefined ? String(data.descripcion).trim() : null;
+  const dia = data.dia !== undefined ? Number(data.dia) : null;
+  const mes = data.mes !== undefined ? Number(data.mes) : null;
+
+  if (dia !== null && (isNaN(dia) || dia < 1 || dia > 31)) throw new Error('El día debe ser un número entre 1 y 31');
+  if (mes !== null && (isNaN(mes) || mes < 1 || mes > 12)) throw new Error('El mes debe ser un número entre 1 y 12');
+
+  if (isPgConnected && sql) {
+    await sql`
+      UPDATE fechas_patrias
+      SET
+        descripcion = COALESCE(${descripcion}, descripcion),
+        dia = COALESCE(${dia}, dia),
+        mes = COALESCE(${mes}, mes),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${fId}
+    `;
+    const rows = await sql`SELECT * FROM fechas_patrias WHERE id = ${fId}`;
+    return rows[0] || null;
+  } else {
+    const list = inMemoryData.fechas_patrias || [];
+    const idx = list.findIndex(i => i.id === fId);
+    if (idx !== -1) {
+      if (descripcion !== null) list[idx].descripcion = descripcion;
+      if (dia !== null) list[idx].dia = dia;
+      if (mes !== null) list[idx].mes = mes;
+      list[idx].updated_at = new Date().toISOString();
+      return list[idx];
+    }
+    return null;
+  }
+}
+
+export async function deleteFechaPatriaModel(id) {
+  return await deleteEntityDynamic('fechas_patrias', 'fecha patria', id);
+}

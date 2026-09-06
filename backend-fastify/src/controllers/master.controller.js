@@ -28,7 +28,9 @@ import {
   getModelosModel, createModeloModel, updateModeloModel, deleteModeloModel,
   getTiposModel, createTipoModel, updateTipoModel, deleteTipoModel,
   getModosModel, createModoModel, updateModoModel, deleteModoModel,
-  getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel
+  getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel,
+  getExcepcionesModel, createExcepcionModel, updateExcepcionModel, deleteExcepcionModel,
+  getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1739,3 +1741,17 @@ export const getLegal = legalCtrl.get;
 export const createLegal = legalCtrl.create;
 export const updateLegal = legalCtrl.update;
 export const deleteLegal = legalCtrl.delete;
+
+// 10. Excepciones
+const excepcionesCtrl = buildCrudControllers(getExcepcionesModel, createExcepcionModel, updateExcepcionModel, deleteExcepcionModel);
+export const getExcepciones = excepcionesCtrl.get;
+export const createExcepcion = excepcionesCtrl.create;
+export const updateExcepcion = excepcionesCtrl.update;
+export const deleteExcepcion = excepcionesCtrl.delete;
+
+// 11. Fechas Patrias
+const fechasPatriasCtrl = buildCrudControllers(getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel);
+export const getFechasPatrias = fechasPatriasCtrl.get;
+export const createFechaPatria = fechasPatriasCtrl.create;
+export const updateFechaPatria = fechasPatriasCtrl.update;
+export const deleteFechaPatria = fechasPatriasCtrl.delete;

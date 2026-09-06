@@ -29,6 +29,8 @@ export let inMemoryData = {
   tipos: [],
   modos: [],
   legal: [],
+  excepciones: [],
+  fechas_patrias: [],
   descargas: [
     { id: 1, plataforma: 'android', formato: 'apk', archivo: 'app-wisi-android-v1-c1.apk', peso: '6.5 MB', peso_bytes: 6574550, version_num: 1, fecha: new Date().toISOString() },
     { id: 2, plataforma: 'windows', formato: 'exe', archivo: 'app-wisi-windows-v1-c2.exe', peso: '2.3 MB', peso_bytes: 2379534, version_num: 1, fecha: new Date().toISOString() }
@@ -88,7 +90,8 @@ export let inMemoryData = {
     { id: 2, nombre: 'RRHH' },
     { id: 3, nombre: 'MAQUINAS' },
     { id: 7, nombre: 'MESAS EN VIVO' },
-    { id: 8, nombre: 'CONFIGURACION' }
+    { id: 8, nombre: 'CONFIGURACION' },
+    { id: 10, nombre: 'CONF.M: RRHH' }
   ],
   modulos: [
     // Módulos de CECOM (page_id = 1)
@@ -122,7 +125,10 @@ export let inMemoryData = {
     // Módulos de MESAS EN VIVO (page_id = 7)
     { id: 12, nombre: 'Mesas', icono: 'settings', ruta: '/mesas-en-vivo/mesas', page_id: 7 },
     { id: 34, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos', page_id: 7 },
-    { id: 35, nombre: 'Mesas Borradas', icono: 'settings', ruta: '/mesas-en-vivo/mesas-borradas', page_id: 7 }
+    { id: 35, nombre: 'Mesas Borradas', icono: 'settings', ruta: '/mesas-en-vivo/mesas-borradas', page_id: 7 },
+    // Módulos de CONF.M: RRHH (page_id = 10)
+    { id: 37, nombre: 'Excepciones', icono: 'settings', ruta: '/configuracion/excepciones', page_id: 10 },
+    { id: 38, nombre: 'Fechas Patrias', icono: 'settings', ruta: '/configuracion/fechas-patrias', page_id: 10 }
   ],
   dispositivos: [
     { id: 3, nombre: 'Marcaje Personal ( Monagas )', sala_id: 1, ip_local: null, ip_remota: '186.167.73.66:8027', ip_panel: null, usuario: 'admin', clave: 'S0p0rt3S0p0rt3', marcaje_inicio: '2025-01-01T00:00:00', marcaje_fin: '2030-12-31T23:59:59' },
@@ -833,6 +839,29 @@ export async function initDb() {
       );
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS excepciones (
+        id SERIAL PRIMARY KEY,
+        codigo VARCHAR(50) NOT NULL UNIQUE,
+        descripcion VARCHAR(255) NOT NULL,
+        color VARCHAR(30) DEFAULT '#3B82F6',
+        tipo VARCHAR(50) NOT NULL DEFAULT 'Asignable',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS fechas_patrias (
+        id SERIAL PRIMARY KEY,
+        descripcion VARCHAR(255) NOT NULL,
+        dia INT NOT NULL,
+        mes INT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     // Existing wisi_items table
     await sql`
       CREATE TABLE IF NOT EXISTS wisi_items (
@@ -845,6 +874,25 @@ export async function initDb() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+    `;
+
+    // Seed page 10 and modules 37 & 38 if not present
+    await sql`
+      INSERT INTO paginas (id, nombre) VALUES
+      (10, 'CONF.M: RRHH')
+      ON CONFLICT DO NOTHING;
+    `;
+    await sql`
+      INSERT INTO modulos (id, nombre, icono, ruta, page_id) VALUES
+      (37, 'Excepciones', 'settings', '/configuracion/excepciones', 10),
+      (38, 'Fechas Patrias', 'settings', '/configuracion/fechas-patrias', 10)
+      ON CONFLICT DO NOTHING;
+    `;
+    await sql`
+      INSERT INTO user_module_permissions (user_id, module_id, permission_id) VALUES
+      (1, 37, 1), (1, 37, 2), (1, 37, 3), (1, 37, 4), (1, 37, 5),
+      (1, 38, 1), (1, 38, 2), (1, 38, 3), (1, 38, 4), (1, 38, 5)
+      ON CONFLICT DO NOTHING;
     `;
 
     // Seed defaults in PostgreSQL if empty
