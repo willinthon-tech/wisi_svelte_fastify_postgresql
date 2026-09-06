@@ -81,22 +81,21 @@
 
   const tipoOptions = [
     { id: 'Asignable', nombre: 'Asignable' },
-    { id: 'No Asignable', nombre: 'No Asignable' },
-    { id: 'Especial', nombre: 'Especial' }
+    { id: 'No Asignable', nombre: 'No Asignable' }
   ];
 
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'codigo', label: 'Código', bold: true, sortable: true, editable: true },
     { key: 'descripcion', label: 'Descripción', sortable: true, editable: true },
-    { key: 'color', label: 'Color', sortable: true, editable: true },
+    { key: 'color', label: 'COLOR DE IDENTIFICACIÓN', type: 'color', sortable: true, editable: true },
     { key: 'tipo', label: 'Tipo', sortable: true, editable: true, type: 'select', options: tipoOptions }
   ];
 
   $: createFields = [
     { key: 'codigo', label: 'Código de Excepción', type: 'text', placeholder: 'Ej. EXC-01, MEDICO, PERMISO...', required: true },
     { key: 'descripcion', label: 'Descripción de Excepción', type: 'text', placeholder: 'Ej. Permiso Médico con reposo...', required: true },
-    { key: 'color', label: 'Color Identificador', type: 'text', placeholder: '#3B82F6', defaultValue: '#3B82F6', required: true },
+    { key: 'color', label: 'COLOR DE IDENTIFICACIÓN', type: 'color', placeholder: '#000000', defaultValue: '#000000', required: true },
     { 
       key: 'tipo', 
       label: 'Tipo de Excepción', 
