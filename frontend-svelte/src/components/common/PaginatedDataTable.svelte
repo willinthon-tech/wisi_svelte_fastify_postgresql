@@ -124,7 +124,7 @@
   export let columns = [];
   export let searchPlaceholder = 'Buscar registros...';
   export let entityType = 'registro';
-  export let actions = { edit: true, delete: true, reincorporate: false, desincorporate: false };
+  export let actions = { edit: true, delete: true, reincorporate: false, desincorporate: false, restore: false };
   export let showCheckbox = true;
   export let isServerSide = false;
   export let createFields = [];
@@ -136,7 +136,7 @@
     let allMasterCargos = [];
   $: allMasterCargos = $masterCargosStore || [];
   $: activeCargosList = (cargosOptions && cargosOptions.length > 0) ? cargosOptions : allMasterCargos;
-  $: hasRowActions = actions && (actions.edit !== false || actions.delete !== false || actions.reincorporate || actions.desincorporate);
+  $: hasRowActions = actions && (actions.edit !== false || actions.delete !== false || actions.reincorporate || actions.desincorporate || actions.restore);
 
   // Reincorporar Modal State
   let isReincorporarModalOpen = false;
@@ -726,6 +726,12 @@
     selectedIds = new Set();
   }
 
+  function handleBatchRestore() {
+    const ids = Array.from(selectedIds);
+    dispatch('batchRestore', ids);
+    selectedIds = new Set();
+  }
+
   function handleBatchDelete() {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
@@ -964,9 +970,15 @@
             </button>
           {/if}
 
+          {#if actions.restore}
+            <button type="button" on:click={handleBatchRestore} class="btn-batch btn-batch-reincorporate">
+              {actions.restoreLabel || 'Restaurar'}
+            </button>
+          {/if}
+
           {#if actions.delete !== false}
             <button type="button" on:click={handleBatchDelete} class="btn-batch btn-batch-delete">
-              Eliminar
+              {actions.deleteLabel || 'Eliminar'}
             </button>
           {/if}
         </div>
@@ -1472,6 +1484,16 @@
                       </button>
                     {/if}
 
+                    {#if actions.restore}
+                      <button 
+                        type="button"
+                        class="btn-action btn-reincorporate"
+                        title="Restaurar elemento"
+                        on:click={() => dispatch('restore', item)}>
+                        {actions.restoreLabel || 'Restaurar'}
+                      </button>
+                    {/if}
+
                     {#if actions.edit !== false}
                       {#if item.disabled || item.disableEdit || item.is_system}
                         <button 
@@ -1511,15 +1533,15 @@
                           disabled
                           style="opacity: 0.35; cursor: not-allowed;"
                           title="Plantilla base del sistema (no se puede eliminar)">
-                          Eliminar
+                          {actions.deleteLabel || 'Eliminar'}
                         </button>
                       {:else}
                         <button 
                           type="button"
                           class="btn-action btn-delete"
-                          title="Eliminar"
+                          title={actions.deleteTitle || "Eliminar"}
                           on:click={() => promptDelete(item)}>
-                          Eliminar
+                          {actions.deleteLabel || "Eliminar"}
                         </button>
                       {/if}
                     {/if}

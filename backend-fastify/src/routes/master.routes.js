@@ -18,7 +18,9 @@ import {
   getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado,
   getCumpleanos, getCarnets,
   getCortes, getCorteById, createCorte, deleteCorte, getCortesFilterOptions,
-  getDescargas, getLatestDescargas, uploadDescarga, deleteDescarga
+  getDescargas, getLatestDescargas, uploadDescarga, deleteDescarga,
+  getJuegos, getJuegosFilterOptions, createJuego, updateJuego, deleteJuego,
+  getMesas, getMesasFilterOptions, createMesa, updateMesa, deleteMesa, restoreMesa, purgeMesa
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -156,6 +158,36 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/master/departamentos', createDepartamento);
   fastify.put('/master/departamentos/:id', updateDepartamento);
   fastify.delete('/master/departamentos/:id', deleteDepartamento);
+
+  // Juegos (Mesas en vivo)
+  fastify.get('/master/juegos', getJuegos);
+  fastify.get('/api/master/juegos', getJuegos);
+  fastify.get('/master/juegos/filter-options', getJuegosFilterOptions);
+  fastify.get('/api/master/juegos/filter-options', getJuegosFilterOptions);
+  fastify.post('/master/juegos', createJuego);
+  fastify.post('/api/master/juegos', createJuego);
+  fastify.put('/master/juegos/:id', updateJuego);
+  fastify.put('/api/master/juegos/:id', updateJuego);
+  fastify.delete('/master/juegos/:id', deleteJuego);
+  fastify.delete('/api/master/juegos/:id', deleteJuego);
+
+  // Mesas (Mesas en vivo: Activas y Borradas)
+  fastify.get('/master/mesas', getMesas);
+  fastify.get('/api/master/mesas', getMesas);
+  fastify.get('/master/mesas/filter-options', getMesasFilterOptions);
+  fastify.get('/api/master/mesas/filter-options', getMesasFilterOptions);
+  fastify.post('/master/mesas', createMesa);
+  fastify.post('/api/master/mesas', createMesa);
+  fastify.put('/master/mesas/:id', updateMesa);
+  fastify.put('/api/master/mesas/:id', updateMesa);
+  fastify.delete('/master/mesas/:id', deleteMesa);
+  fastify.delete('/api/master/mesas/:id', deleteMesa);
+  fastify.post('/master/mesas/:id/restore', restoreMesa);
+  fastify.post('/api/master/mesas/:id/restore', restoreMesa);
+  fastify.delete('/master/mesas/:id/purge', purgeMesa);
+  fastify.delete('/api/master/mesas/:id/purge', purgeMesa);
+
+
 
   // Áreas
   fastify.get('/master/areas', getAreas);

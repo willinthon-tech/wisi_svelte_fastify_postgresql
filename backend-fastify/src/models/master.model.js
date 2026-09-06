@@ -4890,5 +4890,599 @@ export async function deleteDescargaModel(id) {
 }
 
 
+// ==========================================
+// --- JUEGOS (MESAS EN VIVO) ---
+// ==========================================
+
+export function buildJuegoConditions(options = {}) {
+  const conds = [];
+
+  // 1. Restricción por salas asignadas al usuario logueado
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    conds.push(sql`j.sala_id = ANY(${options.userSalaIds})`);
+  }
+
+  // 2. Salas seleccionadas en el filtro
+  if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
+    conds.push(sql`j.sala_id = ANY(${options.salaIds})`);
+  }
+
+  // 3. Búsqueda por texto
+  if (options.search && String(options.search).trim()) {
+    const term = `%${String(options.search).trim().toLowerCase()}%`;
+    conds.push(sql`(
+      LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
+      CAST(j.id AS TEXT) LIKE ${term}
+    )`);
+  }
+
+  return conds;
+}
+
+export async function getJuegosFilterOptionsModel(options = {}) {
+  if (!isPgConnected || !sql) {
+    return {
+      success: true,
+      data: { salas: [] }
+    };
+  }
+
+  const conds = buildJuegoConditions({ ...options, skipSalas: true });
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  let allSalas;
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+  } else {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+  }
+
+  const countsRes = await sql`
+    SELECT j.sala_id AS id, COUNT(j.id)::int AS count
+    FROM juegos j
+    LEFT JOIN salas s ON j.sala_id = s.id
+    ${where}
+    GROUP BY j.sala_id
+  `;
+  const countMap = new Map(countsRes.map(r => [r.id, r.count]));
+  const activeSalas = new Set((options.salaIds || []).map(Number));
+
+  const salas = allSalas
+    .map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      count: countMap.get(s.id) || 0
+    }))
+    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    success: true,
+    data: {
+      salas
+    }
+  };
+}
+
+export async function getJuegosModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    let list = inMemoryData.juegos || [];
+    return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+  }
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const sortBy = params.sortBy || 'id';
+  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  // Parse filters
+  let userSalaIds = null;
+  if (params.user_sala_ids) {
+    userSalaIds = String(params.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+  let salaIds = null;
+  if (params.sala_ids) {
+    salaIds = String(params.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+
+  const conds = buildJuegoConditions({
+    userSalaIds,
+    salaIds,
+    search
+  });
+
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  const allowedSortColumns = {
+    'id': 'j.id',
+    'nombre': 'j.nombre',
+    'sala_nombre': 's.nombre'
+  };
+
+  const orderCol = allowedSortColumns[sortBy] || 'j.id';
+
+  const countRes = await sql`
+    SELECT COUNT(j.id)::int AS total
+    FROM juegos j
+    LEFT JOIN salas s ON j.sala_id = s.id
+    ${where}
+  `;
+  const total = countRes[0]?.total || 0;
+
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, j.id DESC`);
+
+  let data;
+  if (limit > 0) {
+    data = await sql`
+      SELECT j.*, s.nombre AS sala_nombre
+      FROM juegos j
+      LEFT JOIN salas s ON j.sala_id = s.id
+      ${where}
+      ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  } else {
+    data = await sql`
+      SELECT j.*, s.nombre AS sala_nombre
+      FROM juegos j
+      LEFT JOIN salas s ON j.sala_id = s.id
+      ${where}
+      ${orderClause}
+    `;
+  }
+
+  data = data.map(r => ({ ...r, nombre: toTitleCase(r.nombre) }));
+  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+
+  return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function createJuegoModel(data) {
+  const cleanName = (data.nombre || '').trim();
+  if (!cleanName) throw new Error('El nombre del juego es obligatorio');
+  if (!data.sala_id) throw new Error('Debe seleccionar una sala para el juego');
+
+  if (isPgConnected && sql) {
+    const existing = await sql`
+      SELECT id FROM juegos 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND sala_id = ${Number(data.sala_id)}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe un juego registrado con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+    }
+
+    const rows = await sql`
+      INSERT INTO juegos (nombre, sala_id)
+      VALUES (${cleanName}, ${Number(data.sala_id)})
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const cleanLower = cleanName.toLowerCase();
+    const existing = (inMemoryData.juegos || []).find(j => (j.nombre || '').trim().toLowerCase() === cleanLower && Number(j.sala_id) === Number(data.sala_id));
+    if (existing) {
+      throw new Error(`Ya existe un juego registrado con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+    }
+    const nextId = (inMemoryData.juegos?.length || 0) > 0 ? Math.max(...inMemoryData.juegos.map(j => j.id)) + 1 : 1;
+    const newJuego = {
+      id: nextId,
+      nombre: cleanName,
+      sala_id: Number(data.sala_id),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.juegos = inMemoryData.juegos || [];
+    inMemoryData.juegos.unshift(newJuego);
+    return newJuego;
+  }
+}
+
+export async function updateJuegoModel(id, data) {
+  const jId = Number(id);
+  const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
+  const salaId = data.sala_id ? Number(data.sala_id) : null;
+
+  if (isPgConnected && sql) {
+    if (cleanName) {
+      const existing = await sql`
+        SELECT id FROM juegos 
+        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
+          AND id != ${jId}
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe otro juego registrado con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+      }
+    }
+
+    const rows = await sql`
+      UPDATE juegos
+      SET 
+        nombre = COALESCE(${cleanName}, nombre),
+        sala_id = COALESCE(${salaId}, sala_id),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${jId}
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const idx = (inMemoryData.juegos || []).findIndex(j => j.id === jId);
+    if (idx !== -1) {
+      inMemoryData.juegos[idx] = { ...inMemoryData.juegos[idx], ...data, updated_at: new Date().toISOString() };
+      return inMemoryData.juegos[idx];
+    }
+    return null;
+  }
+}
+
+export async function deleteJuegoModel(id) {
+  const jId = Number(id);
+  if (isPgConnected && sql) {
+    // Validar si tiene mesas asociadas
+    const mesasCount = await sql`SELECT count(*)::int AS count FROM mesas WHERE juego_id = ${jId}`;
+    if (mesasCount[0]?.count > 0) {
+      const jNameRes = await sql`SELECT nombre FROM juegos WHERE id = ${jId}`;
+      return {
+        success: false,
+        blocked: true,
+        entityType: 'juego',
+        entityName: jNameRes[0]?.nombre || `ID: ${jId}`,
+        entityId: jId,
+        message: `No se puede eliminar el juego porque tiene ${mesasCount[0].count} mesa(s) asociada(s). Elimine primero las mesas vinculadas.`,
+        dependencies: [{ label: 'Mesas Vinculadas', count: mesasCount[0].count }]
+      };
+    }
+    await sql`DELETE FROM juegos WHERE id = ${jId}`;
+    return { success: true, id: jId };
+  } else {
+    inMemoryData.juegos = (inMemoryData.juegos || []).filter(j => j.id !== jId);
+    return { success: true, id: jId };
+  }
+}
+
+
+// ==========================================
+// --- MESAS (MESAS EN VIVO: ACTIVAS Y BORRADAS) ---
+// ==========================================
+
+export function buildMesaConditions(options = {}) {
+  const conds = [];
+
+  // 1. Estado activo (1 = mesas activas, 0 = mesas borradas)
+  if (options.active !== undefined && options.active !== null && options.active !== '') {
+    conds.push(sql`m.active = ${Number(options.active)}`);
+  }
+
+  // 2. Restricción por salas asignadas al usuario logueado
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    conds.push(sql`j.sala_id = ANY(${options.userSalaIds})`);
+  }
+
+  // 3. Salas seleccionadas en el filtro
+  if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
+    conds.push(sql`j.sala_id = ANY(${options.salaIds})`);
+  }
+
+  // 4. Juegos seleccionados en el filtro
+  if (!options.skipJuegos && options.juegoIds && options.juegoIds.length > 0) {
+    conds.push(sql`m.juego_id = ANY(${options.juegoIds})`);
+  }
+
+  // 5. Búsqueda por texto
+  if (options.search && String(options.search).trim()) {
+    const term = `%${String(options.search).trim().toLowerCase()}%`;
+    conds.push(sql`(
+      LOWER(COALESCE(m.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
+      CAST(m.id AS TEXT) LIKE ${term}
+    )`);
+  }
+
+  return conds;
+}
+
+export async function getMesasFilterOptionsModel(options = {}) {
+  if (!isPgConnected || !sql) {
+    return {
+      success: true,
+      data: { salas: [], juegos: [] }
+    };
+  }
+
+  const active = options.active !== undefined ? Number(options.active) : 1;
+
+  // Filtro de Salas
+  const condsSalas = buildMesaConditions({ ...options, skipSalas: true, active });
+  const whereSalas = condsSalas.length > 0 ? sql`WHERE ${condsSalas.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  let allSalas;
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+  } else {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+  }
+
+  const countsSalasRes = await sql`
+    SELECT j.sala_id AS id, COUNT(m.id)::int AS count
+    FROM mesas m
+    JOIN juegos j ON m.juego_id = j.id
+    LEFT JOIN salas s ON j.sala_id = s.id
+    ${whereSalas}
+    GROUP BY j.sala_id
+  `;
+  const countSalasMap = new Map(countsSalasRes.map(r => [r.id, r.count]));
+  const activeSalas = new Set((options.salaIds || []).map(Number));
+
+  const salas = allSalas
+    .map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      count: countSalasMap.get(s.id) || 0
+    }))
+    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
+    .sort((a, b) => b.count - a.count);
+
+  // Filtro de Juegos
+  const condsJuegos = buildMesaConditions({ ...options, skipJuegos: true, active });
+  const whereJuegos = condsJuegos.length > 0 ? sql`WHERE ${condsJuegos.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  let allJuegos;
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    allJuegos = await sql`SELECT j.id, j.nombre, j.sala_id FROM juegos j WHERE j.sala_id = ANY(${options.userSalaIds}) ORDER BY j.nombre ASC`;
+  } else {
+    allJuegos = await sql`SELECT j.id, j.nombre, j.sala_id FROM juegos j ORDER BY j.nombre ASC`;
+  }
+
+  const countsJuegosRes = await sql`
+    SELECT m.juego_id AS id, COUNT(m.id)::int AS count
+    FROM mesas m
+    JOIN juegos j ON m.juego_id = j.id
+    LEFT JOIN salas s ON j.sala_id = s.id
+    ${whereJuegos}
+    GROUP BY m.juego_id
+  `;
+  const countJuegosMap = new Map(countsJuegosRes.map(r => [r.id, r.count]));
+  const activeJuegos = new Set((options.juegoIds || []).map(Number));
+
+  const juegos = allJuegos
+    .map(j => ({
+      id: j.id,
+      nombre: j.nombre,
+      sala_id: j.sala_id,
+      count: countJuegosMap.get(j.id) || 0
+    }))
+    .filter(j => j.count > 0 || activeJuegos.has(Number(j.id)))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    success: true,
+    data: {
+      salas,
+      juegos
+    }
+  };
+}
+
+export async function getMesasModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    let list = inMemoryData.mesas || [];
+    const active = params.active !== undefined ? Number(params.active) : 1;
+    list = list.filter(m => (m.active ?? 1) === active);
+    return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+  }
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const sortBy = params.sortBy || 'id';
+  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const active = params.active !== undefined ? Number(params.active) : 1;
+
+  // Parse filters
+  let userSalaIds = null;
+  if (params.user_sala_ids) {
+    userSalaIds = String(params.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+  let salaIds = null;
+  if (params.sala_ids) {
+    salaIds = String(params.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+  let juegoIds = null;
+  if (params.juego_ids) {
+    juegoIds = String(params.juego_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+
+  const conds = buildMesaConditions({
+    active,
+    userSalaIds,
+    salaIds,
+    juegoIds,
+    search
+  });
+
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  const allowedSortColumns = {
+    'id': 'm.id',
+    'nombre': 'm.nombre',
+    'juego_nombre': 'j.nombre',
+    'sala_nombre': 's.nombre'
+  };
+
+  const orderCol = allowedSortColumns[sortBy] || 'm.id';
+
+  const countRes = await sql`
+    SELECT COUNT(m.id)::int AS total
+    FROM mesas m
+    JOIN juegos j ON m.juego_id = j.id
+    LEFT JOIN salas s ON j.sala_id = s.id
+    ${where}
+  `;
+  const total = countRes[0]?.total || 0;
+
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, m.id DESC`);
+
+  let data;
+  if (limit > 0) {
+    data = await sql`
+      SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre
+      FROM mesas m
+      JOIN juegos j ON m.juego_id = j.id
+      LEFT JOIN salas s ON j.sala_id = s.id
+      ${where}
+      ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  } else {
+    data = await sql`
+      SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre
+      FROM mesas m
+      JOIN juegos j ON m.juego_id = j.id
+      LEFT JOIN salas s ON j.sala_id = s.id
+      ${where}
+      ${orderClause}
+    `;
+  }
+
+  data = data.map(r => ({ ...r, nombre: toTitleCase(r.nombre), juego_nombre: toTitleCase(r.juego_nombre) }));
+  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+
+  return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function createMesaModel(data) {
+  const cleanName = (data.nombre || '').trim();
+  if (!cleanName) throw new Error('El nombre de la mesa es obligatorio');
+  if (!data.juego_id) throw new Error('Debe seleccionar un juego para la mesa');
+
+  if (isPgConnected && sql) {
+    const existing = await sql`
+      SELECT id FROM mesas 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND juego_id = ${Number(data.juego_id)}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe una mesa registrada con el nombre "${toTitleCase(cleanName)}" en este juego`);
+    }
+
+    const rows = await sql`
+      INSERT INTO mesas (nombre, juego_id, active)
+      VALUES (${cleanName}, ${Number(data.juego_id)}, 1)
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const cleanLower = cleanName.toLowerCase();
+    const existing = (inMemoryData.mesas || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && Number(m.juego_id) === Number(data.juego_id));
+    if (existing) {
+      throw new Error(`Ya existe una mesa registrada con el nombre "${toTitleCase(cleanName)}" en este juego`);
+    }
+    const nextId = (inMemoryData.mesas?.length || 0) > 0 ? Math.max(...inMemoryData.mesas.map(m => m.id)) + 1 : 1;
+    const newMesa = {
+      id: nextId,
+      nombre: cleanName,
+      juego_id: Number(data.juego_id),
+      active: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.mesas = inMemoryData.mesas || [];
+    inMemoryData.mesas.unshift(newMesa);
+    return newMesa;
+  }
+}
+
+export async function updateMesaModel(id, data) {
+  const mId = Number(id);
+  const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
+  const juegoId = data.juego_id ? Number(data.juego_id) : null;
+  const active = data.active !== undefined ? Number(data.active) : null;
+
+  if (isPgConnected && sql) {
+    if (cleanName) {
+      const existing = await sql`
+        SELECT id FROM mesas 
+        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+          AND (${juegoId}::int IS NULL OR juego_id = ${juegoId})
+          AND id != ${mId}
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe otra mesa registrada con el nombre "${toTitleCase(cleanName)}"`);
+      }
+    }
+
+    const rows = await sql`
+      UPDATE mesas
+      SET 
+        nombre = COALESCE(${cleanName}, nombre),
+        juego_id = COALESCE(${juegoId}, juego_id),
+        active = COALESCE(${active}, active),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${mId}
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const idx = (inMemoryData.mesas || []).findIndex(m => m.id === mId);
+    if (idx !== -1) {
+      inMemoryData.mesas[idx] = { ...inMemoryData.mesas[idx], ...data, updated_at: new Date().toISOString() };
+      return inMemoryData.mesas[idx];
+    }
+    return null;
+  }
+}
+
+// Soft delete: Marca active = 0 (envía a Mesas Borradas)
+export async function softDeleteMesaModel(id) {
+  const mId = Number(id);
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      UPDATE mesas 
+      SET active = 0, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ${mId} 
+      RETURNING *
+    `;
+    return { success: true, id: mId, mesa: rows[0] };
+  } else {
+    const mesa = (inMemoryData.mesas || []).find(m => m.id === mId);
+    if (mesa) mesa.active = 0;
+    return { success: true, id: mId };
+  }
+}
+
+// Restore: Marca active = 1 (restaura de Mesas Borradas a Mesas)
+export async function restoreMesaModel(id) {
+  const mId = Number(id);
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      UPDATE mesas 
+      SET active = 1, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ${mId} 
+      RETURNING *
+    `;
+    return { success: true, id: mId, mesa: rows[0] };
+  } else {
+    const mesa = (inMemoryData.mesas || []).find(m => m.id === mId);
+    if (mesa) mesa.active = 1;
+    return { success: true, id: mId };
+  }
+}
+
+// Purge: Eliminación física definitiva desde Mesas Borradas
+export async function purgeMesaModel(id) {
+  return await deleteEntityDynamic('mesas', 'mesa', id);
+}
+
+
+
+
 
 

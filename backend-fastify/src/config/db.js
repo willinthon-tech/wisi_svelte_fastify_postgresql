@@ -317,7 +317,9 @@ export let inMemoryData = {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
-  ]
+  ],
+  juegos: [],
+  mesas: []
 };
 
 export let inMemoryItems = inMemoryData.wisi_items;
@@ -708,6 +710,35 @@ export async function initDb() {
       await sql`SELECT setval('feriados_id_seq', (SELECT COALESCE(MAX(id), 1) FROM feriados));`.catch(() => {});
     }
 
+    // 21. Table juegos (Juegos de Mesas en vivo)
+    await sql`
+      CREATE TABLE IF NOT EXISTS juegos (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        sala_id INT NOT NULL REFERENCES salas(id) ON DELETE CASCADE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_juegos_nombre_sala UNIQUE (nombre, sala_id)
+      );
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_juegos_sala_id ON juegos(sala_id);`.catch(() => {});
+
+    // 22. Table mesas (Mesas en vivo)
+    await sql`
+      CREATE TABLE IF NOT EXISTS mesas (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        juego_id INT NOT NULL REFERENCES juegos(id) ON DELETE CASCADE,
+        active SMALLINT DEFAULT 1,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_mesas_nombre_juego UNIQUE (nombre, juego_id)
+      );
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_mesas_juego_id ON mesas(juego_id);`.catch(() => {});
+    await sql`CREATE INDEX IF NOT EXISTS idx_mesas_active ON mesas(active);`.catch(() => {});
+
+
     // Existing wisi_items table
     await sql`
       CREATE TABLE IF NOT EXISTS wisi_items (
@@ -885,7 +916,9 @@ export async function syncInMemoryFromPg() {
       configuracion,
       wisiItems,
       feriados,
-      cortes
+      cortes,
+      juegos,
+      mesas
     ] = await Promise.all([
       sql`SELECT * FROM usuarios ORDER BY id ASC`.catch(() => inMemoryData.usuarios),
       sql`SELECT * FROM grupo_salas ORDER BY id ASC`.catch(() => inMemoryData.grupo_salas),
@@ -903,7 +936,9 @@ export async function syncInMemoryFromPg() {
       sql`SELECT * FROM configuracion`.catch(() => inMemoryData.configuracion),
       sql`SELECT * FROM wisi_items ORDER BY id ASC`.catch(() => inMemoryData.wisi_items),
       sql`SELECT * FROM feriados ORDER BY mes ASC, dia ASC, id ASC`.catch(() => inMemoryData.feriados || []),
-      sql`SELECT id, titulo, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at FROM cortes ORDER BY id DESC`.catch(() => inMemoryData.cortes || [])
+      sql`SELECT id, titulo, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, created_at, updated_at FROM cortes ORDER BY id DESC`.catch(() => inMemoryData.cortes || []),
+      sql`SELECT j.*, s.nombre AS sala_nombre FROM juegos j LEFT JOIN salas s ON j.sala_id = s.id ORDER BY j.id DESC`.catch(() => inMemoryData.juegos || []),
+      sql`SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre FROM mesas m JOIN juegos j ON m.juego_id = j.id LEFT JOIN salas s ON j.sala_id = s.id ORDER BY m.id DESC`.catch(() => inMemoryData.mesas || [])
     ]);
 
     if (usuarios && usuarios.length > 0) inMemoryData.usuarios = usuarios;
@@ -923,6 +958,8 @@ export async function syncInMemoryFromPg() {
     if (wisiItems && wisiItems.length > 0) inMemoryData.wisi_items = wisiItems;
     if (feriados && feriados.length > 0) inMemoryData.feriados = feriados;
     if (cortes && cortes.length > 0) inMemoryData.cortes = cortes;
+    if (juegos && juegos.length > 0) inMemoryData.juegos = juegos;
+    if (mesas && mesas.length > 0) inMemoryData.mesas = mesas;
   } catch (err) {
     console.warn('Aviso sincronizando In-Memory Fallback desde PostgreSQL:', err.message);
   }

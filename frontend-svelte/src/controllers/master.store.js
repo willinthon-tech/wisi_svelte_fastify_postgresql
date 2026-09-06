@@ -263,6 +263,8 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('modulos', masterModulosStore),
     fetchEntity('dispositivos', masterDispositivosStore),
     fetchEntity('descargas', masterDescargasStore),
+    fetchEntity('juegos', masterJuegosStore),
+    fetchEntity('mesas', masterMesasStore),
     fetchUserSalas(),
     fetchUserPerms()
   ]);
@@ -359,16 +361,52 @@ export const masterDepartamentosStore = writable(loadStore('departamentos_v1', [
 export const masterAreasStore = writable(loadStore('areas_v1', []));
 export const masterCargosStore = writable(loadStore('cargos_v1', []));
 export const masterEmpleadosStore = writable(loadStore('empleados_v1', []));
+export const masterJuegosStore = writable(loadStore('juegos_v1', []));
+export const masterMesasStore = writable(loadStore('mesas_v1', []));
 
 masterDepartamentosStore.subscribe(val => saveStore('departamentos_v1', val));
 masterAreasStore.subscribe(val => saveStore('areas_v1', val));
 masterCargosStore.subscribe(val => saveStore('cargos_v1', val));
 masterEmpleadosStore.subscribe(val => saveStore('empleados_v1', val));
+masterJuegosStore.subscribe(val => saveStore('juegos_v1', val));
+masterMesasStore.subscribe(val => saveStore('mesas_v1', val));
 
 export const masterDepartamentosActions = createMasterEntityActions(masterDepartamentosStore, 'departamentos');
 export const masterAreasActions = createMasterEntityActions(masterAreasStore, 'areas');
 export const masterCargosActions = createMasterEntityActions(masterCargosStore, 'cargos');
 export const masterEmpleadosActions = createMasterEntityActions(masterEmpleadosStore, 'empleados');
+export const masterJuegosActions = createMasterEntityActions(masterJuegosStore, 'juegos');
+export const masterMesasActions = {
+  ...createMasterEntityActions(masterMesasStore, 'mesas'),
+  restore: async (id) => {
+    try {
+      const res = await fetch(`/api/master/mesas/${id}/restore`, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok || json?.success === false) {
+        throw new Error(json?.error || 'Error al restaurar mesa');
+      }
+      await loadMasterStoresFromBackend();
+      return json;
+    } catch (err) {
+      console.warn('Backend sync error for mesa restore:', err);
+      throw err;
+    }
+  },
+  purge: async (id) => {
+    try {
+      const res = await fetch(`/api/master/mesas/${id}/purge`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || json?.success === false) {
+        throw new Error(json?.error || 'Error al eliminar mesa definitivamente');
+      }
+      await loadMasterStoresFromBackend();
+      return json;
+    } catch (err) {
+      console.warn('Backend sync error for mesa purge:', err);
+      throw err;
+    }
+  }
+};
 
 export const masterSalasActions = createMasterEntityActions(masterSalasStore, 'salas');
 export const masterPaginasActions = createMasterEntityActions(masterPaginasStore, 'paginas');

@@ -251,3 +251,29 @@ INSERT INTO dispositivos (id, nombre, sala_id, ip_local, ip_remota, ip_panel, us
 (39, 'Marcaje Personal ( Roraima )', 2, '192.168.3.174', '190.72.102.210:8030', NULL, 'admin', 'Jjnc0412', '2026-01-01 00:00:00', '2031-01-31 23:59:59'),
 (40, 'Marcaje Personal ( Plaza )', 5, NULL, '190.72.102.210:8031', NULL, 'admin', 'Jjnc0412', '2026-06-30 00:00:00', '2031-06-30 23:59:59')
 ON CONFLICT (id) DO NOTHING;
+
+-- Tabla de Juegos (Mesas en vivo)
+CREATE TABLE IF NOT EXISTS juegos (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    sala_id INT NOT NULL REFERENCES salas(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_juegos_nombre_sala UNIQUE (nombre, sala_id)
+);
+CREATE INDEX IF NOT EXISTS idx_juegos_sala_id ON juegos(sala_id);
+
+-- Tabla de Mesas (Mesas en vivo)
+CREATE TABLE IF NOT EXISTS mesas (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    juego_id INT NOT NULL REFERENCES juegos(id) ON DELETE CASCADE,
+    active SMALLINT DEFAULT 1,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_mesas_nombre_juego UNIQUE (nombre, juego_id)
+);
+CREATE INDEX IF NOT EXISTS idx_mesas_juego_id ON mesas(juego_id);
+CREATE INDEX IF NOT EXISTS idx_mesas_active ON mesas(active);
+
+

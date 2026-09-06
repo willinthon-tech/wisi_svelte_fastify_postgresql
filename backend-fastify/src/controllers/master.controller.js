@@ -17,7 +17,9 @@ import {
   getFeriadosModel, getFeriadosFilterOptionsModel, createFeriadoModel, updateFeriadoModel, deleteFeriadoModel,
   getCumpleanosModel, getCarnetsModel,
   getCortesModel, getCorteByIdModel, createCorteModel, deleteCorteModel, getCortesFilterOptionsModel,
-  getDescargasModel, getLatestDescargasModel, createDescargaUploadModel, deleteDescargaModel
+  getDescargasModel, getLatestDescargasModel, createDescargaUploadModel, deleteDescargaModel,
+  getJuegosModel, getJuegosFilterOptionsModel, createJuegoModel, updateJuegoModel, deleteJuegoModel,
+  getMesasModel, getMesasFilterOptionsModel, createMesaModel, updateMesaModel, softDeleteMesaModel, restoreMesaModel, purgeMesaModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -839,6 +841,161 @@ export async function deleteDepartamento(request, reply) {
     return reply.status(400).send({ success: false, error: err.message });
   }
 }
+
+
+// --- JUEGOS (MESAS EN VIVO) ---
+export async function getJuegosFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    let userSalaIds = null;
+    if (q.user_sala_ids) {
+      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    let salaIds = null;
+    if (q.sala_ids) {
+      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+
+    const result = await getJuegosFilterOptionsModel({
+      userSalaIds,
+      salaIds,
+      search: q.search
+    });
+    return reply.send(result);
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getJuegos(request, reply) {
+  const result = await getJuegosModel(request.query);
+  return reply.send(result);
+}
+
+export async function createJuego(request, reply) {
+  try {
+    const data = parseBody(request.body);
+    const result = await createJuegoModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateJuego(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = parseBody(request.body);
+    const result = await updateJuegoModel(id, data);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteJuego(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await deleteJuegoModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+
+// --- MESAS (MESAS EN VIVO) ---
+export async function getMesasFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    let userSalaIds = null;
+    if (q.user_sala_ids) {
+      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    let salaIds = null;
+    if (q.sala_ids) {
+      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    let juegoIds = null;
+    if (q.juego_ids) {
+      juegoIds = String(q.juego_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+
+    const result = await getMesasFilterOptionsModel({
+      active: q.active,
+      userSalaIds,
+      salaIds,
+      juegoIds,
+      search: q.search
+    });
+    return reply.send(result);
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getMesas(request, reply) {
+  const result = await getMesasModel(request.query);
+  return reply.send(result);
+}
+
+export async function createMesa(request, reply) {
+  try {
+    const data = parseBody(request.body);
+    const result = await createMesaModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateMesa(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = parseBody(request.body);
+    const result = await updateMesaModel(id, data);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// Soft delete: marcar como borrada (active = 0)
+export async function deleteMesa(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await softDeleteMesaModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// Restaurar mesa desde mesas borradas (active = 1)
+export async function restoreMesa(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await restoreMesaModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// Purgar definitivamente mesa
+export async function purgeMesa(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await purgeMesaModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+
 
 
 // --- ÁREAS ---
