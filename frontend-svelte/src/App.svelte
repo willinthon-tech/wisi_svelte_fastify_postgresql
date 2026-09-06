@@ -474,6 +474,7 @@
   onMount(async () => {
     initRouter();
     loadMasterStoresFromBackend();
+    initPushNotifications($currentUserStore?.id);
     await loadUserSession();
     await refreshData();
 

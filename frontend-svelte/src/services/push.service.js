@@ -65,23 +65,22 @@ export async function initPushNotifications(userId, onNotificationReceived) {
       }
     }
 
-    // Si ya existe un token almacenado en este teléfono, vincularlo de inmediato con el usuario logueado
+    // Si ya existe un token almacenado en este teléfono, sincronizarlo de inmediato
     try {
       const cachedToken = localStorage.getItem('wisi_fcm_token');
-      if (cachedToken && userId) {
+      if (cachedToken) {
         syncTokenWithBackend(cachedToken, userId);
       }
     } catch (e) {}
 
-    // 3. Registrar ante FCM (Firebase Cloud Messaging)
-    await PushNotifications.register();
-
-    // 4. Escuchar el Token FCM generado por Google Services
+    // 3. Limpiar y registrar listeners ANTES de llamar a register() para evitar perder el evento
     await PushNotifications.removeAllListeners();
 
     PushNotifications.addListener('registration', async (token) => {
-      console.log('✅ [Push] FCM Token Registrado:', token.value);
-      await syncTokenWithBackend(token.value, userId);
+      console.log('✅ [Push] FCM Token Registrado:', token?.value);
+      if (token?.value) {
+        await syncTokenWithBackend(token.value, userId);
+      }
     });
 
     PushNotifications.addListener('registrationError', (err) => {
@@ -105,6 +104,9 @@ export async function initPushNotifications(userId, onNotificationReceived) {
         openPhotoModalForAttlog(attlogId);
       }
     });
+
+    // 4. Registrar ante FCM (Firebase Cloud Messaging) tras tener los listeners listos
+    await PushNotifications.register();
 
   } catch (error) {
     console.warn('⚠️ [Push] No se pudo inicializar Push Notifications en este dispositivo:', error);

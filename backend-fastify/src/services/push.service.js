@@ -134,21 +134,22 @@ export async function sendPushNotificationForAttlog({ salaId = null, title, body
     try {
       const numSalaId = salaId ? Number(salaId) : null;
       if (numSalaId) {
-        // Consultar únicamente tokens de usuarios que tienen asignada esta sala
-        // o usuarios que no tienen ninguna sala en user_salas (acceso global irrestricto)
+        // Consultar tokens de usuarios asignados a esta sala,
+        // usuarios con acceso global irrestricto (sin registros en user_salas),
+        // o dispositivos registrados donde user_id es null
         const rows = await sql`
           SELECT DISTINCT ft.token 
           FROM fcm_tokens ft
           WHERE ft.activo = TRUE 
-            AND ft.user_id IS NOT NULL
             AND (
-              EXISTS (
-                SELECT 1 FROM user_salas us 
-                WHERE us.user_id = ft.user_id AND us.sala_id = ${numSalaId}
-              )
+              ft.user_id IS NULL
               OR NOT EXISTS (
                 SELECT 1 FROM user_salas us 
                 WHERE us.user_id = ft.user_id
+              )
+              OR EXISTS (
+                SELECT 1 FROM user_salas us 
+                WHERE us.user_id = ft.user_id AND us.sala_id = ${numSalaId}
               )
             )
         `;
@@ -167,6 +168,36 @@ export async function sendPushNotificationForAttlog({ salaId = null, title, body
   }
 
   return executeMulticastSend({ tokens, title, body, data, imageUrl, icon });
+}
+
+/**
+ * Retorna información de diagnóstico sobre Firebase y tokens registrados
+ */
+export async function getPushDiagnostics() {
+  let tokenCount = 0;
+  let tokens = [];
+  if (isPgConnected && sql) {
+    try {
+      const rows = await sql`
+        SELECT id, user_id, platform, activo, updated_at, 
+               SUBSTRING(token, 1, 15) || '...' as token_preview 
+        FROM fcm_tokens 
+        ORDER BY id DESC 
+        LIMIT 20
+      `;
+      tokens = rows;
+      tokenCount = rows.length;
+    } catch (e) {
+      tokenCount = inMemoryTokens.size;
+    }
+  } else {
+    tokenCount = inMemoryTokens.size;
+  }
+  return {
+    firebaseInitialized: isFirebaseInitialized,
+    activeTokensCount: tokenCount,
+    tokensSample: tokens
+  };
 }
 
 /**
@@ -197,6 +228,7 @@ async function executeMulticastSend({ tokens = [], title, body, data = {}, image
   tokens = Array.from(new Set(tokens.filter(Boolean)));
 
   if (tokens.length === 0) {
+    console.log('\x1b[33m🟡 [PUSH FCM]\x1b[0m No hay tokens FCM registrados o activos para enviar.');
     return { success: false, reason: 'No_tokens_registered' };
   }
 
@@ -206,6 +238,7 @@ async function executeMulticastSend({ tokens = [], title, body, data = {}, image
   }
 
   if (!isFirebaseInitialized) {
+    console.warn('\x1b[31m❌ [PUSH FCM]\x1b[0m Firebase Admin no está inicializado (falta service-account.json en el servidor).');
     return { success: false, reason: 'Firebase_not_initialized' };
   }
 

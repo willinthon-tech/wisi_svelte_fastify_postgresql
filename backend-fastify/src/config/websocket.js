@@ -160,6 +160,14 @@ attlogEvents.on('new_attlog', (data) => {
         nombre: String(empName),
         image_url: String(photoUrl || '')
       }
-    }).catch(() => {});
+    }).then((res) => {
+      if (res && res.success) {
+        console.log(`\x1b[32m📲 [PUSH FCM]\x1b[0m Push enviado exitosamente a ${res.successCount} dispositivo(s) (Fallos: ${res.failureCount || 0})`);
+      } else if (res && res.reason) {
+        console.log(`\x1b[33m🟡 [PUSH FCM]\x1b[0m Envío de push omitido: ${res.reason}`);
+      }
+    }).catch(err => {
+      console.warn('⚠️ [PUSH FCM] Error enviando notificación push:', err?.message || err);
+    });
   }
 });

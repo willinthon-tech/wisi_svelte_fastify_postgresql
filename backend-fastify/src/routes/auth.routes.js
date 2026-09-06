@@ -1,10 +1,16 @@
 import { loginController, getMeController, verifyPasswordController } from '../controllers/auth.controller.js';
-import { registerDeviceToken, unregisterDeviceToken } from '../services/push.service.js';
+import { registerDeviceToken, unregisterDeviceToken, getPushDiagnostics } from '../services/push.service.js';
 
 export default async function authRoutes(fastify, options) {
   fastify.post('/auth/login', loginController);
   fastify.post('/auth/verify-password', verifyPasswordController);
   fastify.get('/auth/me', getMeController);
+
+  // Diagnóstico de estado de Firebase y Tokens FCM
+  fastify.get('/auth/push-status', async (request, reply) => {
+    const diag = await getPushDiagnostics();
+    return { success: true, diagnostics: diag };
+  });
 
   // Registro de Token FCM para Notificaciones Push de Android
   fastify.post('/auth/fcm-token', async (request, reply) => {
