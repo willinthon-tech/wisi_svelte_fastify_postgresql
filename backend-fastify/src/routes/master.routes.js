@@ -17,6 +17,7 @@ import {
   getEmpleados, getEmpleadosFilterOptions, checkEmpleadoCedula, getEmpleadoDispositivos, createEmpleado, updateEmpleado, deleteEmpleado,
   getFeriados, getFeriadosFilterOptions, createFeriado, updateFeriado, deleteFeriado,
   getCumpleanos, getCarnets,
+  getCortes, getCorteById, createCorte, deleteCorte, getCortesFilterOptions,
   getDescargas, getLatestDescargas, uploadDescarga, deleteDescarga,
   getJuegos, getJuegosFilterOptions, createJuego, updateJuego, deleteJuego,
   getMesas, getMesasFilterOptions, createMesa, updateMesa, deleteMesa, restoreMesa, purgeMesa,
