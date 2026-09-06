@@ -995,7 +995,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "configuracion/juegos" || $currentRouteStore === "juegos"}
+        {:else if $currentRouteStore === "configuracion/juegos-maquinas" || $currentRouteStore === "maquinas/juegos" || $currentRouteStore === "juegos-maquinas"}
           <MaquinasJuegosView
             items={$itemsStore}
             on:toggle={handleToggle}
@@ -1060,7 +1060,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "configuracion/juegos" || $currentRouteStore === "mesas-en-vivo/juegos"}
+        {:else if $currentRouteStore === "configuracion/juegos" || $currentRouteStore === "mesas-en-vivo/juegos" || $currentRouteStore === "mesas/juegos"}
           <MesasJuegosView
             items={$itemsStore}
             on:toggle={handleToggle}

@@ -93,7 +93,7 @@ const initialModulos = [
   { id: 14, nombre: 'Estados', icono: 'settings', ruta: '/configuracion/estados', page_id: 3 },
   { id: 15, nombre: 'Sociedades', icono: 'settings', ruta: '/configuracion/sociedades', page_id: 3 },
   { id: 16, nombre: 'Valores', icono: 'settings', ruta: '/configuracion/valores', page_id: 3 },
-  { id: 17, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos', page_id: 3 },
+  { id: 17, nombre: 'Juegos', icono: 'settings', ruta: '/configuracion/juegos-maquinas', page_id: 3 },
   { id: 18, nombre: 'Marcas', icono: 'settings', ruta: '/configuracion/marcas', page_id: 3 },
   { id: 19, nombre: 'Modelos', icono: 'settings', ruta: '/configuracion/modelos', page_id: 3 },
   { id: 20, nombre: 'Tipos', icono: 'settings', ruta: '/configuracion/tipos', page_id: 3 },

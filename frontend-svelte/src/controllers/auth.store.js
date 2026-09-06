@@ -63,7 +63,7 @@ export const navMenuStore = writable([
       { id: 14, nombre: 'Estados', ruta: '/configuracion/estados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 15, nombre: 'Sociedades', ruta: '/configuracion/sociedades', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 16, nombre: 'Valores', ruta: '/configuracion/valores', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 17, nombre: 'Juegos', ruta: '/configuracion/juegos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
+      { id: 17, nombre: 'Juegos', ruta: '/configuracion/juegos-maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 18, nombre: 'Marcas', ruta: '/configuracion/marcas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 19, nombre: 'Modelos', ruta: '/configuracion/modelos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 20, nombre: 'Tipos', ruta: '/configuracion/tipos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },

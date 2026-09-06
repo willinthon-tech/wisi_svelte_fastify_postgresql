@@ -2,6 +2,42 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!-- Suprimir advertencias benignas de Chrome DevTools y extensiones (Core Web Vitals / reportAllChanges VM) -->
+    <script>
+      (function() {
+        var isIgnored = function(msg, url, stack) {
+          var str = String(msg || '') + ' ' + String(url || '') + ' ' + String(stack || '');
+          return str.indexOf('startTime') !== -1 && (str.indexOf('reportAllChanges') !== -1 || str.indexOf('VM') !== -1 || str.indexOf('Cannot read properties of undefined') !== -1);
+        };
+        var origOnError = window.onerror;
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+          if (isIgnored(msg || (error && error.message), url, error && error.stack)) {
+            return true;
+          }
+          if (typeof origOnError === 'function') {
+            return origOnError.apply(this, arguments);
+          }
+        };
+        window.addEventListener('error', function(event) {
+          if (isIgnored(event.message, event.filename, event.error && event.error.stack)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, true);
+        var origConsoleError = console.error;
+        console.error = function() {
+          var allArgs = Array.prototype.slice.call(arguments).map(function(a) {
+            return (a && a.stack) ? a.stack : String(a || '');
+          }).join(' ');
+          if (isIgnored(allArgs, '', '')) {
+            return;
+          }
+          if (origConsoleError) {
+            origConsoleError.apply(console, arguments);
+          }
+        };
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Wisi Space</title>
     <meta name="title" content="Wisi Space" />
