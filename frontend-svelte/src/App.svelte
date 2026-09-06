@@ -239,6 +239,19 @@
   }
 
   let audioCtx = null;
+  let userHasInteracted = false;
+
+  if (typeof window !== "undefined") {
+    const unlockAudio = () => {
+      userHasInteracted = true;
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+      }
+    };
+    window.addEventListener("click", unlockAudio, { passive: true, once: true });
+    window.addEventListener("keydown", unlockAudio, { passive: true, once: true });
+    window.addEventListener("touchstart", unlockAudio, { passive: true, once: true });
+  }
 
   function getAudioContext() {
     if (!audioCtx && typeof window !== "undefined") {
@@ -247,8 +260,8 @@
         audioCtx = new AudioContextClass();
       }
     }
-    if (audioCtx && audioCtx.state === "suspended") {
-      audioCtx.resume();
+    if (audioCtx && audioCtx.state === "suspended" && userHasInteracted) {
+      audioCtx.resume().catch(() => {});
     }
     return audioCtx;
   }
