@@ -73,7 +73,6 @@
   import DeleteModal from "./components/modals/DeleteModal.svelte";
   import {
     itemsStore,
-    loadItemsData,
     addNewItem,
     updateExistingItem,
     toggleItemCompleted,
