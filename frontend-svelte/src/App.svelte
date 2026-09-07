@@ -960,15 +960,8 @@
           <CortesCalculosView />
 
           <!-- MAQUINAS Module Views -->
-        {:else if $currentRouteStore === "configuracion/maquinas" || $currentRouteStore === "maquinas"}
-          <MaquinasView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+        {:else if $currentRouteStore === "configuracion/maquinas" || $currentRouteStore === "maquinas" || $currentRouteStore === "maquinas/maquinas"}
+          <MaquinasView />
         {:else if $currentRouteStore === "configuracion/estados" || $currentRouteStore === "estados"}
           <EstadosView />
         {:else if $currentRouteStore === "configuracion/sociedades" || $currentRouteStore === "sociedades"}

@@ -30,7 +30,8 @@ import {
   getModosModel, createModoModel, updateModoModel, deleteModoModel,
   getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel,
   getExcepcionesModel, createExcepcionModel, updateExcepcionModel, deleteExcepcionModel,
-  getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel
+  getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel,
+  getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1777,3 +1778,97 @@ export const getFechasPatrias = fechasPatriasCtrl.get;
 export const createFechaPatria = fechasPatriasCtrl.create;
 export const updateFechaPatria = fechasPatriasCtrl.update;
 export const deleteFechaPatria = fechasPatriasCtrl.delete;
+
+// 12. Máquinas
+export async function getMaquinas(request, reply) {
+  try {
+    const q = request.query || {};
+    const parseIds = (val) => val ? String(val).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
+    const grupoIds = parseIds(q.grupo_ids || q.grupo_sala_ids);
+    const juegoIds = parseIds(q.juego_ids);
+    const estadoIds = parseIds(q.estado_ids);
+    const sociedadIds = parseIds(q.sociedad_ids);
+    const valorIds = parseIds(q.valor_ids);
+    const modeloIds = parseIds(q.modelo_ids);
+    const tipoIds = parseIds(q.tipo_ids);
+    const modoIds = parseIds(q.modo_ids);
+    const legalIds = parseIds(q.legal_ids);
+
+    const res = await getMaquinasModel({
+      page: q.page,
+      limit: q.limit,
+      search: q.search,
+      sortBy: q.sortBy || q.sort_by,
+      sortDir: q.sortDir || q.sort_order,
+      userSalaIds,
+      salaIds,
+      grupoIds,
+      juegoIds,
+      estadoIds,
+      sociedadIds,
+      valorIds,
+      modeloIds,
+      tipoIds,
+      modoIds,
+      legalIds
+    });
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getMaquinasFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    const userSalaIds = q.user_sala_ids ? String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
+    const res = await getMaquinasFilterOptionsModel({ userSalaIds });
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getMaquinaById(request, reply) {
+  try {
+    const { id } = request.params;
+    const item = await getMaquinaByIdModel(id);
+    if (!item) return reply.status(404).send({ success: false, error: 'Máquina no encontrada' });
+    return reply.send({ success: true, data: item });
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function createMaquina(request, reply) {
+  try {
+    const item = await createMaquinaModel(request.body);
+    return reply.send({ success: true, data: item });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateMaquina(request, reply) {
+  try {
+    const { id } = request.params;
+    const item = await updateMaquinaModel(id, request.body);
+    if (!item) return reply.status(404).send({ success: false, error: 'Máquina no encontrada' });
+    return reply.send({ success: true, data: item });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteMaquina(request, reply) {
+  try {
+    const { id } = request.params;
+    const res = await deleteMaquinaModel(id);
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+

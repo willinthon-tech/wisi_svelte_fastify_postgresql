@@ -31,7 +31,8 @@ import {
   getModos, createModo, updateModo, deleteModo,
   getLegal, createLegal, updateLegal, deleteLegal,
   getExcepciones, createExcepcion, updateExcepcion, deleteExcepcion,
-  getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria
+  getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria,
+  getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -323,6 +324,21 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/fechas-patrias/:id', updateFechaPatria);
   fastify.delete('/master/fechas-patrias/:id', deleteFechaPatria);
   fastify.delete('/api/master/fechas-patrias/:id', deleteFechaPatria);
+
+  // 12. Máquinas (CRUD Principal)
+  fastify.get('/master/maquinas', getMaquinas);
+  fastify.get('/api/master/maquinas', getMaquinas);
+  fastify.get('/master/maquinas/filter-options', getMaquinasFilterOptions);
+  fastify.get('/api/master/maquinas/filter-options', getMaquinasFilterOptions);
+  fastify.get('/master/maquinas/:id', getMaquinaById);
+  fastify.get('/api/master/maquinas/:id', getMaquinaById);
+  fastify.post('/master/maquinas', createMaquina);
+  fastify.post('/api/master/maquinas', createMaquina);
+  fastify.put('/master/maquinas/:id', updateMaquina);
+  fastify.put('/api/master/maquinas/:id', updateMaquina);
+  fastify.delete('/master/maquinas/:id', deleteMaquina);
+  fastify.delete('/api/master/maquinas/:id', deleteMaquina);
+
 
 
   // Áreas
