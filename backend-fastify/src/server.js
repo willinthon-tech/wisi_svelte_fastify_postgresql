@@ -4,7 +4,6 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import dotenv from 'dotenv';
 
-import itemRoutes from './routes/item.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import masterRoutes from './routes/master.routes.js';
@@ -88,7 +87,6 @@ async function startServer() {
     await initDb();
 
     // Register API Routes
-    await fastify.register(itemRoutes, { prefix: '/api' });
     await fastify.register(healthRoutes, { prefix: '/api' });
     await fastify.register(authRoutes, { prefix: '/api' });
     await fastify.register(masterRoutes, { prefix: '/api' });

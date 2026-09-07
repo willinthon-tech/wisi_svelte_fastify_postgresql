@@ -38,7 +38,10 @@ export async function initDb() {
     // MIGRACIONES DE RENOMBRADO DEFINITIVO EN POSTGRESQL
     // =========================================================================
     
-    // 1. Unificar y renombrar plantillas_horarios -> horarios
+    // 1. Eliminar tabla no utilizada wisi_items
+    await sql`DROP TABLE IF EXISTS wisi_items CASCADE;`.catch(() => {});
+
+    // 2. Unificar y renombrar plantillas_horarios -> horarios
     await sql`
       DO $$ 
       BEGIN
@@ -58,7 +61,25 @@ export async function initDb() {
       END $$;
     `.catch((e) => console.warn('Migración plantillas_horarios -> horarios:', e.message));
 
-    // 2. Unificar y renombrar empleados_plantillas_horarios -> empleados_horarios
+    // 3. Garantizar que la tabla horarios tenga su sala_id
+    await sql`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'horarios') THEN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'horarios' AND column_name = 'sala_id') THEN
+            ALTER TABLE horarios ADD COLUMN sala_id INT REFERENCES salas(id) ON DELETE SET NULL;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'horarios' AND column_name = 'codigo') THEN
+            ALTER TABLE horarios ADD COLUMN codigo VARCHAR(50);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'horarios' AND column_name = 'tipo') THEN
+            ALTER TABLE horarios ADD COLUMN tipo VARCHAR(50) DEFAULT 'horario';
+          END IF;
+        END IF;
+      END $$;
+    `.catch((e) => console.warn('Garantizar columnas en horarios:', e.message));
+
+    // 4. Unificar y renombrar empleados_plantillas_horarios -> empleados_horarios
     await sql`
       DO $$ 
       BEGIN
@@ -80,7 +101,7 @@ export async function initDb() {
       END $$;
     `.catch((e) => console.warn('Migración empleados_plantillas_horarios -> empleados_horarios:', e.message));
 
-    // 3. Unificar y renombrar excepciones_horarios -> empleados_excepciones_horarios
+    // 5. Unificar y renombrar excepciones_horarios -> empleados_excepciones_horarios
     await sql`
       DO $$ 
       BEGIN
@@ -102,7 +123,7 @@ export async function initDb() {
       END $$;
     `.catch((e) => console.warn('Migración excepciones_horarios -> empleados_excepciones_horarios:', e.message));
 
-    // 4. Asegurar columnas en empleados_excepciones_horarios
+    // 6. Asegurar columnas en empleados_excepciones_horarios
     await sql`
       DO $$
       BEGIN
@@ -123,7 +144,7 @@ export async function initDb() {
       END $$;
     `.catch(() => {});
 
-    // 5. Actualizar módulo en la tabla modulos
+    // 7. Actualizar módulo en la tabla modulos
     await sql`
       UPDATE modulos 
       SET nombre = 'Horarios', ruta = '/rrhh/horarios', icono = 'schedule' 
