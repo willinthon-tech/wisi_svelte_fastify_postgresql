@@ -95,11 +95,13 @@
       
       <div style="display: flex; flex-direction: column; text-align: left; line-height: 1.2;">
         <span class="user-name" style="font-size: 13px; font-weight: 700; color: #0f172a;">
-          {$currentUserStore?.nombre_apellido || 'Wilinthon Carriedo'}
+          {$currentUserStore?.nombre_apellido || 'Usuario'}
         </span>
-        <span style="font-size: 11px; color: #10b981; font-weight: 600;">
-          @{$currentUserStore?.usuario || 'wilinthon'}
-        </span>
+        {#if $currentUserStore?.usuario}
+          <span style="font-size: 11px; color: #10b981; font-weight: 600;">
+            @{$currentUserStore.usuario}
+          </span>
+        {/if}
       </div>
     </div>
   </div>

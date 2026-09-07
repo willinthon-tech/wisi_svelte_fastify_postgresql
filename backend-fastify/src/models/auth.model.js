@@ -4,25 +4,16 @@ export async function findUserByUsername(usuario) {
   const cleanInput = (usuario || '').trim().toLowerCase();
   if (!cleanInput) return null;
 
-  // Normalizar variantes habituales como wilinthon / willinthon
-  const altInput = cleanInput === 'willinthon'
-    ? 'wilinthon'
-    : (cleanInput === 'wilinthon' ? 'willinthon' : cleanInput);
-
   if (isPgConnected && sql) {
     const rows = await sql`
       SELECT id, nombre_apellido, usuario, password 
       FROM usuarios 
-      WHERE LOWER(TRIM(usuario)) = ${cleanInput} OR LOWER(TRIM(usuario)) = ${altInput}
-      ORDER BY CASE WHEN LOWER(TRIM(usuario)) = ${cleanInput} THEN 1 ELSE 2 END
+      WHERE LOWER(TRIM(usuario)) = ${cleanInput}
       LIMIT 1
     `;
     return rows[0] || null;
   } else {
-    return inMemoryData.usuarios.find(u => {
-      const uLower = (u.usuario || '').trim().toLowerCase();
-      return uLower === cleanInput || uLower === altInput;
-    }) || null;
+    return inMemoryData.usuarios.find(u => (u.usuario || '').trim().toLowerCase() === cleanInput) || null;
   }
 }
 

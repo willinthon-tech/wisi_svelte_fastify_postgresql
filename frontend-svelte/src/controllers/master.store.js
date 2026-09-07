@@ -125,7 +125,7 @@ const initialDispositivos = [
 ];
 
 const initialUsuarios = [
-  { id: 1, nombre_apellido: 'Wilinthon Carriedo', usuario: 'wilinthon', password: '123456' },
+  { id: 1, nombre_apellido: 'Willinthon Carriedo', usuario: 'willinthon', password: '123456' },
   { id: 2, nombre_apellido: 'Anthony Operador', usuario: 'anthony', password: '123456' },
   { id: 3, nombre_apellido: 'Supervisor General', usuario: 'supervisor', password: '123456' },
   { id: 4, nombre_apellido: 'Carla Administradora', usuario: 'carla', password: '12345678' }

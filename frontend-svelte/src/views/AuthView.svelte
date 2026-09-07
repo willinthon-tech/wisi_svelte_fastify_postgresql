@@ -12,7 +12,7 @@
   import { navigateToRoute } from '../controllers/router.store.js';
   import { getCloudBaseUrl } from '../config/api.config.js';
 
-  let usuario = 'wilinthon';
+  let usuario = '';
   let password = '';
   let loading = false;
 
@@ -66,7 +66,7 @@
           👤 Sesión Activa: {$currentUserStore?.nombre_apellido || 'Usuario'}
         </h4>
         <p style="font-size: 12px; color: #047857; margin: 0;">
-          @{$currentUserStore?.usuario || 'wilinthon'}
+          @{$currentUserStore?.usuario || ''}
         </p>
       </div>
 
@@ -90,7 +90,7 @@
             id="auth-user"
             type="text"
             bind:value={usuario}
-            placeholder="wilinthon"
+            placeholder="Usuario"
             class="form-input"
             required
           />

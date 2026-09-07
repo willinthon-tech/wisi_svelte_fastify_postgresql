@@ -34,7 +34,7 @@ export async function loginController(request, reply) {
     }
 
     // Strict password match against DB record
-    const isMatch = user.password === password.trim() || user.password.startsWith('$2a$');
+    const isMatch = String(user.password || '').trim() === String(password || '').trim();
     if (!isMatch) {
       return reply.status(401).send({ success: false, error: 'Credenciales inválidas' });
     }

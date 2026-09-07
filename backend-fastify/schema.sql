@@ -132,7 +132,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Insertar Usuario Inicial
 INSERT INTO usuarios (id, nombre_apellido, usuario, password) VALUES
-(1, 'Wilinthon Carriedo', 'wilinthon', '123456')
+(1, 'Willinthon Carriedo', 'willinthon', '123456')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insertar Salas Iniciales (Asociadas a grupo_salas)
@@ -196,7 +196,7 @@ INSERT INTO modulos (id, nombre, icono, ruta, page_id) VALUES
 (35, 'Mesas Borradas', 'settings', '/mesas-en-vivo/mesas-borradas', 7)
 ON CONFLICT (id) DO NOTHING;
 
--- Asignar Permisos Iniciales al Usuario 1 (wilinthon) en todos los módulos activos
+-- Asignar Permisos Iniciales al Usuario 1 (willinthon) en todos los módulos activos
 INSERT INTO user_module_permissions (user_id, module_id, permission_id) VALUES
 -- Módulos de CECOM (5, 32, 33) y MESAS EN VIVO (12, 34, 35)
 (1, 5, 5), (1, 5, 1), (1, 5, 3), (1, 5, 4), (1, 5, 2),
