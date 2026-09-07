@@ -59,7 +59,7 @@ export let inMemoryData = {
       id: 1,
       nombre_apellido: 'Willinthon Carriedo',
       usuario: 'willinthon',
-      password: '123456',
+      password: '12345678',
       created_at: '2025-09-30T04:45:22.000Z',
       updated_at: '2025-09-30T04:45:22.000Z'
     },
@@ -399,7 +399,7 @@ export async function initDb() {
 
     await sql`
       INSERT INTO usuarios (id, nombre_apellido, usuario, password)
-      VALUES (1, 'Willinthon Carriedo', 'willinthon', '123456')
+      VALUES (1, 'Willinthon Carriedo', 'willinthon', '12345678')
       ON CONFLICT (id) DO NOTHING;
     `.catch(() => {});
 
@@ -1052,7 +1052,7 @@ export async function initDb() {
     if (userCount[0].count === 0) {
       await sql`
         INSERT INTO usuarios (id, nombre_apellido, usuario, password)
-        VALUES (1, 'Willinthon Carriedo', 'willinthon', '123456')
+        VALUES (1, 'Willinthon Carriedo', 'willinthon', '12345678')
         ON CONFLICT DO NOTHING;
       `;
       await sql`

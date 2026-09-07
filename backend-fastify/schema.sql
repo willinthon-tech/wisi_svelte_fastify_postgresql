@@ -132,7 +132,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Insertar Usuario Inicial
 INSERT INTO usuarios (id, nombre_apellido, usuario, password) VALUES
-(1, 'Willinthon Carriedo', 'willinthon', '123456')
+(1, 'Willinthon Carriedo', 'willinthon', '12345678')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insertar Salas Iniciales (Asociadas a grupo_salas)
