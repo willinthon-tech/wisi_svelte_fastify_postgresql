@@ -6472,7 +6472,7 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
         return (res || [])
           .map(r => ({ 
             id: r.id, 
-            nombre: r.nombre_comercial || r.nombre, 
+            nombre: r.nombre, 
             grupo_id: r.grupo_id,
             subgroup_label: r.grupo_nombre ? toTitleCase(r.grupo_nombre) : 'Sin Grupo',
             count: r.count 

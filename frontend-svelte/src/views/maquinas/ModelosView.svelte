@@ -261,7 +261,7 @@
   on:batchDelete={handleBatchDelete}
 >
   <div slot="filters" style="display: flex; gap: 10px; width: 100%;">
-    <div style="flex: 1; max-width: 320px;">
+    <div style="flex: 1; width: 100%;">
       <SmartMultiSelect
         id="filter-modelos-marcas"
         label="Marca"

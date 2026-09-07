@@ -515,6 +515,8 @@
           label="MODELO"
           options={filterOptions.modelos}
           bind:selectedValues={selectedModelos}
+          groupBy="subgroup_label"
+          parentIcon="🏷️"
           on:change={handleFilterChange}
         />
       </div>
@@ -548,6 +550,8 @@
           label="SALA"
           options={filterOptions.salas}
           bind:selectedValues={selectedSalas}
+          groupBy="subgroup_label"
+          parentIcon="📍"
           on:change={handleFilterChange}
         />
       </div>
