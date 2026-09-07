@@ -460,9 +460,9 @@
   async function refreshData() {
     try {
       healthStatus = await fetchHealthModel();
-      await loadItemsData();
+      await loadMasterStoresFromBackend();
     } catch (err) {
-      triggerToast("Error de conexión con la API Backend", "error");
+      console.warn("Aviso al refrescar estado del servidor:", err);
     }
   }
 
