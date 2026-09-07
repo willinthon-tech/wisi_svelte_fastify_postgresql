@@ -35,70 +35,95 @@ export async function initDb() {
     await sql`SELECT 1;`;
 
     // =========================================================================
-    // MIGRACIONES AUTOMÁTICAS DE RENOMBRADO DE TABLAS EN POSTGRESQL
+    // MIGRACIONES DE RENOMBRADO DEFINITIVO EN POSTGRESQL
     // =========================================================================
     
-    // 1. Renombrar plantillas_horarios -> horarios
+    // 1. Unificar y renombrar plantillas_horarios -> horarios
     await sql`
       DO $$ 
       BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'plantillas_horarios') 
-           AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'horarios') THEN
+           AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'horarios') THEN
+           
+          INSERT INTO horarios (id, nombre, hora_entrada, hora_salida, color, created_at, updated_at)
+          SELECT id, nombre, hora_entrada::time, hora_salida::time, color, created_at, updated_at 
+          FROM plantillas_horarios 
+          ON CONFLICT (id) DO NOTHING;
+
+          PERFORM setval(pg_get_serial_sequence('horarios', 'id'), COALESCE(MAX(id), 1)) FROM horarios;
+          DROP TABLE plantillas_horarios CASCADE;
+        ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'plantillas_horarios') THEN
           ALTER TABLE plantillas_horarios RENAME TO horarios;
         END IF;
       END $$;
     `.catch((e) => console.warn('Migración plantillas_horarios -> horarios:', e.message));
 
-    // 2. Renombrar empleados_plantillas_horarios -> empleados_horarios
+    // 2. Unificar y renombrar empleados_plantillas_horarios -> empleados_horarios
     await sql`
       DO $$ 
       BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_plantillas_horarios') 
-           AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_horarios') THEN
+           AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_horarios') THEN
+           
+          INSERT INTO empleados_horarios (empleado_id, horario_id, created_at, updated_at)
+          SELECT empleado_id, plantilla_horario_id, created_at, updated_at 
+          FROM empleados_plantillas_horarios 
+          ON CONFLICT DO NOTHING;
+
+          DROP TABLE empleados_plantillas_horarios CASCADE;
+        ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_plantillas_horarios') THEN
           ALTER TABLE empleados_plantillas_horarios RENAME TO empleados_horarios;
-        END IF;
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_horarios' AND column_name = 'plantilla_horario_id') THEN
-          ALTER TABLE empleados_horarios RENAME COLUMN plantilla_horario_id TO horario_id;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_horarios' AND column_name = 'plantilla_horario_id') THEN
+            ALTER TABLE empleados_horarios RENAME COLUMN plantilla_horario_id TO horario_id;
+          END IF;
         END IF;
       END $$;
     `.catch((e) => console.warn('Migración empleados_plantillas_horarios -> empleados_horarios:', e.message));
 
-    // 3. Renombrar excepciones_horarios -> empleados_excepciones_horarios
+    // 3. Unificar y renombrar excepciones_horarios -> empleados_excepciones_horarios
     await sql`
       DO $$ 
       BEGIN
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'excepciones_horarios') 
-           AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_excepciones_horarios') THEN
+           AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_excepciones_horarios') THEN
+           
+          INSERT INTO empleados_excepciones_horarios (empleado_id, fecha, horario_id, excepcion_id, es_libre, observacion, created_at, updated_at)
+          SELECT empleado_id, fecha, plantilla_horario_id, NULL, COALESCE(es_libre, false), observacion, created_at, updated_at 
+          FROM excepciones_horarios 
+          ON CONFLICT (empleado_id, fecha) DO NOTHING;
+
+          DROP TABLE excepciones_horarios CASCADE;
+        ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'excepciones_horarios') THEN
           ALTER TABLE excepciones_horarios RENAME TO empleados_excepciones_horarios;
-        END IF;
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_excepciones_horarios' AND column_name = 'plantilla_horario_id') THEN
-          ALTER TABLE empleados_excepciones_horarios RENAME COLUMN plantilla_horario_id TO horario_id;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_excepciones_horarios' AND column_name = 'plantilla_horario_id') THEN
+            ALTER TABLE empleados_excepciones_horarios RENAME COLUMN plantilla_horario_id TO horario_id;
+          END IF;
         END IF;
       END $$;
     `.catch((e) => console.warn('Migración excepciones_horarios -> empleados_excepciones_horarios:', e.message));
 
-    // 4. Garantizar estructura y columnas de empleados_excepciones_horarios
+    // 4. Asegurar columnas en empleados_excepciones_horarios
     await sql`
-      CREATE TABLE IF NOT EXISTS empleados_excepciones_horarios (
-        id SERIAL PRIMARY KEY,
-        empleado_id INT NOT NULL REFERENCES empleados(id) ON DELETE CASCADE,
-        fecha DATE NOT NULL,
-        horario_id INT REFERENCES horarios(id) ON DELETE CASCADE,
-        excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE,
-        es_libre BOOLEAN DEFAULT FALSE,
-        observacion TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT uk_emp_fecha_excepcion UNIQUE(empleado_id, fecha)
-      );
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_excepciones_horarios') THEN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_excepciones_horarios' AND column_name = 'horario_id') THEN
+            ALTER TABLE empleados_excepciones_horarios ADD COLUMN horario_id INT REFERENCES horarios(id) ON DELETE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_excepciones_horarios' AND column_name = 'excepcion_id') THEN
+            ALTER TABLE empleados_excepciones_horarios ADD COLUMN excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_excepciones_horarios' AND column_name = 'es_libre') THEN
+            ALTER TABLE empleados_excepciones_horarios ADD COLUMN es_libre BOOLEAN DEFAULT FALSE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_excepciones_horarios' AND column_name = 'observacion') THEN
+            ALTER TABLE empleados_excepciones_horarios ADD COLUMN observacion TEXT;
+          END IF;
+        END IF;
+      END $$;
     `.catch(() => {});
 
-    await sql`ALTER TABLE empleados_excepciones_horarios ADD COLUMN IF NOT EXISTS horario_id INT REFERENCES horarios(id) ON DELETE CASCADE;`.catch(() => {});
-    await sql`ALTER TABLE empleados_excepciones_horarios ADD COLUMN IF NOT EXISTS excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE;`.catch(() => {});
-    await sql`ALTER TABLE empleados_excepciones_horarios ADD COLUMN IF NOT EXISTS es_libre BOOLEAN DEFAULT FALSE;`.catch(() => {});
-    await sql`ALTER TABLE empleados_excepciones_horarios ADD COLUMN IF NOT EXISTS observacion TEXT;`.catch(() => {});
-
-    // 5. Actualizar módulo 29 a "Horarios" en PostgreSQL
+    // 5. Actualizar módulo en la tabla modulos
     await sql`
       UPDATE modulos 
       SET nombre = 'Horarios', ruta = '/rrhh/horarios', icono = 'schedule' 
