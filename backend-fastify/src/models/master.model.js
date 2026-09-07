@@ -6064,9 +6064,16 @@ export async function deleteFechaPatriaModel(id) {
 // ==========================================
 
 export async function getMaquinasModel(params = {}) {
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 10;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const searchNombre = String(params.searchNombre || params.search_nombre || '').trim().toLowerCase();
+  const searchSerial = String(params.searchSerial || params.search_serial || '').trim().toLowerCase();
+
   if (!isPgConnected || !sql) {
     let list = inMemoryData.maquinas || [];
-    const search = String(params.search || '').trim().toLowerCase();
     if (search) {
       list = list.filter(m =>
         (m.nombre || '').toLowerCase().includes(search) ||
@@ -6075,158 +6082,178 @@ export async function getMaquinasModel(params = {}) {
         String(m.id).includes(search)
       );
     }
+    if (searchNombre) {
+      list = list.filter(m => (m.nombre || '').toLowerCase().includes(searchNombre));
+    }
+    if (searchSerial) {
+      list = list.filter(m => (m.serial || '').toLowerCase().includes(searchSerial));
+    }
     if (params.userSalaIds && params.userSalaIds.length > 0) {
       list = list.filter(m => m.sala_id && params.userSalaIds.map(Number).includes(Number(m.sala_id)));
     }
     if (params.salaIds && params.salaIds.length > 0) {
       list = list.filter(m => m.sala_id && params.salaIds.map(Number).includes(Number(m.sala_id)));
     }
-    const page = Math.max(1, Number(params.page) || 1);
-    const limit = Number(params.limit) > 0 ? Number(params.limit) : 10;
-    const offset = (page - 1) * limit;
     const total = list.length;
     const paged = list.slice(offset, offset + limit);
     return { success: true, data: paged, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
-  const page = Math.max(1, Number(params.page) || 1);
-  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
-  const limit = hasLimit ? Number(params.limit) : 10;
-  const offset = hasLimit ? (page - 1) * limit : 0;
-  const search = String(params.search || '').trim().toLowerCase();
+  try {
+    const conds = [];
 
-  const conds = [];
+    if (params.userSalaIds && params.userSalaIds.length > 0) {
+      conds.push(sql`m.sala_id = ANY(${params.userSalaIds})`);
+    }
+    if (params.salaIds && params.salaIds.length > 0) {
+      conds.push(sql`m.sala_id = ANY(${params.salaIds})`);
+    }
+    if (params.grupoIds && params.grupoIds.length > 0) {
+      conds.push(sql`s.grupo_id = ANY(${params.grupoIds})`);
+    }
+    if (params.marcaIds && params.marcaIds.length > 0) {
+      conds.push(sql`mod.marca_id = ANY(${params.marcaIds})`);
+    }
+    if (params.modeloIds && params.modeloIds.length > 0) {
+      conds.push(sql`m.modelo_id = ANY(${params.modeloIds})`);
+    }
+    if (params.juegoIds && params.juegoIds.length > 0) {
+      conds.push(sql`m.juego_id = ANY(${params.juegoIds})`);
+    }
+    if (params.estadoIds && params.estadoIds.length > 0) {
+      conds.push(sql`m.estado_id = ANY(${params.estadoIds})`);
+    }
+    if (params.sociedadIds && params.sociedadIds.length > 0) {
+      conds.push(sql`m.sociedad_id = ANY(${params.sociedadIds})`);
+    }
+    if (params.valorIds && params.valorIds.length > 0) {
+      conds.push(sql`m.valor_id = ANY(${params.valorIds})`);
+    }
+    if (params.tipoIds && params.tipoIds.length > 0) {
+      conds.push(sql`m.tipo_id = ANY(${params.tipoIds})`);
+    }
+    if (params.modoIds && params.modoIds.length > 0) {
+      conds.push(sql`m.modo_id = ANY(${params.modoIds})`);
+    }
+    if (params.legalIds && params.legalIds.length > 0) {
+      conds.push(sql`m.legal_id = ANY(${params.legalIds})`);
+    }
 
-  if (params.userSalaIds && params.userSalaIds.length > 0) {
-    conds.push(sql`m.sala_id = ANY(${params.userSalaIds})`);
-  }
-  if (params.salaIds && params.salaIds.length > 0) {
-    conds.push(sql`m.sala_id = ANY(${params.salaIds})`);
-  }
-  if (params.grupoIds && params.grupoIds.length > 0) {
-    conds.push(sql`s.grupo_id = ANY(${params.grupoIds})`);
-  }
-  if (params.juegoIds && params.juegoIds.length > 0) {
-    conds.push(sql`m.juego_id = ANY(${params.juegoIds})`);
-  }
-  if (params.estadoIds && params.estadoIds.length > 0) {
-    conds.push(sql`m.estado_id = ANY(${params.estadoIds})`);
-  }
-  if (params.sociedadIds && params.sociedadIds.length > 0) {
-    conds.push(sql`m.sociedad_id = ANY(${params.sociedadIds})`);
-  }
-  if (params.valorIds && params.valorIds.length > 0) {
-    conds.push(sql`m.valor_id = ANY(${params.valorIds})`);
-  }
-  if (params.modeloIds && params.modeloIds.length > 0) {
-    conds.push(sql`m.modelo_id = ANY(${params.modeloIds})`);
-  }
-  if (params.tipoIds && params.tipoIds.length > 0) {
-    conds.push(sql`m.tipo_id = ANY(${params.tipoIds})`);
-  }
-  if (params.modoIds && params.modoIds.length > 0) {
-    conds.push(sql`m.modo_id = ANY(${params.modoIds})`);
-  }
-  if (params.legalIds && params.legalIds.length > 0) {
-    conds.push(sql`m.legal_id = ANY(${params.legalIds})`);
-  }
+    if (searchNombre) {
+      const termNombre = `%${searchNombre}%`;
+      conds.push(sql`LOWER(COALESCE(m.nombre, '')) LIKE ${termNombre}`);
+    }
 
-  if (search) {
-    const term = `%${search}%`;
-    conds.push(sql`(
-      LOWER(COALESCE(m.nombre, '')) LIKE ${term} OR
-      LOWER(COALESCE(m.serial, '')) LIKE ${term} OR
-      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
-      LOWER(COALESCE(s.nombre_comercial, '')) LIKE ${term} OR
-      LOWER(COALESCE(gs.nombre, '')) LIKE ${term} OR
-      LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
-      LOWER(COALESCE(mod.nombre, '')) LIKE ${term} OR
-      m.id::text LIKE ${term}
-    )`);
+    if (searchSerial) {
+      const termSerial = `%${searchSerial}%`;
+      conds.push(sql`LOWER(COALESCE(m.serial, '')) LIKE ${termSerial}`);
+    }
+
+    if (search) {
+      const term = `%${search}%`;
+      conds.push(sql`(
+        LOWER(COALESCE(m.nombre, '')) LIKE ${term} OR
+        LOWER(COALESCE(m.serial, '')) LIKE ${term} OR
+        LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
+        LOWER(COALESCE(s.nombre_comercial, '')) LIKE ${term} OR
+        LOWER(COALESCE(gs.nombre, '')) LIKE ${term} OR
+        LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
+        LOWER(COALESCE(mod.nombre, '')) LIKE ${term} OR
+        LOWER(COALESCE(mar.nombre, '')) LIKE ${term} OR
+        m.id::text LIKE ${term}
+      )`);
+    }
+
+    const whereClause = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+    const validSortCols = {
+      id: 'm.id',
+      nombre: 'm.nombre',
+      serial: 'm.serial',
+      puestos: 'm.puestos',
+      sala_id: 's.nombre',
+      sala_nombre: 's.nombre',
+      grupo_sala_nombre: 'gs.nombre',
+      marca_nombre: 'mar.nombre',
+      juego_nombre: 'j.nombre',
+      estado_nombre: 'e.nombre',
+      sociedad_nombre: 'soc.nombre',
+      valor_nombre: 'v.nombre',
+      modelo_nombre: 'mod.nombre',
+      tipo_nombre: 't.nombre',
+      modo_nombre: 'mo.nombre',
+      legal_nombre: 'l.nombre',
+      created_at: 'm.created_at'
+    };
+
+    const sortCol = validSortCols[params.sortBy] || 'm.id';
+    const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    const orderClause = sql.unsafe(`ORDER BY ${sortCol} ${sortDir}, m.id DESC`);
+
+    const fromJoin = sql`
+      FROM maquinas m
+      LEFT JOIN salas s ON m.sala_id = s.id
+      LEFT JOIN grupo_sala gs ON s.grupo_id = gs.id
+      LEFT JOIN juegos_maquinas j ON m.juego_id = j.id
+      LEFT JOIN estados e ON m.estado_id = e.id
+      LEFT JOIN sociedades soc ON m.sociedad_id = soc.id
+      LEFT JOIN valores v ON m.valor_id = v.id
+      LEFT JOIN modelos mod ON m.modelo_id = mod.id
+      LEFT JOIN marcas mar ON mod.marca_id = mar.id
+      LEFT JOIN tipos t ON m.tipo_id = t.id
+      LEFT JOIN modos mo ON m.modo_id = mo.id
+      LEFT JOIN legal l ON m.legal_id = l.id
+    `;
+
+    const countRes = await sql`SELECT COUNT(m.id)::int AS total ${fromJoin} ${whereClause}`;
+    const total = countRes[0]?.total || 0;
+
+    const selectCols = sql`
+      SELECT 
+        m.id,
+        m.nombre,
+        m.serial,
+        m.puestos,
+        m.sala_id,
+        s.nombre AS sala_nombre,
+        s.nombre_comercial AS sala_nombre_comercial,
+        s.grupo_id AS grupo_sala_id,
+        gs.nombre AS grupo_sala_nombre,
+        m.juego_id,
+        j.nombre AS juego_nombre,
+        m.estado_id,
+        e.nombre AS estado_nombre,
+        m.sociedad_id,
+        soc.nombre AS sociedad_nombre,
+        m.valor_id,
+        v.nombre AS valor_nombre,
+        m.modelo_id,
+        mod.nombre AS modelo_nombre,
+        mod.marca_id,
+        mar.nombre AS marca_nombre,
+        m.tipo_id,
+        t.nombre AS tipo_nombre,
+        m.modo_id,
+        mo.nombre AS modo_nombre,
+        m.legal_id,
+        l.nombre AS legal_nombre,
+        m.created_at,
+        m.updated_at
+    `;
+
+    let data;
+    if (hasLimit) {
+      data = await sql`${selectCols} ${fromJoin} ${whereClause} ${orderClause} LIMIT ${limit} OFFSET ${offset}`;
+    } else {
+      data = await sql`${selectCols} ${fromJoin} ${whereClause} ${orderClause}`;
+    }
+
+    const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+    return { success: true, data, total, page, limit, totalPages };
+  } catch (err) {
+    console.error('Error getMaquinasModel en PG:', err);
+    return { success: true, data: [], total: 0, page, limit, totalPages: 1 };
   }
-
-  const whereClause = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
-
-  const validSortCols = {
-    id: 'm.id',
-    nombre: 'm.nombre',
-    serial: 'm.serial',
-    puestos: 'm.puestos',
-    sala_id: 's.nombre',
-    sala_nombre: 's.nombre',
-    grupo_sala_nombre: 'gs.nombre',
-    juego_nombre: 'j.nombre',
-    estado_nombre: 'e.nombre',
-    sociedad_nombre: 'soc.nombre',
-    valor_nombre: 'v.nombre',
-    modelo_nombre: 'mod.nombre',
-    tipo_nombre: 't.nombre',
-    modo_nombre: 'mo.nombre',
-    legal_nombre: 'l.nombre',
-    created_at: 'm.created_at'
-  };
-
-  const sortCol = validSortCols[params.sortBy] || 'm.id';
-  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
-  const orderClause = sql.unsafe(`ORDER BY ${sortCol} ${sortDir}, m.id DESC`);
-
-  const fromJoin = sql`
-    FROM maquinas m
-    LEFT JOIN salas s ON m.sala_id = s.id
-    LEFT JOIN grupo_sala gs ON s.grupo_id = gs.id
-    LEFT JOIN juegos_maquinas j ON m.juego_id = j.id
-    LEFT JOIN estados e ON m.estado_id = e.id
-    LEFT JOIN sociedades soc ON m.sociedad_id = soc.id
-    LEFT JOIN valores v ON m.valor_id = v.id
-    LEFT JOIN modelos mod ON m.modelo_id = mod.id
-    LEFT JOIN tipos t ON m.tipo_id = t.id
-    LEFT JOIN modos mo ON m.modo_id = mo.id
-    LEFT JOIN legal l ON m.legal_id = l.id
-  `;
-
-  const countRes = await sql`SELECT COUNT(m.id)::int AS total ${fromJoin} ${whereClause}`;
-  const total = countRes[0]?.total || 0;
-
-  const selectCols = sql`
-    SELECT 
-      m.id,
-      m.nombre,
-      m.serial,
-      m.puestos,
-      m.sala_id,
-      s.nombre AS sala_nombre,
-      s.nombre_comercial AS sala_nombre_comercial,
-      s.grupo_id AS grupo_sala_id,
-      gs.nombre AS grupo_sala_nombre,
-      m.juego_id,
-      j.nombre AS juego_nombre,
-      m.estado_id,
-      e.nombre AS estado_nombre,
-      m.sociedad_id,
-      soc.nombre AS sociedad_nombre,
-      m.valor_id,
-      v.nombre AS valor_nombre,
-      m.modelo_id,
-      mod.nombre AS modelo_nombre,
-      m.tipo_id,
-      t.nombre AS tipo_nombre,
-      m.modo_id,
-      mo.nombre AS modo_nombre,
-      m.legal_id,
-      l.nombre AS legal_nombre,
-      m.created_at,
-      m.updated_at
-  `;
-
-  let data;
-  if (hasLimit) {
-    data = await sql`${selectCols} ${fromJoin} ${whereClause} ${orderClause} LIMIT ${limit} OFFSET ${offset}`;
-  } else {
-    data = await sql`${selectCols} ${fromJoin} ${whereClause} ${orderClause}`;
-  }
-
-  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
-  return { success: true, data, total, page, limit, totalPages };
 }
 
 export async function getMaquinasFilterOptionsModel(options = {}) {
@@ -6236,6 +6263,7 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
       data: {
         grupos: [],
         salas: inMemoryData.salas || [],
+        marcas: inMemoryData.marcas || [],
         juegos: inMemoryData.juegos_maquinas || [],
         estados: inMemoryData.estados || [],
         sociedades: inMemoryData.sociedades || [],
@@ -6252,14 +6280,15 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
     const userSalaIds = options.userSalaIds && options.userSalaIds.length > 0 ? options.userSalaIds : null;
     const salaWhere = userSalaIds ? sql`WHERE id = ANY(${userSalaIds})` : sql``;
 
-    const [gruposRes, salasRes, juegosRes, estadosRes, sociedadesRes, valoresRes, modelosRes, tiposRes, modosRes, legalesRes] = await Promise.all([
-      sql`SELECT id, nombre FROM grupo_sala ORDER BY nombre ASC`.catch(() => []),
+    const [gruposRes, salasRes, marcasRes, juegosRes, estadosRes, sociedadesRes, valoresRes, modelosRes, tiposRes, modosRes, legalesRes] = await Promise.all([
+      sql`SELECT id, nombre FROM grupo_sala ORDER BY nombre ASC`.catch(() => sql`SELECT id, nombre FROM grupos_salas ORDER BY nombre ASC`).catch(() => []),
       sql`SELECT id, nombre, nombre_comercial, grupo_id FROM salas ${salaWhere} ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM juegos_maquinas ORDER BY nombre ASC`.catch(() => []),
+      sql`SELECT id, nombre FROM marcas ORDER BY nombre ASC`.catch(() => []),
+      sql`SELECT id, nombre FROM juegos_maquinas ORDER BY nombre ASC`.catch(() => sql`SELECT id, nombre FROM juegos ORDER BY nombre ASC`).catch(() => []),
       sql`SELECT id, nombre FROM estados ORDER BY nombre ASC`.catch(() => []),
       sql`SELECT id, nombre FROM sociedades ORDER BY nombre ASC`.catch(() => []),
       sql`SELECT id, nombre FROM valores ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM modelos ORDER BY nombre ASC`.catch(() => []),
+      sql`SELECT id, nombre, marca_id FROM modelos ORDER BY nombre ASC`.catch(() => []),
       sql`SELECT id, nombre FROM tipos ORDER BY nombre ASC`.catch(() => []),
       sql`SELECT id, nombre FROM modos ORDER BY nombre ASC`.catch(() => []),
       sql`SELECT id, nombre FROM legal ORDER BY nombre ASC`.catch(() => [])
@@ -6270,11 +6299,12 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
       data: {
         grupos: (gruposRes || []).map(g => ({ id: g.id, nombre: toTitleCase(g.nombre) })),
         salas: (salasRes || []).map(s => ({ id: s.id, nombre: s.nombre_comercial || s.nombre, grupo_id: s.grupo_id })),
+        marcas: (marcasRes || []).map(m => ({ id: m.id, nombre: toTitleCase(m.nombre) })),
         juegos: (juegosRes || []).map(j => ({ id: j.id, nombre: toTitleCase(j.nombre) })),
         estados: (estadosRes || []).map(e => ({ id: e.id, nombre: toTitleCase(e.nombre) })),
         sociedades: (sociedadesRes || []).map(soc => ({ id: soc.id, nombre: toTitleCase(soc.nombre) })),
         valores: (valoresRes || []).map(v => ({ id: v.id, nombre: toTitleCase(v.nombre) })),
-        modelos: (modelosRes || []).map(m => ({ id: m.id, nombre: toTitleCase(m.nombre) })),
+        modelos: (modelosRes || []).map(m => ({ id: m.id, nombre: toTitleCase(m.nombre), marca_id: m.marca_id })),
         tipos: (tiposRes || []).map(t => ({ id: t.id, nombre: toTitleCase(t.nombre) })),
         modos: (modosRes || []).map(mo => ({ id: mo.id, nombre: toTitleCase(mo.nombre) })),
         legales: (legalesRes || []).map(l => ({ id: l.id, nombre: toTitleCase(l.nombre) }))
@@ -6282,7 +6312,22 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
     };
   } catch (err) {
     console.error('Error getMaquinasFilterOptionsModel:', err);
-    throw err;
+    return {
+      success: true,
+      data: {
+        grupos: [],
+        salas: [],
+        marcas: [],
+        juegos: [],
+        estados: [],
+        sociedades: [],
+        valores: [],
+        modelos: [],
+        tipos: [],
+        modos: [],
+        legales: []
+      }
+    };
   }
 }
 

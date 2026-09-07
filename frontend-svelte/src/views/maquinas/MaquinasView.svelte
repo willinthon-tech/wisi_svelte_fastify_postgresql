@@ -3,12 +3,19 @@
 
   // Persistent Filter State across view navigations
   export const persistentMaquinasFilters = writable({
+    searchNombre: "",
+    searchSerial: "",
+    selectedSociedades: [],
+    selectedLegales: [],
+    selectedMarcas: [],
+    selectedModelos: [],
+    selectedJuegos: [],
     selectedGrupos: [],
     selectedSalas: [],
     selectedEstados: [],
-    selectedModelos: [],
-    selectedJuegos: [],
-    selectedSociedades: [],
+    selectedValores: [],
+    selectedTipos: [],
+    selectedModos: [],
     searchQuery: ""
   });
 </script>
@@ -35,24 +42,47 @@
   });
   unsubInit();
 
-  // Smart Multiselect Filters State
+  // Smart Multiselect & Search Filters State
+  let searchNombre = initial.searchNombre || "";
+  let searchSerial = initial.searchSerial || "";
+  let selectedSociedades = initial.selectedSociedades || [];
+  let selectedLegales = initial.selectedLegales || [];
+  let selectedMarcas = initial.selectedMarcas || [];
+  let selectedModelos = initial.selectedModelos || [];
+  let selectedJuegos = initial.selectedJuegos || [];
   let selectedGrupos = initial.selectedGrupos || [];
   let selectedSalas = initial.selectedSalas || [];
   let selectedEstados = initial.selectedEstados || [];
-  let selectedModelos = initial.selectedModelos || [];
-  let selectedJuegos = initial.selectedJuegos || [];
-  let selectedSociedades = initial.selectedSociedades || [];
+  let selectedValores = initial.selectedValores || [];
+  let selectedTipos = initial.selectedTipos || [];
+  let selectedModos = initial.selectedModos || [];
   let searchQuery = initial.searchQuery || "";
+
+  // Debounce inputs for searchNombre and searchSerial
+  let debounceTimer;
+  function handleSearchInputChange() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      loadServerData({ page: 1 });
+    }, 300);
+  }
 
   // Sync back to persistent store whenever any filter parameter changes
   $: {
     persistentMaquinasFilters.set({
+      searchNombre,
+      searchSerial,
+      selectedSociedades,
+      selectedLegales,
+      selectedMarcas,
+      selectedModelos,
+      selectedJuegos,
       selectedGrupos,
       selectedSalas,
       selectedEstados,
-      selectedModelos,
-      selectedJuegos,
-      selectedSociedades,
+      selectedValores,
+      selectedTipos,
+      selectedModos,
       searchQuery
     });
   }
@@ -61,6 +91,7 @@
   let filterOptions = {
     grupos: [],
     salas: [],
+    marcas: [],
     juegos: [],
     estados: [],
     sociedades: [],
@@ -72,22 +103,36 @@
   };
 
   $: hasActiveFilters = Boolean(
+    (searchNombre || "").trim() ||
+    (searchSerial || "").trim() ||
     (searchQuery || "").trim() ||
+    selectedSociedades.length > 0 ||
+    selectedLegales.length > 0 ||
+    selectedMarcas.length > 0 ||
+    selectedModelos.length > 0 ||
+    selectedJuegos.length > 0 ||
     selectedGrupos.length > 0 ||
     selectedSalas.length > 0 ||
     selectedEstados.length > 0 ||
-    selectedModelos.length > 0 ||
-    selectedJuegos.length > 0 ||
-    selectedSociedades.length > 0
+    selectedValores.length > 0 ||
+    selectedTipos.length > 0 ||
+    selectedModos.length > 0
   );
 
-  $: totalFilters = ((searchQuery || "").trim() ? 1 : 0) +
+  $: totalFilters = ((searchNombre || "").trim() ? 1 : 0) +
+    ((searchSerial || "").trim() ? 1 : 0) +
+    ((searchQuery || "").trim() ? 1 : 0) +
+    selectedSociedades.length +
+    selectedLegales.length +
+    selectedMarcas.length +
+    selectedModelos.length +
+    selectedJuegos.length +
     selectedGrupos.length +
     selectedSalas.length +
     selectedEstados.length +
-    selectedModelos.length +
-    selectedJuegos.length +
-    selectedSociedades.length;
+    selectedValores.length +
+    selectedTipos.length +
+    selectedModos.length;
 
   let items = [];
   let totalCount = 0;
@@ -142,6 +187,8 @@
         page: currentParams.page || 1,
         limit: currentParams.limit || 10,
         search: currentParams.search !== undefined ? currentParams.search : searchQuery,
+        search_nombre: searchNombre.trim(),
+        search_serial: searchSerial.trim(),
         sort_by: currentParams.sortBy || currentParams.sort_by || 'id',
         sort_order: currentParams.sortDir || currentParams.sort_order || 'desc'
       });
@@ -154,8 +201,8 @@
       if (selectedSalas.length > 0) {
         q.set('sala_ids', selectedSalas.join(','));
       }
-      if (selectedEstados.length > 0) {
-        q.set('estado_ids', selectedEstados.join(','));
+      if (selectedMarcas.length > 0) {
+        q.set('marca_ids', selectedMarcas.join(','));
       }
       if (selectedModelos.length > 0) {
         q.set('modelo_ids', selectedModelos.join(','));
@@ -163,8 +210,23 @@
       if (selectedJuegos.length > 0) {
         q.set('juego_ids', selectedJuegos.join(','));
       }
+      if (selectedEstados.length > 0) {
+        q.set('estado_ids', selectedEstados.join(','));
+      }
       if (selectedSociedades.length > 0) {
         q.set('sociedad_ids', selectedSociedades.join(','));
+      }
+      if (selectedValores.length > 0) {
+        q.set('valor_ids', selectedValores.join(','));
+      }
+      if (selectedTipos.length > 0) {
+        q.set('tipo_ids', selectedTipos.join(','));
+      }
+      if (selectedModos.length > 0) {
+        q.set('modo_ids', selectedModos.join(','));
+      }
+      if (selectedLegales.length > 0) {
+        q.set('legal_ids', selectedLegales.join(','));
       }
 
       const res = await fetch(`/api/master/maquinas?${q.toString()}`);
@@ -186,13 +248,20 @@
   }
 
   function clearAllFilters() {
+    searchNombre = "";
+    searchSerial = "";
     searchQuery = "";
+    selectedSociedades = [];
+    selectedLegales = [];
+    selectedMarcas = [];
+    selectedModelos = [];
+    selectedJuegos = [];
     selectedGrupos = [];
     selectedSalas = [];
     selectedEstados = [];
-    selectedModelos = [];
-    selectedJuegos = [];
-    selectedSociedades = [];
+    selectedValores = [];
+    selectedTipos = [];
+    selectedModos = [];
     loadServerData({ page: 1, search: "" });
   }
 
@@ -209,27 +278,21 @@
     { key: 'nombre', label: 'Nombre de Máquina', bold: true, sortable: true, editable: true },
     { key: 'serial', label: 'Serial', bold: true, sortable: true, editable: true },
     { key: 'puestos', label: 'Puestos', type: 'number', sortable: true, editable: true },
-    { key: 'grupo_sala_nombre', label: 'Grupo de Sala', sortable: true, editable: false },
+    { key: 'grupo_sala_nombre', label: 'Grupo', sortable: true, editable: false },
     { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala', sortable: true, editable: true, type: 'select', options: filterOptions.salas || [] },
+    { key: 'marca_nombre', label: 'Marca', sortable: true, editable: false },
+    { key: 'modelo_nombre', keyId: 'modelo_id', label: 'Modelo', sortable: true, editable: true, type: 'select', options: filterOptions.modelos || [] },
     { key: 'juego_nombre', keyId: 'juego_id', label: 'Juego', sortable: true, editable: true, type: 'select', options: filterOptions.juegos || [] },
     { key: 'estado_nombre', keyId: 'estado_id', label: 'Estado', sortable: true, editable: true, type: 'select', options: filterOptions.estados || [] },
     { key: 'sociedad_nombre', keyId: 'sociedad_id', label: 'Sociedad', sortable: true, editable: true, type: 'select', options: filterOptions.sociedades || [] },
     { key: 'valor_nombre', keyId: 'valor_id', label: 'Valor', sortable: true, editable: true, type: 'select', options: filterOptions.valores || [] },
-    { key: 'modelo_nombre', keyId: 'modelo_id', label: 'Modelo', sortable: true, editable: true, type: 'select', options: filterOptions.modelos || [] },
     { key: 'tipo_nombre', keyId: 'tipo_id', label: 'Tipo', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
     { key: 'modo_nombre', keyId: 'modo_id', label: 'Modo', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
     { key: 'legal_nombre', keyId: 'legal_id', label: 'Legal', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] }
   ];
 
-  // Create modal form fields with col-6 row for nombre and serial
+  // Create modal form fields: nombre and serial are at the BOTTOM in col-6 format
   $: createFields = [
-    {
-      type: 'row',
-      fields: [
-        { key: 'nombre', label: 'Nombre de Máquina', type: 'text', placeholder: 'Ej. MAQ-001 / Buffalo Gold', required: true },
-        { key: 'serial', label: 'Serial de Máquina', type: 'text', placeholder: 'Ej. SN-89234812', required: true }
-      ]
-    },
     {
       type: 'row',
       fields: [
@@ -263,6 +326,13 @@
       fields: [
         { key: 'modo_id', label: 'Modo', type: 'select', options: filterOptions.modos || [], required: false },
         { key: 'legal_id', label: 'Legal', type: 'select', options: filterOptions.legales || [], required: false }
+      ]
+    },
+    {
+      type: 'row',
+      fields: [
+        { key: 'nombre', label: 'Nombre de Máquina', type: 'text', placeholder: 'Ej. MAQ-001 / Buffalo Gold', required: true },
+        { key: 'serial', label: 'Serial de Máquina', type: 'text', placeholder: 'Ej. SN-89234812', required: true }
       ]
     }
   ];
@@ -382,7 +452,7 @@
   {columns}
   {createFields}
   bind:searchQuery
-  searchPlaceholder="Buscar por nombre, serial, sala, juego, modelo..."
+  searchPlaceholder="Buscar máquina..."
   entityType="máquina"
   createModalTitle="Agregar Máquina"
   on:fetchServerData={(e) => loadServerData(e.detail)}
@@ -391,54 +461,149 @@
   on:delete={handleDelete}
   on:batchDelete={handleBatchDelete}
 >
-  <div slot="filters" class="smart-filters-grid">
-    <SmartMultiSelect
-      id="filter-maquinas-grupos"
-      label="Grupo de Sala"
-      options={filterOptions.grupos}
-      bind:selectedValues={selectedGrupos}
-      on:change={handleFilterChange}
-    />
+  <div slot="filters" class="maquinas-filters-container">
+    <!-- FILA 1: NOMBRE, SERIAL, SOCIEDAD, LEGAL -->
+    <div class="filters-row-4">
+      <div class="filter-input-col">
+        <label for="filter-input-nombre" class="filter-input-label">NOMBRE</label>
+        <input
+          id="filter-input-nombre"
+          type="text"
+          class="filter-custom-input"
+          placeholder="Buscar..."
+          bind:value={searchNombre}
+          on:input={handleSearchInputChange}
+        />
+      </div>
 
-    <SmartMultiSelect
-      id="filter-maquinas-salas"
-      label="Salas"
-      options={filterOptions.salas}
-      bind:selectedValues={selectedSalas}
-      on:change={handleFilterChange}
-    />
+      <div class="filter-input-col">
+        <label for="filter-input-serial" class="filter-input-label">SERIAL</label>
+        <input
+          id="filter-input-serial"
+          type="text"
+          class="filter-custom-input"
+          placeholder="Buscar..."
+          bind:value={searchSerial}
+          on:input={handleSearchInputChange}
+        />
+      </div>
 
-    <SmartMultiSelect
-      id="filter-maquinas-estados"
-      label="Estados"
-      options={filterOptions.estados}
-      bind:selectedValues={selectedEstados}
-      on:change={handleFilterChange}
-    />
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-sociedades"
+          label="SOCIEDAD"
+          options={filterOptions.sociedades}
+          bind:selectedValues={selectedSociedades}
+          on:change={handleFilterChange}
+        />
+      </div>
 
-    <SmartMultiSelect
-      id="filter-maquinas-modelos"
-      label="Modelos"
-      options={filterOptions.modelos}
-      bind:selectedValues={selectedModelos}
-      on:change={handleFilterChange}
-    />
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-legales"
+          label="LEGAL"
+          options={filterOptions.legales}
+          bind:selectedValues={selectedLegales}
+          on:change={handleFilterChange}
+        />
+      </div>
+    </div>
 
-    <SmartMultiSelect
-      id="filter-maquinas-juegos"
-      label="Juegos"
-      options={filterOptions.juegos}
-      bind:selectedValues={selectedJuegos}
-      on:change={handleFilterChange}
-    />
+    <!-- FILA 2: MARCA, MODELO, JUEGO -->
+    <div class="filters-row-3">
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-marcas"
+          label="MARCA"
+          options={filterOptions.marcas}
+          bind:selectedValues={selectedMarcas}
+          on:change={handleFilterChange}
+        />
+      </div>
 
-    <SmartMultiSelect
-      id="filter-maquinas-sociedades"
-      label="Sociedades"
-      options={filterOptions.sociedades}
-      bind:selectedValues={selectedSociedades}
-      on:change={handleFilterChange}
-    />
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-modelos"
+          label="MODELO"
+          options={filterOptions.modelos}
+          bind:selectedValues={selectedModelos}
+          on:change={handleFilterChange}
+        />
+      </div>
+
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-juegos"
+          label="JUEGO"
+          options={filterOptions.juegos}
+          bind:selectedValues={selectedJuegos}
+          on:change={handleFilterChange}
+        />
+      </div>
+    </div>
+
+    <!-- FILA 3: GRUPO, SALA, ESTADO, VALOR, TIPO, MODO -->
+    <div class="filters-row-6">
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-grupos"
+          label="GRUPO"
+          options={filterOptions.grupos}
+          bind:selectedValues={selectedGrupos}
+          on:change={handleFilterChange}
+        />
+      </div>
+
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-salas"
+          label="SALA"
+          options={filterOptions.salas}
+          bind:selectedValues={selectedSalas}
+          on:change={handleFilterChange}
+        />
+      </div>
+
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-estados"
+          label="ESTADO"
+          options={filterOptions.estados}
+          bind:selectedValues={selectedEstados}
+          on:change={handleFilterChange}
+        />
+      </div>
+
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-valores"
+          label="VALOR"
+          options={filterOptions.valores}
+          bind:selectedValues={selectedValores}
+          on:change={handleFilterChange}
+        />
+      </div>
+
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-tipos"
+          label="TIPO"
+          options={filterOptions.tipos}
+          bind:selectedValues={selectedTipos}
+          on:change={handleFilterChange}
+        />
+      </div>
+
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-modos"
+          label="MODO"
+          options={filterOptions.modos}
+          bind:selectedValues={selectedModos}
+          on:change={handleFilterChange}
+        />
+      </div>
+    </div>
   </div>
 
   <div slot="search-actions">
@@ -456,11 +621,91 @@
 </PaginatedDataTable>
 
 <style>
-  .smart-filters-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 10px;
+  .maquinas-filters-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
     width: 100%;
-    align-items: center;
+  }
+
+  .filters-row-4 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    align-items: flex-end;
+  }
+
+  .filters-row-3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    align-items: flex-end;
+  }
+
+  .filters-row-6 {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+    align-items: flex-end;
+  }
+
+  @media (max-width: 1200px) {
+    .filters-row-6 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 900px) {
+    .filters-row-4,
+    .filters-row-3,
+    .filters-row-6 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 600px) {
+    .filters-row-4,
+    .filters-row-3,
+    .filters-row-6 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .filter-input-col,
+  .filter-select-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+  }
+
+  .filter-input-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .filter-custom-input {
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    font-size: 13px;
+    color: #1e293b;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+    outline: none;
+  }
+
+  .filter-custom-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   }
 </style>

@@ -1787,11 +1787,12 @@ export async function getMaquinas(request, reply) {
     const userSalaIds = parseIds(q.user_sala_ids);
     const salaIds = parseIds(q.sala_ids);
     const grupoIds = parseIds(q.grupo_ids || q.grupo_sala_ids);
+    const marcaIds = parseIds(q.marca_ids);
+    const modeloIds = parseIds(q.modelo_ids);
     const juegoIds = parseIds(q.juego_ids);
     const estadoIds = parseIds(q.estado_ids);
     const sociedadIds = parseIds(q.sociedad_ids);
     const valorIds = parseIds(q.valor_ids);
-    const modeloIds = parseIds(q.modelo_ids);
     const tipoIds = parseIds(q.tipo_ids);
     const modoIds = parseIds(q.modo_ids);
     const legalIds = parseIds(q.legal_ids);
@@ -1800,16 +1801,19 @@ export async function getMaquinas(request, reply) {
       page: q.page,
       limit: q.limit,
       search: q.search,
+      searchNombre: q.search_nombre || q.searchNombre,
+      searchSerial: q.search_serial || q.searchSerial,
       sortBy: q.sortBy || q.sort_by,
       sortDir: q.sortDir || q.sort_order,
       userSalaIds,
       salaIds,
       grupoIds,
+      marcaIds,
+      modeloIds,
       juegoIds,
       estadoIds,
       sociedadIds,
       valorIds,
-      modeloIds,
       tipoIds,
       modoIds,
       legalIds
