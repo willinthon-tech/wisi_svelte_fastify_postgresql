@@ -4417,9 +4417,13 @@ export async function getCortesModel(options = {}) {
   const limit = parseInt(options.limit) || 10;
   const offset = (page - 1) * limit;
   const search = options.search ? String(options.search).trim().toLowerCase() : '';
+  const validSorts = ['id', 'sala_id', 'sala_nombre', 'fecha_desde', 'fecha_hasta', 'total_empleados', 'created_at', 'updated_at'];
+  const sortBy = validSorts.includes(options.sortBy) ? options.sortBy : 'id';
+  const sortDir = (options.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
   if (isPgConnected && sql) {
     try {
+      const conds = [];
       // Filtrar solo cortes con visible = TRUE (o NULL como TRUE para compatibilidad)
       conds.push(sql`COALESCE(visible, TRUE) = TRUE`);
 
@@ -4440,6 +4444,7 @@ export async function getCortesModel(options = {}) {
       }
 
       const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+      const order = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, id DESC`);
 
       const [countResult, rows] = await Promise.all([
         sql`SELECT COUNT(*)::int AS total FROM cortes ${where}`,
@@ -4455,7 +4460,7 @@ export async function getCortesModel(options = {}) {
             updated_at 
           FROM cortes 
           ${where}
-          ORDER BY id DESC
+          ${order}
           LIMIT ${limit} OFFSET ${offset}
         `
       ]);

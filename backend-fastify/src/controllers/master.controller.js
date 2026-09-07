@@ -1557,6 +1557,8 @@ export async function getCortes(request, reply) {
       page: q.page,
       limit: q.limit,
       search: q.search,
+      sortBy: q.sortBy || q.sort_by,
+      sortDir: q.sortDir || q.sort_order,
       userSalaIds,
       salaIds
     });
