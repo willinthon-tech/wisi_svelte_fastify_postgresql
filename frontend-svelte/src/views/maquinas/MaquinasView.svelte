@@ -281,10 +281,25 @@
 
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.includes(s.id);
+    return assignedSalaIds.map(Number).includes(Number(s.id));
   });
 
-  $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : (filteredSalasStore[0]?.id || 1);
+  $: userSalasForCreate = (filteredSalasStore || []).map(s => ({
+    id: s.id,
+    nombre: s.nombre,
+    subgroup_label: (s.grupo_id === 2 ? 'GALPÓN' : 'SALA')
+  }));
+
+  $: modelosForCreate = (filterOptions.modelos && filterOptions.modelos.length > 0
+    ? filterOptions.modelos
+    : []
+  ).map(m => ({
+    id: m.id,
+    nombre: m.nombre,
+    subgroup_label: String(m.subgroup_label || m.marca_nombre || 'GENERAL').toUpperCase()
+  }));
+
+  $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : (userSalasForCreate[0]?.id || 1);
 
   // Column definitions for PaginatedDataTable
   $: columns = [
@@ -293,9 +308,9 @@
     { key: 'serial', label: 'SERIAL', bold: true, sortable: true, editable: true },
     { key: 'puestos', label: 'PUESTOS', type: 'number', sortable: true, editable: true },
     { key: 'grupo_sala_nombre', label: 'GRUPO', sortable: true, editable: false },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'SALA', sortable: true, editable: true, type: 'select', options: filterOptions.salas || [] },
+    { key: 'sala_nombre', keyId: 'sala_id', label: 'SALA', sortable: true, editable: true, type: 'select', options: userSalasForCreate },
     { key: 'marca_nombre', label: 'MARCA', sortable: true, editable: false },
-    { key: 'modelo_nombre', keyId: 'modelo_id', label: 'MODELO', sortable: true, editable: true, type: 'select', options: filterOptions.modelos || [] },
+    { key: 'modelo_nombre', keyId: 'modelo_id', label: 'MODELO', sortable: true, editable: true, type: 'select', options: modelosForCreate },
     { key: 'juego_nombre', keyId: 'juego_id', label: 'JUEGO', sortable: true, editable: true, type: 'select', options: filterOptions.juegos || [] },
     { key: 'estado_nombre', keyId: 'estado_id', label: 'ESTADO', sortable: true, editable: true, type: 'select', options: filterOptions.estados || [] },
     { key: 'sociedad_nombre', keyId: 'sociedad_id', label: 'SOCIEDAD', sortable: true, editable: true, type: 'select', options: filterOptions.sociedades || [] },
@@ -311,7 +326,7 @@
       type: 'row',
       fields: [
         { key: 'puestos', label: 'Puestos', type: 'number', placeholder: '1', defaultValue: 1, min: 1, required: true },
-        { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filterOptions.salas || filteredSalasStore, required: true, defaultValue: defaultSalaId }
+        { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: userSalasForCreate, required: true, defaultValue: defaultSalaId }
       ]
     },
     {
@@ -331,7 +346,7 @@
     {
       type: 'row',
       fields: [
-        { key: 'modelo_id', label: 'Modelo', type: 'select', options: filterOptions.modelos || [], required: false },
+        { key: 'modelo_id', label: 'Modelo', type: 'select', options: modelosForCreate, required: false },
         { key: 'tipo_id', label: 'Tipo', type: 'select', options: filterOptions.tipos || [], required: false }
       ]
     },

@@ -41,9 +41,10 @@ export function getActiveUserAssignedSalaIds() {
 
 export function filterOptionsByActiveSalas(items = [], salaIdKey = 'sala_id') {
   const assignedIds = getActiveUserAssignedSalaIds();
-  if (!assignedIds || assignedIds.length === 0) return items;
   return items.filter(item => {
     if (!item) return false;
+    if (item.grupo_id && Number(item.grupo_id) === 2) return false;
+    if (!assignedIds || assignedIds.length === 0) return true;
     if (salaIdKey === 'id' && item.id) return assignedIds.includes(item.id);
     if (item[salaIdKey]) return assignedIds.includes(item[salaIdKey]);
     if (item.sala_id) return assignedIds.includes(item.sala_id);

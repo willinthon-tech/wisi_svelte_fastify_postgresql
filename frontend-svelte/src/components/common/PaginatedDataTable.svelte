@@ -233,9 +233,14 @@
   function getGroupedOptions(optionsList) {
     if (!optionsList || !Array.isArray(optionsList) || optionsList.length === 0) return [];
     
-    // Sort items hierarchically & alphabetically (1. Sala A-Z, 2. Departamento A-Z, 3. Área A-Z, 4. Cargo/Nombre A-Z)
+    // Sort items hierarchically & alphabetically (1. Subgroup/Marca/Grupo A-Z, 2. Sala A-Z, 3. Departamento A-Z, 4. Área A-Z, 5. Cargo/Nombre A-Z)
     const sortedOptions = [...optionsList].sort((a, b) => {
       if (!a || !b) return 0;
+
+      // 0. Subgroup / Marca / Grupo (A-Z)
+      const sgA = (a.subgroup_label || a.marca_nombre || a.grupo_nombre || a.group || '').toString().trim().toLowerCase();
+      const sgB = (b.subgroup_label || b.marca_nombre || b.grupo_nombre || b.group || '').toString().trim().toLowerCase();
+      if (sgA && sgB && sgA !== sgB) return sgA.localeCompare(sgB, 'es', { sensitivity: 'base' });
 
       // 1. Sala (A-Z)
       const sA = (a.sala_nombre || '').toString().trim().toLowerCase();
@@ -253,17 +258,17 @@
       if (aA !== aB) return aA.localeCompare(aB, 'es', { sensitivity: 'base' });
 
       // 4. Cargo / Nombre (A-Z)
-      const nA = (a.nombre || a.nombre_comercial || a.name || '').toString().trim().toLowerCase();
-      const nB = (b.nombre || b.nombre_comercial || b.name || '').toString().trim().toLowerCase();
+      const nA = (a.nombre || a.nombre_comercial || a.name || a.label || '').toString().trim().toLowerCase();
+      const nB = (b.nombre || b.nombre_comercial || b.name || b.label || '').toString().trim().toLowerCase();
       return nA.localeCompare(nB, 'es', { sensitivity: 'base' });
     });
 
     const hasTriple = sortedOptions.some(o => o && o.sala_nombre && o.departamento_nombre && o.area_nombre);
     const hasBoth = sortedOptions.some(o => o && o.sala_nombre && o.departamento_nombre);
+    const hasSubgroup = sortedOptions.some(o => o && (o.subgroup_label || o.marca_nombre || o.grupo_nombre || o.grupo_sala_nombre || o.group));
     const hasSalaGroup = sortedOptions.some(o => o && o.sala_nombre);
-    const hasCustomGroup = sortedOptions.some(o => o && o.group);
 
-    if (!hasTriple && !hasBoth && !hasSalaGroup && !hasCustomGroup) {
+    if (!hasTriple && !hasBoth && !hasSubgroup && !hasSalaGroup) {
       return [{ label: null, items: sortedOptions }];
     }
 
@@ -282,6 +287,8 @@
         const sName = item.sala_nombre ? String(item.sala_nombre).trim() : 'Sin Sala';
         const dName = item.departamento_nombre ? String(item.departamento_nombre).trim() : 'Sin Depto';
         gName = `📍 ${sName} — 🏢 ${dName}`;
+      } else if (item.subgroup_label || item.marca_nombre || item.grupo_nombre || item.grupo_sala_nombre) {
+        gName = String(item.subgroup_label || item.marca_nombre || item.grupo_nombre || item.grupo_sala_nombre).trim();
       } else if (hasSalaGroup) {
         gName = item.sala_nombre ? `📍 ${String(item.sala_nombre).trim()}` : 'Sin Sala Asignada';
       } else {
@@ -2474,11 +2481,32 @@
                         required={subField.required}
                         style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
                       >
-                        {#each (subField.options || []) as opt}
-                          <option value={typeof opt === 'object' ? opt.id : opt}>
-                            {typeof opt === 'object' ? (opt.nombre || opt.label) : opt}
-                          </option>
-                        {/each}
+                        {#if !createDraft[subField.key]}
+                          <option value="">-- Seleccionar {subField.label} --</option>
+                        {/if}
+                        {#if Array.isArray(subField.options) && typeof subField.options[0] === 'string'}
+                          {#each subField.options as opt}
+                            <option value={opt}>{String(opt).toUpperCase()}</option>
+                          {/each}
+                        {:else}
+                          {#each getGroupedOptions(subField.options) as grp}
+                            {#if grp.label}
+                              <optgroup label="{grp.label}">
+                                {#each grp.items as opt}
+                                  <option value={typeof opt === 'object' ? opt.id : opt}>
+                                    {typeof opt === 'object' ? (opt.nombre || opt.label || opt.nombre_comercial) : opt}
+                                  </option>
+                                {/each}
+                              </optgroup>
+                            {:else}
+                              {#each grp.items as opt}
+                                <option value={typeof opt === 'object' ? opt.id : opt}>
+                                  {typeof opt === 'object' ? (opt.nombre || opt.label || opt.nombre_comercial) : opt}
+                                </option>
+                              {/each}
+                            {/if}
+                          {/each}
+                        {/if}
                       </select>
                     {:else}
                       <input 

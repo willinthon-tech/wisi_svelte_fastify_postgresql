@@ -1245,9 +1245,9 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
 
         let allSalas;
         if (options.userSalaIds && options.userSalaIds.length > 0) {
-          allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+          allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
         } else {
-          allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+          allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
         }
 
         const countsRes = await sql`
@@ -2259,9 +2259,9 @@ export async function getDepartamentosFilterOptionsModel(options = {}) {
 
   let allSalas;
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   } else {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   }
 
   const countsRes = await sql`
@@ -2470,9 +2470,9 @@ export async function getAreasFilterOptionsModel(options = {}) {
 
       let allSalas;
       if (options.userSalaIds && options.userSalaIds.length > 0) {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
       } else {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
       }
 
       const countsRes = await sql`
@@ -2727,9 +2727,9 @@ export async function getCargosFilterOptionsModel(options = {}) {
 
       let allSalas;
       if (options.userSalaIds && options.userSalaIds.length > 0) {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
       } else {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
       }
 
       const countsRes = await sql`
@@ -3058,9 +3058,9 @@ export async function getEmpleadosFilterOptionsModel(options = {}) {
 
       let allSalas;
       if (options.userSalaIds && options.userSalaIds.length > 0) {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
       } else {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
       }
 
       const countsRes = await sql`
@@ -3590,9 +3590,9 @@ export async function getPlantillasHorariosFilterOptionsModel(options = {}) {
 
   let allSalas;
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   } else {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   }
 
   const countsRes = await sql`
@@ -4096,9 +4096,9 @@ export async function getFeriadosFilterOptionsModel(options = {}) {
 
   let allSalas = [];
   if (userSalaIds.length > 0) {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id IN ${sql(userSalaIds)} ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id IN ${sql(userSalaIds)} AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   } else {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   }
 
   const countsRes = await sql`
@@ -4671,9 +4671,9 @@ export async function getCortesFilterOptionsModel(options = {}) {
     try {
       let rows;
       if (options.userSalaIds && options.userSalaIds.length > 0) {
-        rows = await sql`SELECT id, nombre, nombre_comercial FROM salas WHERE id = ANY(${options.userSalaIds}) ORDER BY id ASC`;
+        rows = await sql`SELECT id, nombre, nombre_comercial FROM salas WHERE id = ANY(${options.userSalaIds}) AND (grupo_id IS NULL OR grupo_id = 1) ORDER BY id ASC`;
       } else {
-        rows = await sql`SELECT id, nombre, nombre_comercial FROM salas ORDER BY id ASC`;
+        rows = await sql`SELECT id, nombre, nombre_comercial FROM salas WHERE (grupo_id IS NULL OR grupo_id = 1) ORDER BY id ASC`;
       }
       rows.forEach(s => {
         salasMap.set(Number(s.id), { id: s.id, nombre: s.nombre_comercial || s.nombre });
@@ -5126,9 +5126,9 @@ export async function getMesasFilterOptionsModel(options = {}) {
 
   let allSalas;
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   } else {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
   }
 
   const countsSalasRes = await sql`

@@ -25,6 +25,7 @@ export async function getUserSalasModel(userId) {
     SELECT s.* FROM salas s
     INNER JOIN user_salas us ON s.id = us.sala_id
     WHERE us.user_id = ${uId}
+    AND (s.grupo_id IS NULL OR s.grupo_id = 1)
     ORDER BY s.id ASC
   `;
 }

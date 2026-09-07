@@ -141,6 +141,7 @@
   }
 
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
+    if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
     return assignedSalaIds.map(Number).includes(Number(s.id));
   });

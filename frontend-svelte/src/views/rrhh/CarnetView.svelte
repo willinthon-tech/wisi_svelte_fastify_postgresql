@@ -44,7 +44,7 @@
   // Opciones de salas disponibles para el usuario (con id, key y value garantizados)
   let salasOptions = [];
   $: {
-    const allSalas = $masterSalasStore || [];
+    const allSalas = ($masterSalasStore || []).filter(s => !s.grupo_id || Number(s.grupo_id) !== 2);
     let filtered = allSalas;
     if (assignedSalaIds.length > 0) {
       filtered = allSalas.filter((s) => assignedSalaIds.includes(Number(s.id)));
