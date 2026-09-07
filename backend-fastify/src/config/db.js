@@ -30,12 +30,13 @@ export let inMemoryData = {
   modos: [],
   legal: [],
   excepciones: [
-    { id: 1, codigo: 'L', descripcion: 'Día Libre', color: '#D9D9D9', tipo: 'No Asignable' },
+    { id: 1, codigo: 'L', descripcion: 'Día Libre', color: '#D9D9D9', tipo: 'Asignable' },
     { id: 2, codigo: 'P', descripcion: 'Permiso Médico / Personal', color: '#3B82F6', tipo: 'Asignable' },
     { id: 3, codigo: 'R', descripcion: 'Reposo Médico', color: '#EF4444', tipo: 'Asignable' },
     { id: 4, codigo: 'V', descripcion: 'Vacaciones', color: '#10B981', tipo: 'Asignable' },
     { id: 5, codigo: 'F', descripcion: 'Falta / Inasistencia', color: '#F59E0B', tipo: 'Asignable' },
-    { id: 6, codigo: 'FER', descripcion: 'Día Feriado', color: '#8B5CF6', tipo: 'Asignable' }
+    { id: 6, codigo: 'FER', descripcion: 'Día Feriado', color: '#8B5CF6', tipo: 'Asignable' },
+    { id: 7, codigo: 'U', descripcion: 'Horario Único', color: '#86EFAC', tipo: 'No Asignable' }
   ],
   fechas_patrias: [
     { id: 1, descripcion: 'Año Nuevo', dia: 1, mes: 1 },
@@ -916,13 +917,17 @@ export async function initDb() {
     // Seed default base excepciones and fechas_patrias into PostgreSQL
     await sql`
       INSERT INTO excepciones (codigo, descripcion, color, tipo) VALUES
-      ('L', 'Día Libre', '#D9D9D9', 'No Asignable'),
+      ('L', 'Día Libre', '#D9D9D9', 'Asignable'),
       ('P', 'Permiso Médico / Personal', '#3B82F6', 'Asignable'),
       ('R', 'Reposo Médico', '#EF4444', 'Asignable'),
       ('V', 'Vacaciones', '#10B981', 'Asignable'),
       ('F', 'Falta / Inasistencia', '#F59E0B', 'Asignable'),
-      ('FER', 'Día Feriado', '#8B5CF6', 'Asignable')
-      ON CONFLICT (codigo) DO NOTHING;
+      ('FER', 'Día Feriado', '#8B5CF6', 'Asignable'),
+      ('U', 'Horario Único', '#86EFAC', 'No Asignable')
+      ON CONFLICT (codigo) DO UPDATE SET
+        tipo = EXCLUDED.tipo,
+        descripcion = EXCLUDED.descripcion,
+        color = EXCLUDED.color;
     `;
 
     await sql`

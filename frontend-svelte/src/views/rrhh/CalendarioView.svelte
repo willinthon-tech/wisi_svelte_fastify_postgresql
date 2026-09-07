@@ -115,6 +115,7 @@
   ];
 
   let globalFechasPatrias = [];
+  let rawServerItems = [];
 
   // Combinar fechas patrias globales de base de datos con las fechas patrias de las salas del servidor
   $: combinedItems = (function() {
