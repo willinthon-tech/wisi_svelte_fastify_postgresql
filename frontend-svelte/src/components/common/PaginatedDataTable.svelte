@@ -208,11 +208,11 @@
       if (filteredDept.length > 0) return filteredDept;
     }
 
-    // Priority 2: Filter by sala_id / sala_nombre if row has sala context (e.g. Areas editing Departamento)
+    // Priority 2: Filter by sala_id / sala_nombre if row has sala context (e.g. Areas editing Departamento, but NOT when selecting Sala or Modelo directly)
     const targetSalaId = item.sala_id ? Number(item.sala_id) : null;
     const targetSalaNombre = item.sala_nombre ? String(item.sala_nombre).trim().toLowerCase() : null;
 
-    if (targetSalaId || targetSalaNombre) {
+    if (col.keyId !== 'sala_id' && col.key !== 'sala_nombre' && col.keyId !== 'modelo_id' && col.key !== 'modelo_nombre' && (targetSalaId || targetSalaNombre)) {
       const filteredSala = rawOptions.filter(opt => {
         if (!opt) return false;
         if (targetSalaId && opt.sala_id) {
@@ -313,9 +313,10 @@
 
   // Reactive validation for creation modal duplicate name check
   $: duplicateNameError = (function() {
+    if (entityType === 'máquina' || entityType === 'maquina' || entityType === 'maquinas') return '';
     if (!createDraft || !createDraft.nombre) return '';
     const clean = createDraft.nombre.trim().toLowerCase();
-    if (!clean) return '';
+    if (!clean || clean === 'n/a') return '';
     const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
     const scopeField = uniqueByField || (entityType === 'mesa' ? 'sala_id' : null);
 
@@ -354,9 +355,10 @@
       if (isReserved) return `El código "${code}" está reservado como plantilla base y no puede usarse.`;
     }
     // Check duplicate name
+    if (entityType === 'máquina' || entityType === 'maquina' || entityType === 'maquinas') return '';
     if (!inlineDraft.nombre) return '';
     const clean = inlineDraft.nombre.trim().toLowerCase();
-    if (!clean) return '';
+    if (!clean || clean === 'n/a') return '';
     const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
     const scopeField = uniqueByField || (entityType === 'mesa' ? 'sala_id' : null);
     const currentItem = nameList.find(x => Number(x.id) === Number(editingInlineId));
@@ -1211,14 +1213,26 @@
                       </select>
 
                     {:else if col.options && Array.isArray(col.options)}
-                      <!-- Standard Entity Select Dropdown -->
+                      <!-- Standard Entity Select Dropdown with Optgroups -->
                       <select 
                         bind:value={inlineDraft[col.keyId || col.key]}
                         class="inline-select">
-                        {#each getInlineSelectOptions(col, item) as opt}
-                          <option value={typeof opt === 'object' ? opt.id : opt}>
-                            {typeof opt === 'object' ? (opt.nombre || opt.nombre_comercial || opt.name) : opt}
-                          </option>
+                        {#each getGroupedOptions(getInlineSelectOptions(col, item)) as grp}
+                          {#if grp.label}
+                            <optgroup label="{grp.label}">
+                              {#each grp.items as opt}
+                                <option value={typeof opt === 'object' ? opt.id : opt}>
+                                  {typeof opt === 'object' ? (opt.nombre || opt.nombre_comercial || opt.name || opt.label) : opt}
+                                </option>
+                              {/each}
+                            </optgroup>
+                          {:else}
+                            {#each grp.items as opt}
+                              <option value={typeof opt === 'object' ? opt.id : opt}>
+                                {typeof opt === 'object' ? (opt.nombre || opt.nombre_comercial || opt.name || opt.label) : opt}
+                              </option>
+                            {/each}
+                          {/if}
                         {/each}
                       </select>
 

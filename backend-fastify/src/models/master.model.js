@@ -6643,8 +6643,10 @@ export async function getMaquinaByIdModel(id) {
 }
 
 export async function createMaquinaModel(data) {
-  const nombre = (data.nombre || '').trim();
-  const serial = (data.serial || '').trim();
+  const rawNombre = (data.nombre !== undefined && data.nombre !== null) ? String(data.nombre).trim() : '';
+  const nombre = rawNombre || 'N/A';
+  const rawSerial = (data.serial !== undefined && data.serial !== null) ? String(data.serial).trim() : '';
+  const serial = rawSerial || 'N/A';
   const puestos = Number(data.puestos) > 0 ? Number(data.puestos) : 1;
   const sala_id = data.sala_id ? Number(data.sala_id) : null;
   const juego_id = data.juego_id ? Number(data.juego_id) : null;
@@ -6656,17 +6658,16 @@ export async function createMaquinaModel(data) {
   const modo_id = data.modo_id ? Number(data.modo_id) : null;
   const legal_id = data.legal_id ? Number(data.legal_id) : null;
 
-  if (!nombre) throw new Error('El nombre de la máquina es obligatorio');
-  if (!serial) throw new Error('El serial de la máquina es obligatorio');
-
   if (isPgConnected && sql) {
-    const existing = await sql`
-      SELECT id FROM maquinas 
-      WHERE LOWER(TRIM(serial)) = LOWER(${serial})
-      LIMIT 1
-    `;
-    if (existing.length > 0) {
-      throw new Error(`Ya existe una máquina registrada con el serial "${serial}"`);
+    if (serial.toUpperCase() !== 'N/A') {
+      const existing = await sql`
+        SELECT id, nombre, serial FROM maquinas 
+        WHERE LOWER(TRIM(serial)) = LOWER(${serial}) AND UPPER(TRIM(serial)) != 'N/A'
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe una máquina registrada con el serial "${serial}" (${existing[0].nombre})`);
+      }
     }
 
     const rows = await sql`
@@ -6682,6 +6683,12 @@ export async function createMaquinaModel(data) {
     return rows[0];
   } else {
     if (!inMemoryData.maquinas) inMemoryData.maquinas = [];
+    if (serial.toUpperCase() !== 'N/A') {
+      const exists = inMemoryData.maquinas.find(m => (m.serial || '').trim().toLowerCase() === serial.toLowerCase() && (m.serial || '').trim().toUpperCase() !== 'N/A');
+      if (exists) {
+        throw new Error(`Ya existe una máquina registrada con el serial "${serial}" (${exists.nombre})`);
+      }
+    }
     const nextId = inMemoryData.maquinas.length > 0 ? Math.max(...inMemoryData.maquinas.map(m => m.id)) + 1 : 1;
     const item = {
       id: nextId,
@@ -6707,8 +6714,8 @@ export async function createMaquinaModel(data) {
 
 export async function updateMaquinaModel(id, data) {
   const mId = Number(id);
-  const nombre = data.nombre !== undefined ? String(data.nombre).trim() : null;
-  const serial = data.serial !== undefined ? String(data.serial).trim() : null;
+  const nombre = data.nombre !== undefined ? (String(data.nombre).trim() || 'N/A') : undefined;
+  const serial = data.serial !== undefined ? (String(data.serial).trim() || 'N/A') : undefined;
   const puestos = data.puestos !== undefined ? (Number(data.puestos) > 0 ? Number(data.puestos) : 1) : undefined;
   const sala_id = data.sala_id !== undefined ? (data.sala_id ? Number(data.sala_id) : null) : undefined;
   const juego_id = data.juego_id !== undefined ? (data.juego_id ? Number(data.juego_id) : null) : undefined;
@@ -6721,22 +6728,22 @@ export async function updateMaquinaModel(id, data) {
   const legal_id = data.legal_id !== undefined ? (data.legal_id ? Number(data.legal_id) : null) : undefined;
 
   if (isPgConnected && sql) {
-    if (serial) {
+    if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
       const existing = await sql`
-        SELECT id FROM maquinas 
-        WHERE LOWER(TRIM(serial)) = LOWER(${serial}) AND id != ${mId}
+        SELECT id, nombre, serial FROM maquinas 
+        WHERE id != ${mId} AND LOWER(TRIM(serial)) = LOWER(${serial}) AND UPPER(TRIM(serial)) != 'N/A'
         LIMIT 1
       `;
       if (existing.length > 0) {
-        throw new Error(`Ya existe otra máquina registrada con el serial "${serial}"`);
+        throw new Error(`Ya existe otra máquina registrada con el serial "${serial}" (${existing[0].nombre})`);
       }
     }
 
     const rows = await sql`
       UPDATE maquinas
       SET
-        nombre = COALESCE(${nombre}, nombre),
-        serial = COALESCE(${serial}, serial),
+        nombre = ${nombre !== undefined ? nombre : sql`nombre`},
+        serial = ${serial !== undefined ? serial : sql`serial`},
         puestos = ${puestos !== undefined ? puestos : sql`puestos`},
         sala_id = ${sala_id !== undefined ? sala_id : sql`sala_id`},
         juego_id = ${juego_id !== undefined ? juego_id : sql`juego_id`},
@@ -6756,8 +6763,14 @@ export async function updateMaquinaModel(id, data) {
     const list = inMemoryData.maquinas || [];
     const idx = list.findIndex(m => m.id === mId);
     if (idx !== -1) {
-      if (nombre !== null) list[idx].nombre = nombre;
-      if (serial !== null) list[idx].serial = serial;
+      if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
+        const exists = list.find(m => m.id !== mId && (m.serial || '').trim().toLowerCase() === serial.toLowerCase() && (m.serial || '').trim().toUpperCase() !== 'N/A');
+        if (exists) {
+          throw new Error(`Ya existe otra máquina registrada con el serial "${serial}" (${exists.nombre})`);
+        }
+      }
+      if (nombre !== undefined) list[idx].nombre = nombre;
+      if (serial !== undefined) list[idx].serial = serial;
       if (puestos !== undefined) list[idx].puestos = puestos;
       if (sala_id !== undefined) list[idx].sala_id = sala_id;
       if (juego_id !== undefined) list[idx].juego_id = juego_id;

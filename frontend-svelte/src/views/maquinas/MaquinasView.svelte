@@ -360,8 +360,8 @@
     {
       type: 'row',
       fields: [
-        { key: 'nombre', label: 'Nombre de Máquina', type: 'text', placeholder: 'Ej. MAQ-001 / Buffalo Gold', required: true },
-        { key: 'serial', label: 'Serial de Máquina', type: 'text', placeholder: 'Ej. SN-89234812', required: true }
+        { key: 'nombre', label: 'Nombre de Máquina', type: 'text', placeholder: 'Ej. MAQ-001 (o N/A)', required: false },
+        { key: 'serial', label: 'Serial de Máquina', type: 'text', placeholder: 'Ej. SN-89234812 (o N/A)', required: false }
       ]
     }
   ];
