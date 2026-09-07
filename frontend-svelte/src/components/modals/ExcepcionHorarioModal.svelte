@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { onMount, createEventDispatcher } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
 
@@ -34,12 +34,17 @@
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
           excepcionesList = json.data;
+          initModalData();
         }
       }
     } catch (err) {
       console.error("Error fetching master excepciones:", err);
     }
   }
+
+  onMount(() => {
+    fetchExcepcionesConfig();
+  });
 
   function showStatus(text, type = 'saved', duration = 1800) {
     saveStatusText = text;
@@ -57,16 +62,22 @@
   let lastLoadedFechaStr = null;
   let currentFetchId = 0;
 
-  $: if (show && dia && plantillasSala) {
+  $: if (show && dia) {
     const currentEmpId = empleado?.id;
     const currentFechaStr = dia?.fechaStr;
     if (currentEmpId !== lastLoadedEmpId || currentFechaStr !== lastLoadedFechaStr) {
       lastLoadedEmpId = currentEmpId;
       lastLoadedFechaStr = currentFechaStr;
-      fetchExcepcionesConfig();
+      if (excepcionesList.length === 0) {
+        fetchExcepcionesConfig();
+      }
       initModalData();
       fetchMarcajesRapidos();
     }
+  }
+
+  $: if (show && dia && (excepcionesList.length > 0 || (plantillasSala && plantillasSala.length > 0))) {
+    initModalData();
   }
 
   $: currentDayIndex = (empleado?.dias || []).findIndex(d => d.fechaStr === dia?.fechaStr);
@@ -185,14 +196,26 @@
     }
   }
 
+  function formatHours(p) {
+    if (!p) return '';
+    const ent = p.hora_entrada ? String(p.hora_entrada).slice(0, 5) : '';
+    const sal = p.hora_salida ? String(p.hora_salida).slice(0, 5) : '';
+    if (ent && sal) return `(${ent} - ${sal})`;
+    if (ent) return `(${ent})`;
+    return '';
+  }
+
   function initModalData() {
     // 1. Mapeo de IDs de horarios directamente asignados al empleado
     const assignedMap = new Map();
     (empleado?.horarios_asignados || []).forEach(h => {
       if (h && h.id) assignedMap.set(Number(h.id), h);
     });
+    (assignedPlantillasEmp || []).forEach(h => {
+      if (h && h.id) assignedMap.set(Number(h.id), h);
+    });
 
-    // 2. Horarios asignados al empleado
+    // 2. Horarios asignados al empleado en su sala
     if (assignedMap.size > 0) {
       const foundInSala = (plantillasSala || []).filter(p => assignedMap.has(Number(p.id)));
       const foundIds = new Set(foundInSala.map(p => Number(p.id)));
@@ -209,27 +232,41 @@
 
     // Pre-selección del valor según el estado actual del día
     const currentCode = dia?.shift?.codigo || '';
+    const currentId = dia?.shift?.id || null;
+
     if (dia && dia.isExcepcion) {
+      if (dia.excepcionId) {
+        const excById = (excepcionesList || []).find(e => Number(e.id) === Number(dia.excepcionId));
+        if (excById) {
+          selectedValue = `EXCEPCION_${excById.id}`;
+          initialSelectedValue = selectedValue;
+          return;
+        }
+      }
       const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
       if (excMatch) {
         selectedValue = `EXCEPCION_${excMatch.id}`;
-      } else if (dia.shift && dia.shift.id) {
-        selectedValue = `PLANTILLA_${dia.shift.id}`;
+      } else if (currentId) {
+        selectedValue = `PLANTILLA_${currentId}`;
       } else {
-        selectedValue = 'BASE_L';
+        const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
+        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
       }
     } else {
-      const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
+      const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode && (e.codigo === 'L' || e.codigo === 'U'));
       if (excMatch) {
         selectedValue = `EXCEPCION_${excMatch.id}`;
       } else if (currentCode === 'L') {
-        selectedValue = 'BASE_L';
+        const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
+        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
       } else if (currentCode === 'U') {
-        selectedValue = 'BASE_U';
-      } else if (dia && dia.shift && dia.shift.id) {
-        selectedValue = `PLANTILLA_${dia.shift.id}`;
+        const uExc = (excepcionesList || []).find(e => e.codigo === 'U');
+        selectedValue = uExc ? `EXCEPCION_${uExc.id}` : 'BASE_U';
+      } else if (currentId) {
+        selectedValue = `PLANTILLA_${currentId}`;
       } else {
-        selectedValue = 'BASE_L';
+        const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
+        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
       }
     }
     initialSelectedValue = selectedValue;
@@ -752,12 +789,12 @@
               </optgroup>
             {/if}
 
-            <!-- Optgroup 2: Horarios Asignados al Empleado (tipo 'horario') -->
+            <!-- Optgroup 2: Horarios Asignados al Empleado (Turnos de la Sala) -->
             {#if horariosEmpleado.length > 0}
               <optgroup label="⏰ Horarios Asignados al Empleado">
                 {#each horariosEmpleado as p}
                   <option value="PLANTILLA_{p.id}">
-                    [{p.codigo}] {p.nombre} {getHorasFormat(p)}
+                    [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
                   </option>
                 {/each}
               </optgroup>
