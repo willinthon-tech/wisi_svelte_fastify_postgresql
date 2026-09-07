@@ -161,7 +161,7 @@
     if (!salaId) return;
     if (currentLoadedSalaId === Number(salaId) && plantillasSalaExcepcion.length > 0) return;
     try {
-      const res = await fetch(`/api/master/plantillas-horarios?sala_ids=${salaId}&limit=1000`);
+      const res = await fetch(`/api/master/horarios?sala_ids=${salaId}&limit=1000`);
       const json = await res.json();
       if (json && json.success) {
         plantillasSalaExcepcion = json.data || [];

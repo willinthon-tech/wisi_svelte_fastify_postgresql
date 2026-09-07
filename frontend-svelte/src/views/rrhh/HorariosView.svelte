@@ -89,7 +89,7 @@
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
-      const res = await fetch(`/api/master/plantillas-horarios/filter-options?${q.toString()}`);
+      const res = await fetch(`/api/master/horarios/filter-options?${q.toString()}`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -172,7 +172,7 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      const res = await fetch('/api/master/plantillas-horarios', {
+      const res = await fetch('/api/master/horarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...draft, tipo: 'horario' })
@@ -192,7 +192,7 @@
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
     try {
-      const res = await fetch(`/api/master/plantillas-horarios/${id}`, {
+      const res = await fetch(`/api/master/horarios/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...draft, tipo: 'horario' })
@@ -212,7 +212,7 @@
   async function handleDelete(event) {
     const { id, onResult } = event.detail;
     try {
-      const res = await fetch(`/api/master/plantillas-horarios/${id}`, {
+      const res = await fetch(`/api/master/horarios/${id}`, {
         method: 'DELETE'
       });
       const json = await res.json();
@@ -236,7 +236,7 @@
 
     for (const id of ids) {
       try {
-        const res = await fetch(`/api/master/plantillas-horarios/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/master/horarios/${id}`, { method: 'DELETE' });
         const json = await res.json();
         if (json && json.blocked) {
           blocked.push({

@@ -138,7 +138,7 @@ export async function loadMasterStoresFromBackend() {
 
   // Carga ultra rápida en paralelo de todas las tablas maestras
   await Promise.allSettled([
-    fetchEntity('plantillas-horarios', masterPlantillasHorariosStore),
+    fetchEntity('horarios', masterPlantillasHorariosStore),
     fetchEntity('departamentos', masterDepartamentosStore),
     fetchEntity('areas', masterAreasStore),
     fetchEntity('cargos', masterCargosStore),
@@ -331,9 +331,11 @@ export const masterModulosActions = {
 export const masterDispositivosActions = createMasterEntityActions(masterDispositivosStore, 'dispositivos');
 export const masterUsuariosActions = createMasterEntityActions(masterUsuariosStore, 'usuarios');
 
-export const masterPlantillasHorariosStore = writable(loadStore('plantillas_horarios_v1', []));
-masterPlantillasHorariosStore.subscribe(val => saveStore('plantillas_horarios_v1', val));
-export const masterPlantillasHorariosActions = createMasterEntityActions(masterPlantillasHorariosStore, 'plantillas-horarios');
+export const masterHorariosStore = writable(loadStore('horarios_v1', []));
+export const masterPlantillasHorariosStore = masterHorariosStore;
+masterHorariosStore.subscribe(val => saveStore('horarios_v1', val));
+export const masterHorariosActions = createMasterEntityActions(masterHorariosStore, 'horarios');
+export const masterPlantillasHorariosActions = masterHorariosActions;
 
 export const masterDescargasStore = writable(loadStore('descargas_v1', []));
 masterDescargasStore.subscribe(val => saveStore('descargas_v1', val));
