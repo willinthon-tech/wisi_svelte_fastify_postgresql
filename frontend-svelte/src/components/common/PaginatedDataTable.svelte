@@ -971,15 +971,19 @@
       <slot name="filters" />
 
       <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
-        <div class="search-box" style="flex: 1; width: 100%;">
-          <input 
-            type="text" 
-            bind:value={searchQuery}
-            on:input={handleSearchInput}
-            placeholder={searchPlaceholder}
-          />
-          <span class="search-icon">🔍</span>
-        </div>
+        {#if $$slots['search-bar'] || $$slots.searchBar}
+          <slot name="search-bar" />
+        {:else}
+          <div class="search-box" style="flex: 1; width: 100%;">
+            <input 
+              type="text" 
+              bind:value={searchQuery}
+              on:input={handleSearchInput}
+              placeholder={searchPlaceholder}
+            />
+            <span class="search-icon">🔍</span>
+          </div>
+        {/if}
 
         <slot name="search-actions" />
       </div>

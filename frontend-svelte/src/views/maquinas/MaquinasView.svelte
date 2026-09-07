@@ -275,20 +275,20 @@
   // Column definitions for PaginatedDataTable
   $: columns = [
     { key: 'id', label: 'N°', type: 'id', sortable: true, editable: false },
-    { key: 'nombre', label: 'Nombre de Máquina', bold: true, sortable: true, editable: true },
-    { key: 'serial', label: 'Serial', bold: true, sortable: true, editable: true },
-    { key: 'puestos', label: 'Puestos', type: 'number', sortable: true, editable: true },
-    { key: 'grupo_sala_nombre', label: 'Grupo', sortable: true, editable: false },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala', sortable: true, editable: true, type: 'select', options: filterOptions.salas || [] },
-    { key: 'marca_nombre', label: 'Marca', sortable: true, editable: false },
-    { key: 'modelo_nombre', keyId: 'modelo_id', label: 'Modelo', sortable: true, editable: true, type: 'select', options: filterOptions.modelos || [] },
-    { key: 'juego_nombre', keyId: 'juego_id', label: 'Juego', sortable: true, editable: true, type: 'select', options: filterOptions.juegos || [] },
-    { key: 'estado_nombre', keyId: 'estado_id', label: 'Estado', sortable: true, editable: true, type: 'select', options: filterOptions.estados || [] },
-    { key: 'sociedad_nombre', keyId: 'sociedad_id', label: 'Sociedad', sortable: true, editable: true, type: 'select', options: filterOptions.sociedades || [] },
-    { key: 'valor_nombre', keyId: 'valor_id', label: 'Valor', sortable: true, editable: true, type: 'select', options: filterOptions.valores || [] },
-    { key: 'tipo_nombre', keyId: 'tipo_id', label: 'Tipo', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
-    { key: 'modo_nombre', keyId: 'modo_id', label: 'Modo', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
-    { key: 'legal_nombre', keyId: 'legal_id', label: 'Legal', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] }
+    { key: 'nombre', label: 'NOMBRE DE MÁQUINA', bold: true, sortable: true, editable: true },
+    { key: 'serial', label: 'SERIAL', bold: true, sortable: true, editable: true },
+    { key: 'puestos', label: 'PUESTOS', type: 'number', sortable: true, editable: true },
+    { key: 'grupo_sala_nombre', label: 'GRUPO', sortable: true, editable: false },
+    { key: 'sala_nombre', keyId: 'sala_id', label: 'SALA', sortable: true, editable: true, type: 'select', options: filterOptions.salas || [] },
+    { key: 'marca_nombre', label: 'MARCA', sortable: true, editable: false },
+    { key: 'modelo_nombre', keyId: 'modelo_id', label: 'MODELO', sortable: true, editable: true, type: 'select', options: filterOptions.modelos || [] },
+    { key: 'juego_nombre', keyId: 'juego_id', label: 'JUEGO', sortable: true, editable: true, type: 'select', options: filterOptions.juegos || [] },
+    { key: 'estado_nombre', keyId: 'estado_id', label: 'ESTADO', sortable: true, editable: true, type: 'select', options: filterOptions.estados || [] },
+    { key: 'sociedad_nombre', keyId: 'sociedad_id', label: 'SOCIEDAD', sortable: true, editable: true, type: 'select', options: filterOptions.sociedades || [] },
+    { key: 'valor_nombre', keyId: 'valor_id', label: 'VALOR', sortable: true, editable: true, type: 'select', options: filterOptions.valores || [] },
+    { key: 'tipo_nombre', keyId: 'tipo_id', label: 'TIPO', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
+    { key: 'modo_nombre', keyId: 'modo_id', label: 'MODO', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
+    { key: 'legal_nombre', keyId: 'legal_id', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] }
   ];
 
   // Create modal form fields: nombre and serial are at the BOTTOM in col-6 format
@@ -451,8 +451,6 @@
   isServerSide={true}
   {columns}
   {createFields}
-  bind:searchQuery
-  searchPlaceholder="Buscar máquina..."
   entityType="máquina"
   createModalTitle="Agregar Máquina"
   on:fetchServerData={(e) => loadServerData(e.detail)}
@@ -462,32 +460,8 @@
   on:batchDelete={handleBatchDelete}
 >
   <div slot="filters" class="maquinas-filters-container">
-    <!-- FILA 1: NOMBRE, SERIAL, SOCIEDAD, LEGAL -->
-    <div class="filters-row-4">
-      <div class="filter-input-col">
-        <label for="filter-input-nombre" class="filter-input-label">NOMBRE</label>
-        <input
-          id="filter-input-nombre"
-          type="text"
-          class="filter-custom-input"
-          placeholder="Buscar..."
-          bind:value={searchNombre}
-          on:input={handleSearchInputChange}
-        />
-      </div>
-
-      <div class="filter-input-col">
-        <label for="filter-input-serial" class="filter-input-label">SERIAL</label>
-        <input
-          id="filter-input-serial"
-          type="text"
-          class="filter-custom-input"
-          placeholder="Buscar..."
-          bind:value={searchSerial}
-          on:input={handleSearchInputChange}
-        />
-      </div>
-
+    <!-- FILA 1: SOCIEDAD (col-6), LEGAL (col-6) -->
+    <div class="filters-row-2">
       <div class="filter-select-col">
         <SmartMultiSelect
           id="filter-maquinas-sociedades"
@@ -606,6 +580,29 @@
     </div>
   </div>
 
+  <!-- Barra inferior de búsqueda dual: NOMBRE (col-6) y SERIAL (col-6) -->
+  <div slot="search-bar" class="maquinas-dual-search-bar">
+    <div class="search-box dual-search-box">
+      <input 
+        type="text" 
+        bind:value={searchNombre}
+        on:input={handleSearchInputChange}
+        placeholder="Buscar por nombre de máquina..."
+      />
+      <span class="search-icon">🔍</span>
+    </div>
+
+    <div class="search-box dual-search-box">
+      <input 
+        type="text" 
+        bind:value={searchSerial}
+        on:input={handleSearchInputChange}
+        placeholder="Buscar por serial de máquina..."
+      />
+      <span class="search-icon">🔍</span>
+    </div>
+  </div>
+
   <div slot="search-actions">
     {#if hasActiveFilters}
       <button
@@ -628,9 +625,9 @@
     width: 100%;
   }
 
-  .filters-row-4 {
+  .filters-row-2 {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
     width: 100%;
     align-items: flex-end;
@@ -659,7 +656,7 @@
   }
 
   @media (max-width: 900px) {
-    .filters-row-4,
+    .filters-row-2,
     .filters-row-3,
     .filters-row-6 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -667,14 +664,13 @@
   }
 
   @media (max-width: 600px) {
-    .filters-row-4,
+    .filters-row-2,
     .filters-row-3,
     .filters-row-6 {
       grid-template-columns: 1fr;
     }
   }
 
-  .filter-input-col,
   .filter-select-col {
     display: flex;
     flex-direction: column;
@@ -682,19 +678,30 @@
     width: 100%;
   }
 
-  .filter-input-label {
-    font-size: 11px;
-    font-weight: 800;
-    color: #475569;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  .maquinas-dual-search-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    flex: 1;
   }
 
-  .filter-custom-input {
+  @media (max-width: 768px) {
+    .maquinas-dual-search-bar {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .dual-search-box {
+    position: relative;
     width: 100%;
-    height: 38px;
-    padding: 0 12px;
-    font-size: 13px;
+  }
+
+  .dual-search-box input {
+    width: 100%;
+    height: 40px;
+    padding: 0 14px 0 38px;
+    font-size: 13.5px;
     color: #1e293b;
     background: #ffffff;
     border: 1px solid #cbd5e1;
@@ -704,8 +711,18 @@
     outline: none;
   }
 
-  .filter-custom-input:focus {
+  .dual-search-box input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .dual-search-box .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    opacity: 0.6;
+    pointer-events: none;
   }
 </style>
