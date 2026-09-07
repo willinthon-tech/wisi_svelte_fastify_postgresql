@@ -1,432 +1,58 @@
--- ========================================================
--- SCRIPT DE MIGRACIÓN/IMPORTACIÓN A POSTGRESQL PARA MÁQUINAS
--- Base de Datos: PostgreSQL (VPS / Local)
--- ========================================================
+-- --------------------------------------------------------
+-- Host:                         66.97.43.124
+-- Server version:               10.6.23-MariaDB-0ubuntu0.22.04.1 - Ubuntu 22.04
+-- Server OS:                    debian-linux-gnu
+-- HeidiSQL Version:             12.8.0.6908
+-- --------------------------------------------------------
 
-BEGIN;
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
--- 1. TABLA: grupo_salas
-CREATE TABLE IF NOT EXISTS grupo_salas (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
+-- Dumping structure for table sistema_maquinas.estado
+CREATE TABLE IF NOT EXISTS `estado` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-INSERT INTO grupo_salas (id, nombre) VALUES
-(1, 'Sala'),
-	(2, 'Galpon')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
-
-SELECT setval('grupo_salas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM grupo_salas));
-
--- 2. TABLA: salas (Actualización de columnas y sucursales/galpones)
-CREATE TABLE IF NOT EXISTS salas (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL,
-  nombre_comercial VARCHAR(100),
-  grupo_id INT REFERENCES grupo_salas(id) ON DELETE SET NULL,
-  pianas INT DEFAULT 0,
-  pianas_xl INT DEFAULT 0,
-  activo BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE salas ADD COLUMN IF NOT EXISTS grupo_id INT REFERENCES grupo_salas(id) ON DELETE SET NULL;
-ALTER TABLE salas ADD COLUMN IF NOT EXISTS pianas INT DEFAULT 0;
-ALTER TABLE salas ADD COLUMN IF NOT EXISTS pianas_xl INT DEFAULT 0;
-
-INSERT INTO salas (id, nombre, grupo_id, pianas, pianas_xl) VALUES
-(1, 'El Marques Gran Casino', 1, 0, 0),
-	(2, 'Charaima', 1, 0, 0),
-	(4, 'Gran Casino Plc', 1, 0, 0),
-	(5, 'Roraima', 1, 0, 0),
-	(6, 'Gran Casino Sc', 1, 0, 0),
-	(7, 'Gran Casino Lg', 1, 0, 0),
-	(8, 'Monagas Royal Casino', 1, 0, 0),
-	(9, 'Sótano 1 Roraima', 2, 27, 0),
-	(10, 'Darien el Marques', 2, 0, 0),
-	(11, 'Deposito Monagas Royal', 2, 0, 0),
-	(12, 'Casino La Llovizna', 1, 0, 0),
-	(13, 'Galpon Edi', 2, 0, 0),
-	(14, 'Plaza Mayor', 1, 0, 0),
-	(15, 'Mare Mare', 1, 0, 0),
-	(16, 'Galpon Valencia', 2, 0, 0),
-	(17, 'Gainer', 2, 31, 7),
-	(18, 'Galpon Barcelona', 2, 0, 0),
-	(20, 'Casino Laja Real', 1, 0, 0)
-ON CONFLICT (id) DO UPDATE SET 
-      nombre = EXCLUDED.nombre, 
-      grupo_id = EXCLUDED.grupo_id, 
-      pianas = EXCLUDED.pianas, 
-      pianas_xl = EXCLUDED.pianas_xl;
-
-SELECT setval('salas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM salas));
-
--- 3. TABLA: estados
-CREATE TABLE IF NOT EXISTS estados (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO estados (id, nombre) VALUES
-(1, 'N/A'),
+-- Dumping data for table sistema_maquinas.estado: ~7 rows (approximately)
+INSERT INTO `estado` (`id`, `nombre`) VALUES
+	(1, 'N/A'),
 	(2, 'Operativa'),
 	(3, 'Inactiva'),
 	(4, 'Sin targeta'),
 	(5, 'Sin pantalla'),
 	(6, 'Sin monitor'),
-	(7, 'Sin botonera')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
+	(7, 'Sin botonera');
 
-SELECT setval('estados_id_seq', (SELECT COALESCE(MAX(id), 1) FROM estados));
+-- Dumping structure for table sistema_maquinas.grupo
+CREATE TABLE IF NOT EXISTS `grupo` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 4. TABLA: legal
-CREATE TABLE IF NOT EXISTS legal (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
+-- Dumping data for table sistema_maquinas.grupo: ~0 rows (approximately)
+INSERT INTO `grupo` (`id`, `nombre`) VALUES
+	(1, 'Sala'),
+	(2, 'Galpon');
 
-INSERT INTO legal (id, nombre) VALUES
-(1, 'N/A'),
-	(2, 'Si'),
-	(3, 'No')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
+-- Dumping structure for table sistema_maquinas.juego
+CREATE TABLE IF NOT EXISTS `juego` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=248 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-SELECT setval('legal_id_seq', (SELECT COALESCE(MAX(id), 1) FROM legal));
-
--- 5. TABLA: marcas
-CREATE TABLE IF NOT EXISTS marcas (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO marcas (id, nombre) VALUES
-(1, 'N/A'),
-	(2, 'Aristocrat'),
-	(3, 'Igt'),
-	(4, 'Williams'),
-	(5, 'Konami'),
-	(6, 'Sg'),
-	(7, 'Novomatic'),
-	(8, 'Bally'),
-	(9, 'Ainsworth'),
-	(10, 'Aruze'),
-	(11, 'Unidesa'),
-	(12, 'Alphastreet'),
-	(13, 'Spintec'),
-	(14, 'Gamble'),
-	(15, 'Austrian'),
-	(16, 'Egt'),
-	(17, 'Atronic'),
-	(18, 'Alfastreet'),
-	(19, 'American'),
-	(20, 'Franco'),
-	(21, 'Astro'),
-	(22, 'Ainsworth Game T'),
-	(23, 'Konami Kp3'),
-	(24, 'Wms'),
-	(25, 'Alfa Street'),
-	(26, 'Gts'),
-	(27, 'Astro-aristocrat'),
-	(28, 'William'),
-	(29, 'Ruleta Alfastreet'),
-	(30, 'Poker'),
-	(31, 'Incredible Technologies'),
-	(32, 'FV640 f2'),
-	(33, 'Stern Pinball'),
-	(34, 'Amusgo')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
-
-SELECT setval('marcas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM marcas));
-
--- 6. TABLA: modelos
-CREATE TABLE IF NOT EXISTS modelos (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL,
-  marca_id INT REFERENCES marcas(id) ON DELETE SET NULL
-);
-
-INSERT INTO modelos (id, nombre, marca_id) VALUES
-(1, 'N/A', 1),
-	(2, 'N/A', 2),
-	(3, 'N/A', 3),
-	(4, 'N/A', 4),
-	(5, 'N/A', 5),
-	(6, 'N/A', 6),
-	(7, 'N/A', 7),
-	(8, 'N/A', 8),
-	(9, 'N/A', 9),
-	(10, 'N/A', 10),
-	(11, 'N/A', 11),
-	(12, 'N/A', 12),
-	(13, 'N/A', 13),
-	(14, 'N/A', 14),
-	(15, 'N/A', 15),
-	(16, 'N/A', 16),
-	(17, 'N/A', 17),
-	(18, 'N/A', 18),
-	(19, 'N/A', 19),
-	(20, 'N/A', 20),
-	(21, 'N/A', 21),
-	(22, 'N/A', 22),
-	(23, 'N/A', 23),
-	(24, 'N/A', 24),
-	(25, 'N/A', 25),
-	(26, 'N/A', 26),
-	(27, 'N/A', 27),
-	(28, 'N/A', 28),
-	(29, 'N/A', 29),
-	(30, 'N/A', 30),
-	(32, 'Mk6 Mav500', 2),
-	(33, 'Neo', 3),
-	(34, 'Blade', 4),
-	(35, 'Kp3', 5),
-	(36, 'Equinox', 6),
-	(37, 'Fv880 Cf2', 7),
-	(38, 'Helix', 2),
-	(39, 'Helix Link', 2),
-	(40, 'Ultra Hot', 8),
-	(41, 'Ap-v222st', 8),
-	(42, 'Dualos', 6),
-	(43, 'Ap-v32st', 8),
-	(44, 'Fv640 Cf2', 7),
-	(45, 'A560-h', 9),
-	(46, 'A560x', 9),
-	(47, 'Ah-1cc40st', 8),
-	(48, 'Fv610 Cf2', 7),
-	(49, 'Fv626 Cf2', 7),
-	(50, 'Fv626 Cf2p', 7),
-	(51, 'Viridian Ws', 2),
-	(52, 'Alpha 1', 8),
-	(53, 'Kgp 2/3 Ubss', 5),
-	(54, 'Genx-wd00', 10),
-	(55, 'S400 Px', 11),
-	(56, 'Fv680 Cf2', 7),
-	(57, 'Edge', 2),
-	(58, 'Sg1', 8),
-	(59, 'Fv629', 7),
-	(60, 'A-540', 7),
-	(61, 'Fv623 Cfd', 7),
-	(62, 'Bbu', 4),
-	(63, 'Bbxd Slanto', 4),
-	(64, 'Bb1', 4),
-	(65, 'Mk4', 2),
-	(66, 'S400', 11),
-	(67, 'Austrian', 7),
-	(68, 'Mk5', 2),
-	(69, 'Fv622cf', 15),
-	(70, 'S300', 11),
-	(71, 'Vv Up', 16),
-	(72, 'Gl20', 3),
-	(73, 'S9-1', 8),
-	(74, 'Wave', 8),
-	(75, '640', 7),
-	(76, '880', 7),
-	(77, 'V22', 8),
-	(78, 'V32', 8),
-	(79, 'Kp2', 5),
-	(80, 'Hiem', 17),
-	(81, '626', 7),
-	(82, '8k-top', 18),
-	(83, 'Coolfire1', 7),
-	(84, 'Mk6', 2),
-	(85, 'Coolfire2', 7),
-	(86, 'Coolfire1(china)', 7),
-	(87, 'Bally Alfa', 8),
-	(88, 'Viridian', 2),
-	(89, 'C1070121', 3),
-	(90, 'C1070120', 3),
-	(91, 'Fv-640', 7),
-	(92, 'Kgp 2.0 Uvsn', 5),
-	(93, 'Tasman Series I', 5),
-	(94, 'Admiral', 7),
-	(95, 'Mpas', 20),
-	(96, 'Wms Bb1', 4),
-	(97, 'Fv-880', 7),
-	(98, 'Cf2680', 7),
-	(99, 'Cf2626', 7),
-	(100, 'Cf2610', 7),
-	(101, 'Alpha2b32', 8),
-	(102, 'Alpha2wv', 8),
-	(103, 'Fv880', 7),
-	(104, 'Sg', 21),
-	(105, 'Avp', 3),
-	(106, 'Alpha1', 8),
-	(107, 'Blue Bird One', 4),
-	(108, 'Cf1 623', 7),
-	(109, 'Helix Slant', 2),
-	(110, 'Kp3 Revolver', 5),
-	(111, 'Cf640', 7),
-	(112, 'A560', 9),
-	(113, 'Reel', 3),
-	(114, 'Mmpg', 18),
-	(115, 'Fv640 F2', 7),
-	(116, 'Ah-1 (a2 V32 Wave)', 8),
-	(117, 'As-1', 8),
-	(118, 'A560-l-nzc1800108', 22),
-	(119, 'A560-h', 22),
-	(120, 'M9000-s3', 8),
-	(121, 'M9000-2c3', 8),
-	(122, 'Ap-1', 8),
-	(123, '1070121', 3),
-	(124, '1070121c', 3),
-	(125, 'Fv623cfd', 15),
-	(126, 'Podium Kp3', 23),
-	(127, 'Cirsa Serie 300 Video Dl', 11),
-	(128, 'Cirsa S400 Video Ia', 11),
-	(129, 'Cirsa S400', 11),
-	(130, 'Sg6', 5),
-	(131, 'Ps-6', 5),
-	(132, 'Endearvour Series', 5),
-	(133, 'Ca0319-0c-07', 21),
-	(134, 'Ca0319-0c-21', 21),
-	(135, 'Ca319-0c-21', 21),
-	(136, 'Mav500', 2),
-	(137, 'Fv626 F1', 7),
-	(138, 'Herculite (kgi)', 5),
-	(139, 'Blade', 24),
-	(140, 'M9000', 8),
-	(141, '300 Mg', 11),
-	(142, 'Viridian 1', 2),
-	(143, 'Astro', 21),
-	(144, 'R8ts', 25),
-	(145, 'R8m3', 25),
-	(146, 'Ps-c-001', 13),
-	(147, 'Fv 640 Cf2', 7),
-	(148, 'Fv 610 Cf2', 7),
-	(149, 'Fv 680 Cf2', 7),
-	(150, 'Fv 880 Cf2', 7),
-	(151, 'Alpha 1 V20-20', 8),
-	(152, 'Ap-1 V32-st', 8),
-	(153, 'Cc40st Ah-1', 8),
-	(154, 'A560x-h', 9),
-	(155, 'Mmpg', 12),
-	(156, 'R8m3-23', 12),
-	(157, 'Karma', 13),
-	(158, 'Alpha 2 V32 Wv', 8),
-	(159, 'Alpha 2 V32', 8),
-	(160, 'Crystal Dual', 3),
-	(161, 'Alpha 2 V22/v32', 8),
-	(162, 'Kp', 5),
-	(163, 'A560-l', 9),
-	(164, 'R8c7', 26),
-	(165, 'Fv 623 Cfd', 7),
-	(166, 'Fv 626 Cf2', 7),
-	(167, 'Ap-1 V32 St', 8),
-	(168, 'Ca0319-0c-04', 27),
-	(169, 'Ca0319-0c-21', 27),
-	(170, 'Mk6 Mav540', 2),
-	(171, 'Mk5 Mav540', 2),
-	(172, 'Kgp2', 5),
-	(173, 'Blade', 28),
-	(174, 'Ap-1 V222 St', 8),
-	(175, 'Mmpg', 29),
-	(176, 'Extra Draw Ii', 30),
-	(177, 'Targeta China', 21),
-	(178, 'N/A', 31),
-	(179, '96499203', 3),
-	(180, '96499410', 3),
-	(181, '96499410 V2', 3),
-	(182, '96499810', 3),
-	(183, 'Pinball i-005 * Gotg Pro', 33),
-	(184, '96499309 V2', 3),
-	(185, '96499410 E', 3),
-	(186, '96499312', 3),
-	(187, '96499204', 3),
-	(188, 'EMR Modular', 34),
-	(189, '96499412', 3),
-	(190, '96499313', 3),
-	(191, 'MVP540', 1),
-	(192, 'GPW', 14)
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, marca_id = EXCLUDED.marca_id;
-
-SELECT setval('modelos_id_seq', (SELECT COALESCE(MAX(id), 1) FROM modelos));
-
--- 7. TABLA: modos
-CREATE TABLE IF NOT EXISTS modos (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO modos (id, nombre) VALUES
-(1, 'BILL'),
-	(2, 'ACR'),
-	(3, 'N/A')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
-
-SELECT setval('modos_id_seq', (SELECT COALESCE(MAX(id), 1) FROM modos));
-
--- 8. TABLA: sociedades
-CREATE TABLE IF NOT EXISTS sociedades (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO sociedades (id, nombre) VALUES
-(1, 'N/A'),
-	(2, 'WISI'),
-	(3, 'WAMJU'),
-	(4, 'WAJ'),
-	(5, 'WJ'),
-	(6, 'SMARTGAMES'),
-	(7, 'YIHAD'),
-	(8, 'VM'),
-	(10, 'RA'),
-	(11, 'JA'),
-	(15, 'J-WAM'),
-	(18, 'LORENA'),
-	(20, 'AD-WAM'),
-	(21, 'ANTONIO')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
-
-SELECT setval('sociedades_id_seq', (SELECT COALESCE(MAX(id), 1) FROM sociedades));
-
--- 9. TABLA: tipos
-CREATE TABLE IF NOT EXISTS tipos (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO tipos (id, nombre) VALUES
-(1, 'Slots'),
-	(2, 'Ruleta'),
-	(3, 'N/A'),
-	(5, 'Poker'),
-	(6, 'Blackjack'),
-	(7, 'Caballo')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
-
-SELECT setval('tipos_id_seq', (SELECT COALESCE(MAX(id), 1) FROM tipos));
-
--- 10. TABLA: valores
-CREATE TABLE IF NOT EXISTS valores (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO valores (id, nombre) VALUES
-(1, 'N/A'),
-	(2, '0.01'),
-	(3, '0.001'),
-	(4, '1'),
-	(5, '0.0004'),
-	(6, '0.0002'),
-	(7, '0.003'),
-	(8, '0.000004'),
-	(9, '0.0005'),
-	(10, '0.002')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
-
-SELECT setval('valores_id_seq', (SELECT COALESCE(MAX(id), 1) FROM valores));
-
--- 11. TABLA: juegos_maquinas
-CREATE TABLE IF NOT EXISTS juegos_maquinas (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO juegos_maquinas (id, nombre) VALUES
-(1, 'N/A'),
+-- Dumping data for table sistema_maquinas.juego: ~246 rows (approximately)
+INSERT INTO `juego` (`id`, `nombre`) VALUES
+	(1, 'N/A'),
 	(2, 'Multijuego'),
 	(3, 'Eureka Reel Blast'),
 	(4, 'Cats Hats Y Bats'),
@@ -508,7 +134,7 @@ INSERT INTO juegos_maquinas (id, nombre) VALUES
 	(80, 'Kingdom Of The Titans'),
 	(81, 'Enchanted Kingdom'),
 	(82, 'Fire Light'),
-	(83, 'Shamman''s Magic'),
+	(83, 'Shamman\'s Magic'),
 	(84, 'Beaver Bucks'),
 	(85, 'Pick A Game Multigame'),
 	(86, 'Multi Hot Spot Ii'),
@@ -563,7 +189,7 @@ INSERT INTO juegos_maquinas (id, nombre) VALUES
 	(135, 'Golden Piramids'),
 	(136, 'Geisha'),
 	(137, 'Multigame'),
-	(138, 'Neptune''s Kingdom Ii'),
+	(138, 'Neptune\'s Kingdom Ii'),
 	(139, 'Thai Treasure'),
 	(140, 'Multi Gaminator Vii'),
 	(141, 'Multi Gaminator Xvii'),
@@ -594,7 +220,7 @@ INSERT INTO juegos_maquinas (id, nombre) VALUES
 	(166, 'North Shore'),
 	(167, 'By The Bay'),
 	(168, 'Game King'),
-	(169, 'Multi Game Winner''s Choice'),
+	(169, 'Multi Game Winner\'s Choice'),
 	(170, 'Multi Game'),
 	(171, 'Novo Line Interactive Edition 7'),
 	(172, 'Novo Line Interactive Edition X2'),
@@ -613,7 +239,7 @@ INSERT INTO juegos_maquinas (id, nombre) VALUES
 	(185, 'Fortunes'),
 	(186, 'Hd Multi Game'),
 	(187, 'Pompe 2 Legends'),
-	(188, 'Wild Ameri''coins'),
+	(188, 'Wild Ameri\'coins'),
 	(189, 'Mexico Lindo'),
 	(190, 'Wealth Of North'),
 	(191, 'Stacks Of Magic'),
@@ -643,7 +269,7 @@ INSERT INTO juegos_maquinas (id, nombre) VALUES
 	(215, 'Lightning Cash Sahara Gold'),
 	(216, 'Tigress'),
 	(217, 'Choy Sun Dot'),
-	(218, 'Multigame Winner''s Choice'),
+	(218, 'Multigame Winner\'s Choice'),
 	(219, 'Mj Wanna Be Starting Something'),
 	(220, 'Multiwin 1'),
 	(221, 'Quest For Riches'),
@@ -671,32 +297,60 @@ INSERT INTO juegos_maquinas (id, nombre) VALUES
 	(243, 'Cats Hats Y More Bats'),
 	(244, 'Night Life'),
 	(245, 'Firelink River Walk'),
-	(246, 'Multipuestos')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
+	(246, 'Multipuestos');
 
-SELECT setval('juegos_maquinas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM juegos_maquinas));
+-- Dumping structure for table sistema_maquinas.legal
+CREATE TABLE IF NOT EXISTS `legal` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 12. TABLA: maquinas
-CREATE TABLE IF NOT EXISTS maquinas (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100),
-  serial VARCHAR(100),
-  puestos INT NOT NULL DEFAULT 1,
-  sala_id INT REFERENCES salas(id) ON DELETE SET NULL,
-  juego_id INT REFERENCES juegos_maquinas(id) ON DELETE SET NULL,
-  estado_id INT REFERENCES estados(id) ON DELETE SET NULL,
-  sociedad_id INT REFERENCES sociedades(id) ON DELETE SET NULL,
-  valor_id INT REFERENCES valores(id) ON DELETE SET NULL,
-  modelo_id INT REFERENCES modelos(id) ON DELETE SET NULL,
-  tipo_id INT REFERENCES tipos(id) ON DELETE SET NULL,
-  modo_id INT REFERENCES modos(id) ON DELETE SET NULL,
-  legal_id INT REFERENCES legal(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- Dumping data for table sistema_maquinas.legal: ~3 rows (approximately)
+INSERT INTO `legal` (`id`, `nombre`) VALUES
+	(1, 'N/A'),
+	(2, 'Si'),
+	(3, 'No');
 
-INSERT INTO maquinas (id, nombre, serial, puestos, sala_id, juego_id, estado_id, sociedad_id, valor_id, modelo_id, tipo_id, modo_id, legal_id) VALUES
-(1, '1', '149923', 1, 1, 1, 2, 2, 2, 32, 1, 1, 2),
+-- Dumping structure for table sistema_maquinas.maquina
+CREATE TABLE IF NOT EXISTS `maquina` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  `serial` varchar(100) DEFAULT NULL,
+  `puestos` int(11) NOT NULL DEFAULT 1,
+  `sucursal_id` int(11) DEFAULT NULL,
+  `juego_id` int(11) DEFAULT NULL,
+  `estado_id` int(11) DEFAULT NULL,
+  `sociedad_id` int(11) DEFAULT NULL,
+  `valor_id` int(11) DEFAULT NULL,
+  `modelo_id` int(11) DEFAULT NULL,
+  `tipo_id` int(11) DEFAULT NULL,
+  `modo_id` int(11) DEFAULT NULL,
+  `legal_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `sucursal_id` (`sucursal_id`),
+  KEY `juego_id` (`juego_id`),
+  KEY `estado_id` (`estado_id`),
+  KEY `sociedad_id` (`sociedad_id`),
+  KEY `valor_id` (`valor_id`),
+  KEY `modelo_id` (`modelo_id`),
+  KEY `maquina_ibfk_7` (`tipo_id`),
+  KEY `maquina_ibfk_8` (`modo_id`),
+  KEY `fk_maquina_legal` (`legal_id`),
+  CONSTRAINT `fk_maquina_legal` FOREIGN KEY (`legal_id`) REFERENCES `legal` (`id`) ON DELETE NO ACTION ON UPDATE CASCADE,
+  CONSTRAINT `maquina_ibfk_1` FOREIGN KEY (`sucursal_id`) REFERENCES `sucursal` (`id`),
+  CONSTRAINT `maquina_ibfk_2` FOREIGN KEY (`juego_id`) REFERENCES `juego` (`id`),
+  CONSTRAINT `maquina_ibfk_3` FOREIGN KEY (`estado_id`) REFERENCES `estado` (`id`),
+  CONSTRAINT `maquina_ibfk_4` FOREIGN KEY (`sociedad_id`) REFERENCES `sociedad` (`id`),
+  CONSTRAINT `maquina_ibfk_5` FOREIGN KEY (`valor_id`) REFERENCES `valor` (`id`),
+  CONSTRAINT `maquina_ibfk_6` FOREIGN KEY (`modelo_id`) REFERENCES `modelo` (`id`),
+  CONSTRAINT `maquina_ibfk_7` FOREIGN KEY (`tipo_id`) REFERENCES `tipo` (`id`),
+  CONSTRAINT `maquina_ibfk_8` FOREIGN KEY (`modo_id`) REFERENCES `modo` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1720 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Dumping data for table sistema_maquinas.maquina: ~1,486 rows (approximately)
+INSERT INTO `maquina` (`id`, `nombre`, `serial`, `puestos`, `sucursal_id`, `juego_id`, `estado_id`, `sociedad_id`, `valor_id`, `modelo_id`, `tipo_id`, `modo_id`, `legal_id`) VALUES
+	(1, '1', '149923', 1, 1, 1, 2, 2, 2, 32, 1, 1, 2),
 	(2, '2', '43010129', 1, 10, 1, 2, 2, 2, 32, 1, 1, 2),
 	(3, '3', '43007278', 1, 1, 1, 2, 2, 2, 32, 1, 1, 2),
 	(4, '4', '150152', 1, 10, 1, 2, 2, 2, 32, 1, 1, 2),
@@ -2230,22 +1884,364 @@ INSERT INTO maquinas (id, nombre, serial, puestos, sala_id, juego_id, estado_id,
 	(1716, '66', 'MAV2003837', 1, 20, 49, 2, 2, 2, 2, 1, 2, 2),
 	(1717, '67', '49259', 1, 20, 44, 2, 3, 2, 35, 1, 2, 2),
 	(1718, '68', 'N/A', 1, 20, 44, 2, 3, 2, 35, 1, 2, 2),
-	(1719, '69', '9997355', 1, 20, 44, 2, 2, 2, 35, 1, 2, 2)
-ON CONFLICT (id) DO UPDATE SET
-      nombre = EXCLUDED.nombre,
-      serial = EXCLUDED.serial,
-      puestos = EXCLUDED.puestos,
-      sala_id = EXCLUDED.sala_id,
-      juego_id = EXCLUDED.juego_id,
-      estado_id = EXCLUDED.estado_id,
-      sociedad_id = EXCLUDED.sociedad_id,
-      valor_id = EXCLUDED.valor_id,
-      modelo_id = EXCLUDED.modelo_id,
-      tipo_id = EXCLUDED.tipo_id,
-      modo_id = EXCLUDED.modo_id,
-      legal_id = EXCLUDED.legal_id,
-      updated_at = NOW();
+	(1719, '69', '9997355', 1, 20, 44, 2, 2, 2, 35, 1, 2, 2);
 
-SELECT setval('maquinas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM maquinas));
+-- Dumping structure for table sistema_maquinas.marca
+CREATE TABLE IF NOT EXISTS `marca` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-COMMIT;
+-- Dumping data for table sistema_maquinas.marca: ~30 rows (approximately)
+INSERT INTO `marca` (`id`, `nombre`) VALUES
+	(1, 'N/A'),
+	(2, 'Aristocrat'),
+	(3, 'Igt'),
+	(4, 'Williams'),
+	(5, 'Konami'),
+	(6, 'Sg'),
+	(7, 'Novomatic'),
+	(8, 'Bally'),
+	(9, 'Ainsworth'),
+	(10, 'Aruze'),
+	(11, 'Unidesa'),
+	(12, 'Alphastreet'),
+	(13, 'Spintec'),
+	(14, 'Gamble'),
+	(15, 'Austrian'),
+	(16, 'Egt'),
+	(17, 'Atronic'),
+	(18, 'Alfastreet'),
+	(19, 'American'),
+	(20, 'Franco'),
+	(21, 'Astro'),
+	(22, 'Ainsworth Game T'),
+	(23, 'Konami Kp3'),
+	(24, 'Wms'),
+	(25, 'Alfa Street'),
+	(26, 'Gts'),
+	(27, 'Astro-aristocrat'),
+	(28, 'William'),
+	(29, 'Ruleta Alfastreet'),
+	(30, 'Poker'),
+	(31, 'Incredible Technologies'),
+	(32, 'FV640 f2'),
+	(33, 'Stern Pinball'),
+	(34, 'Amusgo');
+
+-- Dumping structure for table sistema_maquinas.modelo
+CREATE TABLE IF NOT EXISTS `modelo` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  `marca_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `marca_id` (`marca_id`),
+  CONSTRAINT `modelo_ibfk_1` FOREIGN KEY (`marca_id`) REFERENCES `marca` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=193 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Dumping data for table sistema_maquinas.modelo: ~175 rows (approximately)
+INSERT INTO `modelo` (`id`, `nombre`, `marca_id`) VALUES
+	(1, 'N/A', 1),
+	(2, 'N/A', 2),
+	(3, 'N/A', 3),
+	(4, 'N/A', 4),
+	(5, 'N/A', 5),
+	(6, 'N/A', 6),
+	(7, 'N/A', 7),
+	(8, 'N/A', 8),
+	(9, 'N/A', 9),
+	(10, 'N/A', 10),
+	(11, 'N/A', 11),
+	(12, 'N/A', 12),
+	(13, 'N/A', 13),
+	(14, 'N/A', 14),
+	(15, 'N/A', 15),
+	(16, 'N/A', 16),
+	(17, 'N/A', 17),
+	(18, 'N/A', 18),
+	(19, 'N/A', 19),
+	(20, 'N/A', 20),
+	(21, 'N/A', 21),
+	(22, 'N/A', 22),
+	(23, 'N/A', 23),
+	(24, 'N/A', 24),
+	(25, 'N/A', 25),
+	(26, 'N/A', 26),
+	(27, 'N/A', 27),
+	(28, 'N/A', 28),
+	(29, 'N/A', 29),
+	(30, 'N/A', 30),
+	(32, 'Mk6 Mav500', 2),
+	(33, 'Neo', 3),
+	(34, 'Blade', 4),
+	(35, 'Kp3', 5),
+	(36, 'Equinox', 6),
+	(37, 'Fv880 Cf2', 7),
+	(38, 'Helix', 2),
+	(39, 'Helix Link', 2),
+	(40, 'Ultra Hot', 8),
+	(41, 'Ap-v222st', 8),
+	(42, 'Dualos', 6),
+	(43, 'Ap-v32st', 8),
+	(44, 'Fv640 Cf2', 7),
+	(45, 'A560-h', 9),
+	(46, 'A560x', 9),
+	(47, 'Ah-1cc40st', 8),
+	(48, 'Fv610 Cf2', 7),
+	(49, 'Fv626 Cf2', 7),
+	(50, 'Fv626 Cf2p', 7),
+	(51, 'Viridian Ws', 2),
+	(52, 'Alpha 1', 8),
+	(53, 'Kgp 2/3 Ubss', 5),
+	(54, 'Genx-wd00', 10),
+	(55, 'S400 Px', 11),
+	(56, 'Fv680 Cf2', 7),
+	(57, 'Edge', 2),
+	(58, 'Sg1', 8),
+	(59, 'Fv629', 7),
+	(60, 'A-540', 7),
+	(61, 'Fv623 Cfd', 7),
+	(62, 'Bbu', 4),
+	(63, 'Bbxd Slanto', 4),
+	(64, 'Bb1', 4),
+	(65, 'Mk4', 2),
+	(66, 'S400', 11),
+	(67, 'Austrian', 7),
+	(68, 'Mk5', 2),
+	(69, 'Fv622cf', 15),
+	(70, 'S300', 11),
+	(71, 'Vv Up', 16),
+	(72, 'Gl20', 3),
+	(73, 'S9-1', 8),
+	(74, 'Wave', 8),
+	(75, '640', 7),
+	(76, '880', 7),
+	(77, 'V22', 8),
+	(78, 'V32', 8),
+	(79, 'Kp2', 5),
+	(80, 'Hiem', 17),
+	(81, '626', 7),
+	(82, '8k-top', 18),
+	(83, 'Coolfire1', 7),
+	(84, 'Mk6', 2),
+	(85, 'Coolfire2', 7),
+	(86, 'Coolfire1(china)', 7),
+	(87, 'Bally Alfa', 8),
+	(88, 'Viridian', 2),
+	(89, 'C1070121', 3),
+	(90, 'C1070120', 3),
+	(91, 'Fv-640', 7),
+	(92, 'Kgp 2.0 Uvsn', 5),
+	(93, 'Tasman Series I', 5),
+	(94, 'Admiral', 7),
+	(95, 'Mpas', 20),
+	(96, 'Wms Bb1', 4),
+	(97, 'Fv-880', 7),
+	(98, 'Cf2680', 7),
+	(99, 'Cf2626', 7),
+	(100, 'Cf2610', 7),
+	(101, 'Alpha2b32', 8),
+	(102, 'Alpha2wv', 8),
+	(103, 'Fv880', 7),
+	(104, 'Sg', 21),
+	(105, 'Avp', 3),
+	(106, 'Alpha1', 8),
+	(107, 'Blue Bird One', 4),
+	(108, 'Cf1 623', 7),
+	(109, 'Helix Slant', 2),
+	(110, 'Kp3 Revolver', 5),
+	(111, 'Cf640', 7),
+	(112, 'A560', 9),
+	(113, 'Reel', 3),
+	(114, 'Mmpg', 18),
+	(115, 'Fv640 F2', 7),
+	(116, 'Ah-1 (a2 V32 Wave)', 8),
+	(117, 'As-1', 8),
+	(118, 'A560-l-nzc1800108', 22),
+	(119, 'A560-h', 22),
+	(120, 'M9000-s3', 8),
+	(121, 'M9000-2c3', 8),
+	(122, 'Ap-1', 8),
+	(123, '1070121', 3),
+	(124, '1070121c', 3),
+	(125, 'Fv623cfd', 15),
+	(126, 'Podium Kp3', 23),
+	(127, 'Cirsa Serie 300 Video Dl', 11),
+	(128, 'Cirsa S400 Video Ia', 11),
+	(129, 'Cirsa S400', 11),
+	(130, 'Sg6', 5),
+	(131, 'Ps-6', 5),
+	(132, 'Endearvour Series', 5),
+	(133, 'Ca0319-0c-07', 21),
+	(134, 'Ca0319-0c-21', 21),
+	(135, 'Ca319-0c-21', 21),
+	(136, 'Mav500', 2),
+	(137, 'Fv626 F1', 7),
+	(138, 'Herculite (kgi)', 5),
+	(139, 'Blade', 24),
+	(140, 'M9000', 8),
+	(141, '300 Mg', 11),
+	(142, 'Viridian 1', 2),
+	(143, 'Astro', 21),
+	(144, 'R8ts', 25),
+	(145, 'R8m3', 25),
+	(146, 'Ps-c-001', 13),
+	(147, 'Fv 640 Cf2', 7),
+	(148, 'Fv 610 Cf2', 7),
+	(149, 'Fv 680 Cf2', 7),
+	(150, 'Fv 880 Cf2', 7),
+	(151, 'Alpha 1 V20-20', 8),
+	(152, 'Ap-1 V32-st', 8),
+	(153, 'Cc40st Ah-1', 8),
+	(154, 'A560x-h', 9),
+	(155, 'Mmpg', 12),
+	(156, 'R8m3-23', 12),
+	(157, 'Karma', 13),
+	(158, 'Alpha 2 V32 Wv', 8),
+	(159, 'Alpha 2 V32', 8),
+	(160, 'Crystal Dual', 3),
+	(161, 'Alpha 2 V22/v32', 8),
+	(162, 'Kp', 5),
+	(163, 'A560-l', 9),
+	(164, 'R8c7', 26),
+	(165, 'Fv 623 Cfd', 7),
+	(166, 'Fv 626 Cf2', 7),
+	(167, 'Ap-1 V32 St', 8),
+	(168, 'Ca0319-0c-04', 27),
+	(169, 'Ca0319-0c-21', 27),
+	(170, 'Mk6 Mav540', 2),
+	(171, 'Mk5 Mav540', 2),
+	(172, 'Kgp2', 5),
+	(173, 'Blade', 28),
+	(174, 'Ap-1 V222 St', 8),
+	(175, 'Mmpg', 29),
+	(176, 'Extra Draw Ii', 30),
+	(177, 'Targeta China', 21),
+	(178, 'N/A', 31),
+	(179, '96499203', 3),
+	(180, '96499410', 3),
+	(181, '96499410 V2', 3),
+	(182, '96499810', 3),
+	(183, 'Pinball i-005 * Gotg Pro', 33),
+	(184, '96499309 V2', 3),
+	(185, '96499410 E', 3),
+	(186, '96499312', 3),
+	(187, '96499204', 3),
+	(188, 'EMR Modular', 34),
+	(189, '96499412', 3),
+	(190, '96499313', 3),
+	(191, 'MVP540', 1),
+	(192, 'GPW', 14);
+
+-- Dumping structure for table sistema_maquinas.modo
+CREATE TABLE IF NOT EXISTS `modo` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Dumping data for table sistema_maquinas.modo: ~3 rows (approximately)
+INSERT INTO `modo` (`id`, `nombre`) VALUES
+	(1, 'BILL'),
+	(2, 'ACR'),
+	(3, 'N/A');
+
+-- Dumping structure for table sistema_maquinas.sociedad
+CREATE TABLE IF NOT EXISTS `sociedad` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Dumping data for table sistema_maquinas.sociedad: ~13 rows (approximately)
+INSERT INTO `sociedad` (`id`, `nombre`) VALUES
+	(1, 'N/A'),
+	(2, 'WISI'),
+	(3, 'WAMJU'),
+	(4, 'WAJ'),
+	(5, 'WJ'),
+	(6, 'SMARTGAMES'),
+	(7, 'YIHAD'),
+	(8, 'VM'),
+	(10, 'RA'),
+	(11, 'JA'),
+	(15, 'J-WAM'),
+	(18, 'LORENA'),
+	(20, 'AD-WAM'),
+	(21, 'ANTONIO');
+
+-- Dumping structure for table sistema_maquinas.sucursal
+CREATE TABLE IF NOT EXISTS `sucursal` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  `grupo_id` int(11) DEFAULT NULL,
+  `pianas` int(11) DEFAULT 0,
+  `pianas_xl` int(11) DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `grupo_id` (`grupo_id`),
+  CONSTRAINT `sucursal_ibfk_1` FOREIGN KEY (`grupo_id`) REFERENCES `grupo` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Dumping data for table sistema_maquinas.sucursal: ~19 rows (approximately)
+INSERT INTO `sucursal` (`id`, `nombre`, `grupo_id`, `pianas`, `pianas_xl`) VALUES
+	(1, 'El Marques Gran Casino', 1, 0, 0),
+	(2, 'Charaima', 1, 0, 0),
+	(4, 'Gran Casino Plc', 1, 0, 0),
+	(5, 'Roraima', 1, 0, 0),
+	(6, 'Gran Casino Sc', 1, 0, 0),
+	(7, 'Gran Casino Lg', 1, 0, 0),
+	(8, 'Monagas Royal Casino', 1, 0, 0),
+	(9, 'Sótano 1 Roraima', 2, 27, 0),
+	(10, 'Darien el Marques', 2, 0, 0),
+	(11, 'Deposito Monagas Royal', 2, 0, 0),
+	(12, 'Casino La Llovizna', 1, 0, 0),
+	(13, 'Galpon Edi', 2, 0, 0),
+	(14, 'Plaza Mayor', 1, 0, 0),
+	(15, 'Mare Mare', 1, 0, 0),
+	(16, 'Galpon Valencia', 2, 0, 0),
+	(17, 'Gainer', 2, 31, 7),
+	(18, 'Galpon Barcelona', 2, 0, 0),
+	(20, 'Casino Laja Real', 1, 0, 0);
+
+-- Dumping structure for table sistema_maquinas.tipo
+CREATE TABLE IF NOT EXISTS `tipo` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Dumping data for table sistema_maquinas.tipo: ~5 rows (approximately)
+INSERT INTO `tipo` (`id`, `nombre`) VALUES
+	(1, 'Slots'),
+	(2, 'Ruleta'),
+	(3, 'N/A'),
+	(5, 'Poker'),
+	(6, 'Blackjack'),
+	(7, 'Caballo');
+
+-- Dumping structure for table sistema_maquinas.valor
+CREATE TABLE IF NOT EXISTS `valor` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Dumping data for table sistema_maquinas.valor: ~10 rows (approximately)
+INSERT INTO `valor` (`id`, `nombre`) VALUES
+	(1, 'N/A'),
+	(2, '0.01'),
+	(3, '0.001'),
+	(4, '1'),
+	(5, '0.0004'),
+	(6, '0.0002'),
+	(7, '0.003'),
+	(8, '0.000004'),
+	(9, '0.0005'),
+	(10, '0.002');
+
+/*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;

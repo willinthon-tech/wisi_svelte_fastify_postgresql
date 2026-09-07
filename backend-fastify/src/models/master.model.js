@@ -6242,7 +6242,7 @@ export async function getMaquinasModel(params = {}) {
     const fromJoin = sql`
       FROM maquinas m
       LEFT JOIN salas s ON m.sala_id = s.id
-      LEFT JOIN grupo_sala gs ON s.grupo_id = gs.id
+      LEFT JOIN grupo_salas gs ON s.grupo_id = gs.id
       LEFT JOIN juegos_maquinas j ON m.juego_id = j.id
       LEFT JOIN estados e ON m.estado_id = e.id
       LEFT JOIN sociedades soc ON m.sociedad_id = soc.id
@@ -6329,7 +6329,7 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
     const fromJoin = sql`
       FROM maquinas m
       LEFT JOIN salas s ON m.sala_id = s.id
-      LEFT JOIN grupo_sala gs ON s.grupo_id = gs.id
+      LEFT JOIN grupo_salas gs ON s.grupo_id = gs.id
       LEFT JOIN juegos_maquinas j ON m.juego_id = j.id
       LEFT JOIN estados e ON m.estado_id = e.id
       LEFT JOIN sociedades soc ON m.sociedad_id = soc.id
@@ -6624,7 +6624,7 @@ export async function getMaquinaByIdModel(id) {
         m.updated_at
       FROM maquinas m
       LEFT JOIN salas s ON m.sala_id = s.id
-      LEFT JOIN grupo_sala gs ON s.grupo_id = gs.id
+      LEFT JOIN grupo_salas gs ON s.grupo_id = gs.id
       LEFT JOIN juegos_maquinas j ON m.juego_id = j.id
       LEFT JOIN estados e ON m.estado_id = e.id
       LEFT JOIN sociedades soc ON m.sociedad_id = soc.id
