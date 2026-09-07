@@ -25,7 +25,7 @@ import {
   getValoresModel, createValorModel, updateValorModel, deleteValorModel,
   getJuegosMaquinasModel, createJuegoMaquinaModel, updateJuegoMaquinaModel, deleteJuegoMaquinaModel,
   getMarcasModel, createMarcaModel, updateMarcaModel, deleteMarcaModel,
-  getModelosModel, createModeloModel, updateModeloModel, deleteModeloModel,
+  getModelosModel, createModeloModel, updateModeloModel, deleteModeloModel, getModelosFilterOptionsModel,
   getTiposModel, createTipoModel, updateTipoModel, deleteTipoModel,
   getModosModel, createModoModel, updateModoModel, deleteModoModel,
   getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel,
@@ -1743,6 +1743,20 @@ export const getModelos = modelosCtrl.get;
 export const createModelo = modelosCtrl.create;
 export const updateModelo = modelosCtrl.update;
 export const deleteModelo = modelosCtrl.delete;
+
+export async function getModelosFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    const parseIds = (key) => q[key] ? String(q[key]).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
+    const res = await getModelosFilterOptionsModel({
+      marcaIds: parseIds('marca_ids'),
+      search: q.search || ''
+    });
+    return reply.send(res);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
 
 // 7. Tipos
 const tiposCtrl = buildCrudControllers(getTiposModel, createTipoModel, updateTipoModel, deleteTipoModel);

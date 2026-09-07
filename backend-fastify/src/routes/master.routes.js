@@ -26,7 +26,7 @@ import {
   getValores, createValor, updateValor, deleteValor,
   getJuegosMaquinas, createJuegoMaquina, updateJuegoMaquina, deleteJuegoMaquina,
   getMarcas, createMarca, updateMarca, deleteMarca,
-  getModelos, createModelo, updateModelo, deleteModelo,
+  getModelos, getModelosFilterOptions, createModelo, updateModelo, deleteModelo,
   getTipos, createTipo, updateTipo, deleteTipo,
   getModos, createModo, updateModo, deleteModo,
   getLegal, createLegal, updateLegal, deleteLegal,
@@ -266,6 +266,8 @@ export default async function masterRoutes(fastify, options) {
   fastify.delete('/api/master/marcas/:id', deleteMarca);
 
   // 6. Modelos
+  fastify.get('/master/modelos/filter-options', getModelosFilterOptions);
+  fastify.get('/api/master/modelos/filter-options', getModelosFilterOptions);
   fastify.get('/master/modelos', getModelos);
   fastify.get('/api/master/modelos', getModelos);
   fastify.post('/master/modelos', createModelo);

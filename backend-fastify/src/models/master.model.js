@@ -5613,6 +5613,9 @@ export async function getModelosModel(params = {}) {
     if (search) {
       list = list.filter(m => (m.nombre || '').toLowerCase().includes(search) || (m.marca_nombre || '').toLowerCase().includes(search));
     }
+    if (params.marcaIds && params.marcaIds.length > 0) {
+      list = list.filter(m => params.marcaIds.map(Number).includes(Number(m.marca_id)));
+    }
     return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
   }
 
@@ -5624,10 +5627,16 @@ export async function getModelosModel(params = {}) {
   const sortBy = params.sortBy === 'nombre' ? 'm.nombre' : (params.sortBy === 'marca_nombre' ? 'ma.nombre' : 'm.id');
   const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-  const searchPattern = `%${search}%`;
-  const whereClause = search
-    ? sql`WHERE LOWER(m.nombre) LIKE ${searchPattern} OR LOWER(ma.nombre) LIKE ${searchPattern} OR m.id::text LIKE ${searchPattern}`
-    : sql``;
+  const conds = [];
+  if (params.marcaIds && params.marcaIds.length > 0) {
+    conds.push(sql`m.marca_id = ANY(${params.marcaIds})`);
+  }
+  if (search) {
+    const searchPattern = `%${search}%`;
+    conds.push(sql`(LOWER(m.nombre) LIKE ${searchPattern} OR LOWER(ma.nombre) LIKE ${searchPattern} OR m.id::text LIKE ${searchPattern})`);
+  }
+
+  const whereClause = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const countRes = await sql`
     SELECT COUNT(m.id)::int AS total
@@ -5667,6 +5676,38 @@ export async function getModelosModel(params = {}) {
   const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
 
   return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function getModelosFilterOptionsModel(options = {}) {
+  if (!isPgConnected || !sql) {
+    return { success: true, data: { marcas: inMemoryData.marcas || [] } };
+  }
+  try {
+    const conds = [];
+    const search = String(options.search || '').trim().toLowerCase();
+    if (search) {
+      const searchPattern = `%${search}%`;
+      conds.push(sql`(LOWER(m.nombre) LIKE ${searchPattern} OR LOWER(ma.nombre) LIKE ${searchPattern} OR m.id::text LIKE ${searchPattern})`);
+    }
+    const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+    const res = await sql`
+      SELECT ma.id, ma.nombre, COUNT(DISTINCT m.id)::int AS count
+      FROM modelos m
+      JOIN marcas ma ON m.marca_id = ma.id
+      ${where}
+      GROUP BY ma.id, ma.nombre
+      ORDER BY ma.nombre ASC
+    `.catch(() => []);
+    const active = new Set((options.marcaIds || []).map(Number));
+    const marcas = (res || [])
+      .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+      .filter(r => r.count > 0 || active.has(Number(r.id)));
+
+    return { success: true, data: { marcas } };
+  } catch (err) {
+    return { success: true, data: { marcas: [] } };
+  }
 }
 
 export async function createModeloModel(data) {

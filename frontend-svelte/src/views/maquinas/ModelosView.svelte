@@ -2,6 +2,7 @@
   import { writable } from "svelte/store";
 
   export const persistentModelosFilters = writable({
+    selectedMarcas: [],
     searchQuery: ""
   });
 </script>
@@ -9,6 +10,7 @@
 <script>
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
+  import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
   import { 
     masterModelosActions, 
     masterModelosStore, 
@@ -23,15 +25,22 @@
   });
   unsubInit();
 
+  let selectedMarcas = initial.selectedMarcas || [];
   let searchQuery = initial.searchQuery || "";
 
   $: {
     persistentModelosFilters.set({
+      selectedMarcas,
       searchQuery
     });
   }
 
-  $: hasActiveFilters = Boolean((searchQuery || "").trim());
+  let filterOptions = {
+    marcas: []
+  };
+
+  $: hasActiveFilters = Boolean((searchQuery || "").trim() || selectedMarcas.length > 0);
+  $: totalFilters = ((searchQuery || "").trim() ? 1 : 0) + selectedMarcas.length;
 
   let items = [];
   $: allModelos = $masterModelosStore || [];
@@ -51,9 +60,36 @@
   onMount(async () => {
     await Promise.all([
       loadMasterStoresFromBackend(),
+      fetchFilterOptions(),
       loadServerData(currentParams)
     ]);
   });
+
+  // Dynamic cascading facet fetch
+  let lastFilterKey = "";
+  $: filterKey = `${selectedMarcas.join(",")}_${(searchQuery || "").trim()}`;
+  $: if (filterKey !== lastFilterKey) {
+    lastFilterKey = filterKey;
+    fetchFilterOptions();
+  }
+
+  async function fetchFilterOptions() {
+    try {
+      const q = new URLSearchParams();
+      if (selectedMarcas.length > 0) q.set("marca_ids", selectedMarcas.join(","));
+      if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
+
+      const res = await fetch(`/api/master/modelos/filter-options?${q.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && json.data) {
+          filterOptions = json.data;
+        }
+      }
+    } catch (e) {
+      console.warn("Error fetching filter options in ModelosView:", e);
+    }
+  }
 
   async function loadServerData(params = {}) {
     currentParams = { ...currentParams, ...params };
@@ -61,10 +97,13 @@
       const q = new URLSearchParams({
         page: currentParams.page,
         limit: currentParams.limit,
-        search: currentParams.search || '',
+        search: currentParams.search !== undefined ? currentParams.search : searchQuery,
         sortBy: currentParams.sortBy || 'id',
         sortDir: currentParams.sortDir || 'desc'
       });
+      if (selectedMarcas.length > 0) {
+        q.set('marca_ids', selectedMarcas.join(','));
+      }
 
       const res = await fetch(`/api/master/modelos?${q.toString()}`);
       const json = await res.json();
@@ -80,8 +119,13 @@
     }
   }
 
+  function handleFilterChange() {
+    loadServerData({ page: 1 });
+  }
+
   function clearAllFilters() {
     searchQuery = "";
+    selectedMarcas = [];
     loadServerData({ page: 1, search: "" });
   }
 
@@ -216,15 +260,27 @@
   on:delete={handleDelete}
   on:batchDelete={handleBatchDelete}
 >
+  <div slot="filters" style="display: flex; gap: 10px; width: 100%;">
+    <div style="flex: 1; max-width: 320px;">
+      <SmartMultiSelect
+        id="filter-modelos-marcas"
+        label="Marca"
+        options={filterOptions.marcas}
+        bind:selectedValues={selectedMarcas}
+        on:change={handleFilterChange}
+      />
+    </div>
+  </div>
+
   <div slot="search-actions">
     {#if hasActiveFilters}
       <button
         type="button"
         on:click={clearAllFilters}
         style="padding: 7px 14px; font-size: 12px; font-weight: 700; color: #ef4444; border: 1px solid #fca5a5; border-radius: 8px; background: #fef2f2; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.04); white-space: nowrap;"
-        title="Restablecer búsqueda"
+        title="Restablecer filtros"
       >
-        <span>✕</span> Limpiar Búsqueda
+        <span>✕</span> Limpiar Filtros ({totalFilters})
       </button>
     {/if}
   </div>
