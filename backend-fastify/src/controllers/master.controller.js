@@ -32,7 +32,8 @@ import {
   getExcepcionesModel, createExcepcionModel, updateExcepcionModel, deleteExcepcionModel,
   getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel,
   getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel,
-  getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel
+  getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
+  getLibrosModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1995,5 +1996,70 @@ export async function purgeLlave(request, reply) {
     return reply.status(400).send({ success: false, error: err.message });
   }
 }
+
+// =========================================================================
+// 📖 CONTROLADORES DE LIBROS (CECOM: LIBRO)
+// =========================================================================
+
+export async function getLibrosFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    let userSalaIds = null;
+    if (q.user_sala_ids) {
+      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    let salaIds = null;
+    if (q.sala_ids) {
+      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+
+    const result = await getLibrosFilterOptionsModel({
+      userSalaIds,
+      salaIds,
+      search: q.search
+    });
+    return reply.send(result);
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getLibros(request, reply) {
+  const result = await getLibrosModel(request.query);
+  return reply.send(result);
+}
+
+export async function createLibro(request, reply) {
+  try {
+    const data = parseBody(request.body);
+    const result = await createLibroModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateLibro(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = parseBody(request.body);
+    const result = await updateLibroModel(id, data);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteLibro(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await deleteLibroModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
 
 

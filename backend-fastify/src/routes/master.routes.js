@@ -33,7 +33,8 @@ import {
   getExcepciones, createExcepcion, updateExcepcion, deleteExcepcion,
   getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria,
   getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina,
-  getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave
+  getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
+  getLibros, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -227,6 +228,18 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/llaves/:id/restore', restoreLlave);
   fastify.delete('/master/llaves/:id/purge', purgeLlave);
   fastify.delete('/api/master/llaves/:id/purge', purgeLlave);
+
+  // Libros (CECOM: Libro)
+  fastify.get('/master/libros', getLibros);
+  fastify.get('/api/master/libros', getLibros);
+  fastify.get('/master/libros/filter-options', getLibrosFilterOptions);
+  fastify.get('/api/master/libros/filter-options', getLibrosFilterOptions);
+  fastify.post('/master/libros', createLibro);
+  fastify.post('/api/master/libros', createLibro);
+  fastify.put('/master/libros/:id', updateLibro);
+  fastify.put('/api/master/libros/:id', updateLibro);
+  fastify.delete('/master/libros/:id', deleteLibro);
+  fastify.delete('/api/master/libros/:id', deleteLibro);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)

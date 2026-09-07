@@ -153,6 +153,7 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('juegos', masterJuegosStore),
     fetchEntity('mesas', masterMesasStore),
     fetchEntity('llaves', masterLlavesStore),
+    fetchEntity('libros', masterLibrosStore),
     fetchEntity('estados', masterEstadosStore),
     fetchEntity('sociedades', masterSociedadesStore),
     fetchEntity('valores', masterValoresStore),
@@ -263,6 +264,7 @@ export const masterEmpleadosStore = writable(loadStore('empleados_v1', []));
 export const masterJuegosStore = writable(loadStore('juegos_v1', []));
 export const masterMesasStore = writable(loadStore('mesas_v1', []));
 export const masterLlavesStore = writable(loadStore('llaves_v1', []));
+export const masterLibrosStore = writable(loadStore('libros_v1', []));
 
 masterDepartamentosStore.subscribe(val => saveStore('departamentos_v1', val));
 masterAreasStore.subscribe(val => saveStore('areas_v1', val));
@@ -271,12 +273,14 @@ masterEmpleadosStore.subscribe(val => saveStore('empleados_v1', val));
 masterJuegosStore.subscribe(val => saveStore('juegos_v1', val));
 masterMesasStore.subscribe(val => saveStore('mesas_v1', val));
 masterLlavesStore.subscribe(val => saveStore('llaves_v1', val));
+masterLibrosStore.subscribe(val => saveStore('libros_v1', val));
 
 export const masterDepartamentosActions = createMasterEntityActions(masterDepartamentosStore, 'departamentos');
 export const masterAreasActions = createMasterEntityActions(masterAreasStore, 'areas');
 export const masterCargosActions = createMasterEntityActions(masterCargosStore, 'cargos');
 export const masterEmpleadosActions = createMasterEntityActions(masterEmpleadosStore, 'empleados');
 export const masterJuegosActions = createMasterEntityActions(masterJuegosStore, 'juegos');
+export const masterLibrosActions = createMasterEntityActions(masterLibrosStore, 'libros');
 export const masterMesasActions = {
   ...createMasterEntityActions(masterMesasStore, 'mesas'),
   restore: async (id) => {

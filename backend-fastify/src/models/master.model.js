@@ -7092,3 +7092,252 @@ export async function purgeLlaveModel(id) {
   }
 }
 
+// ==========================================
+// --- LIBROS (CECOM: LIBRO) ---
+// ==========================================
+
+export function buildLibroConditions(options = {}) {
+  const conds = [];
+
+  // 1. Restricción por salas asignadas al usuario logueado
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    conds.push(sql`l.sala_id = ANY(${options.userSalaIds})`);
+  }
+
+  // 2. Salas seleccionadas en el filtro
+  if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
+    conds.push(sql`l.sala_id = ANY(${options.salaIds})`);
+  }
+
+  // 3. Búsqueda por texto
+  if (options.search && String(options.search).trim()) {
+    const term = `%${String(options.search).trim().toLowerCase()}%`;
+    conds.push(sql`(
+      LOWER(COALESCE(l.descripcion, '')) LIKE ${term} OR
+      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
+      CAST(l.id AS TEXT) LIKE ${term}
+    )`);
+  }
+
+  return conds;
+}
+
+export async function getLibrosFilterOptionsModel(options = {}) {
+  if (!isPgConnected || !sql) {
+    return {
+      success: true,
+      data: { salas: [] }
+    };
+  }
+
+  // Filtro de Salas (Excluyendo galpones grupo_id = 2)
+  const condsSalas = buildLibroConditions({ ...options, skipSalas: true });
+  const whereSalas = condsSalas.length > 0 ? sql`WHERE ${condsSalas.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  let allSalas;
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
+  } else {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
+  }
+
+  const countsSalasRes = await sql`
+    SELECT l.sala_id AS id, COUNT(l.id)::int AS count
+    FROM libros l
+    LEFT JOIN salas s ON l.sala_id = s.id
+    ${whereSalas}
+    GROUP BY l.sala_id
+  `;
+  const countSalasMap = new Map(countsSalasRes.map(r => [r.id, r.count]));
+  const activeSalas = new Set((options.salaIds || []).map(Number));
+
+  const salas = allSalas
+    .map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      count: countSalasMap.get(s.id) || 0
+    }))
+    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    success: true,
+    data: {
+      salas
+    }
+  };
+}
+
+export async function getLibrosModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    let list = inMemoryData.libros || [];
+    return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+  }
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const sortBy = params.sortBy || 'id';
+  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  // Parse filters
+  let userSalaIds = null;
+  if (params.user_sala_ids) {
+    userSalaIds = String(params.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+  let salaIds = null;
+  if (params.sala_ids) {
+    salaIds = String(params.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+
+  const conds = buildLibroConditions({
+    userSalaIds,
+    salaIds,
+    search
+  });
+
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  const allowedSortColumns = {
+    'id': 'l.id',
+    'descripcion': 'l.descripcion',
+    'sala_nombre': 's.nombre'
+  };
+
+  const orderCol = allowedSortColumns[sortBy] || 'l.id';
+
+  const countRes = await sql`
+    SELECT COUNT(l.id)::int AS total
+    FROM libros l
+    LEFT JOIN salas s ON l.sala_id = s.id
+    ${where}
+  `;
+  const total = countRes[0]?.total || 0;
+
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, l.id DESC`);
+
+  let data;
+  if (limit > 0) {
+    data = await sql`
+      SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre
+      FROM libros l
+      LEFT JOIN salas s ON l.sala_id = s.id
+      ${where}
+      ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  } else {
+    data = await sql`
+      SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre
+      FROM libros l
+      LEFT JOIN salas s ON l.sala_id = s.id
+      ${where}
+      ${orderClause}
+    `;
+  }
+
+  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+
+  return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function createLibroModel(data) {
+  const cleanDesc = (data.descripcion || '').trim();
+  if (!cleanDesc) throw new Error('La descripción del libro es obligatoria');
+  if (!data.sala_id) throw new Error('Debe seleccionar una sala para el libro');
+
+  if (isPgConnected && sql) {
+    const existing = await sql`
+      SELECT id FROM libros 
+      WHERE LOWER(TRIM(descripcion)) = LOWER(${cleanDesc}) AND sala_id = ${Number(data.sala_id)}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe un libro registrado con la descripción "${cleanDesc}" en esta sala`);
+    }
+
+    const rows = await sql`
+      INSERT INTO libros (descripcion, sala_id)
+      VALUES (${cleanDesc}, ${Number(data.sala_id)})
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const cleanLower = cleanDesc.toLowerCase();
+    const existing = (inMemoryData.libros || []).find(m => (m.descripcion || '').trim().toLowerCase() === cleanLower && Number(m.sala_id) === Number(data.sala_id));
+    if (existing) {
+      throw new Error(`Ya existe un libro registrado con la descripción "${cleanDesc}" en esta sala`);
+    }
+    const nextId = (inMemoryData.libros?.length || 0) > 0 ? Math.max(...inMemoryData.libros.map(m => m.id)) + 1 : 1;
+    const newLibro = {
+      id: nextId,
+      descripcion: cleanDesc,
+      sala_id: Number(data.sala_id),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.libros = inMemoryData.libros || [];
+    inMemoryData.libros.unshift(newLibro);
+    return newLibro;
+  }
+}
+
+export async function updateLibroModel(id, data) {
+  const lId = Number(id);
+  const cleanDesc = data.descripcion !== undefined ? String(data.descripcion).trim() : null;
+  let salaId = data.sala_id ? Number(data.sala_id) : null;
+
+  if (isPgConnected && sql) {
+    if (cleanDesc && !salaId) {
+      const cur = await sql`SELECT sala_id FROM libros WHERE id = ${lId} LIMIT 1`;
+      if (cur.length > 0) {
+        salaId = cur[0].sala_id;
+      }
+    }
+
+    if (cleanDesc) {
+      const existing = await sql`
+        SELECT id FROM libros 
+        WHERE LOWER(TRIM(descripcion)) = LOWER(${cleanDesc}) 
+          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
+          AND id != ${lId}
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe otro libro registrado con la descripción "${cleanDesc}" en esta sala`);
+      }
+    }
+
+    const rows = await sql`
+      UPDATE libros
+      SET 
+        descripcion = COALESCE(${cleanDesc}, descripcion),
+        sala_id = COALESCE(${salaId}, sala_id),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${lId}
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const idx = (inMemoryData.libros || []).findIndex(m => m.id === lId);
+    if (idx !== -1) {
+      inMemoryData.libros[idx] = { ...inMemoryData.libros[idx], ...data, updated_at: new Date().toISOString() };
+      return inMemoryData.libros[idx];
+    }
+    return null;
+  }
+}
+
+export async function deleteLibroModel(id) {
+  const lId = Number(id);
+  if (isPgConnected && sql) {
+    await sql`DELETE FROM libros WHERE id = ${lId}`;
+    return { success: true, id: lId };
+  } else {
+    inMemoryData.libros = (inMemoryData.libros || []).filter(m => m.id !== lId);
+    return { success: true, id: lId };
+  }
+}
+
+
