@@ -24,17 +24,10 @@
     fetchExceptions();
   }
 
-  $: if (plantillasSala && plantillasSala.length > 0) {
-    const salaExcs = plantillasSala.filter(p => p.tipo === 'plantilla' && p.codigo !== 'L' && p.codigo !== 'U');
-    if (salaExcs.length > 0) {
-      plantillasExcepcion = salaExcs;
-      ensureSelectedValue();
-    }
-  }
-
   function ensureSelectedValue() {
-    if ((!selectedValue || selectedValue === 'BASE_L') && plantillasExcepcion.length > 0) {
-      selectedValue = `PLANTILLA_${plantillasExcepcion[0].id}`;
+    if (!selectedValue && plantillasExcepcion.length > 0) {
+      const first = plantillasExcepcion[0];
+      selectedValue = first.codigo ? `EXCEPCION_${first.id}` : `PLANTILLA_${first.id}`;
     }
   }
 
@@ -60,18 +53,16 @@
   }
 
   async function fetchExceptions() {
-    const sId = empleado?.sala_id;
-    if (!sId) return;
     loadingExceptions = true;
     try {
-      const res = await fetch(`/api/master/plantillas-horarios?sala_ids=${sId}&tipo=plantilla&limit=1000`);
+      const res = await fetch('/api/master/excepciones?limit=1000');
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data)) {
-        plantillasExcepcion = json.data.filter(p => p.codigo !== 'L' && p.codigo !== 'U');
+        plantillasExcepcion = json.data.filter(p => p.tipo === 'Asignable');
         ensureSelectedValue();
       }
     } catch (err) {
-      console.error("Error loading room exceptions:", err);
+      console.error("Error loading master excepciones:", err);
     } finally {
       loadingExceptions = false;
     }
@@ -117,11 +108,15 @@
     isSaving = true;
     try {
       let plantillaId = null;
-      if (selectedValue && selectedValue.startsWith('PLANTILLA_')) {
+      let excepcionId = null;
+
+      if (selectedValue && selectedValue.startsWith('EXCEPCION_')) {
+        excepcionId = Number(selectedValue.replace('EXCEPCION_', ''));
+      } else if (selectedValue && selectedValue.startsWith('PLANTILLA_')) {
         plantillaId = Number(selectedValue.replace('PLANTILLA_', ''));
       }
 
-      if (!plantillaId) {
+      if (!excepcionId && !plantillaId) {
         triggerToast('Por favor selecciona una excepción de la lista.', 'warning');
         return;
       }
@@ -130,7 +125,8 @@
         empleado_id: empleado.id,
         fecha_desde: fechaDesde,
         fecha_hasta: fechaHasta,
-        plantilla_horario_id: plantillaId
+        plantilla_horario_id: plantillaId,
+        excepcion_id: excepcionId
       };
 
       const res = await fetch('/api/reports/excepciones-rango', {
@@ -270,18 +266,18 @@
             class="form-select"
           >
             {#if plantillasExcepcion.length === 0}
-              <option value="" disabled>Cargando excepciones de la sala...</option>
+              <option value="" disabled>Cargando excepciones de asistencia...</option>
             {:else}
               {#each plantillasExcepcion as p}
-                <option value="PLANTILLA_{p.id}">
-                  [{p.codigo}] {p.nombre}
+                <option value={p.descripcion ? `EXCEPCION_${p.id}` : `PLANTILLA_${p.id}`}>
+                  [{p.codigo}] {p.descripcion || p.nombre}
                 </option>
               {/each}
             {/if}
           </select>
           <span class="form-hint">
             {#if loadingExceptions}
-              Cargando excepciones de la sala...
+              Cargando excepciones de asistencia...
             {:else}
               Esta excepción se establecerá para cada uno de los días del rango seleccionado.
             {/if}

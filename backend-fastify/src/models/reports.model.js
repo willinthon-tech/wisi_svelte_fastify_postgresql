@@ -653,17 +653,24 @@ export async function getMarcajePersonalReportModel(params = {}) {
   if (isPgConnected && sql) {
     try {
       const excepciones = await sql`
-        SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.plantilla_horario_id, eh.es_libre, eh.observacion,
-               ph.codigo AS plantilla_codigo, ph.nombre AS plantilla_nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
+        SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.plantilla_horario_id, eh.excepcion_id, eh.es_libre, eh.observacion,
+               ph.codigo AS plantilla_codigo, ph.nombre AS plantilla_nombre, ph.hora_entrada, ph.hora_salida, ph.color AS plantilla_color, ph.tipo AS plantilla_tipo,
+               exc.codigo AS excepcion_codigo, exc.descripcion AS excepcion_nombre, exc.color AS excepcion_color, exc.tipo AS excepcion_tipo
         FROM excepciones_horarios eh
         LEFT JOIN plantillas_horarios ph ON eh.plantilla_horario_id = ph.id
+        LEFT JOIN excepciones exc ON eh.excepcion_id = exc.id
         WHERE eh.empleado_id = ANY(${empIds})
           AND eh.fecha >= ${fechaDesdeStr}::date
           AND eh.fecha <= ${fechaHastaStr}::date
       `;
       excepciones.forEach(ex => {
         const key = `${ex.empleado_id}_${ex.fecha_str}`;
-        excepcionesMap.set(key, ex);
+        excepcionesMap.set(key, {
+          ...ex,
+          codigo: ex.excepcion_codigo || ex.plantilla_codigo || (ex.es_libre ? 'L' : 'EX'),
+          nombre: ex.excepcion_nombre || ex.plantilla_nombre || (ex.es_libre ? 'Libre' : 'Excepción'),
+          color: ex.excepcion_color || ex.plantilla_color || (ex.es_libre ? '#D9D9D9' : '#3B82F6')
+        });
       });
     } catch (e) {
       console.warn('Warning fetching excepciones_horarios:', e.message);
@@ -844,7 +851,12 @@ export async function getMarcajePersonalReportModel(params = {}) {
       let shiftTipo = 'plantilla';
 
       if (isExcepcion && excepObj) {
-        if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
+        if (excepObj.excepcion_codigo) {
+          shiftId = excepObj.excepcion_id;
+          shiftCode = excepObj.excepcion_codigo;
+          shiftColor = excepObj.excepcion_color || '#3B82F6';
+          shiftTipo = 'excepcion';
+        } else if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
           shiftId = null;
           shiftCode = 'L';
           shiftColor = '#D9D9D9';
@@ -852,8 +864,8 @@ export async function getMarcajePersonalReportModel(params = {}) {
         } else {
           shiftId = excepObj.plantilla_horario_id;
           shiftCode = excepObj.plantilla_codigo || 'EX';
-          shiftColor = excepObj.color || '#FDE047';
-          shiftTipo = excepObj.tipo || 'plantilla';
+          shiftColor = excepObj.plantilla_color || excepObj.color || '#FDE047';
+          shiftTipo = excepObj.plantilla_tipo || excepObj.tipo || 'plantilla';
         }
       } else if (matchedPlantilla) {
         shiftId = matchedPlantilla.id;
@@ -943,6 +955,7 @@ export async function saveExcepcionHorarioModel(data) {
   const empleado_id = Number(data.empleado_id);
   const fecha = String(data.fecha).trim();
   const plantilla_horario_id = data.plantilla_horario_id ? Number(data.plantilla_horario_id) : null;
+  const excepcion_id = data.excepcion_id ? Number(data.excepcion_id) : null;
   const observacion = data.observacion ? String(data.observacion).trim() : null;
 
   if (!empleado_id || !fecha) {
@@ -950,7 +963,12 @@ export async function saveExcepcionHorarioModel(data) {
   }
 
   let es_libre = false;
-  if (plantilla_horario_id) {
+  if (excepcion_id) {
+    const [exc] = await sql`SELECT id, codigo, descripcion FROM excepciones WHERE id = ${excepcion_id}`;
+    if (exc && (exc.codigo === 'L' || (exc.descripcion && exc.descripcion.toLowerCase().includes('libre')))) {
+      es_libre = true;
+    }
+  } else if (plantilla_horario_id) {
     const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM plantillas_horarios WHERE id = ${plantilla_horario_id}`;
     if (p && (p.codigo === 'L' || (p.nombre && p.nombre.toUpperCase() === 'LIBRE'))) {
       es_libre = true;
@@ -960,10 +978,11 @@ export async function saveExcepcionHorarioModel(data) {
   }
 
   const [row] = await sql`
-    INSERT INTO excepciones_horarios (empleado_id, fecha, plantilla_horario_id, es_libre, observacion, updated_at)
-    VALUES (${empleado_id}, ${fecha}::date, ${plantilla_horario_id}, ${es_libre}, ${observacion}, CURRENT_TIMESTAMP)
+    INSERT INTO excepciones_horarios (empleado_id, fecha, plantilla_horario_id, excepcion_id, es_libre, observacion, updated_at)
+    VALUES (${empleado_id}, ${fecha}::date, ${plantilla_horario_id}, ${excepcion_id}, ${es_libre}, ${observacion}, CURRENT_TIMESTAMP)
     ON CONFLICT (empleado_id, fecha) DO UPDATE
     SET plantilla_horario_id = EXCLUDED.plantilla_horario_id,
+        excepcion_id = EXCLUDED.excepcion_id,
         es_libre = EXCLUDED.es_libre,
         observacion = EXCLUDED.observacion,
         updated_at = CURRENT_TIMESTAMP
@@ -979,6 +998,7 @@ export async function saveExcepcionRangoHorarioModel(data) {
   const fecha_desde = String(data.fecha_desde || '').trim();
   const fecha_hasta = String(data.fecha_hasta || '').trim();
   const plantilla_horario_id = data.plantilla_horario_id ? Number(data.plantilla_horario_id) : null;
+  const excepcion_id = data.excepcion_id ? Number(data.excepcion_id) : null;
   const observacion = data.observacion ? String(data.observacion).trim() : null;
 
   if (!empleado_id || !fecha_desde || !fecha_hasta) {
@@ -990,7 +1010,12 @@ export async function saveExcepcionRangoHorarioModel(data) {
   }
 
   let es_libre = false;
-  if (plantilla_horario_id) {
+  if (excepcion_id) {
+    const [exc] = await sql`SELECT id, codigo, descripcion FROM excepciones WHERE id = ${excepcion_id}`;
+    if (exc && (exc.codigo === 'L' || (exc.descripcion && exc.descripcion.toLowerCase().includes('libre')))) {
+      es_libre = true;
+    }
+  } else if (plantilla_horario_id) {
     const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM plantillas_horarios WHERE id = ${plantilla_horario_id}`;
     if (p && (p.codigo === 'L' || (p.nombre && p.nombre.toUpperCase() === 'LIBRE'))) {
       es_libre = true;
@@ -1000,17 +1025,19 @@ export async function saveExcepcionRangoHorarioModel(data) {
   }
 
   const rows = await sql`
-    INSERT INTO excepciones_horarios (empleado_id, fecha, plantilla_horario_id, es_libre, observacion, updated_at)
+    INSERT INTO excepciones_horarios (empleado_id, fecha, plantilla_horario_id, excepcion_id, es_libre, observacion, updated_at)
     SELECT 
       ${empleado_id}, 
       d::date, 
       ${plantilla_horario_id}, 
+      ${excepcion_id},
       ${es_libre}, 
       ${observacion}, 
       CURRENT_TIMESTAMP
     FROM generate_series(${fecha_desde}::date, ${fecha_hasta}::date, '1 day'::interval) d
     ON CONFLICT (empleado_id, fecha) DO UPDATE
     SET plantilla_horario_id = EXCLUDED.plantilla_horario_id,
+        excepcion_id = EXCLUDED.excepcion_id,
         es_libre = EXCLUDED.es_libre,
         observacion = EXCLUDED.observacion,
         updated_at = CURRENT_TIMESTAMP
@@ -1151,15 +1178,24 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   `;
 
   const excepciones = await sql`
-    SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.plantilla_horario_id, eh.es_libre,
-           ph.codigo AS plantilla_codigo, ph.nombre AS plantilla_nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
+    SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.plantilla_horario_id, eh.excepcion_id, eh.es_libre,
+           ph.codigo AS plantilla_codigo, ph.nombre AS plantilla_nombre, ph.hora_entrada, ph.hora_salida, ph.color AS plantilla_color, ph.tipo AS plantilla_tipo,
+           exc.codigo AS excepcion_codigo, exc.descripcion AS excepcion_nombre, exc.color AS excepcion_color, exc.tipo AS excepcion_tipo
     FROM excepciones_horarios eh
     LEFT JOIN plantillas_horarios ph ON eh.plantilla_horario_id = ph.id
+    LEFT JOIN excepciones exc ON eh.excepcion_id = exc.id
     WHERE eh.empleado_id = ${empId}
       AND eh.fecha = ANY(${[prevDateStr, dateStr, nextDateStr]}::date[])
   `;
   const exMap = new Map();
-  excepciones.forEach(ex => exMap.set(ex.fecha_str, ex));
+  excepciones.forEach(ex => {
+    exMap.set(ex.fecha_str, {
+      ...ex,
+      codigo: ex.excepcion_codigo || ex.plantilla_codigo || (ex.es_libre ? 'L' : 'EX'),
+      nombre: ex.excepcion_nombre || ex.plantilla_nombre || (ex.es_libre ? 'Libre' : 'Excepción'),
+      color: ex.excepcion_color || ex.plantilla_color || (ex.es_libre ? '#D9D9D9' : '#3B82F6')
+    });
+  });
 
   // Determine which punches were actually taken as Entry and Exit for each day using the exact same central engine
   const evalDay = (dayStr, nextDayStr) => {

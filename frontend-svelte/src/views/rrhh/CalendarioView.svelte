@@ -100,24 +100,10 @@
     { id: 12, nombre: 'Diciembre' }
   ];
 
-  // Las 10 Fechas Patrias Base Nacionales del Sistema (Hardcodeadas, protegidas, aplican a todas las salas)
-  const BASE_FERIADOS = [
-    { id: 'SYS-12', nombre: 'Año Nuevo', mes: 1, dia: 1, mes_nombre: 'Enero', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-13', nombre: 'Declaración de la Independencia', mes: 4, dia: 19, mes_nombre: 'Abril', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-14', nombre: 'Día del Trabajador', mes: 5, dia: 1, mes_nombre: 'Mayo', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-15', nombre: 'Batalla de Carabobo', mes: 6, dia: 24, mes_nombre: 'Junio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-16', nombre: 'Día de la Independencia', mes: 7, dia: 5, mes_nombre: 'Julio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-17', nombre: 'Natalicio del Libertador Simón Bolívar', mes: 7, dia: 24, mes_nombre: 'Julio', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-18', nombre: 'Día de la Resistencia Indígena', mes: 10, dia: 12, mes_nombre: 'Octubre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-19', nombre: 'Víspera de Navidad', mes: 12, dia: 24, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-20', nombre: 'Navidad', mes: 12, dia: 25, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null },
-    { id: 'SYS-21', nombre: 'Fin de Año', mes: 12, dia: 31, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null }
-  ];
-
   let globalFechasPatrias = [];
   let rawServerItems = [];
 
-  // Combinar fechas patrias globales de base de datos con las fechas patrias de las salas del servidor
+  // Combinar fechas patrias globales de base de datos (fechas_patrias) con las fechas patrias de las salas del servidor
   $: combinedItems = (function() {
     let serverList = [...rawServerItems];
     if (selectedSalas.length > 0) {
@@ -127,8 +113,7 @@
       const set = new Set(assignedSalaIds.map(Number));
       serverList = serverList.filter(item => !item.sala_id || set.has(Number(item.sala_id)));
     }
-    const baseList = globalFechasPatrias.length > 0 ? globalFechasPatrias : BASE_FERIADOS;
-    return [...baseList, ...serverList];
+    return [...globalFechasPatrias, ...serverList];
   })();
 
   // Fetch filter options ONLY when active filters, user assigned salas or search change

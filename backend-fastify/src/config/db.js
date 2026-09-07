@@ -640,6 +640,7 @@ export async function initDb() {
         empleado_id INT NOT NULL REFERENCES empleados(id) ON DELETE CASCADE,
         fecha DATE NOT NULL,
         plantilla_horario_id INT REFERENCES plantillas_horarios(id) ON DELETE CASCADE,
+        excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE,
         es_libre BOOLEAN DEFAULT FALSE,
         observacion TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -647,6 +648,7 @@ export async function initDb() {
         CONSTRAINT uk_emp_fecha_excepcion UNIQUE(empleado_id, fecha)
       );
     `;
+    await sql`ALTER TABLE excepciones_horarios ADD COLUMN IF NOT EXISTS excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE;`.catch(() => {});
 
     // 19. Table feriados (Fechas patrias y días feriados por sala y nacionales)
     await sql`

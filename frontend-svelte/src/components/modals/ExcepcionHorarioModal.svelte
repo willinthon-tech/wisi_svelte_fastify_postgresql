@@ -17,6 +17,7 @@
 
   let horariosEmpleado = [];
   let plantillasExcepcion = [];
+  let excepcionesList = [];
 
   let marcajesLoading = false;
   let marcajesContext = [];
@@ -25,6 +26,20 @@
   let saveStatusText = '';
   let saveStatusType = 'idle'; // 'idle' | 'saving' | 'saved' | 'error'
   let saveStatusTimer = null;
+
+  async function fetchExcepcionesConfig() {
+    try {
+      const res = await fetch('/api/master/excepciones?limit=1000');
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && Array.isArray(json.data)) {
+          excepcionesList = json.data;
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching master excepciones:", err);
+    }
+  }
 
   function showStatus(text, type = 'saved', duration = 1800) {
     saveStatusText = text;
@@ -48,6 +63,7 @@
     if (currentEmpId !== lastLoadedEmpId || currentFechaStr !== lastLoadedFechaStr) {
       lastLoadedEmpId = currentEmpId;
       lastLoadedFechaStr = currentFechaStr;
+      fetchExcepcionesConfig();
       initModalData();
       fetchMarcajesRapidos();
     }
@@ -191,37 +207,31 @@
       horariosEmpleado = [];
     }
 
-    // 3. Plantillas Tipo Excepción (tipo === 'plantilla', excluyendo códigos base L y U)
-    plantillasExcepcion = (plantillasSala || []).filter(p => p.tipo === 'plantilla' && p.codigo !== 'L' && p.codigo !== 'U');
-
     // Pre-selección del valor según el estado actual del día
+    const currentCode = dia?.shift?.codigo || '';
     if (dia && dia.isExcepcion) {
-      if (dia.shift && dia.shift.id) {
+      const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
+      if (excMatch) {
+        selectedValue = `EXCEPCION_${excMatch.id}`;
+      } else if (dia.shift && dia.shift.id) {
         selectedValue = `PLANTILLA_${dia.shift.id}`;
-      } else if (dia.shift && dia.shift.codigo === 'L') {
-        selectedValue = 'BASE_L';
-      } else if (dia.shift && dia.shift.codigo) {
-        const pMatch = (plantillasSala || []).find(p => p.codigo === dia.shift.codigo);
-        selectedValue = pMatch ? `PLANTILLA_${pMatch.id}` : 'BASE_L';
       } else {
         selectedValue = 'BASE_L';
       }
     } else {
-      const currentCodigo = dia?.shift?.codigo || '';
-      if (currentCodigo === 'L') {
+      const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
+      if (excMatch) {
+        selectedValue = `EXCEPCION_${excMatch.id}`;
+      } else if (currentCode === 'L') {
         selectedValue = 'BASE_L';
-      } else if (currentCodigo === 'U') {
+      } else if (currentCode === 'U') {
         selectedValue = 'BASE_U';
       } else if (dia && dia.shift && dia.shift.id) {
         selectedValue = `PLANTILLA_${dia.shift.id}`;
-      } else if (dia && dia.shift && dia.shift.codigo) {
-        const pMatch = (plantillasSala || []).find(p => p.codigo === dia.shift.codigo);
-        selectedValue = pMatch ? `PLANTILLA_${pMatch.id}` : 'BASE_L';
       } else {
         selectedValue = 'BASE_L';
       }
     }
-
     initialSelectedValue = selectedValue;
   }
 
@@ -322,24 +332,37 @@
     showStatus('Guardando...', 'saving', 0);
     try {
       let plantillaId = null;
+      let excepcionId = null;
       let isLibre = false;
       let selectedShiftObj = null;
 
-      if (val === 'BASE_L') {
-        plantillaId = null;
-        isLibre = true;
-        selectedShiftObj = {
-          id: null,
-          codigo: 'L',
-          nombre: 'Libre',
-          color: '#D9D9D9',
-          es_libre: true
-        };
-      } else {
+      if (val.startsWith('EXCEPCION_')) {
+        excepcionId = Number(val.replace('EXCEPCION_', ''));
+        const excObj = (excepcionesList || []).find(e => Number(e.id) === Number(excepcionId));
+        isLibre = excObj ? (excObj.codigo === 'L' || (excObj.descripcion && excObj.descripcion.toLowerCase().includes('libre'))) : false;
+        selectedShiftObj = excObj ? {
+          id: excObj.id,
+          codigo: excObj.codigo,
+          nombre: excObj.descripcion,
+          color: excObj.color,
+          es_libre: isLibre
+        } : null;
+      } else if (val.startsWith('PLANTILLA_')) {
         plantillaId = Number(val.replace('PLANTILLA_', ''));
         const pObj = (plantillasSala || []).find(p => Number(p.id) === Number(plantillaId));
         isLibre = pObj ? (pObj.codigo === 'L' || pObj.nombre?.toUpperCase() === 'LIBRE') : false;
         selectedShiftObj = pObj ? { ...pObj, es_libre: isLibre } : null;
+      } else if (val === 'BASE_L') {
+        const excObj = (excepcionesList || []).find(e => e.codigo === 'L');
+        if (excObj) excepcionId = excObj.id;
+        isLibre = true;
+        selectedShiftObj = {
+          id: excepcionId,
+          codigo: 'L',
+          nombre: 'Día Libre',
+          color: '#D9D9D9',
+          es_libre: true
+        };
       }
 
       // Actualización optimista local
@@ -354,6 +377,7 @@
         empleado_id: empleado.id,
         fecha: dia.fechaStr,
         plantilla_horario_id: plantillaId,
+        excepcion_id: excepcionId,
         es_libre: isLibre
       };
 
@@ -706,11 +730,27 @@
             on:change={handleScheduleSelectChange}
             style="width: 100%; padding: 8px 10px; font-size: 11.5px; font-weight: 700; color: #0f172a; background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; cursor: pointer;"
           >
-            <!-- Optgroup 1: Plantillas Base del Sistema -->
-            <optgroup label="⚙️ Plantillas Base del Sistema">
-              <option value="BASE_L">[L] Libre</option>
-              <option value="BASE_U" disabled style="font-size: 10.5px;">[U] Horario Único (Asignado automáticamente por el sistema si no le establecen uno)</option>
-            </optgroup>
+            <!-- Optgroup 1: Excepciones de Asistencia (Configuración Global / Tabla excepciones) -->
+            {#if excepcionesList.length > 0}
+              <optgroup label="📋 Excepciones de Asistencia (Configuración)">
+                {#each excepcionesList as exc}
+                  {#if exc.tipo === 'No Asignable'}
+                    <option value="EXCEPCION_{exc.id}" disabled style="font-size: 10.5px;">
+                      [{exc.codigo}] {exc.descripcion} (Asignado automáticamente por el sistema si no hay turno)
+                    </option>
+                  {:else}
+                    <option value="EXCEPCION_{exc.id}">
+                      [{exc.codigo}] {exc.descripcion}
+                    </option>
+                  {/if}
+                {/each}
+              </optgroup>
+            {:else}
+              <optgroup label="⚙️ Plantillas Base del Sistema">
+                <option value="BASE_L">[L] Día Libre</option>
+                <option value="BASE_U" disabled style="font-size: 10.5px;">[U] Horario Único (Asignado automáticamente por el sistema si no le establecen uno)</option>
+              </optgroup>
+            {/if}
 
             <!-- Optgroup 2: Horarios Asignados al Empleado (tipo 'horario') -->
             {#if horariosEmpleado.length > 0}
@@ -718,17 +758,6 @@
                 {#each horariosEmpleado as p}
                   <option value="PLANTILLA_{p.id}">
                     [{p.codigo}] {p.nombre} {getHorasFormat(p)}
-                  </option>
-                {/each}
-              </optgroup>
-            {/if}
-
-            <!-- Optgroup 3: Plantillas Tipo Excepción (tipo 'plantilla': Falta, Permiso, Reposo, etc.) -->
-            {#if plantillasExcepcion.length > 0}
-              <optgroup label="📋 Plantillas Tipo Excepción (Falta, Permiso, Reposo, etc.)">
-                {#each plantillasExcepcion as p}
-                  <option value="PLANTILLA_{p.id}">
-                    [{p.codigo}] {p.nombre}
                   </option>
                 {/each}
               </optgroup>
