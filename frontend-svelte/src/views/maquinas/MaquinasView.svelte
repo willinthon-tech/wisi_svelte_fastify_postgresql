@@ -155,9 +155,9 @@
     ]);
   });
 
-  // Fetch filter options ONLY when user assigned salas change
+  // Fetch filter options dynamically whenever active filters, search inputs or user assigned salas change
   let lastFilterKey = "";
-  $: filterKey = `${(assignedSalaIds || []).join(",")}`;
+  $: filterKey = `${(assignedSalaIds || []).join(",")}_${searchNombre.trim()}_${searchSerial.trim()}_${selectedSociedades.join(",")}_${selectedLegales.join(",")}_${selectedMarcas.join(",")}_${selectedModelos.join(",")}_${selectedJuegos.join(",")}_${selectedGrupos.join(",")}_${selectedSalas.join(",")}_${selectedEstados.join(",")}_${selectedValores.join(",")}_${selectedTipos.join(",")}_${selectedModos.join(",")}_${searchQuery.trim()}`;
   $: if (filterKey !== lastFilterKey) {
     lastFilterKey = filterKey;
     fetchFilterOptions();
@@ -167,6 +167,20 @@
     try {
       const q = new URLSearchParams();
       if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
+      if (selectedGrupos.length > 0) q.set("grupo_ids", selectedGrupos.join(","));
+      if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
+      if (selectedMarcas.length > 0) q.set("marca_ids", selectedMarcas.join(","));
+      if (selectedModelos.length > 0) q.set("modelo_ids", selectedModelos.join(","));
+      if (selectedJuegos.length > 0) q.set("juego_ids", selectedJuegos.join(","));
+      if (selectedEstados.length > 0) q.set("estado_ids", selectedEstados.join(","));
+      if (selectedSociedades.length > 0) q.set("sociedad_ids", selectedSociedades.join(","));
+      if (selectedValores.length > 0) q.set("valor_ids", selectedValores.join(","));
+      if (selectedTipos.length > 0) q.set("tipo_ids", selectedTipos.join(","));
+      if (selectedModos.length > 0) q.set("modo_ids", selectedModos.join(","));
+      if (selectedLegales.length > 0) q.set("legal_ids", selectedLegales.join(","));
+      if (searchNombre.trim()) q.set("search_nombre", searchNombre.trim());
+      if (searchSerial.trim()) q.set("search_serial", searchSerial.trim());
+      if (searchQuery.trim()) q.set("search", searchQuery.trim());
 
       const res = await fetch(`/api/master/maquinas/filter-options?${q.toString()}`);
       if (res.ok) {

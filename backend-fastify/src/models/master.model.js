@@ -6063,6 +6063,77 @@ export async function deleteFechaPatriaModel(id) {
 // 🎰 12. MÁQUINAS (CRUD PRINCIPAL)
 // ==========================================
 
+export function buildMaquinasConditions(params = {}) {
+  const conds = [];
+
+  if (params.userSalaIds && params.userSalaIds.length > 0) {
+    conds.push(sql`m.sala_id = ANY(${params.userSalaIds})`);
+  }
+  if (!params.skipSalas && params.salaIds && params.salaIds.length > 0) {
+    conds.push(sql`m.sala_id = ANY(${params.salaIds})`);
+  }
+  if (!params.skipGrupos && params.grupoIds && params.grupoIds.length > 0) {
+    conds.push(sql`s.grupo_id = ANY(${params.grupoIds})`);
+  }
+  if (!params.skipMarcas && params.marcaIds && params.marcaIds.length > 0) {
+    conds.push(sql`mod.marca_id = ANY(${params.marcaIds})`);
+  }
+  if (!params.skipModelos && params.modeloIds && params.modeloIds.length > 0) {
+    conds.push(sql`m.modelo_id = ANY(${params.modeloIds})`);
+  }
+  if (!params.skipJuegos && params.juegoIds && params.juegoIds.length > 0) {
+    conds.push(sql`m.juego_id = ANY(${params.juegoIds})`);
+  }
+  if (!params.skipEstados && params.estadoIds && params.estadoIds.length > 0) {
+    conds.push(sql`m.estado_id = ANY(${params.estadoIds})`);
+  }
+  if (!params.skipSociedades && params.sociedadIds && params.sociedadIds.length > 0) {
+    conds.push(sql`m.sociedad_id = ANY(${params.sociedadIds})`);
+  }
+  if (!params.skipValores && params.valorIds && params.valorIds.length > 0) {
+    conds.push(sql`m.valor_id = ANY(${params.valorIds})`);
+  }
+  if (!params.skipTipos && params.tipoIds && params.tipoIds.length > 0) {
+    conds.push(sql`m.tipo_id = ANY(${params.tipoIds})`);
+  }
+  if (!params.skipModos && params.modoIds && params.modoIds.length > 0) {
+    conds.push(sql`m.modo_id = ANY(${params.modoIds})`);
+  }
+  if (!params.skipLegales && params.legalIds && params.legalIds.length > 0) {
+    conds.push(sql`m.legal_id = ANY(${params.legalIds})`);
+  }
+
+  const searchNombre = String(params.searchNombre || params.search_nombre || '').trim().toLowerCase();
+  if (searchNombre) {
+    const termNombre = `%${searchNombre}%`;
+    conds.push(sql`LOWER(COALESCE(m.nombre, '')) LIKE ${termNombre}`);
+  }
+
+  const searchSerial = String(params.searchSerial || params.search_serial || '').trim().toLowerCase();
+  if (searchSerial) {
+    const termSerial = `%${searchSerial}%`;
+    conds.push(sql`LOWER(COALESCE(m.serial, '')) LIKE ${termSerial}`);
+  }
+
+  const search = String(params.search || '').trim().toLowerCase();
+  if (search) {
+    const term = `%${search}%`;
+    conds.push(sql`(
+      LOWER(COALESCE(m.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(m.serial, '')) LIKE ${term} OR
+      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(s.nombre_comercial, '')) LIKE ${term} OR
+      LOWER(COALESCE(gs.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(mod.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(mar.nombre, '')) LIKE ${term} OR
+      m.id::text LIKE ${term}
+    )`);
+  }
+
+  return conds;
+}
+
 export async function getMaquinasModel(params = {}) {
   const page = Math.max(1, Number(params.page) || 1);
   const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
@@ -6100,70 +6171,7 @@ export async function getMaquinasModel(params = {}) {
   }
 
   try {
-    const conds = [];
-
-    if (params.userSalaIds && params.userSalaIds.length > 0) {
-      conds.push(sql`m.sala_id = ANY(${params.userSalaIds})`);
-    }
-    if (params.salaIds && params.salaIds.length > 0) {
-      conds.push(sql`m.sala_id = ANY(${params.salaIds})`);
-    }
-    if (params.grupoIds && params.grupoIds.length > 0) {
-      conds.push(sql`s.grupo_id = ANY(${params.grupoIds})`);
-    }
-    if (params.marcaIds && params.marcaIds.length > 0) {
-      conds.push(sql`mod.marca_id = ANY(${params.marcaIds})`);
-    }
-    if (params.modeloIds && params.modeloIds.length > 0) {
-      conds.push(sql`m.modelo_id = ANY(${params.modeloIds})`);
-    }
-    if (params.juegoIds && params.juegoIds.length > 0) {
-      conds.push(sql`m.juego_id = ANY(${params.juegoIds})`);
-    }
-    if (params.estadoIds && params.estadoIds.length > 0) {
-      conds.push(sql`m.estado_id = ANY(${params.estadoIds})`);
-    }
-    if (params.sociedadIds && params.sociedadIds.length > 0) {
-      conds.push(sql`m.sociedad_id = ANY(${params.sociedadIds})`);
-    }
-    if (params.valorIds && params.valorIds.length > 0) {
-      conds.push(sql`m.valor_id = ANY(${params.valorIds})`);
-    }
-    if (params.tipoIds && params.tipoIds.length > 0) {
-      conds.push(sql`m.tipo_id = ANY(${params.tipoIds})`);
-    }
-    if (params.modoIds && params.modoIds.length > 0) {
-      conds.push(sql`m.modo_id = ANY(${params.modoIds})`);
-    }
-    if (params.legalIds && params.legalIds.length > 0) {
-      conds.push(sql`m.legal_id = ANY(${params.legalIds})`);
-    }
-
-    if (searchNombre) {
-      const termNombre = `%${searchNombre}%`;
-      conds.push(sql`LOWER(COALESCE(m.nombre, '')) LIKE ${termNombre}`);
-    }
-
-    if (searchSerial) {
-      const termSerial = `%${searchSerial}%`;
-      conds.push(sql`LOWER(COALESCE(m.serial, '')) LIKE ${termSerial}`);
-    }
-
-    if (search) {
-      const term = `%${search}%`;
-      conds.push(sql`(
-        LOWER(COALESCE(m.nombre, '')) LIKE ${term} OR
-        LOWER(COALESCE(m.serial, '')) LIKE ${term} OR
-        LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
-        LOWER(COALESCE(s.nombre_comercial, '')) LIKE ${term} OR
-        LOWER(COALESCE(gs.nombre, '')) LIKE ${term} OR
-        LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
-        LOWER(COALESCE(mod.nombre, '')) LIKE ${term} OR
-        LOWER(COALESCE(mar.nombre, '')) LIKE ${term} OR
-        m.id::text LIKE ${term}
-      )`);
-    }
-
+    const conds = buildMaquinasConditions(params);
     const whereClause = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
     const validSortCols = {
@@ -6277,37 +6285,247 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
   }
 
   try {
-    const userSalaIds = options.userSalaIds && options.userSalaIds.length > 0 ? options.userSalaIds : null;
-    const salaWhere = userSalaIds ? sql`WHERE id = ANY(${userSalaIds})` : sql``;
+    const fromJoin = sql`
+      FROM maquinas m
+      LEFT JOIN salas s ON m.sala_id = s.id
+      LEFT JOIN grupo_sala gs ON s.grupo_id = gs.id
+      LEFT JOIN juegos_maquinas j ON m.juego_id = j.id
+      LEFT JOIN estados e ON m.estado_id = e.id
+      LEFT JOIN sociedades soc ON m.sociedad_id = soc.id
+      LEFT JOIN valores v ON m.valor_id = v.id
+      LEFT JOIN modelos mod ON m.modelo_id = mod.id
+      LEFT JOIN marcas mar ON mod.marca_id = mar.id
+      LEFT JOIN tipos t ON m.tipo_id = t.id
+      LEFT JOIN modos mo ON m.modo_id = mo.id
+      LEFT JOIN legal l ON m.legal_id = l.id
+    `;
 
-    const [gruposRes, salasRes, marcasRes, juegosRes, estadosRes, sociedadesRes, valoresRes, modelosRes, tiposRes, modosRes, legalesRes] = await Promise.all([
-      sql`SELECT id, nombre FROM grupo_sala ORDER BY nombre ASC`.catch(() => sql`SELECT id, nombre FROM grupos_salas ORDER BY nombre ASC`).catch(() => []),
-      sql`SELECT id, nombre, nombre_comercial, grupo_id FROM salas ${salaWhere} ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM marcas ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM juegos_maquinas ORDER BY nombre ASC`.catch(() => sql`SELECT id, nombre FROM juegos ORDER BY nombre ASC`).catch(() => []),
-      sql`SELECT id, nombre FROM estados ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM sociedades ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM valores ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre, marca_id FROM modelos ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM tipos ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM modos ORDER BY nombre ASC`.catch(() => []),
-      sql`SELECT id, nombre FROM legal ORDER BY nombre ASC`.catch(() => [])
+    const [sociedadesRes, legalesRes, marcasRes, modelosRes, juegosRes, gruposRes, salasRes, estadosRes, valoresRes, tiposRes, modosRes] = await Promise.all([
+      // 1. Sociedades (Grouped from maquinas matching filters)
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipSociedades: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT soc.id, soc.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND soc.id IS NOT NULL
+          GROUP BY soc.id, soc.nombre
+          ORDER BY soc.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.sociedadIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 2. Legal
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipLegales: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT l.id, l.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND l.id IS NOT NULL
+          GROUP BY l.id, l.nombre
+          ORDER BY l.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.legalIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 3. Marcas
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipMarcas: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT mar.id, mar.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND mar.id IS NOT NULL
+          GROUP BY mar.id, mar.nombre
+          ORDER BY mar.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.marcaIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 4. Modelos (Subgroup label by Marca)
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipModelos: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT mod.id, mod.nombre, mod.marca_id, mar.nombre AS marca_nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND mod.id IS NOT NULL
+          GROUP BY mod.id, mod.nombre, mod.marca_id, mar.nombre
+          ORDER BY mar.nombre ASC, mod.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.modeloIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ 
+            id: r.id, 
+            nombre: toTitleCase(r.nombre), 
+            marca_id: r.marca_id,
+            subgroup_label: r.marca_nombre ? toTitleCase(r.marca_nombre) : 'Sin Marca',
+            count: r.count 
+          }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 5. Juegos
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipJuegos: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT j.id, j.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND j.id IS NOT NULL
+          GROUP BY j.id, j.nombre
+          ORDER BY j.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.juegoIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 6. Grupos de Sala
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipGrupos: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT gs.id, gs.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND gs.id IS NOT NULL
+          GROUP BY gs.id, gs.nombre
+          ORDER BY gs.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.grupoIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 7. Salas (Subgroup label by Grupo)
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipSalas: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT s.id, s.nombre, s.nombre_comercial, s.grupo_id, gs.nombre AS grupo_nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND s.id IS NOT NULL
+          GROUP BY s.id, s.nombre, s.nombre_comercial, s.grupo_id, gs.nombre
+          ORDER BY s.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.salaIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ 
+            id: r.id, 
+            nombre: r.nombre_comercial || r.nombre, 
+            grupo_id: r.grupo_id,
+            subgroup_label: r.grupo_nombre ? toTitleCase(r.grupo_nombre) : 'Sin Grupo',
+            count: r.count 
+          }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 8. Estados
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipEstados: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT e.id, e.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND e.id IS NOT NULL
+          GROUP BY e.id, e.nombre
+          ORDER BY e.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.estadoIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 9. Valores
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipValores: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT v.id, v.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND v.id IS NOT NULL
+          GROUP BY v.id, v.nombre
+          ORDER BY v.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.valorIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 10. Tipos
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipTipos: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT t.id, t.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND t.id IS NOT NULL
+          GROUP BY t.id, t.nombre
+          ORDER BY t.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.tipoIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })(),
+
+      // 11. Modos
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipModos: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT mo.id, mo.nombre, COUNT(DISTINCT m.id)::int AS count
+          ${fromJoin}
+          ${where}
+          AND mo.id IS NOT NULL
+          GROUP BY mo.id, mo.nombre
+          ORDER BY mo.nombre ASC
+        `.catch(() => []);
+        const active = new Set((options.modoIds || []).map(Number));
+        return (res || [])
+          .map(r => ({ id: r.id, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(Number(r.id)));
+      })()
     ]);
 
     return {
       success: true,
       data: {
-        grupos: (gruposRes || []).map(g => ({ id: g.id, nombre: toTitleCase(g.nombre) })),
-        salas: (salasRes || []).map(s => ({ id: s.id, nombre: s.nombre_comercial || s.nombre, grupo_id: s.grupo_id })),
-        marcas: (marcasRes || []).map(m => ({ id: m.id, nombre: toTitleCase(m.nombre) })),
-        juegos: (juegosRes || []).map(j => ({ id: j.id, nombre: toTitleCase(j.nombre) })),
-        estados: (estadosRes || []).map(e => ({ id: e.id, nombre: toTitleCase(e.nombre) })),
-        sociedades: (sociedadesRes || []).map(soc => ({ id: soc.id, nombre: toTitleCase(soc.nombre) })),
-        valores: (valoresRes || []).map(v => ({ id: v.id, nombre: toTitleCase(v.nombre) })),
-        modelos: (modelosRes || []).map(m => ({ id: m.id, nombre: toTitleCase(m.nombre), marca_id: m.marca_id })),
-        tipos: (tiposRes || []).map(t => ({ id: t.id, nombre: toTitleCase(t.nombre) })),
-        modos: (modosRes || []).map(mo => ({ id: mo.id, nombre: toTitleCase(mo.nombre) })),
-        legales: (legalesRes || []).map(l => ({ id: l.id, nombre: toTitleCase(l.nombre) }))
+        sociedades: sociedadesRes || [],
+        legales: legalesRes || [],
+        marcas: marcasRes || [],
+        modelos: modelosRes || [],
+        juegos: juegosRes || [],
+        grupos: gruposRes || [],
+        salas: salasRes || [],
+        estados: estadosRes || [],
+        valores: valoresRes || [],
+        tipos: tiposRes || [],
+        modos: modosRes || []
       }
     };
   } catch (err) {

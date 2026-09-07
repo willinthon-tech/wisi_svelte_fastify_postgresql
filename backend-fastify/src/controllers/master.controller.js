@@ -1827,8 +1827,25 @@ export async function getMaquinas(request, reply) {
 export async function getMaquinasFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    const userSalaIds = q.user_sala_ids ? String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
-    const res = await getMaquinasFilterOptionsModel({ userSalaIds });
+    const parseIds = (key) => q[key] ? String(q[key]).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
+
+    const res = await getMaquinasFilterOptionsModel({
+      userSalaIds: parseIds('user_sala_ids'),
+      salaIds: parseIds('sala_ids'),
+      grupoIds: parseIds('grupo_ids'),
+      marcaIds: parseIds('marca_ids'),
+      modeloIds: parseIds('modelo_ids'),
+      juegoIds: parseIds('juego_ids'),
+      estadoIds: parseIds('estado_ids'),
+      sociedadIds: parseIds('sociedad_ids'),
+      valorIds: parseIds('valor_ids'),
+      tipoIds: parseIds('tipo_ids'),
+      modoIds: parseIds('modo_ids'),
+      legalIds: parseIds('legal_ids'),
+      searchNombre: q.search_nombre || q.searchNombre || '',
+      searchSerial: q.search_serial || q.searchSerial || '',
+      search: q.search || ''
+    });
     return reply.send(res);
   } catch (err) {
     return reply.status(500).send({ success: false, error: err.message });
