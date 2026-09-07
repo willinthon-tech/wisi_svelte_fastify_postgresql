@@ -549,24 +549,13 @@
     return count;
   })();
 
-  // Resumen para impresión: Feriados (base nacionales + salas asignadas al usuario)
+  // Resumen para impresión: Feriados (salas asignadas al usuario)
   $: printFeriadosMonth = (function() {
     const activeMonthsSet = (calSelectedMeses && calSelectedMeses.length > 0)
       ? new Set(calSelectedMeses.map(Number))
       : new Set([1,2,3,4,5,6,7,8,9,10,11,12]);
 
     const list = [];
-    for (const bf of globalFechasPatrias) {
-      if (activeMonthsSet.has(bf.mes)) {
-        list.push({
-          dia: bf.dia,
-          nombre: bf.nombre,
-          tipo: 'Nacional',
-          sala: 'Todas las salas'
-        });
-      }
-    }
-
     let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)));
     if (calSelectedSalas.length > 0) {
       const salaSet = new Set(calSelectedSalas.map(Number));

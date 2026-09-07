@@ -113,8 +113,6 @@
 
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
-    { key: 'dia', label: 'Día', sortable: true, editable: true, type: 'select', options: diaOptions },
-    { key: 'mes', label: 'Mes', sortable: true, editable: true, type: 'select', options: mesOptions, displayKey: 'mes_nombre' },
     { key: 'fecha_formateada', label: 'Fecha Conmemorativa', sortable: false, editable: false },
     { key: 'descripcion', label: 'Descripción / Evento Patrio', bold: true, sortable: true, editable: true }
   ];
