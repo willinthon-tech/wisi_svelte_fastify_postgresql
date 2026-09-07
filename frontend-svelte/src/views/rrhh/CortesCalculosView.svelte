@@ -19,20 +19,6 @@
   let diasDelMes = [];
   let mesesAgrupados = [];
 
-  // Fechas patrias base nacionales
-  const BASE_FERIADOS = [
-    { mes: 1, dia: 1, nombre: 'Año Nuevo' },
-    { mes: 4, dia: 19, nombre: 'Declaración de la Independencia' },
-    { mes: 5, dia: 1, nombre: 'Día del Trabajador' },
-    { mes: 6, dia: 24, nombre: 'Batalla de Carabobo' },
-    { mes: 7, dia: 5, nombre: 'Día de la Independencia' },
-    { mes: 7, dia: 24, nombre: 'Natalicio del Libertador Simón Bolívar' },
-    { mes: 10, dia: 12, nombre: 'Día de la Resistencia Indígena' },
-    { mes: 12, dia: 24, nombre: 'Víspera de Navidad' },
-    { mes: 12, dia: 25, nombre: 'Navidad' },
-    { mes: 12, dia: 31, nombre: 'Fin de Año' }
-  ];
-
   let allCalendarFeriados = [];
 
   // Cálculos procesados de los empleados
@@ -121,7 +107,7 @@
     const dia = parseInt(parts[2], 10);
 
     // 1. Fechas Patrias Globales de Base de Datos
-    const patrias = globalFechasPatrias.length > 0 ? globalFechasPatrias : BASE_FERIADOS;
+    const patrias = globalFechasPatrias;
     if (patrias.some(bf => Number(bf.mes) === mes && Number(bf.dia) === dia)) {
       return true;
     }

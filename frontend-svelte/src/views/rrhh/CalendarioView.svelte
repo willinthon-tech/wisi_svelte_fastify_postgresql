@@ -577,7 +577,7 @@
       : new Set([1,2,3,4,5,6,7,8,9,10,11,12]);
 
     const list = [];
-    for (const bf of BASE_FERIADOS) {
+    for (const bf of globalFechasPatrias) {
       if (activeMonthsSet.has(bf.mes)) {
         list.push({
           dia: bf.dia,
@@ -689,8 +689,8 @@
 
       // 2. Feriados (abajo)
       if (calSelectedTipos.includes('FERIADOS')) {
-        // Fechas Base Nacionales
-        const baseHols = BASE_FERIADOS.filter(bf => activeMonthsSet.has(bf.mes) && bf.dia === d);
+        // Fechas Base Nacionales (de tabla fechas_patrias)
+        const baseHols = globalFechasPatrias.filter(bf => activeMonthsSet.has(bf.mes) && bf.dia === d);
         for (const bh of baseHols) {
           feriadoEvents.push({
             type: 'feriado_nacional',
@@ -789,12 +789,12 @@
   <div slot="info-banner" class="plantillas-base-banner">
     <div class="banner-badge-heading">
       <span class="info-icon">📌</span>
-      <span class="info-lead">Fechas Patrias Base del Sistema:</span>
-      <span class="info-note">Se cuenta con 10 fechas patrias predeterminadas de carácter nacional (aplican a todas las salas):</span>
+      <span class="info-lead">Fechas Patrias del Sistema:</span>
+      <span class="info-note">Fechas patrias de carácter nacional registradas en la base de datos (aplican a todas las salas):</span>
     </div>
 
     <div class="plantillas-cards-row">
-      {#each BASE_FERIADOS as bf}
+      {#each globalFechasPatrias as bf}
         <div class="base-plantilla-pill pill-feriado-base" title="{bf.nombre} - Aplica a todas las salas">
           <span class="pill-date">{String(bf.dia).padStart(2, '0')} {bf.mes_nombre.slice(0, 3)}</span>
           <span class="pill-name">{bf.nombre}</span>
