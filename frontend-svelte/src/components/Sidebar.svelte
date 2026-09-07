@@ -85,7 +85,10 @@
 
     <!-- Dynamic DB Pages & Modules Navigation Filtered by 'VER' Permission -->
     {#each filteredNavPages as page (page.id)}
-      <div class="sidebar-section-title">
+      {@const isConfM = String(page.nombre || '').toUpperCase().includes('CONF.M:') || String(page.nombre || '').toUpperCase().includes('CONF.M')}
+      <div 
+        class="sidebar-section-title {isConfM ? 'title-conf-m' : ''}"
+        style="{isConfM ? 'color: #ef4444 !important; font-weight: 900;' : ''}">
         {page.nombre}
       </div>
       {#each page.modulos as modulo (modulo.id)}

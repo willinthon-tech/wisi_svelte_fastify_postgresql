@@ -32,7 +32,8 @@ import {
   getLegal, createLegal, updateLegal, deleteLegal,
   getExcepciones, createExcepcion, updateExcepcion, deleteExcepcion,
   getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria,
-  getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina
+  getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina,
+  getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -210,6 +211,22 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/mesas/:id/restore', restoreMesa);
   fastify.delete('/master/mesas/:id/purge', purgeMesa);
   fastify.delete('/api/master/mesas/:id/purge', purgeMesa);
+
+  // Llaves (CECOM: Activas y Borradas)
+  fastify.get('/master/llaves', getLlaves);
+  fastify.get('/api/master/llaves', getLlaves);
+  fastify.get('/master/llaves/filter-options', getLlavesFilterOptions);
+  fastify.get('/api/master/llaves/filter-options', getLlavesFilterOptions);
+  fastify.post('/master/llaves', createLlave);
+  fastify.post('/api/master/llaves', createLlave);
+  fastify.put('/master/llaves/:id', updateLlave);
+  fastify.put('/api/master/llaves/:id', updateLlave);
+  fastify.delete('/master/llaves/:id', deleteLlave);
+  fastify.delete('/api/master/llaves/:id', deleteLlave);
+  fastify.post('/master/llaves/:id/restore', restoreLlave);
+  fastify.post('/api/master/llaves/:id/restore', restoreLlave);
+  fastify.delete('/master/llaves/:id/purge', purgeLlave);
+  fastify.delete('/api/master/llaves/:id/purge', purgeLlave);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)

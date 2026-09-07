@@ -775,13 +775,15 @@
       >
         <!-- Page Title Header without breadcrumbs -->
         {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos'}
+          {@const currentTitle = getTabTitle($currentRouteStore)}
+          {@const isConfM = String(currentTitle || '').toUpperCase().includes('CONF.M:') || String(currentTitle || '').toUpperCase().includes('CONF.M')}
           <div
             class="page-header"
             style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;"
           >
             <div>
-              <h1 class="page-title" style="margin: 0;">
-                {getTabTitle($currentRouteStore)}
+              <h1 class="page-title" style="margin: 0; {isConfM ? 'color: #ef4444 !important;' : ''}">
+                {currentTitle}
               </h1>
             </div>
 

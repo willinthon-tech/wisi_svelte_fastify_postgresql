@@ -31,7 +31,8 @@ import {
   getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel,
   getExcepcionesModel, createExcepcionModel, updateExcepcionModel, deleteExcepcionModel,
   getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel,
-  getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel
+  getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel,
+  getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -1906,4 +1907,93 @@ export async function deleteMaquina(request, reply) {
     return reply.status(500).send({ success: false, error: err.message });
   }
 }
+
+// =========================================================================
+// 🔑 CONTROLADORES DE LLAVES (CECOM: ACTIVAS Y BORRADAS)
+// =========================================================================
+
+export async function getLlavesFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    let userSalaIds = null;
+    if (q.user_sala_ids) {
+      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+    let salaIds = null;
+    if (q.sala_ids) {
+      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    }
+
+    const result = await getLlavesFilterOptionsModel({
+      active: q.active,
+      userSalaIds,
+      salaIds,
+      search: q.search
+    });
+    return reply.send(result);
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getLlaves(request, reply) {
+  const result = await getLlavesModel(request.query);
+  return reply.send(result);
+}
+
+export async function createLlave(request, reply) {
+  try {
+    const data = parseBody(request.body);
+    const result = await createLlaveModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateLlave(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = parseBody(request.body);
+    const result = await updateLlaveModel(id, data);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// Soft delete: marcar como borrada (active = 0)
+export async function deleteLlave(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await softDeleteLlaveModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// Restaurar llave desde llaves borradas (active = 1)
+export async function restoreLlave(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await restoreLlaveModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// Purgar definitivamente llave
+export async function purgeLlave(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await purgeLlaveModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
 

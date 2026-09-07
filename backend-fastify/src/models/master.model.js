@@ -6792,3 +6792,303 @@ export async function deleteMaquinaModel(id) {
   return await deleteEntityDynamic('maquinas', 'máquina', id);
 }
 
+// ==========================================
+// --- LLAVES (CECOM: ACTIVAS Y BORRADAS) ---
+// ==========================================
+
+export function buildLlaveConditions(options = {}) {
+  const conds = [];
+
+  // 1. Estado activo (1 = llaves activas, 0 = llaves borradas)
+  if (options.active !== undefined && options.active !== null && options.active !== '') {
+    conds.push(sql`l.active = ${Number(options.active)}`);
+  }
+
+  // 2. Restricción por salas asignadas al usuario logueado
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    conds.push(sql`l.sala_id = ANY(${options.userSalaIds})`);
+  }
+
+  // 3. Salas seleccionadas en el filtro
+  if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
+    conds.push(sql`l.sala_id = ANY(${options.salaIds})`);
+  }
+
+  // 4. Búsqueda por texto
+  if (options.search && String(options.search).trim()) {
+    const term = `%${String(options.search).trim().toLowerCase()}%`;
+    conds.push(sql`(
+      LOWER(COALESCE(l.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
+      CAST(l.id AS TEXT) LIKE ${term}
+    )`);
+  }
+
+  return conds;
+}
+
+export async function getLlavesFilterOptionsModel(options = {}) {
+  if (!isPgConnected || !sql) {
+    return {
+      success: true,
+      data: { salas: [] }
+    };
+  }
+
+  const active = options.active !== undefined ? Number(options.active) : 1;
+
+  // Filtro de Salas (Excluyendo galpones grupo_id = 2)
+  const condsSalas = buildLlaveConditions({ ...options, skipSalas: true, active });
+  const whereSalas = condsSalas.length > 0 ? sql`WHERE ${condsSalas.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  let allSalas;
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
+  } else {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
+  }
+
+  const countsSalasRes = await sql`
+    SELECT l.sala_id AS id, COUNT(l.id)::int AS count
+    FROM llaves l
+    LEFT JOIN salas s ON l.sala_id = s.id
+    ${whereSalas}
+    GROUP BY l.sala_id
+  `;
+  const countSalasMap = new Map(countsSalasRes.map(r => [r.id, r.count]));
+  const activeSalas = new Set((options.salaIds || []).map(Number));
+
+  const salas = allSalas
+    .map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      count: countSalasMap.get(s.id) || 0
+    }))
+    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    success: true,
+    data: {
+      salas
+    }
+  };
+}
+
+export async function getLlavesModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    let list = inMemoryData.llaves || [];
+    const active = params.active !== undefined ? Number(params.active) : 1;
+    list = list.filter(m => (m.active ?? 1) === active);
+    return { success: true, data: list, total: list.length, page: 1, limit: 10, totalPages: 1 };
+  }
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const sortBy = params.sortBy || 'id';
+  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+  const active = params.active !== undefined ? Number(params.active) : 1;
+
+  // Parse filters
+  let userSalaIds = null;
+  if (params.user_sala_ids) {
+    userSalaIds = String(params.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+  let salaIds = null;
+  if (params.sala_ids) {
+    salaIds = String(params.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+
+  const conds = buildLlaveConditions({
+    active,
+    userSalaIds,
+    salaIds,
+    search
+  });
+
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  const allowedSortColumns = {
+    'id': 'l.id',
+    'nombre': 'l.nombre',
+    'sala_nombre': 's.nombre'
+  };
+
+  const orderCol = allowedSortColumns[sortBy] || 'l.id';
+
+  const countRes = await sql`
+    SELECT COUNT(l.id)::int AS total
+    FROM llaves l
+    LEFT JOIN salas s ON l.sala_id = s.id
+    ${where}
+  `;
+  const total = countRes[0]?.total || 0;
+
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, l.id DESC`);
+
+  let data;
+  if (limit > 0) {
+    data = await sql`
+      SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre
+      FROM llaves l
+      LEFT JOIN salas s ON l.sala_id = s.id
+      ${where}
+      ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  } else {
+    data = await sql`
+      SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre
+      FROM llaves l
+      LEFT JOIN salas s ON l.sala_id = s.id
+      ${where}
+      ${orderClause}
+    `;
+  }
+
+  data = data.map(r => ({ ...r, nombre: toTitleCase(r.nombre) }));
+  const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+
+  return { success: true, data, total, page, limit, totalPages };
+}
+
+export async function createLlaveModel(data) {
+  const cleanName = (data.nombre || '').trim();
+  if (!cleanName) throw new Error('El nombre de la llave es obligatorio');
+  if (!data.sala_id) throw new Error('Debe seleccionar una sala para la llave');
+
+  if (isPgConnected && sql) {
+    const existing = await sql`
+      SELECT id FROM llaves 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND sala_id = ${Number(data.sala_id)}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe una llave registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+    }
+
+    const rows = await sql`
+      INSERT INTO llaves (nombre, sala_id, active)
+      VALUES (${cleanName}, ${Number(data.sala_id)}, 1)
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const cleanLower = cleanName.toLowerCase();
+    const existing = (inMemoryData.llaves || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && Number(m.sala_id) === Number(data.sala_id));
+    if (existing) {
+      throw new Error(`Ya existe una llave registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+    }
+    const nextId = (inMemoryData.llaves?.length || 0) > 0 ? Math.max(...inMemoryData.llaves.map(m => m.id)) + 1 : 1;
+    const newLlave = {
+      id: nextId,
+      nombre: cleanName,
+      sala_id: Number(data.sala_id),
+      active: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.llaves = inMemoryData.llaves || [];
+    inMemoryData.llaves.unshift(newLlave);
+    return newLlave;
+  }
+}
+
+export async function updateLlaveModel(id, data) {
+  const lId = Number(id);
+  const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
+  let salaId = data.sala_id ? Number(data.sala_id) : null;
+  const active = data.active !== undefined ? Number(data.active) : null;
+
+  if (isPgConnected && sql) {
+    if (cleanName && !salaId) {
+      const cur = await sql`SELECT sala_id FROM llaves WHERE id = ${lId} LIMIT 1`;
+      if (cur.length > 0) {
+        salaId = cur[0].sala_id;
+      }
+    }
+
+    if (cleanName) {
+      const existing = await sql`
+        SELECT id FROM llaves 
+        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
+          AND id != ${lId}
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        throw new Error(`Ya existe otra llave registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
+      }
+    }
+
+    const rows = await sql`
+      UPDATE llaves
+      SET 
+        nombre = COALESCE(${cleanName}, nombre),
+        sala_id = COALESCE(${salaId}, sala_id),
+        active = COALESCE(${active}, active),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${lId}
+      RETURNING *
+    `;
+    return rows[0];
+  } else {
+    const idx = (inMemoryData.llaves || []).findIndex(m => m.id === lId);
+    if (idx !== -1) {
+      inMemoryData.llaves[idx] = { ...inMemoryData.llaves[idx], ...data, updated_at: new Date().toISOString() };
+      return inMemoryData.llaves[idx];
+    }
+    return null;
+  }
+}
+
+// Soft delete: Marca active = 0 (envía a Llaves Borradas)
+export async function softDeleteLlaveModel(id) {
+  const lId = Number(id);
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      UPDATE llaves 
+      SET active = 0, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ${lId} 
+      RETURNING *
+    `;
+    return { success: true, id: lId, llave: rows[0] };
+  } else {
+    const llave = (inMemoryData.llaves || []).find(m => m.id === lId);
+    if (llave) llave.active = 0;
+    return { success: true, id: lId };
+  }
+}
+
+// Restore: Marca active = 1 (restaura de Llaves Borradas a Llaves)
+export async function restoreLlaveModel(id) {
+  const lId = Number(id);
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      UPDATE llaves 
+      SET active = 1, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ${lId} 
+      RETURNING *
+    `;
+    return { success: true, id: lId, llave: rows[0] };
+  } else {
+    const llave = (inMemoryData.llaves || []).find(m => m.id === lId);
+    if (llave) llave.active = 1;
+    return { success: true, id: lId };
+  }
+}
+
+// Purge: Eliminación definitiva física de la base de datos
+export async function purgeLlaveModel(id) {
+  const lId = Number(id);
+  if (isPgConnected && sql) {
+    await sql`DELETE FROM llaves WHERE id = ${lId}`;
+    return { success: true, id: lId };
+  } else {
+    inMemoryData.llaves = (inMemoryData.llaves || []).filter(m => m.id !== lId);
+    return { success: true, id: lId };
+  }
+}
+
