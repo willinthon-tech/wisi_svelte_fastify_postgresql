@@ -274,6 +274,8 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('tipos', masterTiposStore),
     fetchEntity('modos', masterModosStore),
     fetchEntity('legal', masterLegalStore),
+    fetchEntity('excepciones', masterExcepcionesStore),
+    fetchEntity('fechas-patrias', masterFechasPatriasStore),
     fetchUserSalas(),
     fetchUserPerms()
   ]);

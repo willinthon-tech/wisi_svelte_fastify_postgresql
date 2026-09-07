@@ -100,6 +100,7 @@
     { id: 12, nombre: 'Diciembre' }
   ];
 
+  let globalFechasPatrias = [];
   let rawServerItems = [];
 
   // Fechas patrias por sala del servidor
@@ -152,10 +153,19 @@
         q.set('user_sala_ids', assignedSalaIds.join(','));
       }
 
-      const resCal = await fetch(`/api/master/calendario?${q.toString()}`);
+      const [resCal, resPatrias] = await Promise.all([
+        fetch(`/api/master/calendario?${q.toString()}`),
+        fetch(`/api/master/fechas-patrias?limit=1000`)
+      ]);
+
       const jsonCal = await resCal.json();
       if (jsonCal && jsonCal.success) {
         rawServerItems = jsonCal.data || [];
+      }
+
+      const jsonPatrias = await resPatrias.json();
+      if (jsonPatrias && jsonPatrias.success) {
+        globalFechasPatrias = jsonPatrias.data || [];
       }
     } catch (err) {
       console.error(err);
@@ -549,13 +559,24 @@
     return count;
   })();
 
-  // Resumen para impresión: Feriados (salas asignadas al usuario)
+  // Resumen para impresión: Feriados (nacionales + salas asignadas al usuario)
   $: printFeriadosMonth = (function() {
     const activeMonthsSet = (calSelectedMeses && calSelectedMeses.length > 0)
       ? new Set(calSelectedMeses.map(Number))
       : new Set([1,2,3,4,5,6,7,8,9,10,11,12]);
 
     const list = [];
+    for (const bf of globalFechasPatrias) {
+      if (activeMonthsSet.has(Number(bf.mes))) {
+        list.push({
+          dia: Number(bf.dia),
+          nombre: bf.descripcion || bf.nombre,
+          tipo: 'Nacional',
+          sala: 'Nacional'
+        });
+      }
+    }
+
     let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)));
     if (calSelectedSalas.length > 0) {
       const salaSet = new Set(calSelectedSalas.map(Number));
@@ -657,6 +678,17 @@
 
       // 2. Feriados (abajo)
       if (calSelectedTipos.includes('FERIADOS')) {
+        // Fechas Patrias Globales (de tabla fechas_patrias)
+        const baseHols = globalFechasPatrias.filter(bf => activeMonthsSet.has(Number(bf.mes)) && Number(bf.dia) === d);
+        for (const bh of baseHols) {
+          feriadoEvents.push({
+            type: 'feriado_nacional',
+            id: `FP-${bh.id}`,
+            title: bh.descripcion || bh.nombre,
+            subtitle: 'Nacional'
+          });
+        }
+
         // Fechas de Salas en DB (filtrando por salas asignadas al usuario)
         let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)) && Number(rf.dia) === d);
         if (calSelectedSalas.length > 0) {
