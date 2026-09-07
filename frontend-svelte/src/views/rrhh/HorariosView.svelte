@@ -323,7 +323,7 @@
 <style>
   .smart-filters-grid {
     display: grid;
-    grid-template-columns: minmax(200px, 320px);
+    grid-template-columns: 1fr;
     gap: 8px;
     width: 100%;
     align-items: center;
