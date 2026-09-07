@@ -1,6 +1,5 @@
 import { writable } from 'svelte/store';
 import { getWsUrl } from '../config/api.config.js';
-import { Capacitor } from '@capacitor/core';
 
 export const isWsConnectedStore = writable(false);
 
@@ -183,19 +182,18 @@ function attachLifecycleListeners() {
     }
   });
 
-  // 2. Cuando recupera conexión a internet (WiFi / Datos)
+  // 2. Cuando recupera conexión a internet (WiFi / Datos) o recobra el foco
   window.addEventListener('online', handleWakeUp);
   window.addEventListener('focus', handleWakeUp);
+  document.addEventListener('resume', handleWakeUp);
 
   // 3. Si corre en Android con Capacitor, escuchar retorno a primer plano
   try {
-    if (Capacitor.isNativePlatform()) {
-      import('@capacitor/app').then(({ App }) => {
-        App.addListener('appStateChange', (state) => {
-          if (state && state.isActive) {
-            handleWakeUp();
-          }
-        }).catch(() => {});
+    if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.App?.addListener) {
+      window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
+        if (state && state.isActive) {
+          handleWakeUp();
+        }
       }).catch(() => {});
     }
   } catch (e) {}
