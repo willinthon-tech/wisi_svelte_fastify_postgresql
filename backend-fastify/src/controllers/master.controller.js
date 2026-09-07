@@ -1345,27 +1345,47 @@ export async function getPlantillasHorariosFilterOptions(request, reply) {
 }
 
 export async function getPlantillasHorarios(request, reply) {
-  const result = await getPlantillasHorariosModel(request.query);
-  return reply.send(result);
+  try {
+    const result = await getPlantillasHorariosModel(request.query || {});
+    return reply.send(result);
+  } catch (err) {
+    console.error('Error in getPlantillasHorarios:', err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
 }
 
 export async function createPlantillaHorario(request, reply) {
-  const body = parseBody(request.body);
-  const result = await createPlantillaHorarioModel(body);
-  return reply.send({ success: true, data: result });
+  try {
+    const body = parseBody(request.body);
+    const result = await createPlantillaHorarioModel(body);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    console.error('Error in createPlantillaHorario:', err);
+    return reply.status(400).send({ success: false, error: err.message });
+  }
 }
 
 export async function updatePlantillaHorario(request, reply) {
-  const { id } = request.params;
-  const body = parseBody(request.body);
-  const result = await updatePlantillaHorarioModel(id, body);
-  return reply.send({ success: true, data: result });
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const result = await updatePlantillaHorarioModel(id, body);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    console.error('Error in updatePlantillaHorario:', err);
+    return reply.status(400).send({ success: false, error: err.message });
+  }
 }
 
 export async function deletePlantillaHorario(request, reply) {
-  const { id } = request.params;
-  const result = await deletePlantillaHorarioModel(id);
-  return reply.send(result);
+  try {
+    const { id } = request.params;
+    const result = await deletePlantillaHorarioModel(id);
+    return reply.send(result);
+  } catch (err) {
+    console.error('Error in deletePlantillaHorario:', err);
+    return reply.status(400).send({ success: false, error: err.message });
+  }
 }
 
 

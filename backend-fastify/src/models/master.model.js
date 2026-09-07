@@ -3551,11 +3551,11 @@ export function buildPlantillasHorariosConditions(options = {}) {
   const conds = [];
 
   // Excluir excepciones y plantillas sin horas asignadas (esta tabla es exclusivamente para Horarios de trabajo)
-  conds.push(sql`p.hora_entrada IS NOT NULL AND p.hora_salida IS NOT NULL AND p.codigo NOT IN ('L', 'U')`);
+  conds.push(sql`p.hora_entrada IS NOT NULL AND p.hora_salida IS NOT NULL AND COALESCE(p.codigo, '') NOT IN ('L', 'U')`);
 
   // 1. Restricción por salas asignadas al usuario logueado
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`p.sala_id = ANY(${options.userSalaIds})`);
+    conds.push(sql`(p.sala_id IS NULL OR p.sala_id = ANY(${options.userSalaIds}))`);
   }
 
   // 2. Salas seleccionadas
@@ -3691,16 +3691,15 @@ export async function getPlantillasHorariosModel(params = {}) {
 
 export async function createPlantillaHorarioModel(data) {
   if (isPgConnected && sql) {
+    const salaId = (data.sala_id !== null && data.sala_id !== undefined && data.sala_id !== '') ? Number(data.sala_id) : null;
     const rows = await sql`
       INSERT INTO horarios (
-        nombre, sala_id, codigo, hora_entrada, hora_salida, 
-        hora_descanso_entrada, hora_descanso_salida, descanso_automatico, color
+        nombre, sala_id, codigo, hora_entrada, hora_salida, color
       )
       VALUES (
-        ${data.nombre}, ${Number(data.sala_id)}, ${data.codigo}, 
+        ${data.nombre}, ${salaId}, ${data.codigo || null}, 
         ${data.hora_entrada || null}, ${data.hora_salida || null}, 
-        ${data.hora_descanso_entrada || null}, ${data.hora_descanso_salida || null}, 
-        ${data.descanso_automatico || null}, ${data.color || '#FFFF99'}
+        ${data.color || '#FFFF99'}
       )
       RETURNING *
     `;
@@ -3712,14 +3711,14 @@ export async function createPlantillaHorarioModel(data) {
 export async function updatePlantillaHorarioModel(id, data) {
   const pId = Number(id);
   if (isPgConnected && sql) {
+    const salaId = (data.sala_id !== null && data.sala_id !== undefined && data.sala_id !== '') ? Number(data.sala_id) : null;
     const rows = await sql`
       UPDATE horarios
       SET nombre = ${data.nombre},
-          sala_id = ${Number(data.sala_id)},
-          codigo = ${data.codigo},
+          sala_id = ${salaId},
+          codigo = ${data.codigo || null},
           hora_entrada = ${data.hora_entrada || null},
           hora_salida = ${data.hora_salida || null},
-          descanso_automatico = ${data.descanso_automatico || null},
           color = ${data.color || '#FFFF99'},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${pId}
