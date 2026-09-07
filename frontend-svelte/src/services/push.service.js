@@ -88,8 +88,37 @@ export async function initPushNotifications(userId, onNotificationReceived) {
     });
 
     // Notificación recibida en primer plano
-    PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      console.log('🔔 [Push] Notificación push recibida:', notification);
+    PushNotifications.addListener('pushNotificationReceived', async (notification) => {
+      console.log('🔔 [Push] Notificación push recibida en primer plano:', notification);
+      try {
+        const data = notification?.data || {};
+        if (data.attlog_id || data.id || data.nombre) {
+          const status = String(data.tipo || data.attendancestatus || '').toLowerCase().trim();
+          const rec = {
+            id: data.attlog_id || data.id,
+            employee_no: data.employee_no || '',
+            nombre: data.nombre || notification.title || '',
+            cargo_nombre: data.cargo || '',
+            sala_nombre: data.sala || '',
+            sala_id: data.sala_id ? Number(data.sala_id) : null,
+            attendancestatus: status,
+            status: status,
+            foto: data.image_url || null
+          };
+          const { latestAttlogEventStore, latestCheckInStore, latestCheckOutStore, latestMarcajeAlertStore } = await import('../controllers/websocket.store.js');
+          latestAttlogEventStore.set(rec);
+          if (status === 'entrada' || status === 'checkin') {
+            latestCheckInStore.set(rec);
+          } else if (status === 'salida' || status === 'checkout') {
+            latestCheckOutStore.set(rec);
+          } else {
+            latestMarcajeAlertStore.set(rec);
+          }
+        }
+      } catch (e) {
+        console.warn('Error procesando push en primer plano:', e);
+      }
+
       if (typeof onNotificationReceived === 'function') {
         onNotificationReceived(notification);
       }
