@@ -4203,14 +4203,32 @@ export async function getFeriadosModel(params = {}) {
 }
 
 export async function createFeriadoModel(data) {
+  const nombre = (data.nombre || '').trim();
+  const salaId = Number(data.sala_id);
+  const mes = Math.min(12, Math.max(1, parseInt(data.mes) || 1));
+  const dia = Math.min(31, Math.max(1, parseInt(data.dia) || 1));
+
+  if (!nombre) throw new Error('El nombre de la fecha patria o feriado es obligatorio');
+  if (!salaId) throw new Error('Debe seleccionar una sala válida');
+
   if (isPgConnected && sql) {
+    const existing = await sql`
+      SELECT f.id, f.nombre, s.nombre as sala_nombre
+      FROM feriados f
+      LEFT JOIN salas s ON f.sala_id = s.id
+      WHERE f.sala_id = ${salaId} AND f.mes = ${mes} AND f.dia = ${dia}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe un feriado ("${existing[0].nombre}") para esta sala en la fecha ${dia}/${mes}`);
+    }
     const rows = await sql`
       INSERT INTO feriados (nombre, sala_id, mes, dia)
       VALUES (
-        ${data.nombre.trim()},
-        ${Number(data.sala_id)},
-        ${Math.min(12, Math.max(1, parseInt(data.mes) || 1))},
-        ${Math.min(31, Math.max(1, parseInt(data.dia) || 1))}
+        ${nombre},
+        ${salaId},
+        ${mes},
+        ${dia}
       )
       RETURNING *
     `;
@@ -4231,12 +4249,29 @@ export async function createFeriadoModel(data) {
 export async function updateFeriadoModel(id, data) {
   const fId = Number(id);
   if (isPgConnected && sql) {
+    const current = await sql`SELECT * FROM feriados WHERE id = ${fId}`;
+    if (current.length === 0) throw new Error('Feriado no encontrado');
+
+    const targetSalaId = data.sala_id ? Number(data.sala_id) : current[0].sala_id;
+    const targetMes = data.mes ? Math.min(12, Math.max(1, parseInt(data.mes))) : current[0].mes;
+    const targetDia = data.dia ? Math.min(31, Math.max(1, parseInt(data.dia))) : current[0].dia;
+
+    const existing = await sql`
+      SELECT f.id, f.nombre 
+      FROM feriados f
+      WHERE f.sala_id = ${targetSalaId} AND f.mes = ${targetMes} AND f.dia = ${targetDia} AND f.id != ${fId}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe otro feriado ("${existing[0].nombre}") para esta sala en la fecha ${targetDia}/${targetMes}`);
+    }
+
     const rows = await sql`
       UPDATE feriados
       SET nombre = ${data.nombre ? data.nombre.trim() : sql`nombre`},
-          sala_id = ${data.sala_id ? Number(data.sala_id) : sql`sala_id`},
-          mes = ${data.mes ? Math.min(12, Math.max(1, parseInt(data.mes))) : sql`mes`},
-          dia = ${data.dia ? Math.min(31, Math.max(1, parseInt(data.dia))) : sql`dia`},
+          sala_id = ${targetSalaId},
+          mes = ${targetMes},
+          dia = ${targetDia},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${fId}
       RETURNING *
@@ -5947,12 +5982,12 @@ export async function createFechaPatriaModel(data) {
 
   if (isPgConnected && sql) {
     const existing = await sql`
-      SELECT id FROM fechas_patrias 
-      WHERE dia = ${dia} AND mes = ${mes} AND LOWER(TRIM(descripcion)) = LOWER(${descripcion}) 
+      SELECT id, descripcion FROM fechas_patrias 
+      WHERE dia = ${dia} AND mes = ${mes}
       LIMIT 1
     `;
     if (existing.length > 0) {
-      throw new Error(`Ya existe una fecha patria registrada para este día y mes con la misma descripción`);
+      throw new Error(`Ya existe una fecha patria registrada para el ${dia}/${mes} ("${existing[0].descripcion}")`);
     }
     const rows = await sql`
       INSERT INTO fechas_patrias (descripcion, dia, mes)
@@ -5962,6 +5997,9 @@ export async function createFechaPatriaModel(data) {
     return rows[0];
   } else {
     const list = inMemoryData.fechas_patrias || [];
+    if (list.some(i => Number(i.dia) === dia && Number(i.mes) === mes)) {
+      throw new Error(`Ya existe una fecha patria registrada para el ${dia}/${mes}`);
+    }
     const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
     const newItem = { id: nextId, descripcion, dia, mes, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     inMemoryData.fechas_patrias = [newItem, ...list];
@@ -5979,7 +6017,22 @@ export async function updateFechaPatriaModel(id, data) {
   if (mes !== null && (isNaN(mes) || mes < 1 || mes > 12)) throw new Error('El mes debe ser un número entre 1 y 12');
 
   if (isPgConnected && sql) {
-    await sql`
+    const current = await sql`SELECT * FROM fechas_patrias WHERE id = ${fId}`;
+    if (current.length === 0) throw new Error('Fecha patria no encontrada');
+
+    const targetDia = dia !== null ? dia : current[0].dia;
+    const targetMes = mes !== null ? mes : current[0].mes;
+
+    const existing = await sql`
+      SELECT id, descripcion FROM fechas_patrias 
+      WHERE dia = ${targetDia} AND mes = ${targetMes} AND id != ${fId}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      throw new Error(`Ya existe otra fecha patria registrada para el ${targetDia}/${targetMes} ("${existing[0].descripcion}")`);
+    }
+
+    const rows = await sql`
       UPDATE fechas_patrias
       SET
         descripcion = COALESCE(${descripcion}, descripcion),
@@ -5987,13 +6040,18 @@ export async function updateFechaPatriaModel(id, data) {
         mes = COALESCE(${mes}, mes),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${fId}
+      RETURNING *
     `;
-    const rows = await sql`SELECT * FROM fechas_patrias WHERE id = ${fId}`;
     return rows[0] || null;
   } else {
     const list = inMemoryData.fechas_patrias || [];
     const idx = list.findIndex(i => i.id === fId);
     if (idx !== -1) {
+      const targetDia = dia !== null ? dia : list[idx].dia;
+      const targetMes = mes !== null ? mes : list[idx].mes;
+      if (list.some(i => Number(i.dia) === Number(targetDia) && Number(i.mes) === Number(targetMes) && i.id !== fId)) {
+        throw new Error(`Ya existe otra fecha patria registrada para el ${targetDia}/${targetMes}`);
+      }
       if (descripcion !== null) list[idx].descripcion = descripcion;
       if (dia !== null) list[idx].dia = dia;
       if (mes !== null) list[idx].mes = mes;

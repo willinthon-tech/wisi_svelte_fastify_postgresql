@@ -933,6 +933,33 @@ export async function initDb() {
          OR LOWER(COALESCE(tipo, '')) = 'plantilla';
     `.catch(() => {});
 
+    // 1. Deduplicate and enforce unique (dia, mes) on fechas_patrias
+    await sql`
+      DELETE FROM fechas_patrias a USING fechas_patrias b
+      WHERE a.id > b.id AND a.dia = b.dia AND a.mes = b.mes;
+    `.catch(() => {});
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_fechas_patrias_dia_mes ON fechas_patrias (dia, mes);
+    `.catch(() => {});
+
+    // 2. Deduplicate and enforce unique codigo on excepciones
+    await sql`
+      DELETE FROM excepciones a USING excepciones b
+      WHERE a.id > b.id AND LOWER(TRIM(a.codigo)) = LOWER(TRIM(b.codigo));
+    `.catch(() => {});
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_excepciones_codigo ON excepciones (LOWER(TRIM(codigo)));
+    `.catch(() => {});
+
+    // 3. Deduplicate and enforce unique (sala_id, dia, mes) on feriados / calendario
+    await sql`
+      DELETE FROM feriados a USING feriados b
+      WHERE a.id > b.id AND a.sala_id = b.sala_id AND a.dia = b.dia AND a.mes = b.mes;
+    `.catch(() => {});
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_feriados_sala_dia_mes ON feriados (sala_id, dia, mes);
+    `.catch(() => {});
+
     // Seed default base excepciones and fechas_patrias into PostgreSQL
     await sql`
       INSERT INTO excepciones (codigo, descripcion, color, tipo) VALUES
@@ -961,7 +988,8 @@ export async function initDb() {
       ('Víspera de Navidad', 24, 12),
       ('Navidad', 25, 12),
       ('Fin de Año', 31, 12)
-      ON CONFLICT DO NOTHING;
+      ON CONFLICT (dia, mes) DO UPDATE SET
+        descripcion = EXCLUDED.descripcion;
     `;
 
     // Seed defaults in PostgreSQL if empty

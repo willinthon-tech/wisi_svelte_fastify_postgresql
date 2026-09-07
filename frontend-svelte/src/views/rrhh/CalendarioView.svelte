@@ -100,20 +100,19 @@
     { id: 12, nombre: 'Diciembre' }
   ];
 
-  let globalFechasPatrias = [];
   let rawServerItems = [];
 
-  // Combinar fechas patrias globales de base de datos (fechas_patrias) con las fechas patrias de las salas del servidor
-  $: combinedItems = (function() {
-    let serverList = [...rawServerItems];
+  // Fechas patrias por sala del servidor
+  $: serverList = (function() {
+    let list = [...rawServerItems];
     if (selectedSalas.length > 0) {
       const set = new Set(selectedSalas.map(Number));
-      serverList = serverList.filter(item => set.has(Number(item.sala_id)));
+      list = list.filter(item => set.has(Number(item.sala_id)));
     } else if (assignedSalaIds && assignedSalaIds.length > 0) {
       const set = new Set(assignedSalaIds.map(Number));
-      serverList = serverList.filter(item => !item.sala_id || set.has(Number(item.sala_id)));
+      list = list.filter(item => !item.sala_id || set.has(Number(item.sala_id)));
     }
-    return [...globalFechasPatrias, ...serverList];
+    return list;
   })();
 
   // Fetch filter options ONLY when active filters, user assigned salas or search change
@@ -153,30 +152,10 @@
         q.set('user_sala_ids', assignedSalaIds.join(','));
       }
 
-      const [resCal, resPatrias] = await Promise.all([
-        fetch(`/api/master/calendario?${q.toString()}`),
-        fetch(`/api/master/fechas-patrias?limit=1000`)
-      ]);
-
+      const resCal = await fetch(`/api/master/calendario?${q.toString()}`);
       const jsonCal = await resCal.json();
       if (jsonCal && jsonCal.success) {
         rawServerItems = jsonCal.data || [];
-      }
-
-      const jsonPatrias = await resPatrias.json();
-      if (jsonPatrias && jsonPatrias.success) {
-        globalFechasPatrias = (jsonPatrias.data || []).map(fp => ({
-          id: `FP-${fp.id}`,
-          nombre: fp.descripcion,
-          mes: Number(fp.mes),
-          dia: Number(fp.dia),
-          mes_nombre: (MESES.find(m => Number(m.id) === Number(fp.mes))?.nombre) || `Mes ${fp.mes}`,
-          sala_nombre: 'Todas las salas',
-          is_system: true,
-          disabled: true,
-          disableDelete: true,
-          disableEdit: true
-        }));
       }
     } catch (err) {
       console.error(err);
@@ -689,17 +668,6 @@
 
       // 2. Feriados (abajo)
       if (calSelectedTipos.includes('FERIADOS')) {
-        // Fechas Base Nacionales (de tabla fechas_patrias)
-        const baseHols = globalFechasPatrias.filter(bf => activeMonthsSet.has(bf.mes) && bf.dia === d);
-        for (const bh of baseHols) {
-          feriadoEvents.push({
-            type: 'feriado_nacional',
-            id: bh.id,
-            title: bh.nombre,
-            subtitle: 'Nacional'
-          });
-        }
-
         // Fechas de Salas en DB (filtrando por salas asignadas al usuario)
         let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)) && Number(rf.dia) === d);
         if (calSelectedSalas.length > 0) {
@@ -747,8 +715,8 @@
 </script>
 
 <PaginatedDataTable 
-  items={combinedItems}
-  existingItems={combinedItems}
+  items={serverList}
+  existingItems={serverList}
   isServerSide={false}
   pageSize={10}
   sortBy="mes_nombre"
@@ -784,23 +752,6 @@
         <span>✕</span> Limpiar Filtros ({totalFilters})
       </button>
     {/if}
-  </div>
-
-  <div slot="info-banner" class="plantillas-base-banner">
-    <div class="banner-badge-heading">
-      <span class="info-icon">📌</span>
-      <span class="info-lead">Fechas Patrias del Sistema:</span>
-      <span class="info-note">Fechas patrias de carácter nacional registradas en la base de datos (aplican a todas las salas):</span>
-    </div>
-
-    <div class="plantillas-cards-row">
-      {#each globalFechasPatrias as bf}
-        <div class="base-plantilla-pill pill-feriado-base" title="{bf.nombre} - Aplica a todas las salas">
-          <span class="pill-date">{String(bf.dia).padStart(2, '0')} {bf.mes_nombre.slice(0, 3)}</span>
-          <span class="pill-name">{bf.nombre}</span>
-        </div>
-      {/each}
-    </div>
   </div>
 </PaginatedDataTable>
 
@@ -2220,111 +2171,5 @@
     gap: 8px;
     width: 100%;
     align-items: center;
-  }
-
-  .plantillas-base-banner {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    width: 100%;
-    padding: 10px 16px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    box-sizing: border-box;
-  }
-
-  .banner-badge-heading {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12.5px;
-    color: #334155;
-    flex-wrap: wrap;
-  }
-
-  .info-icon {
-    font-size: 14px;
-  }
-
-  .info-lead {
-    font-weight: 800;
-    color: #0f172a;
-  }
-
-  .info-note {
-    color: #64748b;
-    font-size: 12px;
-  }
-
-  .plantillas-cards-row {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
-    width: 100%;
-  }
-
-  .base-plantilla-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 8px;
-    border-radius: 6px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    transition: all 0.15s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .pill-feriado-base {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-  }
-
-  .pill-date {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: #2563eb;
-    color: #ffffff;
-    font-size: 11px;
-    font-weight: 800;
-    font-family: monospace;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .pill-name {
-    font-size: 12px;
-    font-weight: 700;
-    color: #1e3a8a;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    flex: 1;
-  }
-
-  @media (max-width: 1200px) {
-    .plantillas-cards-row {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 768px) {
-    .plantillas-cards-row {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 480px) {
-    .plantillas-cards-row {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
