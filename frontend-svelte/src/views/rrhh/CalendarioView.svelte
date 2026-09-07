@@ -185,7 +185,7 @@
           nombre: fp.descripcion,
           mes: Number(fp.mes),
           dia: Number(fp.dia),
-          mes_nombre: mesNombres[fp.mes] || `Mes ${fp.mes}`,
+          mes_nombre: (MESES.find(m => Number(m.id) === Number(fp.mes))?.nombre) || `Mes ${fp.mes}`,
           sala_nombre: 'Todas las salas',
           is_system: true,
           disabled: true,
