@@ -100,6 +100,8 @@
     { id: 12, nombre: 'Diciembre' }
   ];
 
+  const SHORT_MESES = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
   let globalFechasPatrias = [];
   let rawServerItems = [];
 
@@ -735,6 +737,26 @@
   })();
 </script>
 
+{#if globalFechasPatrias && globalFechasPatrias.length > 0}
+  <div class="fechas-patrias-banner-card">
+    <div class="fechas-patrias-banner-header">
+      <span class="fechas-patrias-pin">📌</span>
+      <strong class="fechas-patrias-title">Fechas Patrias Base del Sistema:</strong>
+      <span class="fechas-patrias-subtitle">
+        Se cuenta con {globalFechasPatrias.length} fechas patrias predeterminadas de carácter nacional (aplican a todas las salas):
+      </span>
+    </div>
+    <div class="fechas-patrias-badges-grid">
+      {#each globalFechasPatrias as fp}
+        <div class="fecha-patria-badge-item" title="{fp.descripcion || fp.nombre}">
+          <span class="fp-date-chip">{String(fp.dia).padStart(2, '0')} {SHORT_MESES[Number(fp.mes)] || ''}</span>
+          <span class="fp-name-text">{fp.descripcion || fp.nombre}</span>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/if}
+
 <PaginatedDataTable 
   items={serverList}
   existingItems={serverList}
@@ -1106,6 +1128,91 @@
 {/if}
 
 <style>
+  .fechas-patrias-banner-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+
+  .fechas-patrias-banner-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #1e293b;
+    flex-wrap: wrap;
+  }
+
+  .fechas-patrias-pin {
+    font-size: 14px;
+  }
+
+  .fechas-patrias-title {
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .fechas-patrias-subtitle {
+    color: #64748b;
+    font-size: 12.5px;
+  }
+
+  .fechas-patrias-badges-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    width: 100%;
+  }
+
+  .fecha-patria-badge-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+    overflow: hidden;
+  }
+
+  .fecha-patria-badge-item:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    transform: translateY(-1px);
+  }
+
+  .fp-date-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #1d4ed8;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 6px;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+  }
+
+  .fp-name-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e40af;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .monthly-calendar-section {
     display: flex;
     flex-direction: column;
