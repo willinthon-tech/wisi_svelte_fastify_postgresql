@@ -621,25 +621,25 @@ export async function initDb() {
       );
     `;
 
-    // 17. Table empleados_plantillas_horarios (Direct assignment of shift plantillas to employees)
+    // 17. Table empleados_horarios (Direct assignment of shift horarios to employees)
     await sql`
-      CREATE TABLE IF NOT EXISTS empleados_plantillas_horarios (
+      CREATE TABLE IF NOT EXISTS empleados_horarios (
         id SERIAL PRIMARY KEY,
         empleado_id INT NOT NULL REFERENCES empleados(id) ON DELETE CASCADE,
-        plantilla_horario_id INT NOT NULL REFERENCES plantillas_horarios(id) ON DELETE CASCADE,
+        horario_id INT NOT NULL REFERENCES horarios(id) ON DELETE CASCADE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT uk_emp_plantilla UNIQUE(empleado_id, plantilla_horario_id)
+        CONSTRAINT uk_emp_horario UNIQUE(empleado_id, horario_id)
       );
     `;
 
-    // 18. Table excepciones_horarios (Shift exception overrides by employee and date)
+    // 18. Table empleados_excepciones_horarios (Shift exception overrides by employee and date)
     await sql`
-      CREATE TABLE IF NOT EXISTS excepciones_horarios (
+      CREATE TABLE IF NOT EXISTS empleados_excepciones_horarios (
         id SERIAL PRIMARY KEY,
         empleado_id INT NOT NULL REFERENCES empleados(id) ON DELETE CASCADE,
         fecha DATE NOT NULL,
-        plantilla_horario_id INT REFERENCES plantillas_horarios(id) ON DELETE CASCADE,
+        horario_id INT REFERENCES horarios(id) ON DELETE CASCADE,
         excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE,
         es_libre BOOLEAN DEFAULT FALSE,
         observacion TEXT,
@@ -648,7 +648,8 @@ export async function initDb() {
         CONSTRAINT uk_emp_fecha_excepcion UNIQUE(empleado_id, fecha)
       );
     `;
-    await sql`ALTER TABLE excepciones_horarios ADD COLUMN IF NOT EXISTS excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE;`.catch(() => {});
+    await sql`ALTER TABLE empleados_excepciones_horarios ADD COLUMN IF NOT EXISTS excepcion_id INT REFERENCES excepciones(id) ON DELETE CASCADE;`.catch(() => {});
+    await sql`ALTER TABLE empleados_excepciones_horarios ADD COLUMN IF NOT EXISTS horario_id INT REFERENCES horarios(id) ON DELETE CASCADE;`.catch(() => {});
 
     // 19. Table feriados (Fechas patrias y días feriados por sala y nacionales)
     await sql`
@@ -923,7 +924,55 @@ export async function initDb() {
       WHERE id = 29;
     `.catch(() => {});
 
-    // Clean up non-work-shift exception templates from horarios / plantillas_horarios table
+    // MIGRACIONES DE RENOMBRADO DE TABLAS
+    // 1. plantillas_horarios -> horarios
+    await sql`
+      DO $$ 
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'plantillas_horarios') 
+           AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'horarios') THEN
+          ALTER TABLE plantillas_horarios RENAME TO horarios;
+        END IF;
+      END $$;
+    `.catch((e) => console.warn('Migration plantillas_horarios -> horarios:', e.message));
+
+    // 2. empleados_plantillas_horarios -> empleados_horarios
+    await sql`
+      DO $$ 
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_plantillas_horarios') 
+           AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_horarios') THEN
+          ALTER TABLE empleados_plantillas_horarios RENAME TO empleados_horarios;
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_horarios' AND column_name = 'plantilla_horario_id') THEN
+          ALTER TABLE empleados_horarios RENAME COLUMN plantilla_horario_id TO horario_id;
+        END IF;
+      END $$;
+    `.catch((e) => console.warn('Migration empleados_plantillas_horarios -> empleados_horarios:', e.message));
+
+    // 3. excepciones_horarios -> empleados_excepciones_horarios
+    await sql`
+      DO $$ 
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'excepciones_horarios') 
+           AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'empleados_excepciones_horarios') THEN
+          ALTER TABLE excepciones_horarios RENAME TO empleados_excepciones_horarios;
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'empleados_excepciones_horarios' AND column_name = 'plantilla_horario_id') THEN
+          ALTER TABLE empleados_excepciones_horarios RENAME COLUMN plantilla_horario_id TO horario_id;
+        END IF;
+      END $$;
+    `.catch((e) => console.warn('Migration excepciones_horarios -> empleados_excepciones_horarios:', e.message));
+
+    // Clean up non-work-shift exception templates from horarios table
+    await sql`
+      DELETE FROM horarios 
+      WHERE hora_entrada IS NULL 
+         OR hora_salida IS NULL 
+         OR codigo IN ('L', 'U') 
+         OR LOWER(nombre) LIKE '%libre%'
+         OR LOWER(COALESCE(tipo, '')) = 'plantilla';
+    `.catch(() => {});
     await sql`
       DELETE FROM plantillas_horarios 
       WHERE hora_entrada IS NULL 

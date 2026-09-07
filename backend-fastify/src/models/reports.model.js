@@ -632,12 +632,12 @@ export async function getMarcajePersonalReportModel(params = {}) {
 
   const empIds = employees.map(e => e.id);
 
-  // 3. Fetch Direct Individual Employee Shift Assignments (empleados_plantillas_horarios)
+  // 3. Fetch Direct Individual Employee Shift Assignments (empleados_horarios)
   const empDirectPlantillasMap = new Map();
   const directAssignments = await sql`
     SELECT eph.empleado_id, ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
-    FROM empleados_plantillas_horarios eph
-    JOIN plantillas_horarios ph ON eph.plantilla_horario_id = ph.id
+    FROM empleados_horarios eph
+    JOIN horarios ph ON eph.horario_id = ph.id
     WHERE eph.empleado_id = ANY(${empIds})
     ORDER BY ph.hora_entrada ASC, ph.codigo ASC
   `;
@@ -648,16 +648,16 @@ export async function getMarcajePersonalReportModel(params = {}) {
     empDirectPlantillasMap.get(da.empleado_id).push(da);
   });
 
-  // 4. Fetch Exceptions for date range (excepciones_horarios)
+  // 4. Fetch Exceptions for date range (empleados_excepciones_horarios)
   const excepcionesMap = new Map();
   if (isPgConnected && sql) {
     try {
       const excepciones = await sql`
-        SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.plantilla_horario_id, eh.excepcion_id, eh.es_libre, eh.observacion,
+        SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.horario_id AS plantilla_horario_id, eh.horario_id, eh.excepcion_id, eh.es_libre, eh.observacion,
                ph.codigo AS plantilla_codigo, ph.nombre AS plantilla_nombre, ph.hora_entrada, ph.hora_salida, ph.color AS plantilla_color, ph.tipo AS plantilla_tipo,
                exc.codigo AS excepcion_codigo, exc.descripcion AS excepcion_nombre, exc.color AS excepcion_color, exc.tipo AS excepcion_tipo
-        FROM excepciones_horarios eh
-        LEFT JOIN plantillas_horarios ph ON eh.plantilla_horario_id = ph.id
+        FROM empleados_excepciones_horarios eh
+        LEFT JOIN horarios ph ON eh.horario_id = ph.id
         LEFT JOIN excepciones exc ON eh.excepcion_id = exc.id
         WHERE eh.empleado_id = ANY(${empIds})
           AND eh.fecha >= ${fechaDesdeStr}::date
@@ -673,7 +673,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
         });
       });
     } catch (e) {
-      console.warn('Warning fetching excepciones_horarios:', e.message);
+      console.warn('Warning fetching empleados_excepciones_horarios:', e.message);
     }
   }
 
@@ -954,7 +954,7 @@ export async function saveExcepcionHorarioModel(data) {
   if (!isPgConnected || !sql) return { success: false, error: 'Base de datos no conectada' };
   const empleado_id = Number(data.empleado_id);
   const fecha = String(data.fecha).trim();
-  const plantilla_horario_id = data.plantilla_horario_id ? Number(data.plantilla_horario_id) : null;
+  const horario_id = data.horario_id ? Number(data.horario_id) : (data.plantilla_horario_id ? Number(data.plantilla_horario_id) : null);
   const excepcion_id = data.excepcion_id ? Number(data.excepcion_id) : null;
   const observacion = data.observacion ? String(data.observacion).trim() : null;
 
@@ -968,8 +968,8 @@ export async function saveExcepcionHorarioModel(data) {
     if (exc && (exc.codigo === 'L' || (exc.descripcion && exc.descripcion.toLowerCase().includes('libre')))) {
       es_libre = true;
     }
-  } else if (plantilla_horario_id) {
-    const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM plantillas_horarios WHERE id = ${plantilla_horario_id}`;
+  } else if (horario_id) {
+    const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM horarios WHERE id = ${horario_id}`;
     if (p && (p.codigo === 'L' || (p.nombre && p.nombre.toUpperCase() === 'LIBRE'))) {
       es_libre = true;
     }
@@ -978,10 +978,10 @@ export async function saveExcepcionHorarioModel(data) {
   }
 
   const [row] = await sql`
-    INSERT INTO excepciones_horarios (empleado_id, fecha, plantilla_horario_id, excepcion_id, es_libre, observacion, updated_at)
-    VALUES (${empleado_id}, ${fecha}::date, ${plantilla_horario_id}, ${excepcion_id}, ${es_libre}, ${observacion}, CURRENT_TIMESTAMP)
+    INSERT INTO empleados_excepciones_horarios (empleado_id, fecha, horario_id, excepcion_id, es_libre, observacion, updated_at)
+    VALUES (${empleado_id}, ${fecha}::date, ${horario_id}, ${excepcion_id}, ${es_libre}, ${observacion}, CURRENT_TIMESTAMP)
     ON CONFLICT (empleado_id, fecha) DO UPDATE
-    SET plantilla_horario_id = EXCLUDED.plantilla_horario_id,
+    SET horario_id = EXCLUDED.horario_id,
         excepcion_id = EXCLUDED.excepcion_id,
         es_libre = EXCLUDED.es_libre,
         observacion = EXCLUDED.observacion,
@@ -997,7 +997,7 @@ export async function saveExcepcionRangoHorarioModel(data) {
   const empleado_id = Number(data.empleado_id);
   const fecha_desde = String(data.fecha_desde || '').trim();
   const fecha_hasta = String(data.fecha_hasta || '').trim();
-  const plantilla_horario_id = data.plantilla_horario_id ? Number(data.plantilla_horario_id) : null;
+  const horario_id = data.horario_id ? Number(data.horario_id) : (data.plantilla_horario_id ? Number(data.plantilla_horario_id) : null);
   const excepcion_id = data.excepcion_id ? Number(data.excepcion_id) : null;
   const observacion = data.observacion ? String(data.observacion).trim() : null;
 
@@ -1015,8 +1015,8 @@ export async function saveExcepcionRangoHorarioModel(data) {
     if (exc && (exc.codigo === 'L' || (exc.descripcion && exc.descripcion.toLowerCase().includes('libre')))) {
       es_libre = true;
     }
-  } else if (plantilla_horario_id) {
-    const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM plantillas_horarios WHERE id = ${plantilla_horario_id}`;
+  } else if (horario_id) {
+    const [p] = await sql`SELECT codigo, nombre, tipo, hora_entrada, hora_salida FROM horarios WHERE id = ${horario_id}`;
     if (p && (p.codigo === 'L' || (p.nombre && p.nombre.toUpperCase() === 'LIBRE'))) {
       es_libre = true;
     }
@@ -1025,18 +1025,18 @@ export async function saveExcepcionRangoHorarioModel(data) {
   }
 
   const rows = await sql`
-    INSERT INTO excepciones_horarios (empleado_id, fecha, plantilla_horario_id, excepcion_id, es_libre, observacion, updated_at)
+    INSERT INTO empleados_excepciones_horarios (empleado_id, fecha, horario_id, excepcion_id, es_libre, observacion, updated_at)
     SELECT 
       ${empleado_id}, 
       d::date, 
-      ${plantilla_horario_id}, 
+      ${horario_id}, 
       ${excepcion_id},
       ${es_libre}, 
       ${observacion}, 
       CURRENT_TIMESTAMP
     FROM generate_series(${fecha_desde}::date, ${fecha_hasta}::date, '1 day'::interval) d
     ON CONFLICT (empleado_id, fecha) DO UPDATE
-    SET plantilla_horario_id = EXCLUDED.plantilla_horario_id,
+    SET horario_id = EXCLUDED.horario_id,
         excepcion_id = EXCLUDED.excepcion_id,
         es_libre = EXCLUDED.es_libre,
         observacion = EXCLUDED.observacion,
@@ -1052,7 +1052,7 @@ export async function deleteExcepcionHorarioModel(id) {
   const eId = Number(id);
   if (!eId || isNaN(eId)) return { success: false, error: 'ID de excepción inválido' };
 
-  await sql`DELETE FROM excepciones_horarios WHERE id = ${eId}`;
+  await sql`DELETE FROM empleados_excepciones_horarios WHERE id = ${eId}`;
   return { success: true };
 }
 
@@ -1168,21 +1168,21 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
     punchesByDate.set(fStr, list);
   });
 
-  // Obtener plantillas directamente asignadas al empleado y excepciones en el rango de 3 días
+  // Obtener horarios directamente asignados al empleado y excepciones en el rango de 3 días
   const directAssignments = await sql`
     SELECT eph.empleado_id, ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
-    FROM empleados_plantillas_horarios eph
-    JOIN plantillas_horarios ph ON eph.plantilla_horario_id = ph.id
+    FROM empleados_horarios eph
+    JOIN horarios ph ON eph.horario_id = ph.id
     WHERE eph.empleado_id = ${empId}
     ORDER BY ph.hora_entrada ASC, ph.codigo ASC
   `;
 
   const excepciones = await sql`
-    SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.plantilla_horario_id, eh.excepcion_id, eh.es_libre,
+    SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.horario_id AS plantilla_horario_id, eh.horario_id, eh.excepcion_id, eh.es_libre,
            ph.codigo AS plantilla_codigo, ph.nombre AS plantilla_nombre, ph.hora_entrada, ph.hora_salida, ph.color AS plantilla_color, ph.tipo AS plantilla_tipo,
            exc.codigo AS excepcion_codigo, exc.descripcion AS excepcion_nombre, exc.color AS excepcion_color, exc.tipo AS excepcion_tipo
-    FROM excepciones_horarios eh
-    LEFT JOIN plantillas_horarios ph ON eh.plantilla_horario_id = ph.id
+    FROM empleados_excepciones_horarios eh
+    LEFT JOIN horarios ph ON eh.horario_id = ph.id
     LEFT JOIN excepciones exc ON eh.excepcion_id = exc.id
     WHERE eh.empleado_id = ${empId}
       AND eh.fecha = ANY(${[prevDateStr, dateStr, nextDateStr]}::date[])

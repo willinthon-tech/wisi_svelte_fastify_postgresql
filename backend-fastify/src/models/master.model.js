@@ -3597,7 +3597,7 @@ export async function getPlantillasHorariosFilterOptionsModel(options = {}) {
 
   const countsRes = await sql`
     SELECT p.sala_id AS id, COUNT(p.id)::int AS count
-    FROM plantillas_horarios p
+    FROM horarios p
     LEFT JOIN salas s ON p.sala_id = s.id
     ${where}
     GROUP BY p.sala_id
@@ -3673,7 +3673,7 @@ export async function getPlantillasHorariosModel(params = {}) {
 
     const countRes = await sql`
       SELECT COUNT(*)::int AS total
-      FROM plantillas_horarios p
+      FROM horarios p
       LEFT JOIN salas s ON p.sala_id = s.id
       ${whereClause}
     `;
@@ -3681,7 +3681,7 @@ export async function getPlantillasHorariosModel(params = {}) {
 
     const dataRes = await sql`
       SELECT p.*, s.nombre AS sala_nombre
-      FROM plantillas_horarios p
+      FROM horarios p
       LEFT JOIN salas s ON p.sala_id = s.id
       ${whereClause}
       ${orderClause}
@@ -3699,7 +3699,7 @@ export async function createPlantillaHorarioModel(data) {
   if (isPgConnected && sql) {
     const computedTipo = (!data.hora_entrada && !data.hora_salida) ? 'plantilla' : (data.tipo || 'horario');
     const rows = await sql`
-      INSERT INTO plantillas_horarios (
+      INSERT INTO horarios (
         nombre, sala_id, codigo, hora_entrada, hora_salida, 
         hora_descanso_entrada, hora_descanso_salida, descanso_automatico, color, tipo
       )
@@ -3722,7 +3722,7 @@ export async function updatePlantillaHorarioModel(id, data) {
   if (isPgConnected && sql) {
     const computedTipo = (!data.hora_entrada && !data.hora_salida) ? 'plantilla' : (data.tipo || 'horario');
     const rows = await sql`
-      UPDATE plantillas_horarios
+      UPDATE horarios
       SET nombre = ${data.nombre},
           sala_id = ${Number(data.sala_id)},
           codigo = ${data.codigo},
@@ -3741,7 +3741,7 @@ export async function updatePlantillaHorarioModel(id, data) {
 }
 
 export async function deletePlantillaHorarioModel(id) {
-  return await deleteEntityDynamic('plantillas_horarios', 'plantilla_horario', id);
+  return await deleteEntityDynamic('horarios', 'horario', id);
 }
 
 
@@ -3845,14 +3845,14 @@ export async function getDepartamentosCiclosModel(params = {}) {
       `;
       item.total_empleados = empCountRes[0]?.total || 0;
 
-      // Get all distinct assigned shift plantillas for active employees in this department
+      // Get all distinct assigned shift horarios for active employees in this department
       const horariosRes = await sql`
         SELECT DISTINCT ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
-        FROM empleados_plantillas_horarios eph
+        FROM empleados_horarios eph
         JOIN empleados e ON eph.empleado_id = e.id
         JOIN cargos c ON e.cargo_id = c.id
         JOIN areas a ON c.area_id = a.id
-        JOIN plantillas_horarios ph ON eph.plantilla_horario_id = ph.id
+        JOIN horarios ph ON eph.horario_id = ph.id
         WHERE a.departamento_id = ${item.id} AND e.activo = TRUE
         ORDER BY ph.codigo ASC
       `;
@@ -3882,10 +3882,10 @@ export async function getDepartamentoEmpleadosCiclosModel(deptId, search = '') {
 
     if (!dept) return { success: false, error: 'Departamento no encontrado' };
 
-    // Get all shift plantillas for this department's sala
+    // Get all shift horarios for this department's sala
     const plantillasSala = await sql`
       SELECT id, codigo, nombre, hora_entrada, hora_salida, color, tipo
-      FROM plantillas_horarios
+      FROM horarios
       WHERE sala_id = ${dept.sala_id}
       ORDER BY codigo ASC, id ASC
     `;
@@ -3922,8 +3922,8 @@ export async function getDepartamentoEmpleadosCiclosModel(deptId, search = '') {
     for (const emp of empleados) {
       const empHorarios = await sql`
         SELECT ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
-        FROM empleados_plantillas_horarios eph
-        JOIN plantillas_horarios ph ON eph.plantilla_horario_id = ph.id
+        FROM empleados_horarios eph
+        JOIN horarios ph ON eph.horario_id = ph.id
         WHERE eph.empleado_id = ${emp.empleado_id}
         ORDER BY ph.codigo ASC, ph.id ASC
       `;
@@ -3948,12 +3948,12 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
 
   try {
     const action = payload.action;
-    const plantillaId = payload.plantilla_id ? Number(payload.plantilla_id) : null;
+    const plantillaId = payload.plantilla_id ? Number(payload.plantilla_id) : (payload.horario_id ? Number(payload.horario_id) : null);
     const empId = payload.empleado_id ? Number(payload.empleado_id) : null;
 
     if (action === 'bulk_add' && plantillaId) {
       await sql`
-        INSERT INTO empleados_plantillas_horarios (empleado_id, plantilla_horario_id)
+        INSERT INTO empleados_horarios (empleado_id, horario_id)
         SELECT e.id, ${plantillaId}
         FROM empleados e
         JOIN cargos c ON e.cargo_id = c.id
@@ -3968,7 +3968,7 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
       // Remove ALL horario-type plantillas from ALL employees in this department
       // (plantillas where tipo = 'horario' only; exceptions like L/U are auto-excluded since they are tipo='excepcion')
       await sql`
-        DELETE FROM empleados_plantillas_horarios
+        DELETE FROM empleados_horarios
         WHERE empleado_id IN (
           SELECT e.id
           FROM empleados e
@@ -3976,8 +3976,8 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
           JOIN areas a ON c.area_id = a.id
           WHERE a.departamento_id = ${dId} AND e.activo = TRUE
         )
-        AND plantilla_horario_id IN (
-          SELECT id FROM plantillas_horarios WHERE tipo = 'horario'
+        AND horario_id IN (
+          SELECT id FROM horarios WHERE tipo = 'horario'
         );
       `;
       return { success: true, message: 'Todos los horarios han sido quitados de los empleados del departamento' };
@@ -3985,18 +3985,18 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
 
     if (action === 'toggle' && empId && plantillaId) {
       const existing = await sql`
-        SELECT id FROM empleados_plantillas_horarios 
-        WHERE empleado_id = ${empId} AND plantilla_horario_id = ${plantillaId}
+        SELECT id FROM empleados_horarios 
+        WHERE empleado_id = ${empId} AND horario_id = ${plantillaId}
       `;
       if (existing.length > 0) {
         await sql`
-          DELETE FROM empleados_plantillas_horarios 
-          WHERE empleado_id = ${empId} AND plantilla_horario_id = ${plantillaId}
+          DELETE FROM empleados_horarios 
+          WHERE empleado_id = ${empId} AND horario_id = ${plantillaId}
         `;
         return { success: true, action: 'removed' };
       } else {
         await sql`
-          INSERT INTO empleados_plantillas_horarios (empleado_id, plantilla_horario_id)
+          INSERT INTO empleados_horarios (empleado_id, horario_id)
           VALUES (${empId}, ${plantillaId})
           ON CONFLICT DO NOTHING;
         `;
@@ -4006,8 +4006,8 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
 
     if (action === 'remove' && empId && plantillaId) {
       await sql`
-        DELETE FROM empleados_plantillas_horarios 
-        WHERE empleado_id = ${empId} AND plantilla_horario_id = ${plantillaId}
+        DELETE FROM empleados_horarios 
+        WHERE empleado_id = ${empId} AND horario_id = ${plantillaId}
       `;
       return { success: true };
     }
@@ -4015,20 +4015,20 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
     if (Array.isArray(payload.assignments)) {
       for (const item of payload.assignments) {
         const eId = Number(item.empleado_id);
-        const pIds = Array.isArray(item.plantilla_ids) ? item.plantilla_ids : [];
+        const pIds = Array.isArray(item.plantilla_ids) ? item.plantilla_ids : (Array.isArray(item.horario_ids) ? item.horario_ids : []);
         if (!eId) continue;
         await sql`
-          DELETE FROM empleados_plantillas_horarios 
+          DELETE FROM empleados_horarios 
           WHERE empleado_id = ${eId}
-          AND plantilla_horario_id IN (
-            SELECT id FROM plantillas_horarios WHERE tipo = 'horario'
+          AND horario_id IN (
+            SELECT id FROM horarios WHERE tipo = 'horario'
           )
         `;
         for (const pId of pIds) {
           const numPId = Number(pId);
           if (numPId) {
             await sql`
-              INSERT INTO empleados_plantillas_horarios (empleado_id, plantilla_horario_id)
+              INSERT INTO empleados_horarios (empleado_id, horario_id)
               VALUES (${eId}, ${numPId})
               ON CONFLICT DO NOTHING;
             `;
