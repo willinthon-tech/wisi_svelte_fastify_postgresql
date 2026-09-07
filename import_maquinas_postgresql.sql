@@ -1,48 +1,12 @@
 -- ========================================================
--- SCRIPT DE MIGRACIÓN/IMPORTACIÓN A POSTGRESQL PARA MÁQUINAS
--- Base de Datos: PostgreSQL (VPS / Local)
+-- SCRIPT DE MIGRACIÓN A POSTGRESQL (SOLO GALPONES, REFERENCIAS Y MÁQUINAS)
+-- No modifica las salas existentes (1, 2, 3, 4, 6, 7) ni grupo_salas
 -- ========================================================
 
 BEGIN;
 
--- 1. TABLA: grupo_salas
-CREATE TABLE IF NOT EXISTS grupo_salas (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL
-);
-
-INSERT INTO grupo_salas (id, nombre) VALUES
-(1, 'Sala'),
-	(2, 'Galpon')
-ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
-
-SELECT setval('grupo_salas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM grupo_salas));
-
--- 2. TABLA: salas (Actualización de columnas y sucursales/galpones)
-CREATE TABLE IF NOT EXISTS salas (
-  id SERIAL PRIMARY KEY,
-  nombre VARCHAR(100) NOT NULL,
-  nombre_comercial VARCHAR(100),
-  grupo_id INT REFERENCES grupo_salas(id) ON DELETE SET NULL,
-  pianas INT DEFAULT 0,
-  pianas_xl INT DEFAULT 0,
-  activo BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE salas ADD COLUMN IF NOT EXISTS grupo_id INT REFERENCES grupo_salas(id) ON DELETE SET NULL;
-ALTER TABLE salas ADD COLUMN IF NOT EXISTS pianas INT DEFAULT 0;
-ALTER TABLE salas ADD COLUMN IF NOT EXISTS pianas_xl INT DEFAULT 0;
-
+-- 1. SALAS / GALPONES NUEVOS (Solo inserta los que no existan)
 INSERT INTO salas (id, nombre, grupo_id, pianas, pianas_xl) VALUES
-(1, 'El Marques Gran Casino', 1, 0, 0),
-	(2, 'Charaima', 1, 0, 0),
-	(4, 'Gran Casino Plc', 1, 0, 0),
-	(5, 'Roraima', 1, 0, 0),
-	(6, 'Gran Casino Sc', 1, 0, 0),
-	(7, 'Gran Casino Lg', 1, 0, 0),
-	(8, 'Monagas Royal Casino', 1, 0, 0),
 	(9, 'Sótano 1 Roraima', 2, 27, 0),
 	(10, 'Darien el Marques', 2, 0, 0),
 	(11, 'Deposito Monagas Royal', 2, 0, 0),
@@ -54,15 +18,11 @@ INSERT INTO salas (id, nombre, grupo_id, pianas, pianas_xl) VALUES
 	(17, 'Gainer', 2, 31, 7),
 	(18, 'Galpon Barcelona', 2, 0, 0),
 	(20, 'Casino Laja Real', 1, 0, 0)
-ON CONFLICT (id) DO UPDATE SET 
-      nombre = EXCLUDED.nombre, 
-      grupo_id = EXCLUDED.grupo_id, 
-      pianas = EXCLUDED.pianas, 
-      pianas_xl = EXCLUDED.pianas_xl;
+ON CONFLICT (id) DO NOTHING;
 
 SELECT setval('salas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM salas));
 
--- 3. TABLA: estados
+-- 2. TABLA: estados
 CREATE TABLE IF NOT EXISTS estados (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -80,7 +40,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('estados_id_seq', (SELECT COALESCE(MAX(id), 1) FROM estados));
 
--- 4. TABLA: legal
+-- 3. TABLA: legal
 CREATE TABLE IF NOT EXISTS legal (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -94,7 +54,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('legal_id_seq', (SELECT COALESCE(MAX(id), 1) FROM legal));
 
--- 5. TABLA: marcas
+-- 4. TABLA: marcas
 CREATE TABLE IF NOT EXISTS marcas (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -139,7 +99,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('marcas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM marcas));
 
--- 6. TABLA: modelos
+-- 5. TABLA: modelos
 CREATE TABLE IF NOT EXISTS modelos (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL,
@@ -342,7 +302,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, marca_id = EXCLUDED.mar
 
 SELECT setval('modelos_id_seq', (SELECT COALESCE(MAX(id), 1) FROM modelos));
 
--- 7. TABLA: modos
+-- 6. TABLA: modos
 CREATE TABLE IF NOT EXISTS modos (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -356,7 +316,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('modos_id_seq', (SELECT COALESCE(MAX(id), 1) FROM modos));
 
--- 8. TABLA: sociedades
+-- 7. TABLA: sociedades
 CREATE TABLE IF NOT EXISTS sociedades (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -381,7 +341,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('sociedades_id_seq', (SELECT COALESCE(MAX(id), 1) FROM sociedades));
 
--- 9. TABLA: tipos
+-- 8. TABLA: tipos
 CREATE TABLE IF NOT EXISTS tipos (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -398,7 +358,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('tipos_id_seq', (SELECT COALESCE(MAX(id), 1) FROM tipos));
 
--- 10. TABLA: valores
+-- 9. TABLA: valores
 CREATE TABLE IF NOT EXISTS valores (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -419,7 +379,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('valores_id_seq', (SELECT COALESCE(MAX(id), 1) FROM valores));
 
--- 11. TABLA: juegos_maquinas
+-- 10. TABLA: juegos_maquinas
 CREATE TABLE IF NOT EXISTS juegos_maquinas (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
@@ -676,7 +636,7 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('juegos_maquinas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM juegos_maquinas));
 
--- 12. TABLA: maquinas
+-- 11. TABLA: maquinas
 CREATE TABLE IF NOT EXISTS maquinas (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100),
