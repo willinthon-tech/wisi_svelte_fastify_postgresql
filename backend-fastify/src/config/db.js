@@ -397,6 +397,12 @@ export async function initDb() {
       );
     `;
 
+    await sql`
+      INSERT INTO usuarios (id, nombre_apellido, usuario, password)
+      VALUES (1, 'Wilinthon Carriedo', 'wilinthon', '123456')
+      ON CONFLICT (id) DO NOTHING;
+    `.catch(() => {});
+
     // 2. Table grupo_salas
     await sql`
       CREATE TABLE IF NOT EXISTS grupo_salas (
