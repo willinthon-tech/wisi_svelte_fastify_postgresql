@@ -868,10 +868,18 @@ export async function getMarcajePersonalReportModel(params = {}) {
           shiftTipo = excepObj.plantilla_tipo || excepObj.tipo || 'plantilla';
         }
       } else if (matchedPlantilla) {
-        shiftId = matchedPlantilla.id;
-        shiftCode = matchedPlantilla.codigo || 'U';
-        shiftColor = matchedPlantilla.color || '#86EFAC';
-        shiftTipo = matchedPlantilla.tipo || 'horario';
+        shiftId = (matchedPlantilla.id === 'SYS-U' || matchedPlantilla.id === 'SYS-L') ? null : matchedPlantilla.id;
+        if (matchedPlantilla.id === 'SYS-U') {
+          shiftCode = 'U';
+          shiftColor = matchedPlantilla.color || '#3B82F6';
+        } else if (matchedPlantilla.id === 'SYS-L') {
+          shiftCode = 'L';
+          shiftColor = matchedPlantilla.color || '#D9D9D9';
+        } else {
+          shiftCode = matchedPlantilla.codigo || (matchedPlantilla.nombre ? matchedPlantilla.nombre.trim().slice(0, 3).toUpperCase() : 'H');
+          shiftColor = matchedPlantilla.color || '#86EFAC';
+        }
+        shiftTipo = 'horario';
       } else {
         shiftCode = 'L';
         shiftColor = '#D9D9D9';

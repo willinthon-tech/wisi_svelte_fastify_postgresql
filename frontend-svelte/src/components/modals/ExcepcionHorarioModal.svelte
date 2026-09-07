@@ -232,7 +232,8 @@
 
     // Pre-selección del valor según el estado actual del día
     const currentCode = dia?.shift?.codigo || '';
-    const currentId = dia?.shift?.id || null;
+    const rawId = dia?.shift?.id;
+    const isRealHorarioId = rawId && !isNaN(Number(rawId)) && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L';
 
     if (dia && dia.isExcepcion) {
       if (dia.excepcionId) {
@@ -243,30 +244,55 @@
           return;
         }
       }
-      const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
-      if (excMatch) {
-        selectedValue = `EXCEPCION_${excMatch.id}`;
-      } else if (currentId) {
-        selectedValue = `PLANTILLA_${currentId}`;
+      if (isRealHorarioId) {
+        selectedValue = `PLANTILLA_${rawId}`;
       } else {
-        const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
-        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+        const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
+        if (excMatch) {
+          selectedValue = `EXCEPCION_${excMatch.id}`;
+        } else {
+          const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
+          selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+        }
       }
     } else {
-      const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode && (e.codigo === 'L' || e.codigo === 'U'));
-      if (excMatch) {
-        selectedValue = `EXCEPCION_${excMatch.id}`;
-      } else if (currentCode === 'L') {
+      // Si el día tiene un horario asignado real (no SYS-U ni SYS-L), seleccionarlo en el select
+      if (isRealHorarioId) {
+        selectedValue = `PLANTILLA_${rawId}`;
+      } else if (currentCode === 'L' || dia?.resultadoStr === 'LIBRE') {
         const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
         selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
       } else if (currentCode === 'U') {
-        const uExc = (excepcionesList || []).find(e => e.codigo === 'U');
-        selectedValue = uExc ? `EXCEPCION_${uExc.id}` : 'BASE_U';
-      } else if (currentId) {
-        selectedValue = `PLANTILLA_${currentId}`;
+        // Si el empleado tiene horarios asignados, pre-seleccionar el correspondiente
+        if (horariosEmpleado.length === 1) {
+          selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
+        } else if (horariosEmpleado.length > 1 && dia?.entradaStr) {
+          const entMins = toMinutes(dia.entradaStr);
+          let best = horariosEmpleado[0];
+          let minDiff = Infinity;
+          for (const h of horariosEmpleado) {
+            if (h.hora_entrada) {
+              const hMins = toMinutes(h.hora_entrada);
+              let diff = Math.abs(entMins - hMins);
+              if (diff > 720) diff = 1440 - diff;
+              if (diff < minDiff) {
+                minDiff = diff;
+                best = h;
+              }
+            }
+          }
+          selectedValue = `PLANTILLA_${best.id}`;
+        } else {
+          const uExc = (excepcionesList || []).find(e => e.codigo === 'U');
+          selectedValue = uExc ? `EXCEPCION_${uExc.id}` : 'BASE_U';
+        }
       } else {
-        const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
-        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+        if (horariosEmpleado.length === 1) {
+          selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
+        } else {
+          const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
+          selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+        }
       }
     }
     initialSelectedValue = selectedValue;
