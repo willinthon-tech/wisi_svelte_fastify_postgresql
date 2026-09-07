@@ -5,11 +5,14 @@
 
 BEGIN;
 
--- 1. TABLA: grupo_salas (Garantizar los 2 únicos registros: 1=Sala, 2=Galpon)
+-- 1. TABLA: grupo_salas (Garantizar los 2 únicos registros: 1=Sala, 2=Galpon y eliminar columna descripcion)
 CREATE TABLE IF NOT EXISTS grupo_salas (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL
 );
+
+-- Eliminar campo descripcion si existe
+ALTER TABLE grupo_salas DROP COLUMN IF EXISTS descripcion;
 
 INSERT INTO grupo_salas (id, nombre) VALUES
   (1, 'Sala'),
@@ -18,7 +21,9 @@ ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre;
 
 SELECT setval('grupo_salas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM grupo_salas));
 
--- 2. TABLA: salas (Actualizar columnas e insertar salas faltantes y galpones)
+-- 2. TABLA: salas (Eliminar logo, actualizar columnas e insertar salas faltantes y galpones)
+-- Eliminar campo logo si existe
+ALTER TABLE salas DROP COLUMN IF EXISTS logo;
 ALTER TABLE salas ADD COLUMN IF NOT EXISTS grupo_id INT REFERENCES grupo_salas(id) ON DELETE SET NULL;
 ALTER TABLE salas ADD COLUMN IF NOT EXISTS pianas INT DEFAULT 0;
 ALTER TABLE salas ADD COLUMN IF NOT EXISTS pianas_xl INT DEFAULT 0;
