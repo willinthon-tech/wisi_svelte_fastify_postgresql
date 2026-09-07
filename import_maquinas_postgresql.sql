@@ -1,6 +1,6 @@
 -- ========================================================
 -- SCRIPT DE MIGRACIÓN A POSTGRESQL (SOLO GALPONES, REFERENCIAS Y MÁQUINAS)
--- No modifica las salas existentes (1, 2, 3, 4, 6, 7) ni grupo_salas
+-- No modifica las salas existentes (1, 2, 3, 4, 5, 6, 7) ni grupo_salas
 -- ========================================================
 
 BEGIN;
@@ -16,8 +16,7 @@ INSERT INTO salas (id, nombre, grupo_id, pianas, pianas_xl) VALUES
 	(15, 'Mare Mare', 1, 0, 0),
 	(16, 'Galpon Valencia', 2, 0, 0),
 	(17, 'Gainer', 2, 31, 7),
-	(18, 'Galpon Barcelona', 2, 0, 0),
-	(20, 'Casino Laja Real', 1, 0, 0)
+	(18, 'Galpon Barcelona', 2, 0, 0)
 ON CONFLICT (id) DO NOTHING;
 
 SELECT setval('salas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM salas));
@@ -2190,7 +2189,7 @@ INSERT INTO maquinas (id, nombre, serial, puestos, sala_id, juego_id, estado_id,
 	(1716, '66', 'MAV2003837', 1, 20, 49, 2, 2, 2, 2, 1, 2, 2),
 	(1717, '67', '49259', 1, 20, 44, 2, 3, 2, 35, 1, 2, 2),
 	(1718, '68', 'N/A', 1, 20, 44, 2, 3, 2, 35, 1, 2, 2),
-	(1719, '69', '9997355', 1, 20, 44, 2, 2, 2, 35, 1, 2, 2)
+	(1719, '69', '9997355', 1, 5, 44, 2, 2, 2, 35, 1, 2, 2)
 ON CONFLICT (id) DO UPDATE SET
       nombre = EXCLUDED.nombre,
       serial = EXCLUDED.serial,
