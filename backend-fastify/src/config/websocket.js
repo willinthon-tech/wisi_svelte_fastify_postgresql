@@ -94,6 +94,31 @@ export function broadcastNewAttlog(attlogData) {
   //console.log(`\x1b[32m⚡ [WEBSOCKET BROADCAST]\x1b[0m Notificación de marcaje enviada a ${activeClients.size} clientes.`);
 }
 
+/**
+ * Broadcasts master entity changes (create, update, delete) to connected WebSocket clients
+ */
+export function broadcastMasterSync(entityName, action, data) {
+  if (activeClients.size === 0) return;
+
+  const payload = JSON.stringify({
+    type: 'MASTER_SYNC',
+    entity: entityName,
+    action,
+    data,
+    timestamp: new Date().toISOString()
+  });
+
+  for (const client of activeClients) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch (err) {
+        activeClients.delete(client);
+      }
+    }
+  }
+}
+
 // Automatically subscribe to system-wide attlog events
 attlogEvents.on('new_attlog', (data) => {
   // 1. Enviar a clientes WebSocket en primer plano

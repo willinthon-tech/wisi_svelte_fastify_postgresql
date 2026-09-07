@@ -64,6 +64,11 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
           if (typeof onNewMarcajeCallback === 'function') {
             onNewMarcajeCallback(rec);
           }
+        } else if (payload.type === 'MASTER_SYNC') {
+          // Dynamic real-time sync with PostgreSQL
+          import('./master.store.js').then(({ loadMasterStoresFromBackend }) => {
+            loadMasterStoresFromBackend().catch(() => {});
+          });
         }
       } catch (err) {
         console.warn('Error parseando mensaje WebSocket:', err);
