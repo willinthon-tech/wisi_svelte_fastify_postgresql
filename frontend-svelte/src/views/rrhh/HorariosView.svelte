@@ -61,28 +61,8 @@
     selectedSalas.length +
     selectedTipo.length;
 
-  // Las 2 Plantillas Base del Sistema (Protegidas / Deshabilitadas para eliminación)
+  // Plantilla Base del Sistema (Protegida / Deshabilitada para eliminación)
   const BASE_PLANTILLAS = [
-    {
-      id: 'SYS-L',
-      codigo: 'L',
-      nombre: 'Libre',
-      colspans: {
-        sala_nombre: {
-          colspan: 3,
-          align: 'center',
-          text: 'Todas las salas'
-        }
-      },
-      skipColumns: ['horas_trabajo', 'jornada'],
-      sala_nombre: 'Todas las salas',
-      color: '#D9D9D9',
-      tipo: 'plantilla', // Se visualiza como 'Excepción'
-      is_system: true,
-      disabled: true,
-      disableDelete: true,
-      disableEdit: true
-    },
     {
       id: 'SYS-U',
       codigo: 'U',
@@ -228,8 +208,7 @@
     { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala', sortable: true, editable: false },
     { key: 'horas_trabajo', label: 'Horas de Trabajo', type: 'horario_badge', sortable: true, editable: true },
     { key: 'jornada', label: 'Jornada', type: 'jornada', sortable: true, editable: false },
-    { key: 'color', label: 'Color', type: 'color', sortable: true, editable: true },
-    { key: 'tipo', label: 'Tipo', type: 'badge', sortable: true, editable: true, options: ['horario', 'plantilla'] }
+    { key: 'color', label: 'Color', type: 'color', sortable: true, editable: true }
   ];
 
   $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : '';
@@ -238,17 +217,6 @@
     { key: 'codigo', label: 'Código', type: 'text', placeholder: 'Ej. O, T, NC, A', required: true },
     { key: 'nombre', label: 'Descripción / Nombre', type: 'text', placeholder: 'Ej. ADMINISTRACION', required: true },
     { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true, defaultValue: defaultSalaId },
-    { 
-      key: 'tipo', 
-      label: 'Tipo de Registro', 
-      type: 'select', 
-      options: [
-        { id: 'horario', nombre: 'Horario' },
-        { id: 'plantilla', nombre: 'Excepción' }
-      ], 
-      required: true, 
-      defaultValue: 'horario' 
-    },
     {
       type: 'row',
       fields: [

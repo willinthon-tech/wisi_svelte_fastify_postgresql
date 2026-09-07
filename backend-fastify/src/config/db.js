@@ -29,8 +29,26 @@ export let inMemoryData = {
   tipos: [],
   modos: [],
   legal: [],
-  excepciones: [],
-  fechas_patrias: [],
+  excepciones: [
+    { id: 1, codigo: 'L', descripcion: 'Día Libre', color: '#D9D9D9', tipo: 'No Asignable' },
+    { id: 2, codigo: 'P', descripcion: 'Permiso Médico / Personal', color: '#3B82F6', tipo: 'Asignable' },
+    { id: 3, codigo: 'R', descripcion: 'Reposo Médico', color: '#EF4444', tipo: 'Asignable' },
+    { id: 4, codigo: 'V', descripcion: 'Vacaciones', color: '#10B981', tipo: 'Asignable' },
+    { id: 5, codigo: 'F', descripcion: 'Falta / Inasistencia', color: '#F59E0B', tipo: 'Asignable' },
+    { id: 6, codigo: 'FER', descripcion: 'Día Feriado', color: '#8B5CF6', tipo: 'Asignable' }
+  ],
+  fechas_patrias: [
+    { id: 1, descripcion: 'Año Nuevo', dia: 1, mes: 1 },
+    { id: 2, descripcion: 'Declaración de la Independencia', dia: 19, mes: 4 },
+    { id: 3, descripcion: 'Día del Trabajador', dia: 1, mes: 5 },
+    { id: 4, descripcion: 'Batalla de Carabobo', dia: 24, mes: 6 },
+    { id: 5, descripcion: 'Día de la Independencia', dia: 5, mes: 7 },
+    { id: 6, descripcion: 'Natalicio del Libertador Simón Bolívar', dia: 24, mes: 7 },
+    { id: 7, descripcion: 'Día de la Resistencia Indígena', dia: 12, mes: 10 },
+    { id: 8, descripcion: 'Víspera de Navidad', dia: 24, mes: 12 },
+    { id: 9, descripcion: 'Navidad', dia: 25, mes: 12 },
+    { id: 10, descripcion: 'Fin de Año', dia: 31, mes: 12 }
+  ],
   descargas: [
     { id: 1, plataforma: 'android', formato: 'apk', archivo: 'app-wisi-android-v1-c1.apk', peso: '6.5 MB', peso_bytes: 6574550, version_num: 1, fecha: new Date().toISOString() },
     { id: 2, plataforma: 'windows', formato: 'exe', archivo: 'app-wisi-windows-v1-c2.exe', peso: '2.3 MB', peso_bytes: 2379534, version_num: 1, fecha: new Date().toISOString() }
@@ -892,6 +910,33 @@ export async function initDb() {
       INSERT INTO user_module_permissions (user_id, module_id, permission_id) VALUES
       (1, 37, 1), (1, 37, 2), (1, 37, 3), (1, 37, 4), (1, 37, 5),
       (1, 38, 1), (1, 38, 2), (1, 38, 3), (1, 38, 4), (1, 38, 5)
+      ON CONFLICT DO NOTHING;
+    `;
+
+    // Seed default base excepciones and fechas_patrias into PostgreSQL
+    await sql`
+      INSERT INTO excepciones (codigo, descripcion, color, tipo) VALUES
+      ('L', 'Día Libre', '#D9D9D9', 'No Asignable'),
+      ('P', 'Permiso Médico / Personal', '#3B82F6', 'Asignable'),
+      ('R', 'Reposo Médico', '#EF4444', 'Asignable'),
+      ('V', 'Vacaciones', '#10B981', 'Asignable'),
+      ('F', 'Falta / Inasistencia', '#F59E0B', 'Asignable'),
+      ('FER', 'Día Feriado', '#8B5CF6', 'Asignable')
+      ON CONFLICT (codigo) DO NOTHING;
+    `;
+
+    await sql`
+      INSERT INTO fechas_patrias (descripcion, dia, mes) VALUES
+      ('Año Nuevo', 1, 1),
+      ('Declaración de la Independencia', 19, 4),
+      ('Día del Trabajador', 1, 5),
+      ('Batalla de Carabobo', 24, 6),
+      ('Día de la Independencia', 5, 7),
+      ('Natalicio del Libertador Simón Bolívar', 24, 7),
+      ('Día de la Resistencia Indígena', 12, 10),
+      ('Víspera de Navidad', 24, 12),
+      ('Navidad', 25, 12),
+      ('Fin de Año', 31, 12)
       ON CONFLICT DO NOTHING;
     `;
 

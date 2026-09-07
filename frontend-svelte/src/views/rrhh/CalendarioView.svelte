@@ -114,9 +114,9 @@
     { id: 'SYS-21', nombre: 'Fin de Año', mes: 12, dia: 31, mes_nombre: 'Diciembre', sala_nombre: 'Todas las salas', is_system: true, disabled: true, disableDelete: true, disableEdit: true, foto: null }
   ];
 
-  let rawServerItems = [];
+  let globalFechasPatrias = [];
 
-  // Combinar fechas base nacionales con las fechas patrias de las salas del servidor (filtrando por salas asignadas)
+  // Combinar fechas patrias globales de base de datos con las fechas patrias de las salas del servidor
   $: combinedItems = (function() {
     let serverList = [...rawServerItems];
     if (selectedSalas.length > 0) {
@@ -126,7 +126,8 @@
       const set = new Set(assignedSalaIds.map(Number));
       serverList = serverList.filter(item => !item.sala_id || set.has(Number(item.sala_id)));
     }
-    return [...BASE_FERIADOS, ...serverList];
+    const baseList = globalFechasPatrias.length > 0 ? globalFechasPatrias : BASE_FERIADOS;
+    return [...baseList, ...serverList];
   })();
 
   // Fetch filter options ONLY when active filters, user assigned salas or search change
@@ -166,10 +167,30 @@
         q.set('user_sala_ids', assignedSalaIds.join(','));
       }
 
-      const res = await fetch(`/api/master/calendario?${q.toString()}`);
-      const json = await res.json();
-      if (json && json.success) {
-        rawServerItems = json.data || [];
+      const [resCal, resPatrias] = await Promise.all([
+        fetch(`/api/master/calendario?${q.toString()}`),
+        fetch(`/api/master/fechas-patrias?limit=1000`)
+      ]);
+
+      const jsonCal = await resCal.json();
+      if (jsonCal && jsonCal.success) {
+        rawServerItems = jsonCal.data || [];
+      }
+
+      const jsonPatrias = await resPatrias.json();
+      if (jsonPatrias && jsonPatrias.success) {
+        globalFechasPatrias = (jsonPatrias.data || []).map(fp => ({
+          id: `FP-${fp.id}`,
+          nombre: fp.descripcion,
+          mes: Number(fp.mes),
+          dia: Number(fp.dia),
+          mes_nombre: mesNombres[fp.mes] || `Mes ${fp.mes}`,
+          sala_nombre: 'Todas las salas',
+          is_system: true,
+          disabled: true,
+          disableDelete: true,
+          disableEdit: true
+        }));
       }
     } catch (err) {
       console.error(err);

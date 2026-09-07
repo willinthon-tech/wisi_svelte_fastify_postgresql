@@ -74,15 +74,24 @@
     }
   });
 
+  let globalFechasPatrias = [];
+
   async function loadCorteData(id) {
     isLoading = true;
     try {
-      // Cargar feriados del calendario (excluyendo cumpleaños)
+      // Cargar feriados del calendario y fechas patrias globales
       try {
-        const resFer = await fetch(toBackendUrl('/api/master/calendario?limit=500'));
+        const [resFer, resPatrias] = await Promise.all([
+          fetch(toBackendUrl('/api/master/calendario?limit=500')),
+          fetch(toBackendUrl('/api/master/fechas-patrias?limit=500'))
+        ]);
         const jsonFer = await resFer.json();
         if (jsonFer) {
           allCalendarFeriados = jsonFer.data || jsonFer.items || (Array.isArray(jsonFer) ? jsonFer : []);
+        }
+        const jsonPatrias = await resPatrias.json();
+        if (jsonPatrias && jsonPatrias.success) {
+          globalFechasPatrias = jsonPatrias.data || [];
         }
       } catch (e) {
         console.warn('Error cargando feriados del calendario:', e);
@@ -111,8 +120,9 @@
     const mes = parseInt(parts[1], 10);
     const dia = parseInt(parts[2], 10);
 
-    // 1. Fechas Patrias Base Nacionales
-    if (BASE_FERIADOS.some(bf => bf.mes === mes && bf.dia === dia)) {
+    // 1. Fechas Patrias Globales de Base de Datos
+    const patrias = globalFechasPatrias.length > 0 ? globalFechasPatrias : BASE_FERIADOS;
+    if (patrias.some(bf => Number(bf.mes) === mes && Number(bf.dia) === dia)) {
       return true;
     }
 
