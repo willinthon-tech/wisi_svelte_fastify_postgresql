@@ -935,7 +935,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "rrhh/plantillas" || $currentRouteStore === "plantillas"}
+        {:else if $currentRouteStore === "rrhh/horarios" || $currentRouteStore === "horarios" || $currentRouteStore === "rrhh/plantillas" || $currentRouteStore === "plantillas"}
           <HorariosView
             items={$itemsStore}
             on:toggle={handleToggle}

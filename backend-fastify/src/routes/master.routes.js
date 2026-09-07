@@ -57,7 +57,19 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/departamentos-ciclos/:deptId/empleados', updateDepartamentoEmpleadosCiclos);
 
 
-  // Plantillas Horarios
+  // Horarios (antiguo Plantillas Horarios)
+  fastify.get('/master/horarios', getPlantillasHorarios);
+  fastify.get('/api/master/horarios', getPlantillasHorarios);
+  fastify.get('/master/horarios/filter-options', getPlantillasHorariosFilterOptions);
+  fastify.get('/api/master/horarios/filter-options', getPlantillasHorariosFilterOptions);
+  fastify.post('/master/horarios', createPlantillaHorario);
+  fastify.post('/api/master/horarios', createPlantillaHorario);
+  fastify.put('/master/horarios/:id', updatePlantillaHorario);
+  fastify.put('/api/master/horarios/:id', updatePlantillaHorario);
+  fastify.delete('/master/horarios/:id', deletePlantillaHorario);
+  fastify.delete('/api/master/horarios/:id', deletePlantillaHorario);
+
+  // Plantillas Horarios (Alias retrocompatible)
   fastify.get('/master/plantillas-horarios', getPlantillasHorarios);
   fastify.get('/api/master/plantillas-horarios', getPlantillasHorarios);
   fastify.get('/master/plantillas-horarios/filter-options', getPlantillasHorariosFilterOptions);

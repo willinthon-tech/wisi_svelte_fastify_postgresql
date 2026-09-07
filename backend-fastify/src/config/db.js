@@ -127,7 +127,7 @@ export let inMemoryData = {
     { id: 26, nombre: 'Registros', icono: 'settings', ruta: '/rrhh/registros', page_id: 2 },
     { id: 27, nombre: 'Desincorporados', icono: 'settings', ruta: '/rrhh/desincorporados', page_id: 2 },
     { id: 28, nombre: 'Carnet', icono: 'settings', ruta: '/rrhh/carnet', page_id: 2 },
-    { id: 29, nombre: 'Plantillas', icono: 'settings', ruta: '/rrhh/plantillas', page_id: 2 },
+    { id: 29, nombre: 'Horarios', icono: 'schedule', ruta: '/rrhh/horarios', page_id: 2 },
     { id: 30, nombre: 'Cumpleaños', icono: 'settings', ruta: '/rrhh/cumpleanos', page_id: 2 },
     { id: 31, nombre: 'Calendario', icono: 'calendar_month', ruta: '/rrhh/calendario', page_id: 2 },
     // Módulos de MAQUINAS (page_id = 3)
@@ -915,6 +915,23 @@ export async function initDb() {
       (1, 38, 1), (1, 38, 2), (1, 38, 3), (1, 38, 4), (1, 38, 5)
       ON CONFLICT DO NOTHING;
     `;
+
+    // Rename Module 29 to Horarios and update route
+    await sql`
+      UPDATE modulos 
+      SET nombre = 'Horarios', ruta = '/rrhh/horarios', icono = 'schedule' 
+      WHERE id = 29;
+    `.catch(() => {});
+
+    // Clean up non-work-shift exception templates from horarios / plantillas_horarios table
+    await sql`
+      DELETE FROM plantillas_horarios 
+      WHERE hora_entrada IS NULL 
+         OR hora_salida IS NULL 
+         OR codigo IN ('L', 'U') 
+         OR LOWER(nombre) LIKE '%libre%'
+         OR LOWER(COALESCE(tipo, '')) = 'plantilla';
+    `.catch(() => {});
 
     // Seed default base excepciones and fechas_patrias into PostgreSQL
     await sql`

@@ -3550,6 +3550,9 @@ export async function deleteEmpleadoModel(id) {
 export function buildPlantillasHorariosConditions(options = {}) {
   const conds = [];
 
+  // Excluir excepciones y plantillas sin horas asignadas (esta tabla es exclusivamente para Horarios de trabajo)
+  conds.push(sql`p.hora_entrada IS NOT NULL AND p.hora_salida IS NOT NULL AND p.codigo NOT IN ('L', 'U')`);
+
   // 1. Restricción por salas asignadas al usuario logueado
   if (options.userSalaIds && options.userSalaIds.length > 0) {
     conds.push(sql`p.sala_id = ANY(${options.userSalaIds})`);
@@ -3560,13 +3563,7 @@ export function buildPlantillasHorariosConditions(options = {}) {
     conds.push(sql`p.sala_id = ANY(${options.salaIds})`);
   }
 
-  // 3. Tipos seleccionados (horario, plantilla)
-  if (!options.skipTipo && options.tipo && options.tipo.length > 0) {
-    const tipos = options.tipo.map(t => String(t).toLowerCase());
-    conds.push(sql`LOWER(p.tipo) = ANY(${tipos})`);
-  }
-
-  // 4. Búsqueda por texto
+  // 3. Búsqueda por texto
   if (options.search && String(options.search).trim()) {
     const term = `%${String(options.search).trim().toLowerCase()}%`;
     conds.push(sql`(
@@ -3584,74 +3581,43 @@ export async function getPlantillasHorariosFilterOptionsModel(options = {}) {
   if (!isPgConnected || !sql) {
     return {
       success: true,
-      data: { salas: [], tipo: [] }
+      data: { salas: [] }
     };
   }
 
-  const [salas, tipoRes] = await Promise.all([
-    // 1. Salas
-    (async () => {
-      const conds = buildPlantillasHorariosConditions({ ...options, skipSalas: true });
-      const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+  const conds = buildPlantillasHorariosConditions({ ...options, skipSalas: true });
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
-      let allSalas;
-      if (options.userSalaIds && options.userSalaIds.length > 0) {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
-      } else {
-        allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
-      }
+  let allSalas;
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) ORDER BY s.nombre ASC`;
+  } else {
+    allSalas = await sql`SELECT s.id, s.nombre FROM salas s ORDER BY s.nombre ASC`;
+  }
 
-      const countsRes = await sql`
-        SELECT p.sala_id AS id, COUNT(p.id)::int AS count
-        FROM plantillas_horarios p
-        LEFT JOIN salas s ON p.sala_id = s.id
-        ${where}
-        GROUP BY p.sala_id
-      `;
-      const countMap = new Map(countsRes.map(r => [r.id, r.count]));
-      const activeSalas = new Set((options.salaIds || []).map(Number));
+  const countsRes = await sql`
+    SELECT p.sala_id AS id, COUNT(p.id)::int AS count
+    FROM plantillas_horarios p
+    LEFT JOIN salas s ON p.sala_id = s.id
+    ${where}
+    GROUP BY p.sala_id
+  `;
+  const countMap = new Map(countsRes.map(r => [r.id, r.count]));
+  const activeSalas = new Set((options.salaIds || []).map(Number));
 
-      return allSalas
-        .map(s => ({
-          id: s.id,
-          nombre: s.nombre,
-          count: countMap.get(s.id) || 0
-        }))
-        .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
-        .sort((a, b) => b.count - a.count);
-    })(),
-
-    // 2. Tipo (horario, plantilla)
-    (async () => {
-      const conds = buildPlantillasHorariosConditions({ ...options, skipTipo: true });
-      const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
-
-      const countsRes = await sql`
-        SELECT LOWER(COALESCE(p.tipo, 'horario')) AS tipo_val, COUNT(p.id)::int AS count
-        FROM plantillas_horarios p
-        LEFT JOIN salas s ON p.sala_id = s.id
-        ${where}
-        GROUP BY LOWER(COALESCE(p.tipo, 'horario'))
-      `;
-      const countMap = new Map(countsRes.map(r => [r.tipo_val, r.count]));
-      const activeSet = new Set((options.tipo || []).map(t => String(t).toLowerCase()));
-
-      const availableTipos = [
-        { id: 'horario', nombre: 'Horario', count: countMap.get('horario') || 0 },
-        { id: 'plantilla', nombre: 'Excepción', count: countMap.get('plantilla') || 0 }
-      ];
-
-      return availableTipos
-        .filter(t => t.count > 0 || activeSet.has(t.id))
-        .sort((a, b) => b.count - a.count);
-    })()
-  ]);
+  const salas = allSalas
+    .map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      count: countMap.get(s.id) || 0
+    }))
+    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
+    .sort((a, b) => b.count - a.count);
 
   return {
     success: true,
     data: {
-      salas,
-      tipo: tipoRes
+      salas
     }
   };
 }

@@ -4,7 +4,6 @@
   // Persistent Filter State across view navigations
   export const persistentHorariosFilters = writable({
     selectedSalas: [],
-    selectedTipo: [],
     searchQuery: ""
   });
 </script>
@@ -33,84 +32,32 @@
 
   // Smart Multiselect Filters State
   let selectedSalas = initial.selectedSalas || [];
-  let selectedTipo = initial.selectedTipo || [];
   let searchQuery = initial.searchQuery || "";
 
   // Sync back to persistent store whenever any filter parameter changes
   $: {
     persistentHorariosFilters.set({
       selectedSalas,
-      selectedTipo,
       searchQuery
     });
   }
 
   // Cascading Facet Options from Backend
   let filterOptions = {
-    salas: [],
-    tipo: []
+    salas: []
   };
 
   $: hasActiveFilters = Boolean(
     (searchQuery || "").trim() ||
-    selectedSalas.length > 0 ||
-    selectedTipo.length > 0
+    selectedSalas.length > 0
   );
 
-  $: totalFilters = ((searchQuery || "").trim() ? 1 : 0) +
-    selectedSalas.length +
-    selectedTipo.length;
+  $: totalFilters = ((searchQuery || "").trim() ? 1 : 0) + selectedSalas.length;
 
-  // Plantilla Base del Sistema (Protegida / Deshabilitada para eliminación)
-  const BASE_PLANTILLAS = [
-    {
-      id: 'SYS-U',
-      codigo: 'U',
-      nombre: 'Horario Único',
-      colspans: {
-        sala_nombre: {
-          colspan: 3,
-          align: 'center',
-          text: 'Todas las salas'
-        }
-      },
-      skipColumns: ['horas_trabajo', 'jornada'],
-      sala_nombre: 'Todas las salas',
-      color: '#86EFAC',
-      tipo: 'horario',
-      is_system: true,
-      disabled: true,
-      disableDelete: true,
-      disableEdit: true
-    }
-  ];
-
-  let rawServerItems = [];
-  let serverTotalCount = 0;
+  let items = [];
+  let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
-
-  // Filtrar las plantillas base si el usuario aplica filtros de tipo o búsqueda
-  $: matchingBasePlantillas = BASE_PLANTILLAS.filter(bp => {
-    if (selectedTipo && selectedTipo.length > 0) {
-      if (!selectedTipo.includes(bp.tipo)) return false;
-    }
-    if ((searchQuery || '').trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      const matchCod = bp.codigo.toLowerCase().includes(q);
-      const matchNom = bp.nombre.toLowerCase().includes(q);
-      const matchTipo = (bp.tipo === 'plantilla' ? 'excepción excepcion' : bp.tipo).toLowerCase().includes(q);
-      if (!matchCod && !matchNom && !matchTipo) return false;
-    }
-    return true;
-  });
-
-  // Mostrar las plantillas base de primeritas en la primera página
-  $: items = (Number(currentPage) === 1)
-    ? [...matchingBasePlantillas, ...rawServerItems]
-    : rawServerItems;
-
-  $: totalCount = serverTotalCount + matchingBasePlantillas.length;
 
   let currentParams = {
     page: 1,
@@ -129,7 +76,7 @@
 
   // Fetch filter options ONLY when active filters, user assigned salas or search change
   let lastFilterKey = "";
-  $: filterKey = `${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${selectedTipo.join(",")}_${(searchQuery || "").trim()}`;
+  $: filterKey = `${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${(searchQuery || "").trim()}`;
   $: if (filterKey !== lastFilterKey) {
     lastFilterKey = filterKey;
     fetchFilterOptions();
@@ -140,7 +87,6 @@
       const q = new URLSearchParams();
       if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
-      if (selectedTipo.length > 0) q.set("tipo", selectedTipo.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
       const res = await fetch(`/api/master/plantillas-horarios/filter-options?${q.toString()}`);
@@ -171,15 +117,12 @@
       if (selectedSalas.length > 0) {
         q.set('sala_ids', selectedSalas.join(','));
       }
-      if (selectedTipo.length > 0) {
-        q.set('tipo', selectedTipo.join(','));
-      }
 
       const res = await fetch(`/api/master/plantillas-horarios?${q.toString()}`);
       const json = await res.json();
       if (json && json.success) {
-        rawServerItems = json.data || [];
-        serverTotalCount = json.total || 0;
+        items = json.data || [];
+        totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
       }
@@ -192,7 +135,6 @@
   function clearAllFilters() {
     searchQuery = "";
     selectedSalas = [];
-    selectedTipo = [];
     loadServerData({ page: 1, search: "" });
   }
 
@@ -214,17 +156,17 @@
   $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : '';
 
   $: createFields = [
-    { key: 'codigo', label: 'Código', type: 'text', placeholder: 'Ej. O, T, NC, A', required: true },
-    { key: 'nombre', label: 'Descripción / Nombre', type: 'text', placeholder: 'Ej. ADMINISTRACION', required: true },
+    { key: 'codigo', label: 'Código', type: 'text', placeholder: 'Ej. M, T, N, ADM', required: true },
+    { key: 'nombre', label: 'Descripción / Nombre', type: 'text', placeholder: 'Ej. TURNO MAÑANA', required: true },
     { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true, defaultValue: defaultSalaId },
     {
       type: 'row',
       fields: [
-        { key: 'hora_entrada', label: 'Hora Entrada', type: 'time', placeholder: '08:00:00' },
-        { key: 'hora_salida', label: 'Hora Salida', type: 'time', placeholder: '17:00:00' }
+        { key: 'hora_entrada', label: 'Hora Entrada', type: 'time', placeholder: '08:00:00', required: true },
+        { key: 'hora_salida', label: 'Hora Salida', type: 'time', placeholder: '17:00:00', required: true }
       ]
     },
-    { key: 'color', label: 'Color de Identificación', type: 'color', defaultValue: '#FFFF99' }
+    { key: 'color', label: 'Color de Identificación', type: 'color', defaultValue: '#86EFAC' }
   ];
 
   async function handleCreate(event) {
@@ -233,14 +175,14 @@
       const res = await fetch('/api/master/plantillas-horarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
+        body: JSON.stringify({ ...draft, tipo: 'horario' })
       });
       const json = await res.json();
       if (json && json.success) {
-        triggerToast('Registro creado exitosamente', 'success');
+        triggerToast('Horario creado exitosamente', 'success');
         await loadServerData();
       } else {
-        throw new Error(json.error || 'Error al guardar');
+        throw new Error(json.error || 'Error al guardar horario');
       }
     } catch (err) {
       triggerToast(`Error al crear: ${err.message}`, 'error');
@@ -249,22 +191,18 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
-    if (String(id).startsWith('SYS-')) {
-      triggerToast('Esta plantilla base no puede ser modificada', 'warning');
-      return;
-    }
     try {
       const res = await fetch(`/api/master/plantillas-horarios/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
+        body: JSON.stringify({ ...draft, tipo: 'horario' })
       });
       const json = await res.json();
       if (json && json.success) {
-        triggerToast('Horario/Excepción actualizado exitosamente', 'success');
+        triggerToast('Horario actualizado exitosamente', 'success');
         await loadServerData();
       } else {
-        throw new Error(json.error || 'Error al actualizar');
+        throw new Error(json.error || 'Error al actualizar horario');
       }
     } catch (err) {
       triggerToast(`Error al actualizar: ${err.message}`, 'error');
@@ -273,10 +211,6 @@
 
   async function handleDelete(event) {
     const { id, onResult } = event.detail;
-    if (String(id).startsWith('SYS-')) {
-      triggerToast('Esta plantilla base no puede ser eliminada', 'warning');
-      return;
-    }
     try {
       const res = await fetch(`/api/master/plantillas-horarios/${id}`, {
         method: 'DELETE'
@@ -285,7 +219,7 @@
       if (json && json.blocked) {
         onResult(json);
       } else {
-        triggerToast('Eliminado exitosamente', 'success');
+        triggerToast('Horario eliminado exitosamente', 'success');
         onResult({ success: true });
         await loadServerData();
       }
@@ -300,20 +234,7 @@
     const blocked = [];
     const errors = [];
 
-    const filteredIds = ids.filter(id => !String(id).startsWith('SYS-'));
-    const sysIds = ids.filter(id => String(id).startsWith('SYS-'));
-
-    for (const sysId of sysIds) {
-      const item = items.find(i => String(i.id) === String(sysId));
-      blocked.push({
-        id: sysId,
-        name: item?.nombre || `Plantilla Base (${sysId})`,
-        reason: 'Es una plantilla base del sistema y está protegida contra eliminación.',
-        dependencies: []
-      });
-    }
-
-    for (const id of filteredIds) {
+    for (const id of ids) {
       try {
         const res = await fetch(`/api/master/plantillas-horarios/${id}`, { method: 'DELETE' });
         const json = await res.json();
@@ -365,8 +286,7 @@
   bind:searchQuery
   searchPlaceholder="Buscar por código, descripción, sala..."
   entityType="horario"
-  reservedCodes={['L', 'U']}
-  createModalTitle="Agregar Plantilla"
+  createModalTitle="Agregar Horario"
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:create={handleCreate}
   on:saveInline={handleSaveInline}
@@ -384,17 +304,6 @@
         loadServerData({ page: 1 });
       }}
     />
-
-    <SmartMultiSelect
-      id="filter-horarios-tipo"
-      label="Tipo"
-      options={filterOptions.tipo}
-      bind:selectedValues={selectedTipo}
-      on:change={(e) => {
-        selectedTipo = e.detail;
-        loadServerData({ page: 1 });
-      }}
-    />
   </div>
 
   <div slot="search-actions">
@@ -403,174 +312,20 @@
         type="button"
         on:click={clearAllFilters}
         style="padding: 7px 14px; font-size: 12px; font-weight: 700; color: #ef4444; border: 1px solid #fca5a5; border-radius: 8px; background: #fef2f2; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.04); white-space: nowrap;"
-        title="Restablecer búsqueda y todos los filtros"
+        title="Restablecer búsqueda y filtros"
       >
         <span>✕</span> Limpiar Filtros ({totalFilters})
       </button>
     {/if}
-  </div>
-
-  <div slot="info-banner" class="plantillas-base-banner">
-    <div class="banner-badge-heading">
-      <span class="info-icon">📌</span>
-      <span class="info-lead">Plantillas Base del Sistema:</span>
-      <span class="info-note">Se cuenta con 2 plantillas predeterminadas de uso general:</span>
-    </div>
-
-    <div class="plantillas-cards-row">
-      <!-- Item 1: Código L - Libre (Tipo: Excepción) -->
-      <div class="base-plantilla-pill pill-excepcion">
-        <span class="pill-code">L</span>
-        <div class="pill-details">
-          <span class="pill-desc">Libre</span>
-          <span class="pill-sub">Tipo: <strong>Excepción</strong></span>
-        </div>
-      </div>
-
-      <!-- Item 2: Código U - Horario Único (Tipo: Horario) -->
-      <div class="base-plantilla-pill pill-horario">
-        <span class="pill-code">U</span>
-        <div class="pill-details">
-          <span class="pill-desc">Horario Único</span>
-          <span class="pill-sub">Tipo: <strong>Horario</strong></span>
-        </div>
-      </div>
-    </div>
   </div>
 </PaginatedDataTable>
 
 <style>
   .smart-filters-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(200px, 320px);
     gap: 8px;
     width: 100%;
     align-items: center;
-  }
-
-  .plantillas-base-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    width: 100%;
-    padding: 8px 14px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    box-sizing: border-box;
-  }
-
-  .banner-badge-heading {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12.5px;
-    color: #334155;
-    flex-wrap: wrap;
-  }
-
-  .info-icon {
-    font-size: 14px;
-  }
-
-  .info-lead {
-    font-weight: 800;
-    color: #0f172a;
-  }
-
-  .info-note {
-    color: #64748b;
-    font-size: 12px;
-  }
-
-  .plantillas-cards-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-    flex-wrap: wrap;
-  }
-
-  .base-plantilla-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 12px;
-    border-radius: 8px;
-    border: 1px solid;
-    transition: all 0.15s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  }
-
-  .pill-excepcion {
-    background: #f8fafc;
-    border-color: #cbd5e1;
-  }
-
-  .pill-horario {
-    background: #f0fdf4;
-    border-color: #bbf7d0;
-  }
-
-  .pill-code {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 900;
-    font-family: monospace;
-  }
-
-  .pill-excepcion .pill-code {
-    background: #94a3b8;
-    color: #ffffff;
-  }
-
-  .pill-horario .pill-code {
-    background: #4ade80;
-    color: #064e3b;
-  }
-
-  .pill-details {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.2;
-  }
-
-  .pill-desc {
-    font-size: 12px;
-    font-weight: 800;
-    color: #0f172a;
-  }
-
-  .pill-sub {
-    font-size: 10.5px;
-    color: #64748b;
-  }
-
-  .pill-excepcion .pill-sub strong {
-    color: #4338ca;
-  }
-
-  .pill-horario .pill-sub strong {
-    color: #15803d;
-  }
-
-  @media (max-width: 1024px) {
-    .plantillas-base-banner {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 10px;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .smart-filters-grid {
-      grid-template-columns: 1fr;
-    }
   }
 </style>
