@@ -3639,10 +3639,6 @@ export async function getPlantillasHorariosModel(params = {}) {
   if (params.sala_ids) {
     salaIds = String(params.sala_ids).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
   }
-  let tipo = null;
-  if (params.tipo) {
-    tipo = String(params.tipo).split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-  }
 
   const allowedSortColumns = {
     'id': 'p.id',
@@ -3652,8 +3648,7 @@ export async function getPlantillasHorariosModel(params = {}) {
     'horas_trabajo': 'p.hora_entrada',
     'hora_entrada': 'p.hora_entrada',
     'jornada': "COALESCE(p.hora_salida, '00:00:00') - COALESCE(p.hora_entrada, '00:00:00')",
-    'color': 'p.color',
-    'tipo': 'p.tipo'
+    'color': 'p.color'
   };
 
   const sortSql = allowedSortColumns[sortBy] || allowedSortColumns['codigo'];
@@ -3663,7 +3658,6 @@ export async function getPlantillasHorariosModel(params = {}) {
     const conds = buildPlantillasHorariosConditions({
       userSalaIds,
       salaIds,
-      tipo,
       search
     });
 
@@ -3697,18 +3691,16 @@ export async function getPlantillasHorariosModel(params = {}) {
 
 export async function createPlantillaHorarioModel(data) {
   if (isPgConnected && sql) {
-    const computedTipo = (!data.hora_entrada && !data.hora_salida) ? 'plantilla' : (data.tipo || 'horario');
     const rows = await sql`
       INSERT INTO horarios (
         nombre, sala_id, codigo, hora_entrada, hora_salida, 
-        hora_descanso_entrada, hora_descanso_salida, descanso_automatico, color, tipo
+        hora_descanso_entrada, hora_descanso_salida, descanso_automatico, color
       )
       VALUES (
         ${data.nombre}, ${Number(data.sala_id)}, ${data.codigo}, 
         ${data.hora_entrada || null}, ${data.hora_salida || null}, 
         ${data.hora_descanso_entrada || null}, ${data.hora_descanso_salida || null}, 
-        ${data.descanso_automatico || null}, ${data.color || '#FFFF99'}, 
-        ${computedTipo}
+        ${data.descanso_automatico || null}, ${data.color || '#FFFF99'}
       )
       RETURNING *
     `;
@@ -3720,7 +3712,6 @@ export async function createPlantillaHorarioModel(data) {
 export async function updatePlantillaHorarioModel(id, data) {
   const pId = Number(id);
   if (isPgConnected && sql) {
-    const computedTipo = (!data.hora_entrada && !data.hora_salida) ? 'plantilla' : (data.tipo || 'horario');
     const rows = await sql`
       UPDATE horarios
       SET nombre = ${data.nombre},
@@ -3730,7 +3721,6 @@ export async function updatePlantillaHorarioModel(id, data) {
           hora_salida = ${data.hora_salida || null},
           descanso_automatico = ${data.descanso_automatico || null},
           color = ${data.color || '#FFFF99'},
-          tipo = ${computedTipo},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${pId}
       RETURNING *
@@ -3847,7 +3837,7 @@ export async function getDepartamentosCiclosModel(params = {}) {
 
       // Get all distinct assigned shift horarios for active employees in this department
       const horariosRes = await sql`
-        SELECT DISTINCT ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
+        SELECT DISTINCT ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color
         FROM empleados_horarios eph
         JOIN empleados e ON eph.empleado_id = e.id
         JOIN cargos c ON e.cargo_id = c.id
@@ -3884,7 +3874,7 @@ export async function getDepartamentoEmpleadosCiclosModel(deptId, search = '') {
 
     // Get all shift horarios for this department's sala
     const plantillasSala = await sql`
-      SELECT id, codigo, nombre, hora_entrada, hora_salida, color, tipo
+      SELECT id, codigo, nombre, hora_entrada, hora_salida, color
       FROM horarios
       WHERE sala_id = ${dept.sala_id}
       ORDER BY codigo ASC, id ASC
@@ -3921,7 +3911,7 @@ export async function getDepartamentoEmpleadosCiclosModel(deptId, search = '') {
 
     for (const emp of empleados) {
       const empHorarios = await sql`
-        SELECT ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color, ph.tipo
+        SELECT ph.id, ph.codigo, ph.nombre, ph.hora_entrada, ph.hora_salida, ph.color
         FROM empleados_horarios eph
         JOIN horarios ph ON eph.horario_id = ph.id
         WHERE eph.empleado_id = ${emp.empleado_id}
@@ -3965,8 +3955,7 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
     }
 
     if (action === 'bulk_remove_all') {
-      // Remove ALL horario-type plantillas from ALL employees in this department
-      // (plantillas where tipo = 'horario' only; exceptions like L/U are auto-excluded since they are tipo='excepcion')
+      // Remove ALL horarios from ALL employees in this department
       await sql`
         DELETE FROM empleados_horarios
         WHERE empleado_id IN (
@@ -3977,7 +3966,7 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
           WHERE a.departamento_id = ${dId} AND e.activo = TRUE
         )
         AND horario_id IN (
-          SELECT id FROM horarios WHERE tipo = 'horario'
+          SELECT id FROM horarios
         );
       `;
       return { success: true, message: 'Todos los horarios han sido quitados de los empleados del departamento' };
@@ -4021,7 +4010,7 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
           DELETE FROM empleados_horarios 
           WHERE empleado_id = ${eId}
           AND horario_id IN (
-            SELECT id FROM horarios WHERE tipo = 'horario'
+            SELECT id FROM horarios
           )
         `;
         for (const pId of pIds) {

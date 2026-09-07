@@ -175,7 +175,7 @@
       const res = await fetch('/api/master/horarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...draft, tipo: 'horario' })
+        body: JSON.stringify(draft)
       });
       const json = await res.json();
       if (json && json.success) {
@@ -195,7 +195,7 @@
       const res = await fetch(`/api/master/horarios/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...draft, tipo: 'horario' })
+        body: JSON.stringify(draft)
       });
       const json = await res.json();
       if (json && json.success) {

@@ -192,13 +192,13 @@
       if (h && h.id) assignedMap.set(Number(h.id), h);
     });
 
-    // 2. Horarios asignados al empleado (tipo === 'horario')
+    // 2. Horarios asignados al empleado
     if (assignedMap.size > 0) {
-      const foundInSala = (plantillasSala || []).filter(p => p.tipo === 'horario' && assignedMap.has(Number(p.id)));
+      const foundInSala = (plantillasSala || []).filter(p => assignedMap.has(Number(p.id)));
       const foundIds = new Set(foundInSala.map(p => Number(p.id)));
       const missingFromSala = [];
       assignedMap.forEach((h, id) => {
-        if (!foundIds.has(id) && (h.tipo === 'horario' || (!h.tipo && h.hora_entrada))) {
+        if (!foundIds.has(id)) {
           missingFromSala.push(h);
         }
       });

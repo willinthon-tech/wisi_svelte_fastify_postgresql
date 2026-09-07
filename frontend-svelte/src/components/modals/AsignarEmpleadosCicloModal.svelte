@@ -126,8 +126,7 @@
   }
 
   $: horariosUnicamente = (plantillasSala || []).filter(p => {
-    const t = String(p.tipo || '').toLowerCase();
-    return t === 'horario' || (t !== 'plantilla' && p.hora_entrada && p.hora_salida);
+    return p.hora_entrada && p.hora_salida;
   });
 
   $: filteredEmpleados = empleados.filter(e => {
