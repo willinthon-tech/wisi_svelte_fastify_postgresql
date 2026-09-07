@@ -58,6 +58,35 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let globalExcepciones = [];
+
+  function getContrastColor(hexColor) {
+    if (!hexColor || typeof hexColor !== 'string') return '#ffffff';
+    let hex = hexColor.replace('#', '');
+    if (hex.length === 3) {
+      hex = hex.split('').map(c => c + c).join('');
+    }
+    if (hex.length !== 6) return '#ffffff';
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 140 ? '#0f172a' : '#ffffff';
+  }
+
+  async function loadExcepciones() {
+    try {
+      const res = await fetch('/api/master/excepciones?limit=1000&sortBy=codigo&sortDir=asc');
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success) {
+          globalExcepciones = json.data || [];
+        }
+      }
+    } catch (e) {
+      console.warn("Error fetching excepciones in HorariosView:", e);
+    }
+  }
 
   let currentParams = {
     page: 1,
@@ -70,6 +99,7 @@
   onMount(async () => {
     await Promise.all([
       loadMasterStoresFromBackend(),
+      loadExcepciones(),
       loadServerData(currentParams)
     ]);
   });
@@ -274,6 +304,31 @@
   }
 </script>
 
+{#if globalExcepciones && globalExcepciones.length > 0}
+  <div class="excepciones-banner-card">
+    <div class="excepciones-banner-header">
+      <span class="excepciones-pin">📌</span>
+      <strong class="excepciones-title">Excepciones Base del Sistema:</strong>
+      <span class="excepciones-subtitle">
+        Se cuenta con {globalExcepciones.length} excepciones predeterminadas de horario y asistencia (aplican a todas las salas):
+      </span>
+    </div>
+    <div class="excepciones-badges-grid">
+      {#each globalExcepciones as exp}
+        <div class="excepcion-badge-item" title="{exp.codigo} - {exp.descripcion} ({exp.tipo || 'Asignable'})">
+          <span
+            class="exp-code-chip"
+            style="background-color: {exp.color || '#3b82f6'}; color: {getContrastColor(exp.color)};"
+          >
+            {exp.codigo}
+          </span>
+          <span class="exp-name-text">{exp.descripcion || exp.nombre}</span>
+        </div>
+      {/each}
+    </div>
+  </div>
+{/if}
+
 <PaginatedDataTable 
   {items}
   existingItems={items}
@@ -321,6 +376,91 @@
 </PaginatedDataTable>
 
 <style>
+  .excepciones-banner-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+
+  .excepciones-banner-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #1e293b;
+    flex-wrap: wrap;
+  }
+
+  .excepciones-pin {
+    font-size: 14px;
+  }
+
+  .excepciones-title {
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .excepciones-subtitle {
+    color: #64748b;
+    font-size: 12.5px;
+  }
+
+  .excepciones-badges-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    width: 100%;
+  }
+
+  .excepcion-badge-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+    overflow: hidden;
+  }
+
+  .excepcion-badge-item:hover {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    transform: translateY(-1px);
+  }
+
+  .exp-code-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 6px;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  }
+
+  .exp-name-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e40af;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .smart-filters-grid {
     display: grid;
     grid-template-columns: 1fr;
