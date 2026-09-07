@@ -25,7 +25,7 @@ export function toTitleCase(str) {
 // Works automatically for ALL existing tables AND any future tables created!
 
 
-import { sql, isPgConnected, inMemoryData } from '../config/db.js';
+import { sql, isPgConnected } from '../config/db.js';
 import { attlogEvents } from '../events/attlog.events.js';
 import zlib from 'zlib';
 import fs from 'fs';
