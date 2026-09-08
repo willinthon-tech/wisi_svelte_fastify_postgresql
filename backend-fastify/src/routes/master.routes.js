@@ -39,7 +39,8 @@ import {
   getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves,
   getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral,
   getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente,
-  getLibroDatos, saveLibroDatos
+  getLibroDatos, saveLibroDatos,
+  getLibroNovedadesMesas, saveLibroNovedadesMesa, deleteLibroNovedadesMesa
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -299,6 +300,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/libros/:id/datos', saveLibroDatos);
   fastify.put('/master/libros/:id/datos', saveLibroDatos);
   fastify.put('/api/master/libros/:id/datos', saveLibroDatos);
+
+  // Novedades de Mesas (CECOM: Libro Novedades Mesas)
+  fastify.get('/master/libros/:id/novedades-mesas', getLibroNovedadesMesas);
+  fastify.get('/api/master/libros/:id/novedades-mesas', getLibroNovedadesMesas);
+  fastify.post('/master/libros/:id/novedades-mesas', saveLibroNovedadesMesa);
+  fastify.post('/api/master/libros/:id/novedades-mesas', saveLibroNovedadesMesa);
+  fastify.put('/master/libros/:id/novedades-mesas', saveLibroNovedadesMesa);
+  fastify.put('/api/master/libros/:id/novedades-mesas', saveLibroNovedadesMesa);
+  fastify.delete('/master/libros/:id/novedades-mesas/:recordId', deleteLibroNovedadesMesa);
+  fastify.delete('/api/master/libros/:id/novedades-mesas/:recordId', deleteLibroNovedadesMesa);
 
 
   // ==========================================

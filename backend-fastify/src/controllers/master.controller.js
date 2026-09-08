@@ -38,7 +38,8 @@ import {
   getLibroControlLlavesModel, createLibroControlLlavesModel, updateLibroControlLlavesHorasModel, deleteLibroControlLlavesModel,
   getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel,
   getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel,
-  getLibroDatosModel, saveLibroDatosModel
+  getLibroDatosModel, saveLibroDatosModel,
+  getLibroNovedadesMesasModel, saveLibroNovedadesMesaModel, deleteLibroNovedadesMesaModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2273,6 +2274,38 @@ export async function saveLibroDatos(request, reply) {
     const body = parseBody(request.body);
     const result = await saveLibroDatosModel(id, body);
     return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// --- NOVEDADES DE MESAS (CECOM: LIBRO NOVEDADES MESAS) ---
+export async function getLibroNovedadesMesas(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroNovedadesMesasModel(id);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function saveLibroNovedadesMesa(request, reply) {
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const result = await saveLibroNovedadesMesaModel(id, body);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteLibroNovedadesMesa(request, reply) {
+  try {
+    const { id, recordId } = request.params;
+    const result = await deleteLibroNovedadesMesaModel(recordId);
+    return reply.send({ success: true, ...result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
   }

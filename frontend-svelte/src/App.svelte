@@ -829,7 +829,7 @@
           <SettingsView {healthStatus} />
 
           <!-- CECOM Module Views -->
-        {:else if String($currentRouteStore || '').startsWith('cecom/libro/') || String($currentRouteStore || '').startsWith('libro/')}
+        {:else if String($currentRouteStore || '').startsWith('cecom/libro/') || String($currentRouteStore || '').startsWith('libro/') || /^\d+\//.test(String($currentRouteStore || ''))}
           <LibroTrabajoView />
         {:else if $currentRouteStore === "cecom/libro" || $currentRouteStore === "libro" || $currentRouteStore === "libros"}
           <LibroView

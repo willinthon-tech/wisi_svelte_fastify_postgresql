@@ -8193,6 +8193,149 @@ export async function saveLibroDatosModel(libroId, data) {
   return rows[0];
 }
 
+// --- NOVEDADES DE MESAS (CECOM: LIBRO NOVEDADES MESAS) ---
+export async function getLibroNovedadesMesasModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
 
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
+    return inMemoryData.libro_novedades_mesas.filter(d => Number(d.libro_id) === lId);
+  }
 
+  const rows = await sql`
+    SELECT 
+      nm.id,
+      nm.libro_id,
+      nm.mesa_id,
+      m.nombre AS mesa_nombre,
+      m.sala_id,
+      j.nombre AS juego_nombre,
+      nm.hora_apertura,
+      nm.hora_cierre,
+      nm.pitboss,
+      nm.croupier_apertura,
+      nm.croupier_cierre,
+      nm.observacion,
+      nm.created_at,
+      nm.updated_at
+    FROM libro_novedades_mesas nm
+    LEFT JOIN mesas m ON m.id = nm.mesa_id
+    LEFT JOIN juegos j ON j.id = m.juego_id
+    WHERE nm.libro_id = ${lId}
+    ORDER BY m.nombre ASC, nm.id ASC
+  `;
 
+  return rows;
+}
+
+export async function saveLibroNovedadesMesaModel(libroId, data) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  const mesaId = Number(data.mesa_id);
+  if (!mesaId) throw new Error('ID de mesa inválido');
+
+  const horaApertura = (data.hora_apertura || '').trim() || null;
+  const horaCierre = (data.hora_cierre || '').trim() || null;
+  const pitboss = (data.pitboss || '').trim() || null;
+  const croupierApertura = (data.croupier_apertura || '').trim() || null;
+  const croupierCierre = (data.croupier_cierre || '').trim() || null;
+  const observacion = (data.observacion || '').trim() || null;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
+    let idx = inMemoryData.libro_novedades_mesas.findIndex(
+      d => Number(d.libro_id) === lId && Number(d.mesa_id) === mesaId
+    );
+    if (idx !== -1) {
+      inMemoryData.libro_novedades_mesas[idx] = {
+        ...inMemoryData.libro_novedades_mesas[idx],
+        hora_apertura: horaApertura,
+        hora_cierre: horaCierre,
+        pitboss: pitboss,
+        croupier_apertura: croupierApertura,
+        croupier_cierre: croupierCierre,
+        observacion: observacion,
+        updated_at: new Date().toISOString()
+      };
+      return inMemoryData.libro_novedades_mesas[idx];
+    } else {
+      const nextId = (inMemoryData.libro_novedades_mesas.length > 0)
+        ? Math.max(...inMemoryData.libro_novedades_mesas.map(d => d.id)) + 1
+        : 1;
+      const newRecord = {
+        id: nextId,
+        libro_id: lId,
+        mesa_id: mesaId,
+        hora_apertura: horaApertura,
+        hora_cierre: horaCierre,
+        pitboss: pitboss,
+        croupier_apertura: croupierApertura,
+        croupier_cierre: croupierCierre,
+        observacion: observacion,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      inMemoryData.libro_novedades_mesas.push(newRecord);
+      return newRecord;
+    }
+  }
+
+  const rows = await sql`
+    INSERT INTO libro_novedades_mesas (
+      libro_id,
+      mesa_id,
+      hora_apertura,
+      hora_cierre,
+      pitboss,
+      croupier_apertura,
+      croupier_cierre,
+      observacion
+    )
+    VALUES (
+      ${lId},
+      ${mesaId},
+      ${horaApertura},
+      ${horaCierre},
+      ${pitboss},
+      ${croupierApertura},
+      ${croupierCierre},
+      ${observacion}
+    )
+    ON CONFLICT (libro_id, mesa_id) DO UPDATE SET
+      hora_apertura = EXCLUDED.hora_apertura,
+      hora_cierre = EXCLUDED.hora_cierre,
+      pitboss = EXCLUDED.pitboss,
+      croupier_apertura = EXCLUDED.croupier_apertura,
+      croupier_cierre = EXCLUDED.croupier_cierre,
+      observacion = EXCLUDED.observacion,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING 
+      id, libro_id, mesa_id,
+      hora_apertura, hora_cierre,
+      pitboss, croupier_apertura, croupier_cierre,
+      observacion,
+      created_at, updated_at
+  `;
+
+  return rows[0];
+}
+
+export async function deleteLibroNovedadesMesaModel(recordId) {
+  const rId = Number(recordId);
+  if (!rId) throw new Error('ID de registro inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
+    inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas.filter(d => Number(d.id) !== rId);
+    return { success: true };
+  }
+
+  await sql`
+    DELETE FROM libro_novedades_mesas
+    WHERE id = ${rId}
+  `;
+
+  return { success: true };
+}

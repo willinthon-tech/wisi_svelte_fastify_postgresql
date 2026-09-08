@@ -7,6 +7,7 @@
   import LibroControlLlavesView from './LibroControlLlavesView.svelte';
   import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
   import LibroControlClientesView from './LibroControlClientesView.svelte';
+  import LibroNovedadesMesasView from './LibroNovedadesMesasView.svelte';
   import LibroDatosView from './LibroDatosView.svelte';
 
   export let libroId = null;
@@ -22,6 +23,7 @@
     { id: 'control-llaves', label: 'Control Llaves', icon: '🔑', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '⚠️', description: 'Eventos e incidentes reportados en sala' },
     { id: 'control-clientes', label: 'Control Clientes', icon: '👥', description: 'Seguimiento de jugadores y eventos de sala' },
+    { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '🃏', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
     { id: 'resumen-libro', label: 'Resumen Libro', icon: '📊', description: 'Consolidado general y auditoría de la jornada' }
   ];
 
@@ -33,8 +35,8 @@
   function parseRoute(routeStr) {
     if (!routeStr) return;
     const clean = String(routeStr).replace(/^#\/?/, '').replace(/^\//, '').trim();
-    // Match pattern cecom/libro/:id(/:subvista)? o libro/:id(/:subvista)?
-    const match = clean.match(/(?:cecom\/libro|libro)\/(\d+)(?:\/([a-z0-9-]+))?/i);
+    // Match pattern cecom/libro/:id(/:subvista)? o libro/:id(/:subvista)? o :id(/:subvista)?
+    const match = clean.match(/(?:cecom\/libro\/|libro\/|^)(\d+)(?:\/([a-z0-9-]+))?/i);
     if (match) {
       const parsedId = match[1];
       const parsedSub = match[2];
@@ -207,6 +209,8 @@
         <LibroIncidenciasGeneralesView {libro} {libroId} />
       {:else if activeSubvista === 'control-clientes'}
         <LibroControlClientesView {libro} {libroId} />
+      {:else if activeSubvista === 'novedades-mesas'}
+        <LibroNovedadesMesasView {libro} {libroId} />
       {:else}
         <!-- Workspace Card de la Subvista Activa -->
         <div class="subvista-workspace-card">
