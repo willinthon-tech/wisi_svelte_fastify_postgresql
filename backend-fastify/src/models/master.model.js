@@ -7777,5 +7777,119 @@ export async function deleteLibroControlLlavesModel(id, libroId) {
   return { success: true, id: cId };
 }
 
+// --- INCIDENCIAS GENERALES (CECOM: LIBRO INCIDENCIAS GENERALES) ---
+export async function getLibroIncidenciasGeneralesModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
+    return inMemoryData.libro_incidencias_generales.filter(c => Number(c.libro_id) === lId);
+  }
+
+  const rows = await sql`
+    SELECT 
+      id, libro_id, descripcion, hora, created_at, updated_at
+    FROM libro_incidencias_generales
+    WHERE libro_id = ${lId}
+    ORDER BY id ASC
+  `;
+
+  return rows;
+}
+
+export async function createLibroIncidenciaGeneralModel(data) {
+  const libroId = Number(data.libro_id);
+  if (!libroId) throw new Error('ID de libro inválido');
+
+  const descripcion = (data.descripcion || '').trim();
+  if (!descripcion) {
+    throw new Error('La descripción de la incidencia es obligatoria');
+  }
+
+  const now = new Date();
+  const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const hora = (data.hora || '').trim() || currentHHMM;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
+    const nextId = (inMemoryData.libro_incidencias_generales.length > 0)
+      ? Math.max(...inMemoryData.libro_incidencias_generales.map(d => d.id)) + 1
+      : 1;
+    const newRecord = {
+      id: nextId,
+      libro_id: libroId,
+      descripcion,
+      hora,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.libro_incidencias_generales.push(newRecord);
+    return newRecord;
+  }
+
+  const res = await sql`
+    INSERT INTO libro_incidencias_generales (
+      libro_id, descripcion, hora
+    )
+    VALUES (
+      ${libroId}, ${descripcion}, ${hora}
+    )
+    RETURNING id, libro_id, descripcion, hora, created_at, updated_at
+  `;
+
+  return res[0];
+}
+
+export async function updateLibroIncidenciaGeneralHoraModel(incidenciaId, libroId, data) {
+  const incId = Number(incidenciaId);
+  const lId = Number(libroId);
+  if (!incId) throw new Error('ID de incidencia inválido');
+
+  const hora = (data.hora || '').trim();
+  if (!hora) throw new Error('Debe indicar una hora válida');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
+    const idx = inMemoryData.libro_incidencias_generales.findIndex(c => Number(c.id) === incId);
+    if (idx !== -1) {
+      inMemoryData.libro_incidencias_generales[idx].hora = hora;
+      inMemoryData.libro_incidencias_generales[idx].updated_at = new Date().toISOString();
+      return inMemoryData.libro_incidencias_generales[idx];
+    }
+    throw new Error('Incidencia no encontrada');
+  }
+
+  const rows = await sql`
+    UPDATE libro_incidencias_generales
+    SET 
+      hora = ${hora},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${incId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    RETURNING id, libro_id, descripcion, hora, created_at, updated_at
+  `;
+
+  return rows[0];
+}
+
+export async function deleteLibroIncidenciaGeneralModel(id, libroId) {
+  const incId = Number(id);
+  const lId = Number(libroId);
+  if (!incId) throw new Error('ID de incidencia inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
+    inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales.filter(c => Number(c.id) !== incId);
+    return { success: true, id: incId };
+  }
+
+  await sql`
+    DELETE FROM libro_incidencias_generales
+    WHERE id = ${incId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+  `;
+
+  return { success: true, id: incId };
+}
+
 
 

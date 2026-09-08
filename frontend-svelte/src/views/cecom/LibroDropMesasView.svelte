@@ -72,9 +72,10 @@
 
   // Encabezado oscuro de la tabla: Gan Casino PLC - 14/09/2026
   $: tableHeaderTitle = (() => {
-    const salaName = libro?.sala_nombre_comercial || libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre || 'Sala';
+    const salaName = libro?.sala_nombre || 
+      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
+      libro?.sala_nombre_comercial ||
+      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();

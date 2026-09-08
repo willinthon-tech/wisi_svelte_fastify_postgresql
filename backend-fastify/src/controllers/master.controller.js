@@ -35,7 +35,8 @@ import {
   getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
   getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel,
   getLibroDropMesasModel, createLibroDropMesaModel, deleteLibroDropMesaModel,
-  getLibroControlLlavesModel, createLibroControlLlavesModel, updateLibroControlLlavesHorasModel, deleteLibroControlLlavesModel
+  getLibroControlLlavesModel, createLibroControlLlavesModel, updateLibroControlLlavesHorasModel, deleteLibroControlLlavesModel,
+  getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2147,6 +2148,50 @@ export async function deleteLibroControlLlaves(request, reply) {
   try {
     const { id, controlId } = request.params;
     const result = await deleteLibroControlLlavesModel(controlId, id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// --- INCIDENCIAS GENERALES (CECOM: LIBRO INCIDENCIAS GENERALES) ---
+export async function getLibroIncidenciasGenerales(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroIncidenciasGeneralesModel(id);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function createLibroIncidenciaGeneral(request, reply) {
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const data = { ...body, libro_id: id };
+    const result = await createLibroIncidenciaGeneralModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateLibroIncidenciaGeneralHora(request, reply) {
+  try {
+    const { id, incidenciaId } = request.params;
+    const body = parseBody(request.body);
+    const result = await updateLibroIncidenciaGeneralHoraModel(incidenciaId, id, body);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteLibroIncidenciaGeneral(request, reply) {
+  try {
+    const { id, incidenciaId } = request.params;
+    const result = await deleteLibroIncidenciaGeneralModel(incidenciaId, id);
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });

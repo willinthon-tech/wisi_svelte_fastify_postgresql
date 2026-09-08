@@ -36,7 +36,8 @@ import {
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
   getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
-  getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves
+  getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves,
+  getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -262,6 +263,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/libros/:id/control-llaves/:controlId/horas', updateLibroControlLlavesHoras);
   fastify.delete('/master/libros/:id/control-llaves/:controlId', deleteLibroControlLlaves);
   fastify.delete('/api/master/libros/:id/control-llaves/:controlId', deleteLibroControlLlaves);
+
+  // Incidencias Generales (CECOM: Libro Incidencias Generales)
+  fastify.get('/master/libros/:id/incidencias-generales', getLibroIncidenciasGenerales);
+  fastify.get('/api/master/libros/:id/incidencias-generales', getLibroIncidenciasGenerales);
+  fastify.post('/master/libros/:id/incidencias-generales', createLibroIncidenciaGeneral);
+  fastify.post('/api/master/libros/:id/incidencias-generales', createLibroIncidenciaGeneral);
+  fastify.put('/master/libros/:id/incidencias-generales/:incidenciaId/hora', updateLibroIncidenciaGeneralHora);
+  fastify.put('/api/master/libros/:id/incidencias-generales/:incidenciaId/hora', updateLibroIncidenciaGeneralHora);
+  fastify.delete('/master/libros/:id/incidencias-generales/:incidenciaId', deleteLibroIncidenciaGeneral);
+  fastify.delete('/api/master/libros/:id/incidencias-generales/:incidenciaId', deleteLibroIncidenciaGeneral);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)

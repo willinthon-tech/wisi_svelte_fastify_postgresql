@@ -5,6 +5,7 @@
   import { getPublicWebUrl } from '../../config/api.config.js';
   import LibroDropMesasView from './LibroDropMesasView.svelte';
   import LibroControlLlavesView from './LibroControlLlavesView.svelte';
+  import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
 
   export let libroId = null;
 
@@ -139,7 +140,7 @@
           </h1>
           {#if libro?.sala_nombre || libro?.sala_nombre_comercial}
             <span class="badge-sala">
-              📍 {libro.sala_nombre_comercial || libro.sala_nombre}
+              📍 {libro.sala_nombre || libro.sala_nombre_comercial}
             </span>
           {/if}
           {#if libro?.id}
@@ -197,6 +198,8 @@
         <LibroDropMesasView {libro} {libroId} />
       {:else if activeSubvista === 'control-llaves'}
         <LibroControlLlavesView {libro} {libroId} />
+      {:else if activeSubvista === 'incidencias-generales'}
+        <LibroIncidenciasGeneralesView {libro} {libroId} />
       {:else}
         <!-- Workspace Card de la Subvista Activa -->
         <div class="subvista-workspace-card">
@@ -218,19 +221,7 @@
 
           <!-- Dynamic Subview Workspace Placeholder / Module Body -->
           <div class="workspace-body">
-            {#if activeSubvista === 'incidencias-generales'}
-            <div class="sub-panel">
-              <div class="empty-workspace-state">
-                <span class="empty-icon">⚠️</span>
-                <h3>Incidencias Generales de la Sala</h3>
-                <p>Reportes de fallas eléctricas, sistemas de vigilancia, eventos climáticos o situaciones operativas imprevistas.</p>
-                <button type="button" class="btn-primary" on:click={() => triggerToast('Registrar incidencia general...', 'info')}>
-                  + Reportar Incidencia
-                </button>
-              </div>
-            </div>
-
-          {:else if activeSubvista === 'control-clientes'}
+            {#if activeSubvista === 'control-clientes'}
             <div class="sub-panel">
               <div class="empty-workspace-state">
                 <span class="empty-icon">👥</span>
@@ -248,7 +239,7 @@
                 <div class="resumen-header-banner">
                   <div class="banner-title">
                     <h3>Resumen Consolidado del Libro</h3>
-                    <p>Fecha: {formatDateDisplay(libro?.descripcion)} • Sala: {libro?.sala_nombre_comercial || libro?.sala_nombre || 'Asignada'}</p>
+                    <p>Fecha: {formatDateDisplay(libro?.descripcion)} • Sala: {libro?.sala_nombre || libro?.sala_nombre_comercial || 'Asignada'}</p>
                   </div>
                   <span class="status-chip open">En Curso</span>
                 </div>
