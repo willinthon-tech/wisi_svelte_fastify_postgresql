@@ -25,6 +25,19 @@
   // Operadores
   let operadorTurnoA = '';
   let operadorTurnoC = '';
+  let operadoresTurnoAList = [];
+  let operadoresTurnoCList = [];
+
+  // Inputs temporales para escribir/elegir operadores
+  let inputTempOperadorA = '';
+  let inputTempOperadorC = '';
+
+  // Estados de dropdown de sugerencias visuales
+  let showSugerenciasA = false;
+  let selectedIndexA = -1;
+
+  let showSugerenciasC = false;
+  let selectedIndexC = -1;
 
   let isSaving = false;
   let isLoadingData = false;
@@ -35,10 +48,6 @@
   let autoSaveTimeout = null;
   let saveStatus = 'idle'; // 'idle' | 'saving' | 'saved'
   let saveStatusTimeout = null;
-
-  // Reactivos para las tarjetas y tabla de la derecha
-  $: operadoresTurnoAList = parseOperadores(operadorTurnoA);
-  $: operadoresTurnoCList = parseOperadores(operadorTurnoC);
 
   // Encabezado superior: Roraima - 07/09/2026
   $: tableHeaderTitle = (() => {
@@ -55,6 +64,22 @@
     const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim();
     return nom || e.nombre || '';
   }).filter(Boolean);
+
+  // Sugerencias filtradas reactivas para Turno A
+  $: sugerenciasFiltradasA = (() => {
+    const q = (inputTempOperadorA || '').trim().toLowerCase();
+    const disponibles = listaEmpleados.filter(emp => !operadoresTurnoAList.includes(emp));
+    if (!q) return disponibles.slice(0, 8);
+    return disponibles.filter(emp => emp.toLowerCase().includes(q)).slice(0, 8);
+  })();
+
+  // Sugerencias filtradas reactivas para Turno C
+  $: sugerenciasFiltradasC = (() => {
+    const q = (inputTempOperadorC || '').trim().toLowerCase();
+    const disponibles = listaEmpleados.filter(emp => !operadoresTurnoCList.includes(emp));
+    if (!q) return disponibles.slice(0, 8);
+    return disponibles.filter(emp => emp.toLowerCase().includes(q)).slice(0, 8);
+  })();
 
   function formatDateDisplay(d) {
     if (!d) return '—';
@@ -90,6 +115,176 @@
     autoSaveTimeout = setTimeout(() => {
       handleGuardar(true);
     }, 400);
+  }
+
+  // Funciones de Turno A
+  function addOperadorA(val) {
+    if (!val) return;
+    const parts = String(val)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const current = [...operadoresTurnoAList];
+    for (const p of parts) {
+      if (!current.includes(p)) {
+        current.push(p);
+      }
+    }
+    operadoresTurnoAList = current;
+    operadorTurnoA = operadoresTurnoAList.join(', ');
+    inputTempOperadorA = '';
+    showSugerenciasA = false;
+    selectedIndexA = -1;
+    triggerAutoSave();
+  }
+
+  function removeOperadorA(name) {
+    operadoresTurnoAList = operadoresTurnoAList.filter(n => n !== name);
+    operadorTurnoA = operadoresTurnoAList.join(', ');
+    triggerAutoSave();
+  }
+
+  function onInputOperadorA() {
+    showSugerenciasA = true;
+    selectedIndexA = -1;
+  }
+
+  function onKeyDownOperadorA(e) {
+    if (e.key === 'ArrowDown') {
+      if (!showSugerenciasA) {
+        showSugerenciasA = true;
+        selectedIndexA = -1;
+      }
+      if (sugerenciasFiltradasA.length > 0) {
+        e.preventDefault();
+        selectedIndexA = (selectedIndexA + 1) % sugerenciasFiltradasA.length;
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (showSugerenciasA && sugerenciasFiltradasA.length > 0) {
+        e.preventDefault();
+        selectedIndexA = (selectedIndexA - 1 + sugerenciasFiltradasA.length) % sugerenciasFiltradasA.length;
+      }
+    } else if (e.key === 'Tab') {
+      if (showSugerenciasA && sugerenciasFiltradasA.length > 0) {
+        e.preventDefault();
+        const match = selectedIndexA >= 0 ? sugerenciasFiltradasA[selectedIndexA] : sugerenciasFiltradasA[0];
+        addOperadorA(match);
+      } else if (inputTempOperadorA.trim()) {
+        e.preventDefault();
+        addOperadorA(inputTempOperadorA.trim());
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showSugerenciasA && selectedIndexA >= 0 && sugerenciasFiltradasA[selectedIndexA]) {
+        addOperadorA(sugerenciasFiltradasA[selectedIndexA]);
+      } else if (inputTempOperadorA.trim()) {
+        addOperadorA(inputTempOperadorA.trim());
+      }
+    } else if (e.key === ',') {
+      e.preventDefault();
+      if (inputTempOperadorA.trim()) {
+        addOperadorA(inputTempOperadorA.trim());
+      }
+    } else if (e.key === 'Escape') {
+      showSugerenciasA = false;
+      selectedIndexA = -1;
+    }
+  }
+
+  function onBlurOperadorA() {
+    setTimeout(() => {
+      showSugerenciasA = false;
+      selectedIndexA = -1;
+      if (inputTempOperadorA.trim()) {
+        addOperadorA(inputTempOperadorA.trim());
+      }
+    }, 200);
+  }
+
+  // Funciones de Turno C
+  function addOperadorC(val) {
+    if (!val) return;
+    const parts = String(val)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const current = [...operadoresTurnoCList];
+    for (const p of parts) {
+      if (!current.includes(p)) {
+        current.push(p);
+      }
+    }
+    operadoresTurnoCList = current;
+    operadorTurnoC = operadoresTurnoCList.join(', ');
+    inputTempOperadorC = '';
+    showSugerenciasC = false;
+    selectedIndexC = -1;
+    triggerAutoSave();
+  }
+
+  function removeOperadorC(name) {
+    operadoresTurnoCList = operadoresTurnoCList.filter(n => n !== name);
+    operadorTurnoC = operadoresTurnoCList.join(', ');
+    triggerAutoSave();
+  }
+
+  function onInputOperadorC() {
+    showSugerenciasC = true;
+    selectedIndexC = -1;
+  }
+
+  function onKeyDownOperadorC(e) {
+    if (e.key === 'ArrowDown') {
+      if (!showSugerenciasC) {
+        showSugerenciasC = true;
+        selectedIndexC = -1;
+      }
+      if (sugerenciasFiltradasC.length > 0) {
+        e.preventDefault();
+        selectedIndexC = (selectedIndexC + 1) % sugerenciasFiltradasC.length;
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (showSugerenciasC && sugerenciasFiltradasC.length > 0) {
+        e.preventDefault();
+        selectedIndexC = (selectedIndexC - 1 + sugerenciasFiltradasC.length) % sugerenciasFiltradasC.length;
+      }
+    } else if (e.key === 'Tab') {
+      if (showSugerenciasC && sugerenciasFiltradasC.length > 0) {
+        e.preventDefault();
+        const match = selectedIndexC >= 0 ? sugerenciasFiltradasC[selectedIndexC] : sugerenciasFiltradasC[0];
+        addOperadorC(match);
+      } else if (inputTempOperadorC.trim()) {
+        e.preventDefault();
+        addOperadorC(inputTempOperadorC.trim());
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showSugerenciasC && selectedIndexC >= 0 && sugerenciasFiltradasC[selectedIndexC]) {
+        addOperadorC(sugerenciasFiltradasC[selectedIndexC]);
+      } else if (inputTempOperadorC.trim()) {
+        addOperadorC(inputTempOperadorC.trim());
+      }
+    } else if (e.key === ',') {
+      e.preventDefault();
+      if (inputTempOperadorC.trim()) {
+        addOperadorC(inputTempOperadorC.trim());
+      }
+    } else if (e.key === 'Escape') {
+      showSugerenciasC = false;
+      selectedIndexC = -1;
+    }
+  }
+
+  function onBlurOperadorC() {
+    setTimeout(() => {
+      showSugerenciasC = false;
+      selectedIndexC = -1;
+      if (inputTempOperadorC.trim()) {
+        addOperadorC(inputTempOperadorC.trim());
+      }
+    }, 200);
   }
 
   onMount(async () => {
@@ -133,6 +328,9 @@
           operadorTurnoA = d.operador_turno_a || '';
           operadorTurnoC = d.operador_turno_c || '';
 
+          operadoresTurnoAList = parseOperadores(operadorTurnoA);
+          operadoresTurnoCList = parseOperadores(operadorTurnoC);
+
           lastUpdatedAt = d.updated_at || d.created_at || null;
         } else {
           recordId = null;
@@ -148,6 +346,8 @@
           conteoDropboxFin = '';
           operadorTurnoA = '';
           operadorTurnoC = '';
+          operadoresTurnoAList = [];
+          operadoresTurnoCList = [];
           lastUpdatedAt = null;
         }
       }
@@ -165,6 +365,13 @@
       return;
     }
 
+    if (inputTempOperadorA.trim()) {
+      addOperadorA(inputTempOperadorA.trim());
+    }
+    if (inputTempOperadorC.trim()) {
+      addOperadorC(inputTempOperadorC.trim());
+    }
+
     isSaving = true;
     saveStatus = 'saving';
     try {
@@ -179,8 +386,8 @@
         retiros_dropbox_fin: retirosDropboxFin,
         conteo_dropbox_inicio: conteoDropboxInicio,
         conteo_dropbox_fin: conteoDropboxFin,
-        operador_turno_a: operadorTurnoA,
-        operador_turno_c: operadorTurnoC
+        operador_turno_a: operadoresTurnoAList.join(', '),
+        operador_turno_c: operadoresTurnoCList.join(', ')
       };
 
       const res = await fetch(`/api/master/libros/${lId}/datos`, {
@@ -493,42 +700,152 @@
           <span class="section-title">👥 Operadores CECOM</span>
         </div>
         <div class="operadores-dual-row">
+          <!-- Turno A (Apertura) -->
           <div class="operador-input-col">
-            <label for="operador-a-input" class="mini-label">Turno A (Apertura):</label>
-            <input 
-              id="operador-a-input" 
-              type="text" 
-              list="empleados-cecom-list"
-              class="form-text-input" 
-              placeholder="Operador de Apertura..."
-              bind:value={operadorTurnoA} 
-              on:input={triggerAutoSave}
-              on:change={triggerAutoSave}
-              on:blur={triggerAutoSave}
-            />
+            <div class="col-header-mini">
+              <label for="operador-a-input" class="mini-label">Turno A (Apertura):</label>
+              {#if operadoresTurnoAList.length > 0}
+                <span class="op-counter-mini">{operadoresTurnoAList.length}</span>
+              {/if}
+            </div>
+
+            <div class="autocomplete-wrapper">
+              <input 
+                id="operador-a-input" 
+                type="text" 
+                list="empleados-cecom-list-a"
+                class="form-text-input" 
+                placeholder="Escriba o elija operador..."
+                bind:value={inputTempOperadorA} 
+                on:input={onInputOperadorA}
+                on:keydown={onKeyDownOperadorA}
+                on:blur={onBlurOperadorA}
+                on:focus={onInputOperadorA}
+                autocomplete="off"
+              />
+              <datalist id="empleados-cecom-list-a">
+                {#each listaEmpleados as emp}
+                  {#if !operadoresTurnoAList.includes(emp)}
+                    <option value={emp}></option>
+                  {/if}
+                {/each}
+              </datalist>
+
+              <!-- Desplegable visual de sugerencias rápidas -->
+              {#if showSugerenciasA && sugerenciasFiltradasA.length > 0}
+                <div class="sugerencias-dropdown">
+                  <div class="sugerencias-header">
+                    <span>Sugerencias (Pulsa <b>Tab</b> o clic):</span>
+                  </div>
+                  <ul class="sugerencias-list">
+                    {#each sugerenciasFiltradasA as sug, idx}
+                      <!-- svelte-ignore a11y-click-events-have-key-events -->
+                      <li 
+                        class="sugerencia-item {idx === selectedIndexA ? 'active' : ''}"
+                        on:mousedown|preventDefault={() => addOperadorA(sug)}
+                      >
+                        <span class="sug-icon">👤</span>
+                        <span class="sug-text">{sug}</span>
+                        <span class="sug-tab-badge">Tab ⇥</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Chips de Operadores Turno A abajito -->
+            {#if operadoresTurnoAList.length > 0}
+              <div class="chips-box">
+                {#each operadoresTurnoAList as op}
+                  <span class="op-chip chip-a">
+                    <span class="chip-avatar">👤</span>
+                    <span class="chip-text">{op}</span>
+                    <button 
+                      type="button" 
+                      class="chip-del-btn" 
+                      on:click={() => removeOperadorA(op)}
+                      title="Quitar operador"
+                    >×</button>
+                  </span>
+                {/each}
+              </div>
+            {/if}
           </div>
 
+          <!-- Turno C (Cierre) -->
           <div class="operador-input-col">
-            <label for="operador-c-input" class="mini-label">Turno C (Cierre):</label>
-            <input 
-              id="operador-c-input" 
-              type="text" 
-              list="empleados-cecom-list"
-              class="form-text-input" 
-              placeholder="Operador de Cierre..."
-              bind:value={operadorTurnoC} 
-              on:input={triggerAutoSave}
-              on:change={triggerAutoSave}
-              on:blur={triggerAutoSave}
-            />
+            <div class="col-header-mini">
+              <label for="operador-c-input" class="mini-label">Turno C (Cierre):</label>
+              {#if operadoresTurnoCList.length > 0}
+                <span class="op-counter-mini">{operadoresTurnoCList.length}</span>
+              {/if}
+            </div>
+
+            <div class="autocomplete-wrapper">
+              <input 
+                id="operador-c-input" 
+                type="text" 
+                list="empleados-cecom-list-c"
+                class="form-text-input" 
+                placeholder="Escriba o elija operador..."
+                bind:value={inputTempOperadorC} 
+                on:input={onInputOperadorC}
+                on:keydown={onKeyDownOperadorC}
+                on:blur={onBlurOperadorC}
+                on:focus={onInputOperadorC}
+                autocomplete="off"
+              />
+              <datalist id="empleados-cecom-list-c">
+                {#each listaEmpleados as emp}
+                  {#if !operadoresTurnoCList.includes(emp)}
+                    <option value={emp}></option>
+                  {/if}
+                {/each}
+              </datalist>
+
+              <!-- Desplegable visual de sugerencias rápidas -->
+              {#if showSugerenciasC && sugerenciasFiltradasC.length > 0}
+                <div class="sugerencias-dropdown">
+                  <div class="sugerencias-header">
+                    <span>Sugerencias (Pulsa <b>Tab</b> o clic):</span>
+                  </div>
+                  <ul class="sugerencias-list">
+                    {#each sugerenciasFiltradasC as sug, idx}
+                      <!-- svelte-ignore a11y-click-events-have-key-events -->
+                      <li 
+                        class="sugerencia-item {idx === selectedIndexC ? 'active' : ''}"
+                        on:mousedown|preventDefault={() => addOperadorC(sug)}
+                      >
+                        <span class="sug-icon">👤</span>
+                        <span class="sug-text">{sug}</span>
+                        <span class="sug-tab-badge">Tab ⇥</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Chips de Operadores Turno C abajito -->
+            {#if operadoresTurnoCList.length > 0}
+              <div class="chips-box">
+                {#each operadoresTurnoCList as op}
+                  <span class="op-chip chip-c">
+                    <span class="chip-avatar">👤</span>
+                    <span class="chip-text">{op}</span>
+                    <button 
+                      type="button" 
+                      class="chip-del-btn" 
+                      on:click={() => removeOperadorC(op)}
+                      title="Quitar operador"
+                    >×</button>
+                  </span>
+                {/each}
+              </div>
+            {/if}
           </div>
         </div>
-
-        <datalist id="empleados-cecom-list">
-          {#each listaEmpleados as emp}
-            <option value={emp}></option>
-          {/each}
-        </datalist>
       </div>
     </form>
   </div>
@@ -1020,13 +1337,29 @@
   .operadores-dual-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 12px;
   }
 
   .operador-input-col {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
+    position: relative;
+  }
+
+  .op-counter-mini {
+    font-size: 10px;
+    font-weight: 700;
+    color: #2563eb;
+    background: #eff6ff;
+    padding: 1px 5px;
+    border-radius: 8px;
+    border: 1px solid #bfdbfe;
+  }
+
+  .autocomplete-wrapper {
+    position: relative;
+    width: 100%;
   }
 
   .form-text-input {
@@ -1046,6 +1379,145 @@
   .form-text-input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  /* Desplegable de Sugerencias Interactivas */
+  .sugerencias-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    overflow: hidden;
+  }
+
+  .sugerencias-header {
+    background: #f8fafc;
+    padding: 5px 10px;
+    font-size: 11px;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .sugerencias-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .sugerencia-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    cursor: pointer;
+    font-size: 12.5px;
+    color: #1e293b;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s ease;
+  }
+
+  .sugerencia-item:last-child {
+    border-bottom: none;
+  }
+
+  .sugerencia-item:hover,
+  .sugerencia-item.active {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .sug-icon {
+    font-size: 12px;
+    opacity: 0.6;
+  }
+
+  .sug-text {
+    flex: 1;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sug-tab-badge {
+    font-size: 10px;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  .sugerencia-item.active .sug-tab-badge {
+    background: #bfdbfe;
+    color: #1e40af;
+  }
+
+  /* Chips de Operadores "abajito" */
+  .chips-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 4px;
+  }
+
+  .op-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .op-chip.chip-a {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+  }
+
+  .op-chip.chip-c {
+    background: #f3e8ff;
+    color: #6b21a8;
+    border: 1px solid #e9d5ff;
+  }
+
+  .chip-avatar {
+    font-size: 11px;
+  }
+
+  .chip-text {
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-del-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    color: inherit;
+    opacity: 0.7;
+    transition: opacity 0.1s ease;
+  }
+
+  .chip-del-btn:hover {
+    opacity: 1;
+    color: #dc2626;
   }
 
   /* ─────────────────────────────────────────────────────────────
