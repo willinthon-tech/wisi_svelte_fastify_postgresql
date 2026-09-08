@@ -35,7 +35,8 @@ import {
   getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina,
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
-  getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa
+  getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
+  getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -251,6 +252,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/libros/:id/drop-mesas', createLibroDropMesa);
   fastify.delete('/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
   fastify.delete('/api/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
+
+  // Control Llaves (CECOM: Libro Control de Llaves)
+  fastify.get('/master/libros/:id/control-llaves', getLibroControlLlaves);
+  fastify.get('/api/master/libros/:id/control-llaves', getLibroControlLlaves);
+  fastify.post('/master/libros/:id/control-llaves', createLibroControlLlaves);
+  fastify.post('/api/master/libros/:id/control-llaves', createLibroControlLlaves);
+  fastify.put('/master/libros/:id/control-llaves/:controlId/horas', updateLibroControlLlavesHoras);
+  fastify.put('/api/master/libros/:id/control-llaves/:controlId/horas', updateLibroControlLlavesHoras);
+  fastify.delete('/master/libros/:id/control-llaves/:controlId', deleteLibroControlLlaves);
+  fastify.delete('/api/master/libros/:id/control-llaves/:controlId', deleteLibroControlLlaves);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)

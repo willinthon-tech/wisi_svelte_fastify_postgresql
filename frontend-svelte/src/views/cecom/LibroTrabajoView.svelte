@@ -4,6 +4,7 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { getPublicWebUrl } from '../../config/api.config.js';
   import LibroDropMesasView from './LibroDropMesasView.svelte';
+  import LibroControlLlavesView from './LibroControlLlavesView.svelte';
 
   export let libroId = null;
 
@@ -194,6 +195,8 @@
     {:else}
       {#if activeSubvista === 'drop-mesas'}
         <LibroDropMesasView {libro} {libroId} />
+      {:else if activeSubvista === 'control-llaves'}
+        <LibroControlLlavesView {libro} {libroId} />
       {:else}
         <!-- Workspace Card de la Subvista Activa -->
         <div class="subvista-workspace-card">
@@ -215,19 +218,7 @@
 
           <!-- Dynamic Subview Workspace Placeholder / Module Body -->
           <div class="workspace-body">
-            {#if activeSubvista === 'control-llaves'}
-            <div class="sub-panel">
-              <div class="empty-workspace-state">
-                <span class="empty-icon">🔑</span>
-                <h3>Control y Retiro de Llaves</h3>
-                <p>Monitoreo en tiempo real de apertura de cajas, gabinetes y entrega de llaves de seguridad.</p>
-                <button type="button" class="btn-primary" on:click={() => triggerToast('Registrar entrega de llave...', 'info')}>
-                  + Entregar Llave
-                </button>
-              </div>
-            </div>
-
-          {:else if activeSubvista === 'incidencias-generales'}
+            {#if activeSubvista === 'incidencias-generales'}
             <div class="sub-panel">
               <div class="empty-workspace-state">
                 <span class="empty-icon">⚠️</span>

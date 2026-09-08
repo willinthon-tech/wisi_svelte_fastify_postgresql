@@ -7585,5 +7585,197 @@ export async function deleteLibroDropMesaModel(id, libroId) {
   return { success: true, id: dropId };
 }
 
+// --- CONTROL DE LLAVES (CECOM: LIBRO CONTROL DE LLAVES) ---
+export async function getLibroControlLlavesModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
+    const list = inMemoryData.libro_control_llaves.filter(c => Number(c.libro_id) === lId);
+    return list.map(c => {
+      const llavesList = (inMemoryData.llaves || []).filter(l => (c.llaves_ids || []).includes(Number(l.id)));
+      return {
+        ...c,
+        llaves_detalle: llavesList.map(l => ({ id: l.id, nombre: l.nombre }))
+      };
+    });
+  }
+
+  const rows = await sql`
+    SELECT 
+      cl.id,
+      cl.libro_id,
+      cl.descripcion,
+      cl.hora_salida,
+      cl.hora_recepcion,
+      cl.llaves_ids,
+      cl.created_at,
+      cl.updated_at,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object('id', l.id, 'nombre', l.nombre) ORDER BY l.nombre)
+          FROM llaves l
+          WHERE l.id = ANY(cl.llaves_ids)
+        ), '[]'::json
+      ) AS llaves_detalle
+    FROM libro_control_llaves cl
+    WHERE cl.libro_id = ${lId}
+    ORDER BY cl.id ASC
+  `;
+
+  return rows;
+}
+
+export async function createLibroControlLlavesModel(data) {
+  const libroId = Number(data.libro_id);
+  if (!libroId) throw new Error('ID de libro inválido');
+
+  let llavesIds = Array.isArray(data.llaves_ids) 
+    ? data.llaves_ids.map(Number).filter(n => !isNaN(n) && n > 0)
+    : [];
+
+  if (llavesIds.length === 0) {
+    throw new Error('Debe seleccionar al menos una llave');
+  }
+
+  const descripcion = (data.descripcion || '').trim() || 'General';
+  
+  const now = new Date();
+  const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const horaSalida = (data.hora_salida || '').trim() || currentHHMM;
+  const horaRecepcion = (data.hora_recepcion || '').trim() || null;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
+    const nextId = (inMemoryData.libro_control_llaves.length > 0)
+      ? Math.max(...inMemoryData.libro_control_llaves.map(d => d.id)) + 1
+      : 1;
+    const llavesList = (inMemoryData.llaves || []).filter(l => llavesIds.includes(Number(l.id)));
+    const newRecord = {
+      id: nextId,
+      libro_id: libroId,
+      llaves_ids: llavesIds,
+      descripcion,
+      hora_salida: horaSalida,
+      hora_recepcion: horaRecepcion,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      llaves_detalle: llavesList.map(l => ({ id: l.id, nombre: l.nombre }))
+    };
+    inMemoryData.libro_control_llaves.push(newRecord);
+    return newRecord;
+  }
+
+  const res = await sql`
+    INSERT INTO libro_control_llaves (
+      libro_id, llaves_ids, descripcion, hora_salida, hora_recepcion
+    )
+    VALUES (
+      ${libroId}, ${llavesIds}, ${descripcion}, ${horaSalida}, ${horaRecepcion}
+    )
+    RETURNING id
+  `;
+
+  const insertedId = res[0].id;
+
+  const rows = await sql`
+    SELECT 
+      cl.id,
+      cl.libro_id,
+      cl.descripcion,
+      cl.hora_salida,
+      cl.hora_recepcion,
+      cl.llaves_ids,
+      cl.created_at,
+      cl.updated_at,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object('id', l.id, 'nombre', l.nombre) ORDER BY l.nombre)
+          FROM llaves l
+          WHERE l.id = ANY(cl.llaves_ids)
+        ), '[]'::json
+      ) AS llaves_detalle
+    FROM libro_control_llaves cl
+    WHERE cl.id = ${insertedId}
+    LIMIT 1
+  `;
+
+  return rows[0];
+}
+
+export async function updateLibroControlLlavesHorasModel(controlId, libroId, data) {
+  const cId = Number(controlId);
+  const lId = Number(libroId);
+  if (!cId) throw new Error('ID de registro de control de llaves inválido');
+
+  const horaSalida = (data.hora_salida || '').trim() || null;
+  const horaRecepcion = (data.hora_recepcion || '').trim() || null;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
+    const idx = inMemoryData.libro_control_llaves.findIndex(c => Number(c.id) === cId);
+    if (idx !== -1) {
+      if (horaSalida) inMemoryData.libro_control_llaves[idx].hora_salida = horaSalida;
+      inMemoryData.libro_control_llaves[idx].hora_recepcion = horaRecepcion;
+      inMemoryData.libro_control_llaves[idx].updated_at = new Date().toISOString();
+      return inMemoryData.libro_control_llaves[idx];
+    }
+    throw new Error('Registro no encontrado');
+  }
+
+  await sql`
+    UPDATE libro_control_llaves
+    SET 
+      hora_salida = COALESCE(${horaSalida}, hora_salida),
+      hora_recepcion = ${horaRecepcion},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+  `;
+
+  const rows = await sql`
+    SELECT 
+      cl.id,
+      cl.libro_id,
+      cl.descripcion,
+      cl.hora_salida,
+      cl.hora_recepcion,
+      cl.llaves_ids,
+      cl.created_at,
+      cl.updated_at,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object('id', l.id, 'nombre', l.nombre) ORDER BY l.nombre)
+          FROM llaves l
+          WHERE l.id = ANY(cl.llaves_ids)
+        ), '[]'::json
+      ) AS llaves_detalle
+    FROM libro_control_llaves cl
+    WHERE cl.id = ${cId}
+    LIMIT 1
+  `;
+
+  return rows[0];
+}
+
+export async function deleteLibroControlLlavesModel(id, libroId) {
+  const cId = Number(id);
+  const lId = Number(libroId);
+  if (!cId) throw new Error('ID de registro de control de llaves inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
+    inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves.filter(c => Number(c.id) !== cId);
+    return { success: true, id: cId };
+  }
+
+  await sql`
+    DELETE FROM libro_control_llaves
+    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+  `;
+
+  return { success: true, id: cId };
+}
+
 
 

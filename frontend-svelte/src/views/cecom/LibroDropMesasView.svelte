@@ -61,18 +61,11 @@
     });
   })();
 
-  // Formato de opción de mesa: BJ 1 - Blackjacks (Gan Casino PLC)
+  // Formato de opción de mesa: BJ 1 - Blackjacks
   function formatMesaOptionLabel(m) {
     const juegoName = m.juego_nombre || ($masterJuegosStore || []).find(j => Number(j.id) === Number(m.juego_id))?.nombre || '';
-    const salaObj = ($masterSalasStore || []).find(s => Number(s.id) === Number(m.sala_id));
-    const salaName = m.sala_nombre_comercial || m.sala_nombre || salaObj?.nombre_comercial || salaObj?.nombre || '';
-
-    if (juegoName && salaName) {
-      return `${m.nombre} - ${juegoName} (${salaName})`;
-    } else if (juegoName) {
+    if (juegoName) {
       return `${m.nombre} - ${juegoName}`;
-    } else if (salaName) {
-      return `${m.nombre} (${salaName})`;
     }
     return m.nombre || `Mesa #${m.id}`;
   }
