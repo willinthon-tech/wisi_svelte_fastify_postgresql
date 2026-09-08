@@ -5249,7 +5249,7 @@ export async function getMesasModel(params = {}) {
   let data;
   if (limit > 0) {
     data = await sql`
-      SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre
+      SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
       FROM mesas m
       LEFT JOIN salas s ON m.sala_id = s.id
       JOIN juegos j ON m.juego_id = j.id
@@ -5259,7 +5259,7 @@ export async function getMesasModel(params = {}) {
     `;
   } else {
     data = await sql`
-      SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre
+      SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
       FROM mesas m
       LEFT JOIN salas s ON m.sala_id = s.id
       JOIN juegos j ON m.juego_id = j.id
@@ -7361,5 +7361,215 @@ export async function deleteLibroModel(id) {
     return { success: true, id: lId };
   }
 }
+
+// --- DROP DE MESAS (CECOM: LIBRO DROP) ---
+export async function getLibroDropMesasModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) return [];
+
+  if (!isPgConnected || !sql) {
+    const list = inMemoryData.libro_drop_mesas || [];
+    return list.filter(d => Number(d.libro_id) === lId);
+  }
+
+  const rows = await sql`
+    SELECT 
+      d.id,
+      d.libro_id,
+      d.mesa_id,
+      d.denominacion_100,
+      d.denominacion_50,
+      d.denominacion_20,
+      d.denominacion_10,
+      d.denominacion_5,
+      d.denominacion_1,
+      d.denominacion_100 AS b100,
+      d.denominacion_50 AS b50,
+      d.denominacion_20 AS b20,
+      d.denominacion_10 AS b10,
+      d.denominacion_5 AS b5,
+      d.denominacion_1 AS b1,
+      d.total,
+      d.created_at,
+      d.updated_at,
+      m.nombre AS mesa_nombre,
+      j.nombre AS juego_nombre,
+      s.nombre AS sala_nombre,
+      s.nombre_comercial AS sala_nombre_comercial
+    FROM libro_drop_mesas d
+    JOIN mesas m ON d.mesa_id = m.id
+    LEFT JOIN juegos j ON m.juego_id = j.id
+    LEFT JOIN salas s ON m.sala_id = s.id
+    WHERE d.libro_id = ${lId}
+    ORDER BY d.id ASC
+  `;
+
+  return rows.map(r => ({
+    ...r,
+    mesa_nombre: r.mesa_nombre ? toTitleCase(r.mesa_nombre) : '',
+    juego_nombre: r.juego_nombre ? toTitleCase(r.juego_nombre) : ''
+  }));
+}
+
+export async function createLibroDropMesaModel(data) {
+  const libroId = Number(data.libro_id);
+  const mesaId = Number(data.mesa_id);
+  if (!libroId) throw new Error('El ID del libro es obligatorio');
+  if (!mesaId) throw new Error('Debe seleccionar una mesa');
+
+  const b100 = Math.max(0, parseInt(data.denominacion_100 ?? data.b100 ?? 0, 10) || 0);
+  const b50 = Math.max(0, parseInt(data.denominacion_50 ?? data.b50 ?? 0, 10) || 0);
+  const b20 = Math.max(0, parseInt(data.denominacion_20 ?? data.b20 ?? 0, 10) || 0);
+  const b10 = Math.max(0, parseInt(data.denominacion_10 ?? data.b10 ?? 0, 10) || 0);
+  const b5 = Math.max(0, parseInt(data.denominacion_5 ?? data.b5 ?? 0, 10) || 0);
+  const b1 = Math.max(0, parseInt(data.denominacion_1 ?? data.b1 ?? 0, 10) || 0);
+
+  const total = (b100 * 100) + (b50 * 50) + (b20 * 20) + (b10 * 10) + (b5 * 5) + (b1 * 1);
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas || [];
+    const nextId = (inMemoryData.libro_drop_mesas.length > 0)
+      ? Math.max(...inMemoryData.libro_drop_mesas.map(d => d.id)) + 1
+      : 1;
+
+    const mesa = (inMemoryData.mesas || []).find(m => Number(m.id) === mesaId) || {};
+    const newDrop = {
+      id: nextId,
+      libro_id: libroId,
+      mesa_id: mesaId,
+      denominacion_100: b100,
+      denominacion_50: b50,
+      denominacion_20: b20,
+      denominacion_10: b10,
+      denominacion_5: b5,
+      denominacion_1: b1,
+      b100,
+      b50,
+      b20,
+      b10,
+      b5,
+      b1,
+      total,
+      mesa_nombre: mesa.nombre || `Mesa #${mesaId}`,
+      juego_nombre: mesa.juego_nombre || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.libro_drop_mesas.push(newDrop);
+    return newDrop;
+  }
+
+  const res = await sql`
+    INSERT INTO libro_drop_mesas (
+      libro_id, mesa_id, 
+      denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
+      total
+    )
+    VALUES (
+      ${libroId}, ${mesaId}, 
+      ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
+      ${total}
+    )
+    RETURNING *
+  `;
+
+  // Also sync to drop_mesas table if it exists
+  try {
+    await sql`
+      INSERT INTO drop_mesas (
+        id, libro_id, mesa_id, 
+        denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
+        total
+      )
+      VALUES (
+        ${res[0].id}, ${libroId}, ${mesaId}, 
+        ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
+        ${total}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        denominacion_100 = EXCLUDED.denominacion_100,
+        denominacion_50 = EXCLUDED.denominacion_50,
+        denominacion_20 = EXCLUDED.denominacion_20,
+        denominacion_10 = EXCLUDED.denominacion_10,
+        denominacion_5 = EXCLUDED.denominacion_5,
+        denominacion_1 = EXCLUDED.denominacion_1,
+        total = EXCLUDED.total,
+        updated_at = CURRENT_TIMESTAMP
+    `;
+  } catch (e) {}
+
+  const inserted = res[0];
+  const details = await sql`
+    SELECT 
+      d.id,
+      d.libro_id,
+      d.mesa_id,
+      d.denominacion_100,
+      d.denominacion_50,
+      d.denominacion_20,
+      d.denominacion_10,
+      d.denominacion_5,
+      d.denominacion_1,
+      d.denominacion_100 AS b100,
+      d.denominacion_50 AS b50,
+      d.denominacion_20 AS b20,
+      d.denominacion_10 AS b10,
+      d.denominacion_5 AS b5,
+      d.denominacion_1 AS b1,
+      d.total,
+      d.created_at,
+      d.updated_at,
+      m.nombre AS mesa_nombre,
+      j.nombre AS juego_nombre,
+      s.nombre AS sala_nombre,
+      s.nombre_comercial AS sala_nombre_comercial
+    FROM libro_drop_mesas d
+    JOIN mesas m ON d.mesa_id = m.id
+    LEFT JOIN juegos j ON m.juego_id = j.id
+    LEFT JOIN salas s ON m.sala_id = s.id
+    WHERE d.id = ${inserted.id}
+    LIMIT 1
+  `;
+
+  const finalRow = details[0] || inserted;
+  return {
+    ...finalRow,
+    b100: finalRow.denominacion_100,
+    b50: finalRow.denominacion_50,
+    b20: finalRow.denominacion_20,
+    b10: finalRow.denominacion_10,
+    b5: finalRow.denominacion_5,
+    b1: finalRow.denominacion_1,
+    mesa_nombre: finalRow.mesa_nombre ? toTitleCase(finalRow.mesa_nombre) : '',
+    juego_nombre: finalRow.juego_nombre ? toTitleCase(finalRow.juego_nombre) : ''
+  };
+}
+
+export async function deleteLibroDropMesaModel(id, libroId) {
+  const dropId = Number(id);
+  const lId = Number(libroId);
+  if (!dropId) throw new Error('ID de registro de drop inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas || [];
+    inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas.filter(d => Number(d.id) !== dropId);
+    return { success: true, id: dropId };
+  }
+
+  await sql`
+    DELETE FROM libro_drop_mesas
+    WHERE id = ${dropId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+  `;
+
+  try {
+    await sql`
+      DELETE FROM drop_mesas
+      WHERE id = ${dropId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    `;
+  } catch (e) {}
+
+  return { success: true, id: dropId };
+}
+
 
 

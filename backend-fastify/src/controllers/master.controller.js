@@ -33,7 +33,8 @@ import {
   getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel,
   getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel,
   getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
-  getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel
+  getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel,
+  getLibroDropMesasModel, createLibroDropMesaModel, deleteLibroDropMesaModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2073,6 +2074,40 @@ export async function deleteLibro(request, reply) {
     return reply.status(400).send({ success: false, error: err.message });
   }
 }
+
+// --- DROP DE MESAS ---
+export async function getLibroDropMesas(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroDropMesasModel(id);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function createLibroDropMesa(request, reply) {
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const data = { ...body, libro_id: id };
+    const result = await createLibroDropMesaModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteLibroDropMesa(request, reply) {
+  try {
+    const { id, dropId } = request.params;
+    const result = await deleteLibroDropMesaModel(dropId, id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
 
 
 

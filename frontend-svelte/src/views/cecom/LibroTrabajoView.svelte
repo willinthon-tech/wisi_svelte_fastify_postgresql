@@ -3,6 +3,7 @@
   import { currentRouteStore, navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { getPublicWebUrl } from '../../config/api.config.js';
+  import LibroDropMesasView from './LibroDropMesasView.svelte';
 
   export let libroId = null;
 
@@ -199,54 +200,30 @@
         <button type="button" class="btn-retry" on:click={() => loadLibro(libroId)}>Reintentar</button>
       </div>
     {:else}
-      <!-- Workspace Card de la Subvista Activa -->
-      <div class="subvista-workspace-card">
-        <div class="workspace-header">
-          <div class="ws-header-left">
-            <span class="ws-icon">{SUBVISTAS.find(s => s.id === activeSubvista)?.icon}</span>
-            <div>
-              <h2 class="ws-title">{SUBVISTAS.find(s => s.id === activeSubvista)?.label}</h2>
-              <p class="ws-desc">{SUBVISTAS.find(s => s.id === activeSubvista)?.description}</p>
-            </div>
-          </div>
-          <div class="ws-header-actions">
-            <button type="button" class="btn-ws-action btn-add" on:click={() => triggerToast(`Nuevo registro en ${SUBVISTAS.find(s => s.id === activeSubvista)?.label}`, 'info')}>
-              <span>+</span>
-              <span>Nuevo Registro</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Dynamic Subview Workspace Placeholder / Module Body -->
-        <div class="workspace-body">
-          {#if activeSubvista === 'drop-mesas'}
-            <div class="sub-panel">
-              <div class="metrics-grid">
-                <div class="metric-box">
-                  <span class="metric-title">Mesas en Sala</span>
-                  <span class="metric-num">0</span>
-                </div>
-                <div class="metric-box highlight">
-                  <span class="metric-title">Drop Estimado Total</span>
-                  <span class="metric-num">$0.00</span>
-                </div>
-                <div class="metric-box">
-                  <span class="metric-title">Cajas Procesadas</span>
-                  <span class="metric-num">0 / 0</span>
-                </div>
-              </div>
-
-              <div class="empty-workspace-state">
-                <span class="empty-icon">🎲</span>
-                <h3>Control de Drop de Mesas</h3>
-                <p>No hay registros de conteo ni precintos ingresados para este libro de fecha {formatDateDisplay(libro?.descripcion)}.</p>
-                <button type="button" class="btn-primary" on:click={() => triggerToast('Iniciando carga de drop de mesas...', 'info')}>
-                  + Registrar Drop de Mesa
-                </button>
+      {#if activeSubvista === 'drop-mesas'}
+        <LibroDropMesasView {libro} {libroId} />
+      {:else}
+        <!-- Workspace Card de la Subvista Activa -->
+        <div class="subvista-workspace-card">
+          <div class="workspace-header">
+            <div class="ws-header-left">
+              <span class="ws-icon">{SUBVISTAS.find(s => s.id === activeSubvista)?.icon}</span>
+              <div>
+                <h2 class="ws-title">{SUBVISTAS.find(s => s.id === activeSubvista)?.label}</h2>
+                <p class="ws-desc">{SUBVISTAS.find(s => s.id === activeSubvista)?.description}</p>
               </div>
             </div>
+            <div class="ws-header-actions">
+              <button type="button" class="btn-ws-action btn-add" on:click={() => triggerToast(`Nuevo registro en ${SUBVISTAS.find(s => s.id === activeSubvista)?.label}`, 'info')}>
+                <span>+</span>
+                <span>Nuevo Registro</span>
+              </button>
+            </div>
+          </div>
 
-          {:else if activeSubvista === 'novedades-mesas'}
+          <!-- Dynamic Subview Workspace Placeholder / Module Body -->
+          <div class="workspace-body">
+            {#if activeSubvista === 'novedades-mesas'}
             <div class="sub-panel">
               <div class="empty-workspace-state">
                 <span class="empty-icon">📋</span>
@@ -339,7 +316,8 @@
         </div>
       </div>
     {/if}
-  </div>
+  {/if}
+</div>
 </div>
 
 <style>

@@ -34,7 +34,8 @@ import {
   getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria,
   getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina,
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
-  getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro
+  getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
+  getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -242,6 +243,14 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/libros/:id', updateLibro);
   fastify.delete('/master/libros/:id', deleteLibro);
   fastify.delete('/api/master/libros/:id', deleteLibro);
+
+  // Drop Mesas (CECOM: Libro Drop de Mesas)
+  fastify.get('/master/libros/:id/drop-mesas', getLibroDropMesas);
+  fastify.get('/api/master/libros/:id/drop-mesas', getLibroDropMesas);
+  fastify.post('/master/libros/:id/drop-mesas', createLibroDropMesa);
+  fastify.post('/api/master/libros/:id/drop-mesas', createLibroDropMesa);
+  fastify.delete('/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
+  fastify.delete('/api/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
