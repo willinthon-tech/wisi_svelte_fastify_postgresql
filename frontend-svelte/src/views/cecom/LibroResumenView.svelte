@@ -102,39 +102,7 @@
         }
       }
 
-      // Fallback: cargar los endpoints individuales si fuera necesario
-      const [rLibro, rDatos, rNov, rDrop, rLlaves, rInc, rCli] = await Promise.all([
-        fetch(`/api/master/libros/${id}`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`/api/master/libros/${id}/datos`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`/api/master/libros/${id}/novedades-mesas`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`/api/master/libros/${id}/drop-mesas`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`/api/master/libros/${id}/control-llaves`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`/api/master/libros/${id}/incidencias-generales`).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch(`/api/master/libros/${id}/control-clientes`).then(r => r.ok ? r.json() : null).catch(() => null)
-      ]);
-
-      resumenData = {
-        libro: rLibro?.data || libro,
-        datos: rDatos?.data || null,
-        drop_mesas: rDrop?.data || [],
-        novedades_mesas: rNov?.data || [],
-        control_llaves: rLlaves?.data || [],
-        control_clientes: rCli?.data || [],
-        incidencias_generales: rInc?.data || []
-      };
-
-      liveCounts = {
-        datos: rDatos?.data ? 1 : 0,
-        drop_mesas: Array.isArray(rDrop?.data) ? rDrop.data.length : 0,
-        novedades_mesas: Array.isArray(rNov?.data) ? rNov.data.length : 0,
-        control_llaves: Array.isArray(rLlaves?.data) ? rLlaves.data.length : 0,
-        control_clientes: Array.isArray(rCli?.data) ? rCli.data.length : 0,
-        incidencias_generales: Array.isArray(rInc?.data) ? rInc.data.length : 0
-      };
-
-      if (!libro && resumenData.libro) {
-        libro = resumenData.libro;
-      }
+      loadError = 'No se pudo cargar la información del libro';
     } catch (err) {
       console.error('Error al cargar reporte consolidado de libro:', err);
       loadError = 'Error de conexión al cargar la información del libro';
@@ -273,14 +241,90 @@
     };
   }
 
-  // Filtrado de incidencias de mercancía para la Sección 4 de la hoja operativa
-  $: mercanciaItems = (() => {
+  // 1. Clasificación reactiva de Incidencias en Bloque de 3 (Mercancía, Generales, Empleados)
+  $: incidenciasBloque = (() => {
     const list = resumenData.incidencias_generales || [];
-    const mercList = list.filter(i => {
-      const t = (i.tipo || '').toLowerCase();
-      return t === 'mercancía' || t === 'mercancia';
-    });
-    return mercList.length > 0 ? mercList : list;
+    const mercancia = [];
+    const empleado = [];
+    const generales = [];
+
+    for (const inc of list) {
+      const t = (inc.tipo || '').toLowerCase().trim();
+      const desc = (inc.descripcion || '').toLowerCase();
+      if (t.includes('mercanc') || t.includes('proveedor') || desc.includes('proveedor') || desc.includes('mercanc') || desc.includes('factura') || desc.includes('insumo')) {
+        mercancia.push(inc);
+      } else if (t.includes('emplead') || t.includes('personal') || t.includes('rrhh') || t.includes('croupier') || desc.includes('emplead') || desc.includes('croupier') || desc.includes('personal') || desc.includes('asistencia') || desc.includes('retraso')) {
+        empleado.push(inc);
+      } else {
+        generales.push(inc);
+      }
+    }
+
+    return { mercancia, empleado, generales };
+  })();
+
+  // 2. Agrupación reactiva de Clientes por Método de Pago
+  $: clientesPorMetodo = (() => {
+    const list = resumenData.control_clientes || [];
+    const map = {};
+    for (const c of list) {
+      const metodo = (c.metodo || 'No especificado').trim();
+      if (!map[metodo]) {
+        map[metodo] = { metodo, ops: 0, compras: 0, pagos: 0, balance: 0 };
+      }
+      const m = parseFloat(c.monto) || 0;
+      const t = (c.tipo || 'compra').toLowerCase();
+      map[metodo].ops += 1;
+      if (t === 'pago') {
+        map[metodo].pagos += m;
+      } else {
+        map[metodo].compras += m;
+      }
+    }
+    return Object.values(map).map(item => ({
+      ...item,
+      balance: item.compras - item.pagos
+    })).sort((a, b) => (b.compras + b.pagos) - (a.compras + a.pagos));
+  })();
+
+  $: totalesPorMetodo = (() => {
+    const list = clientesPorMetodo;
+    const ops = list.reduce((acc, r) => acc + r.ops, 0);
+    const compras = list.reduce((acc, r) => acc + r.compras, 0);
+    const pagos = list.reduce((acc, r) => acc + r.pagos, 0);
+    return { ops, compras, pagos, balance: compras - pagos };
+  })();
+
+  // 3. Agrupación reactiva de Clientes por Cliente / Jugador
+  $: clientesPorJugador = (() => {
+    const list = resumenData.control_clientes || [];
+    const map = {};
+    for (const c of list) {
+      const cliente = (c.cliente || 'Anónimo / General').trim();
+      if (!map[cliente]) {
+        map[cliente] = { cliente, ops: 0, compras: 0, pagos: 0, balance: 0 };
+      }
+      const m = parseFloat(c.monto) || 0;
+      const t = (c.tipo || 'compra').toLowerCase();
+      map[cliente].ops += 1;
+      if (t === 'pago') {
+        map[cliente].pagos += m;
+      } else {
+        map[cliente].compras += m;
+      }
+    }
+    return Object.values(map).map(item => ({
+      ...item,
+      balance: item.compras - item.pagos
+    })).sort((a, b) => (b.compras + b.pagos) - (a.compras + a.pagos));
+  })();
+
+  $: totalesPorJugador = (() => {
+    const list = clientesPorJugador;
+    const ops = list.reduce((acc, r) => acc + r.ops, 0);
+    const compras = list.reduce((acc, r) => acc + r.compras, 0);
+    const pagos = list.reduce((acc, r) => acc + r.pagos, 0);
+    return { ops, compras, pagos, balance: compras - pagos };
   })();
 
   // Totales de Drop
@@ -401,7 +445,7 @@
         </div>
 
         <div class="header-actions-group">
-          <!-- BOTÓN REQUERIDO: "+ Generar Reporte" (si no existe) o "🔄 Actualizar Reporte" (si ya existe) -->
+          <!-- BOTÓN PRINCIPAL: "Generar Reporte" (si no existe) o "Actualizar Reporte" (si ya existe) -->
           <button
             type="button"
             class="btn-action-primary {reporteExists ? 'btn-actualizar' : 'btn-generar'}"
@@ -413,26 +457,10 @@
               <span class="btn-spinner"></span>
               <span>{reporteExists ? 'Actualizando...' : 'Generando...'}</span>
             {:else if reporteExists}
-              <span class="btn-icon">🔄</span>
               <span>Actualizar Reporte</span>
             {:else}
-              <span class="btn-icon">+</span>
               <span>Generar Reporte</span>
             {/if}
-          </button>
-
-          <button type="button" class="btn-action-secondary" on:click={handleCopiarEnlace} title="Copiar enlace para compartir">
-            <span>🔗</span>
-            <span>Compartir</span>
-          </button>
-
-          <button type="button" class="btn-action-secondary" on:click={handleImprimir} title="Imprimir / Exportar a PDF">
-            <span>🖨️</span>
-            <span>Imprimir</span>
-          </button>
-
-          <button type="button" class="btn-action-secondary btn-icon-only" on:click={() => loadFullResumen(libroId || libro?.id)} title="Recargar vista">
-            <span>🔄</span>
           </button>
         </div>
       </div>
@@ -545,48 +573,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Barra de Filtros de Secciones para el Documento -->
-    <div class="document-section-filters no-print">
-      <div class="view-switch-btns">
-        <button 
-          type="button" 
-          class="btn-switch {viewMode === 'documento' ? 'active' : ''}" 
-          on:click={() => { viewMode = 'documento'; }}
-        >📄 Ver Documento Completo</button>
-        <button 
-          type="button" 
-          class="btn-switch {viewMode === 'drop' ? 'active' : ''}" 
-          on:click={() => { viewMode = 'drop'; }}
-        >🎲 1. Drop Mesas ({liveCounts.drop_mesas})</button>
-        <button 
-          type="button" 
-          class="btn-switch {viewMode === 'resumen' ? 'active' : ''}" 
-          on:click={() => { viewMode = 'resumen'; }}
-        >📋 2. Incidencias Diarias / Hoja Operativa</button>
-        <button 
-          type="button" 
-          class="btn-switch {viewMode === 'llaves' ? 'active' : ''}" 
-          on:click={() => { viewMode = 'llaves'; }}
-        >🔑 3. Control Llaves ({liveCounts.control_llaves})</button>
-        <button 
-          type="button" 
-          class="btn-switch {viewMode === 'clientes' ? 'active' : ''}" 
-          on:click={() => { viewMode = 'clientes'; }}
-        >👥 4. Control Clientes ({liveCounts.control_clientes})</button>
-        <button 
-          type="button" 
-          class="btn-switch {viewMode === 'incidencias' ? 'active' : ''}" 
-          on:click={() => { viewMode = 'incidencias'; }}
-        >⚠️ 5. Incidencias Generales ({liveCounts.incidencias_generales})</button>
-      </div>
-
-      {#if !reporteExists}
-        <div class="preview-notice-badge">
-          <span>ℹ️ Vista previa interactiva en vivo (haz clic en "+ Generar Reporte" para guardar en libro_reporte)</span>
-        </div>
-      {/if}
-    </div>
   {/if}
 
   {#if isLoading}
@@ -628,12 +614,89 @@
       </div>
 
       <!-- ============================================================
-           SECCIÓN 1: DROP DE MESAS (Primero datos de drop como solicitaste)
+           1. INFORMACIÓN DE SALA (Horarios Operativos Oficiales)
            ============================================================ -->
-      <div class="sheet-section sub-module-section first-section" class:hidden-on-screen={viewMode !== 'documento' && viewMode !== 'drop'}>
+      <div class="sheet-section official-incidencias-block first-section">
+        <div class="sheet-main-title-box">
+          <h1 class="sheet-title-text">Resumen De Incidencias Diarias.</h1>
+        </div>
+
+        <div class="horarios-section">
+          <div class="horarios-list">
+            
+            <!-- 1. Apertura de la sala -->
+            <div class="horario-item">
+              <span class="item-num">1.</span>
+              <span class="item-label">Apertura de la sala</span>
+              <div class="item-values">
+                <span class="h-text">h inicio:</span>
+                <span class="h-val">{resumenData.datos?.apertura_sala_inicio || '—'}</span>
+                <span class="h-text">h cierre:</span>
+                <span class="h-val">{resumenData.datos?.apertura_sala_fin || '—'}</span>
+              </div>
+            </div>
+
+            <!-- 2. Apertura de maquinas -->
+            <div class="horario-item">
+              <span class="item-num">2.</span>
+              <span class="item-label">Apertura de maquinas</span>
+              <div class="item-values">
+                <span class="h-text">h inicio:</span>
+                <span class="h-val">{resumenData.datos?.apertura_maquinas_inicio || '—'}</span>
+                <span class="h-text">h cierre:</span>
+                <span class="h-val">{resumenData.datos?.apertura_maquinas_fin || '—'}</span>
+              </div>
+            </div>
+
+            <!-- 3. Apertura de bingo -->
+            <div class="horario-item">
+              <span class="item-num">3.</span>
+              <span class="item-label">Apertura de bingo</span>
+              <div class="item-values">
+                <span class="h-text">h inicio:</span>
+                <span class="h-val">{resumenData.datos?.apertura_bingo_inicio || '—'}</span>
+                <span class="h-text">h cierre:</span>
+                <span class="h-val">{resumenData.datos?.apertura_bingo_fin || '—'}</span>
+              </div>
+            </div>
+
+            <!-- 4. Retiro de dropbox general -->
+            <div class="horario-item">
+              <span class="item-num">4.</span>
+              <span class="item-label">Retiro de dropbox general</span>
+              <div class="item-values">
+                <span class="h-text">hora:</span>
+                <span class="h-val">
+                  {resumenData.datos?.retiros_dropbox_inicio ? `${resumenData.datos.retiros_dropbox_inicio}${resumenData.datos.retiros_dropbox_fin ? ' - ' + resumenData.datos.retiros_dropbox_fin : ''}` : '—'}
+                </span>
+              </div>
+            </div>
+
+            <!-- 5. Se realiza conteo de dropbox -->
+            <div class="horario-item">
+              <span class="item-num">5.</span>
+              <span class="item-label">Se realiza conteo de dropbox por:</span>
+              <div class="item-values">
+                <span class="h-text">h inicio:</span>
+                <span class="h-val">{resumenData.datos?.conteo_dropbox_inicio || '—'}</span>
+                <span class="h-text">h final:</span>
+                <span class="h-val">{resumenData.datos?.conteo_dropbox_fin || '—'}</span>
+                <span class="h-text">Monto: $</span>
+                <span class="h-val highlight-money">{dropTotales.grandTotal ? dropTotales.grandTotal.toLocaleString('en-US') : '0'}</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           2. DROP DE MESAS (Arqueo de Efectivo)
+           ============================================================ -->
+      <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">🎲 1. Drop de Mesas (Arqueo de Efectivo)</h2>
+            <h2 class="sub-section-title">🎲 2. Drop de Mesas (Arqueo de Efectivo)</h2>
             <span class="sub-count-badge">{resumenData.drop_mesas.length} mesas registradas</span>
           </div>
           <span class="sub-total-badge">Total Recaudado Drop: <b>{formatMoney(dropTotales.grandTotal)}</b></span>
@@ -706,114 +769,16 @@
       </div>
 
       <!-- ============================================================
-           SECCIÓN 2: RESUMEN DE INCIDENCIAS DIARIAS (HOJA OFICIAL)
-           (Luego el resumen: datos de apertura de sala, fotos de muestra)
+           3. NOVEDADES DE MESAS (Apertura y Cierre de Mesas)
            ============================================================ -->
-      <div class="sheet-section official-incidencias-block" class:hidden-on-screen={viewMode !== 'documento' && viewMode !== 'resumen'}>
-        <div class="sheet-main-title-box">
-          <h1 class="sheet-title-text">Resumen De Incidencias Diarias.</h1>
-        </div>
-
-        <div class="horarios-section">
-          <div class="horarios-list">
-            
-            <!-- 1. Apertura de la sala -->
-            <div class="horario-item">
-              <span class="item-num">1.</span>
-              <span class="item-label">Apertura de la sala</span>
-              <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.apertura_sala_inicio || '—'}</span>
-                <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.apertura_sala_fin || '—'}</span>
-              </div>
-            </div>
-
-            <!-- 2. Apertura de maquinas -->
-            <div class="horario-item">
-              <span class="item-num">2.</span>
-              <span class="item-label">Apertura de maquinas</span>
-              <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.apertura_maquinas_inicio || '—'}</span>
-                <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.apertura_maquinas_fin || '—'}</span>
-              </div>
-            </div>
-
-            <!-- 3. Apertura de bingo -->
-            <div class="horario-item">
-              <span class="item-num">3.</span>
-              <span class="item-label">Apertura de bingo</span>
-              <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.apertura_bingo_inicio || '—'}</span>
-                <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.apertura_bingo_fin || '—'}</span>
-              </div>
-            </div>
-
-            <!-- 4. Recepción de mercancía -->
-            <div class="horario-item multi-line">
-              <span class="item-num">4.</span>
-              <div class="mercancia-block">
-                <span class="item-label">Recepción de mercancía:</span>
-                {#if mercanciaItems.length === 0}
-                  <div class="mercancia-sublist">
-                    <span class="h-val-none">Sin recepción de mercancía registrada para este día.</span>
-                  </div>
-                {:else}
-                  <div class="mercancia-sublist">
-                    {#each mercanciaItems as inc}
-                      {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
-                      <div class="mercancia-group">
-                        <div class="mercancia-title-line">
-                          <span class="m-title-bold">{parsed.title}</span>
-                        </div>
-                        {#if parsed.items && parsed.items.length > 0}
-                          <div class="mercancia-items-block">
-                            {#each parsed.items as subItem}
-                              <div class="mercancia-sub-item">{subItem}</div>
-                            {/each}
-                          </div>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            </div>
-
-            <!-- 5. Retiro de dropbox general -->
-            <div class="horario-item">
-              <span class="item-num">5.</span>
-              <span class="item-label">Retiro de dropbox general</span>
-              <div class="item-values">
-                <span class="h-text">hora:</span>
-                <span class="h-val">
-                  {resumenData.datos?.retiros_dropbox_inicio ? `${resumenData.datos.retiros_dropbox_inicio}${resumenData.datos.retiros_dropbox_fin ? ' - ' + resumenData.datos.retiros_dropbox_fin : ''}` : '—'}
-                </span>
-              </div>
-            </div>
-
-            <!-- 6. Conteo de dropbox -->
-            <div class="horario-item">
-              <span class="item-num">6.</span>
-              <span class="item-label">Se realiza conteo de dropbox por:</span>
-              <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.conteo_dropbox_inicio || '—'}</span>
-                <span class="h-text">h final:</span>
-                <span class="h-val">{resumenData.datos?.conteo_dropbox_fin || '—'}</span>
-                <span class="h-text">Monto: $</span>
-                <span class="h-val highlight-money">{dropTotales.grandTotal ? dropTotales.grandTotal.toLocaleString('en-US') : '0'}</span>
-              </div>
-            </div>
-
+      <div class="sheet-section sub-module-section">
+        <div class="sub-header-row">
+          <div class="sub-title-group">
+            <h2 class="sub-section-title">🎭 3. Novedades de Mesas (Apertura y Cierre)</h2>
+            <span class="sub-count-badge">{resumenData.novedades_mesas.length} registros</span>
           </div>
         </div>
 
-        <!-- Tabla Oficial de Novedades de Mesas -->
         <div class="mesas-section">
           <table class="sheet-official-table">
             <thead>
@@ -848,30 +813,130 @@
             </tbody>
           </table>
         </div>
+      </div>
 
-        <!-- Operadores CECOM -->
-        <div class="operadores-section">
-          <div class="operadores-block">
-            <span class="op-main-title">OPERADORES:</span>
-            <div class="op-line">
-              <span class="op-label">TURNO A:</span>
-              <span class="op-names">NOMBRES: {resumenData.datos?.operador_turno_a || '—'}</span>
+      <!-- ============================================================
+           4. INCIDENCIAS EN BLOQUE DE 3 (Mercancía, Generales, Empleados)
+           ============================================================ -->
+      <div class="sheet-section sub-module-section">
+        <div class="sub-header-row">
+          <div class="sub-title-group">
+            <h2 class="sub-section-title">⚠️ 4. Bitácora de Incidencias (Mercancía, Generales y Empleados)</h2>
+            <span class="sub-count-badge">{resumenData.incidencias_generales.length} reportes en total</span>
+          </div>
+        </div>
+
+        <div class="incidencias-bloque-tres">
+          
+          <!-- Bloque 1: Mercancía / Proveedores -->
+          <div class="incidencia-subbloque">
+            <div class="incidencia-subbloque-header">
+              <h3 class="incidencia-subbloque-title">
+                <span>📦 Mercancía / Proveedores</span>
+              </h3>
+              <span class="incidencia-badge">{incidenciasBloque.mercancia.length}</span>
             </div>
-            <div class="op-line">
-              <span class="op-label">TURNO C:</span>
-              <span class="op-names">NOMBRES: {resumenData.datos?.operador_turno_c || '—'}</span>
+            <div class="incidencia-subbloque-content">
+              {#if incidenciasBloque.mercancia.length === 0}
+                <div class="empty-sub-alert">Sin recepción de mercancía registrada.</div>
+              {:else}
+                {#each incidenciasBloque.mercancia as inc}
+                  {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
+                  <div class="incidencia-item-card">
+                    <div class="inc-item-header">
+                      <span class="inc-item-time">{inc.hora || 'S/H'}</span>
+                      <span class="inc-item-tag">{inc.tipo || 'Mercancía'}</span>
+                    </div>
+                    <div class="inc-item-title-bold">{parsed.title}</div>
+                    {#if parsed.items && parsed.items.length > 0}
+                      <ul class="inc-subitems-list">
+                        {#each parsed.items as subItem}
+                          <li>{subItem}</li>
+                        {/each}
+                      </ul>
+                    {/if}
+                  </div>
+                {/each}
+              {/if}
             </div>
           </div>
+
+          <!-- Bloque 2: Generales -->
+          <div class="incidencia-subbloque">
+            <div class="incidencia-subbloque-header">
+              <h3 class="incidencia-subbloque-title">
+                <span>📋 Incidencias Generales</span>
+              </h3>
+              <span class="incidencia-badge">{incidenciasBloque.generales.length}</span>
+            </div>
+            <div class="incidencia-subbloque-content">
+              {#if incidenciasBloque.generales.length === 0}
+                <div class="empty-sub-alert">Sin incidencias generales reportadas.</div>
+              {:else}
+                {#each incidenciasBloque.generales as inc}
+                  {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
+                  <div class="incidencia-item-card">
+                    <div class="inc-item-header">
+                      <span class="inc-item-time">{inc.hora || 'S/H'}</span>
+                      <span class="inc-item-tag">{inc.tipo || 'General'}</span>
+                    </div>
+                    <div class="inc-item-title-bold">{parsed.title}</div>
+                    {#if parsed.items && parsed.items.length > 0}
+                      <ul class="inc-subitems-list">
+                        {#each parsed.items as subItem}
+                          <li>{subItem}</li>
+                        {/each}
+                      </ul>
+                    {/if}
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          </div>
+
+          <!-- Bloque 3: Empleados / Personal -->
+          <div class="incidencia-subbloque">
+            <div class="incidencia-subbloque-header">
+              <h3 class="incidencia-subbloque-title">
+                <span>👤 Personal / Empleados</span>
+              </h3>
+              <span class="incidencia-badge">{incidenciasBloque.empleado.length}</span>
+            </div>
+            <div class="incidencia-subbloque-content">
+              {#if incidenciasBloque.empleado.length === 0}
+                <div class="empty-sub-alert">Sin novedades de empleados registradas.</div>
+              {:else}
+                {#each incidenciasBloque.empleado as inc}
+                  {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
+                  <div class="incidencia-item-card">
+                    <div class="inc-item-header">
+                      <span class="inc-item-time">{inc.hora || 'S/H'}</span>
+                      <span class="inc-item-tag">{inc.tipo || 'Empleado'}</span>
+                    </div>
+                    <div class="inc-item-title-bold">{parsed.title}</div>
+                    {#if parsed.items && parsed.items.length > 0}
+                      <ul class="inc-subitems-list">
+                        {#each parsed.items as subItem}
+                          <li>{subItem}</li>
+                        {/each}
+                      </ul>
+                    {/if}
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          </div>
+
         </div>
       </div>
 
       <!-- ============================================================
-           SECCIÓN 3: CONTROL DE LLAVES (Luego lo de llaves)
+           5. CONTROL DE LLAVES
            ============================================================ -->
-      <div class="sheet-section sub-module-section" class:hidden-on-screen={viewMode !== 'documento' && viewMode !== 'llaves'}>
+      <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">🔑 3. Bitácora de Control de Llaves</h2>
+            <h2 class="sub-section-title">🔑 5. Bitácora de Control de Llaves</h2>
             <span class="sub-count-badge">{llavesTotales.total} registros</span>
           </div>
           <div class="badges-status-group">
@@ -921,12 +986,12 @@
       </div>
 
       <!-- ============================================================
-           SECCIÓN 4: CONTROL DE CLIENTES (Despues lo de clientes)
+           6. CONTROL DE CLIENTES (Detallado + 2 Tablitas Agrupadas)
            ============================================================ -->
-      <div class="sheet-section sub-module-section" class:hidden-on-screen={viewMode !== 'documento' && viewMode !== 'clientes'}>
+      <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">👥 4. Control de Clientes / Jugadores en Sala</h2>
+            <h2 class="sub-section-title">👥 6. Control de Clientes / Jugadores en Sala</h2>
             <span class="sub-count-badge">{clientesTotales.totalOps} transacciones</span>
           </div>
           <div class="badges-status-group">
@@ -938,6 +1003,7 @@
           </div>
         </div>
 
+        <!-- 6.1 Detallado de Operación -->
         {#if resumenData.control_clientes.length === 0}
           <div class="empty-sub-alert">No hay operaciones de control de clientes registradas en este libro.</div>
         {:else}
@@ -976,86 +1042,138 @@
               </tr>
             </tfoot>
           </table>
+
+          <!-- 6.2 Las 2 Tablitas Agrupadas (Por Método de Pago y Por Cliente) -->
+          <div class="client-summaries-grid">
+            
+            <!-- Tablita A: Agrupado por Método de Pago -->
+            <div class="summary-subtable-box">
+              <div class="subtable-header">
+                <h4 class="subtable-title">💳 Resumen por Método de Pago</h4>
+                <span class="incidencia-badge">{clientesPorMetodo.length} métodos</span>
+              </div>
+              <table class="compact-table">
+                <thead>
+                  <tr>
+                    <th>MÉTODO</th>
+                    <th>OPS</th>
+                    <th>COMPRAS</th>
+                    <th>PAGOS</th>
+                    <th>BALANCE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each clientesPorMetodo as m}
+                    <tr>
+                      <td class="cell-left font-bold">{m.metodo}</td>
+                      <td class="cell-center">{m.ops}</td>
+                      <td class="cell-total-money">{formatMoney(m.compras)}</td>
+                      <td class="cell-total-money text-blue">{formatMoney(m.pagos)}</td>
+                      <td class="cell-total-money {m.balance >= 0 ? 'text-emerald' : 'text-rose'}">
+                        {formatMoney(m.balance)}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+                <tfoot>
+                  <tr class="tfoot-totals">
+                    <td>TOTAL</td>
+                    <td class="cell-center">{totalesPorMetodo.ops}</td>
+                    <td class="cell-total-money">{formatMoney(totalesPorMetodo.compras)}</td>
+                    <td class="cell-total-money text-blue">{formatMoney(totalesPorMetodo.pagos)}</td>
+                    <td class="cell-grand-total">{formatMoney(totalesPorMetodo.balance)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <!-- Tablita B: Agrupado por Cliente / Jugador -->
+            <div class="summary-subtable-box">
+              <div class="subtable-header">
+                <h4 class="subtable-title">👤 Resumen por Cliente / Jugador</h4>
+                <span class="incidencia-badge">{clientesPorJugador.length} clientes</span>
+              </div>
+              <table class="compact-table">
+                <thead>
+                  <tr>
+                    <th>CLIENTE</th>
+                    <th>OPS</th>
+                    <th>COMPRAS</th>
+                    <th>PAGOS</th>
+                    <th>BALANCE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each clientesPorJugador as cl}
+                    <tr>
+                      <td class="cell-left font-bold">{cl.cliente}</td>
+                      <td class="cell-center">{cl.ops}</td>
+                      <td class="cell-total-money">{formatMoney(cl.compras)}</td>
+                      <td class="cell-total-money text-blue">{formatMoney(cl.pagos)}</td>
+                      <td class="cell-total-money {cl.balance >= 0 ? 'text-emerald' : 'text-rose'}">
+                        {formatMoney(cl.balance)}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+                <tfoot>
+                  <tr class="tfoot-totals">
+                    <td>TOTAL</td>
+                    <td class="cell-center">{totalesPorJugador.ops}</td>
+                    <td class="cell-total-money">{formatMoney(totalesPorJugador.compras)}</td>
+                    <td class="cell-total-money text-blue">{formatMoney(totalesPorJugador.pagos)}</td>
+                    <td class="cell-grand-total">{formatMoney(totalesPorJugador.balance)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+          </div>
         {/if}
       </div>
 
       <!-- ============================================================
-           SECCIÓN 5: INCIDENCIAS GENERALES (Luego lo de incidencias)
+           7. OPERADORES CECOM (APERTURA Y CIERRE) Y AUDITORÍA FINAL
            ============================================================ -->
-      <div class="sheet-section sub-module-section" class:hidden-on-screen={viewMode !== 'documento' && viewMode !== 'incidencias'}>
-        <div class="sub-header-row">
-          <div class="sub-title-group">
-            <h2 class="sub-section-title">⚠️ 5. Bitácora de Incidencias Generales y Novedades</h2>
-            <span class="sub-count-badge">{resumenData.incidencias_generales.length} reportes</span>
+      <div class="sheet-section sub-module-section operadores-final-section">
+        <div class="operadores-section-box">
+          <span class="op-main-title">OPERADORES CECOM:</span>
+          <div class="op-line">
+            <span class="op-label">TURNO A (APERTURA):</span>
+            <span class="op-names">NOMBRES: {resumenData.datos?.operador_turno_a || '—'}</span>
+          </div>
+          <div class="op-line">
+            <span class="op-label">TURNO C (CIERRE):</span>
+            <span class="op-names">NOMBRES: {resumenData.datos?.operador_turno_c || '—'}</span>
           </div>
         </div>
 
-        {#if resumenData.incidencias_generales.length === 0}
-          <div class="empty-sub-alert">No se reportaron incidencias generales adicionales en esta jornada.</div>
-        {:else}
-          <table class="sheet-detail-table">
-            <thead>
-              <tr>
-                <th class="th-num">N°</th>
-                <th class="th-hora">HORA</th>
-                <th class="th-tipo">TIPO</th>
-                <th class="th-desc">DESCRIPCIÓN / NOVEDAD</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each resumenData.incidencias_generales as inc, idx}
-                {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
-                <tr>
-                  <td class="cell-center">{idx + 1}</td>
-                  <td class="cell-center">{inc.hora || '—'}</td>
-                  <td class="cell-center">
-                    <span class="tag-tipo tag-inc-tipo">{inc.tipo || 'General'}</span>
-                  </td>
-                  <td class="cell-left">
-                    <div class="inc-text-wrapper">
-                      <div class="inc-title-bold">{parsed.title}</div>
-                      {#if parsed.items && parsed.items.length > 0}
-                        <ul class="inc-items-ul">
-                          {#each parsed.items as itm}
-                            <li>{itm}</li>
-                          {/each}
-                        </ul>
-                      {/if}
-                    </div>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        {/if}
-      </div>
+        <!-- Firmas Oficiales de Auditoría -->
+        <div class="sheet-footer-signatures">
+          <div class="signature-box">
+            <div class="sign-line"></div>
+            <span class="sign-title">Operador CECOM (Turno A - Apertura)</span>
+            <span class="sign-name">{resumenData.datos?.operador_turno_a || 'Firma y Huella'}</span>
+          </div>
 
-      <!-- ============================================================
-           PIE DE FIRMA Y AUDITORÍA DEL REPORTE
-           ============================================================ -->
-      <div class="sheet-footer-signatures">
-        <div class="signature-box">
-          <div class="sign-line"></div>
-          <span class="sign-title">Operador CECOM (Turno A)</span>
-          <span class="sign-name">{resumenData.datos?.operador_turno_a || 'Firma y Huella'}</span>
+          <div class="signature-box">
+            <div class="sign-line"></div>
+            <span class="sign-title">Operador CECOM (Turno C - Cierre)</span>
+            <span class="sign-name">{resumenData.datos?.operador_turno_c || 'Firma y Huella'}</span>
+          </div>
+
+          <div class="signature-box">
+            <div class="sign-line"></div>
+            <span class="sign-title">Supervisión / Auditoría de Sala</span>
+            <span class="sign-name">Firma y Sello Oficial</span>
+          </div>
         </div>
 
-        <div class="signature-box">
-          <div class="sign-line"></div>
-          <span class="sign-title">Operador CECOM (Turno C)</span>
-          <span class="sign-name">{resumenData.datos?.operador_turno_c || 'Firma y Huella'}</span>
-        </div>
-
-        <div class="signature-box">
-          <div class="sign-line"></div>
-          <span class="sign-title">Supervisión / Auditoría de Sala</span>
-          <span class="sign-name">Firma y Sello Oficial</span>
+        <div class="sheet-bottom-note">
+          Documento oficial consolidado emitido por el Sistema CECOM - WISI desde la tabla libro_reporte.
         </div>
       </div>
 
-      <div class="sheet-bottom-note">
-        Documento oficial consolidado emitido por el Sistema CECOM - WISI desde la tabla libro_reporte.
-      </div>
 
     </div>
   {/if}
@@ -1357,32 +1475,6 @@
   .metric-link:hover {
     color: #1d4ed8;
     text-decoration: underline;
-  }
-
-  /* Filtros de sección del documento */
-  .document-section-filters {
-    width: 100%;
-    max-width: 1100px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-    background: #1e293b;
-    padding: 10px 16px;
-    border-radius: 8px;
-    color: #ffffff;
-  }
-
-  .preview-notice-badge {
-    font-size: 0.8rem;
-    font-weight: 600;
-    background: rgba(234, 179, 8, 0.2);
-    color: #fde047;
-    border: 1px solid rgba(234, 179, 8, 0.3);
-    padding: 4px 10px;
-    border-radius: 6px;
   }
 
   /* Barra de herramientas superior para modo público */
@@ -2063,6 +2155,214 @@
     color: #334155;
   }
 
+  /* ─────────────────────────────────────────────────────────────
+     BLOQUE DE 3: INCIDENCIAS (Mercancía, Generales, Empleados)
+     ───────────────────────────────────────────────────────────── */
+  .incidencias-bloque-tres {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 12px;
+  }
+
+  @media (max-width: 900px) {
+    .incidencias-bloque-tres {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .incidencia-subbloque {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .incidencia-subbloque-header {
+    background: #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .incidencia-subbloque-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .incidencia-badge {
+    font-size: 11px;
+    font-weight: 700;
+    background: #ffffff;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    padding: 2px 7px;
+    border-radius: 9999px;
+  }
+
+  .incidencia-subbloque-content {
+    padding: 12px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+
+  .incidencia-item-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 8px 10px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  }
+
+  .inc-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .inc-item-time {
+    font-weight: 800;
+    font-size: 11px;
+    color: #1e40af;
+    background: #eff6ff;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  .inc-item-tag {
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .inc-item-title-bold {
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  .inc-subitems-list {
+    margin: 4px 0 0 16px;
+    padding: 0;
+    font-size: 11px;
+    color: #334155;
+    line-height: 1.35;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     CLIENTES: 2 TABLITAS AGRUPADAS (Por Método y Por Jugador)
+     ───────────────────────────────────────────────────────────── */
+  .client-summaries-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  @media (max-width: 900px) {
+    .client-summaries-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .summary-subtable-box {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .subtable-header {
+    background: #f1f5f9;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .subtable-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .compact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .compact-table thead tr {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .compact-table th {
+    border: 1px solid #cbd5e1;
+    padding: 5px 6px;
+    font-size: 10px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .compact-table td {
+    border: 1px solid #e2e8f0;
+    padding: 5px 6px;
+  }
+
+  .font-bold {
+    font-weight: 700;
+  }
+
+  .text-blue {
+    color: #2563eb !important;
+  }
+
+  .text-rose {
+    color: #e11d48 !important;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     OPERADORES CECOM FINAL
+     ───────────────────────────────────────────────────────────── */
+  .operadores-final-section {
+    border-top: 2px solid #0f172a;
+    margin-top: 30px;
+    padding-top: 20px;
+  }
+
+  .operadores-section-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
   /* Firmas */
   .sheet-footer-signatures {
     display: flex;
@@ -2151,6 +2451,23 @@
     }
 
     .sheet-footer-signatures {
+      page-break-inside: avoid;
+    }
+
+    .incidencias-bloque-tres {
+      display: grid !important;
+      grid-template-columns: repeat(3, 1fr) !important;
+      page-break-inside: avoid;
+    }
+
+    .incidencia-subbloque-content {
+      max-height: none !important;
+      overflow: visible !important;
+    }
+
+    .client-summaries-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr) !important;
       page-break-inside: avoid;
     }
   }
