@@ -22,13 +22,9 @@
   let conteoDropboxInicio = '';
   let conteoDropboxFin = '';
 
-  // Operadores múltiples por turno
+  // Operadores
   let operadorTurnoA = '';
   let operadorTurnoC = '';
-  let operadoresTurnoAList = [];
-  let operadoresTurnoCList = [];
-  let inputTempOperadorA = '';
-  let inputTempOperadorC = '';
 
   let isSaving = false;
   let isLoadingData = false;
@@ -39,6 +35,10 @@
   let autoSaveTimeout = null;
   let saveStatus = 'idle'; // 'idle' | 'saving' | 'saved'
   let saveStatusTimeout = null;
+
+  // Reactivos para las tarjetas y tabla de la derecha
+  $: operadoresTurnoAList = parseOperadores(operadorTurnoA);
+  $: operadoresTurnoCList = parseOperadores(operadorTurnoC);
 
   // Encabezado superior: Roraima - 07/09/2026
   $: tableHeaderTitle = (() => {
@@ -83,63 +83,13 @@
       .filter(Boolean);
   }
 
-  // Disparar autoguardado con pequeño debounce para no saturar
+  // Disparar autoguardado con debounce para guardar al escribir o cambiar
   function triggerAutoSave() {
     if (isLoadingData) return;
     if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
     autoSaveTimeout = setTimeout(() => {
       handleGuardar(true);
-    }, 200);
-  }
-
-  function addOperadorA(val, triggerSave = true) {
-    if (!val) return;
-    const parts = String(val)
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return;
-    const current = [...operadoresTurnoAList];
-    for (const p of parts) {
-      if (!current.includes(p)) {
-        current.push(p);
-      }
-    }
-    operadoresTurnoAList = current;
-    operadorTurnoA = operadoresTurnoAList.join(', ');
-    inputTempOperadorA = '';
-    if (triggerSave) triggerAutoSave();
-  }
-
-  function removeOperadorA(name) {
-    operadoresTurnoAList = operadoresTurnoAList.filter(n => n !== name);
-    operadorTurnoA = operadoresTurnoAList.join(', ');
-    triggerAutoSave();
-  }
-
-  function addOperadorC(val, triggerSave = true) {
-    if (!val) return;
-    const parts = String(val)
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-    if (parts.length === 0) return;
-    const current = [...operadoresTurnoCList];
-    for (const p of parts) {
-      if (!current.includes(p)) {
-        current.push(p);
-      }
-    }
-    operadoresTurnoCList = current;
-    operadorTurnoC = operadoresTurnoCList.join(', ');
-    inputTempOperadorC = '';
-    if (triggerSave) triggerAutoSave();
-  }
-
-  function removeOperadorC(name) {
-    operadoresTurnoCList = operadoresTurnoCList.filter(n => n !== name);
-    operadorTurnoC = operadoresTurnoCList.join(', ');
-    triggerAutoSave();
+    }, 400);
   }
 
   onMount(async () => {
@@ -183,9 +133,6 @@
           operadorTurnoA = d.operador_turno_a || '';
           operadorTurnoC = d.operador_turno_c || '';
 
-          operadoresTurnoAList = parseOperadores(operadorTurnoA);
-          operadoresTurnoCList = parseOperadores(operadorTurnoC);
-
           lastUpdatedAt = d.updated_at || d.created_at || null;
         } else {
           recordId = null;
@@ -201,8 +148,6 @@
           conteoDropboxFin = '';
           operadorTurnoA = '';
           operadorTurnoC = '';
-          operadoresTurnoAList = [];
-          operadoresTurnoCList = [];
           lastUpdatedAt = null;
         }
       }
@@ -220,14 +165,6 @@
       return;
     }
 
-    // Si había texto pendiente en los inputs temporales, agregarlo
-    if (inputTempOperadorA.trim()) {
-      addOperadorA(inputTempOperadorA, false);
-    }
-    if (inputTempOperadorC.trim()) {
-      addOperadorC(inputTempOperadorC, false);
-    }
-
     isSaving = true;
     saveStatus = 'saving';
     try {
@@ -242,8 +179,8 @@
         retiros_dropbox_fin: retirosDropboxFin,
         conteo_dropbox_inicio: conteoDropboxInicio,
         conteo_dropbox_fin: conteoDropboxFin,
-        operador_turno_a: operadoresTurnoAList.join(', '),
-        operador_turno_c: operadoresTurnoCList.join(', ')
+        operador_turno_a: operadorTurnoA,
+        operador_turno_c: operadorTurnoC
       };
 
       const res = await fetch(`/api/master/libros/${lId}/datos`, {
@@ -261,10 +198,6 @@
         if (json.data) {
           recordId = json.data.id;
           lastUpdatedAt = json.data.updated_at || json.data.created_at;
-          operadorTurnoA = json.data.operador_turno_a || '';
-          operadorTurnoC = json.data.operador_turno_c || '';
-          operadoresTurnoAList = parseOperadores(operadorTurnoA);
-          operadoresTurnoCList = parseOperadores(operadorTurnoC);
         }
 
         if (saveStatusTimeout) clearTimeout(saveStatusTimeout);
@@ -296,7 +229,7 @@
     Boolean(aperturaBingoInicio || aperturaBingoFin),
     Boolean(retirosDropboxInicio || retirosDropboxFin),
     Boolean(conteoDropboxInicio || conteoDropboxFin),
-    Boolean(operadoresTurnoAList.length > 0 || operadoresTurnoCList.length > 0)
+    Boolean(operadorTurnoA || operadorTurnoC)
   ].filter(Boolean).length;
 </script>
 
@@ -318,7 +251,7 @@
       <div class="title-underline"></div>
     </div>
 
-    <form on:submit|preventDefault={() => handleGuardar(false)} class="datos-form">
+    <form on:submit|preventDefault={() => handleGuardar(true)} class="datos-form">
       <!-- 1. Apertura de Sala -->
       <div class="form-section-box">
         <div class="section-label-header">
@@ -554,171 +487,49 @@
         </div>
       </div>
 
-      <!-- 6. Operadores CECOM (Soporte Múltiples) -->
+      <!-- 6. Operadores CECOM -->
       <div class="form-section-box">
         <div class="section-label-header">
           <span class="section-title">👥 Operadores CECOM</span>
         </div>
         <div class="operadores-dual-row">
-          <!-- Turno A (Apertura) -->
           <div class="operador-input-col">
-            <div class="col-header-mini">
-              <label for="operador-a-input" class="mini-label">Turno A (Apertura):</label>
-              {#if operadoresTurnoAList.length > 0}
-                <span class="op-counter-badge">{operadoresTurnoAList.length} {operadoresTurnoAList.length === 1 ? 'operador' : 'operadores'}</span>
-              {/if}
-            </div>
-
-            <!-- Chips de Operadores Turno A -->
-            {#if operadoresTurnoAList.length > 0}
-              <div class="chips-box">
-                {#each operadoresTurnoAList as op}
-                  <span class="op-chip chip-a">
-                    <span class="chip-avatar">👤</span>
-                    <span class="chip-text">{op}</span>
-                    <button 
-                      type="button" 
-                      class="chip-del-btn" 
-                      on:click={() => removeOperadorA(op)}
-                      title="Quitar operador y guardar"
-                    >×</button>
-                  </span>
-                {/each}
-              </div>
-            {/if}
-
-            <!-- Input con sugerencias y botón de agregar -->
-            <div class="input-with-add">
-              <input 
-                id="operador-a-input" 
-                type="text" 
-                list="empleados-cecom-list-a"
-                class="form-text-input" 
-                placeholder="Escriba o elija operador (Enter o coma)..."
-                bind:value={inputTempOperadorA} 
-                on:keydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ',') {
-                    e.preventDefault();
-                    addOperadorA(inputTempOperadorA);
-                  }
-                }}
-                on:change={() => {
-                  if (inputTempOperadorA) {
-                    addOperadorA(inputTempOperadorA);
-                  }
-                }}
-                on:blur={() => {
-                  if (inputTempOperadorA.trim()) {
-                    addOperadorA(inputTempOperadorA);
-                  }
-                }}
-              />
-              {#if inputTempOperadorA.trim()}
-                <button 
-                  type="button" 
-                  class="btn-add-op" 
-                  on:click={() => addOperadorA(inputTempOperadorA)}
-                  title="Agregar a Turno A y guardar"
-                >+</button>
-              {/if}
-            </div>
-
-            <datalist id="empleados-cecom-list-a">
-              {#each listaEmpleados as emp}
-                {#if !operadoresTurnoAList.includes(emp)}
-                  <option value={emp}></option>
-                {/if}
-              {/each}
-            </datalist>
+            <label for="operador-a-input" class="mini-label">Turno A (Apertura):</label>
+            <input 
+              id="operador-a-input" 
+              type="text" 
+              list="empleados-cecom-list"
+              class="form-text-input" 
+              placeholder="Operador de Apertura..."
+              bind:value={operadorTurnoA} 
+              on:input={triggerAutoSave}
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
+            />
           </div>
 
-          <!-- Turno C (Cierre) -->
           <div class="operador-input-col">
-            <div class="col-header-mini">
-              <label for="operador-c-input" class="mini-label">Turno C (Cierre):</label>
-              {#if operadoresTurnoCList.length > 0}
-                <span class="op-counter-badge">{operadoresTurnoCList.length} {operadoresTurnoCList.length === 1 ? 'operador' : 'operadores'}</span>
-              {/if}
-            </div>
-
-            <!-- Chips de Operadores Turno C -->
-            {#if operadoresTurnoCList.length > 0}
-              <div class="chips-box">
-                {#each operadoresTurnoCList as op}
-                  <span class="op-chip chip-c">
-                    <span class="chip-avatar">👤</span>
-                    <span class="chip-text">{op}</span>
-                    <button 
-                      type="button" 
-                      class="chip-del-btn" 
-                      on:click={() => removeOperadorC(op)}
-                      title="Quitar operador y guardar"
-                    >×</button>
-                  </span>
-                {/each}
-              </div>
-            {/if}
-
-            <!-- Input con sugerencias y botón de agregar -->
-            <div class="input-with-add">
-              <input 
-                id="operador-c-input" 
-                type="text" 
-                list="empleados-cecom-list-c"
-                class="form-text-input" 
-                placeholder="Escriba o elija operador (Enter o coma)..."
-                bind:value={inputTempOperadorC} 
-                on:keydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ',') {
-                    e.preventDefault();
-                    addOperadorC(inputTempOperadorC);
-                  }
-                }}
-                on:change={() => {
-                  if (inputTempOperadorC) {
-                    addOperadorC(inputTempOperadorC);
-                  }
-                }}
-                on:blur={() => {
-                  if (inputTempOperadorC.trim()) {
-                    addOperadorC(inputTempOperadorC);
-                  }
-                }}
-              />
-              {#if inputTempOperadorC.trim()}
-                <button 
-                  type="button" 
-                  class="btn-add-op" 
-                  on:click={() => addOperadorC(inputTempOperadorC)}
-                  title="Agregar a Turno C y guardar"
-                >+</button>
-              {/if}
-            </div>
-
-            <datalist id="empleados-cecom-list-c">
-              {#each listaEmpleados as emp}
-                {#if !operadoresTurnoCList.includes(emp)}
-                  <option value={emp}></option>
-                {/if}
-              {/each}
-            </datalist>
+            <label for="operador-c-input" class="mini-label">Turno C (Cierre):</label>
+            <input 
+              id="operador-c-input" 
+              type="text" 
+              list="empleados-cecom-list"
+              class="form-text-input" 
+              placeholder="Operador de Cierre..."
+              bind:value={operadorTurnoC} 
+              on:input={triggerAutoSave}
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
+            />
           </div>
         </div>
-      </div>
 
-      <!-- Botón Guardar Verde -->
-      <button 
-        type="submit" 
-        class="btn-guardar"
-        disabled={isSaving || isLoadingData}
-      >
-        {#if isSaving}
-          <div class="spinner-inline"></div>
-          <span>Guardando...</span>
-        {:else}
-          <span>Guardar Registro</span>
-        {/if}
-      </button>
+        <datalist id="empleados-cecom-list">
+          {#each listaEmpleados as emp}
+            <option value={emp}></option>
+          {/each}
+        </datalist>
+      </div>
     </form>
   </div>
 
@@ -1205,172 +1016,36 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   }
 
-  /* Operadores Múltiples */
+  /* Operadores CECOM */
   .operadores-dual-row {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 
   .operador-input-col {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-  }
-
-  .op-counter-badge {
-    font-size: 10.5px;
-    font-weight: 700;
-    color: #2563eb;
-    background: #eff6ff;
-    padding: 1px 6px;
-    border-radius: 10px;
-    border: 1px solid #bfdbfe;
-  }
-
-  .chips-box {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 2px;
-  }
-
-  .op-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  .op-chip.chip-a {
-    background: #dbeafe;
-    color: #1e40af;
-    border: 1px solid #bfdbfe;
-  }
-
-  .op-chip.chip-c {
-    background: #f3e8ff;
-    color: #6b21a8;
-    border: 1px solid #e9d5ff;
-  }
-
-  .chip-avatar {
-    font-size: 11px;
-  }
-
-  .chip-text {
-    max-width: 140px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .chip-del-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    padding: 0 2px;
-    color: inherit;
-    opacity: 0.7;
-    transition: opacity 0.1s ease;
-  }
-
-  .chip-del-btn:hover {
-    opacity: 1;
-    color: #dc2626;
-  }
-
-  .input-with-add {
-    display: flex;
-    gap: 6px;
-    align-items: center;
+    gap: 4px;
   }
 
   .form-text-input {
     width: 100%;
-    padding: 6px 10px;
+    padding: 6px 8px;
     border: 1px solid #cbd5e1;
     border-radius: 5px;
-    font-size: 12.5px;
+    font-size: 13px;
     color: #0f172a;
     background-color: #ffffff;
     outline: none;
     box-sizing: border-box;
     transition: all 0.2s ease;
+    font-family: inherit;
   }
 
   .form-text-input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-
-  .btn-add-op {
-    background: #2563eb;
-    color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    width: 30px;
-    height: 30px;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: background 0.15s ease;
-  }
-
-  .btn-add-op:hover {
-    background: #1d4ed8;
-  }
-
-  /* Botón Guardar Verde */
-  .btn-guardar {
-    width: 100%;
-    margin-top: 4px;
-    padding: 10px 16px;
-    background-color: #5bb87e;
-    color: #ffffff;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: 0 2px 4px rgba(91, 184, 126, 0.25);
-  }
-
-  .btn-guardar:hover:not(:disabled) {
-    background-color: #4ca66e;
-    box-shadow: 0 4px 8px rgba(91, 184, 126, 0.35);
-  }
-
-  .btn-guardar:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
-  }
-
-  .spinner-inline {
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(255, 255, 255, 0.4);
-    border-top-color: #ffffff;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
   }
 
   /* ─────────────────────────────────────────────────────────────
