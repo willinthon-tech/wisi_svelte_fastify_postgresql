@@ -358,6 +358,9 @@
     return { totalCompras, totalPagos, balanceNeto, totalOps: list.length };
   })();
 
+  // Producción = drop - (Total Compra - Total Pagos)
+  $: produccionTotal = dropTotales.grandTotal - (clientesTotales.totalCompras - clientesTotales.totalPagos);
+
   // Resumen de Llaves
   $: llavesTotales = (() => {
     const list = resumenData.control_llaves || [];
@@ -440,7 +443,13 @@
           </div>
           <div class="overview-title-box">
             <h2 class="overview-title">Resumen Libro</h2>
-            <p class="overview-subtitle">Consolidado general y auditoría de la jornada</p>
+            <p class="overview-subtitle">
+              Consolidado general y auditoría • <span class="meta-highlight">{salaNombre}</span> ({dateParts.formatted})
+              {#if updatedAt}
+                <span class="meta-sep">•</span>
+                <span class="meta-updated">Última sinc: {formatDateTimeDisplay(updatedAt)}</span>
+              {/if}
+            </p>
           </div>
         </div>
 
@@ -462,114 +471,6 @@
               <span>Generar Reporte</span>
             {/if}
           </button>
-        </div>
-      </div>
-
-      <!-- Fila 2: Sub-tarjeta "Resumen Consolidado del Libro" -->
-      <div class="consolidado-banner-card">
-        <div class="consolidado-banner-left">
-          <h3 class="consolidado-banner-title">Resumen Consolidado del Libro</h3>
-          <p class="consolidado-banner-meta">
-            Fecha: <span class="meta-highlight">{dateParts.formatted}</span> • Sala: <span class="meta-highlight">{salaNombre}</span>
-            {#if updatedAt}
-              <span class="meta-sep">•</span>
-              <span class="meta-updated">Última sincronización: {formatDateTimeDisplay(updatedAt)}</span>
-            {/if}
-          </p>
-        </div>
-        <div class="consolidado-banner-right">
-          {#if reporteExists}
-            <span class="badge-status badge-en-curso">EN CURSO</span>
-          {:else}
-            <span class="badge-status badge-sin-generar">PENDIENTE DE GENERAR</span>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Fila 3: Grid de 6 subvistas con conteos y link "Ver subvista →" -->
-      <div class="subvistas-cards-grid">
-        <!-- 1. Datos -->
-        <div class="subvista-metric-card" on:click={() => handleGoToSubvista('datos')} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleGoToSubvista('datos')}>
-          <div class="metric-top">
-            <span class="metric-icon">📋</span>
-            <span class="metric-title">Datos</span>
-          </div>
-          <div class="metric-bottom">
-            <span class="metric-count">{liveCounts.datos > 0 ? '1 registro' : '0 registros'}</span>
-            <button type="button" class="metric-link" on:click|stopPropagation={() => handleGoToSubvista('datos')}>
-              Ver subvista →
-            </button>
-          </div>
-        </div>
-
-        <!-- 2. Drop Mesas -->
-        <div class="subvista-metric-card" on:click={() => handleGoToSubvista('drop-mesas')} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleGoToSubvista('drop-mesas')}>
-          <div class="metric-top">
-            <span class="metric-icon">🎲</span>
-            <span class="metric-title">Drop Mesas</span>
-          </div>
-          <div class="metric-bottom">
-            <span class="metric-count">{liveCounts.drop_mesas} registros</span>
-            <button type="button" class="metric-link" on:click|stopPropagation={() => handleGoToSubvista('drop-mesas')}>
-              Ver subvista →
-            </button>
-          </div>
-        </div>
-
-        <!-- 3. Control Llaves -->
-        <div class="subvista-metric-card" on:click={() => handleGoToSubvista('control-llaves')} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleGoToSubvista('control-llaves')}>
-          <div class="metric-top">
-            <span class="metric-icon">🔑</span>
-            <span class="metric-title">Control Llaves</span>
-          </div>
-          <div class="metric-bottom">
-            <span class="metric-count">{liveCounts.control_llaves} registros</span>
-            <button type="button" class="metric-link" on:click|stopPropagation={() => handleGoToSubvista('control-llaves')}>
-              Ver subvista →
-            </button>
-          </div>
-        </div>
-
-        <!-- 4. Incidencias Generales -->
-        <div class="subvista-metric-card" on:click={() => handleGoToSubvista('incidencias-generales')} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleGoToSubvista('incidencias-generales')}>
-          <div class="metric-top">
-            <span class="metric-icon">⚠️</span>
-            <span class="metric-title">Incidencias Generales</span>
-          </div>
-          <div class="metric-bottom">
-            <span class="metric-count">{liveCounts.incidencias_generales} registros</span>
-            <button type="button" class="metric-link" on:click|stopPropagation={() => handleGoToSubvista('incidencias-generales')}>
-              Ver subvista →
-            </button>
-          </div>
-        </div>
-
-        <!-- 5. Control Clientes -->
-        <div class="subvista-metric-card" on:click={() => handleGoToSubvista('control-clientes')} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleGoToSubvista('control-clientes')}>
-          <div class="metric-top">
-            <span class="metric-icon">👥</span>
-            <span class="metric-title">Control Clientes</span>
-          </div>
-          <div class="metric-bottom">
-            <span class="metric-count">{liveCounts.control_clientes} registros</span>
-            <button type="button" class="metric-link" on:click|stopPropagation={() => handleGoToSubvista('control-clientes')}>
-              Ver subvista →
-            </button>
-          </div>
-        </div>
-
-        <!-- 6. Novedades Mesas -->
-        <div class="subvista-metric-card" on:click={() => handleGoToSubvista('novedades-mesas')} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleGoToSubvista('novedades-mesas')}>
-          <div class="metric-top">
-            <span class="metric-icon">🎭</span>
-            <span class="metric-title">Novedades Mesas</span>
-          </div>
-          <div class="metric-bottom">
-            <span class="metric-count">{liveCounts.novedades_mesas} registros</span>
-            <button type="button" class="metric-link" on:click|stopPropagation={() => handleGoToSubvista('novedades-mesas')}>
-              Ver subvista →
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -699,26 +600,30 @@
             <h2 class="sub-section-title">🎲 2. Drop de Mesas (Arqueo de Efectivo)</h2>
             <span class="sub-count-badge">{resumenData.drop_mesas.length} mesas registradas</span>
           </div>
-          <span class="sub-total-badge">Total Recaudado Drop: <b>{formatMoney(dropTotales.grandTotal)}</b></span>
+          <span class="sub-total-badge {produccionTotal >= 0 ? 'badge-produccion-positive' : 'badge-produccion-negative'}">
+            Producción: <b>{formatMoney(produccionTotal)}</b>
+          </span>
         </div>
 
-        <!-- Indicadores rápidos de denominación -->
+        <!-- Indicadores rápidos de rendimiento -->
         <div class="quick-kpi-grid">
           <div class="kpi-card">
-            <span class="kpi-label">Total General</span>
+            <span class="kpi-label">Total Drop</span>
             <span class="kpi-value text-emerald">{formatMoney(dropTotales.grandTotal)}</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-label">Billetes $100</span>
-            <span class="kpi-value">{dropTotales.sum100} uds. ({formatMoney(dropTotales.sum100 * 100)})</span>
+            <span class="kpi-label">Total Compra</span>
+            <span class="kpi-value text-blue">{formatMoney(clientesTotales.totalCompras)}</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-label">Billetes $50</span>
-            <span class="kpi-value">{dropTotales.sum50} uds. ({formatMoney(dropTotales.sum50 * 50)})</span>
+            <span class="kpi-label">Total Pagos</span>
+            <span class="kpi-value text-rose">{formatMoney(clientesTotales.totalPagos)}</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-label">Billetes $20</span>
-            <span class="kpi-value">{dropTotales.sum20} uds. ({formatMoney(dropTotales.sum20 * 20)})</span>
+            <span class="kpi-label">Total Compra - Total Pagos</span>
+            <span class="kpi-value {clientesTotales.balanceNeto >= 0 ? 'text-emerald' : 'text-rose'}">
+              {formatMoney(clientesTotales.balanceNeto)}
+            </span>
           </div>
         </div>
 
@@ -1978,6 +1883,16 @@
     padding: 4px 10px;
     border-radius: 4px;
     border: 1px solid #bbf7d0;
+  }
+  .sub-total-badge.badge-produccion-positive {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #86efac;
+  }
+  .sub-total-badge.badge-produccion-negative {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #fca5a5;
   }
 
   .sub-count-badge {
