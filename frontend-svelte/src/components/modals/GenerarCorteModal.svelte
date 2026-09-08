@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { getPublicWebUrl } from '../../config/api.config.js';
 
   export let isOpen = false;
   export let fechaDesde = '';
@@ -95,9 +96,8 @@
       if (res.ok && json && json.success) {
         const corteId = json.data?.id;
         if (!guardarVisible) {
-          // Copiar enlace al portapapeles automáticamente
-          const origin = typeof window !== 'undefined' ? window.location.origin : '';
-          const shareUrl = `${origin}/#/reportes/rrhh/corte/${corteId}`;
+          // Copiar enlace al portapapeles con el dominio web público oficial
+          const shareUrl = getPublicWebUrl(`/#/reportes/rrhh/corte/${corteId}`);
           try {
             if (navigator.clipboard && navigator.clipboard.writeText) {
               await navigator.clipboard.writeText(shareUrl);

@@ -21,6 +21,22 @@ fn save_file_to_downloads(app_handle: tauri::AppHandle, file_name: String, bytes
   Ok(file_path.to_string_lossy().to_string())
 }
 
+#[tauri::command]
+fn open_in_browser(url: String) -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  {
+    std::process::Command::new("cmd")
+      .args(["/C", "start", "", &url])
+      .spawn()
+      .map_err(|e| format!("Error al abrir navegador: {}", e))?;
+  }
+  #[cfg(not(target_os = "windows"))]
+  {
+    let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+  }
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -35,7 +51,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![save_file_to_downloads])
+    .invoke_handler(tauri::generate_handler![save_file_to_downloads, open_in_browser])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

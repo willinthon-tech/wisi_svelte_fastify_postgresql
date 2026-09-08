@@ -62,6 +62,29 @@ export function getCloudBaseUrl() {
   return CLOUD_SERVER_ORIGIN;
 }
 
+/**
+ * Obtiene la URL pública web para enlaces compartibles (cortes, reportes, etc.).
+ * Garantiza que en apps nativas de Windows (Tauri) o Android (Capacitor), donde
+ * window.location.origin es 'http://tauri.localhost' o 'http://localhost',
+ * devuelva siempre el dominio web público oficial (ej. https://willinthon.wisi.space).
+ */
+export function getPublicWebUrl(path = '') {
+  let base = CLOUD_SERVER_ORIGIN;
+  if (typeof window !== 'undefined') {
+    const savedCustomUrl = localStorage.getItem('wisi_custom_cloud_url');
+    if (savedCustomUrl && savedCustomUrl.trim().startsWith('http')) {
+      base = savedCustomUrl.trim().replace(/\/+$/, '');
+    } else if (!isTauriApp()) {
+      const { hostname, origin } = window.location;
+      if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.includes('tauri')) {
+        base = origin;
+      }
+    }
+  }
+  const cleanPath = path ? (path.startsWith('/') ? path : `/${path}`) : '';
+  return `${base}${cleanPath}`;
+}
+
 export function getWsUrl() {
   if (typeof window !== 'undefined') {
     const cloudBase = getCloudBaseUrl();

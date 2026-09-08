@@ -36,6 +36,7 @@
   import JSZip from "jszip";
   import {
     getCloudBaseUrl,
+    getPublicWebUrl,
     AGENT_SYNC_ENDPOINT_URL,
     toBackendUrl,
   } from "../config/api.config.js";
@@ -979,7 +980,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     if (!device) return;
     injectingDeviceId = device.id;
     try {
-      const serverUrl = window.location.origin;
+      const serverUrl = getPublicWebUrl();
       const res = await fetch(
         `/api/master/dispositivos/${device.id}/inject-push-config`,
         {

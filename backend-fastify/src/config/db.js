@@ -12,6 +12,18 @@ const PGPASSWORD = process.env.PGPASSWORD || 'postgres';
 export let sql = null;
 export let isPgConnected = false;
 
+// Fallback in-memory storage Proxy para retrocompatibilidad con modelos existentes
+export const inMemoryData = new Proxy({}, {
+  get: (target, prop) => {
+    if (!target[prop]) target[prop] = [];
+    return target[prop];
+  },
+  set: (target, prop, value) => {
+    target[prop] = value;
+    return true;
+  }
+});
+
 export async function initDb() {
   try {
     sql = postgres({

@@ -23,6 +23,7 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { getPublicWebUrl } from '../../config/api.config.js';
 
   let showEmpleadosModal = false;
   let selectedCorteParaEmpleados = null;
@@ -226,8 +227,7 @@
   async function handleCompartirCorte(event) {
     const corte = event.detail;
     if (!corte || !corte.id) return;
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const shareUrl = `${origin}/#/reportes/rrhh/corte/${corte.id}`;
+    const shareUrl = getPublicWebUrl(`/#/reportes/rrhh/corte/${corte.id}`);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
