@@ -22,13 +22,23 @@
   let conteoDropboxInicio = '';
   let conteoDropboxFin = '';
 
+  // Operadores múltiples por turno
   let operadorTurnoA = '';
   let operadorTurnoC = '';
+  let operadoresTurnoAList = [];
+  let operadoresTurnoCList = [];
+  let inputTempOperadorA = '';
+  let inputTempOperadorC = '';
 
   let isSaving = false;
   let isLoadingData = false;
   let recordId = null;
   let lastUpdatedAt = null;
+
+  // Estado de autoguardado reactivo
+  let autoSaveTimeout = null;
+  let saveStatus = 'idle'; // 'idle' | 'saving' | 'saved'
+  let saveStatusTimeout = null;
 
   // Encabezado superior: Roraima - 07/09/2026
   $: tableHeaderTitle = (() => {
@@ -63,6 +73,73 @@
   function getCurrentTimeString() {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function parseOperadores(val) {
+    if (!val) return [];
+    return String(val)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  // Disparar autoguardado con pequeño debounce para no saturar
+  function triggerAutoSave() {
+    if (isLoadingData) return;
+    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = setTimeout(() => {
+      handleGuardar(true);
+    }, 200);
+  }
+
+  function addOperadorA(val, triggerSave = true) {
+    if (!val) return;
+    const parts = String(val)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const current = [...operadoresTurnoAList];
+    for (const p of parts) {
+      if (!current.includes(p)) {
+        current.push(p);
+      }
+    }
+    operadoresTurnoAList = current;
+    operadorTurnoA = operadoresTurnoAList.join(', ');
+    inputTempOperadorA = '';
+    if (triggerSave) triggerAutoSave();
+  }
+
+  function removeOperadorA(name) {
+    operadoresTurnoAList = operadoresTurnoAList.filter(n => n !== name);
+    operadorTurnoA = operadoresTurnoAList.join(', ');
+    triggerAutoSave();
+  }
+
+  function addOperadorC(val, triggerSave = true) {
+    if (!val) return;
+    const parts = String(val)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const current = [...operadoresTurnoCList];
+    for (const p of parts) {
+      if (!current.includes(p)) {
+        current.push(p);
+      }
+    }
+    operadoresTurnoCList = current;
+    operadorTurnoC = operadoresTurnoCList.join(', ');
+    inputTempOperadorC = '';
+    if (triggerSave) triggerAutoSave();
+  }
+
+  function removeOperadorC(name) {
+    operadoresTurnoCList = operadoresTurnoCList.filter(n => n !== name);
+    operadorTurnoC = operadoresTurnoCList.join(', ');
+    triggerAutoSave();
   }
 
   onMount(async () => {
@@ -106,9 +183,11 @@
           operadorTurnoA = d.operador_turno_a || '';
           operadorTurnoC = d.operador_turno_c || '';
 
+          operadoresTurnoAList = parseOperadores(operadorTurnoA);
+          operadoresTurnoCList = parseOperadores(operadorTurnoC);
+
           lastUpdatedAt = d.updated_at || d.created_at || null;
         } else {
-          // Limpiar si no hay datos guardados aún
           recordId = null;
           aperturaSalaInicio = '';
           aperturaSalaFin = '';
@@ -122,6 +201,8 @@
           conteoDropboxFin = '';
           operadorTurnoA = '';
           operadorTurnoC = '';
+          operadoresTurnoAList = [];
+          operadoresTurnoCList = [];
           lastUpdatedAt = null;
         }
       }
@@ -132,14 +213,23 @@
     }
   }
 
-  async function handleGuardar() {
+  async function handleGuardar(silent = false) {
     const lId = libroId || libro?.id;
     if (!lId) {
-      triggerToast('No se encontró el ID del libro', 'error');
+      if (!silent) triggerToast('No se encontró el ID del libro', 'error');
       return;
     }
 
+    // Si había texto pendiente en los inputs temporales, agregarlo
+    if (inputTempOperadorA.trim()) {
+      addOperadorA(inputTempOperadorA, false);
+    }
+    if (inputTempOperadorC.trim()) {
+      addOperadorC(inputTempOperadorC, false);
+    }
+
     isSaving = true;
+    saveStatus = 'saving';
     try {
       const payload = {
         apertura_sala_inicio: aperturaSalaInicio,
@@ -152,8 +242,8 @@
         retiros_dropbox_fin: retirosDropboxFin,
         conteo_dropbox_inicio: conteoDropboxInicio,
         conteo_dropbox_fin: conteoDropboxFin,
-        operador_turno_a: operadorTurnoA,
-        operador_turno_c: operadorTurnoC
+        operador_turno_a: operadoresTurnoAList.join(', '),
+        operador_turno_c: operadoresTurnoCList.join(', ')
       };
 
       const res = await fetch(`/api/master/libros/${lId}/datos`, {
@@ -164,17 +254,35 @@
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Datos operativos guardados correctamente', 'success');
+        saveStatus = 'saved';
+        if (!silent) {
+          triggerToast('Datos operativos guardados correctamente', 'success');
+        }
         if (json.data) {
           recordId = json.data.id;
           lastUpdatedAt = json.data.updated_at || json.data.created_at;
+          operadorTurnoA = json.data.operador_turno_a || '';
+          operadorTurnoC = json.data.operador_turno_c || '';
+          operadoresTurnoAList = parseOperadores(operadorTurnoA);
+          operadoresTurnoCList = parseOperadores(operadorTurnoC);
         }
+
+        if (saveStatusTimeout) clearTimeout(saveStatusTimeout);
+        saveStatusTimeout = setTimeout(() => {
+          if (saveStatus === 'saved') saveStatus = 'idle';
+        }, 2500);
       } else {
-        triggerToast(json?.error || 'Error al guardar los datos operativos', 'error');
+        saveStatus = 'idle';
+        if (!silent) {
+          triggerToast(json?.error || 'Error al guardar los datos operativos', 'error');
+        }
       }
     } catch (err) {
+      saveStatus = 'idle';
       console.error('Error al guardar datos:', err);
-      triggerToast(`Error de conexión: ${err.message}`, 'error');
+      if (!silent) {
+        triggerToast(`Error de conexión: ${err.message}`, 'error');
+      }
     } finally {
       isSaving = false;
     }
@@ -188,7 +296,7 @@
     Boolean(aperturaBingoInicio || aperturaBingoFin),
     Boolean(retirosDropboxInicio || retirosDropboxFin),
     Boolean(conteoDropboxInicio || conteoDropboxFin),
-    Boolean(operadorTurnoA || operadorTurnoC)
+    Boolean(operadoresTurnoAList.length > 0 || operadoresTurnoCList.length > 0)
   ].filter(Boolean).length;
 </script>
 
@@ -196,11 +304,21 @@
   <!-- Tarjeta Izquierda: Formulario "Datos" -->
   <div class="card-form-datos">
     <div class="card-title-box">
-      <h3 class="card-title">Datos Operativos</h3>
+      <div class="card-title-row">
+        <h3 class="card-title">Datos Operativos</h3>
+        {#if saveStatus === 'saving'}
+          <span class="autosave-tag saving">
+            <span class="dot-spin"></span>
+            Guardando...
+          </span>
+        {:else if saveStatus === 'saved'}
+          <span class="autosave-tag saved">✓ Guardado</span>
+        {/if}
+      </div>
       <div class="title-underline"></div>
     </div>
 
-    <form on:submit|preventDefault={handleGuardar} class="datos-form">
+    <form on:submit|preventDefault={() => handleGuardar(false)} class="datos-form">
       <!-- 1. Apertura de Sala -->
       <div class="form-section-box">
         <div class="section-label-header">
@@ -213,8 +331,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => aperturaSalaInicio = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { aperturaSalaInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -222,6 +340,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={aperturaSalaInicio} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
           <div class="time-col">
@@ -230,8 +350,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => aperturaSalaFin = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { aperturaSalaFin = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -239,6 +359,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={aperturaSalaFin} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
         </div>
@@ -256,8 +378,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => aperturaMaquinasInicio = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { aperturaMaquinasInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -265,6 +387,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={aperturaMaquinasInicio} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
           <div class="time-col">
@@ -273,8 +397,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => aperturaMaquinasFin = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { aperturaMaquinasFin = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -282,6 +406,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={aperturaMaquinasFin} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
         </div>
@@ -299,8 +425,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => aperturaBingoInicio = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { aperturaBingoInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -308,6 +434,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={aperturaBingoInicio} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
           <div class="time-col">
@@ -316,8 +444,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => aperturaBingoFin = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { aperturaBingoFin = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -325,6 +453,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={aperturaBingoFin} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
         </div>
@@ -342,8 +472,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => retirosDropboxInicio = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { retirosDropboxInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -351,6 +481,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={retirosDropboxInicio} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
           <div class="time-col">
@@ -359,8 +491,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => retirosDropboxFin = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { retirosDropboxFin = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -368,6 +500,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={retirosDropboxFin} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
         </div>
@@ -385,8 +519,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => conteoDropboxInicio = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { conteoDropboxInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -394,6 +528,8 @@
               type="time" 
               class="form-time-input" 
               bind:value={conteoDropboxInicio} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
           <div class="time-col">
@@ -402,8 +538,8 @@
               <button 
                 type="button" 
                 class="btn-mini-now" 
-                on:click={() => conteoDropboxFin = getCurrentTimeString()}
-                title="Poner hora actual"
+                on:click={() => { conteoDropboxFin = getCurrentTimeString(); triggerAutoSave(); }}
+                title="Poner hora actual y guardar"
               >⚡ Ahora</button>
             </div>
             <input 
@@ -411,45 +547,163 @@
               type="time" 
               class="form-time-input" 
               bind:value={conteoDropboxFin} 
+              on:change={triggerAutoSave}
+              on:blur={triggerAutoSave}
             />
           </div>
         </div>
       </div>
 
-      <!-- 6. Operadores CECOM -->
+      <!-- 6. Operadores CECOM (Soporte Múltiples) -->
       <div class="form-section-box">
         <div class="section-label-header">
           <span class="section-title">👥 Operadores CECOM</span>
         </div>
-        <div class="time-dual-row">
-          <div class="time-col">
-            <label for="operador-a" class="mini-label">Turno A (Apertura):</label>
-            <input 
-              id="operador-a" 
-              type="text" 
-              list="empleados-cecom-list"
-              class="form-text-input" 
-              placeholder="Operador de Apertura..."
-              bind:value={operadorTurnoA} 
-            />
+        <div class="operadores-dual-row">
+          <!-- Turno A (Apertura) -->
+          <div class="operador-input-col">
+            <div class="col-header-mini">
+              <label for="operador-a-input" class="mini-label">Turno A (Apertura):</label>
+              {#if operadoresTurnoAList.length > 0}
+                <span class="op-counter-badge">{operadoresTurnoAList.length} {operadoresTurnoAList.length === 1 ? 'operador' : 'operadores'}</span>
+              {/if}
+            </div>
+
+            <!-- Chips de Operadores Turno A -->
+            {#if operadoresTurnoAList.length > 0}
+              <div class="chips-box">
+                {#each operadoresTurnoAList as op}
+                  <span class="op-chip chip-a">
+                    <span class="chip-avatar">👤</span>
+                    <span class="chip-text">{op}</span>
+                    <button 
+                      type="button" 
+                      class="chip-del-btn" 
+                      on:click={() => removeOperadorA(op)}
+                      title="Quitar operador y guardar"
+                    >×</button>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+
+            <!-- Input con sugerencias y botón de agregar -->
+            <div class="input-with-add">
+              <input 
+                id="operador-a-input" 
+                type="text" 
+                list="empleados-cecom-list-a"
+                class="form-text-input" 
+                placeholder="Escriba o elija operador (Enter o coma)..."
+                bind:value={inputTempOperadorA} 
+                on:keydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    addOperadorA(inputTempOperadorA);
+                  }
+                }}
+                on:change={() => {
+                  if (inputTempOperadorA) {
+                    addOperadorA(inputTempOperadorA);
+                  }
+                }}
+                on:blur={() => {
+                  if (inputTempOperadorA.trim()) {
+                    addOperadorA(inputTempOperadorA);
+                  }
+                }}
+              />
+              {#if inputTempOperadorA.trim()}
+                <button 
+                  type="button" 
+                  class="btn-add-op" 
+                  on:click={() => addOperadorA(inputTempOperadorA)}
+                  title="Agregar a Turno A y guardar"
+                >+</button>
+              {/if}
+            </div>
+
+            <datalist id="empleados-cecom-list-a">
+              {#each listaEmpleados as emp}
+                {#if !operadoresTurnoAList.includes(emp)}
+                  <option value={emp}></option>
+                {/if}
+              {/each}
+            </datalist>
           </div>
-          <div class="time-col">
-            <label for="operador-c" class="mini-label">Turno C (Cierre):</label>
-            <input 
-              id="operador-c" 
-              type="text" 
-              list="empleados-cecom-list"
-              class="form-text-input" 
-              placeholder="Operador de Cierre..."
-              bind:value={operadorTurnoC} 
-            />
+
+          <!-- Turno C (Cierre) -->
+          <div class="operador-input-col">
+            <div class="col-header-mini">
+              <label for="operador-c-input" class="mini-label">Turno C (Cierre):</label>
+              {#if operadoresTurnoCList.length > 0}
+                <span class="op-counter-badge">{operadoresTurnoCList.length} {operadoresTurnoCList.length === 1 ? 'operador' : 'operadores'}</span>
+              {/if}
+            </div>
+
+            <!-- Chips de Operadores Turno C -->
+            {#if operadoresTurnoCList.length > 0}
+              <div class="chips-box">
+                {#each operadoresTurnoCList as op}
+                  <span class="op-chip chip-c">
+                    <span class="chip-avatar">👤</span>
+                    <span class="chip-text">{op}</span>
+                    <button 
+                      type="button" 
+                      class="chip-del-btn" 
+                      on:click={() => removeOperadorC(op)}
+                      title="Quitar operador y guardar"
+                    >×</button>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+
+            <!-- Input con sugerencias y botón de agregar -->
+            <div class="input-with-add">
+              <input 
+                id="operador-c-input" 
+                type="text" 
+                list="empleados-cecom-list-c"
+                class="form-text-input" 
+                placeholder="Escriba o elija operador (Enter o coma)..."
+                bind:value={inputTempOperadorC} 
+                on:keydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    addOperadorC(inputTempOperadorC);
+                  }
+                }}
+                on:change={() => {
+                  if (inputTempOperadorC) {
+                    addOperadorC(inputTempOperadorC);
+                  }
+                }}
+                on:blur={() => {
+                  if (inputTempOperadorC.trim()) {
+                    addOperadorC(inputTempOperadorC);
+                  }
+                }}
+              />
+              {#if inputTempOperadorC.trim()}
+                <button 
+                  type="button" 
+                  class="btn-add-op" 
+                  on:click={() => addOperadorC(inputTempOperadorC)}
+                  title="Agregar a Turno C y guardar"
+                >+</button>
+              {/if}
+            </div>
+
+            <datalist id="empleados-cecom-list-c">
+              {#each listaEmpleados as emp}
+                {#if !operadoresTurnoCList.includes(emp)}
+                  <option value={emp}></option>
+                {/if}
+              {/each}
+            </datalist>
           </div>
         </div>
-        <datalist id="empleados-cecom-list">
-          {#each listaEmpleados as emp}
-            <option value={emp}></option>
-          {/each}
-        </datalist>
       </div>
 
       <!-- Botón Guardar Verde -->
@@ -533,17 +787,17 @@
         </div>
       </div>
 
-      <!-- Métrica 4: Dropbox -->
+      <!-- Métrica 4: Operadores CECOM -->
       <div class="metric-card">
         <div class="mc-header">
-          <span class="mc-icon">📦</span>
-          <span class="mc-title">Dropbox (Retiro/Conteo)</span>
+          <span class="mc-icon">👥</span>
+          <span class="mc-title">Personal CECOM</span>
         </div>
         <div class="mc-value-box">
-          {#if retirosDropboxInicio || conteoDropboxInicio}
-            <span class="mc-time-range">R: {retirosDropboxInicio || '—'} | C: {conteoDropboxInicio || '—'}</span>
+          {#if operadoresTurnoAList.length > 0 || operadoresTurnoCList.length > 0}
+            <span class="mc-time-range">{operadoresTurnoAList.length + operadoresTurnoCList.length} en guardia</span>
           {:else}
-            <span class="mc-empty-txt">No registrado</span>
+            <span class="mc-empty-txt">No asignados</span>
           {/if}
         </div>
       </div>
@@ -738,17 +992,34 @@
       </div>
       <div class="operadores-grid">
         <div class="operador-item">
-          <span class="op-turno-tag tag-a">Turno A</span>
-          <div class="op-detail">
-            <span class="op-name">{operadorTurnoA || 'No asignado'}</span>
-            <span class="op-label">Apertura</span>
+          <div class="op-item-top">
+            <span class="op-turno-tag tag-a">Turno A</span>
+            <span class="op-label">Apertura ({operadoresTurnoAList.length})</span>
+          </div>
+          <div class="op-chips-display">
+            {#if operadoresTurnoAList.length === 0}
+              <span class="op-empty-name">No asignado</span>
+            {:else}
+              {#each operadoresTurnoAList as op}
+                <span class="op-badge-view badge-a">👤 {op}</span>
+              {/each}
+            {/if}
           </div>
         </div>
+
         <div class="operador-item">
-          <span class="op-turno-tag tag-c">Turno C</span>
-          <div class="op-detail">
-            <span class="op-name">{operadorTurnoC || 'No asignado'}</span>
-            <span class="op-label">Cierre</span>
+          <div class="op-item-top">
+            <span class="op-turno-tag tag-c">Turno C</span>
+            <span class="op-label">Cierre ({operadoresTurnoCList.length})</span>
+          </div>
+          <div class="op-chips-display">
+            {#if operadoresTurnoCList.length === 0}
+              <span class="op-empty-name">No asignado</span>
+            {:else}
+              {#each operadoresTurnoCList as op}
+                <span class="op-badge-view badge-c">👤 {op}</span>
+              {/each}
+            {/if}
           </div>
         </div>
       </div>
@@ -790,12 +1061,51 @@
     margin-bottom: 2px;
   }
 
+  .card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
   .card-title {
     margin: 0;
     font-size: 20px;
     font-weight: 700;
     color: #1e293b;
     letter-spacing: -0.2px;
+  }
+
+  .autosave-tag {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+  }
+
+  .autosave-tag.saving {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+  }
+
+  .autosave-tag.saved {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+
+  .dot-spin {
+    width: 8px;
+    height: 8px;
+    border: 1.5px solid #d97706;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
   }
 
   .title-underline {
@@ -895,6 +1205,92 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   }
 
+  /* Operadores Múltiples */
+  .operadores-dual-row {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .operador-input-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .op-counter-badge {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #2563eb;
+    background: #eff6ff;
+    padding: 1px 6px;
+    border-radius: 10px;
+    border: 1px solid #bfdbfe;
+  }
+
+  .chips-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+
+  .op-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .op-chip.chip-a {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+  }
+
+  .op-chip.chip-c {
+    background: #f3e8ff;
+    color: #6b21a8;
+    border: 1px solid #e9d5ff;
+  }
+
+  .chip-avatar {
+    font-size: 11px;
+  }
+
+  .chip-text {
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-del-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    color: inherit;
+    opacity: 0.7;
+    transition: opacity 0.1s ease;
+  }
+
+  .chip-del-btn:hover {
+    opacity: 1;
+    color: #dc2626;
+  }
+
+  .input-with-add {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
   .form-text-input {
     width: 100%;
     padding: 6px 10px;
@@ -911,6 +1307,27 @@
   .form-text-input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  .btn-add-op {
+    background: #2563eb;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+  }
+
+  .btn-add-op:hover {
+    background: #1d4ed8;
   }
 
   /* Botón Guardar Verde */
@@ -1224,16 +1641,22 @@
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 10px 14px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .op-item-top {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: space-between;
   }
 
   .op-turno-tag {
     font-size: 11.5px;
     font-weight: 800;
-    padding: 4px 8px;
+    padding: 3px 8px;
     border-radius: 4px;
     letter-spacing: 0.3px;
     white-space: nowrap;
@@ -1251,24 +1674,45 @@
     border: 1px solid #e9d5ff;
   }
 
-  .op-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .op-name {
-    font-size: 13.5px;
-    font-weight: 700;
-    color: #0f172a;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   .op-label {
-    font-size: 11px;
+    font-size: 11.5px;
+    font-weight: 600;
     color: #64748b;
+  }
+
+  .op-chips-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 28px;
+    align-items: center;
+  }
+
+  .op-badge-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .op-badge-view.badge-a {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+  }
+
+  .op-badge-view.badge-c {
+    background: #faf5ff;
+    color: #6b21a8;
+    border: 1px solid #e9d5ff;
+  }
+
+  .op-empty-name {
+    font-size: 13px;
+    color: #94a3b8;
+    font-style: italic;
   }
 </style>
