@@ -664,12 +664,22 @@
       <table class="novedades-table">
         <thead>
           <tr>
-            <th class="th-center th-hora">HORA A</th>
+            <th class="th-center th-col-dual-hora">
+              <div class="header-dual-stacked">
+                <span class="hdr-line">HORA APERTURA</span>
+                <span class="hdr-divider"></span>
+                <span class="hdr-line">HORA CIERRE</span>
+              </div>
+            </th>
             <th class="th-mesa">MESA</th>
             <th class="th-left th-person">PITBOSS</th>
-            <th class="th-left th-person">CROUPIER APERTURA</th>
-            <th class="th-left th-person">CROUPIER CIERRE</th>
-            <th class="th-center th-hora">HORA C</th>
+            <th class="th-left th-col-dual-croupier">
+              <div class="header-dual-stacked text-left">
+                <span class="hdr-line">CROUPIER APERTURA</span>
+                <span class="hdr-divider"></span>
+                <span class="hdr-line">CROUPIER CIERRE</span>
+              </div>
+            </th>
             <th class="th-left th-obs">OBSERVACIÓN</th>
             <th class="th-center th-acciones">ACCIONES</th>
           </tr>
@@ -677,7 +687,7 @@
         <tbody>
           {#if isLoadingRecords || isLoadingMesas}
             <tr>
-              <td colspan="8" class="empty-state-cell">
+              <td colspan="6" class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
                   <span>Cargando novedades y mesas de la sala...</span>
@@ -686,7 +696,7 @@
             </tr>
           {:else if availableMesas.length === 0}
             <tr>
-              <td colspan="8" class="empty-state-cell">
+              <td colspan="6" class="empty-state-cell">
                 <div class="empty-msg-box">
                   <span class="empty-icon">🎲</span>
                   <p class="empty-text">No se encontraron mesas activas configuradas para esta sala.</p>
@@ -702,16 +712,27 @@
                 on:click={() => seleccionarMesaDesdeTabla(mesa.id)}
                 title="Haga clic para cargar y editar esta mesa"
               >
-                <!-- HORA A -->
-                <td class="td-center td-hora">
-                  {#if rec?.hora_apertura}
-                    <span class="badge-hora badge-apertura">{rec.hora_apertura}</span>
-                  {:else}
-                    <span class="badge-vacio">—</span>
-                  {/if}
+                <!-- 1. HORA (Apertura arriba / Cierre abajo) -->
+                <td class="td-center td-dual-hora">
+                  <div class="cell-dual-stacked">
+                    <div class="dual-row">
+                      {#if rec?.hora_apertura}
+                        <span class="badge-hora badge-apertura">{rec.hora_apertura}</span>
+                      {:else}
+                        <span class="badge-vacio">—</span>
+                      {/if}
+                    </div>
+                    <div class="dual-row">
+                      {#if rec?.hora_cierre}
+                        <span class="badge-hora badge-cierre">{rec.hora_cierre}</span>
+                      {:else}
+                        <span class="badge-vacio">—</span>
+                      {/if}
+                    </div>
+                  </div>
                 </td>
 
-                <!-- MESA -->
+                <!-- 2. MESA -->
                 <td class="td-mesa">
                   <span class="mesa-badge-tag">{mesa.nombre}</span>
                   {#if mesa.juego_nombre}
@@ -719,7 +740,7 @@
                   {/if}
                 </td>
 
-                <!-- PITBOSS -->
+                <!-- 3. PITBOSS -->
                 <td class="td-left td-person">
                   {#if rec?.pitboss}
                     <span class="person-name">👤 {rec.pitboss}</span>
@@ -728,34 +749,27 @@
                   {/if}
                 </td>
 
-                <!-- CROUPIER APERTURA -->
-                <td class="td-left td-person">
-                  {#if rec?.croupier_apertura}
-                    <span class="person-name">👤 {rec.croupier_apertura}</span>
-                  {:else}
-                    <span class="empty-dash">—</span>
-                  {/if}
+                <!-- 4. CROUPIERES (Apertura arriba / Cierre abajo) -->
+                <td class="td-left td-dual-croupier">
+                  <div class="cell-dual-stacked-left">
+                    <div class="dual-row-person">
+                      {#if rec?.croupier_apertura}
+                        <span class="person-name">👤 {rec.croupier_apertura}</span>
+                      {:else}
+                        <span class="empty-dash">—</span>
+                      {/if}
+                    </div>
+                    <div class="dual-row-person">
+                      {#if rec?.croupier_cierre}
+                        <span class="person-name">👤 {rec.croupier_cierre}</span>
+                      {:else}
+                        <span class="empty-dash">—</span>
+                      {/if}
+                    </div>
+                  </div>
                 </td>
 
-                <!-- CROUPIER CIERRE -->
-                <td class="td-left td-person">
-                  {#if rec?.croupier_cierre}
-                    <span class="person-name">👤 {rec.croupier_cierre}</span>
-                  {:else}
-                    <span class="empty-dash">—</span>
-                  {/if}
-                </td>
-
-                <!-- HORA C -->
-                <td class="td-center td-hora">
-                  {#if rec?.hora_cierre}
-                    <span class="badge-hora badge-cierre">{rec.hora_cierre}</span>
-                  {:else}
-                    <span class="badge-vacio">—</span>
-                  {/if}
-                </td>
-
-                <!-- OBSERVACIÓN -->
+                <!-- 5. OBSERVACIÓN -->
                 <td class="td-left td-obs">
                   {#if rec?.observacion}
                     <span class="obs-tag">{rec.observacion}</span>
@@ -1223,11 +1237,66 @@
 
   .th-center { text-align: center; }
   .th-left { text-align: left; }
-  .th-hora { width: 95px; }
-  .th-mesa { min-width: 110px; }
-  .th-person { min-width: 140px; }
+  .th-col-dual-hora { min-width: 125px; }
+  .th-mesa { min-width: 105px; }
+  .th-person { min-width: 135px; }
+  .th-col-dual-croupier { min-width: 175px; }
   .th-obs { min-width: 120px; }
-  .th-acciones { width: 100px; }
+  .th-acciones { width: 95px; }
+
+  .header-dual-stacked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .header-dual-stacked.text-left {
+    align-items: flex-start;
+  }
+
+  .hdr-line {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+
+  .hdr-divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .cell-dual-stacked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+  }
+
+  .cell-dual-stacked-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 2px 0;
+  }
+
+  .dual-row {
+    min-height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dual-row-person {
+    min-height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
 
   .novedad-row {
     border-bottom: 1px solid #f1f5f9;
