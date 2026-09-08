@@ -7789,7 +7789,7 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
 
   const rows = await sql`
     SELECT 
-      id, libro_id, descripcion, hora, created_at, updated_at
+      id, libro_id, descripcion, COALESCE(tipo, 'General') AS tipo, hora, created_at, updated_at
     FROM libro_incidencias_generales
     WHERE libro_id = ${lId}
     ORDER BY hora DESC, id DESC
@@ -7807,6 +7807,7 @@ export async function createLibroIncidenciaGeneralModel(data) {
     throw new Error('La descripción de la incidencia es obligatoria');
   }
 
+  const tipo = (data.tipo || 'General').trim();
   const now = new Date();
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const hora = (data.hora || '').trim() || currentHHMM;
@@ -7820,6 +7821,7 @@ export async function createLibroIncidenciaGeneralModel(data) {
       id: nextId,
       libro_id: libroId,
       descripcion,
+      tipo,
       hora,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -7830,30 +7832,33 @@ export async function createLibroIncidenciaGeneralModel(data) {
 
   const res = await sql`
     INSERT INTO libro_incidencias_generales (
-      libro_id, descripcion, hora
+      libro_id, descripcion, tipo, hora
     )
     VALUES (
-      ${libroId}, ${descripcion}, ${hora}
+      ${libroId}, ${descripcion}, ${tipo}, ${hora}
     )
-    RETURNING id, libro_id, descripcion, hora, created_at, updated_at
+    RETURNING id, libro_id, descripcion, tipo, hora, created_at, updated_at
   `;
 
   return res[0];
 }
 
-export async function updateLibroIncidenciaGeneralHoraModel(incidenciaId, libroId, data) {
+export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, data) {
   const incId = Number(incidenciaId);
   const lId = Number(libroId);
   if (!incId) throw new Error('ID de incidencia inválido');
 
-  const hora = (data.hora || '').trim();
-  if (!hora) throw new Error('Debe indicar una hora válida');
+  const descripcion = data.descripcion !== undefined ? (data.descripcion || '').trim() : null;
+  const tipo = data.tipo !== undefined ? (data.tipo || 'General').trim() : null;
+  const hora = data.hora !== undefined ? (data.hora || '').trim() : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
     const idx = inMemoryData.libro_incidencias_generales.findIndex(c => Number(c.id) === incId);
     if (idx !== -1) {
-      inMemoryData.libro_incidencias_generales[idx].hora = hora;
+      if (descripcion !== null) inMemoryData.libro_incidencias_generales[idx].descripcion = descripcion;
+      if (tipo !== null) inMemoryData.libro_incidencias_generales[idx].tipo = tipo;
+      if (hora !== null) inMemoryData.libro_incidencias_generales[idx].hora = hora;
       inMemoryData.libro_incidencias_generales[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_incidencias_generales[idx];
     }
@@ -7863,14 +7868,18 @@ export async function updateLibroIncidenciaGeneralHoraModel(incidenciaId, libroI
   const rows = await sql`
     UPDATE libro_incidencias_generales
     SET 
-      hora = ${hora},
+      descripcion = COALESCE(${descripcion}, descripcion),
+      tipo = COALESCE(${tipo}, tipo),
+      hora = COALESCE(${hora}, hora),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${incId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, descripcion, hora, created_at, updated_at
+    RETURNING id, libro_id, descripcion, tipo, hora, created_at, updated_at
   `;
 
   return rows[0];
 }
+
+export const updateLibroIncidenciaGeneralHoraModel = updateLibroIncidenciaGeneralModel;
 
 export async function deleteLibroIncidenciaGeneralModel(id, libroId) {
   const incId = Number(id);

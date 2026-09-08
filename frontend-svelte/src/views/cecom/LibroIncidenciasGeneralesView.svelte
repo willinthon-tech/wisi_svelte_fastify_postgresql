@@ -7,14 +7,28 @@
   export let libroId = null;
 
   // Estado del formulario
+  let tipo = 'General'; // 'General', 'Empleado', 'Mercancía'
   let descripcion = '';
   let isSaving = false;
+
+  const TIPOS_INCIDENCIA = ['General', 'Empleado', 'Mercancía'];
+
+  // Pestaña activa para filtrar la tabla: 'all' (Detallado), 'General', 'Empleado', 'Mercancía'
+  let activeTab = 'all';
 
   // Lista de incidencias
   let records = [];
   let isLoadingRecords = false;
 
-  // Ordenadas de más reciente a más antigua por hora
+  // Conteo por tipos para las pestañas
+  $: countGeneral = records.filter(r => (r.tipo || 'General').toLowerCase() === 'general').length;
+  $: countEmpleado = records.filter(r => (r.tipo || '').toLowerCase() === 'empleado').length;
+  $: countMercancia = records.filter(r => {
+    const t = (r.tipo || '').toLowerCase();
+    return t === 'mercancía' || t === 'mercancia';
+  }).length;
+
+  // Lista ordenada por hora DESC
   $: sortedRecords = [...records].sort((a, b) => {
     const hA = a.hora || '';
     const hB = b.hora || '';
@@ -22,11 +36,25 @@
     return Number(b.id) - Number(a.id);
   });
 
-  // Modal para editar hora
-  let showModalHora = false;
+  // Filtrado según la pestaña activa
+  $: filteredRecords = (() => {
+    if (activeTab === 'all') return sortedRecords;
+    return sortedRecords.filter(r => {
+      const t = (r.tipo || 'General').toLowerCase();
+      if (activeTab === 'Mercancía') {
+        return t === 'mercancía' || t === 'mercancia';
+      }
+      return t === activeTab.toLowerCase();
+    });
+  })();
+
+  // Modal para editar incidencia completa (Tipo, Contenido y Hora)
+  let showModalEditar = false;
   let editingRecord = null;
+  let modalTipo = 'General';
+  let modalDescripcion = '';
   let modalHora = '';
-  let isSavingHora = false;
+  let isSavingModal = false;
 
   // Encabezado oscuro de la tabla con nombre de sala (no comercial) y fecha
   $: tableHeaderTitle = (() => {
@@ -55,6 +83,92 @@
   function getCurrentTimeString() {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  // Preformateo de la incidencia para renderizado tipo Word (Título con hora en negrita e items en viñeta)
+  function parseIncidenciaContent(desc, hora) {
+    if (!desc) return { title: '', items: [] };
+    const rawLines = String(desc).split('\n');
+    const lines = rawLines.map(l => l.trimEnd()).filter(l => l.trim().length > 0);
+    if (lines.length === 0) return { title: '', items: [] };
+
+    let titleLine = lines[0].trim();
+    
+    // Si la primera línea ya empieza con la hora (ej. 08:35 ...), la dejamos intacta.
+    // De lo contrario, se le antepone la hora para que quede como en la muestra: "08:35 Inversiones 2020..."
+    const horaRegex = /^\d{1,2}:\d{2}/;
+    if (hora && !horaRegex.test(titleLine)) {
+      titleLine = `${hora} ${titleLine}`;
+    }
+
+    const items = lines.slice(1).map(l => {
+      // Limpiar viñeta inicial si la tiene para normalizar
+      return l.replace(/^[\s•\-\*]+/, '').trim();
+    }).filter(Boolean);
+
+    return {
+      title: titleLine,
+      items
+    };
+  }
+
+  $: livePreviewParsed = parseIncidenciaContent(descripcion, getCurrentTimeString());
+
+  // Manejo de teclado inteligente en el textarea para viñetas y tabulación automática
+  function handleTextareaKeyDown(e) {
+    const textarea = e.target;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      insertAtCursor(textarea, '\n     • ');
+    } else if (e.key === 'Enter') {
+      const start = textarea.selectionStart;
+      const val = textarea.value;
+      const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      const currentLine = val.substring(lineStart, start);
+
+      // Si la línea actual es solo una viñeta vacía, cancelar viñeta
+      if (currentLine.match(/^\s*•\s*$/)) {
+        e.preventDefault();
+        const before = val.substring(0, lineStart);
+        const after = val.substring(start);
+        textarea.value = before + after;
+        textarea.selectionStart = textarea.selectionEnd = lineStart;
+        if (textarea.id === 'm-desc-inc') modalDescripcion = textarea.value;
+        else descripcion = textarea.value;
+        return;
+      }
+
+      // Si ya hay viñeta o estamos en líneas posteriores, continuar con viñeta
+      if (currentLine.includes('•') || lineStart > 0) {
+        e.preventDefault();
+        insertAtCursor(textarea, '\n     • ');
+      } else {
+        // Primera línea (título): al dar enter empezar viñetas
+        e.preventDefault();
+        insertAtCursor(textarea, '\n     • ');
+      }
+    }
+  }
+
+  function insertAtCursor(textarea, textToInsert) {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = textarea.value;
+    textarea.value = val.substring(0, start) + textToInsert + val.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + textToInsert.length;
+    if (textarea.id === 'm-desc-inc') {
+      modalDescripcion = textarea.value;
+    } else {
+      descripcion = textarea.value;
+    }
+  }
+
+  function agregarVinetaToolbar(isModal = false) {
+    const el = document.getElementById(isModal ? 'm-desc-inc' : 'input-desc-incidencia');
+    if (el) {
+      el.focus();
+      insertAtCursor(el, '\n     • ');
+    }
   }
 
   onMount(async () => {
@@ -104,6 +218,7 @@
     try {
       const payload = {
         descripcion: cleanDesc,
+        tipo: tipo || 'General',
         hora: getCurrentTimeString()
       };
 
@@ -117,6 +232,7 @@
       if (res.ok && json && json.success) {
         triggerToast('Incidencia registrada exitosamente', 'success');
         descripcion = '';
+        tipo = 'General';
         await loadRecords();
       } else {
         triggerToast(json?.error || 'Error al guardar incidencia', 'error');
@@ -150,15 +266,17 @@
     }
   }
 
-  // Modal para editar hora
-  function abrirModalHora(record) {
+  // Modal para editar Tipo, Contenido y Hora
+  function abrirModalEditar(record) {
     editingRecord = record;
+    modalTipo = record.tipo || 'General';
+    modalDescripcion = record.descripcion || '';
     modalHora = record.hora || getCurrentTimeString();
-    showModalHora = true;
+    showModalEditar = true;
   }
 
-  function cerrarModalHora() {
-    showModalHora = false;
+  function cerrarModalEditar() {
+    showModalEditar = false;
     editingRecord = null;
   }
 
@@ -166,37 +284,47 @@
     modalHora = getCurrentTimeString();
   }
 
-  async function handleGuardarHora() {
+  async function handleGuardarModal() {
     if (!editingRecord) return;
     const lId = libroId || libro?.id;
     if (!lId) return;
+
+    const cleanDesc = (modalDescripcion || '').trim();
+    if (!cleanDesc) {
+      triggerToast('Debe ingresar una descripción válida', 'warning');
+      return;
+    }
 
     if (!modalHora) {
       triggerToast('Debe indicar una hora válida', 'warning');
       return;
     }
 
-    isSavingHora = true;
+    isSavingModal = true;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${editingRecord.id}/hora`, {
+      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${editingRecord.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hora: modalHora })
+        body: JSON.stringify({
+          tipo: modalTipo || 'General',
+          descripcion: cleanDesc,
+          hora: modalHora
+        })
       });
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Hora de incidencia actualizada correctamente', 'success');
-        cerrarModalHora();
+        triggerToast('Incidencia actualizada correctamente', 'success');
+        cerrarModalEditar();
         await loadRecords();
       } else {
-        triggerToast(json?.error || 'Error al actualizar hora', 'error');
+        triggerToast(json?.error || 'Error al actualizar', 'error');
       }
     } catch (err) {
-      console.error('Error al actualizar hora:', err);
+      console.error('Error al actualizar incidencia:', err);
       triggerToast(`Error: ${err.message}`, 'error');
     } finally {
-      isSavingHora = false;
+      isSavingModal = false;
     }
   }
 </script>
@@ -210,19 +338,93 @@
     </div>
 
     <form on:submit|preventDefault={handleGuardar} class="incidencia-form">
-      <!-- Campo Descripción Obligatorio -->
+      <!-- Sección Tipo de Incidencia: Radios (General, Empleado, Mercancía) -->
       <div class="form-group">
-        <label for="input-desc-incidencia" class="form-label">Descripción de la Incidencia: *</label>
+        <label class="form-label">TIPO DE INCIDENCIA: *</label>
+        <div class="radio-tipo-group">
+          <label class="radio-tipo-pill {tipo === 'General' ? 'active-general' : ''}">
+            <input 
+              type="radio" 
+              name="tipo-incidencia" 
+              value="General" 
+              bind:group={tipo} 
+            />
+            <span class="pill-icon">📌</span>
+            <span class="pill-text">General</span>
+          </label>
+
+          <label class="radio-tipo-pill {tipo === 'Empleado' ? 'active-empleado' : ''}">
+            <input 
+              type="radio" 
+              name="tipo-incidencia" 
+              value="Empleado" 
+              bind:group={tipo} 
+            />
+            <span class="pill-icon">👤</span>
+            <span class="pill-text">Empleado</span>
+          </label>
+
+          <label class="radio-tipo-pill {tipo === 'Mercancía' ? 'active-mercancia' : ''}">
+            <input 
+              type="radio" 
+              name="tipo-incidencia" 
+              value="Mercancía" 
+              bind:group={tipo} 
+            />
+            <span class="pill-icon">📦</span>
+            <span class="pill-text">Mercancía</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Editor de Texto con Formato (Título + Viñetas) -->
+      <div class="form-group">
+        <div class="editor-header-bar">
+          <label for="input-desc-incidencia" class="form-label">DESCRIPCIÓN DE LA INCIDENCIA: *</label>
+          <div class="editor-quick-tools">
+            <button 
+              type="button" 
+              class="btn-tool-vineta" 
+              on:click={() => agregarVinetaToolbar(false)}
+              title="Insertar viñeta (o presiona Enter/Tab)"
+            >
+              • Viñeta
+            </button>
+          </div>
+        </div>
+
         <textarea 
           id="input-desc-incidencia" 
-          class="form-textarea" 
-          rows="5"
-          placeholder="Escriba los detalles de la incidencia ocurrida (campo obligatorio)..."
+          class="form-textarea-editor" 
+          rows="6"
+          placeholder="Línea 1: Título o motivo (ej. Inversiones 2020 ingresa pulpas)...&#10;Líneas siguientes: Pulsa Enter o Tab para items en viñeta..."
           bind:value={descripcion}
+          on:keydown={handleTextareaKeyDown}
           required
         ></textarea>
-        <span class="field-hint">Se registrará automáticamente con la hora actual de este momento.</span>
+        <span class="field-hint">
+          Escribe el título en la 1ra línea y pulsa <b>Enter</b> o <b>Tab</b> para agregar items con viñetas.
+        </span>
       </div>
+
+      <!-- Vista Previa en Vivo del Preformateado -->
+      {#if descripcion.trim()}
+        <div class="live-preview-box">
+          <div class="preview-header">
+            <span>👁️ Vista Previa Preformateada:</span>
+          </div>
+          <div class="preview-content">
+            <div class="preview-title">{livePreviewParsed.title}</div>
+            {#if livePreviewParsed.items.length > 0}
+              <ul class="preview-items-list">
+                {#each livePreviewParsed.items as item}
+                  <li>{item}</li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       <!-- Botón Guardar Verde -->
       <button 
@@ -239,21 +441,56 @@
     </form>
   </div>
 
-  <!-- Tarjeta Derecha: Tabla de Incidencias Generales -->
+  <!-- Tarjeta Derecha: Tabla Unificada con Pestañas -->
   <div class="card-table-incidencias">
     <!-- Barra Superior Oscura con Sala y Fecha -->
     <div class="table-top-bar">
       <span>{tableHeaderTitle}</span>
+      <span class="tag-top-ops">{records.length} {records.length === 1 ? 'incidencia' : 'incidencias'} en total</span>
     </div>
 
-    <!-- Tabla de Contenido -->
+    <!-- Pestañas de Filtro: Detallado (Todas), General, Empleado, Mercancía -->
+    <div class="incidencias-tabs-header">
+      <div class="tabs-nav-list">
+        <button 
+          type="button" 
+          class="tab-nav-btn {activeTab === 'all' ? 'active' : ''}"
+          on:click={() => activeTab = 'all'}
+        >
+          <span>📋 Detallado ({records.length})</span>
+        </button>
+        <button 
+          type="button" 
+          class="tab-nav-btn {activeTab === 'General' ? 'active' : ''}"
+          on:click={() => activeTab = 'General'}
+        >
+          <span>📌 General ({countGeneral})</span>
+        </button>
+        <button 
+          type="button" 
+          class="tab-nav-btn {activeTab === 'Empleado' ? 'active' : ''}"
+          on:click={() => activeTab = 'Empleado'}
+        >
+          <span>👤 Empleado ({countEmpleado})</span>
+        </button>
+        <button 
+          type="button" 
+          class="tab-nav-btn {activeTab === 'Mercancía' ? 'active' : ''}"
+          on:click={() => activeTab = 'Mercancía'}
+        >
+          <span>📦 Mercancía ({countMercancia})</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabla de Contenido (Sin columna de hora separada; hora integrada en la cabecera) -->
     <div class="table-wrapper">
       <table class="incidencias-table">
         <thead>
           <tr>
             <th class="th-center th-num">N°</th>
-            <th class="th-desc">Descripción</th>
-            <th class="th-center th-hora">Hora</th>
+            <th class="th-center th-tipo">Tipo</th>
+            <th class="th-desc">Descripción / Novedad</th>
             <th class="th-center th-acciones">Acciones</th>
           </tr>
         </thead>
@@ -267,36 +504,59 @@
                 </div>
               </td>
             </tr>
-          {:else if records.length === 0}
+          {:else if filteredRecords.length === 0}
             <tr>
               <td colspan="4" class="empty-state-cell">
                 <div class="empty-msg-box">
                   <span class="empty-icon">⚠️</span>
                   <p class="empty-text">
-                    No se han reportado incidencias generales para esta fecha. Redacte la novedad en el formulario de la izquierda para registrarla.
+                    {#if activeTab === 'all'}
+                      No se han reportado incidencias para esta fecha. Use el formulario de la izquierda para registrar una.
+                    {:else}
+                      No hay incidencias registradas en la categoría <b>{activeTab}</b>.
+                    {/if}
                   </p>
                 </div>
               </td>
             </tr>
           {:else}
-            {#each sortedRecords as record, idx}
+            {#each filteredRecords as record, idx}
+              {@const parsed = parseIncidenciaContent(record.descripcion, record.hora)}
               <tr class="incidencia-row">
                 <td class="td-center td-num">{idx + 1}</td>
-                <td class="td-desc">
-                  <span class="desc-content">{record.descripcion}</span>
+                <td class="td-center td-tipo">
+                  {#if (record.tipo || '').toLowerCase() === 'empleado'}
+                    <span class="badge-tipo badge-empleado">👤 Empleado</span>
+                  {:else if (record.tipo || '').toLowerCase() === 'mercancía' || (record.tipo || '').toLowerCase() === 'mercancia'}
+                    <span class="badge-tipo badge-mercancia">📦 Mercancía</span>
+                  {:else}
+                    <span class="badge-tipo badge-general">📌 General</span>
+                  {/if}
                 </td>
-                <td class="td-center td-hora-val">
-                  <span class="time-badge">{record.hora || '—'}</span>
+                <td class="td-desc">
+                  <!-- Formato estilo muestra (Título en negrita con hora, e items indentados abajo) -->
+                  <div class="incidencia-content-rendered">
+                    <div class="inc-title-line">
+                      <span class="inc-title-bold">{parsed.title}</span>
+                    </div>
+                    {#if parsed.items.length > 0}
+                      <ul class="inc-items-list">
+                        {#each parsed.items as item}
+                          <li>{item}</li>
+                        {/each}
+                      </ul>
+                    {/if}
+                  </div>
                 </td>
                 <td class="td-center td-acciones">
                   <div class="acciones-btns-row">
                     <button 
                       type="button" 
-                      class="btn-hora-accion"
-                      on:click={() => abrirModalHora(record)}
-                      title="Modificar hora de la incidencia"
+                      class="btn-editar-accion"
+                      on:click={() => abrirModalEditar(record)}
+                      title="Editar contenido, tipo u hora"
                     >
-                      🕒 Hora
+                      ✏️ Editar
                     </button>
                     <button 
                       type="button" 
@@ -318,60 +578,93 @@
 </div>
 
 <!-- ========================================================
-     MODAL: MODIFICAR HORA DE LA INCIDENCIA
+     MODAL: EDITAR CONTENIDO, TIPO Y HORA DE LA INCIDENCIA
+     (NO se cierra al hacer clic afuera)
 ======================================================== -->
-{#if showModalHora}
-  <div class="modal-overlay">
-    <div class="modal-box">
+{#if showModalEditar && editingRecord}
+  <div class="modal-backdrop-fixed">
+    <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-inc-title">
       <div class="modal-header">
-        <div class="modal-title-left">
-          <span class="modal-header-icon">🕒</span>
-          <div>
-            <h4 class="modal-heading">Modificar Hora de Incidencia</h4>
-            <span class="modal-subheading">Ajustar hora de ocurrencia</span>
-          </div>
-        </div>
-        <button type="button" class="btn-modal-close" on:click={cerrarModalHora}>×</button>
+        <h4 id="modal-editar-inc-title" class="modal-title">✏️ Editar Incidencia</h4>
+        <button type="button" class="btn-close-modal" on:click={cerrarModalEditar} aria-label="Cerrar">
+          &times;
+        </button>
       </div>
 
-      <form on:submit|preventDefault={handleGuardarHora} class="modal-form">
-        <div class="modal-body">
-          <div class="incidencia-snippet">
-            <span class="snippet-label">Incidencia:</span>
-            <p class="snippet-text">{editingRecord?.descripcion}</p>
+      <form on:submit|preventDefault={handleGuardarModal} class="modal-body-form">
+        <!-- Selector Tipo en Modal -->
+        <div class="modal-field-group">
+          <label class="modal-field-label">Tipo de Incidencia: *</label>
+          <div class="radio-tipo-group">
+            {#each TIPOS_INCIDENCIA as t}
+              <label class="radio-tipo-pill {modalTipo === t ? 'active-' + t.toLowerCase().replace('í', 'i') : ''}">
+                <input 
+                  type="radio" 
+                  name="modal-tipo-inc" 
+                  value={t} 
+                  bind:group={modalTipo} 
+                />
+                <span class="pill-text">{t}</span>
+              </label>
+            {/each}
           </div>
+        </div>
 
-          <div class="form-group-modal">
-            <div class="label-with-action">
-              <label for="m-hora-inc" class="form-label-modal">Hora de la Incidencia:</label>
-              <button 
-                type="button" 
-                class="btn-inline-now" 
-                on:click={ponerHoraActualModal}
-                title="Poner hora actual ahora"
-              >
-                ⚡ Usar hora actual
-              </button>
-            </div>
-            <input 
-              id="m-hora-inc" 
-              type="time" 
-              class="form-time-input-modal" 
-              bind:value={modalHora} 
-              required
-            />
+        <!-- Editor de Contenido en Modal -->
+        <div class="modal-field-group">
+          <div class="editor-header-bar">
+            <label for="m-desc-inc" class="modal-field-label">Descripción / Novedad: *</label>
+            <button 
+              type="button" 
+              class="btn-tool-vineta" 
+              on:click={() => agregarVinetaToolbar(true)}
+              title="Insertar viñeta"
+            >
+              • Viñeta
+            </button>
           </div>
+          <textarea 
+            id="m-desc-inc" 
+            class="form-textarea-editor" 
+            rows="6"
+            placeholder="Línea 1: Título o motivo...&#10;Líneas siguientes: Items con viñetas..."
+            bind:value={modalDescripcion}
+            on:keydown={handleTextareaKeyDown}
+            required
+          ></textarea>
+        </div>
+
+        <!-- Campo Hora en la parte de abajo del modal -->
+        <div class="modal-field-group">
+          <div class="modal-field-header">
+            <label for="m-hora-inc" class="modal-field-label">Hora de la Incidencia: *</label>
+            <button 
+              type="button" 
+              class="btn-hora-now" 
+              on:click={ponerHoraActualModal}
+              title="Poner hora actual ahora"
+            >
+              ⚡ Usar hora actual
+            </button>
+          </div>
+          <input 
+            id="m-hora-inc" 
+            type="time" 
+            class="form-time-input-modal" 
+            bind:value={modalHora} 
+            required
+          />
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn-modal-cancel" on:click={cerrarModalHora}>
+          <button type="button" class="btn-modal-cancel" on:click={cerrarModalEditar}>
             Cancelar
           </button>
-          <button type="submit" class="btn-modal-save" disabled={isSavingHora}>
-            {#if isSavingHora}
+          <button type="submit" class="btn-modal-save" disabled={isSavingModal}>
+            {#if isSavingModal}
               Guardando...
             {:else}
-              Guardar Hora
+              Guardar Cambios
             {/if}
           </button>
         </div>
@@ -383,7 +676,7 @@
 <style>
   .incidencias-layout-grid {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 350px 1fr;
     gap: 24px;
     align-items: flex-start;
     width: 100%;
@@ -443,18 +736,105 @@
   }
 
   .form-label {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 700;
     color: #1e293b;
+    letter-spacing: 0.3px;
   }
 
   .field-hint {
     font-size: 11.5px;
     color: #64748b;
     margin-top: 2px;
+    line-height: 1.35;
   }
 
-  .form-textarea {
+  /* Radios de Tipo (General, Empleado, Mercancía) */
+  .radio-tipo-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .radio-tipo-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+
+  .radio-tipo-pill input[type="radio"] {
+    display: none;
+  }
+
+  .radio-tipo-pill.active-general {
+    border-color: #3b82f6;
+    background: #eff6ff;
+    color: #1d4ed8;
+    box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2);
+    font-weight: 700;
+  }
+
+  .radio-tipo-pill.active-empleado {
+    border-color: #8b5cf6;
+    background: #f5f3ff;
+    color: #6d28d9;
+    box-shadow: 0 1px 4px rgba(139, 92, 246, 0.2);
+    font-weight: 700;
+  }
+
+  .radio-tipo-pill.active-mercancia {
+    border-color: #f59e0b;
+    background: #fffbeb;
+    color: #b45309;
+    box-shadow: 0 1px 4px rgba(245, 158, 11, 0.2);
+    font-weight: 700;
+  }
+
+  .pill-icon {
+    font-size: 13px;
+  }
+
+  .pill-text {
+    font-size: 12px;
+  }
+
+  /* Editor Toolbar & Textarea */
+  .editor-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .btn-tool-vineta {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-tool-vineta:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .form-textarea-editor {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid #cbd5e1;
@@ -466,12 +846,51 @@
     transition: all 0.2s ease;
     box-sizing: border-box;
     resize: vertical;
-    line-height: 1.45;
+    line-height: 1.5;
+    font-family: inherit;
   }
 
-  .form-textarea:focus {
+  .form-textarea-editor:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+
+  /* Vista previa en vivo */
+  .live-preview-box {
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+  }
+
+  .preview-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+
+  .preview-content {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 8px 12px;
+  }
+
+  .preview-title {
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 13px;
+  }
+
+  .preview-items-list {
+    margin: 4px 0 0 16px;
+    padding: 0;
+    list-style-type: disc;
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.45;
   }
 
   /* Botón Guardar Verde */
@@ -504,7 +923,7 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
-     Tarjeta Derecha: Tabla
+     Tarjeta Derecha: Tabla Unificada
   ───────────────────────────────────────────────────────────── */
   .card-table-incidencias {
     background: #ffffff;
@@ -520,9 +939,58 @@
     color: #ffffff;
     font-size: 14px;
     font-weight: 700;
-    text-align: center;
-    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
     letter-spacing: 0.3px;
+  }
+
+  .tag-top-ops {
+    font-size: 11.5px;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  /* Pestañas de Filtro */
+  .incidencias-tabs-header {
+    background: #f1f5f9;
+    padding: 8px 16px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .tabs-nav-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .tab-nav-btn {
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #475569;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tab-nav-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .tab-nav-btn.active {
+    background: #ffffff;
+    color: #1e293b;
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   }
 
   .table-wrapper {
@@ -537,7 +1005,6 @@
     text-align: left;
   }
 
-  /* Cabeceras Oscuras */
   .incidencias-table thead tr {
     background: #2b3544;
     color: #ffffff;
@@ -551,27 +1018,12 @@
     white-space: nowrap;
   }
 
-  .th-center {
-    text-align: center;
-  }
+  .th-center { text-align: center; }
+  .th-num { width: 45px; }
+  .th-tipo { width: 110px; }
+  .th-desc { min-width: 320px; }
+  .th-acciones { width: 150px; }
 
-  .th-num {
-    width: 50px;
-  }
-
-  .th-desc {
-    min-width: 250px;
-  }
-
-  .th-hora {
-    width: 120px;
-  }
-
-  .th-acciones {
-    width: 160px;
-  }
-
-  /* Filas de la Tabla */
   .incidencia-row {
     border-bottom: 1px solid #f1f5f9;
     transition: background 0.15s ease;
@@ -585,31 +1037,64 @@
     padding: 12px 14px;
     color: #1e293b;
     font-size: 13px;
-    vertical-align: middle;
+    vertical-align: top;
   }
 
-  .td-center {
-    text-align: center;
-  }
+  .td-center { text-align: center; }
 
-  .desc-content {
-    font-weight: 500;
-    color: #0f172a;
-    line-height: 1.45;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  /* Badge de Hora */
-  .time-badge {
+  /* Badges de Tipo */
+  .badge-tipo {
     display: inline-block;
-    padding: 4px 10px;
+    padding: 4px 8px;
     border-radius: 4px;
-    font-size: 12.5px;
+    font-size: 11px;
     font-weight: 700;
-    background: #f1f5f9;
+    white-space: nowrap;
+  }
+
+  .badge-general {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+
+  .badge-empleado {
+    background: #f5f3ff;
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+  }
+
+  .badge-mercancia {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  /* Renderizado de la Incidencia (Estilo muestra: Título en negrita con hora e items con sangría) */
+  .incidencia-content-rendered {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .inc-title-bold {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.4;
+  }
+
+  .inc-items-list {
+    margin: 2px 0 0 24px;
+    padding: 0;
+    list-style-type: disc;
     color: #334155;
-    border: 1px solid #cbd5e1;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .inc-items-list li {
+    margin-bottom: 2px;
   }
 
   /* Acciones */
@@ -620,7 +1105,7 @@
     gap: 6px;
   }
 
-  .btn-hora-accion {
+  .btn-editar-accion {
     background: #3b82f6;
     color: #ffffff;
     border: none;
@@ -630,9 +1115,10 @@
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
   }
 
-  .btn-hora-accion:hover {
+  .btn-editar-accion:hover {
     background: #2563eb;
   }
 
@@ -652,30 +1138,10 @@
     background: #b91c1c;
   }
 
-  /* Estados vacíos */
+  /* Estados vacíos y loading */
   .empty-state-cell {
-    padding: 48px 24px !important;
+    padding: 40px 20px !important;
     text-align: center;
-    background: #fafafa;
-  }
-
-  .empty-msg-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .empty-icon {
-    font-size: 32px;
-  }
-
-  .empty-text {
-    font-size: 13px;
-    color: #64748b;
-    max-width: 480px;
-    line-height: 1.5;
-    margin: 0;
   }
 
   .loading-state-inline {
@@ -684,33 +1150,56 @@
     justify-content: center;
     gap: 12px;
     color: #64748b;
-    font-size: 13.5px;
+    font-size: 14px;
+    font-weight: 500;
   }
 
   .spinner-small {
-    width: 18px;
-    height: 18px;
-    border: 2.5px solid #cbd5e1;
-    border-top-color: #3b82f6;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e2e8f0;
+    border-top: 2px solid #3b82f6;
     border-radius: 50%;
-    animation: spin 0.7s linear infinite;
+    animation: spin 0.8s linear infinite;
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .empty-msg-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .empty-icon {
+    font-size: 32px;
+  }
+
+  .empty-text {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
   }
 
   /* ─────────────────────────────────────────────────────────────
-     MODAL MODIFICAR HORA
+     Modal Estilos (NO cierra al dar click afuera)
   ───────────────────────────────────────────────────────────── */
-  .modal-overlay {
+  .modal-backdrop-fixed {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(3px);
+    backdrop-filter: blur(2px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -718,22 +1207,20 @@
     padding: 16px;
   }
 
-  .modal-box {
+  .modal-dialog-box {
     background: #ffffff;
-    border-radius: 12px;
+    border-radius: 8px;
     width: 100%;
-    max-width: 420px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
-    display: flex;
-    flex-direction: column;
+    max-width: 520px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
     overflow: hidden;
-    animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: modalScale 0.15s ease-out;
   }
 
-  @keyframes modalPop {
+  @keyframes modalScale {
     from {
       opacity: 0;
-      transform: scale(0.95);
+      transform: scale(0.96);
     }
     to {
       opacity: 1;
@@ -742,126 +1229,92 @@
   }
 
   .modal-header {
-    padding: 16px 20px;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
+    background: #1e293b;
+    color: #ffffff;
+    padding: 14px 18px;
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
 
-  .modal-title-left {
+  .modal-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
   }
 
-  .modal-header-icon {
-    font-size: 24px;
-  }
-
-  .modal-heading {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 700;
-    color: #0f172a;
-  }
-
-  .modal-subheading {
-    font-size: 12.5px;
-    color: #64748b;
-  }
-
-  .btn-modal-close {
-    background: none;
+  .btn-close-modal {
+    background: transparent;
     border: none;
-    font-size: 22px;
-    color: #64748b;
-    cursor: pointer;
+    color: #94a3b8;
+    font-size: 24px;
     line-height: 1;
-    padding: 0;
+    cursor: pointer;
+    padding: 0 4px;
+    transition: color 0.15s ease;
   }
 
-  .btn-modal-close:hover {
-    color: #0f172a;
+  .btn-close-modal:hover {
+    color: #ffffff;
   }
 
-  .modal-body {
-    padding: 20px;
+  .modal-body-form {
+    padding: 18px;
     display: flex;
     flex-direction: column;
     gap: 16px;
   }
 
-  .incidencia-snippet {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 10px 12px;
-    max-height: 100px;
-    overflow-y: auto;
-  }
-
-  .snippet-label {
-    font-size: 11px;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    display: block;
-    margin-bottom: 3px;
-  }
-
-  .snippet-text {
-    margin: 0;
-    font-size: 12.5px;
-    color: #1e293b;
-    line-height: 1.4;
-    white-space: pre-wrap;
-  }
-
-  .form-group-modal {
+  .modal-field-group {
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
 
-  .label-with-action {
+  .modal-field-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
 
-  .form-label-modal {
+  .modal-field-label {
     font-size: 13px;
     font-weight: 700;
-    color: #1e293b;
+    color: #334155;
   }
 
-  .btn-inline-now {
-    background: none;
-    border: none;
+  .btn-hora-now {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
     color: #2563eb;
-    font-size: 11.5px;
+    border-radius: 4px;
+    font-size: 11px;
     font-weight: 700;
+    padding: 3px 8px;
     cursor: pointer;
-    padding: 0;
+    transition: all 0.15s ease;
   }
 
-  .btn-inline-now:hover {
-    text-decoration: underline;
+  .btn-hora-now:hover {
+    background: #e2e8f0;
+    color: #1d4ed8;
   }
 
   .form-time-input-modal {
     width: 100%;
-    padding: 8px 12px;
+    padding: 9px 12px;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     font-size: 14px;
+    font-weight: 600;
     color: #0f172a;
     background: #ffffff;
     outline: none;
     box-sizing: border-box;
+    transition: all 0.15s ease;
   }
 
   .form-time-input-modal:focus {
@@ -870,39 +1323,42 @@
   }
 
   .modal-footer {
-    padding: 14px 20px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #f1f5f9;
   }
 
   .btn-modal-cancel {
     padding: 8px 16px;
-    background: #f1f5f9;
-    color: #475569;
     border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
+    transition: all 0.15s ease;
   }
 
   .btn-modal-cancel:hover {
-    background: #e2e8f0;
+    background: #f1f5f9;
+    color: #1e293b;
   }
 
   .btn-modal-save {
-    padding: 8px 18px;
+    padding: 8px 16px;
+    border: none;
     background: #5bb87e;
     color: #ffffff;
-    border: none;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 4px rgba(91, 184, 126, 0.25);
   }
 
   .btn-modal-save:hover:not(:disabled) {
@@ -910,7 +1366,7 @@
   }
 
   .btn-modal-save:disabled {
-    opacity: 0.65;
+    opacity: 0.6;
     cursor: not-allowed;
   }
 </style>

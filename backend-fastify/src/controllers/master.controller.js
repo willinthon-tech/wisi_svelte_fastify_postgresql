@@ -2189,6 +2189,8 @@ export async function updateLibroIncidenciaGeneralHora(request, reply) {
   }
 }
 
+export const updateLibroIncidenciaGeneral = updateLibroIncidenciaGeneralHora;
+
 export async function deleteLibroIncidenciaGeneral(request, reply) {
   try {
     const { id, incidenciaId } = request.params;

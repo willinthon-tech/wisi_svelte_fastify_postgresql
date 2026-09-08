@@ -272,6 +272,8 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/libros/:id/incidencias-generales', createLibroIncidenciaGeneral);
   fastify.put('/master/libros/:id/incidencias-generales/:incidenciaId/hora', updateLibroIncidenciaGeneralHora);
   fastify.put('/api/master/libros/:id/incidencias-generales/:incidenciaId/hora', updateLibroIncidenciaGeneralHora);
+  fastify.put('/master/libros/:id/incidencias-generales/:incidenciaId', updateLibroIncidenciaGeneralHora);
+  fastify.put('/api/master/libros/:id/incidencias-generales/:incidenciaId', updateLibroIncidenciaGeneralHora);
   fastify.delete('/master/libros/:id/incidencias-generales/:incidenciaId', deleteLibroIncidenciaGeneral);
   fastify.delete('/api/master/libros/:id/incidencias-generales/:incidenciaId', deleteLibroIncidenciaGeneral);
 
