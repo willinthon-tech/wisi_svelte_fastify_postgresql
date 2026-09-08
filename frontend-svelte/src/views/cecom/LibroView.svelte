@@ -153,12 +153,12 @@
 
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
-    { key: 'descripcion', label: 'Descripción', bold: true, sortable: true, editable: true },
+    { key: 'descripcion', label: 'Fecha', type: 'date', bold: true, sortable: true, editable: true },
     { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala Asignada', sortable: true, editable: false }
   ];
 
   $: createFields = [
-    { key: 'descripcion', label: 'Descripción', type: 'text', placeholder: 'Ej. Libro de Novedades', required: true },
+    { key: 'descripcion', label: 'Fecha', type: 'date', required: true },
     { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true }
   ];
 
@@ -255,7 +255,7 @@
   {columns}
   {createFields}
   bind:searchQuery
-  searchPlaceholder="Buscar libros por descripción, sala o ID..."
+  searchPlaceholder="Buscar libros por fecha, sala o ID..."
   entityType="libro"
   uniqueByField="sala_id"
   actions={{ 

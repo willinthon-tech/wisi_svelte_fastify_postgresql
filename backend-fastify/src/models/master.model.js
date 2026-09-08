@@ -7244,7 +7244,7 @@ export async function getLibrosModel(params = {}) {
 
 export async function createLibroModel(data) {
   const cleanDesc = (data.descripcion || '').trim();
-  if (!cleanDesc) throw new Error('La descripción del libro es obligatoria');
+  if (!cleanDesc) throw new Error('La fecha del libro es obligatoria');
   if (!data.sala_id) throw new Error('Debe seleccionar una sala para el libro');
 
   if (isPgConnected && sql) {
@@ -7254,7 +7254,7 @@ export async function createLibroModel(data) {
       LIMIT 1
     `;
     if (existing.length > 0) {
-      throw new Error(`Ya existe un libro registrado con la descripción "${cleanDesc}" en esta sala`);
+      throw new Error(`Ya existe un libro registrado con la fecha "${cleanDesc}" en esta sala`);
     }
 
     const rows = await sql`
@@ -7267,7 +7267,7 @@ export async function createLibroModel(data) {
     const cleanLower = cleanDesc.toLowerCase();
     const existing = (inMemoryData.libros || []).find(m => (m.descripcion || '').trim().toLowerCase() === cleanLower && Number(m.sala_id) === Number(data.sala_id));
     if (existing) {
-      throw new Error(`Ya existe un libro registrado con la descripción "${cleanDesc}" en esta sala`);
+      throw new Error(`Ya existe un libro registrado con la fecha "${cleanDesc}" en esta sala`);
     }
     const nextId = (inMemoryData.libros?.length || 0) > 0 ? Math.max(...inMemoryData.libros.map(m => m.id)) + 1 : 1;
     const newLibro = {
@@ -7305,7 +7305,7 @@ export async function updateLibroModel(id, data) {
         LIMIT 1
       `;
       if (existing.length > 0) {
-        throw new Error(`Ya existe otro libro registrado con la descripción "${cleanDesc}" en esta sala`);
+        throw new Error(`Ya existe otro libro registrado con la fecha "${cleanDesc}" en esta sala`);
       }
     }
 

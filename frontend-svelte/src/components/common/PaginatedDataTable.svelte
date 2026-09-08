@@ -47,14 +47,31 @@
     }
   }
 
+  function formatDateYYYYMMDD(dateStr) {
+    if (!dateStr) return '—';
+    try {
+      const str = dateStr instanceof Date ? dateStr.toISOString().split('T')[0] : String(dateStr).trim();
+      const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (match) {
+        return `${match[1]}/${match[2].padStart(2, '0')}/${match[3].padStart(2, '0')}`;
+      }
+      return str;
+    } catch {
+      return '—';
+    }
+  }
+
   function formatDateForInput(dateVal) {
     if (!dateVal) return '';
     if (dateVal instanceof Date) {
       return dateVal.toISOString().split('T')[0];
     }
     const str = String(dateVal).trim();
-    const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
-    return match ? match[1] : '';
+    const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (match) {
+      return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+    }
+    return '';
   }
 
   function calculateEdad(dateStr) {
@@ -403,7 +420,18 @@
 
 
   function openCreateModal() {
-    createDraft = {};
+    const draft = {};
+    if (Array.isArray(createFields)) {
+      for (const f of createFields) {
+        if (f.defaultValue) {
+          draft[f.key] = f.defaultValue === 'today' ? new Date().toISOString().split('T')[0] : f.defaultValue;
+        } else if (f.type === 'date') {
+          // Prellenar con la fecha actual en formato AAAA-MM-DD para selector de fecha
+          draft[f.key] = new Date().toISOString().split('T')[0];
+        }
+      }
+    }
+    createDraft = draft;
     isCreateModalOpen = true;
   }
 
@@ -829,7 +857,7 @@
   // Inline Editing Methods
   function startInlineEdit(item) {
     editingInlineId = item.id;
-    inlineDraft = {
+    const draft = {
       ...item,
       fecha_nacimiento: formatDateForInput(item.fecha_nacimiento),
       fecha_ingreso: formatDateForInput(item.fecha_ingreso),
@@ -838,6 +866,14 @@
       color: item.color || '#FFFF99',
       tipo: item.tipo || 'horario'
     };
+    if (Array.isArray(columns)) {
+      for (const col of columns) {
+        if (col.type === 'date' && item[col.key] !== undefined && item[col.key] !== null) {
+          draft[col.key] = formatDateForInput(item[col.key]) || item[col.key];
+        }
+      }
+    }
+    inlineDraft = draft;
   }
 
   function cancelInlineEdit() {
@@ -1484,6 +1520,16 @@
                           ({calculateAntiguedad(item[col.key])})
                         </span>
                       </div>
+                    {:else}
+                      <span style="color: #94a3b8; font-style: italic; font-size: 12px;">—</span>
+                    {/if}
+
+                  {:else if col.type === 'date'}
+                    <!-- READ-ONLY Fecha AAAA/MM/DD -->
+                    {#if item[col.key]}
+                      <span class={col.bold ? 'font-bold' : ''} style="font-family: monospace; font-size: 13px; letter-spacing: 0.3px;">
+                        {formatDateYYYYMMDD(item[col.key])}
+                      </span>
                     {:else}
                       <span style="color: #94a3b8; font-style: italic; font-size: 12px;">—</span>
                     {/if}
