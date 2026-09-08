@@ -14,32 +14,25 @@
   export let libro = null;
   export let libroId = null;
 
-  // Estado del formulario
-  let selectedMesaId = '';
-  let horaApertura = '';
-  let horaCierre = '';
-  let pitboss = '';
-  let croupierApertura = '';
-  let croupierCierre = '';
-  let observacion = '';
-
-  let isSaving = false;
+  // Estado de carga y datos
   let isLoadingRecords = false;
   let isLoadingMesas = false;
-
-  // Lista de novedades registradas para este libro
   let novedadesRecords = [];
   let serverMesas = [];
+  let searchQuery = '';
 
-  // Estados de dropdowns interactivos de sugerencias
-  let showSugPitboss = false;
-  let selectedIndexPitboss = -1;
+  // Diccionario reactivo de valores editados por mesa_id
+  // { [mesaId]: { hora_apertura, hora_cierre, pitboss, croupier_apertura, croupier_cierre, observacion } }
+  let rowsData = {};
 
-  let showSugCA = false;
-  let selectedIndexCA = -1;
+  // Conjuntos reactivos para retroalimentación visual de guardado por fila
+  let savingMesaIds = new Set();
+  let savedSuccessMesaIds = new Set();
+  let saveDebounceTimers = {};
 
-  let showSugCC = false;
-  let selectedIndexCC = -1;
+  // Estado del dropdown de autocompletado en celda activa
+  let activeSug = null; // { mesaId, field: 'pitboss'|'croupier_apertura'|'croupier_cierre' }
+  let activeSugIndex = -1;
 
   // Usuario y salas asignadas
   $: userSalasMap = $masterUserSalasStore || {};
@@ -48,7 +41,7 @@
     ? currentUserSalas
     : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
 
-  // Lista de mesas de la sala del libro
+  // Lista de mesas activas para la sala del libro
   $: availableMesas = (() => {
     const list = (serverMesas && serverMesas.length > 0) ? serverMesas : ($masterMesasStore || []);
     return list.filter(m => {
@@ -62,32 +55,40 @@
     }).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }));
   })();
 
-  // Lista de empleados disponibles para sugerencias
+  // Mesas filtradas por buscador de la tabla
+  $: filteredMesas = (() => {
+    const q = (searchQuery || '').trim().toLowerCase();
+    if (!q) return availableMesas;
+    return availableMesas.filter(m => {
+      const nom = (m.nombre || '').toLowerCase();
+      const juego = (m.juego_nombre || '').toLowerCase();
+      const r = rowsData[m.id];
+      const pit = (r?.pitboss || '').toLowerCase();
+      const ca = (r?.croupier_apertura || '').toLowerCase();
+      const cc = (r?.croupier_cierre || '').toLowerCase();
+      const obs = (r?.observacion || '').toLowerCase();
+      return nom.includes(q) || juego.includes(q) || pit.includes(q) || ca.includes(q) || cc.includes(q) || obs.includes(q);
+    });
+  })();
+
+  // Lista de empleados disponibles para sugerencias de autocompletado
   $: listaEmpleados = ($masterEmpleadosStore || []).map(e => {
     const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim();
     return nom || e.nombre || '';
   }).filter(Boolean);
 
-  // Sugerencias filtradas reactivas
-  $: sugerenciasPitboss = (() => {
-    const q = (pitboss || '').trim().toLowerCase();
-    if (!q) return listaEmpleados.slice(0, 8);
-    return listaEmpleados.filter(emp => emp.toLowerCase().includes(q)).slice(0, 8);
+  // Sugerencias filtradas reactivas según la celda enfocada
+  $: currentQuery = (activeSug && rowsData[activeSug.mesaId]) 
+    ? (rowsData[activeSug.mesaId][activeSug.field] || '').trim().toLowerCase() 
+    : '';
+
+  $: filteredSuggestions = (() => {
+    if (!activeSug) return [];
+    if (!currentQuery) return listaEmpleados.slice(0, 7);
+    return listaEmpleados.filter(emp => emp.toLowerCase().includes(currentQuery)).slice(0, 7);
   })();
 
-  $: sugerenciasCA = (() => {
-    const q = (croupierApertura || '').trim().toLowerCase();
-    if (!q) return listaEmpleados.slice(0, 8);
-    return listaEmpleados.filter(emp => emp.toLowerCase().includes(q)).slice(0, 8);
-  })();
-
-  $: sugerenciasCC = (() => {
-    const q = (croupierCierre || '').trim().toLowerCase();
-    if (!q) return listaEmpleados.slice(0, 8);
-    return listaEmpleados.filter(emp => emp.toLowerCase().includes(q)).slice(0, 8);
-  })();
-
-  // Encabezado oscuro de la tabla: Gan Casino PLC - 14/09/2026
+  // Encabezado superior: Nombre de Sala - Fecha
   $: tableHeaderTitle = (() => {
     const salaName = libro?.sala_nombre || 
       ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
@@ -97,7 +98,7 @@
     return `${salaName} - ${dateFormatted}`;
   })();
 
-  // Mapa de registros por mesa_id para acceso ultra rápido
+  // Mapa de registros guardados en base de datos
   $: recordsMap = (() => {
     const map = new Map();
     for (const r of novedadesRecords) {
@@ -106,8 +107,10 @@
     return map;
   })();
 
-  // Cantidad de mesas con novedad registrada
-  $: mesasRegistradasCount = novedadesRecords.length;
+  // Cantidad de mesas con novedades registradas
+  $: mesasRegistradasCount = novedadesRecords.filter(r => 
+    Boolean(r.hora_apertura || r.hora_cierre || r.pitboss || r.croupier_apertura || r.croupier_cierre || r.observacion)
+  ).length;
 
   function formatDateDisplay(d) {
     if (!d) return '—';
@@ -126,14 +129,6 @@
   function getCurrentTimeString() {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  }
-
-  function formatMesaOptionLabel(m) {
-    const juegoName = m.juego_nombre || ($masterJuegosStore || []).find(j => Number(j.id) === Number(m.juego_id))?.nombre || '';
-    if (juegoName) {
-      return `${m.nombre} - ${juegoName}`;
-    }
-    return m.nombre || `Mesa #${m.id}`;
   }
 
   onMount(async () => {
@@ -163,6 +158,7 @@
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
           serverMesas = json.data;
+          syncRowsData(novedadesRecords);
         }
       }
     } catch (e) {
@@ -183,9 +179,7 @@
         const json = await res.json();
         if (json && json.success) {
           novedadesRecords = json.data || [];
-          if (selectedMesaId) {
-            handleMesaChange();
-          }
+          syncRowsData(novedadesRecords);
         }
       }
     } catch (err) {
@@ -195,68 +189,98 @@
     }
   }
 
-  // Al cambiar la mesa seleccionada en el form, si ya tiene novedad, cargar sus datos
-  function handleMesaChange() {
-    if (!selectedMesaId) {
-      limpiarCampos();
-      return;
+  // Sincroniza rowsData manteniendo lo que el usuario esté escribiendo activamente
+  function syncRowsData(records) {
+    const map = new Map();
+    for (const r of (records || [])) {
+      map.set(Number(r.mesa_id), r);
     }
 
-    const existing = recordsMap.get(Number(selectedMesaId));
-    if (existing) {
-      horaApertura = existing.hora_apertura || '';
-      horaCierre = existing.hora_cierre || '';
-      pitboss = existing.pitboss || '';
-      croupierApertura = existing.croupier_apertura || '';
-      croupierCierre = existing.croupier_cierre || '';
-      observacion = existing.observacion || '';
-    } else {
-      horaApertura = '';
-      horaCierre = '';
-      pitboss = '';
-      croupierApertura = '';
-      croupierCierre = '';
-      observacion = '';
+    const updated = { ...rowsData };
+    for (const m of availableMesas) {
+      const mid = Number(m.id);
+      const rec = map.get(mid);
+      
+      // Si la fila no existe o no se está guardando activamente, actualizarla con los datos del server
+      if (!updated[mid] || (!savingMesaIds.has(mid) && (!activeSug || activeSug.mesaId !== mid))) {
+        updated[mid] = {
+          hora_apertura: rec?.hora_apertura || '',
+          hora_cierre: rec?.hora_cierre || '',
+          pitboss: rec?.pitboss || '',
+          croupier_apertura: rec?.croupier_apertura || '',
+          croupier_cierre: rec?.croupier_cierre || '',
+          observacion: rec?.observacion || ''
+        };
+      }
     }
+    rowsData = updated;
   }
 
-  function limpiarCampos() {
-    selectedMesaId = '';
-    horaApertura = '';
-    horaCierre = '';
-    pitboss = '';
-    croupierApertura = '';
-    croupierCierre = '';
-    observacion = '';
+  // Asegura y obtiene los datos de una fila
+  function getRow(mesaId) {
+    if (!rowsData[mesaId]) {
+      const existing = recordsMap.get(Number(mesaId));
+      rowsData[mesaId] = {
+        hora_apertura: existing?.hora_apertura || '',
+        hora_cierre: existing?.hora_cierre || '',
+        pitboss: existing?.pitboss || '',
+        croupier_apertura: existing?.croupier_apertura || '',
+        croupier_cierre: existing?.croupier_cierre || '',
+        observacion: existing?.observacion || ''
+      };
+    }
+    return rowsData[mesaId];
   }
 
-  function seleccionarMesaDesdeTabla(mesaId) {
-    selectedMesaId = String(mesaId);
-    handleMesaChange();
+  // Actualiza un campo individual
+  function updateField(mesaId, field, val) {
+    const row = getRow(mesaId);
+    row[field] = val;
+    rowsData[mesaId] = row;
+    rowsData = { ...rowsData };
   }
 
-  async function handleGuardar() {
+  // Disparador de autoguardado con debounce
+  function triggerAutoSave(mesaId, delay = 700) {
+    if (saveDebounceTimers[mesaId]) {
+      clearTimeout(saveDebounceTimers[mesaId]);
+    }
+    saveDebounceTimers[mesaId] = setTimeout(() => {
+      saveRowToBackend(mesaId);
+    }, delay);
+  }
+
+  // Persistir la fila en el backend (Upsert)
+  async function saveRowToBackend(mesaId) {
     const lId = libroId || libro?.id;
-    if (!lId) {
-      triggerToast('No se encontró el ID del libro', 'error');
+    if (!lId || !mesaId) return;
+
+    const row = rowsData[mesaId];
+    if (!row) return;
+
+    const existing = recordsMap.get(Number(mesaId));
+    const hasAnyValue = Boolean(
+      row.hora_apertura || row.hora_cierre || row.pitboss ||
+      row.croupier_apertura || row.croupier_cierre || row.observacion
+    );
+
+    // Si no hay valores y no existía registro previo, no guardar
+    if (!hasAnyValue && !existing) {
       return;
     }
 
-    if (!selectedMesaId) {
-      triggerToast('Seleccione una mesa para registrar la novedad', 'warning');
-      return;
-    }
+    savingMesaIds.add(Number(mesaId));
+    savingMesaIds = new Set(savingMesaIds);
 
-    isSaving = true;
     try {
       const payload = {
-        mesa_id: Number(selectedMesaId),
-        hora_apertura: horaApertura,
-        hora_cierre: horaCierre,
-        pitboss: pitboss,
-        croupier_apertura: croupierApertura,
-        croupier_cierre: croupierCierre,
-        observacion: observacion
+        mesa_id: Number(mesaId),
+        hora_apertura: row.hora_apertura || '',
+        hora_cierre: row.hora_cierre || '',
+        pitboss: row.pitboss || '',
+        croupier_apertura: row.croupier_apertura || '',
+        croupier_cierre: row.croupier_cierre || '',
+        observacion: row.observacion || ''
       };
 
       const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
@@ -267,390 +291,159 @@
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Novedad de mesa guardada exitosamente', 'success');
-        await loadRecords();
+        const savedRecord = json.data;
+        const idx = novedadesRecords.findIndex(r => Number(r.mesa_id) === Number(mesaId));
+        if (idx >= 0) {
+          novedadesRecords[idx] = savedRecord;
+        } else {
+          novedadesRecords = [...novedadesRecords, savedRecord];
+        }
+
+        savedSuccessMesaIds.add(Number(mesaId));
+        savedSuccessMesaIds = new Set(savedSuccessMesaIds);
+        setTimeout(() => {
+          savedSuccessMesaIds.delete(Number(mesaId));
+          savedSuccessMesaIds = new Set(savedSuccessMesaIds);
+        }, 2200);
       } else {
-        triggerToast(json?.error || 'Error al guardar la novedad de mesa', 'error');
+        triggerToast(json?.error || 'Error al guardar cambios de mesa', 'error');
       }
     } catch (err) {
-      console.error('Error al guardar novedad de mesa:', err);
-      triggerToast(`Error de conexión: ${err.message}`, 'error');
+      console.error('Error al guardar fila de mesa:', err);
     } finally {
-      isSaving = false;
+      savingMesaIds.delete(Number(mesaId));
+      savingMesaIds = new Set(savingMesaIds);
     }
   }
 
-  async function handleEliminar(recordId) {
+  // Eliminar o limpiar el registro de una mesa
+  async function handleEliminar(mesaId) {
     const lId = libroId || libro?.id;
-    if (!lId || !recordId) return;
+    if (!lId || !mesaId) return;
 
-    if (!confirm('¿Está seguro de eliminar el registro de novedad para esta mesa?')) {
+    const existing = recordsMap.get(Number(mesaId));
+    if (!existing) {
+      // Limpiar campos locales si no estaba en la base de datos
+      updateField(mesaId, 'hora_apertura', '');
+      updateField(mesaId, 'hora_cierre', '');
+      updateField(mesaId, 'pitboss', '');
+      updateField(mesaId, 'croupier_apertura', '');
+      updateField(mesaId, 'croupier_cierre', '');
+      updateField(mesaId, 'observacion', '');
+      return;
+    }
+
+    if (!confirm('¿Desea limpiar y eliminar el registro de esta mesa?')) {
       return;
     }
 
     try {
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${recordId}`, {
+      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${existing.id}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Registro eliminado correctamente', 'info');
-        novedadesRecords = novedadesRecords.filter(r => Number(r.id) !== Number(recordId));
-        if (selectedMesaId && !novedadesRecords.some(r => Number(r.mesa_id) === Number(selectedMesaId))) {
-          limpiarCampos();
-        }
+        triggerToast('Registro de mesa eliminado', 'info');
+        novedadesRecords = novedadesRecords.filter(r => Number(r.id) !== Number(existing.id));
+        updateField(mesaId, 'hora_apertura', '');
+        updateField(mesaId, 'hora_cierre', '');
+        updateField(mesaId, 'pitboss', '');
+        updateField(mesaId, 'croupier_apertura', '');
+        updateField(mesaId, 'croupier_cierre', '');
+        updateField(mesaId, 'observacion', '');
       } else {
-        triggerToast(json?.error || 'Error al eliminar el registro', 'error');
+        triggerToast(json?.error || 'Error al eliminar', 'error');
       }
     } catch (err) {
-      console.error('Error al eliminar novedad de mesa:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.error('Error al eliminar novedad:', err);
     }
   }
 
-  // --- Handlers para Autocompletado: Pitboss ---
-  function onInputPitboss() {
-    showSugPitboss = true;
-    selectedIndexPitboss = -1;
-  }
-  function onKeyDownPitboss(e) {
-    if (e.key === 'ArrowDown') {
-      if (!showSugPitboss) { showSugPitboss = true; selectedIndexPitboss = -1; }
-      if (sugerenciasPitboss.length > 0) {
-        e.preventDefault();
-        selectedIndexPitboss = (selectedIndexPitboss + 1) % sugerenciasPitboss.length;
-      }
-    } else if (e.key === 'ArrowUp') {
-      if (showSugPitboss && sugerenciasPitboss.length > 0) {
-        e.preventDefault();
-        selectedIndexPitboss = (selectedIndexPitboss - 1 + sugerenciasPitboss.length) % sugerenciasPitboss.length;
-      }
-    } else if (e.key === 'Tab' || e.key === 'Enter') {
-      if (showSugPitboss && sugerenciasPitboss.length > 0) {
-        e.preventDefault();
-        const match = selectedIndexPitboss >= 0 ? sugerenciasPitboss[selectedIndexPitboss] : sugerenciasPitboss[0];
-        pitboss = match;
-        showSugPitboss = false;
-        selectedIndexPitboss = -1;
-      }
-    } else if (e.key === 'Escape') {
-      showSugPitboss = false;
-      selectedIndexPitboss = -1;
-    }
-  }
-  function onBlurPitboss() {
-    setTimeout(() => { showSugPitboss = false; selectedIndexPitboss = -1; }, 200);
+  // --- Handlers de Autocompletado en Celda ---
+  function handleFocusAutocomplete(mesaId, field) {
+    activeSug = { mesaId, field };
+    activeSugIndex = -1;
   }
 
-  // --- Handlers para Autocompletado: Croupier Apertura ---
-  function onInputCA() {
-    showSugCA = true;
-    selectedIndexCA = -1;
-  }
-  function onKeyDownCA(e) {
-    if (e.key === 'ArrowDown') {
-      if (!showSugCA) { showSugCA = true; selectedIndexCA = -1; }
-      if (sugerenciasCA.length > 0) {
-        e.preventDefault();
-        selectedIndexCA = (selectedIndexCA + 1) % sugerenciasCA.length;
-      }
-    } else if (e.key === 'ArrowUp') {
-      if (showSugCA && sugerenciasCA.length > 0) {
-        e.preventDefault();
-        selectedIndexCA = (selectedIndexCA - 1 + sugerenciasCA.length) % sugerenciasCA.length;
-      }
-    } else if (e.key === 'Tab' || e.key === 'Enter') {
-      if (showSugCA && sugerenciasCA.length > 0) {
-        e.preventDefault();
-        const match = selectedIndexCA >= 0 ? sugerenciasCA[selectedIndexCA] : sugerenciasCA[0];
-        croupierApertura = match;
-        showSugCA = false;
-        selectedIndexCA = -1;
-      }
-    } else if (e.key === 'Escape') {
-      showSugCA = false;
-      selectedIndexCA = -1;
-    }
-  }
-  function onBlurCA() {
-    setTimeout(() => { showSugCA = false; selectedIndexCA = -1; }, 200);
+  function handleInputAutocomplete(mesaId, field, val) {
+    updateField(mesaId, field, val);
+    activeSug = { mesaId, field };
+    activeSugIndex = -1;
+    triggerAutoSave(mesaId, 900);
   }
 
-  // --- Handlers para Autocompletado: Croupier Cierre ---
-  function onInputCC() {
-    showSugCC = true;
-    selectedIndexCC = -1;
-  }
-  function onKeyDownCC(e) {
+  function handleKeyDownAutocomplete(e, mesaId, field) {
+    if (!activeSug || activeSug.mesaId !== mesaId || activeSug.field !== field) return;
+
     if (e.key === 'ArrowDown') {
-      if (!showSugCC) { showSugCC = true; selectedIndexCC = -1; }
-      if (sugerenciasCC.length > 0) {
+      if (filteredSuggestions.length > 0) {
         e.preventDefault();
-        selectedIndexCC = (selectedIndexCC + 1) % sugerenciasCC.length;
+        activeSugIndex = (activeSugIndex + 1) % filteredSuggestions.length;
       }
     } else if (e.key === 'ArrowUp') {
-      if (showSugCC && sugerenciasCC.length > 0) {
+      if (filteredSuggestions.length > 0) {
         e.preventDefault();
-        selectedIndexCC = (selectedIndexCC - 1 + sugerenciasCC.length) % sugerenciasCC.length;
+        activeSugIndex = (activeSugIndex - 1 + filteredSuggestions.length) % filteredSuggestions.length;
       }
     } else if (e.key === 'Tab' || e.key === 'Enter') {
-      if (showSugCC && sugerenciasCC.length > 0) {
+      if (filteredSuggestions.length > 0) {
         e.preventDefault();
-        const match = selectedIndexCC >= 0 ? sugerenciasCC[selectedIndexCC] : sugerenciasCC[0];
-        croupierCierre = match;
-        showSugCC = false;
-        selectedIndexCC = -1;
+        const selected = activeSugIndex >= 0 ? filteredSuggestions[activeSugIndex] : filteredSuggestions[0];
+        selectSuggestion(mesaId, field, selected);
       }
     } else if (e.key === 'Escape') {
-      showSugCC = false;
-      selectedIndexCC = -1;
+      activeSug = null;
+      activeSugIndex = -1;
     }
   }
-  function onBlurCC() {
-    setTimeout(() => { showSugCC = false; selectedIndexCC = -1; }, 200);
+
+  function selectSuggestion(mesaId, field, name) {
+    updateField(mesaId, field, name);
+    activeSug = null;
+    activeSugIndex = -1;
+    triggerAutoSave(mesaId, 0); // Guardar inmediatamente
+  }
+
+  function handleBlurAutocomplete(mesaId, field) {
+    setTimeout(() => {
+      if (activeSug && activeSug.mesaId === mesaId && activeSug.field === field) {
+        activeSug = null;
+        activeSugIndex = -1;
+      }
+    }, 200);
+    triggerAutoSave(mesaId, 0);
   }
 </script>
 
-<div class="novedades-layout-grid">
-  <!-- Tarjeta Izquierda: Formulario "Novedades de Mesas" -->
-  <div class="card-form-novedades">
-    <div class="card-title-box">
-      <div class="title-row">
-        <h3 class="card-title">Novedades de Mesas</h3>
-        {#if selectedMesaId && recordsMap.has(Number(selectedMesaId))}
-          <span class="badge-edit">Editando Mesa</span>
-        {/if}
-      </div>
-      <div class="title-underline"></div>
-    </div>
-
-    <form on:submit|preventDefault={handleGuardar} class="novedades-form">
-      <!-- 1. Selector de Mesa -->
-      <div class="form-group">
-        <label for="select-mesa" class="form-label">Mesa: *</label>
-        <select 
-          id="select-mesa" 
-          class="form-select" 
-          bind:value={selectedMesaId}
-          on:change={handleMesaChange}
-          required
-        >
-          <option value="">Seleccione una mesa...</option>
-          {#each availableMesas as m}
-            <option value={m.id}>
-              {formatMesaOptionLabel(m)} {recordsMap.has(Number(m.id)) ? '✓' : ''}
-            </option>
-          {/each}
-        </select>
-      </div>
-
-      <!-- 2. Horarios (Hora Apertura y Hora Cierre) -->
-      <div class="time-dual-row">
-        <div class="time-col">
-          <div class="col-header-mini">
-            <label for="hora-apertura" class="mini-label">Hora Apertura:</label>
-            <button 
-              type="button" 
-              class="btn-mini-now" 
-              on:click={() => { horaApertura = getCurrentTimeString(); }}
-              title="Colocar hora actual"
-            >⚡ Ahora</button>
-          </div>
-          <input 
-            id="hora-apertura" 
-            type="time" 
-            class="form-time-input" 
-            bind:value={horaApertura} 
-          />
-        </div>
-
-        <div class="time-col">
-          <div class="col-header-mini">
-            <label for="hora-cierre" class="mini-label">Hora Cierre:</label>
-            <button 
-              type="button" 
-              class="btn-mini-now" 
-              on:click={() => { horaCierre = getCurrentTimeString(); }}
-              title="Colocar hora actual"
-            >⚡ Ahora</button>
-          </div>
-          <input 
-            id="hora-cierre" 
-            type="time" 
-            class="form-time-input" 
-            bind:value={horaCierre} 
-          />
-        </div>
-      </div>
-
-      <!-- 3. Pitboss (Autocompletado de empleados) -->
-      <div class="form-group autocomplete-group">
-        <label for="input-pitboss" class="form-label">Pitboss:</label>
-        <div class="input-container">
-          <input 
-            id="input-pitboss" 
-            type="text" 
-            class="form-text-input" 
-            placeholder="Escriba o elija Pitboss..." 
-            bind:value={pitboss}
-            on:input={onInputPitboss}
-            on:keydown={onKeyDownPitboss}
-            on:blur={onBlurPitboss}
-            on:focus={onInputPitboss}
-            autocomplete="off"
-          />
-
-          {#if showSugPitboss && sugerenciasPitboss.length > 0}
-            <div class="sugerencias-dropdown">
-              <div class="sugerencias-header">
-                <span>Sugerencias (Pulsa <b>Tab</b> o clic):</span>
-              </div>
-              <ul class="sugerencias-list">
-                {#each sugerenciasPitboss as sug, idx}
-                  <!-- svelte-ignore a11y-click-events-have-key-events -->
-                  <li 
-                    class="sugerencia-item {idx === selectedIndexPitboss ? 'active' : ''}"
-                    on:mousedown|preventDefault={() => { pitboss = sug; showSugPitboss = false; }}
-                  >
-                    <span class="sug-icon">👤</span>
-                    <span class="sug-text">{sug}</span>
-                    <span class="sug-tab-badge">Tab ⇥</span>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- 4. Croupier Apertura (Autocompletado de empleados) -->
-      <div class="form-group autocomplete-group">
-        <label for="input-croupier-a" class="form-label">Croupier Apertura:</label>
-        <div class="input-container">
-          <input 
-            id="input-croupier-a" 
-            type="text" 
-            class="form-text-input" 
-            placeholder="Escriba o elija Croupier Apertura..." 
-            bind:value={croupierApertura}
-            on:input={onInputCA}
-            on:keydown={onKeyDownCA}
-            on:blur={onBlurCA}
-            on:focus={onInputCA}
-            autocomplete="off"
-          />
-
-          {#if showSugCA && sugerenciasCA.length > 0}
-            <div class="sugerencias-dropdown">
-              <div class="sugerencias-header">
-                <span>Sugerencias (Pulsa <b>Tab</b> o clic):</span>
-              </div>
-              <ul class="sugerencias-list">
-                {#each sugerenciasCA as sug, idx}
-                  <!-- svelte-ignore a11y-click-events-have-key-events -->
-                  <li 
-                    class="sugerencia-item {idx === selectedIndexCA ? 'active' : ''}"
-                    on:mousedown|preventDefault={() => { croupierApertura = sug; showSugCA = false; }}
-                  >
-                    <span class="sug-icon">👤</span>
-                    <span class="sug-text">{sug}</span>
-                    <span class="sug-tab-badge">Tab ⇥</span>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- 5. Croupier Cierre (Autocompletado de empleados) -->
-      <div class="form-group autocomplete-group">
-        <label for="input-croupier-c" class="form-label">Croupier Cierre:</label>
-        <div class="input-container">
-          <input 
-            id="input-croupier-c" 
-            type="text" 
-            class="form-text-input" 
-            placeholder="Escriba o elija Croupier Cierre..." 
-            bind:value={croupierCierre}
-            on:input={onInputCC}
-            on:keydown={onKeyDownCC}
-            on:blur={onBlurCC}
-            on:focus={onInputCC}
-            autocomplete="off"
-          />
-
-          {#if showSugCC && sugerenciasCC.length > 0}
-            <div class="sugerencias-dropdown">
-              <div class="sugerencias-header">
-                <span>Sugerencias (Pulsa <b>Tab</b> o clic):</span>
-              </div>
-              <ul class="sugerencias-list">
-                {#each sugerenciasCC as sug, idx}
-                  <!-- svelte-ignore a11y-click-events-have-key-events -->
-                  <li 
-                    class="sugerencia-item {idx === selectedIndexCC ? 'active' : ''}"
-                    on:mousedown|preventDefault={() => { croupierCierre = sug; showSugCC = false; }}
-                  >
-                    <span class="sug-icon">👤</span>
-                    <span class="sug-text">{sug}</span>
-                    <span class="sug-tab-badge">Tab ⇥</span>
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- 6. Observación (Textarea) -->
-      <div class="form-group">
-        <label for="input-obs" class="form-label">Observación:</label>
-        <textarea 
-          id="input-obs" 
-          class="form-textarea" 
-          rows="3" 
-          placeholder="Observaciones de la mesa (ej. VIP, etc.)..."
-          bind:value={observacion}
-        ></textarea>
-      </div>
-
-      <!-- Botones de Acción -->
-      <div class="form-btns-row">
-        <button 
-          type="submit" 
-          class="btn-guardar"
-          disabled={isSaving}
-        >
-          {#if isSaving}
-            <span>Guardando...</span>
-          {:else if selectedMesaId && recordsMap.has(Number(selectedMesaId))}
-            <span>✓ Actualizar Mesa</span>
-          {:else}
-            <span>Guardar Novedad</span>
-          {/if}
-        </button>
-
-        {#if selectedMesaId}
-          <button 
-            type="button" 
-            class="btn-limpiar"
-            on:click={limpiarCampos}
-            title="Limpiar campos y deseleccionar mesa"
-          >
-            Limpiar
-          </button>
-        {/if}
-      </div>
-    </form>
-  </div>
-
-  <!-- Tarjeta Derecha: Tabla de Novedades de Mesas -->
-  <div class="card-table-novedades">
-    <!-- Barra Superior Oscura con Sala y Fecha -->
+<div class="novedades-full-container">
+  <div class="card-table-novedades full-width">
+    <!-- Barra Superior Oscura: Sala - Fecha + Buscador + Contador -->
     <div class="table-top-bar">
-      <span class="top-bar-title">{tableHeaderTitle}</span>
-      <div class="top-bar-badge">
+      <div class="top-bar-left">
+        <span class="top-bar-title">{tableHeaderTitle}</span>
+        <span class="top-bar-subtitle">Edición en línea de novedades de mesas operativas</span>
+      </div>
+
+      <div class="top-bar-right">
+        <!-- Buscador de mesa o empleado -->
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input 
+            type="text" 
+            class="search-input" 
+            placeholder="Filtrar mesa, croupier o pitboss..." 
+            bind:value={searchQuery}
+          />
+          {#if searchQuery}
+            <button 
+              type="button" 
+              class="btn-clear-search" 
+              on:click={() => { searchQuery = ''; }}
+              title="Borrar búsqueda"
+            >×</button>
+          {/if}
+        </div>
+
         {#if availableMesas.length > 0}
           <span class="badge-status {mesasRegistradasCount === availableMesas.length ? 'complete' : 'partial'}">
             {mesasRegistradasCount} de {availableMesas.length} mesas registradas
@@ -659,157 +452,270 @@
       </div>
     </div>
 
-    <!-- Tabla de Contenido -->
+    <!-- Tabla Completa con Edición en Línea -->
     <div class="table-wrapper">
       <table class="novedades-table">
         <thead>
           <tr>
-            <th class="th-center th-col-dual-hora">
-              <div class="header-dual-stacked">
-                <span class="hdr-line">HORA APERTURA</span>
-                <span class="hdr-divider"></span>
-                <span class="hdr-line">HORA CIERRE</span>
-              </div>
-            </th>
-            <th class="th-mesa">MESA</th>
-            <th class="th-left th-person">PITBOSS</th>
-            <th class="th-left th-col-dual-croupier">
-              <div class="header-dual-stacked text-left">
-                <span class="hdr-line">CROUPIER APERTURA</span>
-                <span class="hdr-divider"></span>
-                <span class="hdr-line">CROUPIER CIERRE</span>
-              </div>
-            </th>
-            <th class="th-left th-obs">OBSERVACIÓN</th>
-            <th class="th-center th-acciones">ACCIONES</th>
+            <th class="th-center th-col-hora">HORA APERTURA</th>
+            <th class="th-left th-col-mesa">MESA</th>
+            <th class="th-left th-col-pitboss">PITBOSS</th>
+            <th class="th-left th-col-croupier">CROUPIER APERTURA</th>
+            <th class="th-left th-col-croupier">CROUPIER CIERRE</th>
+            <th class="th-center th-col-hora">HORA CIERRE</th>
+            <th class="th-left th-col-obs">OBSERVACIÓN</th>
+            <th class="th-center th-col-acciones">ESTADO / ACCIONES</th>
           </tr>
         </thead>
         <tbody>
           {#if isLoadingRecords || isLoadingMesas}
             <tr>
-              <td colspan="6" class="empty-state-cell">
+              <td colspan="8" class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
-                  <span>Cargando novedades y mesas de la sala...</span>
+                  <span>Cargando mesas y novedades en línea...</span>
                 </div>
               </td>
             </tr>
           {:else if availableMesas.length === 0}
             <tr>
-              <td colspan="6" class="empty-state-cell">
+              <td colspan="8" class="empty-state-cell">
                 <div class="empty-msg-box">
                   <span class="empty-icon">🎲</span>
                   <p class="empty-text">No se encontraron mesas activas configuradas para esta sala.</p>
                 </div>
               </td>
             </tr>
+          {:else if filteredMesas.length === 0}
+            <tr>
+              <td colspan="8" class="empty-state-cell">
+                <div class="empty-msg-box">
+                  <span class="empty-icon">🔍</span>
+                  <p class="empty-text">No hay mesas que coincidan con la búsqueda "{searchQuery}".</p>
+                </div>
+              </td>
+            </tr>
           {:else}
-            {#each availableMesas as mesa}
-              {@const rec = recordsMap.get(Number(mesa.id))}
-              {@const isSelected = Number(selectedMesaId) === Number(mesa.id)}
-              <tr 
-                class="novedad-row {isSelected ? 'row-selected' : ''} {rec ? 'row-completed' : 'row-pending'}"
-                on:click={() => seleccionarMesaDesdeTabla(mesa.id)}
-                title="Haga clic para cargar y editar esta mesa"
-              >
-                <!-- 1. HORA (Apertura arriba / Cierre abajo) -->
-                <td class="td-center td-dual-hora">
-                  <div class="cell-dual-stacked">
-                    <div class="dual-row">
-                      {#if rec?.hora_apertura}
-                        <span class="badge-hora badge-apertura">{rec.hora_apertura}</span>
-                      {:else}
-                        <span class="badge-vacio">—</span>
-                      {/if}
-                    </div>
-                    <div class="dual-row">
-                      {#if rec?.hora_cierre}
-                        <span class="badge-hora badge-cierre">{rec.hora_cierre}</span>
-                      {:else}
-                        <span class="badge-vacio">—</span>
-                      {/if}
-                    </div>
+            {#each filteredMesas as mesa (mesa.id)}
+              {@const row = getRow(mesa.id)}
+              {@const hasData = Boolean(row.hora_apertura || row.hora_cierre || row.pitboss || row.croupier_apertura || row.croupier_cierre || row.observacion)}
+              {@const isSavingThis = savingMesaIds.has(Number(mesa.id))}
+              {@const isSavedThis = savedSuccessMesaIds.has(Number(mesa.id))}
+              <tr class="novedad-row {hasData ? 'row-has-data' : 'row-empty'}">
+                
+                <!-- 1. HORA APERTURA (Con botón rápido Ahora) -->
+                <td class="td-center td-col-hora">
+                  <div class="inline-time-box">
+                    <input 
+                      type="time" 
+                      class="inline-time-input" 
+                      value={row.hora_apertura} 
+                      on:input={(e) => updateField(mesa.id, 'hora_apertura', e.target.value)}
+                      on:change={() => triggerAutoSave(mesa.id, 0)}
+                      on:blur={() => triggerAutoSave(mesa.id, 0)}
+                      title="Hora de Apertura"
+                    />
+                    <button 
+                      type="button" 
+                      class="btn-inline-now" 
+                      title="Establecer hora actual de apertura"
+                      on:click={() => {
+                        updateField(mesa.id, 'hora_apertura', getCurrentTimeString());
+                        triggerAutoSave(mesa.id, 0);
+                      }}
+                    >⚡</button>
                   </div>
                 </td>
 
-                <!-- 2. MESA -->
-                <td class="td-mesa">
-                  <span class="mesa-badge-tag">{mesa.nombre}</span>
-                  {#if mesa.juego_nombre}
-                    <span class="mesa-sub-juego">{mesa.juego_nombre}</span>
-                  {/if}
-                </td>
-
-                <!-- 3. PITBOSS -->
-                <td class="td-left td-person">
-                  {#if rec?.pitboss}
-                    <span class="person-name">👤 {rec.pitboss}</span>
-                  {:else}
-                    <span class="empty-dash">—</span>
-                  {/if}
-                </td>
-
-                <!-- 4. CROUPIERES (Apertura arriba / Cierre abajo) -->
-                <td class="td-left td-dual-croupier">
-                  <div class="cell-dual-stacked-left">
-                    <div class="dual-row-person">
-                      {#if rec?.croupier_apertura}
-                        <span class="person-name">👤 {rec.croupier_apertura}</span>
-                      {:else}
-                        <span class="empty-dash">—</span>
-                      {/if}
-                    </div>
-                    <div class="dual-row-person">
-                      {#if rec?.croupier_cierre}
-                        <span class="person-name">👤 {rec.croupier_cierre}</span>
-                      {:else}
-                        <span class="empty-dash">—</span>
-                      {/if}
-                    </div>
+                <!-- 2. MESA (Nombre y juego) -->
+                <td class="td-left td-col-mesa">
+                  <div class="mesa-badge-cell">
+                    <span class="mesa-nombre">{mesa.nombre}</span>
+                    {#if mesa.juego_nombre}
+                      <span class="mesa-juego">{mesa.juego_nombre}</span>
+                    {/if}
                   </div>
                 </td>
 
-                <!-- 5. OBSERVACIÓN -->
-                <td class="td-left td-obs">
-                  {#if rec?.observacion}
-                    <span class="obs-tag">{rec.observacion}</span>
-                  {:else}
-                    <span class="empty-dash">—</span>
-                  {/if}
+                <!-- 3. PITBOSS (Con autocompletado en celda) -->
+                <td class="td-left td-col-pitboss">
+                  <div class="cell-autocomplete-container">
+                    <input 
+                      type="text" 
+                      class="inline-text-input {activeSug?.mesaId === mesa.id && activeSug?.field === 'pitboss' ? 'input-active' : ''}" 
+                      placeholder="Escriba Pitboss..." 
+                      value={row.pitboss}
+                      on:focus={() => handleFocusAutocomplete(mesa.id, 'pitboss')}
+                      on:input={(e) => handleInputAutocomplete(mesa.id, 'pitboss', e.target.value)}
+                      on:keydown={(e) => handleKeyDownAutocomplete(e, mesa.id, 'pitboss')}
+                      on:blur={() => handleBlurAutocomplete(mesa.id, 'pitboss')}
+                      autocomplete="off"
+                    />
+
+                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'pitboss' && filteredSuggestions.length > 0}
+                      <div class="inline-dropdown">
+                        <div class="inline-dropdown-header">
+                          <span>Sugerencias (<b>Tab ⇥</b> o clic):</span>
+                        </div>
+                        <ul class="inline-dropdown-list">
+                          {#each filteredSuggestions as sug, idx}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <li 
+                              class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
+                              on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'pitboss', sug)}
+                            >
+                              <span class="sug-avatar">👤</span>
+                              <span class="sug-name">{sug}</span>
+                              <span class="sug-tab-badge">Tab ⇥</span>
+                            </li>
+                          {/each}
+                        </ul>
+                      </div>
+                    {/if}
+                  </div>
                 </td>
 
-                <!-- ACCIONES -->
-                <td class="td-center td-acciones">
-                  <div class="row-actions-group" on:click|stopPropagation>
-                    {#if rec}
+                <!-- 4. CROUPIER APERTURA (Con autocompletado en celda) -->
+                <td class="td-left td-col-croupier">
+                  <div class="cell-autocomplete-container">
+                    <input 
+                      type="text" 
+                      class="inline-text-input {activeSug?.mesaId === mesa.id && activeSug?.field === 'croupier_apertura' ? 'input-active' : ''}" 
+                      placeholder="Escriba Croupier Apertura..." 
+                      value={row.croupier_apertura}
+                      on:focus={() => handleFocusAutocomplete(mesa.id, 'croupier_apertura')}
+                      on:input={(e) => handleInputAutocomplete(mesa.id, 'croupier_apertura', e.target.value)}
+                      on:keydown={(e) => handleKeyDownAutocomplete(e, mesa.id, 'croupier_apertura')}
+                      on:blur={() => handleBlurAutocomplete(mesa.id, 'croupier_apertura')}
+                      autocomplete="off"
+                    />
+
+                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_apertura' && filteredSuggestions.length > 0}
+                      <div class="inline-dropdown">
+                        <div class="inline-dropdown-header">
+                          <span>Sugerencias (<b>Tab ⇥</b> o clic):</span>
+                        </div>
+                        <ul class="inline-dropdown-list">
+                          {#each filteredSuggestions as sug, idx}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <li 
+                              class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
+                              on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_apertura', sug)}
+                            >
+                              <span class="sug-avatar">👤</span>
+                              <span class="sug-name">{sug}</span>
+                              <span class="sug-tab-badge">Tab ⇥</span>
+                            </li>
+                          {/each}
+                        </ul>
+                      </div>
+                    {/if}
+                  </div>
+                </td>
+
+                <!-- 5. CROUPIER CIERRE (Con autocompletado en celda) -->
+                <td class="td-left td-col-croupier">
+                  <div class="cell-autocomplete-container">
+                    <input 
+                      type="text" 
+                      class="inline-text-input {activeSug?.mesaId === mesa.id && activeSug?.field === 'croupier_cierre' ? 'input-active' : ''}" 
+                      placeholder="Escriba Croupier Cierre..." 
+                      value={row.croupier_cierre}
+                      on:focus={() => handleFocusAutocomplete(mesa.id, 'croupier_cierre')}
+                      on:input={(e) => handleInputAutocomplete(mesa.id, 'croupier_cierre', e.target.value)}
+                      on:keydown={(e) => handleKeyDownAutocomplete(e, mesa.id, 'croupier_cierre')}
+                      on:blur={() => handleBlurAutocomplete(mesa.id, 'croupier_cierre')}
+                      autocomplete="off"
+                    />
+
+                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_cierre' && filteredSuggestions.length > 0}
+                      <div class="inline-dropdown">
+                        <div class="inline-dropdown-header">
+                          <span>Sugerencias (<b>Tab ⇥</b> o clic):</span>
+                        </div>
+                        <ul class="inline-dropdown-list">
+                          {#each filteredSuggestions as sug, idx}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <li 
+                              class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
+                              on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_cierre', sug)}
+                            >
+                              <span class="sug-avatar">👤</span>
+                              <span class="sug-name">{sug}</span>
+                              <span class="sug-tab-badge">Tab ⇥</span>
+                            </li>
+                          {/each}
+                        </ul>
+                      </div>
+                    {/if}
+                  </div>
+                </td>
+
+                <!-- 6. HORA CIERRE (Con botón rápido Ahora) -->
+                <td class="td-center td-col-hora">
+                  <div class="inline-time-box">
+                    <input 
+                      type="time" 
+                      class="inline-time-input" 
+                      value={row.hora_cierre} 
+                      on:input={(e) => updateField(mesa.id, 'hora_cierre', e.target.value)}
+                      on:change={() => triggerAutoSave(mesa.id, 0)}
+                      on:blur={() => triggerAutoSave(mesa.id, 0)}
+                      title="Hora de Cierre"
+                    />
+                    <button 
+                      type="button" 
+                      class="btn-inline-now" 
+                      title="Establecer hora actual de cierre"
+                      on:click={() => {
+                        updateField(mesa.id, 'hora_cierre', getCurrentTimeString());
+                        triggerAutoSave(mesa.id, 0);
+                      }}
+                    >⚡</button>
+                  </div>
+                </td>
+
+                <!-- 7. OBSERVACIÓN -->
+                <td class="td-left td-col-obs">
+                  <input 
+                    type="text" 
+                    class="inline-text-input obs-input" 
+                    placeholder="VIP, cambio de paño, etc..." 
+                    value={row.observacion}
+                    on:input={(e) => updateField(mesa.id, 'observacion', e.target.value)}
+                    on:change={() => triggerAutoSave(mesa.id, 0)}
+                    on:blur={() => triggerAutoSave(mesa.id, 0)}
+                  />
+                </td>
+
+                <!-- 8. ESTADO / ACCIONES -->
+                <td class="td-center td-col-acciones">
+                  <div class="row-status-actions">
+                    {#if isSavingThis}
+                      <span class="status-saving-inline" title="Guardando cambios...">
+                        <span class="mini-spinner"></span>
+                      </span>
+                    {:else if isSavedThis}
+                      <span class="status-saved-inline" title="Guardado correctamente">
+                        ✓
+                      </span>
+                    {:else if hasData}
+                      <span class="status-persisted-dot" title="Registro activo en el libro"></span>
+                    {/if}
+
+                    {#if hasData || recordsMap.has(Number(mesa.id))}
                       <button 
                         type="button" 
-                        class="btn-action-icon edit"
-                        on:click={() => seleccionarMesaDesdeTabla(mesa.id)}
-                        title="Editar novedad de esta mesa"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        type="button" 
-                        class="btn-action-icon delete"
-                        on:click={() => handleEliminar(rec.id)}
-                        title="Eliminar novedad registrada"
+                        class="btn-inline-delete" 
+                        on:click={() => handleEliminar(mesa.id)}
+                        title="Limpiar y eliminar datos de esta mesa"
                       >
                         🗑️
-                      </button>
-                    {:else}
-                      <button 
-                        type="button" 
-                        class="btn-action-add"
-                        on:click={() => seleccionarMesaDesdeTabla(mesa.id)}
-                        title="Registrar novedad para esta mesa"
-                      >
-                        + Registrar
                       </button>
                     {/if}
                   </div>
                 </td>
+
               </tr>
             {/each}
           {/if}
@@ -820,361 +726,27 @@
 </div>
 
 <style>
-  .novedades-layout-grid {
-    display: grid;
-    grid-template-columns: 340px 1fr;
-    gap: 24px;
-    align-items: flex-start;
+  .novedades-full-container {
     width: 100%;
-    box-sizing: border-box;
-  }
-
-  @media (max-width: 1080px) {
-    .novedades-layout-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* ─────────────────────────────────────────────────────────────
-     Tarjeta Izquierda: Formulario
-  ───────────────────────────────────────────────────────────── */
-  .card-form-novedades {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .card-title-box {
-    margin-bottom: 2px;
-  }
-
-  .title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .card-title {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 700;
-    color: #1e293b;
-    letter-spacing: -0.2px;
-  }
-
-  .badge-edit {
-    font-size: 11px;
-    font-weight: 700;
-    background: #eff6ff;
-    color: #2563eb;
-    border: 1px solid #bfdbfe;
-    padding: 2px 8px;
-    border-radius: 10px;
-  }
-
-  .title-underline {
-    margin-top: 8px;
-    height: 2px;
-    background: #3b82f6;
-    width: 100%;
-    border-radius: 2px;
-  }
-
-  .novedades-form {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .autocomplete-group {
-    position: relative;
-  }
-
-  .input-container {
-    position: relative;
-    width: 100%;
-  }
-
-  .form-label {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: #334155;
-  }
-
-  .form-select {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    font-size: 13.5px;
-    color: #0f172a;
-    background-color: #ffffff;
-    outline: none;
-    transition: all 0.2s ease;
-    box-sizing: border-box;
-    font-weight: 600;
-  }
-
-  .form-select:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-
-  .time-dual-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-
-  .time-col {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .col-header-mini {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .mini-label {
-    font-size: 11.5px;
-    font-weight: 600;
-    color: #475569;
-  }
-
-  .btn-mini-now {
-    background: none;
-    border: none;
-    color: #2563eb;
-    font-size: 10.5px;
-    font-weight: 700;
-    cursor: pointer;
-    padding: 0;
-    transition: color 0.15s ease;
-  }
-
-  .btn-mini-now:hover {
-    color: #1d4ed8;
-    text-decoration: underline;
-  }
-
-  .form-time-input {
-    width: 100%;
-    padding: 6px 8px;
-    border: 1px solid #cbd5e1;
-    border-radius: 5px;
-    font-size: 13px;
-    color: #0f172a;
-    background-color: #ffffff;
-    outline: none;
-    box-sizing: border-box;
-    transition: all 0.2s ease;
-    font-family: inherit;
-  }
-
-  .form-time-input:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-
-  .form-text-input {
-    width: 100%;
-    padding: 7px 10px;
-    border: 1px solid #cbd5e1;
-    border-radius: 5px;
-    font-size: 13px;
-    color: #0f172a;
-    background-color: #ffffff;
-    outline: none;
-    box-sizing: border-box;
-    transition: all 0.2s ease;
-    font-family: inherit;
-  }
-
-  .form-text-input:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-
-  .form-textarea {
-    width: 100%;
-    padding: 8px 10px;
-    border: 1px solid #cbd5e1;
-    border-radius: 5px;
-    font-size: 13px;
-    color: #0f172a;
-    background-color: #ffffff;
-    outline: none;
-    box-sizing: border-box;
-    transition: all 0.2s ease;
-    font-family: inherit;
-    resize: vertical;
-  }
-
-  .form-textarea:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  }
-
-  /* Desplegable de Sugerencias */
-  .sugerencias-dropdown {
-    position: absolute;
-    top: calc(100% + 3px);
-    left: 0;
-    right: 0;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-    z-index: 100;
-    overflow: hidden;
-  }
-
-  .sugerencias-header {
-    background: #f8fafc;
-    padding: 5px 10px;
-    font-size: 11px;
-    color: #64748b;
-    border-bottom: 1px solid #e2e8f0;
-  }
-
-  .sugerencias-list {
-    list-style: none;
     margin: 0;
     padding: 0;
-    max-height: 180px;
-    overflow-y: auto;
-  }
-
-  .sugerencia-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 10px;
-    cursor: pointer;
-    font-size: 12.5px;
-    color: #1e293b;
-    border-bottom: 1px solid #f1f5f9;
-    transition: background 0.15s ease;
+    flex-direction: column;
+    box-sizing: border-box;
   }
 
-  .sugerencia-item:last-child {
-    border-bottom: none;
-  }
-
-  .sugerencia-item:hover,
-  .sugerencia-item.active {
-    background: #eff6ff;
-    color: #1d4ed8;
-  }
-
-  .sug-icon {
-    font-size: 12px;
-    opacity: 0.6;
-  }
-
-  .sug-text {
-    flex: 1;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .sug-tab-badge {
-    font-size: 10px;
-    background: #e2e8f0;
-    color: #475569;
-    padding: 2px 5px;
-    border-radius: 3px;
-    font-weight: 600;
-  }
-
-  .sugerencia-item.active .sug-tab-badge {
-    background: #bfdbfe;
-    color: #1e40af;
-  }
-
-  /* Botones del Form */
-  .form-btns-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 4px;
-  }
-
-  .btn-guardar {
-    flex: 1;
-    padding: 10px 16px;
-    background-color: #5bb87e;
-    color: #ffffff;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: 0 2px 4px rgba(91, 184, 126, 0.25);
-  }
-
-  .btn-guardar:hover:not(:disabled) {
-    background-color: #4ca66e;
-    box-shadow: 0 4px 8px rgba(91, 184, 126, 0.35);
-  }
-
-  .btn-guardar:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
-  }
-
-  .btn-limpiar {
-    padding: 10px 14px;
-    background-color: #f1f5f9;
-    color: #475569;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-limpiar:hover {
-    background-color: #e2e8f0;
-    color: #0f172a;
-  }
-
-  /* ─────────────────────────────────────────────────────────────
-     Tarjeta Derecha: Tabla de Novedades de Mesas
-  ───────────────────────────────────────────────────────────── */
-  .card-table-novedades {
+  .card-table-novedades.full-width {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    overflow: hidden;
     display: flex;
     flex-direction: column;
     width: 100%;
-    min-width: 0;
+    overflow: visible;
   }
 
+  /* Barra Superior Oscura */
   .table-top-bar {
     background: #54626f;
     color: #ffffff;
@@ -1183,21 +755,96 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 12px;
+    border-top-left-radius: 7px;
+    border-top-right-radius: 7px;
+  }
+
+  .top-bar-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .top-bar-title {
-    font-size: 14.5px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: 0.3px;
+  }
+
+  .top-bar-subtitle {
+    font-size: 12px;
+    color: #cbd5e1;
+  }
+
+  .top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  /* Buscador de cabecera */
+  .search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 8px;
+    font-size: 12px;
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  .search-input {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 20px;
+    padding: 5px 28px 5px 26px;
+    color: #ffffff;
+    font-size: 12px;
+    width: 230px;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .search-input::placeholder {
+    color: #cbd5e1;
+    font-size: 11.5px;
+  }
+
+  .search-input:focus {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  }
+
+  .btn-clear-search {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+
+  .btn-clear-search:hover {
+    opacity: 1;
   }
 
   .badge-status {
     font-size: 11.5px;
     font-weight: 700;
-    padding: 3px 10px;
+    padding: 4px 11px;
     border-radius: 12px;
     letter-spacing: 0.2px;
+    white-space: nowrap;
   }
 
   .badge-status.complete {
@@ -1210,9 +857,12 @@
     color: #ffffff;
   }
 
+  /* Tabla */
   .table-wrapper {
     overflow-x: auto;
     width: 100%;
+    min-height: 480px;
+    padding-bottom: 80px; /* Margen para que el dropdown de autocompletado inferior flote con soltura */
   }
 
   .novedades-table {
@@ -1228,79 +878,27 @@
   }
 
   .novedades-table th {
-    padding: 12px 14px;
-    font-size: 11.5px;
+    padding: 11px 12px;
+    font-size: 11px;
     font-weight: 800;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.4px;
     white-space: nowrap;
+    border-bottom: 2px solid #1e293b;
   }
 
   .th-center { text-align: center; }
   .th-left { text-align: left; }
-  .th-col-dual-hora { min-width: 125px; }
-  .th-mesa { min-width: 105px; }
-  .th-person { min-width: 135px; }
-  .th-col-dual-croupier { min-width: 175px; }
-  .th-obs { min-width: 120px; }
-  .th-acciones { width: 95px; }
 
-  .header-dual-stacked {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-  }
-
-  .header-dual-stacked.text-left {
-    align-items: flex-start;
-  }
-
-  .hdr-line {
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.3px;
-    white-space: nowrap;
-  }
-
-  .hdr-divider {
-    width: 100%;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  .cell-dual-stacked {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 0;
-  }
-
-  .cell-dual-stacked-left {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    padding: 2px 0;
-  }
-
-  .dual-row {
-    min-height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .dual-row-person {
-    min-height: 22px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
+  /* Anchos de columnas */
+  .th-col-hora { width: 125px; min-width: 125px; }
+  .th-col-mesa { width: 130px; min-width: 120px; }
+  .th-col-pitboss { width: 170px; min-width: 160px; }
+  .th-col-croupier { width: 190px; min-width: 175px; }
+  .th-col-obs { min-width: 180px; }
+  .th-col-acciones { width: 110px; min-width: 100px; }
 
   .novedad-row {
     border-bottom: 1px solid #f1f5f9;
-    cursor: pointer;
     transition: background 0.15s ease;
   }
 
@@ -1308,154 +906,290 @@
     background: #f8fafc;
   }
 
-  .novedad-row.row-selected {
-    background: #eff6ff !important;
+  .novedad-row.row-has-data {
+    background: #ffffff;
   }
 
   .novedades-table td {
-    padding: 10px 14px;
+    padding: 8px 10px;
     vertical-align: middle;
   }
 
   .td-center { text-align: center; }
   .td-left { text-align: left; }
 
-  .td-mesa {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  /* Input de Tiempo con botón Ahora */
+  .inline-time-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    padding: 2px 4px;
+    transition: border-color 0.15s ease;
   }
 
-  .mesa-badge-tag {
+  .inline-time-box:focus-within {
+    border-color: #3b82f6;
+    background: #ffffff;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  .inline-time-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #1e293b;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+
+  .btn-inline-now {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #bfdbfe;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 5px;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.15s ease;
+  }
+
+  .btn-inline-now:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  /* Ficha de Mesa */
+  .mesa-badge-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .mesa-nombre {
     font-weight: 800;
     color: #0f172a;
     font-size: 13px;
   }
 
-  .mesa-sub-juego {
+  .mesa-juego {
     font-size: 11px;
     color: #64748b;
+    font-weight: 500;
   }
 
-  .badge-hora {
-    display: inline-block;
-    padding: 3px 8px;
-    font-weight: 800;
-    font-size: 12px;
-    border-radius: 4px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .badge-apertura {
-    background: #eff6ff;
-    color: #1e40af;
-    border: 1px solid #bfdbfe;
-  }
-
-  .badge-cierre {
-    background: #fef2f2;
-    color: #991b1b;
-    border: 1px solid #fecaca;
-  }
-
-  .badge-vacio, .empty-dash {
-    color: #94a3b8;
-    font-weight: 600;
-  }
-
-  .person-name {
-    font-weight: 600;
-    color: #1e293b;
+  /* Input de Texto en Celda */
+  .inline-text-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 9px;
     font-size: 12.5px;
-  }
-
-  .obs-tag {
-    display: inline-block;
-    background: #f1f5f9;
-    color: #334155;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 11.5px;
-    font-weight: 700;
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    border: 1px solid #e2e8f0;
-  }
-
-  .row-actions-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .btn-action-icon {
-    background: none;
-    border: 1px solid transparent;
-    cursor: pointer;
-    padding: 4px 6px;
-    border-radius: 4px;
-    font-size: 13px;
+    color: #1e293b;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    outline: none;
     transition: all 0.15s ease;
   }
 
-  .btn-action-icon.edit:hover {
-    background: #eff6ff;
-    border-color: #bfdbfe;
+  .inline-text-input:focus,
+  .inline-text-input.input-active {
+    background: #ffffff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
   }
 
-  .btn-action-icon.delete:hover {
+  .inline-text-input.obs-input {
+    border-color: #e2e8f0;
+    background: #fdfdfd;
+  }
+
+  .inline-text-input.obs-input:focus {
+    border-color: #3b82f6;
+    background: #ffffff;
+  }
+
+  /* Autocompletado flotante dentro de la celda */
+  .cell-autocomplete-container {
+    position: relative;
+    width: 100%;
+  }
+
+  .inline-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 100%;
+    min-width: 200px;
+    background: #ffffff;
+    border: 1px solid #3b82f6;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    overflow: hidden;
+  }
+
+  .inline-dropdown-header {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 4px 8px;
+    font-size: 10.5px;
+    color: #64748b;
+  }
+
+  .inline-dropdown-header b {
+    color: #2563eb;
+  }
+
+  .inline-dropdown-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .inline-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #1e293b;
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.15s ease;
+  }
+
+  .inline-dropdown-item:last-child {
+    border-bottom: none;
+  }
+
+  .inline-dropdown-item:hover,
+  .inline-dropdown-item.selected {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .sug-avatar {
+    font-size: 11px;
+    opacity: 0.6;
+  }
+
+  .sug-name {
+    flex: 1;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sug-tab-badge {
+    font-size: 9.5px;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  .inline-dropdown-item.selected .sug-tab-badge {
+    background: #bfdbfe;
+    color: #1e40af;
+  }
+
+  /* Estado y Acciones de Fila */
+  .row-status-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .status-saving-inline {
+    display: flex;
+    align-items: center;
+  }
+
+  .mini-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #cbd5e1;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  .status-saved-inline {
+    font-size: 12px;
+    font-weight: 800;
+    color: #16a34a;
+    background: #dcfce7;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .status-persisted-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .btn-inline-delete {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    opacity: 0.6;
+    transition: all 0.15s ease;
+  }
+
+  .btn-inline-delete:hover {
+    opacity: 1;
     background: #fef2f2;
     border-color: #fecaca;
   }
 
-  .btn-action-add {
-    background: #f1f5f9;
-    color: #2563eb;
-    border: 1px solid #cbd5e1;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 4px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    white-space: nowrap;
-  }
-
-  .btn-action-add:hover {
-    background: #eff6ff;
-    border-color: #3b82f6;
-    color: #1d4ed8;
-  }
-
+  /* Estados vacíos */
   .empty-state-cell {
-    padding: 40px 20px;
     text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
   }
 
   .loading-state-inline {
-    display: inline-flex;
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: 10px;
-    color: #64748b;
-    font-size: 13px;
+    font-size: 13.5px;
+    color: #475569;
   }
 
   .spinner-small {
-    width: 16px;
-    height: 16px;
-    border: 2px solid #cbd5e1;
-    border-top-color: #2563eb;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e2e8f0;
+    border-top-color: #3b82f6;
     border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+    animation: spin 0.8s linear infinite;
   }
 
   .empty-msg-box {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .empty-icon {
@@ -1463,12 +1197,25 @@
   }
 
   .empty-text {
-    margin: 0;
-    color: #64748b;
     font-size: 13px;
+    color: #64748b;
+    margin: 0;
   }
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 900px) {
+    .table-top-bar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .top-bar-right {
+      justify-content: space-between;
+    }
+    .search-input {
+      width: 100%;
+    }
   }
 </style>
