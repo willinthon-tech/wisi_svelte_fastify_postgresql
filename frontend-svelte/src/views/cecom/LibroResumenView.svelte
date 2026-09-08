@@ -420,10 +420,6 @@
         <span class="date-badge">{dateParts.formatted}</span>
       </div>
       <div class="tools-right">
-        <button type="button" class="btn-tool btn-share" on:click={handleCopiarEnlace} title="Copiar enlace para compartir">
-          <span>🔗</span>
-          <span>Compartir</span>
-        </button>
         <button type="button" class="btn-tool btn-print" on:click={handleImprimir} title="Imprimir reporte">
           <span>🖨️</span>
           <span>Imprimir</span>
@@ -454,15 +450,15 @@
         </div>
 
         <div class="header-actions-group">
-          <!-- BOTÓN COMPARTIR -->
+          <!-- BOTÓN IMPRIMIR -->
           <button
             type="button"
-            class="btn-action-share"
-            on:click={handleCopiarEnlace}
-            title="Copiar enlace público del reporte para compartir"
+            class="btn-action-print"
+            on:click={handleImprimir}
+            title="Imprimir reporte oficial consolidado"
           >
-            <span class="share-icon">🔗</span>
-            <span>Compartir</span>
+            <span class="print-icon">🖨️</span>
+            <span>Imprimir</span>
           </button>
 
           <!-- BOTÓN PRINCIPAL: "Generar Reporte" (si no existe) o "Actualizar Reporte" (si ya existe) -->
@@ -1177,9 +1173,9 @@
     flex-wrap: wrap;
   }
 
-  /* Botón Compartir al lado de Actualizar Reporte */
-  .btn-action-share {
-    background: #0284c7;
+  /* Botón Imprimir al lado de Actualizar Reporte */
+  .btn-action-print {
+    background: #059669;
     color: #ffffff;
     border: none;
     border-radius: 8px;
@@ -1190,13 +1186,13 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
     transition: all 0.15s ease;
   }
-  .btn-action-share:hover {
-    background: #0369a1;
+  .btn-action-print:hover {
+    background: #047857;
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.32);
+    box-shadow: 0 6px 16px rgba(5, 150, 105, 0.32);
   }
 
   /* Botón Principal (Generar / Actualizar Reporte) */
@@ -2350,56 +2346,158 @@
   /* ─────────────────────────────────────────────────────────────
      OPTIMIZACIÓN PARA IMPRESIÓN (window.print() / PDF)
      ───────────────────────────────────────────────────────────── */
-  @media print {
-    .no-print {
-      display: none !important;
-    }
+  @page {
+    size: auto;
+    margin: 8mm 6mm;
+  }
 
-    body, html {
+  @media print {
+    /* 1. Reset Global de HTML y BODY */
+    :global(html),
+    :global(body) {
       background: #ffffff !important;
       padding: 0 !important;
       margin: 0 !important;
+      height: auto !important;
+      min-height: 100% !important;
+      overflow: visible !important;
+      overflow-x: visible !important;
+      overflow-y: visible !important;
+      width: 100% !important;
+      font-size: 11px !important;
     }
 
-    .resumen-reporte-wrapper {
+    /* 2. Desenlazar contenedores raíz del layout para permitir paginación fluida */
+    :global(#app),
+    :global(.standalone-public-report),
+    :global(.app-layout),
+    :global(.main-wrapper),
+    :global(.content-body),
+    :global(.libro-trabajo-container),
+    :global(.subvista-content-area) {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+      overflow-x: visible !important;
+      overflow-y: visible !important;
+      display: block !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
       padding: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+      position: static !important;
+      transform: none !important;
       background: #ffffff !important;
     }
 
+    /* 3. Ocultar todos los elementos de navegación y herramientas */
+    :global(.no-print),
+    :global(.sidebar),
+    :global(.sidebar-container),
+    :global(.sidebar-backdrop),
+    :global(.top-navbar),
+    :global(.navbar),
+    :global(.page-header),
+    :global(.top-nav-bar),
+    :global(.subvistas-tabs-wrapper),
+    :global(.resumen-overview-card),
+    :global(.report-tools-bar),
+    :global(.offline-banner),
+    :global(footer),
+    .no-print {
+      display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
+      width: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    /* 4. Forzar visibilidad y fidelidad cromática del documento consolidado */
+    .official-sheet-container,
+    .official-sheet-container * {
+      visibility: visible !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .resumen-reporte-wrapper {
+      display: block !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: #ffffff !important;
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      width: 100% !important;
+    }
+
     .official-sheet-container {
+      display: block !important;
       border: none !important;
       box-shadow: none !important;
-      padding: 10px !important;
+      padding: 2px 4px !important;
+      margin: 0 auto !important;
+      width: 100% !important;
       max-width: 100% !important;
+      height: auto !important;
+      min-height: 0 !important;
+      background: #ffffff !important;
+      overflow: visible !important;
     }
 
-    .sub-module-section {
-      display: block !important;
-      page-break-inside: avoid;
+    /* 5. Reglas de Paginación y Saltos de Hoja */
+    .sheet-header {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+      margin-bottom: 12px !important;
     }
 
+    .sub-module-section,
     .official-incidencias-block {
       display: block !important;
-      page-break-inside: avoid;
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+      overflow: visible !important;
+      margin-bottom: 14px !important;
     }
 
     .sheet-official-table {
-      page-break-inside: auto;
+      width: 100% !important;
+      border-collapse: collapse !important;
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+
+    .sheet-official-table thead {
+      display: table-header-group !important;
     }
 
     .sheet-official-table tr {
-      page-break-inside: avoid;
-      page-break-after: auto;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
 
     .sheet-footer-signatures {
-      page-break-inside: avoid;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+      display: flex !important;
+      flex-direction: row !important;
+      justify-content: space-between !important;
+      margin-top: 24px !important;
+      padding-top: 10px !important;
     }
 
     .incidencias-bloque-tres {
       display: grid !important;
       grid-template-columns: repeat(3, 1fr) !important;
-      page-break-inside: avoid;
+      gap: 12px !important;
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+      align-items: stretch !important;
     }
 
     .incidencia-subbloque-content {
@@ -2410,7 +2508,9 @@
     .client-summaries-grid {
       display: grid !important;
       grid-template-columns: repeat(2, 1fr) !important;
-      page-break-inside: avoid;
+      gap: 12px !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
     }
   }
 

@@ -1653,7 +1653,7 @@
       margin: 14mm;
     }
 
-    :global(body *) {
+    :global(body:has(.monthly-calendar-card) *) {
       visibility: hidden !important;
     }
 
