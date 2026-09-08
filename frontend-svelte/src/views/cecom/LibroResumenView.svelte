@@ -2340,7 +2340,7 @@
      ───────────────────────────────────────────────────────────── */
   @page {
     size: portrait;
-    margin: 4mm 3mm;
+    margin: 14mm;
   }
 
   @media print {
@@ -2432,7 +2432,7 @@
       border: 1.5px solid #0f172a !important;
       box-shadow: none !important;
       border-radius: 0 !important;
-      padding: 6px 8px !important;
+      padding: 14px 18px !important;
       margin: 0 auto !important;
       width: 100% !important;
       max-width: 100% !important;
@@ -2441,6 +2441,8 @@
       background: #ffffff !important;
       overflow: visible !important;
       box-sizing: border-box !important;
+      -webkit-box-decoration-break: clone !important;
+      box-decoration-break: clone !important;
     }
 
     /* 5. Reglas de Paginación y Saltos de Hoja */
