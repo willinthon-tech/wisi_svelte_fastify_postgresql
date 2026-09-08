@@ -37,7 +37,8 @@ import {
   getLibroDropMesasModel, createLibroDropMesaModel, deleteLibroDropMesaModel,
   getLibroControlLlavesModel, createLibroControlLlavesModel, updateLibroControlLlavesHorasModel, deleteLibroControlLlavesModel,
   getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel,
-  getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel
+  getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel,
+  getLibroDatosModel, saveLibroDatosModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2255,6 +2256,24 @@ export async function deleteLibroControlCliente(request, reply) {
   }
 }
 
+// --- DATOS OPERATIVOS DEL LIBRO (CECOM: LIBRO DATOS) ---
+export async function getLibroDatos(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroDatosModel(id);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
 
-
-
+export async function saveLibroDatos(request, reply) {
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const result = await saveLibroDatosModel(id, body);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}

@@ -7,6 +7,7 @@
   import LibroControlLlavesView from './LibroControlLlavesView.svelte';
   import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
   import LibroControlClientesView from './LibroControlClientesView.svelte';
+  import LibroDatosView from './LibroDatosView.svelte';
 
   export let libroId = null;
 
@@ -16,6 +17,7 @@
 
   // Subvistas disponibles
   const SUBVISTAS = [
+    { id: 'datos', label: 'Datos', icon: '📋', description: 'Horarios operativos de sala y asignación de operadores' },
     { id: 'drop-mesas', label: 'Drop Mesas', icon: '🎲', description: 'Registro y cuadre de drop de mesas en vivo' },
     { id: 'control-llaves', label: 'Control Llaves', icon: '🔑', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '⚠️', description: 'Eventos e incidentes reportados en sala' },
@@ -23,7 +25,7 @@
     { id: 'resumen-libro', label: 'Resumen Libro', icon: '📊', description: 'Consolidado general y auditoría de la jornada' }
   ];
 
-  let activeSubvista = 'drop-mesas';
+  let activeSubvista = 'datos';
 
   // Suscribirse a cambios en currentRouteStore para sincronizar la subvista
   let unsubRoute = null;
@@ -43,7 +45,7 @@
       if (parsedSub && SUBVISTAS.some(s => s.id === parsedSub)) {
         activeSubvista = parsedSub;
       } else if (!parsedSub) {
-        activeSubvista = 'drop-mesas';
+        activeSubvista = 'datos';
       }
     }
   }
@@ -195,7 +197,9 @@
         <button type="button" class="btn-retry" on:click={() => loadLibro(libroId)}>Reintentar</button>
       </div>
     {:else}
-      {#if activeSubvista === 'drop-mesas'}
+      {#if activeSubvista === 'datos'}
+        <LibroDatosView {libro} {libroId} />
+      {:else if activeSubvista === 'drop-mesas'}
         <LibroDropMesasView {libro} {libroId} />
       {:else if activeSubvista === 'control-llaves'}
         <LibroControlLlavesView {libro} {libroId} />

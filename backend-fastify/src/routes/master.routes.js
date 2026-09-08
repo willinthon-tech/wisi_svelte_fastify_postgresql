@@ -38,7 +38,8 @@ import {
   getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
   getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves,
   getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral,
-  getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente
+  getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente,
+  getLibroDatos, saveLibroDatos
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -290,6 +291,15 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/libros/:id/control-clientes/:controlId', updateLibroControlCliente);
   fastify.delete('/master/libros/:id/control-clientes/:controlId', deleteLibroControlCliente);
   fastify.delete('/api/master/libros/:id/control-clientes/:controlId', deleteLibroControlCliente);
+
+  // Datos Operativos (CECOM: Libro Datos)
+  fastify.get('/master/libros/:id/datos', getLibroDatos);
+  fastify.get('/api/master/libros/:id/datos', getLibroDatos);
+  fastify.post('/master/libros/:id/datos', saveLibroDatos);
+  fastify.post('/api/master/libros/:id/datos', saveLibroDatos);
+  fastify.put('/master/libros/:id/datos', saveLibroDatos);
+  fastify.put('/api/master/libros/:id/datos', saveLibroDatos);
+
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)

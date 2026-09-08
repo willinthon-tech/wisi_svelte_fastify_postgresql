@@ -8052,5 +8052,147 @@ export async function deleteLibroControlClienteModel(id, libroId) {
   return { success: true, id: cId };
 }
 
+// --- DATOS DEL LIBRO (CECOM: LIBRO DATOS OPERATIVOS) ---
+export async function getLibroDatosModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_datos = inMemoryData.libro_datos || [];
+    const found = inMemoryData.libro_datos.find(d => Number(d.libro_id) === lId);
+    return found || null;
+  }
+
+  const rows = await sql`
+    SELECT 
+      id, libro_id,
+      apertura_sala_inicio, apertura_sala_fin,
+      apertura_maquinas_inicio, apertura_maquinas_fin,
+      apertura_bingo_inicio, apertura_bingo_fin,
+      retiros_dropbox_inicio, retiros_dropbox_fin,
+      conteo_dropbox_inicio, conteo_dropbox_fin,
+      operador_turno_a, operador_turno_c,
+      created_at, updated_at
+    FROM libro_datos
+    WHERE libro_id = ${lId}
+    LIMIT 1
+  `;
+
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function saveLibroDatosModel(libroId, data) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  const aperturaSalaInicio = (data.apertura_sala_inicio || '').trim() || null;
+  const aperturaSalaFin = (data.apertura_sala_fin || '').trim() || null;
+  const aperturaMaquinasInicio = (data.apertura_maquinas_inicio || '').trim() || null;
+  const aperturaMaquinasFin = (data.apertura_maquinas_fin || '').trim() || null;
+  const aperturaBingoInicio = (data.apertura_bingo_inicio || '').trim() || null;
+  const aperturaBingoFin = (data.apertura_bingo_fin || '').trim() || null;
+  const retirosDropboxInicio = (data.retiros_dropbox_inicio || '').trim() || null;
+  const retirosDropboxFin = (data.retiros_dropbox_fin || '').trim() || null;
+  const conteoDropboxInicio = (data.conteo_dropbox_inicio || '').trim() || null;
+  const conteoDropboxFin = (data.conteo_dropbox_fin || '').trim() || null;
+  const operadorTurnoA = (data.operador_turno_a || '').trim() || null;
+  const operadorTurnoC = (data.operador_turno_c || '').trim() || null;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_datos = inMemoryData.libro_datos || [];
+    let idx = inMemoryData.libro_datos.findIndex(d => Number(d.libro_id) === lId);
+    if (idx !== -1) {
+      inMemoryData.libro_datos[idx] = {
+        ...inMemoryData.libro_datos[idx],
+        apertura_sala_inicio: aperturaSalaInicio,
+        apertura_sala_fin: aperturaSalaFin,
+        apertura_maquinas_inicio: aperturaMaquinasInicio,
+        apertura_maquinas_fin: aperturaMaquinasFin,
+        apertura_bingo_inicio: aperturaBingoInicio,
+        apertura_bingo_fin: aperturaBingoFin,
+        retiros_dropbox_inicio: retirosDropboxInicio,
+        retiros_dropbox_fin: retirosDropboxFin,
+        conteo_dropbox_inicio: conteoDropboxInicio,
+        conteo_dropbox_fin: conteoDropboxFin,
+        operador_turno_a: operadorTurnoA,
+        operador_turno_c: operadorTurnoC,
+        updated_at: new Date().toISOString()
+      };
+      return inMemoryData.libro_datos[idx];
+    } else {
+      const nextId = (inMemoryData.libro_datos.length > 0)
+        ? Math.max(...inMemoryData.libro_datos.map(d => d.id)) + 1
+        : 1;
+      const newRecord = {
+        id: nextId,
+        libro_id: lId,
+        apertura_sala_inicio: aperturaSalaInicio,
+        apertura_sala_fin: aperturaSalaFin,
+        apertura_maquinas_inicio: aperturaMaquinasInicio,
+        apertura_maquinas_fin: aperturaMaquinasFin,
+        apertura_bingo_inicio: aperturaBingoInicio,
+        apertura_bingo_fin: aperturaBingoFin,
+        retiros_dropbox_inicio: retirosDropboxInicio,
+        retiros_dropbox_fin: retirosDropboxFin,
+        conteo_dropbox_inicio: conteoDropboxInicio,
+        conteo_dropbox_fin: conteoDropboxFin,
+        operador_turno_a: operadorTurnoA,
+        operador_turno_c: operadorTurnoC,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      inMemoryData.libro_datos.push(newRecord);
+      return newRecord;
+    }
+  }
+
+  const rows = await sql`
+    INSERT INTO libro_datos (
+      libro_id,
+      apertura_sala_inicio, apertura_sala_fin,
+      apertura_maquinas_inicio, apertura_maquinas_fin,
+      apertura_bingo_inicio, apertura_bingo_fin,
+      retiros_dropbox_inicio, retiros_dropbox_fin,
+      conteo_dropbox_inicio, conteo_dropbox_fin,
+      operador_turno_a, operador_turno_c
+    )
+    VALUES (
+      ${lId},
+      ${aperturaSalaInicio}, ${aperturaSalaFin},
+      ${aperturaMaquinasInicio}, ${aperturaMaquinasFin},
+      ${aperturaBingoInicio}, ${aperturaBingoFin},
+      ${retirosDropboxInicio}, ${retirosDropboxFin},
+      ${conteoDropboxInicio}, ${conteoDropboxFin},
+      ${operadorTurnoA}, ${operadorTurnoC}
+    )
+    ON CONFLICT (libro_id) DO UPDATE SET
+      apertura_sala_inicio = EXCLUDED.apertura_sala_inicio,
+      apertura_sala_fin = EXCLUDED.apertura_sala_fin,
+      apertura_maquinas_inicio = EXCLUDED.apertura_maquinas_inicio,
+      apertura_maquinas_fin = EXCLUDED.apertura_maquinas_fin,
+      apertura_bingo_inicio = EXCLUDED.apertura_bingo_inicio,
+      apertura_bingo_fin = EXCLUDED.apertura_bingo_fin,
+      retiros_dropbox_inicio = EXCLUDED.retiros_dropbox_inicio,
+      retiros_dropbox_fin = EXCLUDED.retiros_dropbox_fin,
+      conteo_dropbox_inicio = EXCLUDED.conteo_dropbox_inicio,
+      conteo_dropbox_fin = EXCLUDED.conteo_dropbox_fin,
+      operador_turno_a = EXCLUDED.operador_turno_a,
+      operador_turno_c = EXCLUDED.operador_turno_c,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING 
+      id, libro_id,
+      apertura_sala_inicio, apertura_sala_fin,
+      apertura_maquinas_inicio, apertura_maquinas_fin,
+      apertura_bingo_inicio, apertura_bingo_fin,
+      retiros_dropbox_inicio, retiros_dropbox_fin,
+      conteo_dropbox_inicio, conteo_dropbox_fin,
+      operador_turno_a, operador_turno_c,
+      created_at, updated_at
+  `;
+
+  return rows[0];
+}
+
+
 
 
