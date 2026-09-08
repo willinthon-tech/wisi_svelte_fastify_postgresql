@@ -201,6 +201,8 @@
         <LibroControlLlavesView {libro} {libroId} />
       {:else if activeSubvista === 'incidencias-generales'}
         <LibroIncidenciasGeneralesView {libro} {libroId} />
+      {:else if activeSubvista === 'control-clientes'}
+        <LibroControlClientesView {libro} {libroId} />
       {:else}
         <!-- Workspace Card de la Subvista Activa -->
         <div class="subvista-workspace-card">
@@ -222,9 +224,7 @@
 
           <!-- Dynamic Subview Workspace Placeholder / Module Body -->
           <div class="workspace-body">
-            {#if activeSubvista === 'control-clientes'}
-              <LibroControlClientesView {libro} {libroId} />
-            {:else if activeSubvista === 'resumen-libro'}
+            {#if activeSubvista === 'resumen-libro'}
             <div class="sub-panel">
               <div class="resumen-container">
                 <div class="resumen-header-banner">
