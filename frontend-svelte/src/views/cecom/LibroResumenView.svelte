@@ -382,8 +382,8 @@
     return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
-  // Copiar enlace para compartir
-  async function handleCopiarEnlace() {
+  // Copiar enlace y abrir vista de compartir
+  async function handleCompartir() {
     const id = libroId || libro?.id || resumenData.libro?.id;
     if (!id) return;
     const shareUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${id}`);
@@ -398,10 +398,12 @@
         document.execCommand('copy');
         document.body.removeChild(input);
       }
-      triggerToast(`Enlace copiado al portapapeles: /#/reportes/cecom/libro/${id}`, 'success');
+      triggerToast(`Enlace copiado al portapapeles`, 'success');
     } catch (e) {
       prompt('Copia el enlace del reporte:', shareUrl);
     }
+    // Abrir la vista de compartir en una nueva pestaña
+    window.open(shareUrl, '_blank');
   }
 
   function handleImprimir() {
@@ -450,15 +452,15 @@
         </div>
 
         <div class="header-actions-group">
-          <!-- BOTÓN IMPRIMIR -->
+          <!-- BOTÓN COMPARTIR -->
           <button
             type="button"
-            class="btn-action-print"
-            on:click={handleImprimir}
-            title="Imprimir reporte oficial consolidado"
+            class="btn-action-share"
+            on:click={handleCompartir}
+            title="Abrir vista de compartir y copiar enlace al portapapeles"
           >
-            <span class="print-icon">🖨️</span>
-            <span>Imprimir</span>
+            <span class="share-icon">🔗</span>
+            <span>Compartir</span>
           </button>
 
           <!-- BOTÓN PRINCIPAL: "Generar Reporte" (si no existe) o "Actualizar Reporte" (si ya existe) -->
@@ -1173,9 +1175,9 @@
     flex-wrap: wrap;
   }
 
-  /* Botón Imprimir al lado de Actualizar Reporte */
-  .btn-action-print {
-    background: #059669;
+  /* Botón Compartir al lado de Actualizar Reporte */
+  .btn-action-share {
+    background: #0284c7;
     color: #ffffff;
     border: none;
     border-radius: 8px;
@@ -1186,13 +1188,13 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
     transition: all 0.15s ease;
   }
-  .btn-action-print:hover {
-    background: #047857;
+  .btn-action-share:hover {
+    background: #0369a1;
     transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(5, 150, 105, 0.32);
+    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.32);
   }
 
   /* Botón Principal (Generar / Actualizar Reporte) */
