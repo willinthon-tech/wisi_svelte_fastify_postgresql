@@ -14,7 +14,6 @@
   // Subvistas disponibles
   const SUBVISTAS = [
     { id: 'drop-mesas', label: 'Drop Mesas', icon: '🎲', description: 'Registro y cuadre de drop de mesas en vivo' },
-    { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '📋', description: 'Aperturas, cierres y novedades de mesas' },
     { id: 'novedades-maquinas', label: 'Novedades Máquinas', icon: '🎰', description: 'Novedades y reportes de máquinas de juego' },
     { id: 'control-llaves', label: 'Control Llaves', icon: '🔑', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '⚠️', description: 'Eventos e incidentes reportados en sala' },
@@ -217,19 +216,7 @@
 
           <!-- Dynamic Subview Workspace Placeholder / Module Body -->
           <div class="workspace-body">
-            {#if activeSubvista === 'novedades-mesas'}
-            <div class="sub-panel">
-              <div class="empty-workspace-state">
-                <span class="empty-icon">📋</span>
-                <h3>Novedades en Mesas de Juego</h3>
-                <p>Registra aperturas, quejas, cambios de crupier o inspecciones ocurridas durante la jornada.</p>
-                <button type="button" class="btn-primary" on:click={() => triggerToast('Registrar novedad de mesa...', 'info')}>
-                  + Registrar Novedad
-                </button>
-              </div>
-            </div>
-
-          {:else if activeSubvista === 'novedades-maquinas'}
+            {#if activeSubvista === 'novedades-maquinas'}
             <div class="sub-panel">
               <div class="empty-workspace-state">
                 <span class="empty-icon">🎰</span>
