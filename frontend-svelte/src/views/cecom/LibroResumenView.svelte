@@ -2347,8 +2347,8 @@
      OPTIMIZACIÓN PARA IMPRESIÓN (window.print() / PDF)
      ───────────────────────────────────────────────────────────── */
   @page {
-    size: auto;
-    margin: 15mm 12mm;
+    size: portrait;
+    margin: 8mm 6mm;
   }
 
   @media print {
@@ -2437,9 +2437,10 @@
 
     .official-sheet-container {
       display: block !important;
-      border: none !important;
+      border: 1.5px solid #0f172a !important;
       box-shadow: none !important;
-      padding: 8px 12px !important;
+      border-radius: 0 !important;
+      padding: 12px 14px !important;
       margin: 0 auto !important;
       width: 100% !important;
       max-width: 100% !important;
