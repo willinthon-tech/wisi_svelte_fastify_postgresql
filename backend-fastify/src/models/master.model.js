@@ -7428,11 +7428,32 @@ export async function createLibroDropMesaModel(data) {
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas || [];
+    const existingIdx = (inMemoryData.libro_drop_mesas || []).findIndex(
+      d => Number(d.libro_id) === libroId && Number(d.mesa_id) === mesaId
+    );
+
+    const mesa = (inMemoryData.mesas || []).find(m => Number(m.id) === mesaId) || {};
+
+    if (existingIdx !== -1) {
+      inMemoryData.libro_drop_mesas[existingIdx] = {
+        ...inMemoryData.libro_drop_mesas[existingIdx],
+        denominacion_100: b100,
+        denominacion_50: b50,
+        denominacion_20: b20,
+        denominacion_10: b10,
+        denominacion_5: b5,
+        denominacion_1: b1,
+        b100, b50, b20, b10, b5, b1,
+        total,
+        updated_at: new Date().toISOString()
+      };
+      return inMemoryData.libro_drop_mesas[existingIdx];
+    }
+
     const nextId = (inMemoryData.libro_drop_mesas.length > 0)
       ? Math.max(...inMemoryData.libro_drop_mesas.map(d => d.id)) + 1
       : 1;
 
-    const mesa = (inMemoryData.mesas || []).find(m => Number(m.id) === mesaId) || {};
     const newDrop = {
       id: nextId,
       libro_id: libroId,
@@ -7459,21 +7480,46 @@ export async function createLibroDropMesaModel(data) {
     return newDrop;
   }
 
-  const res = await sql`
-    INSERT INTO libro_drop_mesas (
-      libro_id, mesa_id, 
-      denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
-      total
-    )
-    VALUES (
-      ${libroId}, ${mesaId}, 
-      ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
-      ${total}
-    )
-    RETURNING *
+  // Comprobar si ya existe un registro previo para esta mesa en este libro
+  const existingRow = await sql`
+    SELECT id FROM libro_drop_mesas
+    WHERE libro_id = ${libroId} AND mesa_id = ${mesaId}
+    LIMIT 1
   `;
 
-  const inserted = res[0];
+  let insertedId = null;
+  if (existingRow.length > 0) {
+    const updated = await sql`
+      UPDATE libro_drop_mesas SET
+        denominacion_100 = ${b100},
+        denominacion_50 = ${b50},
+        denominacion_20 = ${b20},
+        denominacion_10 = ${b10},
+        denominacion_5 = ${b5},
+        denominacion_1 = ${b1},
+        total = ${total},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${existingRow[0].id}
+      RETURNING id
+    `;
+    insertedId = updated[0].id;
+  } else {
+    const res = await sql`
+      INSERT INTO libro_drop_mesas (
+        libro_id, mesa_id, 
+        denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
+        total
+      )
+      VALUES (
+        ${libroId}, ${mesaId}, 
+        ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
+        ${total}
+      )
+      RETURNING id
+    `;
+    insertedId = res[0].id;
+  }
+
   const details = await sql`
     SELECT 
       d.id,
@@ -7502,11 +7548,11 @@ export async function createLibroDropMesaModel(data) {
     JOIN mesas m ON d.mesa_id = m.id
     LEFT JOIN juegos j ON m.juego_id = j.id
     LEFT JOIN salas s ON m.sala_id = s.id
-    WHERE d.id = ${inserted.id}
+    WHERE d.id = ${insertedId}
     LIMIT 1
   `;
 
-  const finalRow = details[0] || inserted;
+  const finalRow = details[0] || { id: insertedId };
   return {
     ...finalRow,
     b100: finalRow.denominacion_100,

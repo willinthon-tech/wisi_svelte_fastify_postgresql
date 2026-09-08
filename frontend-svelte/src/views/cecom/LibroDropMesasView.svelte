@@ -15,12 +15,12 @@
 
   // Estado del formulario
   let selectedMesaId = '';
-  let b100 = 0;
-  let b50 = 0;
-  let b20 = 0;
-  let b10 = 0;
-  let b5 = 0;
-  let b1 = 0;
+  let b100 = '';
+  let b50 = '';
+  let b20 = '';
+  let b10 = '';
+  let b5 = '';
+  let b1 = '';
   let isSaving = false;
 
   // Lista de registros de drop
@@ -164,6 +164,9 @@
         const json = await res.json();
         if (json && json.success) {
           dropRecords = json.data || [];
+          if (selectedMesaId) {
+            handleMesaChange();
+          }
         }
       }
     } catch (err) {
@@ -171,6 +174,48 @@
     } finally {
       isLoadingRecords = false;
     }
+  }
+
+  // Al cambiar la mesa seleccionada, si ya tiene registro guardado, cargar sus valores
+  function handleMesaChange() {
+    if (!selectedMesaId) {
+      limpiarCampos();
+      return;
+    }
+
+    const existing = dropRecords.find(r => Number(r.mesa_id) === Number(selectedMesaId));
+    if (existing) {
+      const v100 = Number(existing.denominacion_100 ?? existing.b100 ?? 0);
+      const v50 = Number(existing.denominacion_50 ?? existing.b50 ?? 0);
+      const v20 = Number(existing.denominacion_20 ?? existing.b20 ?? 0);
+      const v10 = Number(existing.denominacion_10 ?? existing.b10 ?? 0);
+      const v5 = Number(existing.denominacion_5 ?? existing.b5 ?? 0);
+      const v1 = Number(existing.denominacion_1 ?? existing.b1 ?? 0);
+
+      // Si es 0, dejar vacío para no mostrar ceros molestos
+      b100 = v100 > 0 ? v100 : '';
+      b50 = v50 > 0 ? v50 : '';
+      b20 = v20 > 0 ? v20 : '';
+      b10 = v10 > 0 ? v10 : '';
+      b5 = v5 > 0 ? v5 : '';
+      b1 = v1 > 0 ? v1 : '';
+    } else {
+      limpiarCampos();
+    }
+  }
+
+  function limpiarCampos() {
+    b100 = '';
+    b50 = '';
+    b20 = '';
+    b10 = '';
+    b5 = '';
+    b1 = '';
+  }
+
+  function seleccionarMesaDesdeTabla(mesaId) {
+    selectedMesaId = String(mesaId);
+    handleMesaChange();
   }
 
   async function handleGuardar() {
@@ -208,12 +253,7 @@
         triggerToast('Registro de drop guardado exitosamente', 'success');
         // Reset form
         selectedMesaId = '';
-        b100 = 0;
-        b50 = 0;
-        b20 = 0;
-        b10 = 0;
-        b5 = 0;
-        b1 = 0;
+        limpiarCampos();
 
         await loadDropRecords();
       } else {
@@ -229,7 +269,7 @@
 
   async function handleEliminar(recordId) {
     const lId = libroId || libro?.id;
-    if (!confirm('¿Está seguro de eliminar este registro de drop?')) return;
+    if (!lId || !recordId) return;
 
     try {
       const res = await fetch(`/api/master/libros/${lId}/drop-mesas/${recordId}`, {
@@ -239,18 +279,15 @@
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'info');
         dropRecords = dropRecords.filter(r => Number(r.id) !== Number(recordId));
+        if (selectedMesaId && !dropRecords.some(r => Number(r.mesa_id) === Number(selectedMesaId))) {
+          limpiarCampos();
+        }
       } else {
         triggerToast(json?.error || 'Error al eliminar registro', 'error');
       }
     } catch (err) {
       console.error('Error al eliminar registro de drop:', err);
       triggerToast(`Error: ${err.message}`, 'error');
-    }
-  }
-
-  function handleInputFocus(e) {
-    if (e.target.value === '0') {
-      e.target.select();
     }
   }
 </script>
@@ -271,6 +308,7 @@
           id="select-mesa" 
           class="form-select" 
           bind:value={selectedMesaId}
+          on:change={handleMesaChange}
           required
         >
           <option value="">Seleccione una opción</option>
@@ -292,9 +330,9 @@
             type="number" 
             min="0" 
             step="1"
+            placeholder=""
             class="denom-input" 
             bind:value={b100} 
-            on:focus={handleInputFocus}
           />
         </div>
         <div class="denom-field">
@@ -304,9 +342,9 @@
             type="number" 
             min="0" 
             step="1"
+            placeholder=""
             class="denom-input" 
             bind:value={b50} 
-            on:focus={handleInputFocus}
           />
         </div>
 
@@ -318,9 +356,9 @@
             type="number" 
             min="0" 
             step="1"
+            placeholder=""
             class="denom-input" 
             bind:value={b20} 
-            on:focus={handleInputFocus}
           />
         </div>
         <div class="denom-field">
@@ -330,9 +368,9 @@
             type="number" 
             min="0" 
             step="1"
+            placeholder=""
             class="denom-input" 
             bind:value={b10} 
-            on:focus={handleInputFocus}
           />
         </div>
 
@@ -344,9 +382,9 @@
             type="number" 
             min="0" 
             step="1"
+            placeholder=""
             class="denom-input" 
             bind:value={b5} 
-            on:focus={handleInputFocus}
           />
         </div>
         <div class="denom-field">
@@ -356,9 +394,9 @@
             type="number" 
             min="0" 
             step="1"
+            placeholder=""
             class="denom-input" 
             bind:value={b1} 
-            on:focus={handleInputFocus}
           />
         </div>
       </div>
@@ -432,7 +470,12 @@
               {@const rec5 = Number(record.denominacion_5 ?? record.b5 ?? 0) || 0}
               {@const rec1 = Number(record.denominacion_1 ?? record.b1 ?? 0) || 0}
               {@const recTotal = Number(record.total) || 0}
-              <tr class="drop-row">
+              <tr 
+                class="drop-row {Number(selectedMesaId) === Number(record.mesa_id) ? 'row-selected' : ''}"
+                on:click={() => seleccionarMesaDesdeTabla(record.mesa_id)}
+                title="Haga clic para cargar y editar esta mesa"
+                style="cursor: pointer;"
+              >
                 <td class="td-center td-num">{idx + 1}</td>
                 <td class="td-mesa">{record.mesa_nombre || `Mesa #${record.mesa_id}`}</td>
                 <td class="td-center">{rec100}</td>
@@ -446,7 +489,7 @@
                   <button 
                     type="button" 
                     class="btn-eliminar"
-                    on:click={() => handleEliminar(record.id)}
+                    on:click|stopPropagation={() => handleEliminar(record.id)}
                     title="Eliminar este registro"
                   >
                     Eliminar
@@ -707,6 +750,10 @@
 
   .drop-row:hover {
     background: #f8fafc;
+  }
+
+  .drop-row.row-selected {
+    background: #e0f2fe !important;
   }
 
   .drop-table td {
