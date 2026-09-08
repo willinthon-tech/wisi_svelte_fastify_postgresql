@@ -443,12 +443,6 @@
             >×</button>
           {/if}
         </div>
-
-        {#if availableMesas.length > 0}
-          <span class="badge-status {mesasRegistradasCount === availableMesas.length ? 'complete' : 'partial'}">
-            {mesasRegistradasCount} de {availableMesas.length} mesas registradas
-          </span>
-        {/if}
       </div>
     </div>
 
@@ -464,7 +458,7 @@
             <th class="th-left th-col-croupier">CROUPIER CIERRE</th>
             <th class="th-center th-col-hora">HORA CIERRE</th>
             <th class="th-left th-col-obs">OBSERVACIÓN</th>
-            <th class="th-center th-col-acciones">ESTADO / ACCIONES</th>
+            <th class="th-center th-col-acciones">ACCIONES</th>
           </tr>
         </thead>
         <tbody>
@@ -688,19 +682,13 @@
                   />
                 </td>
 
-                <!-- 8. ESTADO / ACCIONES -->
+                <!-- 8. ACCIONES -->
                 <td class="td-center td-col-acciones">
                   <div class="row-status-actions">
                     {#if isSavingThis}
                       <span class="status-saving-inline" title="Guardando cambios...">
                         <span class="mini-spinner"></span>
                       </span>
-                    {:else if isSavedThis}
-                      <span class="status-saved-inline" title="Guardado correctamente">
-                        ✓
-                      </span>
-                    {:else if hasData}
-                      <span class="status-persisted-dot" title="Registro activo en el libro"></span>
                     {/if}
 
                     {#if hasData || recordsMap.has(Number(mesa.id))}
@@ -708,7 +696,7 @@
                         type="button" 
                         class="btn-inline-delete" 
                         on:click={() => handleEliminar(mesa.id)}
-                        title="Limpiar y eliminar datos de esta mesa"
+                        title="Limpiar novedad de esta mesa"
                       >
                         🗑️
                       </button>
