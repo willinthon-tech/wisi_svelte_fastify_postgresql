@@ -7242,6 +7242,28 @@ export async function getLibrosModel(params = {}) {
   return { success: true, data, total, page, limit, totalPages };
 }
 
+export async function getLibroByIdModel(id) {
+  const lId = Number(id);
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
+      FROM libros l
+      LEFT JOIN salas s ON l.sala_id = s.id
+      WHERE l.id = ${lId}
+      LIMIT 1
+    `;
+    if (rows && rows.length > 0) {
+      return { success: true, data: rows[0] };
+    }
+  } else {
+    const found = (inMemoryData.libros || []).find(l => Number(l.id) === lId);
+    if (found) {
+      return { success: true, data: found };
+    }
+  }
+  return { success: false, error: 'Libro no encontrado' };
+}
+
 export async function createLibroModel(data) {
   const cleanDesc = (data.descripcion || '').trim();
   if (!cleanDesc) throw new Error('La fecha del libro es obligatoria');

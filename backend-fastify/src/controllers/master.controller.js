@@ -33,7 +33,7 @@ import {
   getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel,
   getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel,
   getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
-  getLibrosModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel
+  getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2028,6 +2028,19 @@ export async function getLibrosFilterOptions(request, reply) {
 export async function getLibros(request, reply) {
   const result = await getLibrosModel(request.query);
   return reply.send(result);
+}
+
+export async function getLibroById(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await getLibroByIdModel(id);
+    if (!result.success) {
+      return reply.status(404).send(result);
+    }
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
 }
 
 export async function createLibro(request, reply) {

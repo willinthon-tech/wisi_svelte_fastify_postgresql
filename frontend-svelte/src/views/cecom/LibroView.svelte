@@ -21,6 +21,8 @@
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { navigateToRoute } from '../../controllers/router.store.js';
+  import { getPublicWebUrl } from '../../config/api.config.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
   $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
@@ -243,6 +245,34 @@
       });
     }
   }
+
+  function handleTrabajarLibro(event) {
+    const item = event.detail;
+    if (item && item.id) {
+      navigateToRoute(`cecom/libro/${item.id}`);
+    }
+  }
+
+  async function handleCompartirLibro(event) {
+    const item = event.detail;
+    if (!item || !item.id) return;
+    const shareUrl = getPublicWebUrl(`/#/cecom/libro/${item.id}`);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const input = document.createElement('input');
+        input.value = shareUrl;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      triggerToast(`Enlace del libro #${item.id} copiado al portapapeles`, 'success');
+    } catch (e) {
+      prompt('Copia el siguiente enlace del libro:', shareUrl);
+    }
+  }
 </script>
 
 <PaginatedDataTable 
@@ -259,14 +289,19 @@
   entityType="libro"
   uniqueByField="sala_id"
   actions={{ 
+    trabajar: true,
+    trabajarLabel: 'Trabajar',
     edit: true, 
-    delete: true, 
-    deleteLabel: 'Eliminar', 
-    deleteTitle: 'Eliminar Libro' 
+    editLabel: 'Editar Fecha',
+    compartir: true,
+    compartirLabel: 'Compartir',
+    delete: false 
   }}
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:create={handleCreate}
   on:saveInline={handleSaveInline}
+  on:trabajar={handleTrabajarLibro}
+  on:compartir={handleCompartirLibro}
   on:delete={handleDelete}
   on:batchDelete={handleBatchDelete}
 >

@@ -34,7 +34,7 @@ import {
   getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria,
   getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina,
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
-  getLibros, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro
+  getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -232,6 +232,8 @@ export default async function masterRoutes(fastify, options) {
   // Libros (CECOM: Libro)
   fastify.get('/master/libros', getLibros);
   fastify.get('/api/master/libros', getLibros);
+  fastify.get('/master/libros/:id', getLibroById);
+  fastify.get('/api/master/libros/:id', getLibroById);
   fastify.get('/master/libros/filter-options', getLibrosFilterOptions);
   fastify.get('/api/master/libros/filter-options', getLibrosFilterOptions);
   fastify.post('/master/libros', createLibro);

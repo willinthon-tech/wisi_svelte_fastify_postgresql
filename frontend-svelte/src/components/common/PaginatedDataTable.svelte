@@ -1601,6 +1601,16 @@
                       </button>
                     {/if}
 
+                    {#if actions.trabajar}
+                      <button
+                        type="button"
+                        class="btn-action btn-trabajar"
+                        title={actions.trabajarTitle || 'Trabajar'}
+                        on:click={() => dispatch('trabajar', item)}>
+                        {actions.trabajarLabel || 'Trabajar'}
+                      </button>
+                    {/if}
+
                     {#if actions.edit !== false}
                       {#if item.disabled || item.disableEdit || item.is_system}
                         <button 
@@ -1609,27 +1619,37 @@
                           disabled
                           style="opacity: 0.35; cursor: not-allowed;"
                           title="Plantilla base predeterminada">
-                          Editar
+                          {actions.editLabel || 'Editar'}
                         </button>
                       {:else}
                         {#if actions.editModal}
                           <button 
-                            type="button"
+                            type="button" 
                             class="btn-action btn-edit"
-                            title="Editar registro"
+                            title={actions.editTitle || 'Editar registro'}
                             on:click={() => dispatch('openEdit', item)}>
-                            Editar
+                            {actions.editLabel || 'Editar'}
                           </button>
                         {:else}
                           <button 
-                            type="button"
+                            type="button" 
                             class="btn-action btn-edit"
-                            title="Editar en la misma línea"
+                            title={actions.editTitle || 'Editar en la misma línea'}
                             on:click={() => startInlineEdit(item)}>
-                            Editar
+                            {actions.editLabel || 'Editar'}
                           </button>
                         {/if}
                       {/if}
+                    {/if}
+
+                    {#if actions.compartir}
+                      <button
+                        type="button"
+                        class="btn-action btn-compartir"
+                        title={actions.compartirTitle || 'Compartir'}
+                        on:click={() => dispatch('compartir', item)}>
+                        {actions.compartirLabel || 'Compartir'}
+                      </button>
                     {/if}
 
                     {#if actions.delete !== false}
@@ -2104,6 +2124,18 @@
     font-weight: 700;
   }
 
+  .btn-trabajar {
+    background: #16a34a;
+    color: #ffffff;
+    border-color: #15803d;
+    font-weight: 700;
+  }
+
+  .btn-trabajar:hover {
+    background: #15803d;
+    color: #ffffff;
+  }
+
   .btn-edit {
     color: #2563eb;
     border-color: #bfdbfe;
@@ -2112,6 +2144,18 @@
 
   .btn-edit:hover {
     background: #eff6ff;
+  }
+
+  .btn-compartir {
+    color: #7c3aed;
+    border-color: #ddd6fe;
+    background: #f5f3ff;
+    font-weight: 700;
+  }
+
+  .btn-compartir:hover {
+    background: #ede9fe;
+    color: #6d28d9;
   }
 
   .btn-desincorporate:hover {

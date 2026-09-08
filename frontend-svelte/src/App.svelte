@@ -27,6 +27,7 @@
 
   // Import CECOM Views
   import LibroView from "./views/cecom/LibroView.svelte";
+  import LibroTrabajoView from "./views/cecom/LibroTrabajoView.svelte";
   import LlavesView from "./views/cecom/LlavesView.svelte";
   import LlavesBorradasView from "./views/cecom/LlavesBorradasView.svelte";
 
@@ -414,6 +415,7 @@
 
   function isBuiltInTab(route) {
     const clean = String(route || '').split('?')[0].trim();
+    if (clean.startsWith('cecom/libro/') || clean.startsWith('libro/')) return true;
     return builtInTabs.includes(clean) || builtInTabs.includes(route);
   }
 
@@ -422,6 +424,7 @@
   }
 
   function getTabTitle(tab) {
+    if (String(tab || '').startsWith("cecom/libro/") || String(tab || '').startsWith("libro/")) return "Libro";
     if (tab === "dashboard") return "RRHH";
     if (tab === "datatable") return "Tabla de Datos y Modal (Data Table)";
     if (tab === "analytics") return "Analítica y Métricas";
@@ -774,7 +777,7 @@
         class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos')}
       >
         <!-- Page Title Header without breadcrumbs -->
-        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos'}
+        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos' && !String($currentRouteStore || '').startsWith('cecom/libro/') && !String($currentRouteStore || '').startsWith('libro/')}
           {@const currentTitle = getTabTitle($currentRouteStore)}
           {@const isConfM = String(currentTitle || '').toUpperCase().includes('CONF.M:') || String(currentTitle || '').toUpperCase().includes('CONF.M')}
           <div
@@ -826,6 +829,8 @@
           <SettingsView {healthStatus} />
 
           <!-- CECOM Module Views -->
+        {:else if String($currentRouteStore || '').startsWith('cecom/libro/') || String($currentRouteStore || '').startsWith('libro/')}
+          <LibroTrabajoView />
         {:else if $currentRouteStore === "cecom/libro" || $currentRouteStore === "libro" || $currentRouteStore === "libros"}
           <LibroView
             items={$itemsStore}
