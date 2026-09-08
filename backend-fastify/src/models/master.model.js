@@ -7621,7 +7621,7 @@ export async function getLibroControlLlavesModel(libroId) {
       ) AS llaves_detalle
     FROM libro_control_llaves cl
     WHERE cl.libro_id = ${lId}
-    ORDER BY cl.id ASC
+    ORDER BY cl.hora_salida DESC, cl.id DESC
   `;
 
   return rows;
@@ -7792,7 +7792,7 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
       id, libro_id, descripcion, hora, created_at, updated_at
     FROM libro_incidencias_generales
     WHERE libro_id = ${lId}
-    ORDER BY id ASC
+    ORDER BY hora DESC, id DESC
   `;
 
   return rows;

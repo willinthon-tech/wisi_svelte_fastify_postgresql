@@ -14,6 +14,14 @@
   let records = [];
   let isLoadingRecords = false;
 
+  // Ordenadas de más reciente a más antigua por hora
+  $: sortedRecords = [...records].sort((a, b) => {
+    const hA = a.hora || '';
+    const hB = b.hora || '';
+    if (hA !== hB) return hB.localeCompare(hA);
+    return Number(b.id) - Number(a.id);
+  });
+
   // Modal para editar hora
   let showModalHora = false;
   let editingRecord = null;
@@ -271,7 +279,7 @@
               </td>
             </tr>
           {:else}
-            {#each records as record, idx}
+            {#each sortedRecords as record, idx}
               <tr class="incidencia-row">
                 <td class="td-center td-num">{idx + 1}</td>
                 <td class="td-desc">

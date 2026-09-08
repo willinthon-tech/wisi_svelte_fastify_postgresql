@@ -23,6 +23,14 @@
   let records = [];
   let isLoadingRecords = false;
 
+  // Ordenados de más reciente a más antiguo por hora_salida
+  $: sortedRecords = [...records].sort((a, b) => {
+    const hA = a.hora_salida || '';
+    const hB = b.hora_salida || '';
+    if (hA !== hB) return hB.localeCompare(hA);
+    return Number(b.id) - Number(a.id);
+  });
+
   // Llaves cargadas del servidor o store
   let serverLlaves = [];
   let isLoadingLlaves = false;
@@ -484,7 +492,7 @@
               </td>
             </tr>
           {:else}
-            {#each records as record, idx}
+            {#each sortedRecords as record, idx}
               {@const numLlaves = record.llaves_ids ? record.llaves_ids.length : (record.llaves_detalle ? record.llaves_detalle.length : 0)}
               {@const singleLlaveName = numLlaves === 1 ? (record.llaves_detalle?.[0]?.nombre || getLlaveName(record.llaves_ids?.[0])) : ''}
               <tr class="llaves-row">
