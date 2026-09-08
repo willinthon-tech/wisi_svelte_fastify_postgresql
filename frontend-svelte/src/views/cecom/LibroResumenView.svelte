@@ -382,7 +382,7 @@
     return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
-  // Copiar enlace y abrir vista de compartir
+  // Copiar enlace al portapapeles
   async function handleCompartir() {
     const id = libroId || libro?.id || resumenData.libro?.id;
     if (!id) return;
@@ -398,12 +398,10 @@
         document.execCommand('copy');
         document.body.removeChild(input);
       }
-      triggerToast(`Enlace copiado al portapapeles`, 'success');
+      triggerToast(`Enlace copiado al portapapeles: /#/reportes/cecom/libro/${id}`, 'success');
     } catch (e) {
       prompt('Copia el enlace del reporte:', shareUrl);
     }
-    // Abrir la vista de compartir en una nueva pestaña
-    window.open(shareUrl, '_blank');
   }
 
   function handleImprimir() {
@@ -2350,7 +2348,7 @@
      ───────────────────────────────────────────────────────────── */
   @page {
     size: auto;
-    margin: 8mm 6mm;
+    margin: 15mm 12mm;
   }
 
   @media print {
@@ -2441,7 +2439,7 @@
       display: block !important;
       border: none !important;
       box-shadow: none !important;
-      padding: 2px 4px !important;
+      padding: 8px 12px !important;
       margin: 0 auto !important;
       width: 100% !important;
       max-width: 100% !important;
@@ -2449,6 +2447,7 @@
       min-height: 0 !important;
       background: #ffffff !important;
       overflow: visible !important;
+      box-sizing: border-box !important;
     }
 
     /* 5. Reglas de Paginación y Saltos de Hoja */
