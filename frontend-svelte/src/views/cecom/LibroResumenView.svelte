@@ -1515,14 +1515,6 @@
     cursor: not-allowed;
   }
 
-  .btn-share {
-    background: #3b82f6;
-    color: #ffffff;
-  }
-  .btn-share:hover {
-    background: #2563eb;
-  }
-
   .btn-print {
     background: #10b981;
     color: #ffffff;
@@ -2348,7 +2340,7 @@
      ───────────────────────────────────────────────────────────── */
   @page {
     size: portrait;
-    margin: 8mm 6mm;
+    margin: 4mm 3mm;
   }
 
   @media print {
@@ -2440,7 +2432,7 @@
       border: 1.5px solid #0f172a !important;
       box-shadow: none !important;
       border-radius: 0 !important;
-      padding: 12px 14px !important;
+      padding: 6px 8px !important;
       margin: 0 auto !important;
       width: 100% !important;
       max-width: 100% !important;
