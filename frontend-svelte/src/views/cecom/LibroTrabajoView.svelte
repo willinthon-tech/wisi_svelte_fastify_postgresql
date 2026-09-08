@@ -133,11 +133,6 @@
   <!-- Top Navigation Header -->
   <div class="top-nav-bar">
     <div class="nav-left">
-      <button type="button" class="btn-back" on:click={handleVolver} title="Volver a la lista de Libros">
-        <span class="icon">‹</span>
-        <span>Volver a Libros</span>
-      </button>
-
       <div class="header-titles">
         <div class="title-row">
           <h1 class="main-title">
@@ -159,9 +154,9 @@
     </div>
 
     <div class="nav-right">
-      <button type="button" class="btn-share" on:click={handleCompartir} title="Copiar enlace directo a esta subvista">
-        <span class="btn-icon">🔗</span>
-        <span>Compartir</span>
+      <button type="button" class="btn-back" on:click={handleVolver} title="Volver a la lista de Libros">
+        <span class="icon">‹</span>
+        <span>Volver a Libros</span>
       </button>
     </div>
   </div>

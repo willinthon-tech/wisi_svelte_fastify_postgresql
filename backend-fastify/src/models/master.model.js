@@ -7473,31 +7473,6 @@ export async function createLibroDropMesaModel(data) {
     RETURNING *
   `;
 
-  // Also sync to drop_mesas table if it exists
-  try {
-    await sql`
-      INSERT INTO drop_mesas (
-        id, libro_id, mesa_id, 
-        denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
-        total
-      )
-      VALUES (
-        ${res[0].id}, ${libroId}, ${mesaId}, 
-        ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
-        ${total}
-      )
-      ON CONFLICT (id) DO UPDATE SET
-        denominacion_100 = EXCLUDED.denominacion_100,
-        denominacion_50 = EXCLUDED.denominacion_50,
-        denominacion_20 = EXCLUDED.denominacion_20,
-        denominacion_10 = EXCLUDED.denominacion_10,
-        denominacion_5 = EXCLUDED.denominacion_5,
-        denominacion_1 = EXCLUDED.denominacion_1,
-        total = EXCLUDED.total,
-        updated_at = CURRENT_TIMESTAMP
-    `;
-  } catch (e) {}
-
   const inserted = res[0];
   const details = await sql`
     SELECT 
@@ -7560,13 +7535,6 @@ export async function deleteLibroDropMesaModel(id, libroId) {
     DELETE FROM libro_drop_mesas
     WHERE id = ${dropId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
   `;
-
-  try {
-    await sql`
-      DELETE FROM drop_mesas
-      WHERE id = ${dropId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    `;
-  } catch (e) {}
 
   return { success: true, id: dropId };
 }
