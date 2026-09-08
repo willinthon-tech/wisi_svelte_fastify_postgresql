@@ -293,8 +293,7 @@
     trabajarLabel: 'Trabajar',
     edit: true, 
     editLabel: 'Editar Fecha',
-    compartir: true,
-    compartirLabel: 'Compartir',
+    compartir: false,
     delete: false 
   }}
   on:fetchServerData={(e) => loadServerData(e.detail)}

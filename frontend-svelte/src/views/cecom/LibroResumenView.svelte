@@ -454,6 +454,17 @@
         </div>
 
         <div class="header-actions-group">
+          <!-- BOTÓN COMPARTIR -->
+          <button
+            type="button"
+            class="btn-action-share"
+            on:click={handleCopiarEnlace}
+            title="Copiar enlace público del reporte para compartir"
+          >
+            <span class="share-icon">🔗</span>
+            <span>Compartir</span>
+          </button>
+
           <!-- BOTÓN PRINCIPAL: "Generar Reporte" (si no existe) o "Actualizar Reporte" (si ya existe) -->
           <button
             type="button"
@@ -566,24 +577,22 @@
               <span class="item-num">4.</span>
               <span class="item-label">Retiro de dropbox general</span>
               <div class="item-values">
-                <span class="h-text">hora:</span>
-                <span class="h-val">
-                  {resumenData.datos?.retiros_dropbox_inicio ? `${resumenData.datos.retiros_dropbox_inicio}${resumenData.datos.retiros_dropbox_fin ? ' - ' + resumenData.datos.retiros_dropbox_fin : ''}` : '—'}
-                </span>
+                <span class="h-text">h inicio:</span>
+                <span class="h-val">{resumenData.datos?.retiros_dropbox_inicio || '—'}</span>
+                <span class="h-text">h cierre:</span>
+                <span class="h-val">{resumenData.datos?.retiros_dropbox_fin || '—'}</span>
               </div>
             </div>
 
-            <!-- 5. Se realiza conteo de dropbox -->
+            <!-- 5. Conteo DROP -->
             <div class="horario-item">
               <span class="item-num">5.</span>
-              <span class="item-label">Se realiza conteo de dropbox por:</span>
+              <span class="item-label">Conteo DROP</span>
               <div class="item-values">
                 <span class="h-text">h inicio:</span>
                 <span class="h-val">{resumenData.datos?.conteo_dropbox_inicio || '—'}</span>
-                <span class="h-text">h final:</span>
+                <span class="h-text">h cierre:</span>
                 <span class="h-val">{resumenData.datos?.conteo_dropbox_fin || '—'}</span>
-                <span class="h-text">Monto: $</span>
-                <span class="h-val highlight-money">{dropTotales.grandTotal ? dropTotales.grandTotal.toLocaleString('en-US') : '0'}</span>
               </div>
             </div>
 
@@ -748,10 +757,6 @@
                 {#each incidenciasBloque.mercancia as inc}
                   {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
                   <div class="incidencia-item-card">
-                    <div class="inc-item-header">
-                      <span class="inc-item-time">{inc.hora || 'S/H'}</span>
-                      <span class="inc-item-tag">{inc.tipo || 'Mercancía'}</span>
-                    </div>
                     <div class="inc-item-title-bold">{parsed.title}</div>
                     {#if parsed.items && parsed.items.length > 0}
                       <ul class="inc-subitems-list">
@@ -781,10 +786,6 @@
                 {#each incidenciasBloque.generales as inc}
                   {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
                   <div class="incidencia-item-card">
-                    <div class="inc-item-header">
-                      <span class="inc-item-time">{inc.hora || 'S/H'}</span>
-                      <span class="inc-item-tag">{inc.tipo || 'General'}</span>
-                    </div>
                     <div class="inc-item-title-bold">{parsed.title}</div>
                     {#if parsed.items && parsed.items.length > 0}
                       <ul class="inc-subitems-list">
@@ -814,10 +815,6 @@
                 {#each incidenciasBloque.empleado as inc}
                   {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
                   <div class="incidencia-item-card">
-                    <div class="inc-item-header">
-                      <span class="inc-item-time">{inc.hora || 'S/H'}</span>
-                      <span class="inc-item-tag">{inc.tipo || 'Empleado'}</span>
-                    </div>
                     <div class="inc-item-title-bold">{parsed.title}</div>
                     {#if parsed.items && parsed.items.length > 0}
                       <ul class="inc-subitems-list">
@@ -1075,7 +1072,7 @@
         </div>
 
         <div class="sheet-bottom-note">
-          Documento oficial consolidado emitido por el Sistema CECOM - WISI desde la tabla libro_reporte.
+          Documento oficial consolidado emitido por el Sistema WISI.
         </div>
       </div>
 
@@ -1178,6 +1175,28 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+  }
+
+  /* Botón Compartir al lado de Actualizar Reporte */
+  .btn-action-share {
+    background: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+    transition: all 0.15s ease;
+  }
+  .btn-action-share:hover {
+    background: #0369a1;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(2, 132, 199, 0.32);
   }
 
   /* Botón Principal (Generar / Actualizar Reporte) */
@@ -2076,6 +2095,7 @@
   .incidencias-bloque-tres {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
+    align-items: stretch;
     gap: 14px;
     margin-top: 12px;
   }
@@ -2093,6 +2113,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    height: 100%;
   }
 
   .incidencia-subbloque-header {
@@ -2130,8 +2151,10 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 380px;
-    overflow-y: auto;
+    flex: 1;
+    height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .incidencia-item-card {
@@ -2188,6 +2211,7 @@
   .client-summaries-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    align-items: stretch;
     gap: 16px;
     margin-top: 16px;
   }
@@ -2203,6 +2227,9 @@
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     overflow: hidden;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .subtable-header {
