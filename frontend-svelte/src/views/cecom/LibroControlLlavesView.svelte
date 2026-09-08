@@ -15,7 +15,6 @@
   // Estado del formulario
   let selectedLlavesIds = []; // Array de IDs seleccionados
   let descripcion = '';
-  let horaSalida = '';
   let isSaving = false;
   let isMultiselectOpen = false;
   let llaveSearchQuery = '';
@@ -104,7 +103,6 @@
   }
 
   onMount(async () => {
-    horaSalida = getCurrentTimeString();
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchServerLlaves(),
@@ -202,7 +200,7 @@
       const payload = {
         llaves_ids: selectedLlavesIds,
         descripcion: (descripcion || '').trim() || 'General',
-        hora_salida: (horaSalida || '').trim() || getCurrentTimeString()
+        hora_salida: getCurrentTimeString()
       };
 
       const res = await fetch(`/api/master/libros/${lId}/control-llaves`, {
@@ -217,7 +215,6 @@
         // Reset form
         selectedLlavesIds = [];
         descripcion = '';
-        horaSalida = getCurrentTimeString();
         isMultiselectOpen = false;
 
         await loadRecords();
@@ -429,18 +426,6 @@
         ></textarea>
       </div>
 
-      <!-- Hora de Salida -->
-      <div class="form-group">
-        <label for="input-hora-salida" class="form-label">Hora de Salida / Entrega:</label>
-        <input 
-          id="input-hora-salida" 
-          type="time" 
-          class="form-time-input" 
-          bind:value={horaSalida}
-        />
-        <span class="field-hint">Si se deja vacío, tomará la hora exacta de este momento.</span>
-      </div>
-
       <!-- Botón Guardar Verde -->
       <button 
         type="submit" 
@@ -500,20 +485,32 @@
           {:else}
             {#each records as record, idx}
               {@const numLlaves = record.llaves_ids ? record.llaves_ids.length : (record.llaves_detalle ? record.llaves_detalle.length : 0)}
+              {@const singleLlaveName = numLlaves === 1 ? (record.llaves_detalle?.[0]?.nombre || getLlaveName(record.llaves_ids?.[0])) : ''}
               <tr class="llaves-row">
                 <td class="td-center td-num">{idx + 1}</td>
                 <td class="td-desc">
                   <span class="desc-text">{record.descripcion || 'General'}</span>
                 </td>
                 <td class="td-center">
-                  <button 
-                    type="button" 
-                    class="btn-badge-llaves"
-                    on:click={() => abrirModalLlaves(record)}
-                    title="Ver listado de llaves asociadas"
-                  >
-                    🔑 {numLlaves} {numLlaves === 1 ? 'Llave' : 'Llaves'}
-                  </button>
+                  {#if numLlaves === 1}
+                    <button 
+                      type="button" 
+                      class="btn-badge-llaves btn-badge-single"
+                      on:click={() => abrirModalLlaves(record)}
+                      title="Ver detalle de la llave"
+                    >
+                      🔑 {singleLlaveName}
+                    </button>
+                  {:else}
+                    <button 
+                      type="button" 
+                      class="btn-badge-llaves"
+                      on:click={() => abrirModalLlaves(record)}
+                      title="Ver listado de llaves asociadas"
+                    >
+                      🔑 {numLlaves} Llaves
+                    </button>
+                  {/if}
                 </td>
                 <td class="td-center td-hora-val">
                   <span class="time-badge time-salida">{record.hora_salida || '—'}</span>
@@ -558,7 +555,7 @@
      MODAL 1: VER LLAVES ASOCIADAS
 ======================================================== -->
 {#if showModalLlaves}
-  <div class="modal-overlay" on:click|self={cerrarModalLlaves}>
+  <div class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
         <div class="modal-title-left">
@@ -599,7 +596,7 @@
      MODAL 2: DEFINIR O EDITAR HORAS
 ======================================================== -->
 {#if showModalHoras}
-  <div class="modal-overlay" on:click|self={cerrarModalHoras}>
+  <div class="modal-overlay">
     <div class="modal-box modal-box-horas">
       <div class="modal-header">
         <div class="modal-title-left">
@@ -1111,6 +1108,13 @@
     background: #dbeafe;
     border-color: #93c5fd;
     transform: translateY(-1px);
+  }
+
+  .btn-badge-single {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* Badges de Horas */
