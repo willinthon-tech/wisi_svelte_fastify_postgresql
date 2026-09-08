@@ -173,7 +173,6 @@
           class:active={activeSubvista === sub.id}
           on:click={() => handleSelectSubvista(sub.id)}
         >
-          <span class="tab-icon">{sub.icon}</span>
           <span class="tab-label">{sub.label}</span>
         </button>
       {/each}
