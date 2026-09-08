@@ -25,8 +25,8 @@
   let dropRecords = [];
   let isLoadingDrop = false;
 
-  // Pestaña activa en el panel de resumen inferior: 'metodos' o 'clientes'
-  let activeResumenTab = 'metodos';
+  // Pestaña activa: 'detallado', 'metodos' o 'clientes'
+  let activeResumenTab = 'detallado';
   let busquedaClienteResumen = '';
 
   // Extraer clientes únicos para sugerencias locales
@@ -553,110 +553,13 @@
     </form>
   </div>
 
-  <!-- Columna Derecha: Tabla Principal de Operaciones + Panel de Resumen Consolidado -->
+  <!-- Columna Derecha: Tarjeta Unificada con KPIs y Pestañas (1. Detallado, 2. Métodos, 3. Clientes) -->
   <div class="clientes-right-column">
-    <!-- Tabla Principal de Operaciones -->
-    <div class="card-table-clientes">
-      <!-- Barra Superior Oscura con Sala y Fecha -->
-      <div class="table-top-bar">
-        <span>{tableHeaderTitle}</span>
-      </div>
-
-      <!-- Tabla de Contenido -->
-      <div class="table-wrapper">
-        <table class="clientes-table">
-          <thead>
-            <tr>
-              <th class="th-center th-num">N°</th>
-              <th class="th-cliente">Cliente</th>
-              <th class="th-center th-tipo">Tipo</th>
-              <th class="th-right th-monto">Monto</th>
-              <th class="th-center th-metodo">Método</th>
-              <th class="th-center th-hora">Hora</th>
-              <th class="th-center th-acciones">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#if isLoadingRecords}
-              <tr>
-                <td colspan="7" class="empty-state-cell">
-                  <div class="loading-state-inline">
-                    <div class="spinner-small"></div>
-                    <span>Cargando registros de clientes...</span>
-                  </div>
-                </td>
-              </tr>
-            {:else if records.length === 0}
-              <tr>
-                <td colspan="7" class="empty-state-cell">
-                  <div class="empty-msg-box">
-                    <span class="empty-icon">👥</span>
-                    <p class="empty-text">
-                      No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            {:else}
-              {#each sortedRecords as record, idx}
-                <tr class="cliente-row">
-                  <td class="td-center td-num">{idx + 1}</td>
-                  <td class="td-cliente">
-                    <span class="cliente-name">{record.cliente}</span>
-                  </td>
-                  <td class="td-center td-tipo">
-                    {#if record.tipo === 'Compra'}
-                      <span class="badge-tipo badge-compra">🛒 Compra</span>
-                    {:else}
-                      <span class="badge-tipo badge-pago">💳 Pago</span>
-                    {/if}
-                  </td>
-                  <td class="td-right td-monto">
-                    <span class="monto-value">${formatMonto(record.monto)}</span>
-                  </td>
-                  <td class="td-center td-metodo">
-                    <span class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}">
-                      {record.metodo || 'General'}
-                    </span>
-                  </td>
-                  <td class="td-center td-hora-val">
-                    <span class="time-badge">{record.hora || '—'}</span>
-                  </td>
-                  <td class="td-center td-acciones">
-                    <div class="acciones-btns-row">
-                      <button 
-                        type="button" 
-                        class="btn-metodo-hora-accion"
-                        on:click={() => abrirModalEditar(record)}
-                        title="Editar Método y Hora"
-                      >
-                        ⚙️ Método / Hora
-                      </button>
-                      <button 
-                        type="button" 
-                        class="btn-eliminar"
-                        on:click={() => handleEliminar(record.id)}
-                        title="Eliminar este registro"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              {/each}
-            {/if}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Panel de Resumen Consolidado (Debajo de la tabla) -->
     <div class="card-resumen-clientes">
-      <!-- Barra Superior Oscura de Resumen -->
+      <!-- Barra Superior Oscura con Sala y Fecha -->
       <div class="resumen-top-bar">
         <div class="resumen-bar-title">
-          <span class="icon-bar">📊</span>
-          <span>Resumen Consolidado de Clientes & Flujo de Caja</span>
+          <span>{tableHeaderTitle}</span>
         </div>
         <span class="resumen-tag-ops">{records.length} {records.length === 1 ? 'operación' : 'operaciones'} en total</span>
       </div>
@@ -717,7 +620,7 @@
         <div class="kpi-card kpi-drop">
           <div class="kpi-header">
             <span class="kpi-icon">🎲</span>
-            <span class="kpi-label">DROP MESAS & TOTAL DÍA</span>
+            <span class="kpi-label">PRODUCCIÓN DÍA</span>
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value text-slate">${formatMonto(resultadoConDrop)}</span>
@@ -730,9 +633,16 @@
         </div>
       </div>
 
-      <!-- Selector de Pestañas del Resumen -->
+      <!-- Selector de Pestañas: 1. Detallado, 2. Métodos, 3. Clientes -->
       <div class="resumen-tabs-header">
         <div class="tabs-nav-list">
+          <button 
+            type="button" 
+            class="tab-nav-btn {activeResumenTab === 'detallado' ? 'active' : ''}"
+            on:click={() => activeResumenTab = 'detallado'}
+          >
+            <span>📋 Detallado de Operaciones ({records.length})</span>
+          </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeResumenTab === 'metodos' ? 'active' : ''}"
@@ -761,6 +671,96 @@
           </div>
         {/if}
       </div>
+
+      <!-- Pestaña 1: Detallado de Operaciones -->
+      {#if activeResumenTab === 'detallado'}
+        <div class="table-wrapper">
+          <table class="clientes-table">
+            <thead>
+              <tr>
+                <th class="th-center th-num">N°</th>
+                <th class="th-cliente">Cliente</th>
+                <th class="th-center th-tipo">Tipo</th>
+                <th class="th-right th-monto">Monto</th>
+                <th class="th-center th-metodo">Método</th>
+                <th class="th-center th-hora">Hora</th>
+                <th class="th-center th-acciones">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#if isLoadingRecords}
+                <tr>
+                  <td colspan="7" class="empty-state-cell">
+                    <div class="loading-state-inline">
+                      <div class="spinner-small"></div>
+                      <span>Cargando registros de clientes...</span>
+                    </div>
+                  </td>
+                </tr>
+              {:else if records.length === 0}
+                <tr>
+                  <td colspan="7" class="empty-state-cell">
+                    <div class="empty-msg-box">
+                      <span class="empty-icon">👥</span>
+                      <p class="empty-text">
+                        No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              {:else}
+                {#each sortedRecords as record, idx}
+                  <tr class="cliente-row">
+                    <td class="td-center td-num">{idx + 1}</td>
+                    <td class="td-cliente">
+                      <span class="cliente-name">{record.cliente}</span>
+                    </td>
+                    <td class="td-center td-tipo">
+                      {#if record.tipo === 'Compra'}
+                        <span class="badge-tipo badge-compra">🛒 Compra</span>
+                      {:else}
+                        <span class="badge-tipo badge-pago">💳 Pago</span>
+                      {/if}
+                    </td>
+                    <td class="td-right td-monto">
+                      <span class="monto-value">${formatMonto(record.monto)}</span>
+                    </td>
+                    <td class="td-center td-metodo">
+                      <span class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}">
+                        {record.metodo || 'General'}
+                      </span>
+                    </td>
+                    <td class="td-center td-hora-val">
+                      <span class="time-badge">{record.hora || '—'}</span>
+                    </td>
+                    <td class="td-center td-acciones">
+                      <div class="acciones-btns-row">
+                        <button 
+                          type="button" 
+                          class="btn-metodo-hora-accion"
+                          on:click={() => abrirModalEditar(record)}
+                          title="Editar Método y Hora"
+                        >
+                          ⚙️ Método / Hora
+                        </button>
+                        <button 
+                          type="button" 
+                          class="btn-eliminar"
+                          on:click={() => handleEliminar(record.id)}
+                          title="Eliminar este registro"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                {/each}
+              {/if}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+
 
       <!-- Contenido Tab 1: Desglose por Métodos de Pago -->
       {#if activeResumenTab === 'metodos'}
