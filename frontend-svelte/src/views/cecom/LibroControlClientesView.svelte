@@ -17,9 +17,17 @@
   let showSugerencias = false;
   let selectedSugerenciaIndex = -1;
 
-  // Lista de registros
+  // Lista de registros de operaciones de clientes
   let records = [];
   let isLoadingRecords = false;
+
+  // Drop de mesas para el consolidado global
+  let dropRecords = [];
+  let isLoadingDrop = false;
+
+  // Pestaña activa en el panel de resumen inferior: 'metodos' o 'clientes'
+  let activeResumenTab = 'metodos';
+  let busquedaClienteResumen = '';
 
   // Extraer clientes únicos para sugerencias locales
   $: clientesLocales = [...new Set(records.map(r => r.cliente).filter(Boolean))];
@@ -86,16 +94,103 @@
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   }
 
+  // ==========================================
+  // CÁLCULOS REACTIVOS PARA EL RESUMEN
+  // ==========================================
+  // 1. Drop de mesas total
+  $: totalDrop = dropRecords.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
+
+  // 2. Compras globales
+  $: totalCompras = records
+    .filter(r => (r.tipo || '').toLowerCase() === 'compra')
+    .reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
+
+  $: countCompras = records
+    .filter(r => (r.tipo || '').toLowerCase() === 'compra').length;
+
+  // 3. Pagos globales
+  $: totalPagos = records
+    .filter(r => (r.tipo || '').toLowerCase() === 'pago')
+    .reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
+
+  $: countPagos = records
+    .filter(r => (r.tipo || '').toLowerCase() === 'pago').length;
+
+  // 4. Balance neto de clientes (Compras - Pagos)
+  $: balanceNeto = totalCompras - totalPagos;
+
+  // 5. Resultado consolidado con Drop de Mesas (Drop + Balance Clientes)
+  $: resultadoConDrop = totalDrop + balanceNeto;
+
+  // 6. Resumen por Métodos de Pago
+  $: resumenMetodos = METODOS_DISPONIBLES.map(metodo => {
+    const ops = records.filter(r => (r.metodo || 'General').toLowerCase() === metodo.toLowerCase());
+    const compras = ops
+      .filter(r => (r.tipo || '').toLowerCase() === 'compra')
+      .reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
+    const pagos = ops
+      .filter(r => (r.tipo || '').toLowerCase() === 'pago')
+      .reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
+    const neto = compras - pagos;
+    return {
+      metodo,
+      compras,
+      pagos,
+      neto,
+      count: ops.length,
+      countCompras: ops.filter(r => (r.tipo || '').toLowerCase() === 'compra').length,
+      countPagos: ops.filter(r => (r.tipo || '').toLowerCase() === 'pago').length
+    };
+  });
+
+  // 7. Resumen detallado por Cliente
+  $: resumenClientes = (() => {
+    const map = {};
+    for (const r of records) {
+      const cli = (r.cliente || '').trim();
+      if (!cli) continue;
+      if (!map[cli]) {
+        map[cli] = { cliente: cli, compras: 0, pagos: 0, count: 0, countCompras: 0, countPagos: 0 };
+      }
+      const montoNum = Number(r.monto) || 0;
+      map[cli].count += 1;
+      if ((r.tipo || '').toLowerCase() === 'compra') {
+        map[cli].compras += montoNum;
+        map[cli].countCompras += 1;
+      } else if ((r.tipo || '').toLowerCase() === 'pago') {
+        map[cli].pagos += montoNum;
+        map[cli].countPagos += 1;
+      }
+    }
+    return Object.values(map).map(c => {
+      const balance = c.compras - c.pagos;
+      // balance > 0: El cliente compró más de lo que cobró (Casa a favor)
+      // balance < 0: El cliente cobró más premios de lo que compró (Jugador ganando)
+      return {
+        ...c,
+        balance
+      };
+    }).sort((a, b) => (b.compras + b.pagos) - (a.compras + a.pagos));
+  })();
+
+  $: resumenClientesFiltrados = (() => {
+    const q = (busquedaClienteResumen || '').trim().toLowerCase();
+    if (!q) return resumenClientes;
+    return resumenClientes.filter(c => c.cliente.toLowerCase().includes(q));
+  })();
+
   onMount(async () => {
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadRecords(),
+      loadDropRecords(),
       loadSugerenciasRemotas()
     ]);
   });
 
   $: if (libroId) {
     loadRecords();
+    loadDropRecords();
   }
 
   async function loadRecords() {
@@ -114,6 +209,25 @@
       console.error('Error al cargar control de clientes:', err);
     } finally {
       isLoadingRecords = false;
+    }
+  }
+
+  async function loadDropRecords() {
+    const lId = libroId || libro?.id;
+    if (!lId) return;
+    isLoadingDrop = true;
+    try {
+      const res = await fetch(`/api/master/libros/${lId}/drop-mesas`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success) {
+          dropRecords = json.data || [];
+        }
+      }
+    } catch (err) {
+      console.error('Error al cargar drop mesas para resumen:', err);
+    } finally {
+      isLoadingDrop = false;
     }
   }
 
@@ -182,7 +296,6 @@
   }
 
   function onClienteBlur() {
-    // Retardo pequeño para permitir el clic sobre la sugerencia
     setTimeout(() => {
       showSugerencias = false;
       selectedSugerenciaIndex = -1;
@@ -233,6 +346,7 @@
         showSugerencias = false;
         await loadRecords();
         loadSugerenciasRemotas();
+        loadDropRecords();
       } else {
         triggerToast(json?.error || 'Error al registrar cliente', 'error');
       }
@@ -439,98 +553,349 @@
     </form>
   </div>
 
-  <!-- Tarjeta Derecha: Tabla de Control de Clientes -->
-  <div class="card-table-clientes">
-    <!-- Barra Superior Oscura con Sala y Fecha -->
-    <div class="table-top-bar">
-      <span>{tableHeaderTitle}</span>
-    </div>
+  <!-- Columna Derecha: Tabla Principal de Operaciones + Panel de Resumen Consolidado -->
+  <div class="clientes-right-column">
+    <!-- Tabla Principal de Operaciones -->
+    <div class="card-table-clientes">
+      <!-- Barra Superior Oscura con Sala y Fecha -->
+      <div class="table-top-bar">
+        <span>{tableHeaderTitle}</span>
+      </div>
 
-    <!-- Tabla de Contenido -->
-    <div class="table-wrapper">
-      <table class="clientes-table">
-        <thead>
-          <tr>
-            <th class="th-center th-num">N°</th>
-            <th class="th-cliente">Cliente</th>
-            <th class="th-center th-tipo">Tipo</th>
-            <th class="th-right th-monto">Monto</th>
-            <th class="th-center th-metodo">Método</th>
-            <th class="th-center th-hora">Hora</th>
-            <th class="th-center th-acciones">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if isLoadingRecords}
+      <!-- Tabla de Contenido -->
+      <div class="table-wrapper">
+        <table class="clientes-table">
+          <thead>
             <tr>
-              <td colspan="7" class="empty-state-cell">
-                <div class="loading-state-inline">
-                  <div class="spinner-small"></div>
-                  <span>Cargando registros de clientes...</span>
-                </div>
-              </td>
+              <th class="th-center th-num">N°</th>
+              <th class="th-cliente">Cliente</th>
+              <th class="th-center th-tipo">Tipo</th>
+              <th class="th-right th-monto">Monto</th>
+              <th class="th-center th-metodo">Método</th>
+              <th class="th-center th-hora">Hora</th>
+              <th class="th-center th-acciones">Acciones</th>
             </tr>
-          {:else if records.length === 0}
-            <tr>
-              <td colspan="7" class="empty-state-cell">
-                <div class="empty-msg-box">
-                  <span class="empty-icon">👥</span>
-                  <p class="empty-text">
-                    No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
-                  </p>
-                </div>
-              </td>
-            </tr>
-          {:else}
-            {#each sortedRecords as record, idx}
-              <tr class="cliente-row">
-                <td class="td-center td-num">{idx + 1}</td>
-                <td class="td-cliente">
-                  <span class="cliente-name">{record.cliente}</span>
-                </td>
-                <td class="td-center td-tipo">
-                  {#if record.tipo === 'Compra'}
-                    <span class="badge-tipo badge-compra">🛒 Compra</span>
-                  {:else}
-                    <span class="badge-tipo badge-pago">💳 Pago</span>
-                  {/if}
-                </td>
-                <td class="td-right td-monto">
-                  <span class="monto-value">${formatMonto(record.monto)}</span>
-                </td>
-                <td class="td-center td-metodo">
-                  <span class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}">
-                    {record.metodo || 'General'}
-                  </span>
-                </td>
-                <td class="td-center td-hora-val">
-                  <span class="time-badge">{record.hora || '—'}</span>
-                </td>
-                <td class="td-center td-acciones">
-                  <div class="acciones-btns-row">
-                    <button 
-                      type="button" 
-                      class="btn-metodo-hora-accion"
-                      on:click={() => abrirModalEditar(record)}
-                      title="Editar Método y Hora"
-                    >
-                      ⚙️ Método / Hora
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn-eliminar"
-                      on:click={() => handleEliminar(record.id)}
-                      title="Eliminar este registro"
-                    >
-                      Eliminar
-                    </button>
+          </thead>
+          <tbody>
+            {#if isLoadingRecords}
+              <tr>
+                <td colspan="7" class="empty-state-cell">
+                  <div class="loading-state-inline">
+                    <div class="spinner-small"></div>
+                    <span>Cargando registros de clientes...</span>
                   </div>
                 </td>
               </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
+            {:else if records.length === 0}
+              <tr>
+                <td colspan="7" class="empty-state-cell">
+                  <div class="empty-msg-box">
+                    <span class="empty-icon">👥</span>
+                    <p class="empty-text">
+                      No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            {:else}
+              {#each sortedRecords as record, idx}
+                <tr class="cliente-row">
+                  <td class="td-center td-num">{idx + 1}</td>
+                  <td class="td-cliente">
+                    <span class="cliente-name">{record.cliente}</span>
+                  </td>
+                  <td class="td-center td-tipo">
+                    {#if record.tipo === 'Compra'}
+                      <span class="badge-tipo badge-compra">🛒 Compra</span>
+                    {:else}
+                      <span class="badge-tipo badge-pago">💳 Pago</span>
+                    {/if}
+                  </td>
+                  <td class="td-right td-monto">
+                    <span class="monto-value">${formatMonto(record.monto)}</span>
+                  </td>
+                  <td class="td-center td-metodo">
+                    <span class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}">
+                      {record.metodo || 'General'}
+                    </span>
+                  </td>
+                  <td class="td-center td-hora-val">
+                    <span class="time-badge">{record.hora || '—'}</span>
+                  </td>
+                  <td class="td-center td-acciones">
+                    <div class="acciones-btns-row">
+                      <button 
+                        type="button" 
+                        class="btn-metodo-hora-accion"
+                        on:click={() => abrirModalEditar(record)}
+                        title="Editar Método y Hora"
+                      >
+                        ⚙️ Método / Hora
+                      </button>
+                      <button 
+                        type="button" 
+                        class="btn-eliminar"
+                        on:click={() => handleEliminar(record.id)}
+                        title="Eliminar este registro"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            {/if}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Panel de Resumen Consolidado (Debajo de la tabla) -->
+    <div class="card-resumen-clientes">
+      <!-- Barra Superior Oscura de Resumen -->
+      <div class="resumen-top-bar">
+        <div class="resumen-bar-title">
+          <span class="icon-bar">📊</span>
+          <span>Resumen Consolidado de Clientes & Flujo de Caja</span>
+        </div>
+        <span class="resumen-tag-ops">{records.length} {records.length === 1 ? 'operación' : 'operaciones'} en total</span>
+      </div>
+
+      <!-- Tarjetas de Métricas Globales (KPIs) -->
+      <div class="kpi-metrics-grid">
+        <!-- KPI 1: Compras -->
+        <div class="kpi-card kpi-compras">
+          <div class="kpi-header">
+            <span class="kpi-icon">🛒</span>
+            <span class="kpi-label">TOTAL COMPRAS</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value text-green">${formatMonto(totalCompras)}</span>
+          </div>
+          <div class="kpi-subtext">
+            <span>{countCompras} {countCompras === 1 ? 'operación' : 'operaciones'}</span>
+          </div>
+        </div>
+
+        <!-- KPI 2: Pagos -->
+        <div class="kpi-card kpi-pagos">
+          <div class="kpi-header">
+            <span class="kpi-icon">💳</span>
+            <span class="kpi-label">TOTAL PAGOS</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value text-purple">${formatMonto(totalPagos)}</span>
+          </div>
+          <div class="kpi-subtext">
+            <span>{countPagos} {countPagos === 1 ? 'operación' : 'operaciones'}</span>
+          </div>
+        </div>
+
+        <!-- KPI 3: Balance Neto Clientes (Compras - Pagos) -->
+        <div class="kpi-card kpi-balance {balanceNeto >= 0 ? 'border-favor-casa' : 'border-favor-cliente'}">
+          <div class="kpi-header">
+            <span class="kpi-icon">⚖️</span>
+            <span class="kpi-label">RESULTADO CLIENTES (COMPRA - PAGO)</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value {balanceNeto >= 0 ? 'text-blue' : 'text-amber'}">
+              {balanceNeto >= 0 ? '+' : '-'}${formatMonto(Math.abs(balanceNeto))}
+            </span>
+          </div>
+          <div class="kpi-subtext">
+            {#if balanceNeto > 0}
+              <span class="badge-kpi-status status-casa">🟢 Casa a favor</span>
+            {:else if balanceNeto < 0}
+              <span class="badge-kpi-status status-jugadores">🔴 Clientes a favor</span>
+            {:else}
+              <span class="badge-kpi-status status-tablas">⚪ En tablas</span>
+            {/if}
+          </div>
+        </div>
+
+        <!-- KPI 4: Drop Mesas & Total Combinado -->
+        <div class="kpi-card kpi-drop">
+          <div class="kpi-header">
+            <span class="kpi-icon">🎲</span>
+            <span class="kpi-label">DROP MESAS & TOTAL DÍA</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-value text-slate">${formatMonto(resultadoConDrop)}</span>
+          </div>
+          <div class="kpi-subtext kpi-drop-breakdown">
+            <span>Drop Mesas: <b>${formatMonto(totalDrop)}</b></span>
+            <span class="dot-sep">•</span>
+            <span>Neto: <b>{balanceNeto >= 0 ? '+' : '-'}${formatMonto(Math.abs(balanceNeto))}</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de Pestañas del Resumen -->
+      <div class="resumen-tabs-header">
+        <div class="tabs-nav-list">
+          <button 
+            type="button" 
+            class="tab-nav-btn {activeResumenTab === 'metodos' ? 'active' : ''}"
+            on:click={() => activeResumenTab = 'metodos'}
+          >
+            <span>💳 Resumen por Métodos de Pago</span>
+          </button>
+          <button 
+            type="button" 
+            class="tab-nav-btn {activeResumenTab === 'clientes' ? 'active' : ''}"
+            on:click={() => activeResumenTab = 'clientes'}
+          >
+            <span>👥 Resumen por Cliente ({resumenClientes.length})</span>
+          </button>
+        </div>
+
+        {#if activeResumenTab === 'clientes'}
+          <div class="tab-search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input 
+              type="text" 
+              class="input-search-cliente-resumen" 
+              placeholder="Buscar cliente..." 
+              bind:value={busquedaClienteResumen} 
+            />
+          </div>
+        {/if}
+      </div>
+
+      <!-- Contenido Tab 1: Desglose por Métodos de Pago -->
+      {#if activeResumenTab === 'metodos'}
+        <div class="table-wrapper">
+          <table class="resumen-table">
+            <thead>
+              <tr>
+                <th class="th-metodo-name">Método de Pago</th>
+                <th class="th-right">Total Compras</th>
+                <th class="th-right">Total Pagos</th>
+                <th class="th-right">Balance Neto (Compras - Pagos)</th>
+                <th class="th-center">Operaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each resumenMetodos as m}
+                <tr>
+                  <td>
+                    <span class="badge-metodo metodo-{m.metodo.toLowerCase()}">{m.metodo}</span>
+                  </td>
+                  <td class="td-right font-mono text-green">
+                    ${formatMonto(m.compras)}
+                  </td>
+                  <td class="td-right font-mono text-purple">
+                    ${formatMonto(m.pagos)}
+                  </td>
+                  <td class="td-right font-mono font-bold {m.neto >= 0 ? 'text-blue' : 'text-amber'}">
+                    {m.neto >= 0 ? '+' : '-'}${formatMonto(Math.abs(m.neto))}
+                  </td>
+                  <td class="td-center">
+                    <span class="ops-badge">{m.count} ({m.countCompras}C / {m.countPagos}P)</span>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+            <tfoot>
+              <tr class="tfoot-totals-row">
+                <td class="font-bold">TOTALES</td>
+                <td class="td-right font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
+                <td class="td-right font-mono font-bold text-purple">${formatMonto(totalPagos)}</td>
+                <td class="td-right font-mono font-bold {balanceNeto >= 0 ? 'text-blue' : 'text-amber'}">
+                  {balanceNeto >= 0 ? '+' : '-'}${formatMonto(Math.abs(balanceNeto))}
+                </td>
+                <td class="td-center font-bold">{records.length}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {/if}
+
+      <!-- Contenido Tab 2: Desglose por Cliente -->
+      {#if activeResumenTab === 'clientes'}
+        <div class="table-wrapper">
+          <table class="resumen-table">
+            <thead>
+              <tr>
+                <th class="th-center th-num">N°</th>
+                <th>Cliente</th>
+                <th class="th-right">Compras Realizadas</th>
+                <th class="th-right">Pagos Recibidos</th>
+                <th class="th-right">Balance Neto</th>
+                <th class="th-center">Resultado</th>
+                <th class="th-center">Operaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#if resumenClientesFiltrados.length === 0}
+                <tr>
+                  <td colspan="7" class="empty-state-cell">
+                    <span class="empty-text">No hay clientes coincidentes registrados en esta fecha.</span>
+                  </td>
+                </tr>
+              {:else}
+                {#each resumenClientesFiltrados as c, idx}
+                  <tr>
+                    <td class="td-center td-num">{idx + 1}</td>
+                    <td>
+                      <span class="cliente-resumen-name">👤 {c.cliente}</span>
+                    </td>
+                    <td class="td-right font-mono text-green">
+                      ${formatMonto(c.compras)}
+                    </td>
+                    <td class="td-right font-mono text-purple">
+                      ${formatMonto(c.pagos)}
+                    </td>
+                    <td class="td-right font-mono font-bold {c.balance >= 0 ? 'text-blue' : 'text-amber'}">
+                      {c.balance >= 0 ? '+' : '-'}${formatMonto(Math.abs(c.balance))}
+                    </td>
+                    <td class="td-center">
+                      {#if c.balance < 0}
+                        <span class="badge-jugador-res ganando" title="El jugador cobró más premios de lo que compró">
+                          🏆 Ganando (${formatMonto(Math.abs(c.balance))})
+                        </span>
+                      {:else if c.balance > 0}
+                        <span class="badge-jugador-res perdiendo" title="La sala retuvo más compras de este jugador">
+                          🔴 En Contra (-${formatMonto(c.balance)})
+                        </span>
+                      {:else}
+                        <span class="badge-jugador-res tablas">
+                          ⚪ En Tablas ($0.00)
+                        </span>
+                      {/if}
+                    </td>
+                    <td class="td-center">
+                      <span class="ops-badge">{c.count} ({c.countCompras}C / {c.countPagos}P)</span>
+                    </td>
+                  </tr>
+                {/each}
+              {/if}
+            </tbody>
+            {#if resumenClientes.length > 0}
+              <tfoot>
+                <tr class="tfoot-totals-row">
+                  <td colspan="2" class="font-bold">TOTAL ({resumenClientes.length} Clientes)</td>
+                  <td class="td-right font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
+                  <td class="td-right font-mono font-bold text-purple">${formatMonto(totalPagos)}</td>
+                  <td class="td-right font-mono font-bold {balanceNeto >= 0 ? 'text-blue' : 'text-amber'}">
+                    {balanceNeto >= 0 ? '+' : '-'}${formatMonto(Math.abs(balanceNeto))}
+                  </td>
+                  <td class="td-center font-bold">
+                    {#if balanceNeto > 0}
+                      <span class="text-blue">Casa a Favor</span>
+                    {:else if balanceNeto < 0}
+                      <span class="text-amber">Clientes a Favor</span>
+                    {:else}
+                      <span>Nivelado</span>
+                    {/if}
+                  </td>
+                  <td class="td-center font-bold">{records.length}</td>
+                </tr>
+              </tfoot>
+            {/if}
+          </table>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
@@ -886,8 +1251,16 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
-     Tarjeta Derecha: Tabla
+     Columna Derecha: Tabla + Resumen
   ───────────────────────────────────────────────────────────── */
+  .clientes-right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    min-width: 0;
+  }
+
   .card-table-clientes {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -984,14 +1357,6 @@
     color: #1e293b;
     font-size: 13px;
     vertical-align: middle;
-  }
-
-  .td-center {
-    text-align: center;
-  }
-
-  .td-right {
-    text-align: right;
   }
 
   .cliente-name {
@@ -1115,9 +1480,323 @@
     background: #b91c1c;
   }
 
+  /* ─────────────────────────────────────────────────────────────
+     Tarjeta de Resumen Consolidado
+  ───────────────────────────────────────────────────────────── */
+  .card-resumen-clientes {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .resumen-top-bar {
+    background: #1e293b;
+    color: #ffffff;
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .resumen-bar-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+  }
+
+  .resumen-tag-ops {
+    font-size: 11.5px;
+    background: #334155;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: #cbd5e1;
+    font-weight: 600;
+  }
+
+  /* Grid de Métricas (KPIs) */
+  .kpi-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  @media (max-width: 900px) {
+    .kpi-metrics-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .kpi-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .kpi-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .kpi-icon {
+    font-size: 14px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.4px;
+  }
+
+  .kpi-value-row {
+    margin-top: 2px;
+  }
+
+  .kpi-value {
+    font-size: 20px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.3px;
+  }
+
+  .text-green { color: #16a34a; }
+  .text-purple { color: #7c3aed; }
+  .text-blue { color: #2563eb; }
+  .text-amber { color: #d97706; }
+  .text-slate { color: #0f172a; }
+
+  .kpi-subtext {
+    font-size: 11.5px;
+    color: #64748b;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .badge-kpi-status {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+
+  .status-casa {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+
+  .status-jugadores {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+
+  .status-tablas {
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  .kpi-drop-breakdown {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+  }
+
+  .dot-sep {
+    color: #cbd5e1;
+  }
+
+  /* Pestañas del Resumen */
+  .resumen-tabs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tabs-nav-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tab-nav-btn {
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #475569;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tab-nav-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .tab-nav-btn.active {
+    background: #ffffff;
+    color: #1e293b;
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .tab-search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 8px;
+    font-size: 11px;
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .input-search-cliente-resumen {
+    padding: 5px 10px 5px 26px;
+    font-size: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    outline: none;
+    background: #ffffff;
+    transition: all 0.2s ease;
+    width: 170px;
+  }
+
+  .input-search-cliente-resumen:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  /* Tablas de Resumen */
+  .resumen-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    text-align: left;
+  }
+
+  .resumen-table thead tr {
+    background: #334155;
+    color: #ffffff;
+  }
+
+  .resumen-table th {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .resumen-table td {
+    padding: 10px 14px;
+    color: #1e293b;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  .resumen-table tr:hover {
+    background: #f8fafc;
+  }
+
+  .th-metodo-name {
+    min-width: 140px;
+  }
+
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-bold {
+    font-weight: 700;
+  }
+
+  .ops-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: #475569;
+  }
+
+  .cliente-resumen-name {
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .badge-jugador-res {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .badge-jugador-res.ganando {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+  }
+
+  .badge-jugador-res.perdiendo {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+
+  .badge-jugador-res.tablas {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+  }
+
+  .tfoot-totals-row {
+    background: #f8fafc;
+    border-top: 2px solid #cbd5e1;
+  }
+
+  .tfoot-totals-row td {
+    padding: 11px 14px;
+    font-size: 13px;
+  }
+
   /* Estados vacíos y loading */
   .empty-state-cell {
-    padding: 40px 20px !important;
+    padding: 30px 16px !important;
     text-align: center;
   }
 
