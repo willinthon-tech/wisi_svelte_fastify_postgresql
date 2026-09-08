@@ -4,7 +4,10 @@ export const currentRouteStore = writable('dashboard');
 
 export function isPublicRoute(route) {
   const clean = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
-  return clean === 'willinthontech' || clean.startsWith('reportes/rrhh/corte/');
+  return clean === 'willinthontech' || 
+         clean.startsWith('reportes/rrhh/corte/') || 
+         clean.startsWith('reportes/cecom/libro/') || 
+         clean.startsWith('reportes/cecom/ibro/');
 }
 
 export function initRouter() {
@@ -14,7 +17,10 @@ export function initRouter() {
     let route = window.location.hash.replace(/^#\/?/, '').trim();
     if (!route) {
       const pathname = window.location.pathname.replace(/^\//, '').trim();
-      if (pathname === 'willinthontech' || pathname.startsWith('reportes/rrhh/corte/')) {
+      if (pathname === 'willinthontech' || 
+          pathname.startsWith('reportes/rrhh/corte/') || 
+          pathname.startsWith('reportes/cecom/libro/') || 
+          pathname.startsWith('reportes/cecom/ibro/')) {
         route = pathname;
       }
     }

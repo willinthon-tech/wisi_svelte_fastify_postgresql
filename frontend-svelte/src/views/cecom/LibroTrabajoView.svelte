@@ -8,6 +8,7 @@
   import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
   import LibroControlClientesView from './LibroControlClientesView.svelte';
   import LibroNovedadesMesasView from './LibroNovedadesMesasView.svelte';
+  import LibroResumenView from './LibroResumenView.svelte';
   import LibroDatosView from './LibroDatosView.svelte';
 
   export let libroId = null;
@@ -101,7 +102,7 @@
   }
 
   async function handleCompartir() {
-    const targetUrl = getPublicWebUrl(`/#/cecom/libro/${libroId || ''}/${activeSubvista}`);
+    const targetUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${libroId || ''}`);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(targetUrl);
@@ -113,9 +114,9 @@
         document.execCommand('copy');
         document.body.removeChild(input);
       }
-      triggerToast('Enlace de la subvista copiado al portapapeles', 'success');
+      triggerToast('Enlace del reporte de libro copiado al portapapeles', 'success');
     } catch (err) {
-      prompt('Copia el siguiente enlace del libro:', targetUrl);
+      prompt('Copia el siguiente enlace del reporte:', targetUrl);
     }
   }
 
@@ -211,62 +212,11 @@
         <LibroControlClientesView {libro} {libroId} />
       {:else if activeSubvista === 'novedades-mesas'}
         <LibroNovedadesMesasView {libro} {libroId} />
-      {:else}
-        <!-- Workspace Card de la Subvista Activa -->
-        <div class="subvista-workspace-card">
-          <div class="workspace-header">
-            <div class="ws-header-left">
-              <span class="ws-icon">{SUBVISTAS.find(s => s.id === activeSubvista)?.icon}</span>
-              <div>
-                <h2 class="ws-title">{SUBVISTAS.find(s => s.id === activeSubvista)?.label}</h2>
-                <p class="ws-desc">{SUBVISTAS.find(s => s.id === activeSubvista)?.description}</p>
-              </div>
-            </div>
-            <div class="ws-header-actions">
-              <button type="button" class="btn-ws-action btn-add" on:click={() => triggerToast(`Nuevo registro en ${SUBVISTAS.find(s => s.id === activeSubvista)?.label}`, 'info')}>
-                <span>+</span>
-                <span>Nuevo Registro</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Dynamic Subview Workspace Placeholder / Module Body -->
-          <div class="workspace-body">
-            {#if activeSubvista === 'resumen-libro'}
-            <div class="sub-panel">
-              <div class="resumen-container">
-                <div class="resumen-header-banner">
-                  <div class="banner-title">
-                    <h3>Resumen Consolidado del Libro</h3>
-                    <p>Fecha: {formatDateDisplay(libro?.descripcion)} • Sala: {libro?.sala_nombre || libro?.sala_nombre_comercial || 'Asignada'}</p>
-                  </div>
-                  <span class="status-chip open">En Curso</span>
-                </div>
-
-                <div class="resumen-cards-grid">
-                  {#each SUBVISTAS.filter(s => s.id !== 'resumen-libro') as item}
-                    <div class="resumen-card">
-                      <div class="rc-header">
-                        <span class="rc-icon">{item.icon}</span>
-                        <span class="rc-name">{item.label}</span>
-                      </div>
-                      <div class="rc-body">
-                        <span class="rc-count">0 registros</span>
-                        <button type="button" class="rc-link-btn" on:click={() => handleSelectSubvista(item.id)}>
-                          Ver subvista →
-                        </button>
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            </div>
-          {/if}
-        </div>
-      </div>
+      {:else if activeSubvista === 'resumen-libro'}
+        <LibroResumenView isPublic={false} {libro} {libroId} onSelectSubvista={handleSelectSubvista} />
+      {/if}
     {/if}
-  {/if}
-</div>
+  </div>
 </div>
 
 <style>

@@ -40,7 +40,8 @@ import {
   getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral,
   getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente,
   getLibroDatos, saveLibroDatos,
-  getLibroNovedadesMesas, saveLibroNovedadesMesa, deleteLibroNovedadesMesa
+  getLibroNovedadesMesas, saveLibroNovedadesMesa, deleteLibroNovedadesMesa,
+  getLibroResumen, getLibroReporte, saveLibroReporte
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -310,6 +311,18 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/libros/:id/novedades-mesas', saveLibroNovedadesMesa);
   fastify.delete('/master/libros/:id/novedades-mesas/:recordId', deleteLibroNovedadesMesa);
   fastify.delete('/api/master/libros/:id/novedades-mesas/:recordId', deleteLibroNovedadesMesa);
+
+  // Resumen y Reporte Consolidado de Libro (CECOM: Tabla libro_reporte)
+  fastify.get('/master/libros/:id/reporte', getLibroReporte);
+  fastify.get('/api/master/libros/:id/reporte', getLibroReporte);
+  fastify.post('/master/libros/:id/reporte', saveLibroReporte);
+  fastify.post('/api/master/libros/:id/reporte', saveLibroReporte);
+  fastify.get('/master/libros/:id/resumen', getLibroReporte);
+  fastify.get('/api/master/libros/:id/resumen', getLibroReporte);
+  fastify.get('/reportes/cecom/libro/:id/data', getLibroReporte);
+  fastify.get('/api/reportes/cecom/libro/:id/data', getLibroReporte);
+  fastify.get('/reportes/cecom/ibro/:id/data', getLibroReporte);
+  fastify.get('/api/reportes/cecom/ibro/:id/data', getLibroReporte);
 
 
   // ==========================================

@@ -39,7 +39,8 @@ import {
   getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel,
   getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel,
   getLibroDatosModel, saveLibroDatosModel,
-  getLibroNovedadesMesasModel, saveLibroNovedadesMesaModel, deleteLibroNovedadesMesaModel
+  getLibroNovedadesMesasModel, saveLibroNovedadesMesaModel, deleteLibroNovedadesMesaModel,
+  getLibroResumenModel, saveLibroReporteModel, getLibroReporteModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2306,6 +2307,38 @@ export async function deleteLibroNovedadesMesa(request, reply) {
     const { id, recordId } = request.params;
     const result = await deleteLibroNovedadesMesaModel(recordId);
     return reply.send({ success: true, ...result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// --- RESUMEN Y REPORTE CONSOLIDADO (TABLA libro_reporte - CECOM) ---
+export async function getLibroResumen(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroResumenModel(id);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function getLibroReporte(request, reply) {
+  try {
+    const { id } = request.params;
+    const auto = request.query?.auto === 'true';
+    const result = await getLibroReporteModel(id, auto);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function saveLibroReporte(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await saveLibroReporteModel(id);
+    return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
   }

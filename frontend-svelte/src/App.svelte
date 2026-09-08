@@ -28,6 +28,7 @@
   // Import CECOM Views
   import LibroView from "./views/cecom/LibroView.svelte";
   import LibroTrabajoView from "./views/cecom/LibroTrabajoView.svelte";
+  import LibroResumenView from "./views/cecom/LibroResumenView.svelte";
   import LlavesView from "./views/cecom/LlavesView.svelte";
   import LlavesBorradasView from "./views/cecom/LlavesBorradasView.svelte";
 
@@ -733,9 +734,17 @@
     return match ? match[1] : null;
   }
 
+  function getPublicLibroId(route) {
+    const clean = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
+    const match = clean.match(/reportes\/cecom\/(?:libro|ibro)\/(\d+)/i);
+    return match ? match[1] : null;
+  }
+
   $: cleanPublicRoute = $currentRouteStore ? String($currentRouteStore).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
   $: isCortePublicRoute = cleanPublicRoute.startsWith('reportes/rrhh/corte/');
   $: publicCorteId = getPublicCorteId(cleanPublicRoute);
+  $: isLibroPublicRoute = cleanPublicRoute.startsWith('reportes/cecom/libro/') || cleanPublicRoute.startsWith('reportes/cecom/ibro/');
+  $: publicLibroId = getPublicLibroId(cleanPublicRoute);
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
@@ -748,6 +757,11 @@
     <!-- Standalone Public Report View (No Sidebar, No Navbar, No Page Title) -->
     <div class="standalone-public-report">
       <CortesCalculosView isPublic={true} corteId={publicCorteId} />
+    </div>
+  {:else if isLibroPublicRoute}
+    <!-- Standalone Public CECOM Daily Book Report View -->
+    <div class="standalone-public-report">
+      <LibroResumenView isPublic={true} libroId={publicLibroId} />
     </div>
   {/if}
 {:else if $isAuthenticatedStore}

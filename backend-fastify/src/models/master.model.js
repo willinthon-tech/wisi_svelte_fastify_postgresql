@@ -8339,3 +8339,214 @@ export async function deleteLibroNovedadesMesaModel(recordId) {
 
   return { success: true };
 }
+
+// --- REPORTE CONSOLIDADO DEL LIBRO (TABLA libro_reporte - HISTÓRICO Y COMPARTIR) ---
+export async function saveLibroReporteModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  const [
+    libroRes,
+    datosRes,
+    dropRes,
+    novedadesRes,
+    llavesRes,
+    clientesRes,
+    incidenciasRes
+  ] = await Promise.all([
+    getLibroByIdModel(lId).catch(e => null),
+    getLibroDatosModel(lId).catch(e => null),
+    getLibroDropMesasModel(lId).catch(e => []),
+    getLibroNovedadesMesasModel(lId).catch(e => []),
+    getLibroControlLlavesModel(lId).catch(e => []),
+    getLibroControlClientesModel(lId).catch(e => []),
+    getLibroIncidenciasGeneralesModel(lId).catch(e => [])
+  ]);
+
+  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.id ? libroRes : null);
+  const salaId = libroObj?.sala_id ? Number(libroObj.sala_id) : null;
+  const salaNombre = libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala';
+  const fecha = libroObj?.descripcion || null;
+
+  const liveCounts = {
+    datos: datosRes ? 1 : 0,
+    drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
+    novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
+    control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
+    control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
+  };
+
+  const fullData = {
+    libro_id: lId,
+    sala_id: salaId,
+    sala_nombre: salaNombre,
+    fecha: fecha,
+    libro: libroObj || null,
+    datos: datosRes || null,
+    drop_mesas: Array.isArray(dropRes) ? dropRes : [],
+    novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
+    control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
+    control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []
+  };
+
+  const jsonStr = JSON.stringify(fullData);
+
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      INSERT INTO libro_reporte (
+        libro_id,
+        data
+      ) VALUES (
+        ${lId},
+        CAST(${jsonStr} AS JSONB)
+      )
+      ON CONFLICT (libro_id) DO UPDATE
+      SET
+        data = EXCLUDED.data,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING id, libro_id, data, created_at, updated_at
+    `;
+
+    return {
+      success: true,
+      exists: true,
+      liveCounts,
+      data: {
+        ...rows[0],
+        data: fullData
+      }
+    };
+  }
+
+  if (!inMemoryData.libro_reporte) inMemoryData.libro_reporte = [];
+  const existingIdx = inMemoryData.libro_reporte.findIndex(r => Number(r.libro_id) === lId);
+  const record = {
+    id: existingIdx !== -1 ? inMemoryData.libro_reporte[existingIdx].id : inMemoryData.libro_reporte.length + 1,
+    libro_id: lId,
+    data: fullData,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (existingIdx !== -1) {
+    inMemoryData.libro_reporte[existingIdx] = record;
+  } else {
+    inMemoryData.libro_reporte.push(record);
+  }
+
+  return { success: true, exists: true, liveCounts, data: record };
+}
+
+export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
+  const numId = Number(idOrLibroId);
+  if (!numId) throw new Error('ID de reporte o libro inválido');
+
+  // Consulta en paralelo de las subvistas en vivo para conteos y vista previa
+  const [
+    libroRes,
+    datosRes,
+    dropRes,
+    novedadesRes,
+    llavesRes,
+    clientesRes,
+    incidenciasRes
+  ] = await Promise.all([
+    getLibroByIdModel(numId).catch(() => null),
+    getLibroDatosModel(numId).catch(() => null),
+    getLibroDropMesasModel(numId).catch(() => []),
+    getLibroNovedadesMesasModel(numId).catch(() => []),
+    getLibroControlLlavesModel(numId).catch(() => []),
+    getLibroControlClientesModel(numId).catch(() => []),
+    getLibroIncidenciasGeneralesModel(numId).catch(() => [])
+  ]);
+
+  const liveCounts = {
+    datos: datosRes ? 1 : 0,
+    drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
+    novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
+    control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
+    control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
+  };
+
+  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.id ? libroRes : null);
+
+  const previewData = {
+    libro_id: numId,
+    sala_id: libroObj?.sala_id || null,
+    sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
+    fecha: libroObj?.descripcion || null,
+    libro: libroObj || null,
+    datos: datosRes || null,
+    drop_mesas: Array.isArray(dropRes) ? dropRes : [],
+    novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
+    control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
+    control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []
+  };
+
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      SELECT id, libro_id, data, created_at, updated_at
+      FROM libro_reporte
+      WHERE libro_id = ${numId} OR id = ${numId}
+      LIMIT 1
+    `;
+
+    if (rows && rows.length > 0) {
+      let rData = rows[0].data;
+      if (typeof rData === 'string') {
+        try { rData = JSON.parse(rData); } catch (e) {}
+      }
+      return {
+        success: true,
+        exists: true,
+        liveCounts,
+        data: {
+          ...rows[0],
+          data: rData
+        }
+      };
+    }
+  } else {
+    const found = (inMemoryData.libro_reporte || []).find(r => Number(r.libro_id) === numId || Number(r.id) === numId);
+    if (found) {
+      return {
+        success: true,
+        exists: true,
+        liveCounts,
+        data: found
+      };
+    }
+  }
+
+  // Si no existe aún en la tabla libro_reporte:
+  if (autoGenerate) {
+    return await saveLibroReporteModel(numId);
+  }
+
+  // Retorna preview con exists = false para que el botón muestre "+ Generar Reporte"
+  return {
+    success: true,
+    exists: false,
+    liveCounts,
+    data: {
+      id: null,
+      libro_id: numId,
+      sala_id: libroObj?.sala_id || null,
+      sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
+      fecha: libroObj?.descripcion || null,
+      data: previewData,
+      created_at: null,
+      updated_at: null
+    }
+  };
+}
+
+export async function getLibroResumenModel(libroId) {
+  const res = await getLibroReporteModel(libroId, false);
+  return res.data?.data || res.data || res;
+}
+

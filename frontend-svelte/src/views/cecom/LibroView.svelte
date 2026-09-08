@@ -256,7 +256,7 @@
   async function handleCompartirLibro(event) {
     const item = event.detail;
     if (!item || !item.id) return;
-    const shareUrl = getPublicWebUrl(`/#/cecom/libro/${item.id}`);
+    const shareUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${item.id}`);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
@@ -268,9 +268,9 @@
         document.execCommand('copy');
         document.body.removeChild(input);
       }
-      triggerToast(`Enlace del libro #${item.id} copiado al portapapeles`, 'success');
+      triggerToast(`Enlace del reporte de libro #${item.id} copiado al portapapeles`, 'success');
     } catch (e) {
-      prompt('Copia el siguiente enlace del libro:', shareUrl);
+      prompt('Copia el siguiente enlace del reporte:', shareUrl);
     }
   }
 </script>
