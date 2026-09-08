@@ -36,7 +36,8 @@ import {
   getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel,
   getLibroDropMesasModel, createLibroDropMesaModel, deleteLibroDropMesaModel,
   getLibroControlLlavesModel, createLibroControlLlavesModel, updateLibroControlLlavesHorasModel, deleteLibroControlLlavesModel,
-  getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel
+  getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel,
+  getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2192,6 +2193,60 @@ export async function deleteLibroIncidenciaGeneral(request, reply) {
   try {
     const { id, incidenciaId } = request.params;
     const result = await deleteLibroIncidenciaGeneralModel(incidenciaId, id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// --- Control de Clientes (CECOM: Libro Control de Clientes) ---
+export async function getLibroControlClientes(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroControlClientesModel(id);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function getClientesSugerencias(request, reply) {
+  try {
+    const query = request.query?.q || '';
+    const data = await getClientesSugerenciasModel(query);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function createLibroControlCliente(request, reply) {
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const data = { ...body, libro_id: id };
+    const result = await createLibroControlClienteModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateLibroControlCliente(request, reply) {
+  try {
+    const { id, controlId } = request.params;
+    const body = parseBody(request.body);
+    const result = await updateLibroControlClienteModel(controlId, id, body);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteLibroControlCliente(request, reply) {
+  try {
+    const { id, controlId } = request.params;
+    const result = await deleteLibroControlClienteModel(controlId, id);
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });

@@ -37,7 +37,8 @@ import {
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
   getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
   getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves,
-  getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral
+  getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral,
+  getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -273,6 +274,20 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/libros/:id/incidencias-generales/:incidenciaId/hora', updateLibroIncidenciaGeneralHora);
   fastify.delete('/master/libros/:id/incidencias-generales/:incidenciaId', deleteLibroIncidenciaGeneral);
   fastify.delete('/api/master/libros/:id/incidencias-generales/:incidenciaId', deleteLibroIncidenciaGeneral);
+
+  // Control Clientes (CECOM: Libro Control de Clientes)
+  fastify.get('/master/libros/control-clientes/sugerencias', getClientesSugerencias);
+  fastify.get('/api/master/libros/control-clientes/sugerencias', getClientesSugerencias);
+  fastify.get('/master/libros/:id/control-clientes/sugerencias', getClientesSugerencias);
+  fastify.get('/api/master/libros/:id/control-clientes/sugerencias', getClientesSugerencias);
+  fastify.get('/master/libros/:id/control-clientes', getLibroControlClientes);
+  fastify.get('/api/master/libros/:id/control-clientes', getLibroControlClientes);
+  fastify.post('/master/libros/:id/control-clientes', createLibroControlCliente);
+  fastify.post('/api/master/libros/:id/control-clientes', createLibroControlCliente);
+  fastify.put('/master/libros/:id/control-clientes/:controlId', updateLibroControlCliente);
+  fastify.put('/api/master/libros/:id/control-clientes/:controlId', updateLibroControlCliente);
+  fastify.delete('/master/libros/:id/control-clientes/:controlId', deleteLibroControlCliente);
+  fastify.delete('/api/master/libros/:id/control-clientes/:controlId', deleteLibroControlCliente);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)

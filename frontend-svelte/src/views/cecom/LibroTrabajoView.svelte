@@ -6,6 +6,7 @@
   import LibroDropMesasView from './LibroDropMesasView.svelte';
   import LibroControlLlavesView from './LibroControlLlavesView.svelte';
   import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
+  import LibroControlClientesView from './LibroControlClientesView.svelte';
 
   export let libroId = null;
 
@@ -222,18 +223,8 @@
           <!-- Dynamic Subview Workspace Placeholder / Module Body -->
           <div class="workspace-body">
             {#if activeSubvista === 'control-clientes'}
-            <div class="sub-panel">
-              <div class="empty-workspace-state">
-                <span class="empty-icon">👥</span>
-                <h3>Control y Observaciones de Clientes</h3>
-                <p>Atención a jugadores VIP, seguimiento de incidentes o alertas de seguridad relacionadas con clientes.</p>
-                <button type="button" class="btn-primary" on:click={() => triggerToast('Registrar reporte de cliente...', 'info')}>
-                  + Registrar Observación
-                </button>
-              </div>
-            </div>
-
-          {:else if activeSubvista === 'resumen-libro'}
+              <LibroControlClientesView {libro} {libroId} />
+            {:else if activeSubvista === 'resumen-libro'}
             <div class="sub-panel">
               <div class="resumen-container">
                 <div class="resumen-header-banner">

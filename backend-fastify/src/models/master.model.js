@@ -7891,5 +7891,157 @@ export async function deleteLibroIncidenciaGeneralModel(id, libroId) {
   return { success: true, id: incId };
 }
 
+// --- CONTROL DE CLIENTES (CECOM: LIBRO CONTROL DE CLIENTES) ---
+export async function getLibroControlClientesModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
+    const list = inMemoryData.libro_control_clientes.filter(c => Number(c.libro_id) === lId);
+    return list.sort((a, b) => {
+      const hA = a.hora || '';
+      const hB = b.hora || '';
+      if (hA !== hB) return hB.localeCompare(hA);
+      return Number(b.id) - Number(a.id);
+    });
+  }
+
+  const rows = await sql`
+    SELECT 
+      id, libro_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
+    FROM libro_control_clientes
+    WHERE libro_id = ${lId}
+    ORDER BY hora DESC, id DESC
+  `;
+
+  return rows;
+}
+
+export async function getClientesSugerenciasModel(query = '') {
+  const cleanQ = (query || '').trim().toLowerCase();
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
+    const all = inMemoryData.libro_control_clientes.map(c => c.cliente).filter(Boolean);
+    const unique = [...new Set(all)];
+    if (!cleanQ) return unique.slice(0, 30);
+    return unique.filter(n => n.toLowerCase().includes(cleanQ)).slice(0, 30);
+  }
+
+  const rows = await sql`
+    SELECT DISTINCT cliente
+    FROM libro_control_clientes
+    WHERE cliente IS NOT NULL AND cliente <> ''
+      ${cleanQ ? sql`AND LOWER(cliente) LIKE ${`%${cleanQ}%`}` : sql``}
+    ORDER BY cliente ASC
+    LIMIT 30
+  `;
+
+  return rows.map(r => r.cliente);
+}
+
+export async function createLibroControlClienteModel(data) {
+  const libroId = Number(data.libro_id);
+  if (!libroId) throw new Error('ID de libro inválido');
+
+  const cliente = (data.cliente || '').trim();
+  if (!cliente) throw new Error('El nombre del cliente es obligatorio');
+
+  const tipo = (data.tipo || 'Compra').trim();
+  const monto = parseFloat(data.monto) || 0;
+  if (monto <= 0) throw new Error('El monto debe ser mayor a 0');
+
+  const metodo = (data.metodo || 'General').trim();
+  const now = new Date();
+  const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const hora = (data.hora || '').trim() || currentHHMM;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
+    const nextId = (inMemoryData.libro_control_clientes.length > 0)
+      ? Math.max(...inMemoryData.libro_control_clientes.map(d => d.id)) + 1
+      : 1;
+    const newRecord = {
+      id: nextId,
+      libro_id: libroId,
+      cliente,
+      tipo,
+      monto,
+      metodo,
+      hora,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.libro_control_clientes.unshift(newRecord);
+    return newRecord;
+  }
+
+  const res = await sql`
+    INSERT INTO libro_control_clientes (
+      libro_id, cliente, tipo, monto, metodo, hora
+    )
+    VALUES (
+      ${libroId}, ${cliente}, ${tipo}, ${monto}, ${metodo}, ${hora}
+    )
+    RETURNING id, libro_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
+  `;
+
+  return res[0];
+}
+
+export async function updateLibroControlClienteModel(controlId, libroId, data) {
+  const cId = Number(controlId);
+  const lId = Number(libroId);
+  if (!cId) throw new Error('ID de registro inválido');
+
+  const metodo = (data.metodo || 'General').trim();
+  const hora = (data.hora || '').trim();
+  if (!hora) throw new Error('La hora es obligatoria');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
+    const idx = inMemoryData.libro_control_clientes.findIndex(c => Number(c.id) === cId);
+    if (idx !== -1) {
+      inMemoryData.libro_control_clientes[idx].metodo = metodo;
+      inMemoryData.libro_control_clientes[idx].hora = hora;
+      inMemoryData.libro_control_clientes[idx].updated_at = new Date().toISOString();
+      return inMemoryData.libro_control_clientes[idx];
+    }
+    throw new Error('Registro no encontrado');
+  }
+
+  const rows = await sql`
+    UPDATE libro_control_clientes
+    SET 
+      metodo = ${metodo},
+      hora = ${hora},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    RETURNING id, libro_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
+  `;
+
+  return rows[0];
+}
+
+export async function deleteLibroControlClienteModel(id, libroId) {
+  const cId = Number(id);
+  const lId = Number(libroId);
+  if (!cId) throw new Error('ID de registro inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
+    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes.filter(c => Number(c.id) !== cId);
+    return { success: true, id: cId };
+  }
+
+  await sql`
+    DELETE FROM libro_control_clientes
+    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+  `;
+
+  return { success: true, id: cId };
+}
+
 
 
