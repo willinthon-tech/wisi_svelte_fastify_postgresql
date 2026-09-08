@@ -1098,7 +1098,8 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+    width: 100%;
   }
 
   /* ============================================================
@@ -1106,7 +1107,7 @@
      ============================================================ */
   .resumen-overview-card {
     width: 100%;
-    max-width: 1100px;
+    max-width: 100%;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 16px;
@@ -1400,7 +1401,7 @@
   /* Barra de herramientas superior para modo público */
   .report-tools-bar {
     width: 100%;
-    max-width: 1100px;
+    max-width: 100%;
     background: #1e293b;
     color: #ffffff;
     padding: 10px 18px;
@@ -1573,7 +1574,7 @@
      ───────────────────────────────────────────────────────────── */
   .official-sheet-container {
     width: 100%;
-    max-width: 1100px;
+    max-width: 100%;
     background: #ffffff;
     border: 1px solid #d1d5db;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
@@ -2432,7 +2433,7 @@
       border: 1.5px solid #0f172a !important;
       box-shadow: none !important;
       border-radius: 0 !important;
-      padding: 14px 18px !important;
+      padding: 28px 34px !important;
       margin: 0 auto !important;
       width: 100% !important;
       max-width: 100% !important;
