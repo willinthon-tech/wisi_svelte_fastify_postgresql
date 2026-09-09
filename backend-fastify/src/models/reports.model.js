@@ -157,46 +157,69 @@ export function pairDayAttendance({
       ? punchesToday.map(p => p.timeStr || p.time).join(', ')
       : 'Sin Registros';
 
-    if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
-      return {
-        entradaStr: null,
-        salidaStr: null,
-        trabajadosMins: 0,
-        marcajeStr: rawMarcaje,
-        resultadoStr: 'LIBRE',
-        entBadge: null,
-        salBadge: null,
-        selectedEntry: null,
-        selectedExit: null,
-        matchedPlantilla: BASE_PLANTILLA_LIBRE,
-        isNoEntryWithOtherPunches: false
-      };
-    } else {
-      matchedPlantilla = {
-        id: excepObj.plantilla_horario_id,
-        codigo: excepObj.plantilla_codigo,
-        nombre: excepObj.plantilla_nombre,
-        hora_entrada: excepObj.hora_entrada,
-        hora_salida: excepObj.hora_salida,
-        color: excepObj.color,
-        tipo: excepObj.tipo
-      };
+    const excepCode = String(excepObj.excepcion_codigo || excepObj.plantilla_codigo || excepObj.codigo || '').toUpperCase().trim();
+    const isTrabajadoCode = excepCode.endsWith('T');
 
-      if (!excepObj.hora_entrada && !excepObj.hora_salida) {
+    // Determinar descripción exacta y respetada de la excepción
+    let desc = (excepObj.excepcion_nombre || excepObj.nombre || excepObj.descripcion || excepObj.plantilla_nombre || '').trim().toUpperCase();
+    if (!desc || desc === 'LIBRE') {
+      if (excepCode === 'FER' || excepCode === 'FERT') desc = 'DÍA FERIADO';
+      else if (excepCode === 'R' || excepCode === 'RT') desc = 'REPOSO MÉDICO';
+      else if (excepCode === 'V' || excepCode === 'VT') desc = 'VACACIONES';
+      else if (excepCode === 'P' || excepCode === 'PT') desc = 'PERMISO';
+      else if (excepCode === 'F' || excepCode === 'FT') desc = 'FALTA';
+      else desc = 'LIBRE';
+    }
+
+    if (!isTrabajadoCode) {
+      // Excepción normal NO trabajada (ej. FER, R, V, P, F, L):
+      // "respeta las excepciones porque pues no es para trabajar la verdad"
+      if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre || (!excepObj.hora_entrada && !excepObj.hora_salida)) {
         return {
           entradaStr: null,
           salidaStr: null,
           trabajadosMins: 0,
           marcajeStr: rawMarcaje,
-          resultadoStr: excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'EXCEPCIÓN',
+          resultadoStr: desc,
           entBadge: null,
           salBadge: null,
           selectedEntry: null,
           selectedExit: null,
-          matchedPlantilla,
+          matchedPlantilla: BASE_PLANTILLA_LIBRE,
+          isNoEntryWithOtherPunches: false
+        };
+      } else {
+        matchedPlantilla = {
+          id: excepObj.plantilla_horario_id,
+          codigo: excepObj.plantilla_codigo,
+          nombre: excepObj.plantilla_nombre,
+          hora_entrada: excepObj.hora_entrada,
+          hora_salida: excepObj.hora_salida,
+          color: excepObj.color,
+          tipo: excepObj.tipo
+        };
+      }
+    } else {
+      // Excepción que termina en 'T' (acrónimo de TRABAJADO, ej: FERT, LT):
+      // Evalúa los marcajes tal como el Horario Único (U)
+      const availableToday = punchesToday.filter(p => !p.consumed);
+      const checkinPunches = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
+      if (checkinPunches.length === 0) {
+        return {
+          entradaStr: null,
+          salidaStr: null,
+          trabajadosMins: 0,
+          marcajeStr: rawMarcaje,
+          resultadoStr: desc.includes('TRABAJAD') ? desc : `${desc} TRABAJADO`,
+          entBadge: null,
+          salBadge: null,
+          selectedEntry: null,
+          selectedExit: null,
+          matchedPlantilla: BASE_PLANTILLA_LIBRE,
           isNoEntryWithOtherPunches: false
         };
       }
+      // Si tiene marcajes, continúa hacia abajo para emparejar entrada/salida y calcular desglose (D) y (N)
     }
   }
 
@@ -212,10 +235,20 @@ export function pairDayAttendance({
       salidaStr = null;
       marcajeStr = 'Sin Registros';
       trabajadosMins = 0;
-      if (!isExcepcion || (excepObj && excepObj.es_libre)) {
-        resultadoStr = 'LIBRE';
+      if (isExcepcion && excepObj) {
+        let desc = (excepObj.excepcion_nombre || excepObj.nombre || excepObj.descripcion || excepObj.plantilla_nombre || '').trim().toUpperCase();
+        if (!desc || desc === 'LIBRE') {
+          const c = String(excepObj.excepcion_codigo || excepObj.codigo || '').toUpperCase();
+          if (c === 'FER' || c === 'FERT') desc = 'DÍA FERIADO';
+          else if (c === 'R' || c === 'RT') desc = 'REPOSO MÉDICO';
+          else if (c === 'V' || c === 'VT') desc = 'VACACIONES';
+          else if (c === 'P' || c === 'PT') desc = 'PERMISO';
+          else if (c === 'F' || c === 'FT') desc = 'FALTA';
+          else desc = 'LIBRE';
+        }
+        resultadoStr = desc;
       } else {
-        resultadoStr = excepObj.plantilla_nombre || excepObj.plantilla_codigo || 'LIBRE';
+        resultadoStr = 'LIBRE';
       }
 
       return {
@@ -803,18 +836,25 @@ export async function getMarcajePersonalReportModel(params = {}) {
       const isExcepcion = Boolean(excepObj);
       const excepcionId = excepObj ? excepObj.id : null;
 
-      // When an exception with specific hours exists, targetPlantillas must be ONLY this exception plantilla
-      let effectiveTargetPlantillas = assignedPlantillas;
-      if (isExcepcion && excepObj && excepObj.hora_entrada && excepObj.hora_salida) {
-        effectiveTargetPlantillas = [{
-          id: excepObj.plantilla_horario_id,
-          codigo: excepObj.plantilla_codigo,
-          nombre: excepObj.plantilla_nombre,
-          hora_entrada: excepObj.hora_entrada,
-          hora_salida: excepObj.hora_salida,
-          color: excepObj.color,
-          tipo: excepObj.tipo
-        }];
+      // When an exception with specific hours exists, targetPlantillas must be ONLY this exception plantilla.
+      // If it is a catalog exception (FER, R, V, P, F, L, FERT, LT, etc.), it completely overrides the schedule, so effectiveTargetPlantillas is empty.
+      let effectiveTargetPlantillas = [];
+      if (isExcepcion && excepObj) {
+        if (excepObj.hora_entrada && excepObj.hora_salida) {
+          effectiveTargetPlantillas = [{
+            id: excepObj.plantilla_horario_id,
+            codigo: excepObj.plantilla_codigo,
+            nombre: excepObj.plantilla_nombre,
+            hora_entrada: excepObj.hora_entrada,
+            hora_salida: excepObj.hora_salida,
+            color: excepObj.color,
+            tipo: excepObj.tipo
+          }];
+        } else {
+          effectiveTargetPlantillas = [];
+        }
+      } else {
+        effectiveTargetPlantillas = assignedPlantillas;
       }
 
       const paired = pairDayAttendance({
@@ -844,27 +884,43 @@ export async function getMarcajePersonalReportModel(params = {}) {
         salBadge = { text: '00:00', isAlert: false, color: '#94a3b8', bg: '#f8fafc', border: '#e2e8f0' };
       }
 
-      // Resolver código, color y tipo de plantilla para el badge
+      // Resolver código, color, nombre y tipo de plantilla para el badge
       let shiftId = null;
       let shiftCode = 'L';
       let shiftColor = '#D9D9D9';
+      let shiftNombre = 'Libre';
       let shiftTipo = 'plantilla';
 
       if (isExcepcion && excepObj) {
+        const exCode = String(excepObj.excepcion_codigo || excepObj.plantilla_codigo || excepObj.codigo || '').toUpperCase().trim();
+        let exDesc = (excepObj.excepcion_nombre || excepObj.nombre || excepObj.descripcion || excepObj.plantilla_nombre || '').trim();
+        if (!exDesc || exDesc.toUpperCase() === 'LIBRE') {
+          if (exCode === 'FER' || exCode === 'FERT') exDesc = exCode.endsWith('T') ? 'Día Feriado Trabajado' : 'Día Feriado';
+          else if (exCode === 'R' || exCode === 'RT') exDesc = exCode.endsWith('T') ? 'Reposo Trabajado' : 'Reposo Médico';
+          else if (exCode === 'V' || exCode === 'VT') exDesc = exCode.endsWith('T') ? 'Vacaciones Trabajadas' : 'Vacaciones';
+          else if (exCode === 'P' || exCode === 'PT') exDesc = exCode.endsWith('T') ? 'Permiso Trabajado' : 'Permiso';
+          else if (exCode === 'F' || exCode === 'FT') exDesc = 'Falta';
+          else if (exCode === 'L' || exCode === 'LT') exDesc = exCode.endsWith('T') ? 'Libre Trabajado' : 'Día Libre';
+          else exDesc = 'Excepción';
+        }
+
         if (excepObj.excepcion_codigo) {
           shiftId = excepObj.excepcion_id;
           shiftCode = excepObj.excepcion_codigo;
-          shiftColor = excepObj.excepcion_color || '#3B82F6';
+          shiftColor = excepObj.excepcion_color || '#8B5CF6';
+          shiftNombre = exDesc;
           shiftTipo = 'excepcion';
         } else if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
           shiftId = null;
-          shiftCode = 'L';
-          shiftColor = '#D9D9D9';
-          shiftTipo = 'plantilla';
+          shiftCode = exCode || 'L';
+          shiftColor = excepObj.excepcion_color || '#D9D9D9';
+          shiftNombre = exDesc;
+          shiftTipo = 'excepcion';
         } else {
           shiftId = excepObj.plantilla_horario_id;
           shiftCode = excepObj.plantilla_codigo || 'EX';
           shiftColor = excepObj.plantilla_color || excepObj.color || '#FDE047';
+          shiftNombre = excepObj.plantilla_nombre || exDesc;
           shiftTipo = excepObj.plantilla_tipo || excepObj.tipo || 'plantilla';
         }
       } else if (matchedPlantilla) {
@@ -872,17 +928,21 @@ export async function getMarcajePersonalReportModel(params = {}) {
         if (matchedPlantilla.id === 'SYS-U') {
           shiftCode = 'U';
           shiftColor = matchedPlantilla.color || '#3B82F6';
+          shiftNombre = 'Horario Único';
         } else if (matchedPlantilla.id === 'SYS-L') {
           shiftCode = 'L';
           shiftColor = matchedPlantilla.color || '#D9D9D9';
+          shiftNombre = 'Libre';
         } else {
           shiftCode = matchedPlantilla.codigo || (matchedPlantilla.nombre ? matchedPlantilla.nombre.trim().slice(0, 3).toUpperCase() : 'H');
           shiftColor = matchedPlantilla.color || '#86EFAC';
+          shiftNombre = matchedPlantilla.nombre || shiftCode;
         }
         shiftTipo = 'horario';
       } else {
         shiftCode = 'L';
         shiftColor = '#D9D9D9';
+        shiftNombre = 'Libre';
         shiftTipo = 'plantilla';
       }
 
@@ -896,6 +956,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
         shift: {
           id: shiftId,
           codigo: shiftCode,
+          nombre: shiftNombre,
           color: shiftColor,
           tipo: shiftTipo
         },
