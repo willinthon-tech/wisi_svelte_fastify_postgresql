@@ -1,9 +1,12 @@
 <script>
-  import { onMount } from 'svelte';
-  import { triggerToast } from '../../controllers/ui.store.js';
-  import { getPublicWebUrl } from '../../config/api.config.js';
-  import { navigateToRoute } from '../../controllers/router.store.js';
-  import { masterSalasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { onMount } from "svelte";
+  import { triggerToast } from "../../controllers/ui.store.js";
+  import { getPublicWebUrl } from "../../config/api.config.js";
+  import { navigateToRoute } from "../../controllers/router.store.js";
+  import {
+    masterSalasStore,
+    loadMasterStoresFromBackend,
+  } from "../../controllers/master.store.js";
 
   export let isPublic = false;
   export let libro = null;
@@ -23,7 +26,7 @@
     novedades_mesas: 0,
     control_llaves: 0,
     control_clientes: 0,
-    incidencias_generales: 0
+    incidencias_generales: 0,
   };
 
   // Datos consolidados del reporte (consumidos de la tabla libro_reporte)
@@ -34,21 +37,21 @@
     novedades_mesas: [],
     control_llaves: [],
     control_clientes: [],
-    incidencias_generales: []
+    incidencias_generales: [],
   };
 
   // Selector de visualización en pantalla
-  let viewMode = 'documento'; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
+  let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
 
   onMount(async () => {
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
-    if (!libroId && typeof window !== 'undefined') {
-      const hash = window.location.hash || '';
+    if (!libroId && typeof window !== "undefined") {
+      const hash = window.location.hash || "";
       const matchHash = hash.match(/reportes\/cecom\/(?:libro|ibro)\/(\d+)/i);
       if (matchHash) libroId = matchHash[1];
 
       if (!libroId) {
-        const path = window.location.pathname || '';
+        const path = window.location.pathname || "";
         const matchPath = path.match(/reportes\/cecom\/(?:libro|ibro)\/(\d+)/i);
         if (matchPath) libroId = matchPath[1];
       }
@@ -60,11 +63,14 @@
       await loadFullResumen(libroId || libro?.id);
     } else {
       isLoading = false;
-      loadError = 'No se especificó ningún libro para generar el reporte';
+      loadError = "No se especificó ningún libro para generar el reporte";
     }
   });
 
-  $: if (libroId && (!resumenData.libro || Number(resumenData.libro.id) !== Number(libroId))) {
+  $: if (
+    libroId &&
+    (!resumenData.libro || Number(resumenData.libro.id) !== Number(libroId))
+  ) {
     loadFullResumen(libroId);
   }
 
@@ -92,7 +98,7 @@
             novedades_mesas: payload.novedades_mesas || [],
             control_llaves: payload.control_llaves || [],
             control_clientes: payload.control_clientes || [],
-            incidencias_generales: payload.incidencias_generales || []
+            incidencias_generales: payload.incidencias_generales || [],
           };
           if (!libro && resumenData.libro) {
             libro = resumenData.libro;
@@ -102,10 +108,10 @@
         }
       }
 
-      loadError = 'No se pudo cargar la información del libro';
+      loadError = "No se pudo cargar la información del libro";
     } catch (err) {
-      console.error('Error al cargar reporte consolidado de libro:', err);
-      loadError = 'Error de conexión al cargar la información del libro';
+      console.error("Error al cargar reporte consolidado de libro:", err);
+      loadError = "Error de conexión al cargar la información del libro";
     } finally {
       isLoading = false;
     }
@@ -117,7 +123,9 @@
     if (!id) return;
     isSyncing = true;
     try {
-      const res = await fetch(`/api/master/libros/${id}/reporte`, { method: 'POST' });
+      const res = await fetch(`/api/master/libros/${id}/reporte`, {
+        method: "POST",
+      });
       const json = await res.json();
       if (res.ok && json && json.success) {
         const wasExisting = reporteExists;
@@ -125,7 +133,10 @@
         if (json.liveCounts) {
           liveCounts = { ...liveCounts, ...json.liveCounts };
         }
-        updatedAt = json.data?.updated_at || json.data?.created_at || new Date().toISOString();
+        updatedAt =
+          json.data?.updated_at ||
+          json.data?.created_at ||
+          new Date().toISOString();
         const payload = json.data?.data || json.data;
         if (payload) {
           resumenData = {
@@ -135,21 +146,26 @@
             novedades_mesas: payload.novedades_mesas || [],
             control_llaves: payload.control_llaves || [],
             control_clientes: payload.control_clientes || [],
-            incidencias_generales: payload.incidencias_generales || []
+            incidencias_generales: payload.incidencias_generales || [],
           };
           if (!libro && resumenData.libro) {
             libro = resumenData.libro;
           }
         }
         triggerToast(
-          wasExisting ? 'Reporte consolidado actualizado exitosamente en libro_reporte' : 'Reporte consolidado generado y guardado exitosamente en libro_reporte',
-          'success'
+          wasExisting
+            ? "Reporte consolidado actualizado exitosamente en libro_reporte"
+            : "Reporte consolidado generado y guardado exitosamente en libro_reporte",
+          "success",
         );
       } else {
-        triggerToast(json?.error || 'Error al procesar reporte consolidado', 'error');
+        triggerToast(
+          json?.error || "Error al procesar reporte consolidado",
+          "error",
+        );
       }
     } catch (err) {
-      triggerToast(`Error: ${err.message}`, 'error');
+      triggerToast(`Error: ${err.message}`, "error");
     } finally {
       isSyncing = false;
     }
@@ -157,7 +173,7 @@
 
   // Navegar directamente a la subvista seleccionada
   function handleGoToSubvista(subId) {
-    if (typeof onSelectSubvista === 'function') {
+    if (typeof onSelectSubvista === "function") {
       onSelectSubvista(subId);
     } else {
       const id = libroId || libro?.id || resumenData.libro?.id;
@@ -169,10 +185,14 @@
 
   // Formato amigable de fecha y hora
   function formatDateTimeDisplay(dateStr) {
-    if (!dateStr) return '—';
+    if (!dateStr) return "—";
     try {
       const d = new Date(dateStr);
-      return d.toLocaleDateString('es-VE') + ' ' + d.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+      return (
+        d.toLocaleDateString("es-VE") +
+        " " +
+        d.toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" })
+      );
     } catch (e) {
       return dateStr;
     }
@@ -184,46 +204,50 @@
     if (l?.sala_nombre) return l.sala_nombre;
     if (l?.sala_nombre_comercial) return l.sala_nombre_comercial;
     if (l?.sala_id) {
-      const s = ($masterSalasStore || []).find(sala => Number(sala.id) === Number(l.sala_id));
+      const s = ($masterSalasStore || []).find(
+        (sala) => Number(sala.id) === Number(l.sala_id),
+      );
       if (s) return s.nombre_comercial || s.nombre;
     }
-    return 'Sala de Casino';
+    return "Sala de Casino";
   })();
 
   // Desglose de fecha [ D | M | A ]
   $: dateParts = (() => {
-    const dStr = (resumenData.libro || libro)?.descripcion || '';
-    if (!dStr) return { day: '—', month: '—', year: '—', formatted: '—' };
-    
+    const dStr = (resumenData.libro || libro)?.descripcion || "";
+    if (!dStr) return { day: "—", month: "—", year: "—", formatted: "—" };
+
     // Si viene YYYY-MM-DD
     const mYMD = String(dStr).match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (mYMD) {
       return {
-        day: mYMD[3].padStart(2, '0'),
-        month: mYMD[2].padStart(2, '0'),
+        day: mYMD[3].padStart(2, "0"),
+        month: mYMD[2].padStart(2, "0"),
         year: mYMD[1].slice(-2),
-        formatted: `${mYMD[3].padStart(2, '0')}/${mYMD[2].padStart(2, '0')}/${mYMD[1]}`
+        formatted: `${mYMD[3].padStart(2, "0")}/${mYMD[2].padStart(2, "0")}/${mYMD[1]}`,
       };
     }
     // Si viene DD/MM/YYYY
     const mDMY = String(dStr).match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
     if (mDMY) {
       return {
-        day: mDMY[1].padStart(2, '0'),
-        month: mDMY[2].padStart(2, '0'),
+        day: mDMY[1].padStart(2, "0"),
+        month: mDMY[2].padStart(2, "0"),
         year: mDMY[3].slice(-2),
-        formatted: `${mDMY[1].padStart(2, '0')}/${mDMY[2].padStart(2, '0')}/${mDMY[3]}`
+        formatted: `${mDMY[1].padStart(2, "0")}/${mDMY[2].padStart(2, "0")}/${mDMY[3]}`,
       };
     }
-    return { day: '—', month: '—', year: '—', formatted: dStr };
+    return { day: "—", month: "—", year: "—", formatted: dStr };
   })();
 
   // Parser para formatear la mercancía e incidencias tipo Word (Título con hora en negrita e items en sangría)
   function parseIncidenciaContent(desc, hora) {
-    if (!desc) return { title: '', items: [] };
-    const rawLines = String(desc).split('\n');
-    const lines = rawLines.map(l => l.trimEnd()).filter(l => l.trim().length > 0);
-    if (lines.length === 0) return { title: '', items: [] };
+    if (!desc) return { title: "", items: [] };
+    const rawLines = String(desc).split("\n");
+    const lines = rawLines
+      .map((l) => l.trimEnd())
+      .filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return { title: "", items: [] };
 
     let titleLine = lines[0].trim();
     const horaRegex = /^\d{1,2}:\d{2}/;
@@ -231,13 +255,16 @@
       titleLine = `${hora} ${titleLine}`;
     }
 
-    const items = lines.slice(1).map(l => {
-      return l.replace(/^[\s•\-\*]+/, '').trim();
-    }).filter(Boolean);
+    const items = lines
+      .slice(1)
+      .map((l) => {
+        return l.replace(/^[\s•\-\*]+/, "").trim();
+      })
+      .filter(Boolean);
 
     return {
       title: titleLine,
-      items
+      items,
     };
   }
 
@@ -249,11 +276,28 @@
     const generales = [];
 
     for (const inc of list) {
-      const t = (inc.tipo || '').toLowerCase().trim();
-      const desc = (inc.descripcion || '').toLowerCase();
-      if (t.includes('mercanc') || t.includes('proveedor') || desc.includes('proveedor') || desc.includes('mercanc') || desc.includes('factura') || desc.includes('insumo')) {
+      const t = (inc.tipo || "").toLowerCase().trim();
+      const desc = (inc.descripcion || "").toLowerCase();
+      if (
+        t.includes("mercanc") ||
+        t.includes("proveedor") ||
+        desc.includes("proveedor") ||
+        desc.includes("mercanc") ||
+        desc.includes("factura") ||
+        desc.includes("insumo")
+      ) {
         mercancia.push(inc);
-      } else if (t.includes('emplead') || t.includes('personal') || t.includes('rrhh') || t.includes('croupier') || desc.includes('emplead') || desc.includes('croupier') || desc.includes('personal') || desc.includes('asistencia') || desc.includes('retraso')) {
+      } else if (
+        t.includes("emplead") ||
+        t.includes("personal") ||
+        t.includes("rrhh") ||
+        t.includes("croupier") ||
+        desc.includes("emplead") ||
+        desc.includes("croupier") ||
+        desc.includes("personal") ||
+        desc.includes("asistencia") ||
+        desc.includes("retraso")
+      ) {
         empleado.push(inc);
       } else {
         generales.push(inc);
@@ -268,23 +312,25 @@
     const list = resumenData.control_clientes || [];
     const map = {};
     for (const c of list) {
-      const metodo = (c.metodo || 'No especificado').trim();
+      const metodo = (c.metodo || "No especificado").trim();
       if (!map[metodo]) {
         map[metodo] = { metodo, ops: 0, compras: 0, pagos: 0, balance: 0 };
       }
       const m = parseFloat(c.monto) || 0;
-      const t = (c.tipo || 'compra').toLowerCase();
+      const t = (c.tipo || "compra").toLowerCase();
       map[metodo].ops += 1;
-      if (t === 'pago') {
+      if (t === "pago") {
         map[metodo].pagos += m;
       } else {
         map[metodo].compras += m;
       }
     }
-    return Object.values(map).map(item => ({
-      ...item,
-      balance: item.compras - item.pagos
-    })).sort((a, b) => (b.compras + b.pagos) - (a.compras + a.pagos));
+    return Object.values(map)
+      .map((item) => ({
+        ...item,
+        balance: item.compras - item.pagos,
+      }))
+      .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
   })();
 
   $: totalesPorMetodo = (() => {
@@ -300,23 +346,25 @@
     const list = resumenData.control_clientes || [];
     const map = {};
     for (const c of list) {
-      const cliente = (c.cliente || 'Anónimo / General').trim();
+      const cliente = (c.cliente || "Anónimo / General").trim();
       if (!map[cliente]) {
         map[cliente] = { cliente, ops: 0, compras: 0, pagos: 0, balance: 0 };
       }
       const m = parseFloat(c.monto) || 0;
-      const t = (c.tipo || 'compra').toLowerCase();
+      const t = (c.tipo || "compra").toLowerCase();
       map[cliente].ops += 1;
-      if (t === 'pago') {
+      if (t === "pago") {
         map[cliente].pagos += m;
       } else {
         map[cliente].compras += m;
       }
     }
-    return Object.values(map).map(item => ({
-      ...item,
-      balance: item.compras - item.pagos
-    })).sort((a, b) => (b.compras + b.pagos) - (a.compras + a.pagos));
+    return Object.values(map)
+      .map((item) => ({
+        ...item,
+        balance: item.compras - item.pagos,
+      }))
+      .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
   })();
 
   $: totalesPorJugador = (() => {
@@ -330,12 +378,30 @@
   // Totales de Drop
   $: dropTotales = (() => {
     const list = resumenData.drop_mesas || [];
-    const sum100 = list.reduce((acc, r) => acc + (Number(r.denominacion_100 ?? r.b100 ?? 0) || 0), 0);
-    const sum50 = list.reduce((acc, r) => acc + (Number(r.denominacion_50 ?? r.b50 ?? 0) || 0), 0);
-    const sum20 = list.reduce((acc, r) => acc + (Number(r.denominacion_20 ?? r.b20 ?? 0) || 0), 0);
-    const sum10 = list.reduce((acc, r) => acc + (Number(r.denominacion_10 ?? r.b10 ?? 0) || 0), 0);
-    const sum5 = list.reduce((acc, r) => acc + (Number(r.denominacion_5 ?? r.b5 ?? 0) || 0), 0);
-    const sum1 = list.reduce((acc, r) => acc + (Number(r.denominacion_1 ?? r.b1 ?? 0) || 0), 0);
+    const sum100 = list.reduce(
+      (acc, r) => acc + (Number(r.denominacion_100 ?? r.b100 ?? 0) || 0),
+      0,
+    );
+    const sum50 = list.reduce(
+      (acc, r) => acc + (Number(r.denominacion_50 ?? r.b50 ?? 0) || 0),
+      0,
+    );
+    const sum20 = list.reduce(
+      (acc, r) => acc + (Number(r.denominacion_20 ?? r.b20 ?? 0) || 0),
+      0,
+    );
+    const sum10 = list.reduce(
+      (acc, r) => acc + (Number(r.denominacion_10 ?? r.b10 ?? 0) || 0),
+      0,
+    );
+    const sum5 = list.reduce(
+      (acc, r) => acc + (Number(r.denominacion_5 ?? r.b5 ?? 0) || 0),
+      0,
+    );
+    const sum1 = list.reduce(
+      (acc, r) => acc + (Number(r.denominacion_1 ?? r.b1 ?? 0) || 0),
+      0,
+    );
     const grandTotal = list.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
     return { sum100, sum50, sum20, sum10, sum5, sum1, grandTotal };
   })();
@@ -347,8 +413,8 @@
     let totalPagos = 0;
     for (const c of list) {
       const m = parseFloat(c.monto) || 0;
-      const t = (c.tipo || 'compra').toLowerCase();
-      if (t === 'pago') {
+      const t = (c.tipo || "compra").toLowerCase();
+      if (t === "pago") {
         totalPagos += m;
       } else {
         totalCompras += m;
@@ -358,8 +424,10 @@
     return { totalCompras, totalPagos, balanceNeto, totalOps: list.length };
   })();
 
-  // Producción = drop - (Total Compra - Total Pagos)
-  $: produccionTotal = dropTotales.grandTotal - (clientesTotales.totalCompras - clientesTotales.totalPagos);
+  // Producción = Drop + (Total Compra - Total Pagos)
+  $: produccionTotal =
+    dropTotales.grandTotal +
+    (clientesTotales.totalCompras - clientesTotales.totalPagos);
 
   // Resumen de Llaves
   $: llavesTotales = (() => {
@@ -378,8 +446,24 @@
 
   // Formatear montos en dólares
   function formatMoney(n) {
-    if (n == null || isNaN(n)) return '$0';
-    return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    if (n == null || isNaN(n)) return "$0";
+    const num = Number(n);
+    if (num < 0) {
+      return (
+        "-$" +
+        Math.abs(num).toLocaleString("en-US", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        })
+      );
+    }
+    return (
+      "$" +
+      num.toLocaleString("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      })
+    );
   }
 
   // Copiar enlace al portapapeles
@@ -391,16 +475,19 @@
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
       } else {
-        const input = document.createElement('input');
+        const input = document.createElement("input");
         input.value = shareUrl;
         document.body.appendChild(input);
         input.select();
-        document.execCommand('copy');
+        document.execCommand("copy");
         document.body.removeChild(input);
       }
-      triggerToast(`Enlace copiado al portapapeles: /#/reportes/cecom/libro/${id}`, 'success');
+      triggerToast(
+        `Enlace copiado al portapapeles: /#/reportes/cecom/libro/${id}`,
+        "success",
+      );
     } catch (e) {
-      prompt('Copia el enlace del reporte:', shareUrl);
+      prompt("Copia el enlace del reporte:", shareUrl);
     }
   }
 
@@ -409,18 +496,29 @@
   }
 </script>
 
-<div class="resumen-reporte-wrapper {isPublic ? 'is-public-mode' : 'is-internal-mode'}">
+<div
+  class="resumen-reporte-wrapper {isPublic
+    ? 'is-public-mode'
+    : 'is-internal-mode'}"
+>
   {#if isPublic}
     <!-- Barra Superior en Modo Público -->
     <div class="report-tools-bar no-print">
       <div class="tools-left">
         <span class="report-tag">📋 Reporte Consolidado Libro CECOM</span>
         <span class="public-badge">Vista Pública</span>
-        <span class="libro-badge">Libro #{libroId || libro?.id || resumenData.libro?.id || '—'}</span>
+        <span class="libro-badge"
+          >Libro #{libroId || libro?.id || resumenData.libro?.id || "—"}</span
+        >
         <span class="date-badge">{dateParts.formatted}</span>
       </div>
       <div class="tools-right">
-        <button type="button" class="btn-tool btn-print" on:click={handleImprimir} title="Imprimir reporte">
+        <button
+          type="button"
+          class="btn-tool btn-print"
+          on:click={handleImprimir}
+          title="Imprimir reporte"
+        >
           <span>🖨️</span>
           <span>Imprimir</span>
         </button>
@@ -440,10 +538,15 @@
           <div class="overview-title-box">
             <h2 class="overview-title">Resumen Libro</h2>
             <p class="overview-subtitle">
-              Consolidado general y auditoría • <span class="meta-highlight">{salaNombre}</span> ({dateParts.formatted})
+              Consolidado general y auditoría • <span class="meta-highlight"
+                >{salaNombre}</span
+              >
+              ({dateParts.formatted})
               {#if updatedAt}
                 <span class="meta-sep">•</span>
-                <span class="meta-updated">Última sinc: {formatDateTimeDisplay(updatedAt)}</span>
+                <span class="meta-updated"
+                  >Última sinc: {formatDateTimeDisplay(updatedAt)}</span
+                >
               {/if}
             </p>
           </div>
@@ -464,14 +567,18 @@
           <!-- BOTÓN PRINCIPAL: "Generar Reporte" (si no existe) o "Actualizar Reporte" (si ya existe) -->
           <button
             type="button"
-            class="btn-action-primary {reporteExists ? 'btn-actualizar' : 'btn-generar'}"
+            class="btn-action-primary {reporteExists
+              ? 'btn-actualizar'
+              : 'btn-generar'}"
             on:click={handleGenerarOActualizarReporte}
             disabled={isSyncing}
-            title={reporteExists ? 'Actualizar y sincronizar snapshot en tabla libro_reporte' : 'Generar y consolidar reporte en tabla libro_reporte'}
+            title={reporteExists
+              ? "Actualizar y sincronizar snapshot en tabla libro_reporte"
+              : "Generar y consolidar reporte en tabla libro_reporte"}
           >
             {#if isSyncing}
               <span class="btn-spinner"></span>
-              <span>{reporteExists ? 'Actualizando...' : 'Generando...'}</span>
+              <span>{reporteExists ? "Actualizando..." : "Generando..."}</span>
             {:else if reporteExists}
               <span>Actualizar Reporte</span>
             {:else}
@@ -493,18 +600,24 @@
       <span class="error-icon">⚠️</span>
       <h3>Error al generar reporte</h3>
       <p>{loadError}</p>
-      <button type="button" class="btn-retry" on:click={() => loadFullResumen(libroId || libro?.id)}>Reintentar</button>
+      <button
+        type="button"
+        class="btn-retry"
+        on:click={() => loadFullResumen(libroId || libro?.id)}
+        >Reintentar</button
+      >
     </div>
   {:else}
     <div class="official-sheet-container">
-      
       <!-- ============================================================
            ENCABEZADO: SALA Y FECHA (Sin las 5 estrellas del logo)
            ============================================================ -->
       <div class="sheet-header">
         <div class="casino-logo-box">
           <span class="logo-main-text">{salaNombre.toUpperCase()}</span>
-          <span class="logo-sub-text">CENTRO DE CONTROL Y MONITOREO (CECOM)</span>
+          <span class="logo-sub-text"
+            >CENTRO DE CONTROL Y MONITOREO (CECOM)</span
+          >
         </div>
 
         <div class="sheet-date-box">
@@ -531,16 +644,19 @@
 
         <div class="horarios-section">
           <div class="horarios-list">
-            
             <!-- 1. Apertura de la sala -->
             <div class="horario-item">
               <span class="item-num">1.</span>
               <span class="item-label">Apertura de la sala</span>
               <div class="item-values">
                 <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.apertura_sala_inicio || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.apertura_sala_inicio || "—"}</span
+                >
                 <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.apertura_sala_fin || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.apertura_sala_fin || "—"}</span
+                >
               </div>
             </div>
 
@@ -550,9 +666,13 @@
               <span class="item-label">Apertura de maquinas</span>
               <div class="item-values">
                 <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.apertura_maquinas_inicio || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.apertura_maquinas_inicio || "—"}</span
+                >
                 <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.apertura_maquinas_fin || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.apertura_maquinas_fin || "—"}</span
+                >
               </div>
             </div>
 
@@ -562,9 +682,13 @@
               <span class="item-label">Apertura de bingo</span>
               <div class="item-values">
                 <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.apertura_bingo_inicio || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.apertura_bingo_inicio || "—"}</span
+                >
                 <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.apertura_bingo_fin || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.apertura_bingo_fin || "—"}</span
+                >
               </div>
             </div>
 
@@ -574,9 +698,13 @@
               <span class="item-label">Retiro de dropbox general</span>
               <div class="item-values">
                 <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.retiros_dropbox_inicio || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.retiros_dropbox_inicio || "—"}</span
+                >
                 <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.retiros_dropbox_fin || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.retiros_dropbox_fin || "—"}</span
+                >
               </div>
             </div>
 
@@ -586,12 +714,15 @@
               <span class="item-label">Conteo DROP</span>
               <div class="item-values">
                 <span class="h-text">h inicio:</span>
-                <span class="h-val">{resumenData.datos?.conteo_dropbox_inicio || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.conteo_dropbox_inicio || "—"}</span
+                >
                 <span class="h-text">h cierre:</span>
-                <span class="h-val">{resumenData.datos?.conteo_dropbox_fin || '—'}</span>
+                <span class="h-val"
+                  >{resumenData.datos?.conteo_dropbox_fin || "—"}</span
+                >
               </div>
             </div>
-
           </div>
         </div>
       </div>
@@ -602,10 +733,18 @@
       <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">🎲 2. Drop de Mesas (Arqueo de Efectivo)</h2>
-            <span class="sub-count-badge">{resumenData.drop_mesas.length} mesas registradas</span>
+            <h2 class="sub-section-title">
+              🎲 2. Drop de Mesas (Arqueo de Efectivo)
+            </h2>
+            <span class="sub-count-badge"
+              >{resumenData.drop_mesas.length} mesas registradas</span
+            >
           </div>
-          <span class="sub-total-badge {produccionTotal >= 0 ? 'badge-produccion-positive' : 'badge-produccion-negative'}">
+          <span
+            class="sub-total-badge {produccionTotal >= 0
+              ? 'badge-produccion-positive'
+              : 'badge-produccion-negative'}"
+          >
             Producción: <b>{formatMoney(produccionTotal)}</b>
           </span>
         </div>
@@ -614,26 +753,38 @@
         <div class="quick-kpi-grid">
           <div class="kpi-card">
             <span class="kpi-label">Total Drop</span>
-            <span class="kpi-value text-emerald">{formatMoney(dropTotales.grandTotal)}</span>
+            <span class="kpi-value text-emerald"
+              >{formatMoney(dropTotales.grandTotal)}</span
+            >
           </div>
           <div class="kpi-card">
             <span class="kpi-label">Total Compra</span>
-            <span class="kpi-value text-blue">{formatMoney(clientesTotales.totalCompras)}</span>
+            <span class="kpi-value text-blue"
+              >{formatMoney(clientesTotales.totalCompras)}</span
+            >
           </div>
           <div class="kpi-card">
             <span class="kpi-label">Total Pagos</span>
-            <span class="kpi-value text-rose">{formatMoney(clientesTotales.totalPagos)}</span>
+            <span class="kpi-value text-rose"
+              >{formatMoney(clientesTotales.totalPagos)}</span
+            >
           </div>
           <div class="kpi-card">
             <span class="kpi-label">Total Compra - Total Pagos</span>
-            <span class="kpi-value {clientesTotales.balanceNeto >= 0 ? 'text-emerald' : 'text-rose'}">
+            <span
+              class="kpi-value {clientesTotales.balanceNeto >= 0
+                ? 'text-emerald'
+                : 'text-rose'}"
+            >
               {formatMoney(clientesTotales.balanceNeto)}
             </span>
           </div>
         </div>
 
         {#if resumenData.drop_mesas.length === 0}
-          <div class="empty-sub-alert">No hay registros de drop para este libro.</div>
+          <div class="empty-sub-alert">
+            No hay registros de drop para este libro.
+          </div>
         {:else}
           <table class="sheet-detail-table">
             <thead>
@@ -651,7 +802,9 @@
             <tbody>
               {#each resumenData.drop_mesas as d}
                 <tr>
-                  <td class="cell-mesa-bold">{d.mesa_nombre || `Mesa #${d.mesa_id}`}</td>
+                  <td class="cell-mesa-bold"
+                    >{d.mesa_nombre || `Mesa #${d.mesa_id}`}</td
+                  >
                   <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
                   <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
                   <td class="cell-num">{d.denominacion_20 ?? d.b20 ?? 0}</td>
@@ -671,7 +824,9 @@
                 <td class="cell-num">{dropTotales.sum10}</td>
                 <td class="cell-num">{dropTotales.sum5}</td>
                 <td class="cell-num">{dropTotales.sum1}</td>
-                <td class="cell-grand-total">{formatMoney(dropTotales.grandTotal)}</td>
+                <td class="cell-grand-total"
+                  >{formatMoney(dropTotales.grandTotal)}</td
+                >
               </tr>
             </tfoot>
           </table>
@@ -684,8 +839,12 @@
       <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">🎭 3. Novedades de Mesas (Apertura y Cierre)</h2>
-            <span class="sub-count-badge">{resumenData.novedades_mesas.length} registros</span>
+            <h2 class="sub-section-title">
+              🎭 3. Novedades de Mesas (Apertura y Cierre)
+            </h2>
+            <span class="sub-count-badge"
+              >{resumenData.novedades_mesas.length} registros</span
+            >
           </div>
         </div>
 
@@ -693,30 +852,34 @@
           <table class="sheet-official-table">
             <thead>
               <tr>
-                <th class="th-hora-a">HORA<br/>A</th>
+                <th class="th-hora-a">HORA<br />A</th>
                 <th class="th-mesa">MESA</th>
                 <th class="th-pitboss">PITBOSS</th>
-                <th class="th-croupier">CROUPIER<br/>APERTURA</th>
-                <th class="th-croupier">CROUPIER<br/>CIERRE</th>
-                <th class="th-hora-c">HORA<br/>C</th>
+                <th class="th-croupier">CROUPIER<br />APERTURA</th>
+                <th class="th-croupier">CROUPIER<br />CIERRE</th>
+                <th class="th-hora-c">HORA<br />C</th>
                 <th class="th-obs">OBSERVACIÓN</th>
               </tr>
             </thead>
             <tbody>
               {#if resumenData.novedades_mesas.length === 0}
                 <tr>
-                  <td colspan="7" class="cell-empty-text">No hay novedades registradas de mesas para este día.</td>
+                  <td colspan="7" class="cell-empty-text"
+                    >No hay novedades registradas de mesas para este día.</td
+                  >
                 </tr>
               {:else}
                 {#each resumenData.novedades_mesas as nov}
                   <tr>
-                    <td class="cell-center">{nov.hora_apertura || '—'}</td>
-                    <td class="cell-mesa-name">{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td>
-                    <td class="cell-left">{nov.pitboss || '—'}</td>
-                    <td class="cell-left">{nov.croupier_apertura || '—'}</td>
-                    <td class="cell-left">{nov.croupier_cierre || '—'}</td>
-                    <td class="cell-center">{nov.hora_cierre || '—'}</td>
-                    <td class="cell-left cell-obs">{nov.observacion || '—'}</td>
+                    <td class="cell-center">{nov.hora_apertura || "—"}</td>
+                    <td class="cell-mesa-name"
+                      >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
+                    >
+                    <td class="cell-left">{nov.pitboss || "—"}</td>
+                    <td class="cell-left">{nov.croupier_apertura || "—"}</td>
+                    <td class="cell-left">{nov.croupier_cierre || "—"}</td>
+                    <td class="cell-center">{nov.hora_cierre || "—"}</td>
+                    <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
                   </tr>
                 {/each}
               {/if}
@@ -731,27 +894,37 @@
       <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">⚠️ 4. Bitácora de Incidencias (Mercancía, Generales y Empleados)</h2>
-            <span class="sub-count-badge">{resumenData.incidencias_generales.length} reportes en total</span>
+            <h2 class="sub-section-title">
+              ⚠️ 4. Bitácora de Incidencias (Mercancía, Generales y Empleados)
+            </h2>
+            <span class="sub-count-badge"
+              >{resumenData.incidencias_generales.length} reportes en total</span
+            >
           </div>
         </div>
 
         <div class="incidencias-bloque-tres">
-          
           <!-- Bloque 1: Mercancía / Proveedores -->
           <div class="incidencia-subbloque">
             <div class="incidencia-subbloque-header">
               <h3 class="incidencia-subbloque-title">
                 <span>📦 Mercancía / Proveedores</span>
               </h3>
-              <span class="incidencia-badge">{incidenciasBloque.mercancia.length}</span>
+              <span class="incidencia-badge"
+                >{incidenciasBloque.mercancia.length}</span
+              >
             </div>
             <div class="incidencia-subbloque-content">
               {#if incidenciasBloque.mercancia.length === 0}
-                <div class="empty-sub-alert">Sin recepción de mercancía registrada.</div>
+                <div class="empty-sub-alert">
+                  Sin recepción de mercancía registrada.
+                </div>
               {:else}
                 {#each incidenciasBloque.mercancia as inc}
-                  {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
+                  {@const parsed = parseIncidenciaContent(
+                    inc.descripcion,
+                    inc.hora,
+                  )}
                   <div class="incidencia-item-card">
                     <div class="inc-item-title-bold">{parsed.title}</div>
                     {#if parsed.items && parsed.items.length > 0}
@@ -773,14 +946,21 @@
               <h3 class="incidencia-subbloque-title">
                 <span>📋 Incidencias Generales</span>
               </h3>
-              <span class="incidencia-badge">{incidenciasBloque.generales.length}</span>
+              <span class="incidencia-badge"
+                >{incidenciasBloque.generales.length}</span
+              >
             </div>
             <div class="incidencia-subbloque-content">
               {#if incidenciasBloque.generales.length === 0}
-                <div class="empty-sub-alert">Sin incidencias generales reportadas.</div>
+                <div class="empty-sub-alert">
+                  Sin incidencias generales reportadas.
+                </div>
               {:else}
                 {#each incidenciasBloque.generales as inc}
-                  {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
+                  {@const parsed = parseIncidenciaContent(
+                    inc.descripcion,
+                    inc.hora,
+                  )}
                   <div class="incidencia-item-card">
                     <div class="inc-item-title-bold">{parsed.title}</div>
                     {#if parsed.items && parsed.items.length > 0}
@@ -802,14 +982,21 @@
               <h3 class="incidencia-subbloque-title">
                 <span>👤 Personal / Empleados</span>
               </h3>
-              <span class="incidencia-badge">{incidenciasBloque.empleado.length}</span>
+              <span class="incidencia-badge"
+                >{incidenciasBloque.empleado.length}</span
+              >
             </div>
             <div class="incidencia-subbloque-content">
               {#if incidenciasBloque.empleado.length === 0}
-                <div class="empty-sub-alert">Sin novedades de empleados registradas.</div>
+                <div class="empty-sub-alert">
+                  Sin novedades de empleados registradas.
+                </div>
               {:else}
                 {#each incidenciasBloque.empleado as inc}
-                  {@const parsed = parseIncidenciaContent(inc.descripcion, inc.hora)}
+                  {@const parsed = parseIncidenciaContent(
+                    inc.descripcion,
+                    inc.hora,
+                  )}
                   <div class="incidencia-item-card">
                     <div class="inc-item-title-bold">{parsed.title}</div>
                     {#if parsed.items && parsed.items.length > 0}
@@ -824,7 +1011,6 @@
               {/if}
             </div>
           </div>
-
         </div>
       </div>
 
@@ -834,17 +1020,25 @@
       <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">🔑 5. Bitácora de Control de Llaves</h2>
+            <h2 class="sub-section-title">
+              🔑 5. Bitácora de Control de Llaves
+            </h2>
             <span class="sub-count-badge">{llavesTotales.total} registros</span>
           </div>
           <div class="badges-status-group">
-            <span class="badge-kpi-pill active">En Custodia: <b>{llavesTotales.enCustodia}</b></span>
-            <span class="badge-kpi-pill success">Devueltas: <b>{llavesTotales.devueltas}</b></span>
+            <span class="badge-kpi-pill active"
+              >En Custodia: <b>{llavesTotales.enCustodia}</b></span
+            >
+            <span class="badge-kpi-pill success"
+              >Devueltas: <b>{llavesTotales.devueltas}</b></span
+            >
           </div>
         </div>
 
         {#if resumenData.control_llaves.length === 0}
-          <div class="empty-sub-alert">No hay movimientos de control de llaves registrados en este libro.</div>
+          <div class="empty-sub-alert">
+            No hay movimientos de control de llaves registrados en este libro.
+          </div>
         {:else}
           <table class="sheet-detail-table">
             <thead>
@@ -859,16 +1053,20 @@
             </thead>
             <tbody>
               {#each resumenData.control_llaves as k, idx}
-                {@const isDevuelta = Boolean(k.hora_recepcion && k.hora_recepcion.trim())}
-                {@const llavesTexto = (k.llaves_detalle && k.llaves_detalle.length > 0)
-                  ? k.llaves_detalle.map(l => l.nombre).join(', ')
-                  : (k.llave_nombre || (k.llaves_ids ? `${k.llaves_ids.length} llaves` : '—'))}
+                {@const isDevuelta = Boolean(
+                  k.hora_recepcion && k.hora_recepcion.trim(),
+                )}
+                {@const llavesTexto =
+                  k.llaves_detalle && k.llaves_detalle.length > 0
+                    ? k.llaves_detalle.map((l) => l.nombre).join(", ")
+                    : k.llave_nombre ||
+                      (k.llaves_ids ? `${k.llaves_ids.length} llaves` : "—")}
                 <tr>
                   <td class="cell-center">{idx + 1}</td>
                   <td class="cell-llave-bold">🔑 {llavesTexto}</td>
-                  <td class="cell-left">{k.descripcion || 'General'}</td>
-                  <td class="cell-center">{k.hora_salida || '—'}</td>
-                  <td class="cell-center">{k.hora_recepcion || '—'}</td>
+                  <td class="cell-left">{k.descripcion || "General"}</td>
+                  <td class="cell-center">{k.hora_salida || "—"}</td>
+                  <td class="cell-center">{k.hora_recepcion || "—"}</td>
                   <td class="cell-center">
                     {#if isDevuelta}
                       <span class="tag-status tag-success">✓ Devuelta</span>
@@ -889,13 +1087,27 @@
       <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
-            <h2 class="sub-section-title">👥 6. Control de Clientes / Jugadores en Sala</h2>
-            <span class="sub-count-badge">{clientesTotales.totalOps} transacciones</span>
+            <h2 class="sub-section-title">
+              👥 6. Control de Clientes / Jugadores en Sala
+            </h2>
+            <span class="sub-count-badge"
+              >{clientesTotales.totalOps} transacciones</span
+            >
           </div>
           <div class="badges-status-group">
-            <span class="badge-kpi-pill success">Total Compras: <b>{formatMoney(clientesTotales.totalCompras)}</b></span>
-            <span class="badge-kpi-pill info">Total Pagos: <b>{formatMoney(clientesTotales.totalPagos)}</b></span>
-            <span class="badge-kpi-pill {clientesTotales.balanceNeto >= 0 ? 'highlight-positive' : 'highlight-negative'}">
+            <span class="badge-kpi-pill success"
+              >Total Compras: <b>{formatMoney(clientesTotales.totalCompras)}</b
+              ></span
+            >
+            <span class="badge-kpi-pill info"
+              >Total Pagos: <b>{formatMoney(clientesTotales.totalPagos)}</b
+              ></span
+            >
+            <span
+              class="badge-kpi-pill {clientesTotales.balanceNeto >= 0
+                ? 'highlight-positive'
+                : 'highlight-negative'}"
+            >
               Balance Neto: <b>{formatMoney(clientesTotales.balanceNeto)}</b>
             </span>
           </div>
@@ -903,7 +1115,9 @@
 
         <!-- 6.1 Detallado de Operación -->
         {#if resumenData.control_clientes.length === 0}
-          <div class="empty-sub-alert">No hay operaciones de control de clientes registradas en este libro.</div>
+          <div class="empty-sub-alert">
+            No hay operaciones de control de clientes registradas en este libro.
+          </div>
         {:else}
           <table class="sheet-detail-table">
             <thead>
@@ -918,17 +1132,21 @@
             </thead>
             <tbody>
               {#each resumenData.control_clientes as c, idx}
-                {@const isCompra = (c.tipo || '').toLowerCase() === 'compra'}
+                {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
                 <tr>
                   <td class="cell-center">{idx + 1}</td>
-                  <td class="cell-center">{c.hora || '—'}</td>
-                  <td class="cell-client-name">👤 {c.cliente || '—'}</td>
+                  <td class="cell-center">{c.hora || "—"}</td>
+                  <td class="cell-client-name">👤 {c.cliente || "—"}</td>
                   <td class="cell-center">
-                    <span class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}">
-                      {c.tipo || 'Compra'}
+                    <span
+                      class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
+                    >
+                      {c.tipo || "Compra"}
                     </span>
                   </td>
-                  <td class="cell-center tag-metodo-text">{c.metodo || 'General'}</td>
+                  <td class="cell-center tag-metodo-text"
+                    >{c.metodo || "General"}</td
+                  >
                   <td class="cell-total-money">{formatMoney(c.monto)}</td>
                 </tr>
               {/each}
@@ -936,19 +1154,22 @@
             <tfoot>
               <tr class="tfoot-totals">
                 <td colspan="5">BALANCE NETO (COMPRAS - PAGOS)</td>
-                <td class="cell-grand-total">{formatMoney(clientesTotales.balanceNeto)}</td>
+                <td class="cell-grand-total"
+                  >{formatMoney(clientesTotales.balanceNeto)}</td
+                >
               </tr>
             </tfoot>
           </table>
 
           <!-- 6.2 Las 2 Tablitas Agrupadas (Por Método de Pago y Por Cliente) -->
           <div class="client-summaries-grid">
-            
             <!-- Tablita A: Agrupado por Método de Pago -->
             <div class="summary-subtable-box">
               <div class="subtable-header">
                 <h4 class="subtable-title">💳 Resumen por Método de Pago</h4>
-                <span class="incidencia-badge">{clientesPorMetodo.length} métodos</span>
+                <span class="incidencia-badge"
+                  >{clientesPorMetodo.length} métodos</span
+                >
               </div>
               <table class="compact-table">
                 <thead>
@@ -966,8 +1187,14 @@
                       <td class="cell-left font-bold">{m.metodo}</td>
                       <td class="cell-center">{m.ops}</td>
                       <td class="cell-total-money">{formatMoney(m.compras)}</td>
-                      <td class="cell-total-money text-blue">{formatMoney(m.pagos)}</td>
-                      <td class="cell-total-money {m.balance >= 0 ? 'text-emerald' : 'text-rose'}">
+                      <td class="cell-total-money text-blue"
+                        >{formatMoney(m.pagos)}</td
+                      >
+                      <td
+                        class="cell-total-money {m.balance >= 0
+                          ? 'text-emerald'
+                          : 'text-rose'}"
+                      >
                         {formatMoney(m.balance)}
                       </td>
                     </tr>
@@ -977,9 +1204,15 @@
                   <tr class="tfoot-totals">
                     <td>TOTAL</td>
                     <td class="cell-center">{totalesPorMetodo.ops}</td>
-                    <td class="cell-total-money">{formatMoney(totalesPorMetodo.compras)}</td>
-                    <td class="cell-total-money text-blue">{formatMoney(totalesPorMetodo.pagos)}</td>
-                    <td class="cell-grand-total">{formatMoney(totalesPorMetodo.balance)}</td>
+                    <td class="cell-total-money"
+                      >{formatMoney(totalesPorMetodo.compras)}</td
+                    >
+                    <td class="cell-total-money text-blue"
+                      >{formatMoney(totalesPorMetodo.pagos)}</td
+                    >
+                    <td class="cell-grand-total"
+                      >{formatMoney(totalesPorMetodo.balance)}</td
+                    >
                   </tr>
                 </tfoot>
               </table>
@@ -989,7 +1222,9 @@
             <div class="summary-subtable-box">
               <div class="subtable-header">
                 <h4 class="subtable-title">👤 Resumen por Cliente / Jugador</h4>
-                <span class="incidencia-badge">{clientesPorJugador.length} clientes</span>
+                <span class="incidencia-badge"
+                  >{clientesPorJugador.length} clientes</span
+                >
               </div>
               <table class="compact-table">
                 <thead>
@@ -1006,9 +1241,16 @@
                     <tr>
                       <td class="cell-left font-bold">{cl.cliente}</td>
                       <td class="cell-center">{cl.ops}</td>
-                      <td class="cell-total-money">{formatMoney(cl.compras)}</td>
-                      <td class="cell-total-money text-blue">{formatMoney(cl.pagos)}</td>
-                      <td class="cell-total-money {cl.balance >= 0 ? 'text-emerald' : 'text-rose'}">
+                      <td class="cell-total-money">{formatMoney(cl.compras)}</td
+                      >
+                      <td class="cell-total-money text-blue"
+                        >{formatMoney(cl.pagos)}</td
+                      >
+                      <td
+                        class="cell-total-money {cl.balance >= 0
+                          ? 'text-emerald'
+                          : 'text-rose'}"
+                      >
                         {formatMoney(cl.balance)}
                       </td>
                     </tr>
@@ -1018,14 +1260,19 @@
                   <tr class="tfoot-totals">
                     <td>TOTAL</td>
                     <td class="cell-center">{totalesPorJugador.ops}</td>
-                    <td class="cell-total-money">{formatMoney(totalesPorJugador.compras)}</td>
-                    <td class="cell-total-money text-blue">{formatMoney(totalesPorJugador.pagos)}</td>
-                    <td class="cell-grand-total">{formatMoney(totalesPorJugador.balance)}</td>
+                    <td class="cell-total-money"
+                      >{formatMoney(totalesPorJugador.compras)}</td
+                    >
+                    <td class="cell-total-money text-blue"
+                      >{formatMoney(totalesPorJugador.pagos)}</td
+                    >
+                    <td class="cell-grand-total"
+                      >{formatMoney(totalesPorJugador.balance)}</td
+                    >
                   </tr>
                 </tfoot>
               </table>
             </div>
-
           </div>
         {/if}
       </div>
@@ -1038,11 +1285,15 @@
           <span class="op-main-title">OPERADORES CECOM:</span>
           <div class="op-line">
             <span class="op-label">TURNO A (APERTURA):</span>
-            <span class="op-names">NOMBRES: {resumenData.datos?.operador_turno_a || '—'}</span>
+            <span class="op-names"
+              >NOMBRES: {resumenData.datos?.operador_turno_a || "—"}</span
+            >
           </div>
           <div class="op-line">
             <span class="op-label">TURNO C (CIERRE):</span>
-            <span class="op-names">NOMBRES: {resumenData.datos?.operador_turno_c || '—'}</span>
+            <span class="op-names"
+              >NOMBRES: {resumenData.datos?.operador_turno_c || "—"}</span
+            >
           </div>
         </div>
 
@@ -1051,13 +1302,17 @@
           <div class="signature-box">
             <div class="sign-line"></div>
             <span class="sign-title">Operador CECOM (Turno A - Apertura)</span>
-            <span class="sign-name">{resumenData.datos?.operador_turno_a || 'Firma y Huella'}</span>
+            <span class="sign-name"
+              >{resumenData.datos?.operador_turno_a || "Firma y Huella"}</span
+            >
           </div>
 
           <div class="signature-box">
             <div class="sign-line"></div>
             <span class="sign-title">Operador CECOM (Turno C - Cierre)</span>
-            <span class="sign-name">{resumenData.datos?.operador_turno_c || 'Firma y Huella'}</span>
+            <span class="sign-name"
+              >{resumenData.datos?.operador_turno_c || "Firma y Huella"}</span
+            >
           </div>
 
           <div class="signature-box">
@@ -1071,8 +1326,6 @@
           Documento oficial consolidado emitido por el Sistema WISI.
         </div>
       </div>
-
-
     </div>
   {/if}
 </div>
@@ -1566,7 +1819,9 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -1603,7 +1858,7 @@
   .logo-main-text {
     font-size: 26px;
     font-weight: 900;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     letter-spacing: -0.3px;
     color: #0f172a;
     line-height: 1.1;
@@ -1791,17 +2046,45 @@
     vertical-align: middle;
   }
 
-  .th-hora-a, .th-hora-c { width: 75px; }
-  .th-mesa { width: 85px; text-align: center; }
-  .th-pitboss { width: 140px; }
-  .th-croupier { width: 160px; }
-  .th-obs { min-width: 120px; }
+  .th-hora-a,
+  .th-hora-c {
+    width: 75px;
+  }
+  .th-mesa {
+    width: 85px;
+    text-align: center;
+  }
+  .th-pitboss {
+    width: 140px;
+  }
+  .th-croupier {
+    width: 160px;
+  }
+  .th-obs {
+    min-width: 120px;
+  }
 
-  .cell-center { text-align: center; font-weight: 700; }
-  .cell-left { text-align: left; }
-  .cell-mesa-name { text-align: center; font-weight: 900; }
-  .cell-obs { font-weight: 700; font-style: italic; }
-  .cell-empty-text { text-align: center; padding: 18px; color: #4b5563; font-style: italic; }
+  .cell-center {
+    text-align: center;
+    font-weight: 700;
+  }
+  .cell-left {
+    text-align: left;
+  }
+  .cell-mesa-name {
+    text-align: center;
+    font-weight: 900;
+  }
+  .cell-obs {
+    font-weight: 700;
+    font-style: italic;
+  }
+  .cell-empty-text {
+    text-align: center;
+    padding: 18px;
+    color: #4b5563;
+    font-style: italic;
+  }
 
   /* Operadores CECOM */
   .operadores-section {
@@ -1925,11 +2208,33 @@
     border-radius: 4px;
     font-weight: 600;
   }
-  .badge-kpi-pill.active { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-  .badge-kpi-pill.success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-  .badge-kpi-pill.info { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
-  .badge-kpi-pill.highlight-positive { background: #d1fae5; color: #047857; font-weight: 800; border: 1px solid #a7f3d0; }
-  .badge-kpi-pill.highlight-negative { background: #fee2e2; color: #b91c1c; font-weight: 800; border: 1px solid #fecaca; }
+  .badge-kpi-pill.active {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+  .badge-kpi-pill.success {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+  .badge-kpi-pill.info {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+  .badge-kpi-pill.highlight-positive {
+    background: #d1fae5;
+    color: #047857;
+    font-weight: 800;
+    border: 1px solid #a7f3d0;
+  }
+  .badge-kpi-pill.highlight-negative {
+    background: #fee2e2;
+    color: #b91c1c;
+    font-weight: 800;
+    border: 1px solid #fecaca;
+  }
 
   /* Quick KPI Cards */
   .quick-kpi-grid {
@@ -2004,18 +2309,51 @@
     padding: 6px 8px;
   }
 
-  .th-num { width: 45px; text-align: center; }
-  .th-hora { width: 80px; text-align: center; }
-  .th-cliente { width: 180px; }
-  .th-tipo { width: 100px; text-align: center; }
-  .th-metodo { width: 110px; text-align: center; }
-  .th-total { width: 130px; text-align: right; }
-  .th-llave { width: 200px; }
-  .th-estado { width: 110px; text-align: center; }
+  .th-num {
+    width: 45px;
+    text-align: center;
+  }
+  .th-hora {
+    width: 80px;
+    text-align: center;
+  }
+  .th-cliente {
+    width: 180px;
+  }
+  .th-tipo {
+    width: 100px;
+    text-align: center;
+  }
+  .th-metodo {
+    width: 110px;
+    text-align: center;
+  }
+  .th-total {
+    width: 130px;
+    text-align: right;
+  }
+  .th-llave {
+    width: 200px;
+  }
+  .th-estado {
+    width: 110px;
+    text-align: center;
+  }
 
-  .cell-num { text-align: center; font-variant-numeric: tabular-nums; }
-  .cell-mesa-bold { font-weight: 800; color: #111827; }
-  .cell-total-money { text-align: right; font-weight: 800; color: #15803d; font-variant-numeric: tabular-nums; }
+  .cell-num {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .cell-mesa-bold {
+    font-weight: 800;
+    color: #111827;
+  }
+  .cell-total-money {
+    text-align: right;
+    font-weight: 800;
+    color: #15803d;
+    font-variant-numeric: tabular-nums;
+  }
 
   .tfoot-totals {
     background: #f3f4f6;
@@ -2031,8 +2369,14 @@
     color: #166534;
   }
 
-  .cell-llave-bold { font-weight: 800; color: #1e3a8a; }
-  .cell-client-name { font-weight: 700; color: #111827; }
+  .cell-llave-bold {
+    font-weight: 800;
+    color: #1e3a8a;
+  }
+  .cell-client-name {
+    font-weight: 700;
+    color: #111827;
+  }
 
   .tag-tipo {
     font-size: 11px;
@@ -2041,9 +2385,18 @@
     border-radius: 4px;
     display: inline-block;
   }
-  .tag-compra { background: #dcfce7; color: #15803d; }
-  .tag-pago { background: #eff6ff; color: #1d4ed8; }
-  .tag-inc-tipo { background: #f1f5f9; color: #475569; }
+  .tag-compra {
+    background: #dcfce7;
+    color: #15803d;
+  }
+  .tag-pago {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+  .tag-inc-tipo {
+    background: #f1f5f9;
+    color: #475569;
+  }
 
   .tag-metodo-text {
     font-weight: 600;
@@ -2057,8 +2410,14 @@
     border-radius: 4px;
     display: inline-block;
   }
-  .tag-success { background: #dcfce7; color: #166534; }
-  .tag-warning { background: #fef3c7; color: #92400e; }
+  .tag-success {
+    background: #dcfce7;
+    color: #166534;
+  }
+  .tag-warning {
+    background: #fef3c7;
+    color: #92400e;
+  }
 
   .inc-text-wrapper {
     display: flex;
