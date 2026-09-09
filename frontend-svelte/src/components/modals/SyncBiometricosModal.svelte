@@ -478,12 +478,22 @@
                           <span>Seleccionar ({selectedSyncIds.size})</span>
                         </label>
 
-                        <input 
-                          type="text" 
-                          bind:value={searchSync}
-                          placeholder="🔍 Buscar empleado, cédula o cargo..."
-                          class="sync-search-input"
-                        />
+                        <div class="sync-search-wrapper">
+                          <input 
+                            type="text" 
+                            bind:value={searchSync}
+                            placeholder="🔍 Buscar empleado, cédula o cargo..."
+                            class="sync-search-input"
+                          />
+                          {#if searchSync}
+                            <button 
+                              type="button" 
+                              class="sync-search-clear-btn" 
+                              on:click={() => searchSync = ''}
+                              title="Limpiar filtro"
+                            >✕</button>
+                          {/if}
+                        </div>
                       </div>
 
                       <div style="display: flex; gap: 8px;">
@@ -602,7 +612,15 @@
                       </table>
                     </div>
                     <div class="sync-table-counter">
-                      Mostrando {filteredSincronizados.length} de {currentDevice.sincronizados.length} empleados sincronizados
+                      <span>Mostrando <strong>{filteredSincronizados.length}</strong> de <strong>{currentDevice.sincronizados.length}</strong> empleados sincronizados</span>
+                      {#if searchSync.trim()}
+                        <span class="sync-filter-active-pill">
+                          Filtrado por: "<strong>{searchSync}</strong>"
+                          <button type="button" class="sync-btn-clear-inline" on:click={() => searchSync = ''}>
+                            ✕ Quitar filtro
+                          </button>
+                        </span>
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -628,12 +646,22 @@
                           <span>Seleccionar ({selectedFaltanIds.size})</span>
                         </label>
 
-                        <input 
-                          type="text" 
-                          bind:value={searchFaltan}
-                          placeholder="🔍 Buscar empleado, cédula o cargo..."
-                          class="sync-search-input"
-                        />
+                        <div class="sync-search-wrapper">
+                          <input 
+                            type="text" 
+                            bind:value={searchFaltan}
+                            placeholder="🔍 Buscar empleado, cédula o cargo..."
+                            class="sync-search-input"
+                          />
+                          {#if searchFaltan}
+                            <button 
+                              type="button" 
+                              class="sync-search-clear-btn" 
+                              on:click={() => searchFaltan = ''}
+                              title="Limpiar filtro"
+                            >✕</button>
+                          {/if}
+                        </div>
                       </div>
 
                       <div style="display: flex; gap: 8px;">
@@ -733,7 +761,15 @@
                       </table>
                     </div>
                     <div class="sync-table-counter">
-                      Mostrando {filteredFaltan.length} de {currentDevice.faltan.length} empleados pendientes
+                      <span>Mostrando <strong>{filteredFaltan.length}</strong> de <strong>{currentDevice.faltan.length}</strong> empleados pendientes</span>
+                      {#if searchFaltan.trim()}
+                        <span class="sync-filter-active-pill">
+                          Filtrado por: "<strong>{searchFaltan}</strong>"
+                          <button type="button" class="sync-btn-clear-inline" on:click={() => searchFaltan = ''}>
+                            ✕ Quitar filtro
+                          </button>
+                        </span>
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -759,12 +795,22 @@
                           <span>Seleccionar ({selectedSobranNos.size})</span>
                         </label>
 
-                        <input 
-                          type="text" 
-                          bind:value={searchSobran}
-                          placeholder="🔍 Buscar usuario, cédula o estado..."
-                          class="sync-search-input"
-                        />
+                        <div class="sync-search-wrapper">
+                          <input 
+                            type="text" 
+                            bind:value={searchSobran}
+                            placeholder="🔍 Buscar usuario, cédula o estado..."
+                            class="sync-search-input"
+                          />
+                          {#if searchSobran}
+                            <button 
+                              type="button" 
+                              class="sync-search-clear-btn" 
+                              on:click={() => searchSobran = ''}
+                              title="Limpiar filtro"
+                            >✕</button>
+                          {/if}
+                        </div>
                       </div>
 
                       <div style="display: flex; gap: 8px;">
@@ -865,7 +911,15 @@
                       </table>
                     </div>
                     <div class="sync-table-counter">
-                      Mostrando {filteredSobran.length} de {currentDevice.sobran.length} usuarios sobrantes
+                      <span>Mostrando <strong>{filteredSobran.length}</strong> de <strong>{currentDevice.sobran.length}</strong> usuarios sobrantes</span>
+                      {#if searchSobran.trim()}
+                        <span class="sync-filter-active-pill">
+                          Filtrado por: "<strong>{searchSobran}</strong>"
+                          <button type="button" class="sync-btn-clear-inline" on:click={() => searchSobran = ''}>
+                            ✕ Quitar filtro
+                          </button>
+                        </span>
+                      {/if}
                     </div>
                   {/if}
                 </div>
@@ -1340,8 +1394,14 @@
     cursor: pointer;
   }
 
+  .sync-search-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
   .sync-search-input {
-    padding: 5px 12px;
+    padding: 5px 28px 5px 12px;
     border-radius: 7px;
     border: 1px solid #cbd5e1;
     font-size: 12px;
@@ -1355,6 +1415,26 @@
   .sync-search-input:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  .sync-search-clear-btn {
+    position: absolute;
+    right: 6px;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: all 0.15s ease;
+  }
+
+  .sync-search-clear-btn:hover {
+    color: #ef4444;
+    background: #fee2e2;
   }
 
   .sync-btn-update-bulk {
@@ -1620,9 +1700,43 @@
     font-size: 11.5px;
     font-weight: 700;
     color: #64748b;
-    text-align: right;
-    padding: 2px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 3px 6px;
     flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .sync-filter-active-pill {
+    padding: 2px 8px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    color: #1d4ed8;
+    font-weight: 600;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sync-btn-clear-inline {
+    background: none;
+    border: none;
+    color: #dc2626;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 11px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+  }
+
+  .sync-btn-clear-inline:hover {
+    background: #fee2e2;
+    color: #991b1b;
   }
 
   .sync-empty-tab {
