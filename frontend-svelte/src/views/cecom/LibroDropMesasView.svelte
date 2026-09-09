@@ -25,11 +25,11 @@
 
   // Lista de registros de drop
   let dropRecords = [];
-  let isLoadingRecords = false;
+  let isLoadingRecords = true;
 
   // Mesas cargadas del servidor o store
   let serverMesas = [];
-  let isLoadingMesas = false;
+  let isLoadingMesas = true;
 
   // Usuario y salas asignadas
   $: userSalasMap = $masterUserSalasStore || {};

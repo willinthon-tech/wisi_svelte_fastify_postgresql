@@ -27,7 +27,7 @@
 
   // Lista de incidencias
   let records = [];
-  let isLoadingRecords = false;
+  let isLoadingRecords = true;
 
   function normalizeText(val) {
     return String(val || '')

@@ -16,8 +16,8 @@
   export let libroId = null;
 
   // Estado de carga y datos
-  let isLoadingRecords = false;
-  let isLoadingMesas = false;
+  let isLoadingRecords = true;
+  let isLoadingMesas = true;
   let novedadesRecords = [];
   let serverMesas = [];
   let searchQuery = '';

@@ -21,7 +21,7 @@
 
   // Lista de registros de control de llaves
   let records = [];
-  let isLoadingRecords = false;
+  let isLoadingRecords = true;
 
   // Ordenados por ID de la tabla (el último registrado primero / ID descendente)
   // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche

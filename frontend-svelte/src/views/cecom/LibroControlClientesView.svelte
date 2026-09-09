@@ -21,7 +21,7 @@
 
   // Lista de registros de operaciones de clientes
   let records = [];
-  let isLoadingRecords = false;
+  let isLoadingRecords = true;
 
   // Drop de mesas para el consolidado global
   let dropRecords = [];
@@ -883,7 +883,17 @@
               </tr>
             </thead>
             <tbody>
-              {#each resumenMetodos as m}
+              {#if isLoadingRecords}
+                <tr>
+                  <td colspan="5" class="empty-state-cell">
+                    <div class="loading-state-inline">
+                      <div class="spinner-small"></div>
+                      <span>Cargando resumen de métodos...</span>
+                    </div>
+                  </td>
+                </tr>
+              {:else}
+                {#each resumenMetodos as m}
                 <tr>
                   <td>
                     <span class="badge-metodo metodo-{m.metodo.toLowerCase()}">{m.metodo}</span>
@@ -902,6 +912,7 @@
                   </td>
                 </tr>
               {/each}
+              {/if}
             </tbody>
             <tfoot>
               <tr class="tfoot-totals-row">
@@ -934,7 +945,16 @@
               </tr>
             </thead>
             <tbody>
-              {#if resumenClientesFiltrados.length === 0}
+              {#if isLoadingRecords}
+                <tr>
+                  <td colspan="7" class="empty-state-cell">
+                    <div class="loading-state-inline">
+                      <div class="spinner-small"></div>
+                      <span>Cargando resumen de clientes...</span>
+                    </div>
+                  </td>
+                </tr>
+              {:else if resumenClientesFiltrados.length === 0}
                 <tr>
                   <td colspan="7" class="empty-state-cell">
                     <span class="empty-text">No hay clientes coincidentes registrados en esta fecha.</span>

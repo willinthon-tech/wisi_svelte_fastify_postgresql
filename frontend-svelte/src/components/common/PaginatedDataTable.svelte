@@ -122,7 +122,7 @@
   }
 
 
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import html2canvas from 'html2canvas';
   import { saveOrShareFile } from '../../utils/fileSaver.js';
   import { triggerToast, globalCreateModalTriggerStore } from '../../controllers/ui.store.js';
@@ -154,7 +154,28 @@
   export let reservedCodes = []; // Array of codes that cannot be used (e.g., ['L', 'U'])
   export let createModalTitle = ''; // Optional custom modal title override
   export let customCreateModal = false; // When true, parent handles create modal via on:openModal
-    let allMasterCargos = [];
+  export let isLoading = undefined; // Controlled loading prop from parent
+
+  // Automatic loading detection: on mount starts loading if items is empty
+  let previousItemsRef = items;
+  let internalLoading = (!items || items.length === 0);
+
+  onMount(() => {
+    // Safety fallback: if backend fails or doesn't update items, clear loading after 6s
+    const timer = setTimeout(() => {
+      internalLoading = false;
+    }, 6000);
+    return () => clearTimeout(timer);
+  });
+
+  $: if (items !== previousItemsRef) {
+    previousItemsRef = items;
+    internalLoading = false;
+  }
+
+  $: effectiveLoading = (isLoading !== undefined) ? Boolean(isLoading) : internalLoading;
+
+  let allMasterCargos = [];
   $: allMasterCargos = $masterCargosStore || [];
   $: activeCargosList = (cargosOptions && cargosOptions.length > 0) ? cargosOptions : allMasterCargos;
   $: hasRowActions = actions && (actions.edit !== false || actions.delete !== false || actions.reincorporate || actions.desincorporate || actions.restore);
@@ -642,6 +663,7 @@
     const pageNum = Number(currentPage) || 1;
     const sizeNum = Number(pageSize) || 10;
     if (isServerSide) {
+      internalLoading = true;
       dispatch('fetchServerData', {
         page: pageNum,
         limit: sizeNum,
@@ -1186,7 +1208,16 @@
       </thead>
 
       <tbody>
-        {#if paginatedItems.length === 0}
+        {#if effectiveLoading}
+          <tr>
+            <td colspan={columns.length + (showCheckbox ? 1 : 0) + (hasRowActions ? 1 : 0)} class="datatable-loading-cell">
+              <div class="datatable-spinner-wrapper">
+                <div class="spinner-small"></div>
+                <span class="datatable-loading-text">Cargando registros...</span>
+              </div>
+            </td>
+          </tr>
+        {:else if paginatedItems.length === 0}
           <tr>
             <td colspan={columns.length + (showCheckbox ? 1 : 0) + (hasRowActions ? 1 : 0)} class="empty-state">
               No se encontraron registros
@@ -2257,6 +2288,27 @@
     color: #64748b;
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .datatable-loading-cell {
+    text-align: center;
+    padding: 40px 20px !important;
+    background: #ffffff;
+  }
+
+  .datatable-spinner-wrapper {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .datatable-loading-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.2px;
   }
 
   .table-footer-toolbar {

@@ -36,7 +36,7 @@
 
   // --- DATOS Y REGISTROS ---
   let records = [];
-  let isLoadingRecords = false;
+  let isLoadingRecords = true;
   let serverRangos = [];
 
   // Pestaña activa en la tarjeta derecha: 'detallado' | 'rangos' | 'empleados'
@@ -618,7 +618,7 @@
                     </span>
                     <div class="sug-info">
                       <span class="sug-name">{emp.nombre}</span>
-                      <span class="sug-cargo">{emp.cargo_nombre} {#if emp.cedula}• V-{emp.cedula}{/if}</span>
+                      <span class="sug-cargo">{emp.cargo_nombre}</span>
                     </div>
                     <span class="sug-tab-badge">Tab ⇥</span>
                   </li>
@@ -865,9 +865,6 @@
                     <td class="td-cliente">
                       <div class="cliente-cell-content">
                         <span class="cliente-name">{record.empleado_nombre}</span>
-                        {#if record.empleado_cedula}
-                          <span class="cliente-tipo-pill">V-{record.empleado_cedula}</span>
-                        {/if}
                       </div>
                     </td>
                     <td class="td-center td-tipo">
@@ -926,7 +923,14 @@
               </tr>
             </thead>
             <tbody>
-              {#if resumenRangos.length === 0}
+              {#if isLoadingRecords}
+                <tr>
+                  <td colspan="6" class="loading-state">
+                    <div class="spinner-small"></div>
+                    <span>Cargando datos de rangos...</span>
+                  </td>
+                </tr>
+              {:else if resumenRangos.length === 0}
                 <tr>
                   <td colspan="6" class="empty-state-cell">
                     <span class="empty-text">Sin datos de aportes por rango para esta fecha.</span>
@@ -974,7 +978,14 @@
               </tr>
             </thead>
             <tbody>
-              {#if resumenEmpleados.length === 0}
+              {#if isLoadingRecords}
+                <tr>
+                  <td colspan="7" class="loading-state">
+                    <div class="spinner-small"></div>
+                    <span>Cargando datos de empleados...</span>
+                  </td>
+                </tr>
+              {:else if resumenEmpleados.length === 0}
                 <tr>
                   <td colspan="7" class="empty-state-cell">
                     <span class="empty-text">Sin datos de aportes por empleado para esta fecha.</span>
@@ -987,9 +998,6 @@
                     <td class="td-cliente">
                       <div class="cliente-cell-content">
                         <span class="cliente-name">{emp.empleado_nombre}</span>
-                        {#if emp.empleado_cedula}
-                          <span class="cliente-tipo-pill">V-{emp.empleado_cedula}</span>
-                        {/if}
                       </div>
                     </td>
                     <td class="td-center td-metodo">
