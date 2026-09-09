@@ -890,6 +890,9 @@ export async function getMarcajePersonalReportModel(params = {}) {
         fechaStr: dateStr,
         isExcepcion,
         excepcionId,
+        excepcion_tipo_id: excepObj ? excepObj.excepcion_id : null,
+        horario_id: excepObj ? (excepObj.horario_id || excepObj.plantilla_horario_id) : null,
+        es_libre: excepObj ? Boolean(excepObj.es_libre) : false,
         shift: {
           id: shiftId,
           codigo: shiftCode,

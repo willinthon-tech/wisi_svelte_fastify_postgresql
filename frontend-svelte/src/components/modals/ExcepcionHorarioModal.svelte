@@ -23,6 +23,27 @@
   let marcajesContext = [];
   let assignedPlantillasEmp = [];
 
+  $: otrosHorariosSala = (plantillasSala || []).filter(p => {
+    return !horariosEmpleado.some(h => Number(h.id) === Number(p.id));
+  });
+
+  $: extraHorario = (function() {
+    if (!selectedValue || !selectedValue.startsWith('PLANTILLA_')) return null;
+    const targetId = Number(selectedValue.replace('PLANTILLA_', ''));
+    const inEmp = horariosEmpleado.some(h => Number(h.id) === targetId);
+    const inSala = (plantillasSala || []).some(p => Number(p.id) === targetId);
+    if (!inEmp && !inSala && targetId) {
+      return {
+        id: targetId,
+        codigo: dia?.shift?.codigo || 'H',
+        nombre: dia?.shift?.nombre || `Horario #${targetId}`,
+        hora_entrada: dia?.shift?.hora_entrada || null,
+        hora_salida: dia?.shift?.hora_salida || null
+      };
+    }
+    return null;
+  })();
+
   let saveStatusText = '';
   let saveStatusType = 'idle'; // 'idle' | 'saving' | 'saved' | 'error'
   let saveStatusTimer = null;
@@ -233,66 +254,82 @@
     // Pre-selección del valor según el estado actual del día
     const currentCode = dia?.shift?.codigo || '';
     const rawId = dia?.shift?.id;
-    const isRealHorarioId = rawId && !isNaN(Number(rawId)) && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L';
+    const shiftTipo = dia?.shift?.tipo; // 'excepcion' | 'horario' | 'plantilla'
+    const isExcepcion = Boolean(dia && (dia.isExcepcion || dia.excepcionId));
 
-    if (dia && dia.isExcepcion) {
-      if (dia.excepcionId) {
-        const excById = (excepcionesList || []).find(e => Number(e.id) === Number(dia.excepcionId));
-        if (excById) {
-          selectedValue = `EXCEPCION_${excById.id}`;
-          initialSelectedValue = selectedValue;
-          return;
-        }
+    if (isExcepcion) {
+      // 1. Prioridad: Verificar si es una Excepción de Catálogo (Permiso, Reposo, Vacaciones, Falta, Feriado, o Día Libre)
+      let excMatch = null;
+      if (dia.excepcion_tipo_id) {
+        excMatch = (excepcionesList || []).find(e => Number(e.id) === Number(dia.excepcion_tipo_id));
       }
-      if (isRealHorarioId) {
-        selectedValue = `PLANTILLA_${rawId}`;
-      } else {
-        const excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
-        if (excMatch) {
-          selectedValue = `EXCEPCION_${excMatch.id}`;
-        } else {
-          const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
-          selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
-        }
+      if (!excMatch && shiftTipo === 'excepcion' && rawId) {
+        excMatch = (excepcionesList || []).find(e => Number(e.id) === Number(rawId));
       }
-    } else {
-      // Si el día tiene un horario asignado real (no SYS-U ni SYS-L), seleccionarlo en el select
-      if (isRealHorarioId) {
-        selectedValue = `PLANTILLA_${rawId}`;
-      } else if (currentCode === 'L' || dia?.resultadoStr === 'LIBRE') {
+      if (!excMatch && currentCode && currentCode !== 'EX') {
+        excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
+      }
+
+      if (excMatch) {
+        selectedValue = `EXCEPCION_${excMatch.id}`;
+        initialSelectedValue = selectedValue;
+        return;
+      }
+
+      // 2. Prioridad: Verificar si es un Horario Asignado como Excepción
+      const targetHorarioId = dia.horario_id || (shiftTipo !== 'excepcion' && rawId && !isNaN(Number(rawId)) && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L' ? Number(rawId) : null);
+      if (targetHorarioId) {
+        selectedValue = `PLANTILLA_${targetHorarioId}`;
+        initialSelectedValue = selectedValue;
+        return;
+      }
+
+      // 3. Prioridad: Día Libre por excepción
+      if (dia.es_libre || currentCode === 'L') {
         const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
         selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
-      } else if (currentCode === 'U') {
-        // Si el empleado tiene horarios asignados, pre-seleccionar el correspondiente
-        if (horariosEmpleado.length === 1) {
-          selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
-        } else if (horariosEmpleado.length > 1 && dia?.entradaStr) {
-          const entMins = toMinutes(dia.entradaStr);
-          let best = horariosEmpleado[0];
-          let minDiff = Infinity;
-          for (const h of horariosEmpleado) {
-            if (h.hora_entrada) {
-              const hMins = toMinutes(h.hora_entrada);
-              let diff = Math.abs(entMins - hMins);
-              if (diff > 720) diff = 1440 - diff;
-              if (diff < minDiff) {
-                minDiff = diff;
-                best = h;
-              }
+        initialSelectedValue = selectedValue;
+        return;
+      }
+    }
+
+    // Si NO es excepción (comportamiento normal del día)
+    const isRealHorarioId = rawId && !isNaN(Number(rawId)) && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L';
+    if (isRealHorarioId) {
+      selectedValue = `PLANTILLA_${rawId}`;
+    } else if (currentCode === 'L' || dia?.resultadoStr === 'LIBRE') {
+      const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
+      selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+    } else if (currentCode === 'U') {
+      // Si el empleado tiene horarios asignados, pre-seleccionar el correspondiente
+      if (horariosEmpleado.length === 1) {
+        selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
+      } else if (horariosEmpleado.length > 1 && dia?.entradaStr) {
+        const entMins = toMinutes(dia.entradaStr);
+        let best = horariosEmpleado[0];
+        let minDiff = Infinity;
+        for (const h of horariosEmpleado) {
+          if (h.hora_entrada) {
+            const hMins = toMinutes(h.hora_entrada);
+            let diff = Math.abs(entMins - hMins);
+            if (diff > 720) diff = 1440 - diff;
+            if (diff < minDiff) {
+              minDiff = diff;
+              best = h;
             }
           }
-          selectedValue = `PLANTILLA_${best.id}`;
-        } else {
-          const uExc = (excepcionesList || []).find(e => e.codigo === 'U');
-          selectedValue = uExc ? `EXCEPCION_${uExc.id}` : 'BASE_U';
         }
+        selectedValue = `PLANTILLA_${best.id}`;
       } else {
-        if (horariosEmpleado.length === 1) {
-          selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
-        } else {
-          const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
-          selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
-        }
+        const uExc = (excepcionesList || []).find(e => e.codigo === 'U');
+        selectedValue = uExc ? `EXCEPCION_${uExc.id}` : 'BASE_U';
+      }
+    } else {
+      if (horariosEmpleado.length === 1) {
+        selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
+      } else {
+        const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
+        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
       }
     }
     initialSelectedValue = selectedValue;
@@ -412,9 +449,9 @@
         } : null;
       } else if (val.startsWith('PLANTILLA_')) {
         plantillaId = Number(val.replace('PLANTILLA_', ''));
-        const pObj = (plantillasSala || []).find(p => Number(p.id) === Number(plantillaId));
+        const pObj = [...(plantillasSala || []), ...(horariosEmpleado || [])].find(p => Number(p.id) === Number(plantillaId));
         isLibre = pObj ? (pObj.codigo === 'L' || pObj.nombre?.toUpperCase() === 'LIBRE') : false;
-        selectedShiftObj = pObj ? { ...pObj, es_libre: isLibre } : null;
+        selectedShiftObj = pObj ? { ...pObj, tipo: 'horario', es_libre: isLibre } : null;
       } else if (val === 'BASE_L') {
         const excObj = (excepcionesList || []).find(e => e.codigo === 'L');
         if (excObj) excepcionId = excObj.id;
@@ -424,6 +461,7 @@
           codigo: 'L',
           nombre: 'Día Libre',
           color: '#D9D9D9',
+          tipo: 'excepcion',
           es_libre: true
         };
       }
@@ -433,12 +471,16 @@
       if (selectedShiftObj) {
         dia.shift = selectedShiftObj;
       }
+      dia.excepcion_tipo_id = excepcionId;
+      dia.horario_id = plantillaId;
+      dia.es_libre = isLibre;
       initialSelectedValue = val;
       recalculateLocalEntryExit();
 
       const payload = {
         empleado_id: empleado.id,
         fecha: dia.fechaStr,
+        horario_id: plantillaId,
         plantilla_horario_id: plantillaId,
         excepcion_id: excepcionId,
         es_libre: isLibre
@@ -457,6 +499,9 @@
 
       if (json.data && json.data.id) {
         dia.excepcionId = json.data.id;
+        dia.excepcion_tipo_id = json.data.excepcion_id || excepcionId;
+        dia.horario_id = json.data.horario_id || plantillaId;
+        dia.es_libre = json.data.es_libre !== undefined ? json.data.es_libre : isLibre;
       }
 
       showStatus('✓ Guardado', 'saved', 1500);
@@ -647,6 +692,9 @@
       if (json && json.success) {
         dia.isExcepcion = false;
         dia.excepcionId = null;
+        dia.excepcion_tipo_id = null;
+        dia.horario_id = null;
+        dia.es_libre = false;
         showStatus('✓ Excepción eliminada', 'saved', 1500);
         triggerToast('Excepción eliminada correctamente', 'success');
         initModalData();
@@ -797,21 +845,15 @@
             {#if excepcionesList.length > 0}
               <optgroup label="📋 Excepciones de Asistencia (Configuración)">
                 {#each excepcionesList as exc}
-                  {#if exc.tipo === 'No Asignable'}
-                    <option value="EXCEPCION_{exc.id}" disabled style="font-size: 10.5px;">
-                      [{exc.codigo}] {exc.descripcion} (Asignado automáticamente por el sistema si no hay turno)
-                    </option>
-                  {:else}
-                    <option value="EXCEPCION_{exc.id}">
-                      [{exc.codigo}] {exc.descripcion}
-                    </option>
-                  {/if}
+                  <option value="EXCEPCION_{exc.id}">
+                    [{exc.codigo}] {exc.descripcion}
+                  </option>
                 {/each}
               </optgroup>
             {:else}
               <optgroup label="⚙️ Plantillas Base del Sistema">
                 <option value="BASE_L">[L] Día Libre</option>
-                <option value="BASE_U" disabled style="font-size: 10.5px;">[U] Horario Único (Asignado automáticamente por el sistema si no le establecen uno)</option>
+                <option value="BASE_U" disabled style="font-size: 10.5px;">[U] Horario Único (Asignado automáticamente por el sistema)</option>
               </optgroup>
             {/if}
 
@@ -823,6 +865,34 @@
                     [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
                   </option>
                 {/each}
+              </optgroup>
+            {/if}
+
+            <!-- Optgroup 3: Horarios de la Sala -->
+            {#if horariosEmpleado.length > 0 && otrosHorariosSala.length > 0}
+              <optgroup label="🏢 Otros Horarios de la Sala">
+                {#each otrosHorariosSala as p}
+                  <option value="PLANTILLA_{p.id}">
+                    [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
+                  </option>
+                {/each}
+              </optgroup>
+            {:else if horariosEmpleado.length === 0 && plantillasSala.length > 0}
+              <optgroup label="🏢 Horarios de la Sala">
+                {#each plantillasSala as p}
+                  <option value="PLANTILLA_{p.id}">
+                    [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
+                  </option>
+                {/each}
+              </optgroup>
+            {/if}
+
+            <!-- Fallback para horario previo si no está en las listas anteriores -->
+            {#if extraHorario}
+              <optgroup label="🕒 Horario Previamente Asignado">
+                <option value="PLANTILLA_{extraHorario.id}">
+                  [{extraHorario.codigo || 'H'}] {extraHorario.nombre} {formatHours(extraHorario)}
+                </option>
               </optgroup>
             {/if}
           </select>
