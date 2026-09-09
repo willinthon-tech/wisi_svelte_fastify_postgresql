@@ -8872,16 +8872,25 @@ export async function saveLibroReporteModel(libroId) {
     const rows = await sql`
       INSERT INTO libro_reporte (
         libro_id,
+        sala_id,
+        sala_nombre,
+        fecha,
         data
       ) VALUES (
         ${lId},
+        ${salaId},
+        ${salaNombre},
+        ${fecha},
         CAST(${jsonStr} AS JSONB)
       )
       ON CONFLICT (libro_id) DO UPDATE
       SET
+        sala_id = EXCLUDED.sala_id,
+        sala_nombre = EXCLUDED.sala_nombre,
+        fecha = EXCLUDED.fecha,
         data = EXCLUDED.data,
         updated_at = CURRENT_TIMESTAMP
-      RETURNING id, libro_id, data, created_at, updated_at
+      RETURNING id, libro_id, sala_id, sala_nombre, fecha, data, created_at, updated_at
     `;
 
     return {
@@ -8900,8 +8909,11 @@ export async function saveLibroReporteModel(libroId) {
   const record = {
     id: existingIdx !== -1 ? inMemoryData.libro_reporte[existingIdx].id : inMemoryData.libro_reporte.length + 1,
     libro_id: lId,
+    sala_id: salaId,
+    sala_nombre: salaNombre,
+    fecha: fecha,
     data: fullData,
-    created_at: new Date().toISOString(),
+    created_at: existingIdx !== -1 ? inMemoryData.libro_reporte[existingIdx].created_at : new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
 
@@ -8963,12 +8975,26 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
   };
 
   if (isPgConnected && sql) {
-    const rows = await sql`
-      SELECT id, libro_id, data, created_at, updated_at
-      FROM libro_reporte
-      WHERE libro_id = ${numId} OR id = ${numId}
-      LIMIT 1
-    `;
+    let rows = [];
+    if (libroObj) {
+      // numId es un libro_id existente: buscar estrictamente por libro_id
+      rows = await sql`
+        SELECT id, libro_id, sala_id, sala_nombre, fecha, data, created_at, updated_at
+        FROM libro_reporte
+        WHERE libro_id = ${numId}
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `;
+    } else {
+      // Fallback si numId no coincide con ningún libro registrado en la tabla libros
+      rows = await sql`
+        SELECT id, libro_id, sala_id, sala_nombre, fecha, data, created_at, updated_at
+        FROM libro_reporte
+        WHERE id = ${numId}
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `;
+    }
 
     if (rows && rows.length > 0) {
       let rData = rows[0].data;
@@ -8986,7 +9012,12 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
       };
     }
   } else {
-    const found = (inMemoryData.libro_reporte || []).find(r => Number(r.libro_id) === numId || Number(r.id) === numId);
+    let found = null;
+    if (libroObj) {
+      found = (inMemoryData.libro_reporte || []).find(r => Number(r.libro_id) === numId);
+    } else {
+      found = (inMemoryData.libro_reporte || []).find(r => Number(r.id) === numId);
+    }
     if (found) {
       return {
         success: true,

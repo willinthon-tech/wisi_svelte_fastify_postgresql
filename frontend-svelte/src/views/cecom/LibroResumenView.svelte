@@ -60,23 +60,27 @@
 
     await loadMasterStoresFromBackend();
 
-    if (libroId || libro?.id) {
-      await loadFullResumen(libroId || libro?.id);
+    const targetId = libroId || libro?.id;
+    if (targetId) {
+      if (Number(targetId) !== Number(lastLoadedId)) {
+        await loadFullResumen(targetId);
+      }
     } else {
       isLoading = false;
       loadError = "No se especificó ningún libro para generar el reporte";
     }
   });
 
-  $: if (
-    libroId &&
-    (!resumenData.libro || Number(resumenData.libro.id) !== Number(libroId))
-  ) {
-    loadFullResumen(libroId);
+  let lastLoadedId = null;
+
+  $: currentTargetId = libroId || libro?.id;
+  $: if (currentTargetId && Number(currentTargetId) !== Number(lastLoadedId)) {
+    loadFullResumen(currentTargetId);
   }
 
   async function loadFullResumen(id) {
     if (!id) return;
+    lastLoadedId = Number(id);
     isLoading = true;
     loadError = null;
 
@@ -92,8 +96,16 @@
           }
           updatedAt = json.data.updated_at || json.data.created_at || null;
           const payload = json.data.data || json.data;
+
+          const loadedLibro =
+            payload.libro && Number(payload.libro.id) === Number(id)
+              ? payload.libro
+              : libro && Number(libro.id) === Number(id)
+                ? libro
+                : payload.libro || libro;
+
           resumenData = {
-            libro: payload.libro || json.data.libro || libro,
+            libro: loadedLibro,
             datos: payload.datos || null,
             drop_mesas: payload.drop_mesas || [],
             novedades_mesas: payload.novedades_mesas || [],
@@ -120,7 +132,7 @@
 
   // Generar o actualizar instantánea en la tabla libro_reporte (Botón principal solicitado)
   async function handleGenerarOActualizarReporte() {
-    const id = libroId || libro?.id || resumenData.libro?.id;
+    const id = libroId || libro?.id || activeLibro?.id || resumenData.libro?.id;
     if (!id) return;
     isSyncing = true;
     try {
@@ -128,7 +140,7 @@
         method: "POST",
       });
       const json = await res.json();
-      if (res.ok && json && json.success) {
+      if (json && json.success) {
         const wasExisting = reporteExists;
         reporteExists = true;
         if (json.liveCounts) {
@@ -140,8 +152,15 @@
           new Date().toISOString();
         const payload = json.data?.data || json.data;
         if (payload) {
+          const loadedLibro =
+            payload.libro && Number(payload.libro.id) === Number(id)
+              ? payload.libro
+              : libro && Number(libro.id) === Number(id)
+                ? libro
+                : payload.libro || libro;
+
           resumenData = {
-            libro: payload.libro || json.data.libro || libro,
+            libro: loadedLibro,
             datos: payload.datos || null,
             drop_mesas: payload.drop_mesas || [],
             novedades_mesas: payload.novedades_mesas || [],
@@ -177,7 +196,7 @@
     if (typeof onSelectSubvista === "function") {
       onSelectSubvista(subId);
     } else {
-      const id = libroId || libro?.id || resumenData.libro?.id;
+      const id = libroId || libro?.id || activeLibro?.id || resumenData.libro?.id;
       if (id) {
         navigateToRoute(`cecom/libro/${id}/${subId}`);
       }
@@ -199,9 +218,21 @@
     }
   }
 
+  // Libro representativo activo (garantizando concordancia de sala y fecha con el libro actual)
+  $: activeLibro = (() => {
+    const target = Number(libroId || libro?.id);
+    if (libro && (!target || Number(libro.id) === target)) {
+      return { ...(resumenData.libro || {}), ...libro };
+    }
+    if (resumenData.libro && (!target || Number(resumenData.libro.id) === target)) {
+      return resumenData.libro;
+    }
+    return libro || resumenData.libro;
+  })();
+
   // Nombre de la sala asignada al libro
   $: salaNombre = (() => {
-    const l = resumenData.libro || libro;
+    const l = activeLibro;
     if (l?.sala_nombre) return l.sala_nombre;
     if (l?.sala_nombre_comercial) return l.sala_nombre_comercial;
     if (l?.sala_id) {
@@ -215,7 +246,7 @@
 
   // Desglose de fecha [ D | M | A ]
   $: dateParts = (() => {
-    const dStr = (resumenData.libro || libro)?.descripcion || "";
+    const dStr = activeLibro?.descripcion || "";
     if (!dStr) return { day: "—", month: "—", year: "—", formatted: "—" };
 
     // Si viene YYYY-MM-DD
@@ -524,7 +555,7 @@
 
   // Copiar enlace al portapapeles
   async function handleCompartir() {
-    const id = libroId || libro?.id || resumenData.libro?.id;
+    const id = libroId || libro?.id || activeLibro?.id || resumenData.libro?.id;
     if (!id) return;
     const shareUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${id}`);
     try {
@@ -564,7 +595,7 @@
         <span class="report-tag">📋 Reporte Consolidado Libro CECOM</span>
         <span class="public-badge">Vista Pública</span>
         <span class="libro-badge"
-          >Libro #{libroId || libro?.id || resumenData.libro?.id || "—"}</span
+          >Libro #{libroId || libro?.id || activeLibro?.id || resumenData.libro?.id || "—"}</span
         >
         <span class="date-badge">{dateParts.formatted}</span>
       </div>
