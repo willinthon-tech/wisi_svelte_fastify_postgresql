@@ -19,6 +19,7 @@
   let nombre = '';
   let tipoClienteId = '';
   let salaId = '';
+  let descripcion = '';
   let fotoUrl = '';
   let fotoBase64 = '';
   let removeFoto = false;
@@ -83,6 +84,7 @@
       nombre = item.nombre || '';
       tipoClienteId = item.tipo_cliente_id ? Number(item.tipo_cliente_id) : '';
       salaId = item.sala_id ? Number(item.sala_id) : '';
+      descripcion = item.descripcion || '';
       if (item.foto) {
         fotoUrl = toBackendUrl(item.foto, { preview: true });
       } else {
@@ -93,6 +95,7 @@
       nombre = '';
       tipoClienteId = '';
       salaId = availableSalas.length === 1 ? availableSalas[0].id : '';
+      descripcion = '';
       fotoUrl = '';
     }
   }
@@ -310,7 +313,8 @@
     const payload = {
       nombre: nombre.trim().toUpperCase(),
       tipo_cliente_id: Number(tipoClienteId),
-      sala_id: Number(salaId)
+      sala_id: Number(salaId),
+      descripcion: descripcion.trim() || null
     };
 
     if (fotoBase64) {
@@ -466,6 +470,21 @@
               No tienes salas asociadas para asignar clientes.
             </span>
           {/if}
+        </div>
+
+        <!-- Descripción Field (Opcional) -->
+        <div class="form-group">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
+          <label class="form-label">
+            Descripción
+            <span class="optional-tag">(Opcional)</span>
+          </label>
+          <textarea 
+            bind:value={descripcion} 
+            placeholder="Ingrese observaciones o descripción del cliente..." 
+            class="form-textarea"
+            rows="3"
+          ></textarea>
         </div>
 
         <!-- Modal Footer Actions -->
@@ -767,6 +786,34 @@
   .form-select:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  .form-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    font-size: 13.5px;
+    color: #0f172a;
+    outline: none;
+    box-sizing: border-box;
+    background: #ffffff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 68px;
+  }
+
+  .form-textarea:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  .optional-tag {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #64748b;
+    margin-left: 4px;
   }
 
   .field-hint {

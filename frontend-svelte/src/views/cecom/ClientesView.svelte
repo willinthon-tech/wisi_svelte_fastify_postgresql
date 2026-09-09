@@ -258,6 +258,12 @@
       sortable: true, 
       editable: false, 
       options: filteredSalasStore 
+    },
+    { 
+      key: 'descripcion', 
+      label: 'Descripción', 
+      sortable: false, 
+      editable: false 
     }
   ];
 

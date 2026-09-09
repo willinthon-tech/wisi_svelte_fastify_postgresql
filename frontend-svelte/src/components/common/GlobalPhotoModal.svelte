@@ -763,6 +763,14 @@
                 </span>
               </div>
 
+              <!-- Fila Completa: DESCRIPCIÓN (Opcional) -->
+              <div class="grid-cell cell-span-3 cliente-desc-cell">
+                <span class="cell-label">DESCRIPCIÓN</span>
+                <div class="cliente-desc-text {item.descripcion && item.descripcion.trim() ? '' : 'cliente-desc-empty'}" title={cleanUtf8(item.descripcion) || 'Sin descripción'}>
+                  {item.descripcion && item.descripcion.trim() ? cleanUtf8(item.descripcion) : '—'}
+                </div>
+              </div>
+
               <!-- Bottom Row: Meta & Action Buttons -->
               <div class="bottom-action-row">
                 <div class="bottom-meta-text">
@@ -1309,6 +1317,29 @@
     height: 8px;
     border-radius: 50%;
     display: inline-block;
+  }
+
+  .cliente-desc-cell {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 2px;
+  }
+
+  .cliente-desc-text {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .cliente-desc-empty {
+    color: #94a3b8;
+    font-style: italic;
+    font-weight: 500;
   }
 
   .bottom-action-row {

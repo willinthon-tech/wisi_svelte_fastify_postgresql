@@ -8318,6 +8318,7 @@ export function buildClienteConditions(options = {}) {
     const s = `%${options.search}%`;
     conds.push(sql`(
       LOWER(c.nombre) LIKE ${s} OR 
+      LOWER(COALESCE(c.descripcion, '')) LIKE ${s} OR 
       LOWER(COALESCE(tc.nombre, '')) LIKE ${s} OR 
       LOWER(COALESCE(s.nombre, '')) LIKE ${s} OR 
       c.id::text LIKE ${s}
@@ -8369,6 +8370,7 @@ export async function getClientesModel(params = {}) {
     'nombre': 'c.nombre',
     'tipo_cliente_nombre': 'tc.nombre',
     'sala_nombre': 's.nombre',
+    'descripcion': 'c.descripcion',
     'created_at': 'c.created_at'
   };
   const orderCol = allowedSortColumns[sortBy] || 'c.id';
@@ -8386,7 +8388,7 @@ export async function getClientesModel(params = {}) {
   let data;
   if (limit > 0) {
     data = await sql`
-      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto,
+      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto, c.descripcion,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
              to_char(COALESCE(c.updated_at, c.created_at), 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
              tc.nombre AS tipo_cliente_nombre,
@@ -8400,7 +8402,7 @@ export async function getClientesModel(params = {}) {
     `;
   } else {
     data = await sql`
-      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto,
+      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto, c.descripcion,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
              to_char(COALESCE(c.updated_at, c.created_at), 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
              tc.nombre AS tipo_cliente_nombre,
@@ -8518,11 +8520,13 @@ export async function createClienteModel(data) {
   if (!nombre) throw new Error('El nombre del cliente es obligatorio');
   const tipoClienteId = data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null;
   const salaId = data.sala_id ? Number(data.sala_id) : null;
+  const descripcion = data.descripcion !== undefined ? (data.descripcion ? String(data.descripcion).trim() : null) : null;
 
   let nextId = 1;
   if (isPgConnected && sql) {
     try {
       await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS foto VARCHAR(255);`;
+      await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS descripcion TEXT;`;
     } catch (e) {}
     const nextIdRes = await sql`SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM clientes`;
     nextId = Number(nextIdRes[0].next_id);
@@ -8548,14 +8552,14 @@ export async function createClienteModel(data) {
 
   if (isPgConnected && sql) {
     const res = await sql`
-      INSERT INTO clientes (id, nombre, tipo_cliente_id, sala_id, foto)
-      VALUES (${nextId}, ${nombre}, ${tipoClienteId}, ${salaId}, ${foto})
-      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, created_at, updated_at
+      INSERT INTO clientes (id, nombre, tipo_cliente_id, sala_id, foto, descripcion)
+      VALUES (${nextId}, ${nombre}, ${tipoClienteId}, ${salaId}, ${foto}, ${descripcion})
+      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, descripcion, created_at, updated_at
     `;
     return res[0];
   } else {
     inMemoryData.clientes = inMemoryData.clientes || [];
-    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, foto, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, foto, descripcion, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     inMemoryData.clientes.unshift(newItem);
     return newItem;
   }
@@ -8568,6 +8572,7 @@ export async function updateClienteModel(id, data) {
   const nombre = data.nombre !== undefined ? String(data.nombre).trim() : undefined;
   const tipoClienteId = data.tipo_cliente_id !== undefined ? (data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null) : undefined;
   const salaId = data.sala_id !== undefined ? (data.sala_id ? Number(data.sala_id) : null) : undefined;
+  const descripcion = data.descripcion !== undefined ? (data.descripcion ? String(data.descripcion).trim() : null) : undefined;
 
   let foto = data.foto;
   if (data.fotoBase64) {
@@ -8595,6 +8600,7 @@ export async function updateClienteModel(id, data) {
   if (isPgConnected && sql) {
     try {
       await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS foto VARCHAR(255);`;
+      await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS descripcion TEXT;`;
     } catch (e) {}
 
     const res = await sql`
@@ -8604,9 +8610,10 @@ export async function updateClienteModel(id, data) {
         tipo_cliente_id = ${tipoClienteId !== undefined ? tipoClienteId : sql`tipo_cliente_id`},
         sala_id = ${salaId !== undefined ? salaId : sql`sala_id`},
         foto = ${foto !== undefined ? foto : sql`foto`},
+        descripcion = ${descripcion !== undefined ? descripcion : sql`descripcion`},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${cId}
-      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, created_at, updated_at
+      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, descripcion, created_at, updated_at
     `;
     return res[0];
   } else {
@@ -8617,6 +8624,7 @@ export async function updateClienteModel(id, data) {
         ...inMemoryData.clientes[idx], 
         ...data, 
         ...(foto !== undefined ? { foto } : {}),
+        ...(descripcion !== undefined ? { descripcion } : {}),
         updated_at: new Date().toISOString() 
       };
       return inMemoryData.clientes[idx];
