@@ -543,15 +543,30 @@
         }, "image/png", 1.0);
       });
 
-      const cedula = (item?.cedula || item?.employee_no || "empleado").toString().replace(/^#/, "").trim();
-      const rawTime = item?.event_time || "ficha";
-      const cleanTime = String(rawTime).replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
-      const fileName = `Ficha_${cedula}_${cleanTime}.png`;
+      let fileName = "";
+      let dialogTitle = "";
+
+      if (mode === 'cliente') {
+        const clientName = (item?.nombre || `cliente_${item?.id || '1'}`)
+          .toString()
+          .trim()
+          .replace(/[\s:]+/g, "_")
+          .replace(/[^a-zA-Z0-9_-]/g, "");
+        const clientId = item?.id ? `_${item.id}` : "";
+        fileName = `Ficha_Cliente_${clientName}${clientId}.png`;
+        dialogTitle = `Guardar Ficha de Cliente ${item?.nombre || ''}`;
+      } else {
+        const cedula = (item?.cedula || item?.employee_no || "empleado").toString().replace(/^#/, "").trim();
+        const rawTime = item?.event_time || "ficha";
+        const cleanTime = String(rawTime).replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
+        fileName = `Ficha_${cedula}_${cleanTime}.png`;
+        dialogTitle = `Guardar Ficha de ${cedula}`;
+      }
 
       await saveOrShareFile({
         blob,
         fileName,
-        dialogTitle: `Guardar Ficha de ${cedula}`,
+        dialogTitle,
         mimeType: "image/png"
       });
       triggerToast(`Ficha guardada: ${fileName}`, "success");
@@ -577,15 +592,31 @@
       if (!res.ok) throw new Error("No se pudo obtener la imagen del servidor");
       const blob = await res.blob();
 
-      const identifier = mode === 'cliente' ? (item.nombre || item.id || "cliente") : (item.cedula || item.employee_no || "empleado");
-      const cleanIdent = String(identifier).replace(/^#/, "").trim().replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
-      const ext = blob.type.includes("png") ? "png" : "jpg";
-      const fileName = `Foto_${cleanIdent}.${ext}`;
+      let fileName = "";
+      let dialogTitle = "";
+
+      if (mode === 'cliente') {
+        const clientName = (item?.nombre || `cliente_${item?.id || '1'}`)
+          .toString()
+          .trim()
+          .replace(/[\s:]+/g, "_")
+          .replace(/[^a-zA-Z0-9_-]/g, "");
+        const clientId = item?.id ? `_${item.id}` : "";
+        const ext = blob.type.includes("png") ? "png" : "jpg";
+        fileName = `Foto_Cliente_${clientName}${clientId}.${ext}`;
+        dialogTitle = `Guardar Fotografía de Cliente ${item?.nombre || ''}`;
+      } else {
+        const identifier = item?.cedula || item?.employee_no || "empleado";
+        const cleanIdent = String(identifier).replace(/^#/, "").trim().replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
+        const ext = blob.type.includes("png") ? "png" : "jpg";
+        fileName = `Foto_${cleanIdent}.${ext}`;
+        dialogTitle = `Guardar Fotografía de ${cleanIdent}`;
+      }
 
       await saveOrShareFile({
         blob,
         fileName,
-        dialogTitle: `Guardar Fotografía de ${cleanIdent}`,
+        dialogTitle,
         mimeType: blob.type || "image/jpeg"
       });
       triggerToast(`Fotografía guardada: ${fileName}`, "success");
