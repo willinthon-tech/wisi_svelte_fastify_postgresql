@@ -736,7 +736,7 @@
         ></textarea>
       </div>
 
-      <!-- Botones de Acción Lote -->
+      <!-- Botón de Guardar -->
       <div class="form-actions-batch">
         <button 
           type="submit" 
@@ -745,19 +745,10 @@
         >
           {#if isSavingBatch}
             <span class="btn-spinner"></span>
-            <span>Guardando en mesas...</span>
+            <span>Guardando...</span>
           {:else}
-            <span>⚡ Asignar a Todas las Mesas ({availableMesas.length})</span>
+            <span>Guardar</span>
           {/if}
-        </button>
-
-        <button 
-          type="button" 
-          class="btn-reset-batch" 
-          on:click={limpiarBatchForm}
-          title="Limpiar campos del formulario"
-        >
-          Limpiar
         </button>
       </div>
     </form>
