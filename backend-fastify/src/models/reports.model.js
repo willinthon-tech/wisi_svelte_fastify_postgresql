@@ -153,33 +153,63 @@ export function pairDayAttendance({
   let isNoEntryWithOtherPunches = false;
 
   if (isExcepcion && excepObj) {
-    const rawMarcaje = punchesToday.length > 0
-      ? punchesToday.map(p => p.timeStr || p.time).join(', ')
-      : 'Sin Registros';
-
     const excepCode = String(excepObj.excepcion_codigo || excepObj.plantilla_codigo || excepObj.codigo || '').toUpperCase().trim();
-    const isTrabajadoCode = excepCode.endsWith('T');
+    // REGLA: Sólo es trabajado si tiene MÍNIMO 2 caracteres y termina en 'T' (ej: LT, FERT, TT, DT).
+    // Si el código es 'T' de 1 solo caracter, es una excepción normal y NO hace nada de trabajo.
+    const isTrabajadoCode = Boolean(excepCode && excepCode.length >= 2 && excepCode.endsWith('T'));
 
     // Determinar descripción exacta y respetada de la excepción
     let desc = (excepObj.excepcion_nombre || excepObj.nombre || excepObj.descripcion || excepObj.plantilla_nombre || '').trim().toUpperCase();
-    if (!desc || desc === 'LIBRE') {
-      if (excepCode === 'FER' || excepCode === 'FERT') desc = 'DÍA FERIADO';
-      else if (excepCode === 'R' || excepCode === 'RT') desc = 'REPOSO MÉDICO';
-      else if (excepCode === 'V' || excepCode === 'VT') desc = 'VACACIONES';
-      else if (excepCode === 'P' || excepCode === 'PT') desc = 'PERMISO';
-      else if (excepCode === 'F' || excepCode === 'FT') desc = 'FALTA';
+    if (excepCode === 'LT') {
+      desc = 'LIBRE TRABAJADO';
+    } else if (excepCode === 'FERT') {
+      desc = 'FERIADO TRABAJADO';
+    } else if (excepCode === 'DT') {
+      desc = 'DESCANSO TRABAJADO';
+    } else if (excepCode === 'RT') {
+      desc = 'REPOSO TRABAJADO';
+    } else if (excepCode === 'VT') {
+      desc = 'VACACIONES TRABAJADAS';
+    } else if (excepCode === 'PT') {
+      desc = 'PERMISO TRABAJADO';
+    } else if (isTrabajadoCode && !desc.includes('TRABAJAD')) {
+      desc = `${desc} TRABAJADO`.trim();
+    } else if (!desc || desc === 'LIBRE') {
+      if (excepCode === 'FER') desc = 'DÍA FERIADO';
+      else if (excepCode === 'R') desc = 'REPOSO MÉDICO';
+      else if (excepCode === 'V') desc = 'VACACIONES';
+      else if (excepCode === 'P') desc = 'PERMISO';
+      else if (excepCode === 'F') desc = 'FALTA';
       else desc = 'LIBRE';
     }
 
     if (!isTrabajadoCode) {
-      // Excepción normal NO trabajada (ej. FER, R, V, P, F, L):
-      // "respeta las excepciones porque pues no es para trabajar la verdad"
-      if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre || (!excepObj.hora_entrada && !excepObj.hora_salida)) {
+      // Excepción normal NO trabajada (ej. FER, R, V, P, F, L, o código T solitario):
+      // "te dije que no aparecera nada alli si alguien marca al menos que alla una excepcion que finalice en T"
+      // Se devuelven horas 0 y marcaje vacío para que jamás muestre horas o marcajes en la celda.
+      return {
+        entradaStr: null,
+        salidaStr: null,
+        trabajadosMins: 0,
+        marcajeStr: '',
+        resultadoStr: desc,
+        entBadge: null,
+        salBadge: null,
+        selectedEntry: null,
+        selectedExit: null,
+        matchedPlantilla: BASE_PLANTILLA_LIBRE,
+        isNoEntryWithOtherPunches: false
+      };
+    } else {
+      // Excepción trabajada (código >= 2 caracteres y termina en 'T', ej: LT, FERT, TT):
+      const availableToday = punchesToday.filter(p => !p.consumed);
+      const checkinPunches = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
+      if (checkinPunches.length === 0) {
         return {
           entradaStr: null,
           salidaStr: null,
           trabajadosMins: 0,
-          marcajeStr: rawMarcaje,
+          marcajeStr: '',
           resultadoStr: desc,
           entBadge: null,
           salBadge: null,
@@ -188,38 +218,8 @@ export function pairDayAttendance({
           matchedPlantilla: BASE_PLANTILLA_LIBRE,
           isNoEntryWithOtherPunches: false
         };
-      } else {
-        matchedPlantilla = {
-          id: excepObj.plantilla_horario_id,
-          codigo: excepObj.plantilla_codigo,
-          nombre: excepObj.plantilla_nombre,
-          hora_entrada: excepObj.hora_entrada,
-          hora_salida: excepObj.hora_salida,
-          color: excepObj.color,
-          tipo: excepObj.tipo
-        };
       }
-    } else {
-      // Excepción que termina en 'T' (acrónimo de TRABAJADO, ej: FERT, LT):
-      // Evalúa los marcajes tal como el Horario Único (U)
-      const availableToday = punchesToday.filter(p => !p.consumed);
-      const checkinPunches = availableToday.filter(p => p.isCheckInFlag || p.type === 'E' || p.isCheckIn);
-      if (checkinPunches.length === 0) {
-        return {
-          entradaStr: null,
-          salidaStr: null,
-          trabajadosMins: 0,
-          marcajeStr: rawMarcaje,
-          resultadoStr: desc.includes('TRABAJAD') ? desc : `${desc} TRABAJADO`,
-          entBadge: null,
-          salBadge: null,
-          selectedEntry: null,
-          selectedExit: null,
-          matchedPlantilla: BASE_PLANTILLA_LIBRE,
-          isNoEntryWithOtherPunches: false
-        };
-      }
-      // Si tiene marcajes, continúa hacia abajo para emparejar entrada/salida y calcular desglose (D) y (N)
+      // Si tiene marcajes, continúa hacia abajo para emparejar entrada/salida y calcular desglose (D) y (N) tal como Horario Único (U)
     }
   }
 
@@ -893,15 +893,29 @@ export async function getMarcajePersonalReportModel(params = {}) {
 
       if (isExcepcion && excepObj) {
         const exCode = String(excepObj.excepcion_codigo || excepObj.plantilla_codigo || excepObj.codigo || '').toUpperCase().trim();
+        const isTrabCode = Boolean(exCode && exCode.length >= 2 && exCode.endsWith('T'));
         let exDesc = (excepObj.excepcion_nombre || excepObj.nombre || excepObj.descripcion || excepObj.plantilla_nombre || '').trim();
-        if (!exDesc || exDesc.toUpperCase() === 'LIBRE') {
-          if (exCode === 'FER' || exCode === 'FERT') exDesc = exCode.endsWith('T') ? 'Día Feriado Trabajado' : 'Día Feriado';
-          else if (exCode === 'R' || exCode === 'RT') exDesc = exCode.endsWith('T') ? 'Reposo Trabajado' : 'Reposo Médico';
-          else if (exCode === 'V' || exCode === 'VT') exDesc = exCode.endsWith('T') ? 'Vacaciones Trabajadas' : 'Vacaciones';
-          else if (exCode === 'P' || exCode === 'PT') exDesc = exCode.endsWith('T') ? 'Permiso Trabajado' : 'Permiso';
-          else if (exCode === 'F' || exCode === 'FT') exDesc = 'Falta';
-          else if (exCode === 'L' || exCode === 'LT') exDesc = exCode.endsWith('T') ? 'Libre Trabajado' : 'Día Libre';
-          else exDesc = 'Excepción';
+        if (exCode === 'LT') {
+          exDesc = 'Libre Trabajado';
+        } else if (exCode === 'FERT') {
+          exDesc = 'Feriado Trabajado';
+        } else if (exCode === 'DT') {
+          exDesc = 'Descanso Trabajado';
+        } else if (exCode === 'RT') {
+          exDesc = 'Reposo Trabajado';
+        } else if (exCode === 'VT') {
+          exDesc = 'Vacaciones Trabajadas';
+        } else if (exCode === 'PT') {
+          exDesc = 'Permiso Trabajado';
+        } else if (isTrabCode && !exDesc.toLowerCase().includes('trabajad')) {
+          exDesc = `${exDesc} Trabajado`.trim();
+        } else if (!exDesc || exDesc.toUpperCase() === 'LIBRE') {
+          if (exCode === 'FER') exDesc = 'Día Feriado';
+          else if (exCode === 'R') exDesc = 'Reposo Médico';
+          else if (exCode === 'V') exDesc = 'Vacaciones';
+          else if (exCode === 'P') exDesc = 'Permiso';
+          else if (exCode === 'F') exDesc = 'Falta';
+          else exDesc = 'Día Libre';
         }
 
         if (excepObj.excepcion_codigo) {

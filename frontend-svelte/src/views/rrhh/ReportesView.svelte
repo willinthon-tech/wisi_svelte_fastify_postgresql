@@ -1012,7 +1012,7 @@
 
                         <!-- Center: Entrada (top) & Salida (bottom) Stack -->
                         <div class="times-stack-center">
-                          {#if times.entrada && dia.resultadoStr !== 'LIBRE'}
+                          {#if times.entrada && (!dia.isExcepcion || (dia.shift && dia.shift.codigo && dia.shift.codigo.length >= 2 && dia.shift.codigo.endsWith('T'))) && dia.resultadoStr !== 'LIBRE'}
                             <span style="color: #0f172a; font-weight: 800;">{times.entrada}</span>
                             {#if times.salida}
                               <span style="color: #0f172a; font-weight: 800;">{times.salida}</span>
@@ -1024,8 +1024,8 @@
 
                         <!-- Right: Worked Hours Pill (Only when dayColWidth >= 70) -->
                         {#if dayColWidth >= 70}
-                          <div class="worked-hours-pill {dia.resultadoStr === 'ERROR' ? 'error' : (dia.resultadoStr === 'EN ESPERA' ? 'espera' : (dia.trabajadosMins > 0 && dia.resultadoStr !== 'LIBRE' ? 'active' : 'zero'))}">
-                            {dia.trabajadoStr || "00:00"}
+                          <div class="worked-hours-pill {dia.resultadoStr === 'ERROR' ? 'error' : (dia.resultadoStr === 'EN ESPERA' ? 'espera' : (dia.trabajadosMins > 0 && (!dia.isExcepcion || (dia.shift && dia.shift.codigo && dia.shift.codigo.length >= 2 && dia.shift.codigo.endsWith('T'))) && dia.resultadoStr !== 'LIBRE' ? 'active' : 'zero'))}">
+                            {(!dia.isExcepcion || (dia.shift && dia.shift.codigo && dia.shift.codigo.length >= 2 && dia.shift.codigo.endsWith('T'))) ? (dia.trabajadoStr || "00:00") : "00:00"}
                           </div>
                         {/if}
                       </div>

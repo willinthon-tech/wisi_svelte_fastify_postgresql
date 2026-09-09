@@ -305,7 +305,8 @@
         const isFeriado = isDayFeriado(dia.fechaStr, emp);
 
         // Si trabajó
-        if (mins > 0 && resStr !== 'LIBRE') {
+        const isTrabajadoExc = dia.isExcepcion && shiftCode && shiftCode.length >= 2 && shiftCode.endsWith('T');
+        if (mins > 0 && resStr !== 'LIBRE' && (!dia.isExcepcion || isTrabajadoExc)) {
           totalTrabajadosMins += mins;
           diasAsistidos++;
 
@@ -737,7 +738,7 @@
                           </div>
 
                           <div class="times-stack-center">
-                            {#if times.entrada && dia.resultadoStr !== 'LIBRE'}
+                            {#if times.entrada && (!dia.isExcepcion || (dia.shift && dia.shift.codigo && dia.shift.codigo.length >= 2 && dia.shift.codigo.endsWith('T'))) && dia.resultadoStr !== 'LIBRE'}
                               <span>{times.entrada}</span>
                               {#if times.salida}
                                 <span>{times.salida}</span>
@@ -747,8 +748,8 @@
                             {/if}
                           </div>
 
-                          <div class="worked-hours-pill {dia.resultadoStr === 'ERROR' ? 'error' : (dia.resultadoStr === 'EN ESPERA' ? 'espera' : (dia.trabajadosMins > 0 && dia.resultadoStr !== 'LIBRE' ? 'active' : 'zero'))}">
-                            {dia.trabajadoStr || "00:00"}
+                          <div class="worked-hours-pill {dia.resultadoStr === 'ERROR' ? 'error' : (dia.resultadoStr === 'EN ESPERA' ? 'espera' : (dia.trabajadosMins > 0 && (!dia.isExcepcion || (dia.shift && dia.shift.codigo && dia.shift.codigo.length >= 2 && dia.shift.codigo.endsWith('T'))) && dia.resultadoStr !== 'LIBRE' ? 'active' : 'zero'))}">
+                            {(!dia.isExcepcion || (dia.shift && dia.shift.codigo && dia.shift.codigo.length >= 2 && dia.shift.codigo.endsWith('T'))) ? (dia.trabajadoStr || "00:00") : "00:00"}
                           </div>
                         </div>
 
