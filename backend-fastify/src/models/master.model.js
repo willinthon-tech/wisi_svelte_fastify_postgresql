@@ -8872,25 +8872,16 @@ export async function saveLibroReporteModel(libroId) {
     const rows = await sql`
       INSERT INTO libro_reporte (
         libro_id,
-        sala_id,
-        sala_nombre,
-        fecha,
         data
       ) VALUES (
         ${lId},
-        ${salaId},
-        ${salaNombre},
-        ${fecha},
         CAST(${jsonStr} AS JSONB)
       )
       ON CONFLICT (libro_id) DO UPDATE
       SET
-        sala_id = EXCLUDED.sala_id,
-        sala_nombre = EXCLUDED.sala_nombre,
-        fecha = EXCLUDED.fecha,
         data = EXCLUDED.data,
         updated_at = CURRENT_TIMESTAMP
-      RETURNING id, libro_id, sala_id, sala_nombre, fecha, data, created_at, updated_at
+      RETURNING id, libro_id, data, created_at, updated_at
     `;
 
     return {
@@ -8979,7 +8970,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     if (libroObj) {
       // numId es un libro_id existente: buscar estrictamente por libro_id
       rows = await sql`
-        SELECT id, libro_id, sala_id, sala_nombre, fecha, data, created_at, updated_at
+        SELECT id, libro_id, data, created_at, updated_at
         FROM libro_reporte
         WHERE libro_id = ${numId}
         ORDER BY updated_at DESC
@@ -8988,7 +8979,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     } else {
       // Fallback si numId no coincide con ningún libro registrado en la tabla libros
       rows = await sql`
-        SELECT id, libro_id, sala_id, sala_nombre, fecha, data, created_at, updated_at
+        SELECT id, libro_id, data, created_at, updated_at
         FROM libro_reporte
         WHERE id = ${numId}
         ORDER BY updated_at DESC
