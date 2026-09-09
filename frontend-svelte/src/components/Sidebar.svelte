@@ -34,26 +34,52 @@
   $: activeUserId = $currentUserStore?.id || 1;
   $: activeUserPermsMap = $userModulePermissionsStore[activeUserId] || {};
 
-  $: filteredNavPages = $masterPaginasStore.map(page => {
-    const pageModulos = $masterModulosStore
-      .filter(m => m.page_id === page.id)
-      .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || a.id - b.id);
-    const visibleModulos = pageModulos.filter(m => {
-      const perms = activeUserPermsMap[m.id] || [];
-      return perms.includes('VER');
-    });
+  $: filteredNavPages = (() => {
+    // Agrupar páginas por nombre normalizado para consolidar secciones duplicadas (ej: CONF.M: CECOM)
+    const pageMap = new Map();
+    for (const page of $masterPaginasStore) {
+      const normName = (page.nombre || '').trim().toUpperCase();
+      if (!pageMap.has(normName)) {
+        pageMap.set(normName, {
+          id: page.id,
+          nombre: page.nombre,
+          pageIds: [page.id]
+        });
+      } else {
+        pageMap.get(normName).pageIds.push(page.id);
+      }
+    }
 
-    // Deduplicar estrictamente por ruta única dentro de la sección
-    const seenRoutes = new Set();
-    const uniqueModulos = visibleModulos.filter(m => {
-      const key = (m.ruta || m.nombre || '').toLowerCase().trim();
-      if (seenRoutes.has(key)) return false;
-      seenRoutes.add(key);
-      return true;
-    });
+    const pages = [];
+    for (const group of pageMap.values()) {
+      const pageModulos = $masterModulosStore
+        .filter(m => group.pageIds.includes(m.page_id))
+        .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || a.id - b.id);
 
-    return { ...page, modulos: uniqueModulos };
-  }).filter(page => page.modulos.length > 0);
+      const visibleModulos = pageModulos.filter(m => {
+        const perms = activeUserPermsMap[m.id] || [];
+        return perms.includes('VER');
+      });
+
+      // Deduplicar estrictamente por ruta única dentro de la sección
+      const seenRoutes = new Set();
+      const uniqueModulos = visibleModulos.filter(m => {
+        const key = (m.ruta || m.nombre || '').toLowerCase().trim();
+        if (seenRoutes.has(key)) return false;
+        seenRoutes.add(key);
+        return true;
+      });
+
+      if (uniqueModulos.length > 0) {
+        pages.push({
+          id: group.id,
+          nombre: group.nombre,
+          modulos: uniqueModulos
+        });
+      }
+    }
+    return pages;
+  })();
 </script>
 
 <!-- Mobile Backdrop -->

@@ -29,16 +29,37 @@
   let records = [];
   let isLoadingRecords = false;
 
-  // Función para obtener conteo por tipo
-  function getCountForTipo(tItem) {
-    return records.filter(r => 
-      (r.tipo_incidencia_id && Number(r.tipo_incidencia_id) === Number(tItem.id)) ||
-      (r.tipo || '').toLowerCase().trim() === tItem.nombre.toLowerCase().trim()
-    ).length;
+  function normalizeText(val) {
+    return String(val || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
   }
 
+  // Conteo reactivo e infalible por cada tipo de incidencia
+  $: countsByTipo = (() => {
+    const counts = {};
+    for (const t of availableTiposIncidencia) {
+      const tId = Number(t.id);
+      const tNorm = normalizeText(t.nombre);
+      const count = records.filter(r => {
+        const rId = r.tipo_incidencia_id != null ? Number(r.tipo_incidencia_id) : null;
+        if (rId && rId === tId) return true;
+        const rTipoNorm = normalizeText(r.tipo);
+        if (rTipoNorm && rTipoNorm === tNorm) return true;
+        const rNomNorm = normalizeText(r.tipo_incidencia_nombre);
+        if (rNomNorm && rNomNorm === tNorm) return true;
+        return false;
+      }).length;
+      counts[t.id] = count;
+      counts[t.nombre] = count;
+    }
+    return counts;
+  })();
+
   function getPillClass(name) {
-    const s = String(name || '').toLowerCase();
+    const s = normalizeText(name);
     if (s.includes('mercanc')) return 'active-mercancia';
     if (s.includes('emplead')) return 'active-empleado';
     if (s.includes('general')) return 'active-general';
@@ -46,7 +67,7 @@
   }
 
   function getPillIcon(name) {
-    const s = String(name || '').toLowerCase();
+    const s = normalizeText(name);
     if (s.includes('mercanc')) return '📦';
     if (s.includes('emplead')) return '👤';
     if (s.includes('general')) return '📌';
@@ -54,7 +75,7 @@
   }
 
   function getBadgeClass(name) {
-    const s = String(name || '').toLowerCase();
+    const s = normalizeText(name);
     if (s.includes('mercanc')) return 'badge-mercancia';
     if (s.includes('emplead')) return 'badge-empleado';
     if (s.includes('general')) return 'badge-general';
@@ -68,12 +89,16 @@
   // Filtrado según la pestaña activa
   $: filteredRecords = (() => {
     if (activeTab === 'all') return sortedRecords;
+    const activeNorm = normalizeText(activeTab);
+    const matchTipo = availableTiposIncidencia.find(t => normalizeText(t.nombre) === activeNorm);
+    const matchId = matchTipo ? Number(matchTipo.id) : null;
+
     return sortedRecords.filter(r => {
-      const matchTipo = availableTiposIncidencia.find(t => t.nombre.toLowerCase() === activeTab.toLowerCase());
-      if (matchTipo && r.tipo_incidencia_id && Number(r.tipo_incidencia_id) === Number(matchTipo.id)) {
-        return true;
-      }
-      return (r.tipo || '').toLowerCase().trim() === activeTab.toLowerCase().trim();
+      const rId = r.tipo_incidencia_id != null ? Number(r.tipo_incidencia_id) : null;
+      if (matchId && rId && rId === matchId) return true;
+      if (normalizeText(r.tipo) === activeNorm) return true;
+      if (normalizeText(r.tipo_incidencia_nombre) === activeNorm) return true;
+      return false;
     });
   })();
 
@@ -248,7 +273,7 @@
     try {
       const payload = {
         descripcion: cleanDesc,
-        tipo_incidencia_id: tipoIncidenciaId || 1,
+        tipo_incidencia_id: Number(tipoIncidenciaId) || 1,
         tipo: tipo || 'General',
         hora: getCurrentTimeString()
       };
@@ -299,10 +324,13 @@
   // Modal para editar Tipo, Contenido y Hora
   function abrirModalEditar(record) {
     editingRecord = record;
-    modalTipoIncidenciaId = record.tipo_incidencia_id || 
-      availableTiposIncidencia.find(t => t.nombre.toLowerCase() === (record.tipo || '').toLowerCase())?.id || 1;
-    modalTipo = record.tipo || 
-      availableTiposIncidencia.find(t => Number(t.id) === Number(modalTipoIncidenciaId))?.nombre || 'General';
+    const rTipoNorm = normalizeText(record.tipo || record.tipo_incidencia_nombre);
+    const match = availableTiposIncidencia.find(t => 
+      (record.tipo_incidencia_id != null && Number(t.id) === Number(record.tipo_incidencia_id)) ||
+      normalizeText(t.nombre) === rTipoNorm
+    );
+    modalTipoIncidenciaId = match ? match.id : (record.tipo_incidencia_id || 1);
+    modalTipo = match ? match.nombre : (record.tipo || 'General');
     modalDescripcion = record.descripcion || '';
     modalHora = record.hora || getCurrentTimeString();
     showModalEditar = true;
@@ -339,7 +367,7 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tipo_incidencia_id: modalTipoIncidenciaId,
+          tipo_incidencia_id: Number(modalTipoIncidenciaId) || 1,
           tipo: modalTipo || 'General',
           descripcion: cleanDesc,
           hora: modalHora
@@ -385,6 +413,7 @@
                 name="tipo-incidencia" 
                 value={tItem.id} 
                 bind:group={tipoIncidenciaId} 
+                on:change={() => tipo = tItem.nombre}
               />
               <span class="pill-icon">{getPillIcon(tItem.nombre)}</span>
               <span class="pill-text">{tItem.nombre}</span>
@@ -481,7 +510,7 @@
             class="tab-nav-btn {activeTab === tItem.nombre ? 'active' : ''}"
             on:click={() => activeTab = tItem.nombre}
           >
-            <span>{getPillIcon(tItem.nombre)} {tItem.nombre} ({getCountForTipo(tItem)})</span>
+            <span>{getPillIcon(tItem.nombre)} {tItem.nombre} ({countsByTipo[tItem.id] || 0})</span>
           </button>
         {/each}
       </div>

@@ -7867,15 +7867,15 @@ export async function createLibroIncidenciaGeneralModel(data) {
     return newRecord;
   }
 
-  if (!tipoIncidenciaId && tipo) {
+  if (tipoIncidenciaId) {
+    const match = await sql`SELECT nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
+    if (match.length > 0) tipo = match[0].nombre;
+  } else if (tipo) {
     const match = await sql`SELECT id, nombre FROM tipo_incidencias WHERE LOWER(TRIM(nombre)) = LOWER(${tipo}) LIMIT 1`;
     if (match.length > 0) {
       tipoIncidenciaId = match[0].id;
       tipo = match[0].nombre;
     }
-  } else if (tipoIncidenciaId && !tipo) {
-    const match = await sql`SELECT nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
-    if (match.length > 0) tipo = match[0].nombre;
   }
   if (!tipoIncidenciaId) tipoIncidenciaId = 1;
   if (!tipo) tipo = 'General';
@@ -7917,7 +7917,7 @@ export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, d
     throw new Error('Incidencia no encontrada');
   }
 
-  if (tipoIncidenciaId && !tipo) {
+  if (tipoIncidenciaId) {
     const match = await sql`SELECT nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
     if (match.length > 0) tipo = match[0].nombre;
   }
