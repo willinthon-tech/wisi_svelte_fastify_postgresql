@@ -29,18 +29,20 @@
   let savedSuccessMesaIds = new Set();
   let saveDebounceTimers = {};
 
-  // Estado del dropdown de autocompletado en celda activa (croupiers)
+  // Estado del dropdown de autocompletado en celda activa (croupiers de la tabla)
   let activeSug = null; // { mesaId, field: 'croupier_apertura'|'croupier_cierre' }
   let activeSugIndex = -1;
 
-  // --- Estado para el Formulario de Asignación en Lote (Izquierda) ---
+  // --- Estado para el Formulario de Asignación a Todas las Mesas (Izquierda) ---
   let batchHoraApertura = '';
   let batchHoraCierre = '';
   let batchPitboss = '';
   let batchObservacion = '';
-  let selectedMesaIdsForBatch = [];
   let isSavingBatch = false;
-  let hasInitializedBatchSelection = false;
+
+  // --- Autocompletado de Pitboss (con coincidencias y soporte para Tab ⇥) ---
+  let pitbossSugTarget = null; // 'batch' | 'modal'
+  let pitbossSugIndex = -1;
 
   // --- Estado para el Modal de Edición Individual ---
   let isEditModalOpen = false;
@@ -49,8 +51,6 @@
   let modalHoraApertura = '';
   let modalHoraCierre = '';
   let modalPitboss = '';
-  let modalCroupierApertura = '';
-  let modalCroupierCierre = '';
   let modalObservacion = '';
   let isSavingModal = false;
 
@@ -75,12 +75,6 @@
     }).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }));
   })();
 
-  // Inicializar selección en lote por defecto con todas las mesas
-  $: if (availableMesas.length > 0 && !hasInitializedBatchSelection) {
-    selectedMesaIdsForBatch = availableMesas.map(m => m.id);
-    hasInitializedBatchSelection = true;
-  }
-
   // Mesas filtradas por buscador de la tabla
   $: filteredMesas = (() => {
     const q = (searchQuery || '').trim().toLowerCase();
@@ -97,21 +91,32 @@
     });
   })();
 
-  // Lista de empleados disponibles para sugerencias y selector de Pitboss
+  // Lista de empleados disponibles para sugerencias y autocompletado
   $: listaEmpleados = ($masterEmpleadosStore || []).map(e => {
     const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim();
     return nom || e.nombre || '';
   }).filter(Boolean).sort((a, b) => a.localeCompare(b));
 
-  // Sugerencias filtradas reactivas según la celda de croupier enfocada
-  $: currentQuery = (activeSug && rowsData[activeSug.mesaId]) 
+  // --- Sugerencias de Croupiers en tabla ---
+  $: currentQueryCroupier = (activeSug && rowsData[activeSug.mesaId]) 
     ? (rowsData[activeSug.mesaId][activeSug.field] || '').trim().toLowerCase() 
     : '';
 
-  $: filteredSuggestions = (() => {
+  $: filteredCroupierSuggestions = (() => {
     if (!activeSug) return [];
-    if (!currentQuery) return listaEmpleados.slice(0, 8);
-    return listaEmpleados.filter(emp => emp.toLowerCase().includes(currentQuery)).slice(0, 8);
+    if (!currentQueryCroupier) return listaEmpleados.slice(0, 8);
+    return listaEmpleados.filter(emp => emp.toLowerCase().includes(currentQueryCroupier)).slice(0, 8);
+  })();
+
+  // --- Sugerencias de Pitboss (con coincidencias y Tab) ---
+  $: currentQueryPitboss = pitbossSugTarget === 'batch'
+    ? (batchPitboss || '').trim().toLowerCase()
+    : (pitbossSugTarget === 'modal' ? (modalPitboss || '').trim().toLowerCase() : '');
+
+  $: filteredPitbossSuggestions = (() => {
+    if (!pitbossSugTarget) return [];
+    if (!currentQueryPitboss) return listaEmpleados.slice(0, 8);
+    return listaEmpleados.filter(emp => emp.toLowerCase().includes(currentQueryPitboss)).slice(0, 8);
   })();
 
   // Encabezado superior: Nombre de Sala - Fecha
@@ -210,7 +215,6 @@
     }
   }
 
-  // Sincroniza rowsData manteniendo lo que el usuario esté escribiendo activamente
   function syncRowsData(records) {
     const map = new Map();
     for (const r of (records || [])) {
@@ -373,31 +377,6 @@
     }
   }
 
-  // --- Handlers de Selección en Lote (Batch) ---
-  function toggleSelectAllMesas() {
-    if (selectedMesaIdsForBatch.length === availableMesas.length) {
-      selectedMesaIdsForBatch = [];
-    } else {
-      selectedMesaIdsForBatch = availableMesas.map(m => m.id);
-    }
-  }
-
-  function toggleSelectMesa(mesaId) {
-    if (selectedMesaIdsForBatch.includes(mesaId)) {
-      selectedMesaIdsForBatch = selectedMesaIdsForBatch.filter(id => id !== mesaId);
-    } else {
-      selectedMesaIdsForBatch = [...selectedMesaIdsForBatch, mesaId];
-    }
-  }
-
-  function selectAllMesasForBatch() {
-    selectedMesaIdsForBatch = availableMesas.map(m => m.id);
-  }
-
-  function clearSelectedMesasForBatch() {
-    selectedMesaIdsForBatch = [];
-  }
-
   function limpiarBatchForm() {
     batchHoraApertura = '';
     batchHoraCierre = '';
@@ -405,7 +384,7 @@
     batchObservacion = '';
   }
 
-  // Asignar en Lote a las mesas seleccionadas
+  // Asignar en Lote a TODAS las mesas disponibles de la sala
   async function handleBatchAssign() {
     const lId = libroId || libro?.id;
     if (!lId) {
@@ -413,8 +392,8 @@
       return;
     }
 
-    if (selectedMesaIdsForBatch.length === 0) {
-      triggerToast('Seleccione al menos una mesa para asignar en lote', 'warning');
+    if (availableMesas.length === 0) {
+      triggerToast('No hay mesas activas para aplicar', 'warning');
       return;
     }
 
@@ -426,13 +405,14 @@
     );
 
     if (!hasAnyField) {
-      triggerToast('Complete al menos un campo (Hora apertura, Hora cierre, Pitboss u Observación) para asignar en lote', 'warning');
+      triggerToast('Complete al menos un campo (Hora apertura, Hora cierre, Pitboss u Observación) para aplicar a todas las mesas', 'warning');
       return;
     }
 
     isSavingBatch = true;
     try {
-      const promises = selectedMesaIdsForBatch.map(async (mid) => {
+      const promises = availableMesas.map(async (mesa) => {
+        const mid = mesa.id;
         const cur = getRow(mid);
         const payload = {
           mesa_id: Number(mid),
@@ -465,11 +445,11 @@
 
       const results = await Promise.all(promises);
       const successCount = results.filter(Boolean).length;
-      triggerToast(`¡Asignación en lote guardada exitosamente en ${successCount} mesas!`, 'success');
+      triggerToast(`¡Asignación aplicada a las ${successCount} mesas!`, 'success');
       await loadRecords();
     } catch (err) {
-      console.error('Error en asignación en lote:', err);
-      triggerToast(`Error al asignar en lote: ${err.message}`, 'error');
+      console.error('Error en asignación a mesas:', err);
+      triggerToast(`Error al asignar: ${err.message}`, 'error');
     } finally {
       isSavingBatch = false;
     }
@@ -483,8 +463,6 @@
     modalHoraApertura = r.hora_apertura || '';
     modalHoraCierre = r.hora_cierre || '';
     modalPitboss = r.pitboss || '';
-    modalCroupierApertura = r.croupier_apertura || '';
-    modalCroupierCierre = r.croupier_cierre || '';
     modalObservacion = r.observacion || '';
     isEditModalOpen = true;
   }
@@ -493,12 +471,15 @@
     isEditModalOpen = false;
     editingMesaId = null;
     modalMesa = null;
+    pitbossSugTarget = null;
+    pitbossSugIndex = -1;
   }
 
   async function handleGuardarModal() {
     const lId = libroId || libro?.id;
     if (!lId || !editingMesaId) return;
 
+    const cur = getRow(editingMesaId);
     isSavingModal = true;
     try {
       const payload = {
@@ -506,8 +487,8 @@
         hora_apertura: modalHoraApertura.trim(),
         hora_cierre: modalHoraCierre.trim(),
         pitboss: modalPitboss.trim(),
-        croupier_apertura: modalCroupierApertura.trim(),
-        croupier_cierre: modalCroupierCierre.trim(),
+        croupier_apertura: cur.croupier_apertura || '',
+        croupier_cierre: cur.croupier_cierre || '',
         observacion: modalObservacion.trim()
       };
 
@@ -522,8 +503,6 @@
         updateField(editingMesaId, 'hora_apertura', payload.hora_apertura);
         updateField(editingMesaId, 'hora_cierre', payload.hora_cierre);
         updateField(editingMesaId, 'pitboss', payload.pitboss);
-        updateField(editingMesaId, 'croupier_apertura', payload.croupier_apertura);
-        updateField(editingMesaId, 'croupier_cierre', payload.croupier_cierre);
         updateField(editingMesaId, 'observacion', payload.observacion);
 
         const savedRecord = json.data;
@@ -547,7 +526,7 @@
     }
   }
 
-  // --- Handlers de Autocompletado en Celda (Croupiers) ---
+  // --- Handlers de Autocompletado de Croupiers (en la tabla) ---
   function handleFocusAutocomplete(mesaId, field) {
     activeSug = { mesaId, field };
     activeSugIndex = -1;
@@ -564,19 +543,19 @@
     if (!activeSug || activeSug.mesaId !== mesaId || activeSug.field !== field) return;
 
     if (e.key === 'ArrowDown') {
-      if (filteredSuggestions.length > 0) {
+      if (filteredCroupierSuggestions.length > 0) {
         e.preventDefault();
-        activeSugIndex = (activeSugIndex + 1) % filteredSuggestions.length;
+        activeSugIndex = (activeSugIndex + 1) % filteredCroupierSuggestions.length;
       }
     } else if (e.key === 'ArrowUp') {
-      if (filteredSuggestions.length > 0) {
+      if (filteredCroupierSuggestions.length > 0) {
         e.preventDefault();
-        activeSugIndex = (activeSugIndex - 1 + filteredSuggestions.length) % filteredSuggestions.length;
+        activeSugIndex = (activeSugIndex - 1 + filteredCroupierSuggestions.length) % filteredCroupierSuggestions.length;
       }
     } else if (e.key === 'Tab' || e.key === 'Enter') {
-      if (filteredSuggestions.length > 0) {
+      if (filteredCroupierSuggestions.length > 0) {
         e.preventDefault();
-        const selected = activeSugIndex >= 0 ? filteredSuggestions[activeSugIndex] : filteredSuggestions[0];
+        const selected = activeSugIndex >= 0 ? filteredCroupierSuggestions[activeSugIndex] : filteredCroupierSuggestions[0];
         selectSuggestion(mesaId, field, selected);
       }
     } else if (e.key === 'Escape') {
@@ -601,27 +580,68 @@
     }, 200);
     triggerAutoSave(mesaId, 0);
   }
+
+  // --- Handlers de Autocompletado de Pitboss (con coincidencias y Tab ⇥) ---
+  function handleFocusPitboss(target) {
+    pitbossSugTarget = target;
+    pitbossSugIndex = -1;
+  }
+
+  function handleInputPitboss(target, val) {
+    if (target === 'batch') batchPitboss = val;
+    if (target === 'modal') modalPitboss = val;
+    pitbossSugTarget = target;
+    pitbossSugIndex = -1;
+  }
+
+  function handleKeyDownPitboss(e, target) {
+    if (pitbossSugTarget !== target) return;
+
+    if (e.key === 'ArrowDown') {
+      if (filteredPitbossSuggestions.length > 0) {
+        e.preventDefault();
+        pitbossSugIndex = (pitbossSugIndex + 1) % filteredPitbossSuggestions.length;
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (filteredPitbossSuggestions.length > 0) {
+        e.preventDefault();
+        pitbossSugIndex = (pitbossSugIndex - 1 + filteredPitbossSuggestions.length) % filteredPitbossSuggestions.length;
+      }
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (filteredPitbossSuggestions.length > 0) {
+        e.preventDefault();
+        const selected = pitbossSugIndex >= 0 ? filteredPitbossSuggestions[pitbossSugIndex] : filteredPitbossSuggestions[0];
+        selectPitbossSuggestion(target, selected);
+      }
+    } else if (e.key === 'Escape') {
+      pitbossSugTarget = null;
+      pitbossSugIndex = -1;
+    }
+  }
+
+  function selectPitbossSuggestion(target, name) {
+    if (target === 'batch') batchPitboss = name;
+    if (target === 'modal') modalPitboss = name;
+    pitbossSugTarget = null;
+    pitbossSugIndex = -1;
+  }
+
+  function handleBlurPitboss(target) {
+    setTimeout(() => {
+      if (pitbossSugTarget === target) {
+        pitbossSugTarget = null;
+        pitbossSugIndex = -1;
+      }
+    }, 200);
+  }
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key === 'Escape' && isEditModalOpen) cerrarModalEditar(); }} />
-
 <div class="novedades-layout-grid">
-  <!-- Tarjeta Izquierda: Formulario "Novedades de Mesas" (Asignación en Lote) -->
+  <!-- Tarjeta Izquierda: Formulario "Novedades de Mesas" (Asignación a todas las mesas) -->
   <div class="card-form-novedades">
     <div class="card-title-box">
       <h3 class="card-title">Novedades de Mesas</h3>
       <div class="title-underline"></div>
-    </div>
-
-    <div class="batch-selection-panel">
-      <div class="selection-header">
-        <span class="selection-title">Mesas a aplicar:</span>
-        <span class="selection-count">{selectedMesaIdsForBatch.length} de {availableMesas.length} seleccionadas</span>
-      </div>
-      <div class="selection-actions">
-        <button type="button" class="btn-sel-chip" on:click={selectAllMesasForBatch}>Todas</button>
-        <button type="button" class="btn-sel-chip" on:click={clearSelectedMesasForBatch}>Ninguna</button>
-      </div>
     </div>
 
     <form on:submit|preventDefault={handleBatchAssign} class="batch-form">
@@ -664,15 +684,44 @@
         </div>
       </div>
 
-      <!-- Fila 2: Pitboss (col-12) -->
+      <!-- Fila 2: Pitboss (col-12) con autocompletado y coincidencia a Tab ⇥ -->
       <div class="form-group col-12">
         <label for="batch-pitboss" class="form-label">Pitboss:</label>
-        <select id="batch-pitboss" class="form-select" bind:value={batchPitboss}>
-          <option value="">Seleccione Pitboss...</option>
-          {#each listaEmpleados as emp}
-            <option value={emp}>{emp}</option>
-          {/each}
-        </select>
+        <div class="cell-autocomplete-container">
+          <input 
+            id="batch-pitboss" 
+            type="text" 
+            class="form-input {pitbossSugTarget === 'batch' ? 'input-active' : ''}" 
+            placeholder="Escriba Pitboss (coincidencias con Tab ⇥)..." 
+            value={batchPitboss}
+            on:focus={() => handleFocusPitboss('batch')}
+            on:input={(e) => handleInputPitboss('batch', e.target.value)}
+            on:keydown={(e) => handleKeyDownPitboss(e, 'batch')}
+            on:blur={() => handleBlurPitboss('batch')}
+            autocomplete="off"
+          />
+
+          {#if pitbossSugTarget === 'batch' && filteredPitbossSuggestions.length > 0}
+            <div class="inline-dropdown">
+              <div class="inline-dropdown-header">
+                <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+              </div>
+              <ul class="inline-dropdown-list">
+                {#each filteredPitbossSuggestions as sug, idx}
+                  <!-- svelte-ignore a11y-click-events-have-key-events -->
+                  <li 
+                    class="inline-dropdown-item {idx === pitbossSugIndex ? 'selected' : ''}"
+                    on:mousedown|preventDefault={() => selectPitbossSuggestion('batch', sug)}
+                  >
+                    <span class="sug-avatar">👤</span>
+                    <span class="sug-name">{sug}</span>
+                    <span class="sug-tab-badge">Tab ⇥</span>
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/if}
+        </div>
       </div>
 
       <!-- Fila 3: Observación (col-12 textarea) -->
@@ -692,13 +741,13 @@
         <button 
           type="submit" 
           class="btn-primary-batch" 
-          disabled={isSavingBatch || selectedMesaIdsForBatch.length === 0}
+          disabled={isSavingBatch || availableMesas.length === 0}
         >
           {#if isSavingBatch}
             <span class="btn-spinner"></span>
-            <span>Guardando en lote...</span>
+            <span>Guardando en mesas...</span>
           {:else}
-            <span>⚡ Asignar en Lote ({selectedMesaIdsForBatch.length} mesas)</span>
+            <span>⚡ Asignar a Todas las Mesas ({availableMesas.length})</span>
           {/if}
         </button>
 
@@ -745,19 +794,11 @@
       </div>
     </div>
 
-    <!-- Tabla con Columnas Ocultas (Hora Apertura, Cierre, Pitboss y Obs ahora en Form y Modal) -->
+    <!-- Tabla Limpia: Solo MESA, CROUPIER APERTURA, CROUPIER CIERRE y ACCIONES -->
     <div class="table-wrapper">
       <table class="novedades-table">
         <thead>
           <tr>
-            <th class="th-center th-col-select">
-              <input 
-                type="checkbox" 
-                checked={availableMesas.length > 0 && selectedMesaIdsForBatch.length === availableMesas.length}
-                on:change={toggleSelectAllMesas}
-                title="Seleccionar todas las mesas para lote"
-              />
-            </th>
             <th class="th-left th-col-mesa">MESA</th>
             <th class="th-left th-col-croupier">CROUPIER APERTURA</th>
             <th class="th-left th-col-croupier">CROUPIER CIERRE</th>
@@ -767,7 +808,7 @@
         <tbody>
           {#if isLoadingRecords || isLoadingMesas}
             <tr>
-              <td colspan="5" class="empty-state-cell">
+              <td colspan="4" class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
                   <span>Cargando mesas y novedades...</span>
@@ -776,7 +817,7 @@
             </tr>
           {:else if availableMesas.length === 0}
             <tr>
-              <td colspan="5" class="empty-state-cell">
+              <td colspan="4" class="empty-state-cell">
                 <div class="empty-msg-box">
                   <span class="empty-icon">🎲</span>
                   <p class="empty-text">No se encontraron mesas activas configuradas para esta sala.</p>
@@ -785,7 +826,7 @@
             </tr>
           {:else if filteredMesas.length === 0}
             <tr>
-              <td colspan="5" class="empty-state-cell">
+              <td colspan="4" class="empty-state-cell">
                 <div class="empty-msg-box">
                   <span class="empty-icon">🔍</span>
                   <p class="empty-text">No hay mesas que coincidan con la búsqueda "{searchQuery}".</p>
@@ -797,40 +838,14 @@
               {@const row = getRow(mesa.id)}
               {@const hasData = Boolean(row.hora_apertura || row.hora_cierre || row.pitboss || row.croupier_apertura || row.croupier_cierre || row.observacion)}
               {@const isSavingThis = savingMesaIds.has(Number(mesa.id))}
-              {@const isSelectedThis = selectedMesaIdsForBatch.includes(mesa.id)}
-              <tr class="novedad-row {hasData ? 'row-has-data' : 'row-empty'} {isSelectedThis ? 'row-selected' : ''}">
+              <tr class="novedad-row {hasData ? 'row-has-data' : 'row-empty'}">
                 
-                <!-- Checkbox de selección en lote -->
-                <td class="td-center td-col-select">
-                  <input 
-                    type="checkbox" 
-                    checked={isSelectedThis} 
-                    on:change={() => toggleSelectMesa(mesa.id)}
-                    title="Seleccionar mesa para asignación en lote"
-                  />
-                </td>
-
-                <!-- MESA (Nombre, Juego y Badges discretos de Pitboss/Horas) -->
+                <!-- MESA (Solo Nombre y Juego) -->
                 <td class="td-left td-col-mesa">
                   <div class="mesa-badge-cell">
                     <span class="mesa-nombre">{mesa.nombre}</span>
                     {#if mesa.juego_nombre}
                       <span class="mesa-juego">{mesa.juego_nombre}</span>
-                    {/if}
-                    {#if row.pitboss || row.hora_apertura || row.hora_cierre || row.observacion}
-                      <div class="mesa-meta-badges">
-                        {#if row.pitboss}
-                          <span class="meta-pitboss-tag" title="Pitboss: {row.pitboss}">👤 {row.pitboss}</span>
-                        {/if}
-                        {#if row.hora_apertura || row.hora_cierre}
-                          <span class="meta-hora-tag" title="Horario: {row.hora_apertura || '—'} a {row.hora_cierre || '—'}">
-                            🕒 {row.hora_apertura || '—'} - {row.hora_cierre || '—'}
-                          </span>
-                        {/if}
-                        {#if row.observacion}
-                          <span class="meta-obs-tag" title="Observación: {row.observacion}">📝</span>
-                        {/if}
-                      </div>
                     {/if}
                   </div>
                 </td>
@@ -850,13 +865,13 @@
                       autocomplete="off"
                     />
 
-                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_apertura' && filteredSuggestions.length > 0}
+                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_apertura' && filteredCroupierSuggestions.length > 0}
                       <div class="inline-dropdown">
                         <div class="inline-dropdown-header">
                           <span>Sugerencias (<b>Tab ⇥</b> o clic):</span>
                         </div>
                         <ul class="inline-dropdown-list">
-                          {#each filteredSuggestions as sug, idx}
+                          {#each filteredCroupierSuggestions as sug, idx}
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <li 
                               class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
@@ -888,13 +903,13 @@
                       autocomplete="off"
                     />
 
-                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_cierre' && filteredSuggestions.length > 0}
+                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_cierre' && filteredCroupierSuggestions.length > 0}
                       <div class="inline-dropdown">
                         <div class="inline-dropdown-header">
                           <span>Sugerencias (<b>Tab ⇥</b> o clic):</span>
                         </div>
                         <ul class="inline-dropdown-list">
-                          {#each filteredSuggestions as sug, idx}
+                          {#each filteredCroupierSuggestions as sug, idx}
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <li 
                               class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
@@ -925,7 +940,7 @@
                       type="button" 
                       class="btn-inline-edit" 
                       on:click={() => abrirModalEditar(mesa.id)}
-                      title="Editar hora apertura/cierre, pitboss y observación de esta mesa"
+                      title="Editar individualmente hora apertura/cierre, pitboss y observación"
                     >
                       ✏️
                     </button>
@@ -954,9 +969,10 @@
 
 <!-- ============================================================
      MODAL DE EDICIÓN INDIVIDUAL POR MESA
+     (NO se cierra al dar clic afuera)
      ============================================================ -->
 {#if isEditModalOpen && modalMesa}
-  <div class="modal-overlay" on:click|self={cerrarModalEditar}>
+  <div class="modal-overlay">
     <div class="modal-card" role="dialog" aria-modal="true">
       <div class="modal-header">
         <div class="modal-header-info">
@@ -966,7 +982,7 @@
             <span class="modal-subheading">{modalMesa.juego_nombre || 'Mesa Operativa'} • Novedad individual</span>
           </div>
         </div>
-        <button type="button" class="btn-modal-close" on:click={cerrarModalEditar}>×</button>
+        <button type="button" class="btn-modal-close" on:click={cerrarModalEditar} title="Cerrar ventana">×</button>
       </div>
 
       <form on:submit|preventDefault={handleGuardarModal} class="modal-form">
@@ -1010,38 +1026,43 @@
             </div>
           </div>
 
-          <!-- Pitboss -->
+          <!-- Pitboss con autocompletado y Tab ⇥ -->
           <div class="form-group-modal">
             <label for="m-pitboss" class="form-label-modal">Pitboss:</label>
-            <select id="m-pitboss" class="form-select-modal" bind:value={modalPitboss}>
-              <option value="">Seleccione Pitboss...</option>
-              {#each listaEmpleados as emp}
-                <option value={emp}>{emp}</option>
-              {/each}
-            </select>
-          </div>
+            <div class="cell-autocomplete-container">
+              <input 
+                id="m-pitboss"
+                type="text" 
+                class="form-input-modal {pitbossSugTarget === 'modal' ? 'input-active' : ''}" 
+                placeholder="Escriba Pitboss (coincidencias con Tab ⇥)..." 
+                value={modalPitboss}
+                on:focus={() => handleFocusPitboss('modal')}
+                on:input={(e) => handleInputPitboss('modal', e.target.value)}
+                on:keydown={(e) => handleKeyDownPitboss(e, 'modal')}
+                on:blur={() => handleBlurPitboss('modal')}
+                autocomplete="off"
+              />
 
-          <!-- Croupiers (opcional de ajustar en modal) -->
-          <div class="modal-row-2col">
-            <div class="form-group-modal">
-              <label for="m-croupier-ap" class="form-label-modal">Croupier Apertura:</label>
-              <input 
-                id="m-croupier-ap" 
-                type="text" 
-                class="form-input-modal" 
-                placeholder="Nombre Croupier..." 
-                bind:value={modalCroupierApertura} 
-              />
-            </div>
-            <div class="form-group-modal">
-              <label for="m-croupier-ci" class="form-label-modal">Croupier Cierre:</label>
-              <input 
-                id="m-croupier-ci" 
-                type="text" 
-                class="form-input-modal" 
-                placeholder="Nombre Croupier..." 
-                bind:value={modalCroupierCierre} 
-              />
+              {#if pitbossSugTarget === 'modal' && filteredPitbossSuggestions.length > 0}
+                <div class="inline-dropdown">
+                  <div class="inline-dropdown-header">
+                    <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+                  </div>
+                  <ul class="inline-dropdown-list">
+                    {#each filteredPitbossSuggestions as sug, idx}
+                      <!-- svelte-ignore a11y-click-events-have-key-events -->
+                      <li 
+                        class="inline-dropdown-item {idx === pitbossSugIndex ? 'selected' : ''}"
+                        on:mousedown|preventDefault={() => selectPitbossSuggestion('modal', sug)}
+                      >
+                        <span class="sug-avatar">👤</span>
+                        <span class="sug-name">{sug}</span>
+                        <span class="sug-tab-badge">Tab ⇥</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
             </div>
           </div>
 
@@ -1126,56 +1147,6 @@
     border-radius: 2px;
   }
 
-  .batch-selection-panel {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 10px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .selection-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-  }
-
-  .selection-title {
-    font-weight: 700;
-    color: #334155;
-  }
-
-  .selection-count {
-    color: #2563eb;
-    font-weight: 800;
-  }
-
-  .selection-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  .btn-sel-chip {
-    padding: 3px 9px;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    font-size: 11.5px;
-    font-weight: 600;
-    color: #475569;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-sel-chip:hover {
-    background: #f1f5f9;
-    border-color: #94a3b8;
-    color: #0f172a;
-  }
-
   .batch-form {
     display: flex;
     flex-direction: column;
@@ -1222,7 +1193,7 @@
     text-decoration: underline;
   }
 
-  .form-input, .form-select, .form-textarea {
+  .form-input, .form-textarea {
     width: 100%;
     padding: 8px 10px;
     border: 1px solid #cbd5e1;
@@ -1236,7 +1207,7 @@
     font-family: inherit;
   }
 
-  .form-input:focus, .form-select:focus, .form-textarea:focus {
+  .form-input:focus, .form-textarea:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
   }
@@ -1441,7 +1412,6 @@
   .th-center { text-align: center; }
   .th-left { text-align: left; }
 
-  .th-col-select { width: 38px; text-align: center; }
   .th-col-mesa { min-width: 170px; }
   .th-col-croupier { min-width: 200px; }
   .th-col-acciones { width: 100px; text-align: center; }
@@ -1459,10 +1429,6 @@
     background: #ffffff;
   }
 
-  .novedad-row.row-selected {
-    background: #f0f7ff;
-  }
-
   .novedades-table td {
     padding: 8px 10px;
     vertical-align: middle;
@@ -1471,7 +1437,7 @@
   .td-center { text-align: center; }
   .td-left { text-align: left; }
 
-  /* Celda de Mesa con badges de resumen */
+  /* Celda de Mesa limpia (solo nombre y juego) */
   .mesa-badge-cell {
     display: flex;
     flex-direction: column;
@@ -1488,39 +1454,6 @@
     font-size: 11px;
     color: #64748b;
     font-weight: 600;
-  }
-
-  .mesa-meta-badges {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    flex-wrap: wrap;
-    margin-top: 3px;
-  }
-
-  .meta-pitboss-tag {
-    font-size: 10.5px;
-    background: #f0fdf4;
-    color: #166534;
-    border: 1px solid #bbf7d0;
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-weight: 600;
-  }
-
-  .meta-hora-tag {
-    font-size: 10.5px;
-    background: #eff6ff;
-    color: #1e40af;
-    border: 1px solid #bfdbfe;
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-weight: 600;
-  }
-
-  .meta-obs-tag {
-    font-size: 11px;
-    cursor: help;
   }
 
   /* Input con autocompletado en celda */
@@ -1543,7 +1476,9 @@
   }
 
   .inline-text-input:focus,
-  .inline-text-input.input-active {
+  .inline-text-input.input-active,
+  .form-input.input-active,
+  .form-input-modal.input-active {
     border-color: #2563eb;
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
     background: #ffffff;
@@ -1718,7 +1653,7 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
-     Modal de Edición Individual
+     Modal de Edición Individual (No se cierra al dar clic afuera)
      ───────────────────────────────────────────────────────────── */
   .modal-overlay {
     position: fixed;
@@ -1847,7 +1782,7 @@
     text-decoration: underline;
   }
 
-  .form-time-input-modal, .form-input-modal, .form-select-modal, .form-textarea-modal {
+  .form-time-input-modal, .form-input-modal, .form-textarea-modal {
     width: 100%;
     padding: 8px 10px;
     border: 1px solid #cbd5e1;
@@ -1858,7 +1793,7 @@
     font-family: inherit;
   }
 
-  .form-time-input-modal:focus, .form-input-modal:focus, .form-select-modal:focus, .form-textarea-modal:focus {
+  .form-time-input-modal:focus, .form-input-modal:focus, .form-textarea-modal:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
   }
