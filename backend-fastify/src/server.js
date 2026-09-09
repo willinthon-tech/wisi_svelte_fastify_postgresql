@@ -8,6 +8,7 @@ import healthRoutes from './routes/health.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import masterRoutes from './routes/master.routes.js';
 import { reportsRoutes } from './routes/reports.routes.js';
+import biometricosSyncRoutes from './routes/biometricos-sync.routes.js';
 import { syncAttlogs, handleZkIclockCdata } from './controllers/master.controller.js';
 import { initDb } from './config/db.js';
 
@@ -91,6 +92,7 @@ async function startServer() {
     await fastify.register(authRoutes, { prefix: '/api' });
     await fastify.register(masterRoutes, { prefix: '/api' });
     await fastify.register(reportsRoutes);
+    await fastify.register(biometricosSyncRoutes);
     // Register Biometric Push Endpoints at Root Level (ZKTeco ADMS, Hikvision, Dahua, Agente WISI Sync)
     await fastify.register(async (app) => {
       app.get('/iclock/cdata', handleZkIclockCdata);

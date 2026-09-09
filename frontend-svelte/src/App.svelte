@@ -13,6 +13,7 @@
   import AuthView from "./views/AuthView.svelte";
   import MasterAdminView from "./views/MasterAdminView.svelte";
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
+  import SyncBiometricosModal from "./components/modals/SyncBiometricosModal.svelte";
   import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
   import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal, openPhotoModalForAttlog } from "./controllers/globalModal.store.js";
 
@@ -171,6 +172,7 @@
     return [];
   })();
 
+  let isSyncBiometricosModalOpen = false;
   let globalMarcajeAlert = null;
   let globalMarcajeAlertTimer = null;
 
@@ -812,16 +814,33 @@
               </h1>
             </div>
 
-            {#if !isBuiltInTab($currentRouteStore)}
-              <button
-                on:click={openCreateModalUI}
-                type="button"
-                class="btn-flow"
-                style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3); white-space: nowrap;"
-              >
-                {getNewRecordButtonLabel($currentRouteStore)}
-              </button>
-            {/if}
+            <div style="display: flex; align-items: center; gap: 10px;">
+              {#if $currentRouteStore === 'rrhh/empleados' || $currentRouteStore === 'empleados'}
+                <button
+                  on:click={() => (isSyncBiometricosModalOpen = true)}
+                  type="button"
+                  class="btn-flow"
+                  style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; background: #0284c7; color: #fff; box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none;"
+                  title="Auditar y Sincronizar Biométricos y Paneles"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                  </svg>
+                  Sync
+                </button>
+              {/if}
+
+              {#if !isBuiltInTab($currentRouteStore)}
+                <button
+                  on:click={openCreateModalUI}
+                  type="button"
+                  class="btn-flow"
+                  style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3); white-space: nowrap;"
+                >
+                  {getNewRecordButtonLabel($currentRouteStore)}
+                </button>
+              {/if}
+            </div>
           </div>
         {/if}
 
@@ -1213,6 +1232,9 @@
 
 <!-- Modal Global Unificado de Fotografías y Fichas -->
 <GlobalPhotoModal />
+
+<!-- Modal de Auditoría y Sincronización de Biométricos -->
+<SyncBiometricosModal bind:isOpen={isSyncBiometricosModalOpen} {assignedSalaIds} />
 
 <style>
   :global(*::-webkit-scrollbar) {
