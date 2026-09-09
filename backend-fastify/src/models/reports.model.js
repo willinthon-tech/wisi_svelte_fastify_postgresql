@@ -830,29 +830,32 @@ export async function getMarcajePersonalReportModel(params = {}) {
       const nextDateStr = dCurr.toISOString().split('T')[0];
       const nextDayPunches = empPunchesByDate.get(nextDateStr) || [];
 
-      // Check for Excepcion Especial Override for this employee and date
+      // Check for Override for this employee and date
       const exKey = `${emp.id}_${dateStr}`;
       const excepObj = excepcionesMap.get(exKey);
-      const isExcepcion = Boolean(excepObj);
-      const excepcionId = excepObj ? excepObj.id : null;
 
-      // When an exception with specific hours exists, targetPlantillas must be ONLY this exception plantilla.
-      // If it is a catalog exception (FER, R, V, P, F, L, FERT, LT, etc.), it completely overrides the schedule, so effectiveTargetPlantillas is empty.
-      let effectiveTargetPlantillas = [];
-      if (isExcepcion && excepObj) {
-        if (excepObj.hora_entrada && excepObj.hora_salida) {
-          effectiveTargetPlantillas = [{
-            id: excepObj.plantilla_horario_id,
-            codigo: excepObj.plantilla_codigo,
-            nombre: excepObj.plantilla_nombre,
-            hora_entrada: excepObj.hora_entrada,
-            hora_salida: excepObj.hora_salida,
-            color: excepObj.color,
-            tipo: excepObj.tipo
-          }];
-        } else {
-          effectiveTargetPlantillas = [];
-        }
+      // DISTINCIÓN CLAVE: 
+      // 1. Tabla 'horarios': horario_id asignado (con o sin 'T' en su código, es un HORARIO DE TRABAJO regular).
+      // 2. Tabla 'excepciones': excepcion_id asignado (o día libre sin horario_id).
+      const isHorarioOverride = Boolean(excepObj && excepObj.horario_id && !excepObj.excepcion_id);
+      const isExcepcion = Boolean(excepObj && !isHorarioOverride);
+      const excepcionId = isExcepcion && excepObj ? excepObj.id : null;
+
+      let effectiveTargetPlantillas = assignedPlantillas;
+      if (isHorarioOverride) {
+        // Horario de trabajo asignado desde la tabla 'horarios' (ej: T, T1, M, AT, CT)
+        effectiveTargetPlantillas = [{
+          id: excepObj.horario_id,
+          codigo: excepObj.plantilla_codigo || 'H',
+          nombre: excepObj.plantilla_nombre || 'Horario',
+          hora_entrada: excepObj.hora_entrada,
+          hora_salida: excepObj.hora_salida,
+          color: excepObj.plantilla_color || excepObj.color || '#86EFAC',
+          tipo: 'horario'
+        }];
+      } else if (isExcepcion) {
+        // Excepción de la tabla 'excepciones' (FER, R, V, P, F, L, FERT, LT, etc.)
+        effectiveTargetPlantillas = [];
       } else {
         effectiveTargetPlantillas = assignedPlantillas;
       }
@@ -862,7 +865,7 @@ export async function getMarcajePersonalReportModel(params = {}) {
         nextDayPunches,
         targetPlantillas: effectiveTargetPlantillas,
         isExcepcion,
-        excepObj,
+        excepObj: isExcepcion ? excepObj : null,
         dateStr,
         todayStr
       });
@@ -892,9 +895,10 @@ export async function getMarcajePersonalReportModel(params = {}) {
       let shiftTipo = 'plantilla';
 
       if (isExcepcion && excepObj) {
-        const exCode = String(excepObj.excepcion_codigo || excepObj.plantilla_codigo || excepObj.codigo || '').toUpperCase().trim();
+        // Excepción de la tabla 'excepciones'
+        const exCode = String(excepObj.excepcion_codigo || excepObj.codigo || '').toUpperCase().trim();
         const isTrabCode = Boolean(exCode && exCode.length >= 2 && exCode.endsWith('T'));
-        let exDesc = (excepObj.excepcion_nombre || excepObj.nombre || excepObj.descripcion || excepObj.plantilla_nombre || '').trim();
+        let exDesc = (excepObj.excepcion_nombre || excepObj.nombre || excepObj.descripcion || '').trim();
         if (exCode === 'LT') {
           exDesc = 'Libre Trabajado';
         } else if (exCode === 'FERT') {
@@ -918,25 +922,18 @@ export async function getMarcajePersonalReportModel(params = {}) {
           else exDesc = 'Día Libre';
         }
 
-        if (excepObj.excepcion_codigo) {
-          shiftId = excepObj.excepcion_id;
-          shiftCode = excepObj.excepcion_codigo;
-          shiftColor = excepObj.excepcion_color || '#8B5CF6';
-          shiftNombre = exDesc;
-          shiftTipo = 'excepcion';
-        } else if (!excepObj.plantilla_horario_id || excepObj.plantilla_codigo === 'L' || excepObj.es_libre) {
-          shiftId = null;
-          shiftCode = exCode || 'L';
-          shiftColor = excepObj.excepcion_color || '#D9D9D9';
-          shiftNombre = exDesc;
-          shiftTipo = 'excepcion';
-        } else {
-          shiftId = excepObj.plantilla_horario_id;
-          shiftCode = excepObj.plantilla_codigo || 'EX';
-          shiftColor = excepObj.plantilla_color || excepObj.color || '#FDE047';
-          shiftNombre = excepObj.plantilla_nombre || exDesc;
-          shiftTipo = excepObj.plantilla_tipo || excepObj.tipo || 'plantilla';
-        }
+        shiftId = excepObj.excepcion_id || null;
+        shiftCode = exCode || 'EX';
+        shiftColor = excepObj.excepcion_color || (exCode === 'FER' || exCode === 'FERT' ? '#8B5CF6' : (exCode === 'R' ? '#EF4444' : (exCode === 'V' ? '#10B981' : (exCode === 'P' ? '#3B82F6' : '#7C3AED'))));
+        shiftNombre = exDesc;
+        shiftTipo = 'excepcion';
+      } else if (isHorarioOverride) {
+        // Horario asignado de la tabla 'horarios' (con o sin T, es un horario regular)
+        shiftId = excepObj.horario_id;
+        shiftCode = excepObj.plantilla_codigo || (matchedPlantilla ? matchedPlantilla.codigo : 'H');
+        shiftColor = excepObj.plantilla_color || excepObj.color || (matchedPlantilla ? matchedPlantilla.color : '#86EFAC');
+        shiftNombre = excepObj.plantilla_nombre || (matchedPlantilla ? matchedPlantilla.nombre : shiftCode);
+        shiftTipo = 'horario';
       } else if (matchedPlantilla) {
         shiftId = (matchedPlantilla.id === 'SYS-U' || matchedPlantilla.id === 'SYS-L') ? null : matchedPlantilla.id;
         if (matchedPlantilla.id === 'SYS-U') {
@@ -964,9 +961,9 @@ export async function getMarcajePersonalReportModel(params = {}) {
         fechaStr: dateStr,
         isExcepcion,
         excepcionId,
-        excepcion_tipo_id: excepObj ? excepObj.excepcion_id : null,
+        excepcion_tipo_id: isExcepcion && excepObj ? excepObj.excepcion_id : null,
         horario_id: excepObj ? (excepObj.horario_id || excepObj.plantilla_horario_id) : null,
-        es_libre: excepObj ? Boolean(excepObj.es_libre) : false,
+        es_libre: isExcepcion && excepObj ? Boolean(excepObj.es_libre) : false,
         shift: {
           id: shiftId,
           codigo: shiftCode,

@@ -446,7 +446,7 @@
       }
 
       // Actualización optimista local
-      dia.isExcepcion = true;
+      dia.isExcepcion = val.startsWith('EXCEPCION_') || val === 'BASE_L';
       if (selectedShiftObj) {
         dia.shift = selectedShiftObj;
       }
