@@ -649,7 +649,7 @@
       <div class="form-row-2col">
         <div class="form-group col-6">
           <div class="label-with-now">
-            <label for="batch-hora-apertura" class="form-label">Hora Apertura:</label>
+            <label for="batch-hora-apertura" class="form-label">Apertura:</label>
             <button 
               type="button" 
               class="btn-now-text" 
@@ -667,7 +667,7 @@
 
         <div class="form-group col-6">
           <div class="label-with-now">
-            <label for="batch-hora-cierre" class="form-label">Hora Cierre:</label>
+            <label for="batch-hora-cierre" class="form-label">Cierre:</label>
             <button 
               type="button" 
               class="btn-now-text" 
@@ -987,11 +987,11 @@
 
       <form on:submit|preventDefault={handleGuardarModal} class="modal-form">
         <div class="modal-body">
-          <!-- Fila: Hora Apertura (Inicio) y Hora Cierre (Fin) -->
+          <!-- Fila: Apertura y Cierre -->
           <div class="modal-row-2col">
             <div class="form-group-modal">
               <div class="label-with-action">
-                <label for="m-hora-inicio" class="form-label-modal">Hora Apertura (Inicio):</label>
+                <label for="m-hora-inicio" class="form-label-modal">Apertura:</label>
                 <button 
                   type="button" 
                   class="btn-inline-now" 
@@ -1009,7 +1009,7 @@
 
             <div class="form-group-modal">
               <div class="label-with-action">
-                <label for="m-hora-fin" class="form-label-modal">Hora Cierre (Fin):</label>
+                <label for="m-hora-fin" class="form-label-modal">Cierre:</label>
                 <button 
                   type="button" 
                   class="btn-inline-now" 
@@ -1169,6 +1169,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    white-space: nowrap;
+    gap: 4px;
   }
 
   .form-label {
