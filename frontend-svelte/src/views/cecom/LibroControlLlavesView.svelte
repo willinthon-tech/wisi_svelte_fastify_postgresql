@@ -23,13 +23,9 @@
   let records = [];
   let isLoadingRecords = false;
 
-  // Ordenados de más reciente a más antiguo por hora_salida
-  $: sortedRecords = [...records].sort((a, b) => {
-    const hA = a.hora_salida || '';
-    const hB = b.hora_salida || '';
-    if (hA !== hB) return hB.localeCompare(hA);
-    return Number(b.id) - Number(a.id);
-  });
+  // Ordenados por ID de la tabla (el último registrado primero / ID descendente)
+  // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
+  $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
 
   // Llaves cargadas del servidor o store
   let serverLlaves = [];

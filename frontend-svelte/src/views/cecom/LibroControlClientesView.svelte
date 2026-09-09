@@ -85,13 +85,9 @@
       .slice(0, 10);
   })();
 
-  // Ordenadas de más reciente a más antigua por hora
-  $: sortedRecords = [...records].sort((a, b) => {
-    const hA = a.hora || '';
-    const hB = b.hora || '';
-    if (hA !== hB) return hB.localeCompare(hA);
-    return Number(b.id) - Number(a.id);
-  });
+  // Ordenadas por ID de la tabla (el último registrado primero / ID descendente)
+  // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
+  $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
 
   // Modal para editar Método y Hora
   let showModalEditar = false;

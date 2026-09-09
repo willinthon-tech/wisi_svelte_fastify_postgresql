@@ -268,9 +268,19 @@
     };
   }
 
+  // Ordenar por ID de la tabla (el más reciente/último registrado primero / ID descendente)
+  // Se ordena estrictamente por ID para turnos que cruzan la medianoche (noche a madrugada siguiente)
+  function sortByMasReciente(list) {
+    return [...(list || [])].sort((a, b) => Number(b.id) - Number(a.id));
+  }
+
+  $: sortedControlClientes = sortByMasReciente(resumenData.control_clientes);
+  $: sortedControlLlaves = sortByMasReciente(resumenData.control_llaves);
+  $: sortedIncidenciasGenerales = sortByMasReciente(resumenData.incidencias_generales);
+
   // 1. Clasificación reactiva de Incidencias en Bloque de 3 (Mercancía, Generales, Empleados)
   $: incidenciasBloque = (() => {
-    const list = resumenData.incidencias_generales || [];
+    const list = sortedIncidenciasGenerales;
     const mercancia = [];
     const empleado = [];
     const generales = [];
@@ -1052,7 +1062,7 @@
               </tr>
             </thead>
             <tbody>
-              {#each resumenData.control_llaves as k, idx}
+              {#each sortedControlLlaves as k, idx}
                 {@const isDevuelta = Boolean(
                   k.hora_recepcion && k.hora_recepcion.trim(),
                 )}
@@ -1131,7 +1141,7 @@
               </tr>
             </thead>
             <tbody>
-              {#each resumenData.control_clientes as c, idx}
+              {#each sortedControlClientes as c, idx}
                 {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
                 <tr>
                   <td class="cell-center">{idx + 1}</td>

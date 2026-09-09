@@ -7613,7 +7613,7 @@ export async function getLibroControlLlavesModel(libroId) {
         ...c,
         llaves_detalle: llavesList.map(l => ({ id: l.id, nombre: l.nombre }))
       };
-    });
+    }).sort((a, b) => Number(b.id) - Number(a.id));
   }
 
   const rows = await sql`
@@ -7635,7 +7635,7 @@ export async function getLibroControlLlavesModel(libroId) {
       ) AS llaves_detalle
     FROM libro_control_llaves cl
     WHERE cl.libro_id = ${lId}
-    ORDER BY cl.hora_salida DESC, cl.id DESC
+    ORDER BY cl.id DESC
   `;
 
   return rows;
@@ -7798,7 +7798,9 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
-    return inMemoryData.libro_incidencias_generales.filter(c => Number(c.libro_id) === lId);
+    return inMemoryData.libro_incidencias_generales
+      .filter(c => Number(c.libro_id) === lId)
+      .sort((a, b) => Number(b.id) - Number(a.id));
   }
 
   const rows = await sql`
@@ -7806,7 +7808,7 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
       id, libro_id, descripcion, COALESCE(tipo, 'General') AS tipo, hora, created_at, updated_at
     FROM libro_incidencias_generales
     WHERE libro_id = ${lId}
-    ORDER BY hora DESC, id DESC
+    ORDER BY id DESC
   `;
 
   return rows;
@@ -7922,12 +7924,7 @@ export async function getLibroControlClientesModel(libroId) {
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
     const list = inMemoryData.libro_control_clientes.filter(c => Number(c.libro_id) === lId);
-    return list.sort((a, b) => {
-      const hA = a.hora || '';
-      const hB = b.hora || '';
-      if (hA !== hB) return hB.localeCompare(hA);
-      return Number(b.id) - Number(a.id);
-    });
+    return list.sort((a, b) => Number(b.id) - Number(a.id));
   }
 
   const rows = await sql`
@@ -7945,7 +7942,7 @@ export async function getLibroControlClientesModel(libroId) {
     LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
     LEFT JOIN metodos_pago mp ON lcc.metodo_pago_id = mp.id
     WHERE lcc.libro_id = ${lId}
-    ORDER BY lcc.hora DESC, lcc.id DESC
+    ORDER BY lcc.id DESC
   `;
 
   return rows;

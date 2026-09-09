@@ -28,13 +28,9 @@
     return t === 'mercancía' || t === 'mercancia';
   }).length;
 
-  // Lista ordenada por hora DESC
-  $: sortedRecords = [...records].sort((a, b) => {
-    const hA = a.hora || '';
-    const hB = b.hora || '';
-    if (hA !== hB) return hB.localeCompare(hA);
-    return Number(b.id) - Number(a.id);
-  });
+  // Lista ordenada por ID de la tabla (la más última primero / ID descendente)
+  // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
+  $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
 
   // Filtrado según la pestaña activa
   $: filteredRecords = (() => {
