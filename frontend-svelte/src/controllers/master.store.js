@@ -166,6 +166,7 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('excepciones', masterExcepcionesStore),
     fetchEntity('fechas-patrias', masterFechasPatriasStore),
     fetchEntity('tipo-clientes', masterTipoClientesStore),
+    fetchEntity('metodos-pago', masterMetodosPagoStore),
     fetchEntity('clientes', masterClientesStore),
     fetchUserSalas(),
     fetchUserPerms()
@@ -450,13 +451,17 @@ export const masterExcepcionesActions = createMasterEntityActions(masterExcepcio
 export const masterFechasPatriasActions = createMasterEntityActions(masterFechasPatriasStore, 'fechas-patrias');
 
 // ==========================================
-// 👥 CLIENTES Y TIPO CLIENTES
+// 👥 CLIENTES, TIPO CLIENTES Y MÉTODOS DE PAGO
 // ==========================================
 export const masterTipoClientesStore = writable(loadStore('tipo_clientes_v1', []));
+export const masterMetodosPagoStore = writable(loadStore('metodos_pago_v1', []));
 export const masterClientesStore = writable(loadStore('clientes_v1', []));
 
 masterTipoClientesStore.subscribe(val => saveStore('tipo_clientes_v1', val));
+masterMetodosPagoStore.subscribe(val => saveStore('metodos_pago_v1', val));
 masterClientesStore.subscribe(val => saveStore('clientes_v1', val));
 
 export const masterTipoClientesActions = createMasterEntityActions(masterTipoClientesStore, 'tipo-clientes');
+export const masterMetodosPagoActions = createMasterEntityActions(masterMetodosPagoStore, 'metodos-pago');
 export const masterClientesActions = createMasterEntityActions(masterClientesStore, 'clientes');
+

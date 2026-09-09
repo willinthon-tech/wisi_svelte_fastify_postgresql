@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterSalasStore, masterLibrosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterSalasStore, masterLibrosStore, masterMetodosPagoStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
@@ -96,11 +96,21 @@
   // Modal para editar Método y Hora
   let showModalEditar = false;
   let editingRecord = null;
+  let modalMetodoPagoId = 1;
   let modalMetodo = 'General';
   let modalHora = '';
   let isSavingModal = false;
 
-  const METODOS_DISPONIBLES = ['General', 'PDV', 'Cash', 'USDT'];
+  const DEFAULT_METODOS = [
+    { id: 1, nombre: 'General' },
+    { id: 2, nombre: 'PDV' },
+    { id: 3, nombre: 'Cash' },
+    { id: 4, nombre: 'USDT' }
+  ];
+
+  $: metodosDisponibles = ($masterMetodosPagoStore && $masterMetodosPagoStore.length > 0)
+    ? $masterMetodosPagoStore
+    : DEFAULT_METODOS;
 
   // Encabezado oscuro de la tabla con nombre de sala (no comercial) y fecha
   $: tableHeaderTitle = (() => {
@@ -166,8 +176,13 @@
   $: resultadoConDrop = totalDrop + balanceNeto;
 
   // 6. Resumen por Métodos de Pago
-  $: resumenMetodos = METODOS_DISPONIBLES.map(metodo => {
-    const ops = records.filter(r => (r.metodo || 'General').toLowerCase() === metodo.toLowerCase());
+  $: resumenMetodos = metodosDisponibles.map(met => {
+    const metId = Number(met.id);
+    const metNom = (met.nombre || '').toLowerCase().trim();
+    const ops = records.filter(r => {
+      if (r.metodo_pago_id && Number(r.metodo_pago_id) === metId) return true;
+      return (r.metodo || 'General').toLowerCase().trim() === metNom;
+    });
     const compras = ops
       .filter(r => (r.tipo || '').toLowerCase() === 'compra')
       .reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
@@ -176,7 +191,8 @@
       .reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
     const neto = compras - pagos;
     return {
-      metodo,
+      id: met.id,
+      metodo: met.nombre,
       compras,
       pagos,
       neto,
@@ -398,12 +414,14 @@
 
     isSaving = true;
     try {
+      const defaultMetodo = metodosDisponibles.find(m => (m.nombre || '').toLowerCase() === 'general') || metodosDisponibles[0] || { id: 1, nombre: 'General' };
       const payload = {
         cliente: cleanCliente,
         cliente_id: selectedClienteId || null,
         tipo: tipo || 'Compra',
         monto: cleanMonto,
-        metodo: 'General', // Por defecto General según requerimiento
+        metodo_pago_id: defaultMetodo.id || 1,
+        metodo: defaultMetodo.nombre || 'General',
         hora: getCurrentTimeString() // Hora en curso automáticamente
       };
 
@@ -463,7 +481,11 @@
   // Modal para editar Método y Hora
   function abrirModalEditar(record) {
     editingRecord = record;
-    modalMetodo = record.metodo || 'General';
+    modalMetodoPagoId = record.metodo_pago_id 
+      ? Number(record.metodo_pago_id) 
+      : (metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === (record.metodo || '').toLowerCase().trim())?.id || 1);
+    const matched = metodosDisponibles.find(m => Number(m.id) === Number(modalMetodoPagoId));
+    modalMetodo = matched ? matched.nombre : (record.metodo || 'General');
     modalHora = record.hora || getCurrentTimeString();
     showModalEditar = true;
   }
@@ -493,6 +515,7 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          metodo_pago_id: modalMetodoPagoId,
           metodo: modalMetodo || 'General',
           hora: modalHora
         })
@@ -1017,15 +1040,16 @@
           <div class="modal-field-group">
             <label class="modal-field-label">Método de Pago: *</label>
             <div class="metodos-options-grid">
-              {#each METODOS_DISPONIBLES as met}
-                <label class="metodo-radio-pill {modalMetodo === met ? 'active' : ''}">
+              {#each metodosDisponibles as met}
+                <label class="metodo-radio-pill {Number(modalMetodoPagoId) === Number(met.id) ? 'active' : ''}">
                   <input 
                     type="radio" 
                     name="modal-metodo" 
-                    value={met} 
-                    bind:group={modalMetodo}
+                    value={met.id} 
+                    bind:group={modalMetodoPagoId}
+                    on:change={() => modalMetodo = met.nombre}
                   />
-                  <span>{met}</span>
+                  <span>{met.nombre}</span>
                 </label>
               {/each}
             </div>

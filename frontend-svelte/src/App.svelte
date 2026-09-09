@@ -63,6 +63,7 @@
   import ExcepcionesConfigView from "./views/rrhh/ExcepcionesConfigView.svelte";
   import FechasPatriasConfigView from "./views/rrhh/FechasPatriasConfigView.svelte";
   import TipoClientesView from "./views/configuracion/TipoClientesView.svelte";
+  import MetodosPagoView from "./views/configuracion/MetodosPagoView.svelte";
 
   // Import MESAS EN VIVO Views
   import MesasView from "./views/mesas-en-vivo/MesasView.svelte";
@@ -442,6 +443,7 @@
     if (tab === "settings") return "Diagnóstico del Sistema";
     if (tab === "cecom/clientes" || tab === "clientes") return "CLIENTES";
     if (tab === "configuracion/tipo-clientes" || tab === "tipo-clientes") return "TIPO CLIENTES";
+    if (tab === "configuracion/metodos-pago" || tab === "metodos-pago") return "MÉTODOS DE PAGO";
     if (tab === "rrhh/marcajes" || tab === "marcajes") return "Marcajes";
     if (tab === "rrhh/cortes" || tab === "cortes") return "Cortes";
     if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Reportes";
@@ -1013,6 +1015,8 @@
           <FechasPatriasConfigView />
         {:else if $currentRouteStore === "configuracion/tipo-clientes" || $currentRouteStore === "tipo-clientes"}
           <TipoClientesView />
+        {:else if $currentRouteStore === "configuracion/metodos-pago" || $currentRouteStore === "metodos-pago"}
+          <MetodosPagoView />
 
           <!-- MESAS EN VIVO Module Views -->
         {:else if $currentRouteStore === "mesas-en-vivo/mesas" || $currentRouteStore === "mesas"}

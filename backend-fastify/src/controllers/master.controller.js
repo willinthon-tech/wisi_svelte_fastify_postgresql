@@ -42,6 +42,7 @@ import {
   getLibroNovedadesMesasModel, saveLibroNovedadesMesaModel, deleteLibroNovedadesMesaModel,
   getLibroResumenModel, saveLibroReporteModel, getLibroReporteModel,
   getTipoClientesModel, createTipoClienteModel, updateTipoClienteModel, deleteTipoClienteModel,
+  getMetodosPagoModel, createMetodoPagoModel, updateMetodoPagoModel, deleteMetodoPagoModel,
   getClientesModel, getClientesFilterOptionsModel, createClienteModel, updateClienteModel, deleteClienteModel
 } from '../models/master.model.js';
 
@@ -2356,6 +2357,15 @@ export const getTipoClientes = tipoClientesCtrl.get;
 export const createTipoCliente = tipoClientesCtrl.create;
 export const updateTipoCliente = tipoClientesCtrl.update;
 export const deleteTipoCliente = tipoClientesCtrl.delete;
+
+// ==========================================
+// 💳 MÉTODOS DE PAGO (CONFIGURACIÓN)
+// ==========================================
+const metodosPagoCtrl = buildCrudControllers(getMetodosPagoModel, createMetodoPagoModel, updateMetodoPagoModel, deleteMetodoPagoModel);
+export const getMetodosPago = metodosPagoCtrl.get;
+export const createMetodoPago = metodosPagoCtrl.create;
+export const updateMetodoPago = metodosPagoCtrl.update;
+export const deleteMetodoPago = metodosPagoCtrl.delete;
 
 // ==========================================
 // 👥 CLIENTES (CECOM)

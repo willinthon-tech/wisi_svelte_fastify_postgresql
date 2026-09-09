@@ -5566,6 +5566,13 @@ export const createTipoClienteModel = tipoClientesCrud.create;
 export const updateTipoClienteModel = tipoClientesCrud.update;
 export const deleteTipoClienteModel = tipoClientesCrud.delete;
 
+// 1.2. MÉTODOS DE PAGO
+const metodosPagoCrud = buildSimpleConfigCrud('metodos_pago', 'método de pago', 'metodos_pago');
+export const getMetodosPagoModel = metodosPagoCrud.get;
+export const createMetodoPagoModel = metodosPagoCrud.create;
+export const updateMetodoPagoModel = metodosPagoCrud.update;
+export const deleteMetodoPagoModel = metodosPagoCrud.delete;
+
 // 2. SOCIEDADES
 const sociedadesCrud = buildSimpleConfigCrud('sociedades', 'sociedad');
 export const getSociedadesModel = sociedadesCrud.get;
@@ -7927,13 +7934,16 @@ export async function getLibroControlClientesModel(libroId) {
     SELECT 
       lcc.id, lcc.libro_id, lcc.cliente_id, 
       COALESCE(c.nombre, '') AS cliente, 
-      lcc.tipo, lcc.monto, lcc.metodo, lcc.hora, 
+      lcc.tipo, lcc.monto, lcc.metodo_pago_id, 
+      COALESCE(mp.nombre, 'General') AS metodo,
+      lcc.hora, 
       lcc.created_at, lcc.updated_at,
       COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre,
       c.tipo_cliente_id
     FROM libro_control_clientes lcc
     LEFT JOIN clientes c ON lcc.cliente_id = c.id
     LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+    LEFT JOIN metodos_pago mp ON lcc.metodo_pago_id = mp.id
     WHERE lcc.libro_id = ${lId}
     ORDER BY lcc.hora DESC, lcc.id DESC
   `;
@@ -8047,7 +8057,19 @@ export async function createLibroControlClienteModel(data) {
   const monto = parseFloat(data.monto) || 0;
   if (monto <= 0) throw new Error('El monto debe ser mayor a 0');
 
-  const metodo = (data.metodo || 'General').trim();
+  // Resolver metodo_pago_id
+  let metodoPagoId = data.metodo_pago_id ? Number(data.metodo_pago_id) : null;
+  const metodoNombre = (data.metodo || '').trim();
+  if (!metodoPagoId && metodoNombre && sql && isPgConnected) {
+    const mRow = await sql`
+      SELECT id FROM metodos_pago 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${metodoNombre}) 
+      LIMIT 1
+    `;
+    if (mRow.length > 0) metodoPagoId = mRow[0].id;
+  }
+  if (!metodoPagoId) metodoPagoId = 1; // Por defecto 1 (General)
+
   const now = new Date();
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const hora = (data.hora || '').trim() || currentHHMM;
@@ -8064,7 +8086,8 @@ export async function createLibroControlClienteModel(data) {
       cliente: clienteNombre,
       tipo,
       monto,
-      metodo,
+      metodo_pago_id: metodoPagoId,
+      metodo: metodoNombre || 'General',
       hora,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -8075,12 +8098,12 @@ export async function createLibroControlClienteModel(data) {
 
   const res = await sql`
     INSERT INTO libro_control_clientes (
-      libro_id, cliente_id, tipo, monto, metodo, hora
+      libro_id, cliente_id, tipo, monto, metodo_pago_id, hora
     )
     VALUES (
-      ${libroId}, ${clienteId}, ${tipo}, ${monto}, ${metodo}, ${hora}
+      ${libroId}, ${clienteId}, ${tipo}, ${monto}, ${metodoPagoId}, ${hora}
     )
-    RETURNING id, libro_id, cliente_id, tipo, monto, metodo, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, created_at, updated_at
   `;
 
   let clientInfo = null;
@@ -8095,11 +8118,19 @@ export async function createLibroControlClienteModel(data) {
     if (cRows.length > 0) clientInfo = cRows[0];
   }
 
+  let metodoInfo = null;
+  if (metodoPagoId) {
+    const mRows = await sql`SELECT nombre FROM metodos_pago WHERE id = ${metodoPagoId} LIMIT 1`;
+    if (mRows.length > 0) metodoInfo = mRows[0];
+  }
+
   return {
     ...res[0],
     cliente: clientInfo ? clientInfo.cliente : clienteNombre,
     tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : 'General',
-    tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : 1
+    tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : 1,
+    metodo: metodoInfo ? metodoInfo.nombre : (metodoNombre || 'General'),
+    metodo_pago_id: metodoPagoId
   };
 }
 
@@ -8108,9 +8139,20 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
   const lId = Number(libroId);
   if (!cId) throw new Error('ID de registro inválido');
 
-  const metodo = (data.metodo || 'General').trim();
   const hora = (data.hora || '').trim();
   if (!hora) throw new Error('La hora es obligatoria');
+
+  let metodoPagoId = data.metodo_pago_id !== undefined ? (data.metodo_pago_id ? Number(data.metodo_pago_id) : null) : undefined;
+  const metodoNombre = data.metodo !== undefined ? String(data.metodo).trim() : undefined;
+  if (metodoPagoId === undefined && metodoNombre && sql && isPgConnected) {
+    const mRow = await sql`
+      SELECT id FROM metodos_pago 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${metodoNombre}) 
+      LIMIT 1
+    `;
+    if (mRow.length > 0) metodoPagoId = mRow[0].id;
+  }
+
   let clienteId = data.cliente_id !== undefined ? (data.cliente_id ? Number(data.cliente_id) : null) : undefined;
   const clienteNombre = data.cliente !== undefined ? String(data.cliente).trim() : undefined;
 
@@ -8143,8 +8185,9 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
     const idx = inMemoryData.libro_control_clientes.findIndex(c => Number(c.id) === cId);
     if (idx !== -1) {
-      inMemoryData.libro_control_clientes[idx].metodo = metodo;
       inMemoryData.libro_control_clientes[idx].hora = hora;
+      if (metodoPagoId !== undefined) inMemoryData.libro_control_clientes[idx].metodo_pago_id = metodoPagoId;
+      if (metodoNombre !== undefined) inMemoryData.libro_control_clientes[idx].metodo = metodoNombre;
       if (clienteId !== undefined) inMemoryData.libro_control_clientes[idx].cliente_id = clienteId;
       if (clienteNombre !== undefined) inMemoryData.libro_control_clientes[idx].cliente = clienteNombre;
       inMemoryData.libro_control_clientes[idx].updated_at = new Date().toISOString();
@@ -8156,12 +8199,12 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
   const rows = await sql`
     UPDATE libro_control_clientes
     SET 
-      metodo = ${metodo},
       hora = ${hora},
+      metodo_pago_id = ${metodoPagoId !== undefined ? metodoPagoId : sql`metodo_pago_id`},
       cliente_id = ${clienteId !== undefined ? clienteId : sql`cliente_id`},
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, cliente_id, tipo, monto, metodo, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, created_at, updated_at
   `;
 
   if (!rows || rows.length === 0) {
@@ -8181,11 +8224,19 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     if (cRows.length > 0) clientInfo = cRows[0];
   }
 
+  let metodoInfo = null;
+  if (updatedRecord.metodo_pago_id) {
+    const mRows = await sql`SELECT nombre FROM metodos_pago WHERE id = ${updatedRecord.metodo_pago_id} LIMIT 1`;
+    if (mRows.length > 0) metodoInfo = mRows[0];
+  }
+
   return {
     ...updatedRecord,
     cliente: clientInfo ? clientInfo.cliente : (clienteNombre || ''),
     tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : '',
-    tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : null
+    tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : null,
+    metodo: metodoInfo ? metodoInfo.nombre : (metodoNombre || 'General'),
+    metodo_pago_id: updatedRecord.metodo_pago_id
   };
 }
 

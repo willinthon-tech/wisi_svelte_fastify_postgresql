@@ -43,6 +43,7 @@ import {
   getLibroNovedadesMesas, saveLibroNovedadesMesa, deleteLibroNovedadesMesa,
   getLibroResumen, getLibroReporte, saveLibroReporte,
   getTipoClientes, createTipoCliente, updateTipoCliente, deleteTipoCliente,
+  getMetodosPago, createMetodoPago, updateMetodoPago, deleteMetodoPago,
   getClientes, getClientesFilterOptions, createCliente, updateCliente, deleteCliente
 } from '../controllers/master.controller.js';
 
@@ -347,6 +348,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/tipo-clientes/:id', updateTipoCliente);
   fastify.delete('/master/tipo-clientes/:id', deleteTipoCliente);
   fastify.delete('/api/master/tipo-clientes/:id', deleteTipoCliente);
+
+  // Métodos de Pago (Configuración: Métodos de Pago)
+  fastify.get('/master/metodos-pago', getMetodosPago);
+  fastify.get('/api/master/metodos-pago', getMetodosPago);
+  fastify.post('/master/metodos-pago', createMetodoPago);
+  fastify.post('/api/master/metodos-pago', createMetodoPago);
+  fastify.put('/master/metodos-pago/:id', updateMetodoPago);
+  fastify.put('/api/master/metodos-pago/:id', updateMetodoPago);
+  fastify.delete('/master/metodos-pago/:id', deleteMetodoPago);
+  fastify.delete('/api/master/metodos-pago/:id', deleteMetodoPago);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
