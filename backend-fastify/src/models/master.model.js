@@ -3384,6 +3384,33 @@ export async function getEmpleadoDispositivosModel(empleadoId) {
   return rows.map(r => r.dispositivo_id);
 }
 
+function cleanDateOnly(val) {
+  if (!val) return null;
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    const y = val.getUTCFullYear();
+    const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(val.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(val).trim();
+  if (!s || s === 'null' || s === 'undefined') return null;
+  if (s.includes('T')) {
+    return s.split('T')[0];
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10);
+  }
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return null;
+}
+
 export async function createEmpleadoModel(data) {
   if (isPgConnected && sql) {
     if (data.cedula && String(data.cedula).trim()) {
@@ -3418,12 +3445,12 @@ export async function createEmpleadoModel(data) {
       }
     }
 
-    const fIngreso = data.fecha_ingreso ? String(data.fecha_ingreso).split('T')[0] : null;
-    const fNacimiento = data.fecha_nacimiento ? String(data.fecha_nacimiento).split('T')[0] : null;
+    const fIngreso = cleanDateOnly(data.fecha_ingreso);
+    const fNacimiento = cleanDateOnly(data.fecha_nacimiento);
 
     const rows = await sql`
       INSERT INTO empleados (id, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_id, activo, motivo_desincorporacion)
-      VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${fIngreso}, ${fNacimiento}, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
+      VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${fIngreso}::date, ${fNacimiento}::date, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
       RETURNING *
     `;
     const emp = rows[0];
@@ -3492,9 +3519,9 @@ export async function updateEmpleadoModel(id, data) {
     const foto = data.foto !== undefined ? data.foto : (data.fotoBase64 ? `/empleados/${eId}.jpg` : existing.foto);
     const nombre = data.nombre !== undefined ? data.nombre : existing.nombre;
     const rawIngreso = data.fecha_ingreso !== undefined ? data.fecha_ingreso : existing.fecha_ingreso;
-    const fecha_ingreso = rawIngreso ? String(rawIngreso).split('T')[0] : null;
+    const fecha_ingreso = cleanDateOnly(rawIngreso);
     const rawNac = data.fecha_nacimiento !== undefined ? data.fecha_nacimiento : existing.fecha_nacimiento;
-    const fecha_nacimiento = rawNac ? String(rawNac).split('T')[0] : null;
+    const fecha_nacimiento = cleanDateOnly(rawNac);
     const sexo = data.sexo !== undefined ? data.sexo : existing.sexo;
     const cargo_id = data.cargo_id !== undefined ? (data.cargo_id ? Number(data.cargo_id) : null) : existing.cargo_id;
     const activo = data.activo !== undefined ? Boolean(data.activo) : existing.activo;
@@ -3505,8 +3532,8 @@ export async function updateEmpleadoModel(id, data) {
       SET foto = ${foto},
           nombre = ${nombre},
           cedula = ${cedula},
-          fecha_ingreso = ${fecha_ingreso},
-          fecha_nacimiento = ${fecha_nacimiento},
+          fecha_ingreso = ${fecha_ingreso}::date,
+          fecha_nacimiento = ${fecha_nacimiento}::date,
           sexo = ${sexo},
           cargo_id = ${cargo_id},
           activo = ${activo},
