@@ -7925,9 +7925,12 @@ export async function getLibroControlClientesModel(libroId) {
 
   const rows = await sql`
     SELECT 
-      lcc.id, lcc.libro_id, lcc.cliente_id, lcc.cliente, lcc.tipo, lcc.monto, lcc.metodo, lcc.hora, 
+      lcc.id, lcc.libro_id, lcc.cliente_id, 
+      COALESCE(c.nombre, '') AS cliente, 
+      lcc.tipo, lcc.monto, lcc.metodo, lcc.hora, 
       lcc.created_at, lcc.updated_at,
-      tc.nombre AS tipo_cliente_nombre
+      COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre,
+      c.tipo_cliente_id
     FROM libro_control_clientes lcc
     LEFT JOIN clientes c ON lcc.cliente_id = c.id
     LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
@@ -7968,21 +7971,20 @@ export async function getClientesSugerenciasModel(query = '', options = {}) {
   let rows;
   if (resolvedSalaId) {
     rows = await sql`
-      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, tc.nombre AS tipo_cliente_nombre
+      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre
       FROM clientes c
       LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-      WHERE (c.active IS NULL OR c.active = 1)
-        AND c.sala_id = ${resolvedSalaId}
+      WHERE c.sala_id = ${resolvedSalaId}
         ${cleanQ ? sql`AND (LOWER(c.nombre) LIKE ${`%${cleanQ}%`} OR LOWER(COALESCE(tc.nombre, '')) LIKE ${`%${cleanQ}%`})` : sql``}
       ORDER BY c.nombre ASC
       LIMIT 30
     `;
   } else {
     rows = await sql`
-      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, tc.nombre AS tipo_cliente_nombre
+      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre
       FROM clientes c
       LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-      WHERE (c.active IS NULL OR c.active = 1)
+      WHERE 1=1
         ${cleanQ ? sql`AND (LOWER(c.nombre) LIKE ${`%${cleanQ}%`} OR LOWER(COALESCE(tc.nombre, '')) LIKE ${`%${cleanQ}%`})` : sql``}
       ORDER BY c.nombre ASC
       LIMIT 30
@@ -7993,7 +7995,7 @@ export async function getClientesSugerenciasModel(query = '', options = {}) {
     id: r.id,
     nombre: r.nombre,
     tipo_cliente_id: r.tipo_cliente_id,
-    tipo_cliente_nombre: r.tipo_cliente_nombre || '',
+    tipo_cliente_nombre: r.tipo_cliente_nombre || 'General',
     sala_id: r.sala_id
   }));
 }
@@ -8002,10 +8004,45 @@ export async function createLibroControlClienteModel(data) {
   const libroId = Number(data.libro_id);
   if (!libroId) throw new Error('ID de libro inválido');
 
-  const cliente = (data.cliente || '').trim();
-  if (!cliente) throw new Error('El nombre del cliente es obligatorio');
+  const clienteNombre = (data.cliente || '').trim();
+  let clienteId = data.cliente_id ? Number(data.cliente_id) : null;
 
-  const clienteId = data.cliente_id ? Number(data.cliente_id) : null;
+  if (!clienteId && !clienteNombre) {
+    throw new Error('El nombre del cliente es obligatorio');
+  }
+
+  // Resolver salaId del libro
+  let resolvedSalaId = null;
+  if (sql && isPgConnected) {
+    const lib = await sql`SELECT sala_id FROM libros WHERE id = ${libroId} LIMIT 1`;
+    if (lib.length > 0 && lib[0].sala_id) {
+      resolvedSalaId = Number(lib[0].sala_id);
+    }
+  }
+
+  // Si no viene clienteId pero viene clienteNombre, buscar si existe o crearlo automáticamente
+  if (!clienteId && clienteNombre) {
+    if (sql && isPgConnected) {
+      const existing = await sql`
+        SELECT id FROM clientes 
+        WHERE LOWER(TRIM(nombre)) = LOWER(${clienteNombre}) 
+          ${resolvedSalaId ? sql`AND sala_id = ${resolvedSalaId}` : sql``}
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        clienteId = existing[0].id;
+      } else {
+        // Crear cliente con tipo_cliente_id = 1 (General) por defecto
+        const newClient = await sql`
+          INSERT INTO clientes (nombre, tipo_cliente_id, sala_id)
+          VALUES (${clienteNombre}, 1, ${resolvedSalaId || 1})
+          RETURNING id
+        `;
+        clienteId = newClient[0].id;
+      }
+    }
+  }
+
   const tipo = (data.tipo || 'Compra').trim();
   const monto = parseFloat(data.monto) || 0;
   if (monto <= 0) throw new Error('El monto debe ser mayor a 0');
@@ -8024,7 +8061,7 @@ export async function createLibroControlClienteModel(data) {
       id: nextId,
       libro_id: libroId,
       cliente_id: clienteId,
-      cliente,
+      cliente: clienteNombre,
       tipo,
       monto,
       metodo,
@@ -8038,15 +8075,32 @@ export async function createLibroControlClienteModel(data) {
 
   const res = await sql`
     INSERT INTO libro_control_clientes (
-      libro_id, cliente_id, cliente, tipo, monto, metodo, hora
+      libro_id, cliente_id, tipo, monto, metodo, hora
     )
     VALUES (
-      ${libroId}, ${clienteId}, ${cliente}, ${tipo}, ${monto}, ${metodo}, ${hora}
+      ${libroId}, ${clienteId}, ${tipo}, ${monto}, ${metodo}, ${hora}
     )
-    RETURNING id, libro_id, cliente_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, tipo, monto, metodo, hora, created_at, updated_at
   `;
 
-  return res[0];
+  let clientInfo = null;
+  if (clienteId) {
+    const cRows = await sql`
+      SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id
+      FROM clientes c
+      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+      WHERE c.id = ${clienteId}
+      LIMIT 1
+    `;
+    if (cRows.length > 0) clientInfo = cRows[0];
+  }
+
+  return {
+    ...res[0],
+    cliente: clientInfo ? clientInfo.cliente : clienteNombre,
+    tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : 'General',
+    tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : 1
+  };
 }
 
 export async function updateLibroControlClienteModel(controlId, libroId, data) {
@@ -8057,8 +8111,33 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
   const metodo = (data.metodo || 'General').trim();
   const hora = (data.hora || '').trim();
   if (!hora) throw new Error('La hora es obligatoria');
-  const clienteId = data.cliente_id !== undefined ? (data.cliente_id ? Number(data.cliente_id) : null) : undefined;
-  const cliente = data.cliente !== undefined ? String(data.cliente).trim() : undefined;
+  let clienteId = data.cliente_id !== undefined ? (data.cliente_id ? Number(data.cliente_id) : null) : undefined;
+  const clienteNombre = data.cliente !== undefined ? String(data.cliente).trim() : undefined;
+
+  // Si clienteNombre viene pero no clienteId, resolver o crear
+  if (clienteNombre && !clienteId && sql && isPgConnected) {
+    let resolvedSalaId = null;
+    if (lId) {
+      const lib = await sql`SELECT sala_id FROM libros WHERE id = ${lId} LIMIT 1`;
+      if (lib.length > 0 && lib[0].sala_id) resolvedSalaId = Number(lib[0].sala_id);
+    }
+    const existing = await sql`
+      SELECT id FROM clientes 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${clienteNombre}) 
+        ${resolvedSalaId ? sql`AND sala_id = ${resolvedSalaId}` : sql``}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      clienteId = existing[0].id;
+    } else {
+      const newClient = await sql`
+        INSERT INTO clientes (nombre, tipo_cliente_id, sala_id)
+        VALUES (${clienteNombre}, 1, ${resolvedSalaId || 1})
+        RETURNING id
+      `;
+      clienteId = newClient[0].id;
+    }
+  }
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
@@ -8067,7 +8146,7 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       inMemoryData.libro_control_clientes[idx].metodo = metodo;
       inMemoryData.libro_control_clientes[idx].hora = hora;
       if (clienteId !== undefined) inMemoryData.libro_control_clientes[idx].cliente_id = clienteId;
-      if (cliente !== undefined) inMemoryData.libro_control_clientes[idx].cliente = cliente;
+      if (clienteNombre !== undefined) inMemoryData.libro_control_clientes[idx].cliente = clienteNombre;
       inMemoryData.libro_control_clientes[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_control_clientes[idx];
     }
@@ -8080,13 +8159,34 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       metodo = ${metodo},
       hora = ${hora},
       cliente_id = ${clienteId !== undefined ? clienteId : sql`cliente_id`},
-      cliente = COALESCE(${cliente}, cliente),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, cliente_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, tipo, monto, metodo, hora, created_at, updated_at
   `;
 
-  return rows[0];
+  if (!rows || rows.length === 0) {
+    throw new Error('Registro no encontrado');
+  }
+
+  const updatedRecord = rows[0];
+  let clientInfo = null;
+  if (updatedRecord.cliente_id) {
+    const cRows = await sql`
+      SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id
+      FROM clientes c
+      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+      WHERE c.id = ${updatedRecord.cliente_id}
+      LIMIT 1
+    `;
+    if (cRows.length > 0) clientInfo = cRows[0];
+  }
+
+  return {
+    ...updatedRecord,
+    cliente: clientInfo ? clientInfo.cliente : (clienteNombre || ''),
+    tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : '',
+    tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : null
+  };
 }
 
 export async function deleteLibroControlClienteModel(id, libroId) {
@@ -8122,10 +8222,6 @@ export function buildClienteConditions(options = {}) {
 
   if (options.tipoClienteIds && options.tipoClienteIds.length > 0) {
     conds.push(sql`c.tipo_cliente_id = ANY(${options.tipoClienteIds})`);
-  }
-
-  if (options.active !== undefined && options.active !== null && options.active !== 'all') {
-    conds.push(sql`c.active = ${Number(options.active)}`);
   }
 
   if (options.search) {

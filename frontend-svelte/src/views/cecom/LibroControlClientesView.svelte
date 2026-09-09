@@ -38,23 +38,20 @@
   // Extraer clientes únicos para sugerencias locales
   $: clientesLocales = [...new Set(records.map(r => r.cliente).filter(Boolean))];
 
-  // Sugerencias combinadas estructuradas filtradas por lo que escribe el usuario
-  $: sugerenciasFiltradas = (() => {
-    const q = (cliente || '').trim().toLowerCase();
-    if (!q) return [];
-
+  // Lista unificada y enriquecida de clientes para sugerencias
+  $: allClientesList = (() => {
     const map = new Map();
     // 1. Sugerencias remotas de la tabla clientes (vinculadas a la sala)
     for (const item of sugerenciasRemotas) {
       if (!item) continue;
       const nombre = typeof item === 'object' ? item.nombre : String(item);
       if (!nombre) continue;
-      const key = nombre.toLowerCase().trim();
+      const key = `${item.id || nombre.toLowerCase().trim()}`;
       if (!map.has(key)) {
         map.set(key, {
           id: typeof item === 'object' ? item.id : null,
           nombre: nombre,
-          tipo_cliente_nombre: typeof item === 'object' ? (item.tipo_cliente_nombre || '') : ''
+          tipo_cliente_nombre: typeof item === 'object' ? (item.tipo_cliente_nombre || 'General') : 'General'
         });
       }
     }
@@ -62,19 +59,30 @@
     // 2. Clientes locales de registros previos
     for (const r of records) {
       if (!r || !r.cliente) continue;
-      const key = r.cliente.toLowerCase().trim();
+      const key = `${r.cliente_id || r.cliente.toLowerCase().trim()}`;
       if (!map.has(key)) {
         map.set(key, {
           id: r.cliente_id || null,
           nombre: r.cliente,
-          tipo_cliente_nombre: r.tipo_cliente_nombre || ''
+          tipo_cliente_nombre: r.tipo_cliente_nombre || 'General'
         });
       }
     }
 
-    return Array.from(map.values())
-      .filter(item => item.nombre.toLowerCase().includes(q))
-      .slice(0, 8);
+    return Array.from(map.values());
+  })();
+
+  // Sugerencias combinadas estructuradas filtradas por nombre o por tipo de cliente
+  $: sugerenciasFiltradas = (() => {
+    const q = (cliente || '').trim().toLowerCase();
+    if (!q) return allClientesList.slice(0, 10);
+
+    return allClientesList
+      .filter(item => 
+        item.nombre.toLowerCase().includes(q) || 
+        (item.tipo_cliente_nombre && item.tipo_cliente_nombre.toLowerCase().includes(q))
+      )
+      .slice(0, 10);
   })();
 
   // Ordenadas de más reciente a más antigua por hora
@@ -291,27 +299,36 @@
   }
 
   // Manejo de autocompletado en el input cliente
+  function onClienteFocus() {
+    showSugerencias = true;
+    selectedSugerenciaIndex = -1;
+    loadSugerenciasRemotas((cliente || '').trim());
+  }
+
   function onClienteInput() {
     showSugerencias = true;
     selectedSugerenciaIndex = -1;
     const q = (cliente || '').trim().toLowerCase();
-    const match = sugerenciasRemotas.find(s => 
-      (typeof s === 'object' ? s.nombre : String(s)).toLowerCase().trim() === q
+    const match = allClientesList.find(s => 
+      s.nombre.toLowerCase().trim() === q
     );
-    if (match && typeof match === 'object') {
+    if (match) {
       selectedClienteId = match.id || null;
-      selectedTipoClienteNombre = match.tipo_cliente_nombre || '';
+      selectedTipoClienteNombre = match.tipo_cliente_nombre || 'General';
     } else {
       selectedClienteId = null;
       selectedTipoClienteNombre = '';
     }
-    if (cliente.trim().length >= 1) {
-      loadSugerenciasRemotas(cliente.trim());
-    }
+    loadSugerenciasRemotas(cliente.trim());
   }
 
   function onClienteKeyDown(e) {
-    if (!showSugerencias || sugerenciasFiltradas.length === 0) return;
+    if (!showSugerencias || sugerenciasFiltradas.length === 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        showSugerencias = true;
+      }
+      return;
+    }
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -320,7 +337,7 @@
       e.preventDefault();
       selectedSugerenciaIndex = (selectedSugerenciaIndex - 1 + sugerenciasFiltradas.length) % sugerenciasFiltradas.length;
     } else if (e.key === 'Tab') {
-      // Al presionar Tabulador rellena automáticamente con la coincidencia
+      // Al presionar Tabulador rellena automáticamente con la coincidencia seleccionada o primera
       const match = selectedSugerenciaIndex >= 0 
         ? sugerenciasFiltradas[selectedSugerenciaIndex] 
         : sugerenciasFiltradas[0];
@@ -343,11 +360,11 @@
     if (typeof sug === 'object' && sug !== null) {
       cliente = sug.nombre || '';
       selectedClienteId = sug.id || null;
-      selectedTipoClienteNombre = sug.tipo_cliente_nombre || '';
+      selectedTipoClienteNombre = sug.tipo_cliente_nombre || 'General';
     } else {
       cliente = String(sug || '');
       selectedClienteId = null;
-      selectedTipoClienteNombre = '';
+      selectedTipoClienteNombre = 'General';
     }
     showSugerencias = false;
     selectedSugerenciaIndex = -1;
@@ -357,7 +374,7 @@
     setTimeout(() => {
       showSugerencias = false;
       selectedSugerenciaIndex = -1;
-    }, 200);
+    }, 250);
   }
 
   async function handleGuardar() {
@@ -408,6 +425,9 @@
         await loadRecords();
         loadSugerenciasRemotas();
         loadDropRecords();
+        try {
+          await loadMasterStoresFromBackend();
+        } catch (e) {}
       } else {
         triggerToast(json?.error || 'Error al registrar cliente', 'error');
       }
@@ -504,7 +524,7 @@
     </div>
 
     <form on:submit|preventDefault={handleGuardar} class="cliente-form" autocomplete="off">
-      <!-- Campo Cliente con Autocompletado / Recomendación -->
+      <!-- Campo Cliente con Autocompletado / Coincidencias -->
       <div class="form-group relative-autocomplete">
         <label for="input-cliente-nombre" class="form-label">CLIENTE: *</label>
         <div class="cell-autocomplete-container">
@@ -512,12 +532,12 @@
             id="input-cliente-nombre" 
             type="text" 
             class="form-input {showSugerencias && sugerenciasFiltradas.length > 0 ? 'input-active' : ''}" 
-            placeholder="Escriba el nombre del cliente..." 
+            placeholder="Escriba Cliente (coincidencias con Tab ⇥)..." 
             bind:value={cliente}
+            on:focus={onClienteFocus}
             on:input={onClienteInput}
             on:keydown={onClienteKeyDown}
             on:blur={onClienteBlur}
-            on:focus={onClienteInput}
             autocomplete="off"
             required
           />
@@ -535,12 +555,14 @@
                     class="inline-dropdown-item {idx === selectedSugerenciaIndex ? 'selected' : ''}"
                     on:mousedown|preventDefault={() => seleccionarSugerencia(sug)}
                   >
-                    <span class="sug-avatar">👤</span>
+                    <span class="sug-avatar">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b2b73">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                      </svg>
+                    </span>
                     <div class="sug-info">
                       <span class="sug-name">{sug.nombre}</span>
-                      {#if sug.tipo_cliente_nombre}
-                        <span class="sug-cargo">{sug.tipo_cliente_nombre}</span>
-                      {/if}
+                      <span class="sug-cargo">{sug.tipo_cliente_nombre || 'General'}</span>
                     </div>
                     <span class="sug-tab-badge">Tab ⇥</span>
                   </li>
@@ -549,7 +571,7 @@
             </div>
           {/if}
         </div>
-        <span class="field-hint">Al escribir saldrán sugerencias. Pulsa <b>Tab ⇥</b> para rellenar rápido.</span>
+        <span class="field-hint">Escriba nombre o tipo de cliente. Pulsa <b>Tab ⇥</b> para autocompletar. Si no existe, se creará automáticamente como General.</span>
       </div>
 
       <!-- Sección Tipo: Compra o Pago (2 Radios) -->
@@ -1147,80 +1169,127 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   }
 
-  /* Desplegable de Sugerencias Interactivas */
-  .sugerencias-dropdown {
+  /* Input con autocompletado en celda */
+  .cell-autocomplete-container {
+    position: relative;
+    width: 100%;
+  }
+
+  .form-input.input-active {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    background: #ffffff;
+  }
+
+  .inline-dropdown {
     position: absolute;
-    top: 68px;
+    top: 100%;
     left: 0;
     right: 0;
+    z-index: 100;
     background: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    z-index: 50;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+    margin-top: 4px;
+    min-width: 250px;
     overflow: hidden;
   }
 
-  .sugerencias-header {
+  .inline-dropdown-header {
     background: #f8fafc;
     padding: 6px 12px;
-    font-size: 11px;
-    color: #64748b;
     border-bottom: 1px solid #e2e8f0;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
   }
 
-  .sugerencias-list {
+  .inline-dropdown-list {
     list-style: none;
     margin: 0;
     padding: 0;
-    max-height: 180px;
+    max-height: 200px;
     overflow-y: auto;
   }
 
-  .sugerencia-item {
+  .inline-dropdown-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     padding: 8px 12px;
     cursor: pointer;
     font-size: 13px;
     color: #1e293b;
     border-bottom: 1px solid #f1f5f9;
-    transition: background 0.15s ease;
+    transition: background 0.1s ease;
   }
 
-  .sugerencia-item:last-child {
+  .inline-dropdown-item:last-child {
     border-bottom: none;
   }
 
-  .sugerencia-item:hover,
-  .sugerencia-item.active {
+  .inline-dropdown-item:hover,
+  .inline-dropdown-item.selected {
     background: #eff6ff;
     color: #1d4ed8;
   }
 
-  .sug-icon {
-    font-size: 12px;
-    opacity: 0.6;
+  .sug-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
-  .sug-text {
+  .sug-info {
+    display: flex;
+    flex-direction: column;
     flex: 1;
+    min-width: 0;
+    gap: 2px;
+    text-align: left;
+  }
+
+  .sug-name {
+    font-size: 13px;
     font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sug-cargo {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .inline-dropdown-item:hover .sug-cargo,
+  .inline-dropdown-item.selected .sug-cargo {
+    color: #3b82f6;
   }
 
   .sug-tab-badge {
-    font-size: 10.5px;
-    background: #e2e8f0;
-    color: #475569;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 600;
+    font-size: 11px;
+    background: #f1f5f9;
+    color: #334155;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    border: 1px solid #cbd5e1;
+    flex-shrink: 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
-  .sugerencia-item.active .sug-tab-badge {
-    background: #bfdbfe;
-    color: #1e40af;
+  .inline-dropdown-item:hover .sug-tab-badge,
+  .inline-dropdown-item.selected .sug-tab-badge {
+    background: #dbeafe;
+    border-color: #93c5fd;
+    color: #1d4ed8;
   }
 
   /* Sección Tipo: Radios */

@@ -739,7 +739,6 @@
               <input 
                 id="operador-a-input" 
                 type="text" 
-                list="empleados-cecom-list-a"
                 class="form-text-input" 
                 placeholder="Escriba o elija operador..."
                 bind:value={inputTempOperadorA} 
@@ -749,13 +748,6 @@
                 on:focus={onInputOperadorA}
                 autocomplete="off"
               />
-              <datalist id="empleados-cecom-list-a">
-                {#each listaEmpleados as emp}
-                  {#if !operadoresTurnoAList.includes(emp)}
-                    <option value={emp}></option>
-                  {/if}
-                {/each}
-              </datalist>
 
               <!-- Desplegable visual de sugerencias rápidas -->
               {#if showSugerenciasA && sugerenciasFiltradasA.length > 0}
@@ -817,7 +809,6 @@
               <input 
                 id="operador-c-input" 
                 type="text" 
-                list="empleados-cecom-list-c"
                 class="form-text-input" 
                 placeholder="Escriba o elija operador..."
                 bind:value={inputTempOperadorC} 
@@ -827,13 +818,6 @@
                 on:focus={onInputOperadorC}
                 autocomplete="off"
               />
-              <datalist id="empleados-cecom-list-c">
-                {#each listaEmpleados as emp}
-                  {#if !operadoresTurnoCList.includes(emp)}
-                    <option value={emp}></option>
-                  {/if}
-                {/each}
-              </datalist>
 
               <!-- Desplegable visual de sugerencias rápidas -->
               {#if showSugerenciasC && sugerenciasFiltradasC.length > 0}
