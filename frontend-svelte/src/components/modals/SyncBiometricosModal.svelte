@@ -27,7 +27,13 @@
   let selectedDeviceIndex = 0;
   let activeTab = 'sincronizados'; // 'sincronizados' | 'faltan' | 'sobran'
 
+  // Búsquedas por pestaña
+  let searchSync = '';
+  let searchFaltan = '';
+  let searchSobran = '';
+
   // Selecciones masivas
+  let selectedSyncIds = new Set();
   let selectedFaltanIds = new Set();
   let selectedSobranNos = new Set();
   let actionTarget = 'both'; // 'both' | 'bio' | 'panel'
@@ -35,10 +41,48 @@
 
   $: currentDevice = auditResult?.devices?.[selectedDeviceIndex] || null;
 
-  // Resetear selecciones al cambiar de dispositivo o pestaña
+  // Listas filtradas reactivas
+  $: filteredSincronizados = (currentDevice?.sincronizados || []).filter(emp => {
+    if (!searchSync.trim()) return true;
+    const q = searchSync.trim().toLowerCase();
+    return (
+      (emp.nombre && emp.nombre.toLowerCase().includes(q)) ||
+      (emp.cedula && emp.cedula.toLowerCase().includes(q)) ||
+      (emp.cargo_nombre && emp.cargo_nombre.toLowerCase().includes(q)) ||
+      (emp.departamento_nombre && emp.departamento_nombre.toLowerCase().includes(q))
+    );
+  });
+
+  $: filteredFaltan = (currentDevice?.faltan || []).filter(emp => {
+    if (!searchFaltan.trim()) return true;
+    const q = searchFaltan.trim().toLowerCase();
+    return (
+      (emp.nombre && emp.nombre.toLowerCase().includes(q)) ||
+      (emp.cedula && emp.cedula.toLowerCase().includes(q)) ||
+      (emp.cargo_nombre && emp.cargo_nombre.toLowerCase().includes(q)) ||
+      (emp.departamento_nombre && emp.departamento_nombre.toLowerCase().includes(q))
+    );
+  });
+
+  $: filteredSobran = (currentDevice?.sobran || []).filter(u => {
+    if (!searchSobran.trim()) return true;
+    const q = searchSobran.trim().toLowerCase();
+    return (
+      (u.employeeNo && u.employeeNo.toLowerCase().includes(q)) ||
+      (u.name && u.name.toLowerCase().includes(q)) ||
+      (u.systemStatus && u.systemStatus.toLowerCase().includes(q)) ||
+      (u.systemEmployeeName && u.systemEmployeeName.toLowerCase().includes(q))
+    );
+  });
+
+  // Resetear selecciones y búsquedas al cambiar de dispositivo
   $: if (selectedDeviceIndex !== undefined) {
+    selectedSyncIds = new Set();
     selectedFaltanIds = new Set();
     selectedSobranNos = new Set();
+    searchSync = '';
+    searchFaltan = '';
+    searchSobran = '';
   }
 
   async function handleAudit() {
@@ -51,6 +95,7 @@
     auditResult = null;
     selectedDeviceIndex = 0;
     activeTab = 'sincronizados';
+    selectedSyncIds = new Set();
     selectedFaltanIds = new Set();
     selectedSobranNos = new Set();
 
@@ -75,6 +120,26 @@
     }
   }
 
+  // Manejo de selecciones "Sincronizados"
+  function toggleSelectSync(id) {
+    if (selectedSyncIds.has(id)) {
+      selectedSyncIds.delete(id);
+    } else {
+      selectedSyncIds.add(id);
+    }
+    selectedSyncIds = new Set(selectedSyncIds);
+  }
+
+  function toggleSelectAllSync() {
+    if (!currentDevice) return;
+    const list = filteredSincronizados;
+    if (selectedSyncIds.size === list.length && list.length > 0) {
+      selectedSyncIds = new Set();
+    } else {
+      selectedSyncIds = new Set(list.map(e => e.id));
+    }
+  }
+
   // Manejo de selecciones "Faltan"
   function toggleSelectFaltan(id) {
     if (selectedFaltanIds.has(id)) {
@@ -87,11 +152,11 @@
 
   function toggleSelectAllFaltan() {
     if (!currentDevice) return;
-    const faltanList = currentDevice.faltan || [];
-    if (selectedFaltanIds.size === faltanList.length) {
+    const list = filteredFaltan;
+    if (selectedFaltanIds.size === list.length && list.length > 0) {
       selectedFaltanIds = new Set();
     } else {
-      selectedFaltanIds = new Set(faltanList.map(e => e.id));
+      selectedFaltanIds = new Set(list.map(e => e.id));
     }
   }
 
@@ -107,11 +172,41 @@
 
   function toggleSelectAllSobran() {
     if (!currentDevice) return;
-    const sobranList = currentDevice.sobran || [];
-    if (selectedSobranNos.size === sobranList.length) {
+    const list = filteredSobran;
+    if (selectedSobranNos.size === list.length && list.length > 0) {
       selectedSobranNos = new Set();
     } else {
-      selectedSobranNos = new Set(sobranList.map(u => u.employeeNo));
+      selectedSobranNos = new Set(list.map(u => u.employeeNo));
+    }
+  }
+
+  // Actualizar empleados en biométrico / panel (Nombre, Foto y Tarjeta)
+  async function handleUpdateEmployees(empleadoIds) {
+    if (!currentDevice || !empleadoIds || empleadoIds.length === 0) return;
+
+    isExecutingAction = true;
+    try {
+      const res = await fetch('/api/biometricos/actualizar-empleados', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dispositivoId: currentDevice.id,
+          empleado_ids: empleadoIds,
+          target: actionTarget
+        })
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast(`🔄 ${json.successCount || empleadoIds.length} empleado(s) actualizados en el equipo con nombre y foto actual`, 'success');
+        await handleAudit();
+      } else {
+        throw new Error(json.error || 'Error al actualizar empleados en el equipo');
+      }
+    } catch (err) {
+      console.error(err);
+      triggerToast(`Error al actualizar: ${err.message}`, 'error');
+    } finally {
+      isExecutingAction = false;
     }
   }
 
@@ -125,7 +220,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dispositivo_id: currentDevice.id,
+          dispositivoId: currentDevice.id,
           empleado_ids: empleadoIds,
           target: actionTarget
         })
@@ -159,7 +254,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dispositivo_id: currentDevice.id,
+          dispositivoId: currentDevice.id,
           employee_nos: employeeNos,
           target: actionTarget
         })
@@ -187,8 +282,8 @@
 
 {#if isOpen}
   <!-- Backdrop estático (NO se cierra al hacer clic afuera) -->
-  <div class="sync-modal-backdrop">
-    <div class="sync-modal-card">
+  <div class="sync-modal-backdrop" on:click|stopPropagation>
+    <div class="sync-modal-card" on:click|stopPropagation>
       
       <!-- Modal Header -->
       <div class="sync-modal-header">
@@ -197,8 +292,8 @@
             🔄
           </div>
           <div>
-            <h2 class="sync-header-title">Auditoría y Sincronización de Biométricos</h2>
-            <p class="sync-header-subtitle">Compara y sincroniza en tiempo real los empleados del sistema contra los equipos físicos y paneles</p>
+            <h2 class="sync-header-title">Auditoría y Sincronización de Biométricos y Paneles</h2>
+            <p class="sync-header-subtitle">Compara y sincroniza en tiempo real los empleados del sistema contra los equipos físicos y paneles por IP pública</p>
           </div>
         </div>
 
@@ -366,28 +461,96 @@
               {#if activeTab === 'sincronizados'}
                 <div class="sync-tab-content">
                   <div class="sync-tab-intro">
-                    <span>✅ Empleados activos que tienen asignado este equipo en el sistema y se encuentran debidamente registrados en el biométrico.</span>
+                    <span>🟢 Empleados activos de la sala que están en el sistema y <strong>SÍ</strong> se encuentran registrados en el dispositivo físico. Si actualizaste foto o nombre, puedes usar el botón de actualizar.</span>
                   </div>
 
+                  <!-- Toolbar Sincronizados -->
+                  {#if currentDevice.sincronizados.length > 0}
+                    <div class="sync-action-toolbar" style="background: #f0fdf4; border-color: #bbf7d0;">
+                      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <label class="sync-select-all-label">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedSyncIds.size === filteredSincronizados.length && filteredSincronizados.length > 0}
+                            on:change={toggleSelectAllSync}
+                            disabled={isExecutingAction}
+                          />
+                          <span>Seleccionar ({selectedSyncIds.size})</span>
+                        </label>
+
+                        <input 
+                          type="text" 
+                          bind:value={searchSync}
+                          placeholder="🔍 Buscar empleado, cédula o cargo..."
+                          class="sync-search-input"
+                        />
+                      </div>
+
+                      <div style="display: flex; gap: 8px;">
+                        {#if selectedSyncIds.size > 0}
+                          <button 
+                            type="button" 
+                            class="sync-btn-update-bulk"
+                            on:click={() => handleUpdateEmployees(Array.from(selectedSyncIds))}
+                            disabled={isExecutingAction}
+                            title="Actualiza nombre, foto y tarjeta de los seleccionados"
+                          >
+                            🔄 Actualizar Seleccionados ({selectedSyncIds.size})
+                          </button>
+                        {/if}
+
+                        <button 
+                          type="button" 
+                          class="sync-btn-update-all"
+                          on:click={() => handleUpdateEmployees(currentDevice.sincronizados.map(e => e.id))}
+                          disabled={isExecutingAction}
+                          title="Actualiza en lote a todos con el nombre y foto más reciente"
+                        >
+                          🔄 Actualizar Todos (Nombre y Foto)
+                        </button>
+                      </div>
+                    </div>
+                  {/if}
+
                   {#if currentDevice.sincronizados.length === 0}
-                    <div class="sync-empty-tab">No hay empleados coincidentes sincronizados en este momento.</div>
+                    <div class="sync-empty-tab">
+                      No hay ningún empleado sincronizado en este dispositivo actualmente.
+                    </div>
                   {:else}
                     <div class="sync-table-wrapper">
                       <table class="sync-table">
                         <thead>
                           <tr>
-                            <th style="width: 50px;">Foto</th>
+                            <th style="width: 40px; text-align: center;">
+                              <input 
+                                type="checkbox" 
+                                checked={selectedSyncIds.size === filteredSincronizados.length && filteredSincronizados.length > 0}
+                                on:change={toggleSelectAllSync}
+                                disabled={isExecutingAction}
+                              />
+                            </th>
+                            <th style="width: 50px; text-align: center;">Foto</th>
                             <th style="width: 120px;">Cédula</th>
                             <th>Empleado</th>
                             <th>Cargo</th>
                             <th>Departamento</th>
-                            <th style="width: 140px; text-align: center;">Estado</th>
+                            <th style="width: 160px; text-align: center;">Estado en Equipo</th>
+                            <th style="width: 140px; text-align: center;">Acción</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {#each currentDevice.sincronizados as emp}
-                            <tr>
-                              <td>
+                          {#each filteredSincronizados as emp}
+                            {@const isSelected = selectedSyncIds.has(emp.id)}
+                            <tr class={isSelected ? 'row-selected-sync' : ''}>
+                              <td style="text-align: center;">
+                                <input 
+                                  type="checkbox" 
+                                  checked={isSelected}
+                                  on:change={() => toggleSelectSync(emp.id)}
+                                  disabled={isExecutingAction}
+                                />
+                              </td>
+                              <td style="text-align: center;">
                                 <img 
                                   src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
                                   alt={emp.nombre}
@@ -396,18 +559,42 @@
                                 />
                               </td>
                               <td class="font-mono font-bold">{emp.cedula}</td>
-                              <td class="font-bold">{emp.nombre}</td>
+                              <td>
+                                <div class="font-bold">{emp.nombre}</div>
+                                {#if emp.nameDiffers}
+                                  <div class="sync-diff-badge" title="El nombre registrado en el equipo difiere del sistema">
+                                    ⚠️ En equipo: "{emp.deviceUser.name}"
+                                  </div>
+                                {/if}
+                              </td>
                               <td>{emp.cargo_nombre}</td>
                               <td>{emp.departamento_nombre}</td>
                               <td style="text-align: center;">
-                                <span class="sync-chip-badge-ok">
-                                  ✓ Sincronizado
-                                </span>
+                                <div style="display: flex; flex-direction: column; gap: 3px; align-items: center;">
+                                  <span class="sync-chip-badge-ok">✓ Sincronizado</span>
+                                  {#if !emp.hasFaceOnDevice}
+                                    <span class="sync-diff-badge-warn">Sin rostro en equipo</span>
+                                  {/if}
+                                </div>
+                              </td>
+                              <td style="text-align: center;">
+                                <button
+                                  type="button"
+                                  class="sync-btn-update-single"
+                                  on:click={() => handleUpdateEmployees([emp.id])}
+                                  disabled={isExecutingAction}
+                                  title="Actualizar nombre, foto y tarjeta en el biométrico y panel"
+                                >
+                                  🔄 Actualizar
+                                </button>
                               </td>
                             </tr>
                           {/each}
                         </tbody>
                       </table>
+                    </div>
+                    <div class="sync-table-counter">
+                      Mostrando {filteredSincronizados.length} de {currentDevice.sincronizados.length} empleados sincronizados
                     </div>
                   {/if}
                 </div>
@@ -422,15 +609,24 @@
                   <!-- Toolbar de acciones por lote -->
                   {#if currentDevice.faltan.length > 0}
                     <div class="sync-action-toolbar">
-                      <label class="sync-select-all-label">
+                      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <label class="sync-select-all-label">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedFaltanIds.size === filteredFaltan.length && filteredFaltan.length > 0}
+                            on:change={toggleSelectAllFaltan}
+                            disabled={isExecutingAction}
+                          />
+                          <span>Seleccionar ({selectedFaltanIds.size})</span>
+                        </label>
+
                         <input 
-                          type="checkbox" 
-                          checked={selectedFaltanIds.size === currentDevice.faltan.length && currentDevice.faltan.length > 0}
-                          on:change={toggleSelectAllFaltan}
-                          disabled={isExecutingAction}
+                          type="text" 
+                          bind:value={searchFaltan}
+                          placeholder="🔍 Buscar empleado, cédula o cargo..."
+                          class="sync-search-input"
                         />
-                        <span>Seleccionar todos ({currentDevice.faltan.length})</span>
-                      </label>
+                      </div>
 
                       <div style="display: flex; gap: 8px;">
                         {#if selectedFaltanIds.size > 0}
@@ -468,12 +664,12 @@
                             <th style="width: 40px; text-align: center;">
                               <input 
                                 type="checkbox" 
-                                checked={selectedFaltanIds.size === currentDevice.faltan.length}
+                                checked={selectedFaltanIds.size === filteredFaltan.length && filteredFaltan.length > 0}
                                 on:change={toggleSelectAllFaltan}
                                 disabled={isExecutingAction}
                               />
                             </th>
-                            <th style="width: 50px;">Foto</th>
+                            <th style="width: 50px; text-align: center;">Foto</th>
                             <th style="width: 120px;">Cédula</th>
                             <th>Empleado</th>
                             <th>Cargo</th>
@@ -482,9 +678,9 @@
                           </tr>
                         </thead>
                         <tbody>
-                          {#each currentDevice.faltan as emp}
+                          {#each filteredFaltan as emp}
                             {@const isSelected = selectedFaltanIds.has(emp.id)}
-                            <tr class={isSelected ? 'row-selected' : ''}>
+                            <tr class={isSelected ? 'row-selected-add' : ''}>
                               <td style="text-align: center;">
                                 <input 
                                   type="checkbox" 
@@ -493,7 +689,7 @@
                                   disabled={isExecutingAction}
                                 />
                               </td>
-                              <td>
+                              <td style="text-align: center;">
                                 <img 
                                   src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
                                   alt={emp.nombre}
@@ -501,7 +697,7 @@
                                   on:error={(e) => { e.currentTarget.src = '/favicon.png'; }}
                                 />
                               </td>
-                              <td class="font-mono font-bold">{emp.cedula}</td>
+                              <td class="font-mono font-bold" style="color: #d97706;">{emp.cedula}</td>
                               <td class="font-bold">{emp.nombre}</td>
                               <td>{emp.cargo_nombre}</td>
                               <td>{emp.departamento_nombre}</td>
@@ -520,6 +716,9 @@
                         </tbody>
                       </table>
                     </div>
+                    <div class="sync-table-counter">
+                      Mostrando {filteredFaltan.length} de {currentDevice.faltan.length} empleados pendientes
+                    </div>
                   {/if}
                 </div>
 
@@ -527,21 +726,30 @@
               {:else if activeTab === 'sobran'}
                 <div class="sync-tab-content">
                   <div class="sync-tab-intro" style="background: #fef2f2; border-color: #fecaca; color: #991b1b;">
-                    <span>🚫 Usuarios que están registrados en el dispositivo físico pero <strong>NO</strong> corresponden a empleados activos autorizados (personal desincorporado, retirado o códigos ajenos).</span>
+                    <span>🚫 Usuarios que están registrados en el dispositivo físico pero <strong>NO</strong> corresponden a empleados activos autorizados de esta sala (personal desincorporado, retirado o códigos ajenos).</span>
                   </div>
 
                   <!-- Toolbar de acciones por lote -->
                   {#if currentDevice.sobran.length > 0}
-                    <div class="sync-action-toolbar" style="background: #fff1f2; border-color: #fecdd3;">
-                      <label class="sync-select-all-label">
+                    <div class="sync-action-toolbar" style="background: #fef2f2; border-color: #fecaca;">
+                      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                        <label class="sync-select-all-label">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedSobranNos.size === filteredSobran.length && filteredSobran.length > 0}
+                            on:change={toggleSelectAllSobran}
+                            disabled={isExecutingAction}
+                          />
+                          <span>Seleccionar ({selectedSobranNos.size})</span>
+                        </label>
+
                         <input 
-                          type="checkbox" 
-                          checked={selectedSobranNos.size === currentDevice.sobran.length && currentDevice.sobran.length > 0}
-                          on:change={toggleSelectAllSobran}
-                          disabled={isExecutingAction}
+                          type="text" 
+                          bind:value={searchSobran}
+                          placeholder="🔍 Buscar usuario, cédula o estado..."
+                          class="sync-search-input"
                         />
-                        <span>Seleccionar todos ({currentDevice.sobran.length})</span>
-                      </label>
+                      </div>
 
                       <div style="display: flex; gap: 8px;">
                         {#if selectedSobranNos.size > 0}
@@ -579,7 +787,7 @@
                             <th style="width: 40px; text-align: center;">
                               <input 
                                 type="checkbox" 
-                                checked={selectedSobranNos.size === currentDevice.sobran.length}
+                                checked={selectedSobranNos.size === filteredSobran.length && filteredSobran.length > 0}
                                 on:change={toggleSelectAllSobran}
                                 disabled={isExecutingAction}
                               />
@@ -593,7 +801,7 @@
                           </tr>
                         </thead>
                         <tbody>
-                          {#each currentDevice.sobran as u}
+                          {#each filteredSobran as u}
                             {@const isSelected = selectedSobranNos.has(u.employeeNo)}
                             <tr class={isSelected ? 'row-selected-del' : ''}>
                               <td style="text-align: center;">
@@ -607,7 +815,7 @@
                               <td class="font-mono font-bold" style="color: #b91c1c;">{u.employeeNo}</td>
                               <td class="font-bold">{u.name}</td>
                               <td>
-                                <span class="sync-chip-system-status {u.systemStatus.includes('Desincorporado') ? 'chip-desinc' : 'chip-unknown'}">
+                                <span class="sync-chip-system-status {u.systemStatus.includes('Desincorporado') ? 'chip-desinc' : u.systemStatus.includes('Activo') ? 'chip-other-sala' : u.systemStatus.includes('Coincide') ? 'chip-name-match' : 'chip-unknown'}">
                                   {u.systemStatus}
                                 </span>
                               </td>
@@ -632,6 +840,9 @@
                         </tbody>
                       </table>
                     </div>
+                    <div class="sync-table-counter">
+                      Mostrando {filteredSobran.length} de {currentDevice.sobran.length} usuarios sobrantes
+                    </div>
                   {/if}
                 </div>
               {/if}
@@ -643,7 +854,7 @@
       <!-- Modal Footer -->
       <div class="sync-modal-footer">
         <div style="font-size: 12px; color: #64748b; font-weight: 600;">
-          * Las operaciones de alta y baja se ejecutan vía IP pública mediante el protocolo Hikvision ISAPI.
+          * Las operaciones de alta, actualización y baja se ejecutan vía IP pública mediante el protocolo Hikvision ISAPI.
         </div>
         <button 
           type="button" 
@@ -678,9 +889,10 @@
     border-radius: 18px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
     border: 1px solid #cbd5e1;
-    width: 100%;
-    max-width: 1280px;
-    height: min(92vh, 880px);
+    width: 95vw;
+    max-width: 1400px;
+    height: 92vh;
+    max-height: 920px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -845,11 +1057,11 @@
     flex: 1 1 0%;
     min-height: 0;
     overflow-y: auto;
-    padding: 20px 24px;
+    padding: 16px 22px;
     background: #f8fafc;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
 
   .sync-loading-container, .sync-placeholder-container {
@@ -874,7 +1086,7 @@
     display: flex;
     gap: 10px;
     overflow-x: auto;
-    padding-bottom: 6px;
+    padding-bottom: 4px;
     flex-shrink: 0;
   }
 
@@ -970,13 +1182,14 @@
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 14px;
-    padding: 18px 20px;
+    padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
     box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03);
-    flex: 1;
+    flex: 1 1 0%;
     min-height: 0;
+    overflow: hidden;
   }
 
   .sync-device-info-bar {
@@ -985,8 +1198,9 @@
     justify-content: space-between;
     gap: 16px;
     flex-wrap: wrap;
-    padding-bottom: 12px;
+    padding-bottom: 8px;
     border-bottom: 1px solid #f1f5f9;
+    flex-shrink: 0;
   }
 
   .sync-device-badge {
@@ -1026,6 +1240,7 @@
     gap: 8px;
     border-bottom: 1.5px solid #e2e8f0;
     padding-bottom: 2px;
+    flex-shrink: 0;
   }
 
   .sync-tab-btn {
@@ -1066,9 +1281,10 @@
   .sync-tab-content {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    flex: 1;
+    gap: 10px;
+    flex: 1 1 0%;
     min-height: 0;
+    overflow: hidden;
   }
 
   .sync-tab-intro {
@@ -1076,9 +1292,10 @@
     border-radius: 8px;
     background: #f0fdf4;
     border: 1px solid #bbf7d0;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 600;
     color: #166534;
+    flex-shrink: 0;
   }
 
   .sync-action-toolbar {
@@ -1091,16 +1308,74 @@
     background: #fffbeb;
     border: 1px solid #fef3c7;
     flex-wrap: wrap;
+    flex-shrink: 0;
   }
 
   .sync-select-all-label {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 700;
     color: #475569;
     cursor: pointer;
+  }
+
+  .sync-search-input {
+    padding: 5px 12px;
+    border-radius: 7px;
+    border: 1px solid #cbd5e1;
+    font-size: 12px;
+    color: #0f172a;
+    background: #ffffff;
+    outline: none;
+    width: 250px;
+    transition: all 0.15s ease;
+  }
+
+  .sync-search-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  .sync-btn-update-bulk {
+    padding: 6px 12px;
+    border-radius: 7px;
+    border: 1px solid #3b82f6;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .sync-btn-update-all {
+    padding: 6px 12px;
+    border-radius: 7px;
+    border: 1px solid #60a5fa;
+    background: #3b82f6;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .sync-btn-update-single {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 11.5px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .sync-btn-update-single:hover {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
   }
 
   .sync-btn-add-bulk {
@@ -1148,12 +1423,35 @@
   }
 
   .sync-table-wrapper {
-    flex: 1;
-    min-height: 180px;
-    max-height: 420px;
-    overflow-y: auto;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
+    flex: 1 1 0%;
+    min-height: 280px;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    scrollbar-width: thin !important;
+    scrollbar-color: #94a3b8 #f1f5f9 !important;
+  }
+
+  .sync-table-wrapper::-webkit-scrollbar {
+    display: block !important;
+    width: 8px !important;
+    height: 8px !important;
+  }
+
+  .sync-table-wrapper::-webkit-scrollbar-track {
+    background: #f1f5f9 !important;
+    border-radius: 4px !important;
+  }
+
+  .sync-table-wrapper::-webkit-scrollbar-thumb {
+    background: #94a3b8 !important;
+    border-radius: 4px !important;
+  }
+
+  .sync-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #64748b !important;
   }
 
   .sync-table {
@@ -1164,32 +1462,49 @@
   }
 
   .sync-table th {
-    background: #f1f5f9;
+    background: #f8fafc;
     color: #475569;
-    padding: 10px 12px;
+    padding: 11px 14px;
     font-size: 11.5px;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.4px;
     position: sticky;
     top: 0;
-    z-index: 2;
-    border-bottom: 1.5px solid #cbd5e1;
+    z-index: 5;
+    border-bottom: 2px solid #cbd5e1;
   }
 
   .sync-table td {
-    padding: 8px 12px;
+    padding: 10px 14px;
     border-bottom: 1px solid #f1f5f9;
     color: #0f172a;
     vertical-align: middle;
   }
 
+  .sync-table tbody tr:hover {
+    background: #f8fafc;
+  }
+
+  .row-selected-sync {
+    background: #f0fdf4 !important;
+  }
+
+  .row-selected-add {
+    background: #fefce8 !important;
+  }
+
+  .row-selected-del {
+    background: #fef2f2 !important;
+  }
+
   .sync-emp-avatar {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     object-fit: cover;
     border: 1.5px solid #cbd5e1;
+    display: inline-block;
   }
 
   .sync-chip-badge-ok {
@@ -1198,23 +1513,49 @@
     border-radius: 6px;
     background: #dcfce7;
     color: #15803d;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 800;
+    border: 1px solid #bbf7d0;
+  }
+
+  .sync-diff-badge {
+    display: inline-block;
+    margin-top: 3px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #fef3c7;
+    color: #b45309;
+    font-size: 10.5px;
+    font-weight: 700;
+    border: 1px solid #fde68a;
+  }
+
+  .sync-diff-badge-warn {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 10px;
+    font-weight: 700;
+    border: 1px solid #fca5a5;
   }
 
   .sync-chip-system-status {
     display: inline-block;
-    padding: 3px 8px;
+    padding: 4px 9px;
     border-radius: 6px;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 700;
   }
 
-  .chip-desinc { background: #fee2e2; color: #b91c1c; }
-  .chip-unknown { background: #f1f5f9; color: #64748b; }
+  .chip-desinc { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .chip-other-sala { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .chip-name-match { background: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
+  .chip-unknown { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
 
   .sync-btn-add-single {
-    padding: 4px 10px;
+    padding: 5px 12px;
     border-radius: 6px;
     border: 1px solid #86efac;
     background: #f0fdf4;
@@ -1232,7 +1573,7 @@
   }
 
   .sync-btn-del-single {
-    padding: 4px 10px;
+    padding: 5px 12px;
     border-radius: 6px;
     border: 1px solid #fca5a5;
     background: #fef2f2;
@@ -1249,32 +1590,32 @@
     border-color: #dc2626;
   }
 
+  .sync-table-counter {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #64748b;
+    text-align: right;
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+
   .sync-empty-tab {
     padding: 30px;
     text-align: center;
     border-radius: 10px;
-    background: #f8fafc;
-    border: 1px dashed #cbd5e1;
+    border: 1.5px dashed #cbd5e1;
     color: #64748b;
     font-size: 13.5px;
-    font-weight: 600;
-  }
-
-  .row-selected {
-    background: #fefce8 !important;
-  }
-
-  .row-selected-del {
-    background: #fff1f2 !important;
+    font-weight: 700;
   }
 
   .sync-modal-footer {
-    padding: 12px 24px;
-    background: #ffffff;
-    border-top: 1px solid #e2e8f0;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding: 12px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
     flex-shrink: 0;
   }
 
@@ -1282,15 +1623,17 @@
     padding: 8px 18px;
     border-radius: 8px;
     border: 1px solid #cbd5e1;
-    background: #f8fafc;
+    background: #ffffff;
     color: #334155;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
   .sync-close-footer-btn:hover {
-    background: #e2e8f0;
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #94a3b8;
   }
 </style>

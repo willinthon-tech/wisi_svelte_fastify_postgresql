@@ -5,7 +5,8 @@ import {
   setupCardInDevice,
   uploadFaceToDevice,
   deleteUserFromDevice,
-  generarCardNoDesdeCedula
+  generarCardNoDesdeCedula,
+  getCedulaVariants
 } from '../services/hikvision-isapi.service.js';
 
 /**
@@ -74,14 +75,25 @@ export async function auditarSalaBiometricos(request, reply) {
 
     // 4. Obtener todos los empleados del sistema (para identificar si un usuario del biométrico es inactivo/desincorporado)
     const allSystemEmployees = await sql`
-      SELECT id, nombre, cedula, activo, motivo_desincorporacion
-      FROM empleados
+      SELECT e.id, e.nombre, e.cedula, e.activo, e.motivo_desincorporacion, s.nombre as sala_nombre
+      FROM empleados e
+      LEFT JOIN cargos c ON e.cargo_id = c.id
+      LEFT JOIN areas a ON c.area_id = a.id
+      LEFT JOIN departamentos d ON a.departamento_id = d.id
+      LEFT JOIN salas s ON d.sala_id = s.id
     `;
-    const systemEmpByCedula = new Map();
+
+    const systemEmpByVariant = new Map();
+    const systemEmpByName = new Map();
     for (const emp of allSystemEmployees) {
-      const norm = normalizeCedula(emp.cedula);
-      if (norm) {
-        systemEmpByCedula.set(norm, emp);
+      const variants = getCedulaVariants(emp.cedula);
+      for (const v of variants) {
+        if (!systemEmpByVariant.has(v)) {
+          systemEmpByVariant.set(v, emp);
+        }
+      }
+      if (emp.nombre) {
+        systemEmpByName.set(emp.nombre.trim().toLowerCase(), emp);
       }
     }
 
@@ -92,7 +104,6 @@ export async function auditarSalaBiometricos(request, reply) {
       FROM empleado_dispositivos
       WHERE dispositivo_id = ANY(${devIds})
     `;
-    // Set de claves `${empleado_id}_${dispositivo_id}`
     const assignedEmpDevSet = new Set(empDevRows.map(r => `${r.empleado_id}_${r.dispositivo_id}`));
 
     // 6. Auditar cada dispositivo en paralelo
@@ -144,33 +155,68 @@ export async function auditarSalaBiometricos(request, reply) {
         }
       }
 
-      // Mapear usuarios encontrados en el biométrico por cédula normalizada
-      const bioUsersByCedula = new Map();
+      // Mapear usuarios encontrados en el biométrico usando todas las variantes de cédula
+      const bioUsersByVariant = new Map();
+      const bioUsersByName = new Map();
       for (const u of bioUsers) {
-        const norm = normalizeCedula(u.employeeNo);
-        if (norm) {
-          bioUsersByCedula.set(norm, u);
+        const variants = getCedulaVariants(u.employeeNo);
+        for (const v of variants) {
+          bioUsersByVariant.set(v, u);
+        }
+        if (u.name) {
+          bioUsersByName.set(u.name.trim().toLowerCase(), u);
         }
       }
 
-      // Determinar qué empleados activos de la sala están asignados a este dispositivo
-      // Si tienen registro en empleado_dispositivos o si aplican a este dispositivo
+      // Mapear usuarios encontrados en el panel si existe
+      const panelUsersByVariant = new Map();
+      for (const u of panelUsers) {
+        const variants = getCedulaVariants(u.employeeNo);
+        for (const v of variants) {
+          panelUsersByVariant.set(v, u);
+        }
+      }
+
+      // Filtrar empleados asignados a este dispositivo
       const activeEmployeesForDev = activeEmployees.filter(emp => {
         return assignedEmpDevSet.has(`${emp.id}_${dev.id}`);
       });
-
-      // Si ningún empleado tiene asignado este dispositivo específicamente, considerar a los empleados activos de la sala
       const targetEmployees = activeEmployeesForDev.length > 0 ? activeEmployeesForDev : activeEmployees;
 
-      const matchedCedulas = new Set();
+      const matchedDeviceUsers = new Set();
 
-      // Comparativa 1: Empleados del sistema vs Biométrico
+      // Comparativa 1: Empleados del sistema vs Equipos físicos
       for (const emp of targetEmployees) {
-        const empNormCedula = normalizeCedula(emp.cedula);
-        const bioUser = bioUsersByCedula.get(empNormCedula);
+        const variants = getCedulaVariants(emp.cedula);
+        let bioUser = null;
+        for (const v of variants) {
+          if (bioUsersByVariant.has(v)) {
+            bioUser = bioUsersByVariant.get(v);
+            break;
+          }
+        }
+        if (!bioUser && emp.nombre) {
+          bioUser = bioUsersByName.get(emp.nombre.trim().toLowerCase()) || null;
+        }
+
+        let panelUser = null;
+        for (const v of variants) {
+          if (panelUsersByVariant.has(v)) {
+            panelUser = panelUsersByVariant.get(v);
+            break;
+          }
+        }
 
         if (bioUser) {
-          matchedCedulas.add(empNormCedula);
+          matchedDeviceUsers.add(bioUser);
+          if (panelUser) matchedDeviceUsers.add(panelUser);
+
+          const nameInDev = String(bioUser.name || '').trim();
+          const nameInSys = String(emp.nombre || '').trim();
+          const nameDiffers = Boolean(nameInDev && nameInSys && nameInDev.toLowerCase() !== nameInSys.toLowerCase());
+          const hasFaceOnDevice = (bioUser.numOfFace || 0) > 0;
+          const hasCardOnDevice = (bioUser.numOfCard || 0) > 0;
+
           result.sincronizados.push({
             id: emp.id,
             nombre: emp.nombre,
@@ -183,7 +229,12 @@ export async function auditarSalaBiometricos(request, reply) {
               name: bioUser.name,
               numOfCard: bioUser.numOfCard || 0,
               numOfFace: bioUser.numOfFace || 0
-            }
+            },
+            enBiometrico: true,
+            enPanel: !!panelUser,
+            nameDiffers,
+            hasFaceOnDevice,
+            hasCardOnDevice
           });
         } else {
           result.faltan.push({
@@ -194,27 +245,56 @@ export async function auditarSalaBiometricos(request, reply) {
             sexo: emp.sexo,
             cargo_nombre: emp.cargo_nombre || 'Sin cargo',
             departamento_nombre: emp.departamento_nombre || 'Sin depto',
-            assignedInDb: assignedEmpDevSet.has(`${emp.id}_${dev.id}`)
+            assignedInDb: assignedEmpDevSet.has(`${emp.id}_${dev.id}`),
+            faltaEnBiometrico: true,
+            faltaEnPanel: dev.ip_panel ? !panelUser : false
           });
         }
       }
 
-      // Comparativa 2: Usuarios en Biométrico que no corresponden a empleados activos asignados
+      // Comparativa 2: Usuarios en el equipo que NO son empleados activos autorizados en esta sala
       for (const u of bioUsers) {
-        const uNorm = normalizeCedula(u.employeeNo);
-        if (!matchedCedulas.has(uNorm)) {
-          // Buscar si existe en la base de datos como inactivo o de otra sala
-          const sysEmp = systemEmpByCedula.get(uNorm);
+        if (!matchedDeviceUsers.has(u)) {
+          const variants = getCedulaVariants(u.employeeNo);
+          let sysEmp = null;
+          for (const v of variants) {
+            if (systemEmpByVariant.has(v)) {
+              sysEmp = systemEmpByVariant.get(v);
+              break;
+            }
+          }
+
+          let nameMatch = null;
+          if (!sysEmp && u.name) {
+            nameMatch = systemEmpByName.get(u.name.trim().toLowerCase()) || null;
+          }
+
+          let statusDesc = 'No registrado en sistema';
+          let employeeId = null;
+          let employeeName = null;
+
+          if (sysEmp) {
+            employeeId = sysEmp.id;
+            employeeName = sysEmp.nombre;
+            if (!sysEmp.activo) {
+              statusDesc = `Desincorporado: ${sysEmp.motivo_desincorporacion || 'Inactivo'} (${sysEmp.cedula})`;
+            } else {
+              statusDesc = `Activo en otra sala: ${sysEmp.sala_nombre || 'Otra sala'} (${sysEmp.cedula})`;
+            }
+          } else if (nameMatch) {
+            employeeId = nameMatch.id;
+            employeeName = nameMatch.nombre;
+            statusDesc = `Coincide por nombre: ${nameMatch.nombre} (${nameMatch.cedula})`;
+          }
+
           result.sobran.push({
             employeeNo: u.employeeNo,
             name: u.name || 'Sin nombre en equipo',
             numOfCard: u.numOfCard || 0,
             numOfFace: u.numOfFace || 0,
-            systemStatus: sysEmp 
-              ? (sysEmp.activo ? 'Activo en otra sala' : `Desincorporado: ${sysEmp.motivo_desincorporacion || 'Inactivo'}`)
-              : 'No registrado en sistema',
-            systemEmployeeId: sysEmp ? sysEmp.id : null,
-            systemEmployeeName: sysEmp ? sysEmp.nombre : null
+            systemStatus: statusDesc,
+            systemEmployeeId: employeeId,
+            systemEmployeeName: employeeName
           });
         }
       }
@@ -240,13 +320,13 @@ export async function auditarSalaBiometricos(request, reply) {
  */
 export async function agregarEmpleadosABiometrico(request, reply) {
   try {
-    const { dispositivo_id, empleado_ids, target = 'both' } = request.body || {};
-    const dId = Number(dispositivo_id);
+    const { dispositivoId, empleado_ids, target = 'both' } = request.body;
+    const dId = Number(dispositivoId);
     if (!dId || isNaN(dId)) {
-      return reply.status(400).send({ success: false, error: 'Dispositivo inválido' });
+      return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }
 
-    if (!Array.isArray(empleado_ids) || empleado_ids.length === 0) {
+    if (!empleado_ids || !Array.isArray(empleado_ids) || empleado_ids.length === 0) {
       return reply.status(400).send({ success: false, error: 'Debe especificar al menos un empleado' });
     }
 
@@ -329,10 +409,10 @@ export async function agregarEmpleadosABiometrico(request, reply) {
             empRes.panel.success = true;
             empRes.panel.message = 'Usuario agregado a panel';
 
-            const cardNo = generarCardNoDesdeCedula(emp.cedula);
-            if (cardNo) {
+            const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
+            if (panelId) {
               try {
-                await setupCardInDevice(dev.ip_panel, dev.usuario || 'admin', dev.clave || '', emp.cedula, cardNo);
+                await setupCardInDevice(dev.ip_panel, dev.usuario || 'admin', dev.clave || '', panelId, panelId);
               } catch (cardErr) {}
             }
           } else {
@@ -381,19 +461,141 @@ export async function agregarEmpleadosABiometrico(request, reply) {
 }
 
 /**
+ * POST /api/biometricos/actualizar-empleados
+ * Actualiza nombre, foto y tarjeta de empleados sincronizados en el biométrico (y panel)
+ */
+export async function actualizarEmpleadosEnBiometrico(request, reply) {
+  try {
+    const { dispositivoId, empleado_ids, target = 'both' } = request.body;
+    const dId = Number(dispositivoId);
+    if (!dId || isNaN(dId)) {
+      return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
+    }
+
+    if (!empleado_ids || !Array.isArray(empleado_ids) || empleado_ids.length === 0) {
+      return reply.status(400).send({ success: false, error: 'Debe especificar al menos un empleado' });
+    }
+
+    if (!isPgConnected || !sql) {
+      return reply.status(500).send({ success: false, error: 'Base de datos no disponible' });
+    }
+
+    const [dev] = await sql`
+      SELECT id, nombre, sala_id, ip_remota, ip_panel, usuario, clave
+      FROM dispositivos
+      WHERE id = ${dId}
+    `;
+
+    if (!dev) {
+      return reply.status(404).send({ success: false, error: 'Dispositivo no encontrado' });
+    }
+
+    const eIds = empleado_ids.map(Number).filter(Boolean);
+    const empleados = await sql`
+      SELECT id, nombre, cedula, sexo, foto, fecha_ingreso
+      FROM empleados
+      WHERE id = ANY(${eIds})
+    `;
+
+    const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
+    const configMap = {};
+    for (const r of savedConfigRows) configMap[r.clave] = r.valor;
+    const publicDomain = configMap.isapi_ip_domain || 'willinthon.wisi.space';
+
+    const results = [];
+
+    for (const emp of empleados) {
+      const empRes = {
+        empleado_id: emp.id,
+        nombre: emp.nombre,
+        cedula: emp.cedula,
+        biometrico: { success: false, message: '' },
+        panel: dev.ip_panel ? { success: false, message: '' } : null
+      };
+
+      // 1. Actualizar en Biométrico
+      if (dev.ip_remota && (target === 'both' || target === 'bio')) {
+        try {
+          const userRes = await addUserToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp, false);
+          if (userRes.ok || userRes.status === 200) {
+            empRes.biometrico.success = true;
+            empRes.biometrico.message = 'Usuario actualizado exitosamente';
+
+            // Actualizar Tarjeta
+            const cardNo = generarCardNoDesdeCedula(emp.cedula);
+            if (cardNo) {
+              try {
+                await setupCardInDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp.cedula, cardNo);
+              } catch (cardErr) {}
+            }
+
+            // Actualizar Foto
+            if (emp.foto) {
+              const photoUrl = `http://${publicDomain}${emp.foto}`;
+              try {
+                await uploadFaceToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp.cedula, emp.nombre, emp.sexo, photoUrl);
+              } catch (faceErr) {}
+            }
+          } else {
+            empRes.biometrico.message = `El biométrico respondió HTTP ${userRes.status}`;
+          }
+        } catch (bioErr) {
+          empRes.biometrico.message = bioErr.message;
+        }
+      }
+
+      // 2. Actualizar en Panel si aplica
+      if (dev.ip_panel && dev.ip_panel.trim() && (target === 'both' || target === 'panel')) {
+        try {
+          const panelRes = await addUserToDevice(dev.ip_panel, dev.usuario || 'admin', dev.clave || '', emp, true);
+          if (panelRes.ok || panelRes.status === 200) {
+            empRes.panel.success = true;
+            empRes.panel.message = 'Usuario actualizado en panel';
+
+            const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
+            if (panelId) {
+              try {
+                await setupCardInDevice(dev.ip_panel, dev.usuario || 'admin', dev.clave || '', panelId, panelId);
+              } catch (cardErr) {}
+            }
+          } else {
+            empRes.panel.message = `El panel respondió HTTP ${panelRes.status}`;
+          }
+        } catch (panelErr) {
+          empRes.panel.message = panelErr.message;
+        }
+      }
+
+      results.push(empRes);
+    }
+
+    const successCount = results.filter(r => r.biometrico.success || (r.panel && r.panel.success)).length;
+    return reply.send({
+      success: true,
+      processed: results.length,
+      successCount,
+      results
+    });
+  } catch (err) {
+    console.error('Error en actualizarEmpleadosEnBiometrico:', err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+/**
  * POST /api/biometricos/eliminar-usuarios
- * Elimina usuarios de un biométrico (y su panel si corresponde)
+ * Elimina usuarios del biométrico (y panel) por su employeeNo
  */
 export async function eliminarUsuariosDeBiometrico(request, reply) {
   try {
-    const { dispositivo_id, employee_nos, target = 'both' } = request.body || {};
-    const dId = Number(dispositivo_id);
+    const { dispositivoId, employee_nos, target = 'both' } = request.body;
+    const dId = Number(dispositivoId);
     if (!dId || isNaN(dId)) {
-      return reply.status(400).send({ success: false, error: 'Dispositivo inválido' });
+      return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }
 
-    if (!Array.isArray(employee_nos) || employee_nos.length === 0) {
-      return reply.status(400).send({ success: false, error: 'Debe especificar al menos un número de empleado / cédula' });
+    if (!employee_nos || !Array.isArray(employee_nos) || employee_nos.length === 0) {
+      return reply.status(400).send({ success: false, error: 'Debe especificar al menos un usuario' });
     }
 
     if (!isPgConnected || !sql) {
@@ -449,17 +651,15 @@ export async function eliminarUsuariosDeBiometrico(request, reply) {
         }
       }
 
-      // 3. Si existe empleado con esta cédula, remover la relación de empleado_dispositivos
+      // 3. Limpiar de empleado_dispositivos si coincide por cualquiera de sus variantes de cédula
       try {
-        const empMatch = await sql`
-          SELECT id FROM empleados 
-          WHERE REPLACE(REPLACE(UPPER(COALESCE(cedula, '')), 'V', ''), '-', '') = ${cleanNo.replace(/V|-/g, '')}
-          LIMIT 1
-        `;
-        if (empMatch.length > 0) {
+        const variants = getCedulaVariants(cleanNo);
+        for (const v of variants) {
           await sql`
             DELETE FROM empleado_dispositivos 
-            WHERE empleado_id = ${empMatch[0].id} AND dispositivo_id = ${dId}
+            WHERE dispositivo_id = ${dId} AND empleado_id IN (
+              SELECT id FROM empleados WHERE REPLACE(UPPER(COALESCE(cedula, '')), '-', '') = ${v}
+            )
           `;
         }
       } catch (dbErr) {

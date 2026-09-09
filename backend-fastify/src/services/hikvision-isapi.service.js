@@ -256,10 +256,53 @@ export async function getDeviceUsers(ipHost, username, password) {
 }
 
 /**
+ * Obtiene todas las variantes posibles de una cédula / ID para cotejo contra biométricos y paneles
+ * Maneja:
+ * - Con letra (ej: V17548231, E1234567)
+ * - Sin letra / dígitos puros (ej: 17548231, 1234567)
+ * - Formato panel (1 para V, 2 para E, ej: 117548231, 21234567)
+ */
+export function getCedulaVariants(raw) {
+  if (!raw) return [];
+  const s = String(raw).trim().toUpperCase();
+  const variants = new Set();
+
+  // 1. Alfanumérico limpio (V17548231)
+  const alphaNum = s.replace(/[^0-9A-Z]/g, '');
+  if (alphaNum) variants.add(alphaNum);
+
+  // 2. Dígitos puros (17548231)
+  const digits = s.replace(/\D/g, '');
+  if (digits) variants.add(digits);
+
+  // 3. Formato panel con 1 para V y 2 para E
+  if (alphaNum.startsWith('V')) {
+    variants.add('1' + alphaNum.substring(1));
+    if (digits) variants.add('1' + digits);
+  } else if (alphaNum.startsWith('E')) {
+    variants.add('2' + alphaNum.substring(1));
+    if (digits) variants.add('2' + digits);
+  } else if (digits) {
+    variants.add('1' + digits);
+    variants.add('V' + digits);
+    if (digits.startsWith('1') && digits.length >= 7) {
+      variants.add('V' + digits.substring(1));
+      variants.add(digits.substring(1));
+    }
+    if (digits.startsWith('2') && digits.length >= 7) {
+      variants.add('E' + digits.substring(1));
+      variants.add(digits.substring(1));
+    }
+  }
+
+  return Array.from(variants);
+}
+
+/**
  * Agrega o actualiza un usuario en el biométrico o panel
  */
 export async function addUserToDevice(ipHost, username, password, employeeData, isPanel = false) {
-  const cedula = String(employeeData.cedula || employeeData.employeeNo || '').trim().toUpperCase();
+  const rawCedula = String(employeeData.cedula || employeeData.employeeNo || '').trim().toUpperCase();
   const nombre = String(employeeData.nombre || employeeData.name || '').trim();
   const gender = (employeeData.sexo || '').toLowerCase().includes('fem') ? 'female' : 'male';
 
@@ -268,9 +311,12 @@ export async function addUserToDevice(ipHost, username, password, employeeData, 
 
   let body;
   if (isPanel) {
+    // Para paneles: los paneles Hikvision requieren identificador numérico sin letras
+    // Se utiliza 1 para V y 2 para E (generarCardNoDesdeCedula)
+    const panelEmployeeNo = generarCardNoDesdeCedula(rawCedula) || rawCedula.replace(/\D/g, '');
     body = {
       UserInfo: {
-        employeeNo: cedula,
+        employeeNo: panelEmployeeNo,
         name: nombre,
         userType: "normal",
         closeDelayEnabled: false,
@@ -294,7 +340,7 @@ export async function addUserToDevice(ipHost, username, password, employeeData, 
   } else {
     body = {
       UserInfo: {
-        employeeNo: cedula,
+        employeeNo: rawCedula,
         name: nombre,
         gender,
         userType: "normal",
@@ -326,7 +372,7 @@ export async function addUserToDevice(ipHost, username, password, employeeData, 
 export async function setupCardInDevice(ipHost, username, password, employeeNo, cardNo) {
   const body = {
     CardInfo: {
-      employeeNo,
+      employeeNo: String(employeeNo),
       cardNo: String(cardNo),
       cardType: "normalCard"
     }
@@ -338,10 +384,13 @@ export async function setupCardInDevice(ipHost, username, password, employeeNo, 
  * Registra el rostro facial de un empleado usando una URL accesible
  */
 export async function uploadFaceToDevice(ipHost, username, password, employeeNo, name, gender, photoUrl) {
-  // 1. Eliminar foto previa si existe
+  // 1. Eliminar foto previa si existe para evitar duplicidades
   try {
     const delBody = {
-      FPID: [{ value: employeeNo }]
+      FPID: [
+        { value: String(employeeNo) },
+        { value: String(employeeNo).replace(/\D/g, '') }
+      ]
     };
     await executeIsapiCall(ipHost, '/ISAPI/Intelligent/FDLib/FDSearch/Delete?format=json&FDID=1&faceLibType=blackFD', 'PUT', delBody, username, password);
   } catch (e) {
@@ -353,7 +402,7 @@ export async function uploadFaceToDevice(ipHost, username, password, employeeNo,
     faceURL: photoUrl,
     faceLibType: "blackFD",
     FDID: "1",
-    FPID: employeeNo,
+    FPID: String(employeeNo),
     name,
     gender: gender === 'female' ? 'female' : 'male',
     featurePointType: "face"
@@ -368,33 +417,48 @@ export async function uploadFaceToDevice(ipHost, username, password, employeeNo,
 export async function deleteUserFromDevice(ipHost, username, password, employeeNo, isPanel = false) {
   const cleanNo = String(employeeNo).trim().toUpperCase();
   const cardNo = generarCardNoDesdeCedula(cleanNo);
+  const digitsOnly = cleanNo.replace(/\D/g, '');
 
   // 1. Eliminar rostro (solo en biométricos)
   if (!isPanel) {
     try {
       const faceDelBody = {
-        FPID: [{ value: cleanNo }]
+        FPID: [
+          { value: cleanNo },
+          { value: digitsOnly }
+        ]
       };
       await executeIsapiCall(ipHost, '/ISAPI/Intelligent/FDLib/FDSearch/Delete?format=json&FDID=1&faceLibType=blackFD', 'PUT', faceDelBody, username, password);
     } catch (e) {}
   }
 
   // 2. Eliminar tarjeta
-  if (cardNo) {
+  const cardNoList = [];
+  if (cardNo) cardNoList.push({ cardNo: String(cardNo) });
+  if (digitsOnly && digitsOnly !== cardNo) cardNoList.push({ cardNo: String(digitsOnly) });
+  if (cardNoList.length > 0) {
     try {
       const cardDelBody = {
         CardInfoDelCond: {
-          CardNoList: [{ cardNo: String(cardNo) }]
+          CardNoList: cardNoList
         }
       };
       await executeIsapiCall(ipHost, '/ISAPI/AccessControl/CardInfo/Delete?format=json', 'PUT', cardDelBody, username, password);
     } catch (e) {}
   }
 
-  // 3. Eliminar usuario
+  // 3. Eliminar usuario (eliminando todas las posibles variantes de ID en el equipo)
+  const employeeNoList = [{ employeeNo: cleanNo }];
+  if (cardNo && cardNo !== cleanNo) {
+    employeeNoList.push({ employeeNo: cardNo });
+  }
+  if (digitsOnly && digitsOnly !== cleanNo && digitsOnly !== cardNo) {
+    employeeNoList.push({ employeeNo: digitsOnly });
+  }
+
   const userDelBody = {
     UserInfoDelCond: {
-      EmployeeNoList: [{ employeeNo: cleanNo }]
+      EmployeeNoList: employeeNoList
     }
   };
   return await executeIsapiCall(ipHost, '/ISAPI/AccessControl/UserInfo/Delete?format=json', 'PUT', userDelBody, username, password);
