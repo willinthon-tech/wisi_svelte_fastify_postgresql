@@ -23,27 +23,6 @@
   let marcajesContext = [];
   let assignedPlantillasEmp = [];
 
-  $: otrosHorariosSala = (plantillasSala || []).filter(p => {
-    return !horariosEmpleado.some(h => Number(h.id) === Number(p.id));
-  });
-
-  $: extraHorario = (function() {
-    if (!selectedValue || !selectedValue.startsWith('PLANTILLA_')) return null;
-    const targetId = Number(selectedValue.replace('PLANTILLA_', ''));
-    const inEmp = horariosEmpleado.some(h => Number(h.id) === targetId);
-    const inSala = (plantillasSala || []).some(p => Number(p.id) === targetId);
-    if (!inEmp && !inSala && targetId) {
-      return {
-        id: targetId,
-        codigo: dia?.shift?.codigo || 'H',
-        nombre: dia?.shift?.nombre || `Horario #${targetId}`,
-        hora_entrada: dia?.shift?.hora_entrada || null,
-        hora_salida: dia?.shift?.hora_salida || null
-      };
-    }
-    return null;
-  })();
-
   let saveStatusText = '';
   let saveStatusType = 'idle'; // 'idle' | 'saving' | 'saved' | 'error'
   let saveStatusTimer = null;
@@ -845,9 +824,15 @@
             {#if excepcionesList.length > 0}
               <optgroup label="📋 Excepciones de Asistencia (Configuración)">
                 {#each excepcionesList as exc}
-                  <option value="EXCEPCION_{exc.id}">
-                    [{exc.codigo}] {exc.descripcion}
-                  </option>
+                  {#if exc.codigo === 'U' || exc.tipo === 'No Asignable'}
+                    <option value="EXCEPCION_{exc.id}" disabled style="font-size: 10.5px;">
+                      [{exc.codigo}] {exc.descripcion} (Asignado automáticamente por el sistema)
+                    </option>
+                  {:else}
+                    <option value="EXCEPCION_{exc.id}">
+                      [{exc.codigo}] {exc.descripcion}
+                    </option>
+                  {/if}
                 {/each}
               </optgroup>
             {:else}
@@ -865,34 +850,6 @@
                     [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
                   </option>
                 {/each}
-              </optgroup>
-            {/if}
-
-            <!-- Optgroup 3: Horarios de la Sala -->
-            {#if horariosEmpleado.length > 0 && otrosHorariosSala.length > 0}
-              <optgroup label="🏢 Otros Horarios de la Sala">
-                {#each otrosHorariosSala as p}
-                  <option value="PLANTILLA_{p.id}">
-                    [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
-                  </option>
-                {/each}
-              </optgroup>
-            {:else if horariosEmpleado.length === 0 && plantillasSala.length > 0}
-              <optgroup label="🏢 Horarios de la Sala">
-                {#each plantillasSala as p}
-                  <option value="PLANTILLA_{p.id}">
-                    [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
-                  </option>
-                {/each}
-              </optgroup>
-            {/if}
-
-            <!-- Fallback para horario previo si no está en las listas anteriores -->
-            {#if extraHorario}
-              <optgroup label="🕒 Horario Previamente Asignado">
-                <option value="PLANTILLA_{extraHorario.id}">
-                  [{extraHorario.codigo || 'H'}] {extraHorario.nombre} {formatHours(extraHorario)}
-                </option>
               </optgroup>
             {/if}
           </select>
