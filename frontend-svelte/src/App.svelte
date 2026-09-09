@@ -412,10 +412,6 @@
     "cortes",
     "rrhh/cortes/calculos",
     "cortes/calculos",
-    "cecom/clientes",
-    "clientes",
-    "configuracion/tipo-clientes",
-    "tipo-clientes",
   ];
 
   $: activeTabStore.set($currentRouteStore);
@@ -444,8 +440,8 @@
     if (tab === "profile") return "Perfil de Usuario";
     if (tab === "auth") return "Autenticación";
     if (tab === "settings") return "Diagnóstico del Sistema";
-    if (tab === "cecom/clientes" || tab === "clientes") return "Clientes";
-    if (tab === "configuracion/tipo-clientes" || tab === "tipo-clientes") return "Tipo Clientes";
+    if (tab === "cecom/clientes" || tab === "clientes") return "CLIENTES";
+    if (tab === "configuracion/tipo-clientes" || tab === "tipo-clientes") return "TIPO CLIENTES";
     if (tab === "rrhh/marcajes" || tab === "marcajes") return "Marcajes";
     if (tab === "rrhh/cortes" || tab === "cortes") return "Cortes";
     if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Reportes";

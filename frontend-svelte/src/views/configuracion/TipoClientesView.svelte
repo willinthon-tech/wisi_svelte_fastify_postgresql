@@ -111,30 +111,79 @@
   }
 
   async function handleDelete(event) {
-    const item = event.detail;
+    const { id, item, onResult } = event.detail;
     try {
-      const res = await masterTipoClientesActions.delete(item.id);
+      const res = await masterTipoClientesActions.delete(id || item?.id);
       if (res && res.blocked) {
-        triggerToast(res.message || 'No se puede eliminar porque tiene clientes vinculados.', 'warning');
-        return;
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar porque tiene clientes vinculados.', 'warning');
+        }
+      } else {
+        triggerToast(`Tipo de cliente eliminado exitosamente`, 'success');
+        if (onResult) onResult({ success: true });
+        await loadServerData();
       }
-      triggerToast(`Tipo de cliente ${item.nombre} eliminado exitosamente`, 'success');
-      await loadServerData();
     } catch (err) {
       triggerToast(`Error al eliminar tipo de cliente: ${err.message}`, 'error');
+    }
+  }
+
+  async function handleBatchDelete(event) {
+    const { ids, onResult } = event.detail;
+    const deleted = [];
+    const blocked = [];
+    const errors = [];
+
+    for (const id of ids) {
+      try {
+        const res = await masterTipoClientesActions.delete(id);
+        if (res && res.blocked) {
+          blocked.push({
+            id,
+            name: res.entityName || `ID: ${id}`,
+            reason: res.message || 'Tiene elementos asociados en la base de datos',
+            dependencies: res.dependencies || []
+          });
+        } else if (res && (res.success || res.id)) {
+          deleted.push({ id });
+        } else {
+          blocked.push({
+            id,
+            name: `ID: ${id}`,
+            reason: res?.error || 'No se pudo eliminar por restricciones de datos',
+            dependencies: []
+          });
+        }
+      } catch (err) {
+        errors.push({ id, error: err.message });
+      }
+    }
+
+    await loadServerData();
+
+    if (onResult) {
+      onResult({
+        deleted,
+        blocked,
+        errors,
+        total: ids.length,
+        entityType: 'tipo de cliente'
+      });
     }
   }
 </script>
 
 <PaginatedDataTable 
-  bind:items
+  {items}
   existingItems={allTipoClientes}
-  {createFields}
-  bind:totalCount
-  bind:currentPage
-  bind:pageSize
+  {totalCount}
+  {currentPage}
+  {pageSize}
   isServerSide={true}
   {columns}
+  {createFields}
   bind:searchQuery
   searchPlaceholder="Buscar por nombre o ID..."
   entityType="tipo de cliente"
@@ -143,17 +192,17 @@
   on:create={handleCreate}
   on:saveInline={handleSaveInline}
   on:delete={handleDelete}
+  on:batchDelete={handleBatchDelete}
 >
-  <div slot="clear-filters">
+  <div slot="search-actions">
     {#if hasActiveFilters}
       <button 
         type="button" 
         class="clear-filters-btn" 
         on:click={clearAllFilters}
-        title="Restablecer filtros"
+        title="Restablecer búsqueda"
       >
-        <span class="clear-icon">✕</span>
-        <span>Limpiar filtros</span>
+        <span>✕</span> Limpiar Búsqueda
       </button>
     {/if}
   </div>
@@ -161,25 +210,23 @@
 
 <style>
   .clear-filters-btn {
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #ef4444;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    background: #fef2f2;
+    cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.08);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    border-radius: 6px;
-    cursor: pointer;
     transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    white-space: nowrap;
   }
   .clear-filters-btn:hover {
-    background: rgba(239, 68, 68, 0.15);
-    border-color: rgba(239, 68, 68, 0.3);
-  }
-  .clear-icon {
-    font-size: 11px;
-    font-weight: 700;
+    background: #fee2e2;
+    border-color: #f87171;
   }
 </style>
