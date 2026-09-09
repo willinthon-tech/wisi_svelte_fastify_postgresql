@@ -216,7 +216,7 @@
         throw new Error(json.error || 'Error al guardar horario');
       }
     } catch (err) {
-      triggerToast(`Error al crear: ${err.message}`, 'error');
+      triggerToast(err.message?.startsWith('El código') ? err.message : `Error al crear: ${err.message}`, 'error');
     }
   }
 
@@ -236,7 +236,7 @@
         throw new Error(json.error || 'Error al actualizar horario');
       }
     } catch (err) {
-      triggerToast(`Error al actualizar: ${err.message}`, 'error');
+      triggerToast(err.message?.startsWith('El código') ? err.message : `Error al actualizar: ${err.message}`, 'error');
     }
   }
 
@@ -333,6 +333,8 @@
 <PaginatedDataTable 
   {items}
   existingItems={items}
+  reservedCodes={globalExcepciones}
+  uniqueCodeByField="sala_id"
   {totalCount}
   {currentPage}
   {pageSize}

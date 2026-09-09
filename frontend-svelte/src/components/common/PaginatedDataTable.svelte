@@ -331,6 +331,7 @@
 
 
   export let uniqueByField = null; // Scopes name uniqueness by field (e.g., 'sala_id')
+  export let uniqueCodeByField = null; // Scopes code uniqueness by field (e.g., 'sala_id')
 
   // Reactive validation for creation modal duplicate name check
   $: duplicateNameError = (function() {
@@ -362,8 +363,39 @@
     if (!createDraft || !createDraft.codigo || !reservedCodes || reservedCodes.length === 0) return '';
     const code = String(createDraft.codigo).trim().toUpperCase();
     if (!code) return '';
-    const isReserved = reservedCodes.some(r => String(r).toUpperCase() === code);
-    return isReserved ? `El código "${code}" está reservado como plantilla base del sistema y no puede usarse.` : '';
+    const found = reservedCodes.find(r => {
+      const c = typeof r === 'object' && r ? (r.codigo || '') : String(r);
+      return c.trim().toUpperCase() === code;
+    });
+    if (found) {
+      const desc = typeof found === 'object' && found.descripcion ? ` a la excepción global "${found.descripcion}"` : ' a una excepción global';
+      return `El código "${code}" no puede usarse porque pertenece${desc}.`;
+    }
+    return '';
+  })();
+
+  // Reactive validation for duplicate code within room / scope in create modal
+  $: duplicateCodeCreateError = (function() {
+    if (!createDraft || !createDraft.codigo) return '';
+    const code = String(createDraft.codigo).trim().toUpperCase();
+    if (!code) return '';
+    const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
+    const scopeField = uniqueCodeByField || (entityType === 'horario' ? 'sala_id' : null);
+    if (!scopeField) return '';
+    const draftScopeVal = createDraft[scopeField];
+    if (draftScopeVal === undefined || draftScopeVal === null || draftScopeVal === '') return '';
+
+    const match = nameList.find(item => {
+      const itemCode = (item.codigo || '').trim().toUpperCase();
+      if (itemCode !== code) return false;
+      const itemScopeVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : item.sala_id;
+      return String(itemScopeVal) === String(draftScopeVal);
+    });
+    if (match) {
+      const salaName = match.sala_nombre || 'esta sala';
+      return `El código "${code}" ya pertenece al horario "${match.nombre}" de la sala "${salaName}".`;
+    }
+    return '';
   })();
 
   // Reactive validation for inline editing duplicate name check
@@ -372,9 +404,43 @@
     // Check reserved code
     if (reservedCodes && reservedCodes.length > 0 && inlineDraft.codigo) {
       const code = String(inlineDraft.codigo).trim().toUpperCase();
-      const isReserved = reservedCodes.some(r => String(r).toUpperCase() === code);
-      if (isReserved) return `El código "${code}" está reservado como plantilla base y no puede usarse.`;
+      const found = reservedCodes.find(r => {
+        const c = typeof r === 'object' && r ? (r.codigo || '') : String(r);
+        return c.trim().toUpperCase() === code;
+      });
+      if (found) {
+        const desc = typeof found === 'object' && found.descripcion ? ` a la excepción global "${found.descripcion}"` : ' a una excepción global';
+        return `El código "${code}" no puede usarse porque pertenece${desc}.`;
+      }
     }
+
+    // Check duplicate code within room / scope
+    if (inlineDraft.codigo) {
+      const code = String(inlineDraft.codigo).trim().toUpperCase();
+      const scopeField = uniqueCodeByField || (entityType === 'horario' ? 'sala_id' : null);
+      if (scopeField) {
+        const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
+        const currentItem = nameList.find(x => Number(x.id) === Number(editingInlineId));
+        const targetScopeVal = inlineDraft[scopeField] !== undefined && inlineDraft[scopeField] !== null && inlineDraft[scopeField] !== ''
+          ? inlineDraft[scopeField]
+          : (currentItem?.[scopeField] !== undefined ? currentItem[scopeField] : currentItem?.sala_id);
+
+        if (targetScopeVal !== undefined && targetScopeVal !== null && targetScopeVal !== '') {
+          const match = nameList.find(item => {
+            if (Number(item.id) === Number(editingInlineId)) return false;
+            const itemCode = (item.codigo || '').trim().toUpperCase();
+            if (itemCode !== code) return false;
+            const itemScopeVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : item.sala_id;
+            return String(itemScopeVal) === String(targetScopeVal);
+          });
+          if (match) {
+            const salaName = match.sala_nombre || 'esta sala';
+            return `El código "${code}" ya pertenece al horario "${match.nombre}" de la sala "${salaName}".`;
+          }
+        }
+      }
+    }
+
     // Check duplicate name
     if (entityType === 'máquina' || entityType === 'maquina' || entityType === 'maquinas') return '';
     if (!inlineDraft.nombre) return '';
@@ -451,6 +517,10 @@
     }
     if (reservedCodeCreateError) {
       triggerToast(reservedCodeCreateError, 'error');
+      return;
+    }
+    if (duplicateCodeCreateError) {
+      triggerToast(duplicateCodeCreateError, 'error');
       return;
     }
     dispatch('create', createDraft);
@@ -2716,16 +2786,16 @@
                     bind:value={createDraft[field.key]}
                     placeholder={field.placeholder || ''}
                     required={field.required}
-                    style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid {(field.key === 'nombre' && duplicateNameError) || (field.key === 'codigo' && reservedCodeCreateError) ? '#ef4444' : '#cbd5e1'}; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: {(field.key === 'nombre' && duplicateNameError) || (field.key === 'codigo' && reservedCodeCreateError) ? '#fef2f2' : '#ffffff'}; transition: all 0.15s ease;"
+                    style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid {(field.key === 'nombre' && duplicateNameError) || (field.key === 'codigo' && (reservedCodeCreateError || duplicateCodeCreateError)) ? '#ef4444' : '#cbd5e1'}; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: {(field.key === 'nombre' && duplicateNameError) || (field.key === 'codigo' && (reservedCodeCreateError || duplicateCodeCreateError)) ? '#fef2f2' : '#ffffff'}; transition: all 0.15s ease;"
                   />
                   {#if field.key === 'nombre' && duplicateNameError}
                     <div style="font-size: 11.5px; font-weight: 700; color: #ef4444; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
                       <span>⚠️</span> {duplicateNameError}
                     </div>
                   {/if}
-                  {#if field.key === 'codigo' && reservedCodeCreateError}
+                  {#if field.key === 'codigo' && (reservedCodeCreateError || duplicateCodeCreateError)}
                     <div style="font-size: 11.5px; font-weight: 700; color: #ef4444; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
-                      <span>🚫</span> {reservedCodeCreateError}
+                      <span>🚫</span> {reservedCodeCreateError || duplicateCodeCreateError}
                     </div>
                   {/if}
                 </div>
@@ -2745,8 +2815,8 @@
 
           <button 
             type="submit" 
-            disabled={!!duplicateNameError || !!reservedCodeCreateError}
-            style="padding: 9px 18px; border-radius: 8px; border: none; background: {(duplicateNameError || reservedCodeCreateError) ? '#94a3b8' : '#2563eb'}; color: #ffffff; font-size: 13px; font-weight: 800; cursor: {(duplicateNameError || reservedCodeCreateError) ? 'not-allowed' : 'pointer'}; opacity: {(duplicateNameError || reservedCodeCreateError) ? '0.6' : '1'}; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); transition: all 0.15s ease;">
+            disabled={!!duplicateNameError || !!reservedCodeCreateError || !!duplicateCodeCreateError}
+            style="padding: 9px 18px; border-radius: 8px; border: none; background: {(duplicateNameError || reservedCodeCreateError || duplicateCodeCreateError) ? '#94a3b8' : '#2563eb'}; color: #ffffff; font-size: 13px; font-weight: 800; cursor: {(duplicateNameError || reservedCodeCreateError || duplicateCodeCreateError) ? 'not-allowed' : 'pointer'}; opacity: {(duplicateNameError || reservedCodeCreateError || duplicateCodeCreateError) ? '0.6' : '1'}; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); transition: all 0.15s ease;">
             {createModalTitle ? 'Guardar' : `Guardar ${toTitleCase(entityType)}`}
           </button>
         </div>

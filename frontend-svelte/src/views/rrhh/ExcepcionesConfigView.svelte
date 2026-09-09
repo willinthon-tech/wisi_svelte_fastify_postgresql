@@ -113,7 +113,7 @@
       triggerToast('Excepción creada exitosamente', 'success');
       await loadServerData();
     } catch (err) {
-      triggerToast(`Error al crear excepción: ${err.message}`, 'error');
+      triggerToast(err.message?.startsWith('El código') ? err.message : `Error al crear excepción: ${err.message}`, 'error');
     }
   }
 
@@ -124,7 +124,7 @@
       triggerToast('Excepción actualizada exitosamente', 'success');
       await loadServerData();
     } catch (err) {
-      triggerToast(`Error al actualizar excepción: ${err.message}`, 'error');
+      triggerToast(err.message?.startsWith('El código') ? err.message : `Error al actualizar excepción: ${err.message}`, 'error');
     }
   }
 

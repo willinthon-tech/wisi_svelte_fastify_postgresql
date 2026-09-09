@@ -3718,13 +3718,50 @@ export async function getPlantillasHorariosModel(params = {}) {
 
 export async function createPlantillaHorarioModel(data) {
   if (isPgConnected && sql) {
+    const codigo = (data.codigo !== null && data.codigo !== undefined) ? String(data.codigo).trim().toUpperCase() : '';
+    const nombre = (data.nombre || '').trim();
     const salaId = (data.sala_id !== null && data.sala_id !== undefined && data.sala_id !== '') ? Number(data.sala_id) : null;
+
+    if (!codigo) {
+      throw new Error('El código del horario es obligatorio.');
+    }
+    if (!nombre) {
+      throw new Error('La descripción o nombre del horario es obligatorio.');
+    }
+    if (!salaId) {
+      throw new Error('La sala asignada es obligatoria para el horario.');
+    }
+
+    // 1. Validar unicidad global contra excepciones
+    const [excConflict] = await sql`
+      SELECT id, codigo, descripcion 
+      FROM excepciones 
+      WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) 
+      LIMIT 1
+    `;
+    if (excConflict) {
+      throw new Error(`El código "${codigo}" no puede usarse porque pertenece a la excepción global "${excConflict.descripcion}".`);
+    }
+
+    // 2. Validar unicidad de código dentro de la misma sala
+    const [horConflict] = await sql`
+      SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'esta sala') AS sala_nombre 
+      FROM horarios h 
+      LEFT JOIN salas s ON h.sala_id = s.id 
+      WHERE LOWER(TRIM(h.codigo)) = LOWER(${codigo}) 
+        AND ((${salaId}::int IS NULL AND h.sala_id IS NULL) OR h.sala_id = ${salaId}::int)
+      LIMIT 1
+    `;
+    if (horConflict) {
+      throw new Error(`El código "${codigo}" ya pertenece al horario "${horConflict.nombre}" de la sala "${horConflict.sala_nombre}".`);
+    }
+
     const rows = await sql`
       INSERT INTO horarios (
         nombre, sala_id, codigo, hora_entrada, hora_salida, color
       )
       VALUES (
-        ${data.nombre}, ${salaId}, ${data.codigo || null}, 
+        ${nombre}, ${salaId}, ${codigo}, 
         ${data.hora_entrada || null}, ${data.hora_salida || null}, 
         ${data.color || '#FFFF99'}
       )
@@ -3738,15 +3775,63 @@ export async function createPlantillaHorarioModel(data) {
 export async function updatePlantillaHorarioModel(id, data) {
   const pId = Number(id);
   if (isPgConnected && sql) {
-    const salaId = (data.sala_id !== null && data.sala_id !== undefined && data.sala_id !== '') ? Number(data.sala_id) : null;
+    const [current] = await sql`
+      SELECT id, codigo, sala_id, nombre 
+      FROM horarios 
+      WHERE id = ${pId}
+    `;
+    if (!current) {
+      throw new Error(`El horario con ID ${pId} no existe.`);
+    }
+
+    const finalCodigo = (data.codigo !== undefined && data.codigo !== null)
+      ? String(data.codigo).trim().toUpperCase()
+      : (current.codigo ? String(current.codigo).trim().toUpperCase() : null);
+
+    const finalSalaId = (data.sala_id !== undefined && data.sala_id !== null && data.sala_id !== '')
+      ? Number(data.sala_id)
+      : (current.sala_id !== null ? Number(current.sala_id) : null);
+
+    if (finalCodigo) {
+      // 1. Validar contra excepciones globales
+      const [excConflict] = await sql`
+        SELECT id, codigo, descripcion 
+        FROM excepciones 
+        WHERE LOWER(TRIM(codigo)) = LOWER(${finalCodigo}) 
+        LIMIT 1
+      `;
+      if (excConflict) {
+        throw new Error(`El código "${finalCodigo}" no puede usarse porque pertenece a la excepción global "${excConflict.descripcion}".`);
+      }
+
+      // 2. Validar contra horarios en la misma sala excluyendo el registro actual
+      const [horConflict] = await sql`
+        SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'esta sala') AS sala_nombre 
+        FROM horarios h 
+        LEFT JOIN salas s ON h.sala_id = s.id 
+        WHERE LOWER(TRIM(h.codigo)) = LOWER(${finalCodigo}) 
+          AND ((${finalSalaId}::int IS NULL AND h.sala_id IS NULL) OR h.sala_id = ${finalSalaId}::int)
+          AND h.id != ${pId}
+        LIMIT 1
+      `;
+      if (horConflict) {
+        throw new Error(`El código "${finalCodigo}" ya pertenece al horario "${horConflict.nombre}" de la sala "${horConflict.sala_nombre}".`);
+      }
+    }
+
+    const nombre = data.nombre !== undefined ? data.nombre : current.nombre;
+    const horaEntrada = data.hora_entrada !== undefined ? data.hora_entrada : null;
+    const horaSalida = data.hora_salida !== undefined ? data.hora_salida : null;
+    const color = data.color !== undefined ? data.color : '#FFFF99';
+
     const rows = await sql`
       UPDATE horarios
-      SET nombre = ${data.nombre},
-          sala_id = ${salaId},
-          codigo = ${data.codigo || null},
-          hora_entrada = ${data.hora_entrada || null},
-          hora_salida = ${data.hora_salida || null},
-          color = ${data.color || '#FFFF99'},
+      SET nombre = ${nombre},
+          sala_id = ${finalSalaId},
+          codigo = ${finalCodigo},
+          hora_entrada = ${horaEntrada},
+          hora_salida = ${horaSalida},
+          color = ${color},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${pId}
       RETURNING *
@@ -5946,14 +6031,33 @@ export async function createExcepcionModel(data) {
   const tipo = (data.tipo || 'Asignable').trim();
 
   if (!codigo || !descripcion) {
-    throw new Error('El código y la descripción de la excepción son obligatorios');
+    throw new Error('El código y la descripción de la excepción son obligatorios.');
   }
 
   if (isPgConnected && sql) {
-    const existing = await sql`SELECT id FROM excepciones WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) LIMIT 1`;
-    if (existing.length > 0) {
-      throw new Error(`Ya existe una excepción con el código "${codigo}"`);
+    // 1. Validar unicidad dentro de la tabla de excepciones
+    const [existingExc] = await sql`
+      SELECT id, codigo, descripcion 
+      FROM excepciones 
+      WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) 
+      LIMIT 1
+    `;
+    if (existingExc) {
+      throw new Error(`El código "${codigo}" ya está registrado en la excepción "${existingExc.descripcion}".`);
     }
+
+    // 2. Validar que no pertenezca a ningún horario de ninguna sala en toda la tabla horarios
+    const [existingHor] = await sql`
+      SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'Sin Sala') AS sala_nombre 
+      FROM horarios h 
+      LEFT JOIN salas s ON h.sala_id = s.id 
+      WHERE LOWER(TRIM(h.codigo)) = LOWER(${codigo}) 
+      LIMIT 1
+    `;
+    if (existingHor) {
+      throw new Error(`El código "${codigo}" no puede usarse porque ya pertenece al horario "${existingHor.nombre}" de la sala "${existingHor.sala_nombre}".`);
+    }
+
     const rows = await sql`
       INSERT INTO excepciones (codigo, descripcion, color, tipo)
       VALUES (${codigo}, ${descripcion}, ${color}, ${tipo})
@@ -5971,16 +6075,34 @@ export async function createExcepcionModel(data) {
 
 export async function updateExcepcionModel(id, data) {
   const eId = Number(id);
-  const codigo = data.codigo !== undefined ? String(data.codigo).trim().toUpperCase() : null;
-  const descripcion = data.descripcion !== undefined ? String(data.descripcion).trim() : null;
-  const color = data.color !== undefined ? String(data.color).trim() : null;
-  const tipo = data.tipo !== undefined ? String(data.tipo).trim() : null;
+  const codigo = data.codigo !== undefined && data.codigo !== null ? String(data.codigo).trim().toUpperCase() : null;
+  const descripcion = data.descripcion !== undefined && data.descripcion !== null ? String(data.descripcion).trim() : null;
+  const color = data.color !== undefined && data.color !== null ? String(data.color).trim() : null;
+  const tipo = data.tipo !== undefined && data.tipo !== null ? String(data.tipo).trim() : null;
 
   if (isPgConnected && sql) {
     if (codigo) {
-      const existing = await sql`SELECT id FROM excepciones WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) AND id != ${eId} LIMIT 1`;
-      if (existing.length > 0) {
-        throw new Error(`Ya existe otra excepción con el código "${codigo}"`);
+      // 1. Validar que no exista en otra excepción
+      const [existingExc] = await sql`
+        SELECT id, codigo, descripcion 
+        FROM excepciones 
+        WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) AND id != ${eId} 
+        LIMIT 1
+      `;
+      if (existingExc) {
+        throw new Error(`El código "${codigo}" ya está registrado en la excepción "${existingExc.descripcion}".`);
+      }
+
+      // 2. Validar que no pertenezca a ningún horario de ninguna sala en toda la tabla horarios
+      const [existingHor] = await sql`
+        SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'Sin Sala') AS sala_nombre 
+        FROM horarios h 
+        LEFT JOIN salas s ON h.sala_id = s.id 
+        WHERE LOWER(TRIM(h.codigo)) = LOWER(${codigo}) 
+        LIMIT 1
+      `;
+      if (existingHor) {
+        throw new Error(`El código "${codigo}" no puede usarse porque ya pertenece al horario "${existingHor.nombre}" de la sala "${existingHor.sala_nombre}".`);
       }
     }
     const rows = await sql`
