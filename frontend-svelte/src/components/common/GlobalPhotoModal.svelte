@@ -1023,6 +1023,7 @@
     border-bottom: 1px solid #e2e8f0;
     gap: 12px;
     text-align: left;
+    flex-shrink: 0;
   }
 
   .header-left {
@@ -1154,14 +1155,15 @@
   }
 
   .modal-photo-area {
-    padding: 20px;
+    padding: 16px 20px;
     background: #0f172a;
     text-align: center;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 320px;
+    min-height: 220px;
     position: relative;
+    flex-shrink: 0;
   }
 
   .page-transition-overlay {
@@ -1228,12 +1230,14 @@
 
   .modal-main-img {
     max-width: 100%;
-    max-height: 420px;
-    min-height: 240px;
+    max-height: 350px;
+    width: auto;
+    height: auto;
     border-radius: 12px;
     object-fit: contain;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
     border: 3px solid #334155;
+    display: block;
   }
 
   .modal-photo-fallback {
@@ -1259,6 +1263,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 11px 16px;
     align-items: flex-start;
+    flex-shrink: 0;
   }
 
   .grid-cell {
@@ -1414,6 +1419,7 @@
     color: #ffffff;
     padding: 14px 20px;
     border-top: 1px solid #9f1239;
+    flex-shrink: 0;
   }
 
   .banner-desincorporado-title {
@@ -1505,16 +1511,18 @@
       top: 50%;
     }
     .modal-photo-area {
-      min-height: 220px;
+      min-height: 180px;
       padding: 10px;
+      flex-shrink: 0;
     }
     .modal-main-img {
-      max-height: 260px;
+      max-height: 240px;
     }
     .modal-info-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       padding: 12px 14px;
       gap: 8px 12px;
+      flex-shrink: 0;
     }
   }
 </style>
