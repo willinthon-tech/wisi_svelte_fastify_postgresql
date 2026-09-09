@@ -190,9 +190,6 @@
           goToNextEmp();
         }
       }
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      closeModal();
     }
   }
 

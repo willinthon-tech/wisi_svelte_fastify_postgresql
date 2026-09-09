@@ -21,9 +21,13 @@
   let rangosAsignados = [];
   let loadingRangos = false;
   let deletingIds = [];
+  let lastEmpleadoId = null;
 
   $: if (show && empleado) {
-    initData();
+    if (lastEmpleadoId !== empleado.id) {
+      lastEmpleadoId = empleado.id;
+      initData();
+    }
     fetchExceptions();
     fetchEmpleadoRangos();
   }
@@ -85,15 +89,8 @@
     return diffDays > 0 ? diffDays : 0;
   }
 
-  function handleKeyDown(e) {
-    if (!show) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeModal();
-    }
-  }
-
   function closeModal() {
+    lastEmpleadoId = null;
     show = false;
     dispatch('close');
   }
@@ -256,10 +253,8 @@
   }
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
-
 {#if show}
-  <div class="modal-overlay" on:click|self={closeModal}>
+  <div class="modal-overlay">
     <div class="modal-card">
       
       <!-- Header exacto con foto ampliada e información del empleado -->
