@@ -20,13 +20,18 @@
   let showEmpleadoDropdown = false;
   let selectedDropdownIndex = -1;
 
+  let selectedRango = null; // Objeto rango seleccionado
   let selectedRangoId = '';
+  let rangoSearchQuery = '';
+  let showRangoDropdown = false;
+  let selectedRangoDropdownIndex = -1;
+
   let monto = '';
   let isSaving = false;
 
   // Referencias para navegación por teclado (Tab / Enter)
   let empleadoInputEl = null;
-  let rangoSelectEl = null;
+  let rangoInputEl = null;
   let montoInputEl = null;
 
   // --- DATOS Y REGISTROS ---
@@ -94,10 +99,15 @@
     return [...list].sort((a, b) => Number(a.id) - Number(b.id));
   })();
 
-  // Selección de rango por defecto
-  $: if (listaRangos.length > 0 && !selectedRangoId) {
-    selectedRangoId = String(listaRangos[0].id);
-  }
+  // Coincidencias de búsqueda de Rangos (idéntico a empleados)
+  $: rangosSugerencias = (() => {
+    const q = (rangoSearchQuery || '').trim().toLowerCase();
+    if (!q) return listaRangos;
+    return listaRangos.filter(rg => 
+      rg.nombre.toLowerCase().includes(q) ||
+      String(rg.id).includes(q)
+    );
+  })();
 
   // Lista de empleados activos de la sala
   $: listaEmpleados = ($masterEmpleadosStore || [])
@@ -245,7 +255,7 @@
     if (!lId) return;
     isLoadingRecords = true;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes`);
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success) {
@@ -253,13 +263,13 @@
         }
       }
     } catch (err) {
-      console.error('Error al cargar aportes de libro:', err);
+      console.error('Error al cargar aportes de máquinas:', err);
     } finally {
       isLoadingRecords = false;
     }
   }
 
-  // --- MANEJO DE AUTOCOMPLETADO Y TECLADO (TAB / ENTER) ---
+  // --- MANEJO DE AUTOCOMPLETADO Y TECLADO PARA EMPLEADO (TAB / ENTER) ---
   function onEmpleadoInputFocus() {
     showEmpleadoDropdown = true;
     selectedDropdownIndex = -1;
@@ -291,7 +301,7 @@
 
     // Salto automático al campo Rango
     tick().then(() => {
-      if (rangoSelectEl) rangoSelectEl.focus();
+      if (rangoInputEl) rangoInputEl.focus();
     });
   }
 
@@ -317,13 +327,76 @@
         e.preventDefault();
         seleccionarEmpleado(empleadosSugerencias[0]);
       }
+    } else if (e.key === 'Escape') {
+      showEmpleadoDropdown = false;
+      selectedDropdownIndex = -1;
     }
   }
 
-  function onRangoKeyDown(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
+  // --- MANEJO DE AUTOCOMPLETADO Y TECLADO PARA RANGO (TAB / ENTER) ---
+  function onRangoInputFocus() {
+    showRangoDropdown = true;
+    selectedRangoDropdownIndex = -1;
+  }
+
+  function onRangoInputChange() {
+    showRangoDropdown = true;
+    selectedRangoDropdownIndex = -1;
+    const q = (rangoSearchQuery || '').trim().toLowerCase();
+    const match = listaRangos.find(r => r.nombre.toLowerCase().trim() === q);
+    if (match) {
+      selectedRango = match;
+      selectedRangoId = String(match.id);
+    } else {
+      selectedRango = null;
+      selectedRangoId = '';
+    }
+  }
+
+  function onRangoInputBlur() {
+    setTimeout(() => {
+      showRangoDropdown = false;
+    }, 200);
+  }
+
+  function seleccionarRango(rg) {
+    selectedRango = rg;
+    selectedRangoId = String(rg.id);
+    rangoSearchQuery = rg.nombre;
+    showRangoDropdown = false;
+    selectedRangoDropdownIndex = -1;
+
+    // Salto automático al campo Monto
+    tick().then(() => {
       if (montoInputEl) montoInputEl.focus();
+    });
+  }
+
+  function onRangoInputKeyDown(e) {
+    if (!showRangoDropdown || rangosSugerencias.length === 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        showRangoDropdown = true;
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedRangoDropdownIndex = (selectedRangoDropdownIndex + 1) % rangosSugerencias.length;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedRangoDropdownIndex = (selectedRangoDropdownIndex - 1 + rangosSugerencias.length) % rangosSugerencias.length;
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (selectedRangoDropdownIndex >= 0 && rangosSugerencias[selectedRangoDropdownIndex]) {
+        e.preventDefault();
+        seleccionarRango(rangosSugerencias[selectedRangoDropdownIndex]);
+      } else if (rangosSugerencias.length > 0) {
+        e.preventDefault();
+        seleccionarRango(rangosSugerencias[0]);
+      }
+    } else if (e.key === 'Escape') {
+      showRangoDropdown = false;
+      selectedRangoDropdownIndex = -1;
     }
   }
 
@@ -355,11 +428,19 @@
       }
     }
 
-    const rId = Number(selectedRangoId);
+    let rId = Number(selectedRangoId);
     if (!rId) {
-      triggerToast('Debe seleccionar un rango', 'warning');
-      if (rangoSelectEl) rangoSelectEl.focus();
-      return;
+      const q = (rangoSearchQuery || '').trim().toLowerCase();
+      const match = listaRangos.find(r => r.nombre.toLowerCase().trim() === q);
+      if (match) {
+        rId = Number(match.id);
+        selectedRango = match;
+        selectedRangoId = String(match.id);
+      } else {
+        triggerToast('Debe seleccionar un rango de la lista', 'warning');
+        if (rangoInputEl) rangoInputEl.focus();
+        return;
+      }
     }
 
     const numMonto = parseFloat(monto);
@@ -371,7 +452,7 @@
 
     isSaving = true;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes`, {
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -383,11 +464,14 @@
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Registro guardado correctamente', 'success');
+        triggerToast('Aporte de máquina guardado correctamente', 'success');
         
         // Limpiar formulario
         selectedEmpleado = null;
         empleadoSearchQuery = '';
+        selectedRango = null;
+        selectedRangoId = '';
+        rangoSearchQuery = '';
         monto = '';
         
         await loadRecords();
@@ -397,7 +481,7 @@
           if (empleadoInputEl) empleadoInputEl.focus();
         });
       } else {
-        triggerToast(json?.error || 'Error al registrar aporte', 'error');
+        triggerToast(json?.error || 'Error al registrar aporte de máquina', 'error');
       }
     } catch (err) {
       console.error('Error al guardar aporte:', err);
@@ -414,7 +498,7 @@
 
     const lId = libroId || libro?.id;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes/${record.id}`, {
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${record.id}`, {
         method: 'DELETE'
       });
       const json = await res.json();
@@ -486,10 +570,10 @@
 </script>
 
 <div class="clientes-layout-grid">
-  <!-- Tarjeta Izquierda: Formulario "Aportes Libro" -->
+  <!-- Tarjeta Izquierda: Formulario "Aportes Máquinas" -->
   <div class="card-form-cliente">
     <div class="card-title-box">
-      <h3 class="card-title">Aportes Libro</h3>
+      <h3 class="card-title">Aportes Máquinas</h3>
       <div class="title-underline"></div>
     </div>
 
@@ -546,26 +630,55 @@
         <span class="field-hint">Escriba nombre o cargo del empleado. Pulsa <b>Tab ⇥</b> para autocompletar.</span>
       </div>
 
-      <!-- Campo 2: Rango -->
-      <div class="form-group">
-        <label for="select-rango" class="form-label">RANGO: *</label>
-        <select 
-          id="select-rango" 
-          bind:this={rangoSelectEl}
-          class="form-input" 
-          bind:value={selectedRangoId}
-          on:keydown={onRangoKeyDown}
-          required
-        >
-          {#if listaRangos.length === 0}
-            <option value="">Cargando rangos...</option>
-          {:else}
-            {#each listaRangos as rg}
-              <option value={String(rg.id)}>{rg.nombre}</option>
-            {/each}
+      <!-- Campo 2: Rango con Autocompletado / Coincidencias idéntico a Empleado -->
+      <div class="form-group relative-autocomplete">
+        <label for="input-rango-nombre" class="form-label">RANGO: *</label>
+        <div class="cell-autocomplete-container">
+          <input 
+            id="input-rango-nombre" 
+            bind:this={rangoInputEl}
+            type="text" 
+            class="form-input {showRangoDropdown && rangosSugerencias.length > 0 ? 'input-active' : ''}" 
+            placeholder="Escriba Rango (coincidencias con Tab ⇥)..." 
+            bind:value={rangoSearchQuery}
+            on:focus={onRangoInputFocus}
+            on:input={onRangoInputChange}
+            on:keydown={onRangoInputKeyDown}
+            on:blur={onRangoInputBlur}
+            autocomplete="off"
+            required
+          />
+
+          <!-- Desplegable visual de sugerencias rápidas de rango -->
+          {#if showRangoDropdown && rangosSugerencias.length > 0}
+            <div class="inline-dropdown">
+              <div class="inline-dropdown-header">
+                <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+              </div>
+              <ul class="inline-dropdown-list">
+                {#each rangosSugerencias as rg, idx}
+                  <!-- svelte-ignore a11y-click-events-have-key-events -->
+                  <li 
+                    class="inline-dropdown-item {idx === selectedRangoDropdownIndex ? 'selected' : ''}"
+                    on:mousedown|preventDefault={() => seleccionarRango(rg)}
+                  >
+                    <span class="sug-avatar">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b2b73">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                    </span>
+                    <div class="sug-info">
+                      <span class="sug-name">{rg.nombre}</span>
+                      <span class="sug-cargo">Asignación de Rango</span>
+                    </div>
+                    <span class="sug-tab-badge">Tab ⇥</span>
+                  </li>
+                {/each}
+              </ul>
+            </div>
           {/if}
-        </select>
-        <span class="field-hint">Seleccione el rango asignado. Pulsa <b>Tab ⇥</b> para avanzar a Monto.</span>
+        </div>
+        <span class="field-hint">Escriba o seleccione el rango. Pulsa <b>Tab ⇥</b> para autocompletar.</span>
       </div>
 
       <!-- Campo 3: Monto -->

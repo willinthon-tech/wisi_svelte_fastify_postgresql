@@ -25,7 +25,7 @@
     { id: 'control-llaves', label: 'Control Llaves', icon: '🔑', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '⚠️', description: 'Eventos e incidentes reportados en sala' },
     { id: 'control-clientes', label: 'Control Clientes', icon: '👥', description: 'Seguimiento de jugadores y eventos de sala' },
-    { id: 'aportes', label: 'Aportes', icon: '💰', description: 'Registro y control de aportes asignados por empleado y rango' },
+    { id: 'aportes-maquinas', label: 'Aportes Máquinas', icon: '🎰', description: 'Registro y control de aportes de máquinas por empleado y rango' },
     { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '🃏', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
     { id: 'resumen-libro', label: 'Resumen Libro', icon: '📊', description: 'Consolidado general y auditoría de la jornada' }
   ];
@@ -47,8 +47,12 @@
         libroId = parsedId;
         loadLibro(libroId);
       }
-      if (parsedSub && SUBVISTAS.some(s => s.id === parsedSub)) {
-        activeSubvista = parsedSub;
+      if (parsedSub) {
+        if (parsedSub === 'aportes') {
+          activeSubvista = 'aportes-maquinas';
+        } else if (SUBVISTAS.some(s => s.id === parsedSub)) {
+          activeSubvista = parsedSub;
+        }
       } else if (!parsedSub) {
         activeSubvista = 'datos';
       }
@@ -212,7 +216,7 @@
         <LibroIncidenciasGeneralesView {libro} {libroId} />
       {:else if activeSubvista === 'control-clientes'}
         <LibroControlClientesView {libro} {libroId} />
-      {:else if activeSubvista === 'aportes'}
+      {:else if activeSubvista === 'aportes-maquinas' || activeSubvista === 'aportes'}
         <LibroAportesView {libro} {libroId} />
       {:else if activeSubvista === 'novedades-mesas'}
         <LibroNovedadesMesasView {libro} {libroId} />

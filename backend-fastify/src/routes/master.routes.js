@@ -308,15 +308,26 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/master/libros/:id/datos', saveLibroDatos);
   fastify.put('/api/master/libros/:id/datos', saveLibroDatos);
 
-  // Aportes de Libro (CECOM: Libro Aportes)
+  // Aportes de Máquinas (CECOM: Libro Aportes Máquinas)
   fastify.get('/master/libros/:id/aportes', getLibroAportes);
   fastify.get('/api/master/libros/:id/aportes', getLibroAportes);
+  fastify.get('/master/libros/:id/aportes-maquinas', getLibroAportes);
+  fastify.get('/api/master/libros/:id/aportes-maquinas', getLibroAportes);
+
   fastify.post('/master/libros/:id/aportes', createLibroAporte);
   fastify.post('/api/master/libros/:id/aportes', createLibroAporte);
+  fastify.post('/master/libros/:id/aportes-maquinas', createLibroAporte);
+  fastify.post('/api/master/libros/:id/aportes-maquinas', createLibroAporte);
+
   fastify.put('/master/libros/:id/aportes/:aporteId', updateLibroAporte);
   fastify.put('/api/master/libros/:id/aportes/:aporteId', updateLibroAporte);
+  fastify.put('/master/libros/:id/aportes-maquinas/:aporteId', updateLibroAporte);
+  fastify.put('/api/master/libros/:id/aportes-maquinas/:aporteId', updateLibroAporte);
+
   fastify.delete('/master/libros/:id/aportes/:aporteId', deleteLibroAporte);
   fastify.delete('/api/master/libros/:id/aportes/:aporteId', deleteLibroAporte);
+  fastify.delete('/master/libros/:id/aportes-maquinas/:aporteId', deleteLibroAporte);
+  fastify.delete('/api/master/libros/:id/aportes-maquinas/:aporteId', deleteLibroAporte);
 
   // Novedades de Mesas (CECOM: Libro Novedades Mesas)
   fastify.get('/master/libros/:id/novedades-mesas', getLibroNovedadesMesas);
