@@ -282,8 +282,34 @@ async function startServer() {
 
       const cleanTerm = filename.replace(/\.[^/.]+$/, "").replace(/^#/, "").trim();
 
-      // 2. If requested via attlogs (e.g. 404208.jpg), lookup attlog by ID to find employee_no / cedula!
-      if (cleanTerm && isPgConnected && sql) {
+      // 2. Si es una petición de cliente, buscar estrictamente en clientes (NUNCA en empleados)
+      if (isClienteReq) {
+        if (cleanTerm && isPgConnected && sql) {
+          try {
+            const cRows = await sql`SELECT id, foto FROM clientes WHERE CAST(id AS TEXT) = ${cleanTerm} LIMIT 1`;
+            if (cRows.length > 0 && cRows[0].foto) {
+              const cand = path.basename(cRows[0].foto);
+              for (const dir of searchDirs) {
+                const altPath = path.join(dir, cand);
+                if (fs.existsSync(altPath)) {
+                  return deliverOptimizedImage(altPath, cand, req, reply);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Error in cliente photo lookup:', e);
+          }
+        }
+        // Fallback para cliente: SVG avatar por defecto (NUNCA foto de empleado)
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        reply.header('Cache-Control', 'public, max-age=86400');
+        reply.type('image/svg+xml').status(200);
+        return reply.send(DEFAULT_AVATAR_SVG);
+      }
+
+      // 3. Si requested via attlogs (e.g. 404208.jpg), lookup attlog by ID to find employee_no / cedula!
+      if (!isClienteReq && cleanTerm && isPgConnected && sql) {
         try {
           const attlogId = Number(cleanTerm);
           let empNo = null;
@@ -299,7 +325,7 @@ async function startServer() {
 
           const targetTerm = empNo || cleanTerm;
 
-          // 3. Lookup employee profile photo by cedula or ID
+          // 4. Lookup employee profile photo by cedula or ID
           const empRows = await sql`
             SELECT id, foto, cedula FROM empleados 
             WHERE cedula = ${targetTerm} 

@@ -8386,7 +8386,7 @@ export async function getClientesModel(params = {}) {
   let data;
   if (limit > 0) {
     data = await sql`
-      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id,
+      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
              tc.nombre AS tipo_cliente_nombre,
              s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial

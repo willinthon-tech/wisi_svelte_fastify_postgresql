@@ -242,6 +242,15 @@
   function getPhotoUrl(record, opts = { preview: true }) {
     if (!record) return "";
     
+    // Si es un cliente, buscar estrictamente su foto de cliente (NUNCA de empleados)
+    if (mode === 'cliente') {
+      if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
+        return toBackendUrl(record.foto, opts);
+      }
+      if (record.id) return toBackendUrl(`/clientes/${record.id}.jpg`, opts);
+      return "";
+    }
+
     // Si es un empleado o desincorporado (sin evento de marcaje), usa su foto de empleado
     if (mode === 'empleado' || mode === 'desincorporado') {
       if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
@@ -372,6 +381,16 @@
   function handlePhotoErrorFallback(record, failedUrl, reqId = currentActivePhotoRequestId) {
     if (!record) return;
     const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
+
+    // Si es cliente, NUNCA buscar en empleados
+    if (mode === 'cliente') {
+      if (reqId === currentActivePhotoRequestId) {
+        activePhotoUrl = "";
+        isCurrentPhotoLoaded = false;
+        isCurrentPhotoError = true;
+      }
+      return;
+    }
 
     // Buscar si existe una foto de perfil de empleado alternativa que no sea la que falló
     const empFoto = record.empleado_foto || record.foto;
@@ -551,16 +570,15 @@
       if (!res.ok) throw new Error("No se pudo obtener la imagen del servidor");
       const blob = await res.blob();
 
-      const cedula = (item.cedula || item.employee_no || "empleado").toString().replace(/^#/, "").trim();
-      const rawTime = item.event_time || "foto";
-      const cleanTime = String(rawTime).replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
+      const identifier = mode === 'cliente' ? (item.nombre || item.id || "cliente") : (item.cedula || item.employee_no || "empleado");
+      const cleanIdent = String(identifier).replace(/^#/, "").trim().replace(/[\s:]+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
       const ext = blob.type.includes("png") ? "png" : "jpg";
-      const fileName = `Foto_${cedula}_${cleanTime}.${ext}`;
+      const fileName = `Foto_${cleanIdent}.${ext}`;
 
       await saveOrShareFile({
         blob,
         fileName,
-        dialogTitle: `Guardar Fotografía de ${cedula}`,
+        dialogTitle: `Guardar Fotografía de ${cleanIdent}`,
         mimeType: blob.type || "image/jpeg"
       });
       triggerToast(`Fotografía guardada: ${fileName}`, "success");
@@ -599,13 +617,19 @@
           <div class="modal-header">
             <div class="header-left">
               <div class="header-title-row">
-                <span class="employee-name" title={toTitleCase(item.nombre) || "Empleado"}>
-                  {toTitleCase(item.nombre) || `Empleado ${(item.employee_no || "").replace(/^#/, "")}`}
+                <span class="employee-name" title={toTitleCase(item.nombre) || (mode === 'cliente' ? "Cliente" : "Empleado")}>
+                  {toTitleCase(item.nombre) || (mode === 'cliente' ? `Cliente #${item.id}` : `Empleado ${(item.employee_no || "").replace(/^#/, "")}`)}
                 </span>
               </div>
-              <div class="employee-cedula">
-                Cédula: {formatCedulaDisplay(item.cedula || item.employee_no)}
-              </div>
+              {#if mode === 'cliente'}
+                <div class="employee-cedula">
+                  Cliente {item.tipo_cliente_nombre ? `• ${item.tipo_cliente_nombre}` : ''}
+                </div>
+              {:else}
+                <div class="employee-cedula">
+                  Cédula: {formatCedulaDisplay(item.cedula || item.employee_no)}
+                </div>
+              {/if}
             </div>
 
             <div data-html2canvas-ignore="true" class="header-right">
@@ -615,12 +639,12 @@
                     {#if showPageSpinner}
                       ⏳ Cargando página...
                     {:else}
-                      Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros'})
+                      Página {currentPage + 1} de {totalPages || 1} ({totalCount} {mode === 'cliente' ? 'clientes' : (mode === 'empleado' || mode === 'desincorporado' ? 'empleados' : 'registros')})
                     {/if}
                   </span>
                   <div class="index-badge-group">
                     {#if item && (item.id || item.attlog_id)}
-                      <span class="attlog-id-badge" title="ID del registro de marcaje">
+                      <span class="attlog-id-badge" title={mode === 'cliente' ? 'ID del cliente' : 'ID del registro'}>
                         ID: #{item.id || item.attlog_id}
                       </span>
                     {:else if item && item.empleado_id}
@@ -639,7 +663,7 @@
                 </div>
               {:else if item && (item.id || item.attlog_id)}
                 <div class="header-right-meta">
-                  <span class="attlog-id-badge" title="ID del registro de marcaje">
+                  <span class="attlog-id-badge" title={mode === 'cliente' ? 'ID del cliente' : 'ID del registro'}>
                     ID: #{item.id || item.attlog_id}
                   </span>
                 </div>
@@ -705,7 +729,77 @@
           </div>
 
           <!-- Info Details Grid -->
-          <div class="modal-info-grid">
+          {#if mode === 'cliente'}
+            <!-- Ficha simplificada estrictamente para CLIENTES: NOMBRE, TIPO DE CLIENTE y SALA (MAS NADA) -->
+            <div class="modal-info-grid modal-info-grid-cliente">
+              <!-- Col 1: NOMBRE -->
+              <div class="grid-cell">
+                <span class="cell-label">NOMBRE DEL CLIENTE</span>
+                <span class="cell-value" title={cleanUtf8(item.nombre) || "—"}>
+                  {cleanUtf8(item.nombre) || "—"}
+                </span>
+              </div>
+
+              <!-- Col 2: TIPO DE CLIENTE -->
+              <div class="grid-cell">
+                <span class="cell-label">TIPO DE CLIENTE</span>
+                <span class="cell-value cell-value-cargo" title={cleanUtf8(item.tipo_cliente_nombre || item.tipo_cliente) || "—"}>
+                  {cleanUtf8(item.tipo_cliente_nombre || item.tipo_cliente) || "—"}
+                </span>
+              </div>
+
+              <!-- Col 3: SALA -->
+              <div class="grid-cell">
+                <span class="cell-label">SALA</span>
+                <span class="cell-value" title={cleanUtf8(item.sala_nombre) || "—"}>
+                  📍 {cleanUtf8(item.sala_nombre) || "—"}
+                </span>
+              </div>
+
+              <!-- Bottom Row: Meta & Action Buttons -->
+              <div class="bottom-action-row">
+                <div class="bottom-meta-text">
+                  <span class="meta-highlight-blue">👤 Cliente de la sala</span>
+                </div>
+
+                <div data-html2canvas-ignore="true" class="bottom-buttons">
+                  <!-- Botón Tomar Capture -->
+                  <button
+                    type="button"
+                    class="btn-action btn-capture"
+                    on:click={captureModalScreenshot}
+                    disabled={isCapturingScreenshot}
+                    title="Capturar ficha completa (Screenshot)"
+                  >
+                    {#if isCapturingScreenshot}
+                      <span class="spin-icon">⏳</span>
+                    {:else}
+                      <span>Tomar</span>
+                      <span>Capture</span>
+                    {/if}
+                  </button>
+
+                  <!-- Botón Descargar Foto -->
+                  <button
+                    type="button"
+                    class="btn-action btn-download"
+                    on:click={downloadPhoto}
+                    disabled={isDownloadingPhoto}
+                    title="Descargar fotografía en alta resolución"
+                  >
+                    {#if isDownloadingPhoto}
+                      <span class="spin-icon">⏳</span>
+                    {:else}
+                      <span>Descargar</span>
+                      <span>Foto</span>
+                    {/if}
+                  </button>
+                </div>
+              </div>
+            </div>
+          {:else}
+            <!-- Info Details Grid para Empleados / Marcajes -->
+            <div class="modal-info-grid">
             <!-- Fila 1 - Col 1: SEXO -->
             <div class="grid-cell">
               <span class="cell-label">SEXO</span>
@@ -834,6 +928,7 @@
               </div>
             </div>
           </div>
+          {/if}
 
           <!-- Banner Rojo ÚNICAMENTE para la vista de Desincorporados -->
           {#if mode === 'desincorporado'}

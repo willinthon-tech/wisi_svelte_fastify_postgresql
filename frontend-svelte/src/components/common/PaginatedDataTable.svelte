@@ -986,6 +986,7 @@
     const idx = paginatedItems.findIndex(i => String(i.id) === String(item.id));
     const effectiveIdx = idx !== -1 ? idx : 0;
     const isDesinc = entityType === 'desincorporado' || Boolean(actions?.reincorporate);
+    const targetMode = entityType === 'cliente' ? 'cliente' : (isDesinc ? 'desincorporado' : 'empleado');
     triggerGlobalPhotoModal({
       item,
       items: paginatedItems,
@@ -993,7 +994,7 @@
       currentPage: currentPage - 1,
       totalPages: totalPages || 1,
       totalCount: displayTotalCount,
-      mode: isDesinc ? 'desincorporado' : 'empleado',
+      mode: targetMode,
       onPageNext: () => {
         const curr = Number(currentPage) || 1;
         const total = Number(totalPages) || 1;
