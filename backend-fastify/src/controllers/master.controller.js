@@ -40,7 +40,9 @@ import {
   getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel,
   getLibroDatosModel, saveLibroDatosModel,
   getLibroNovedadesMesasModel, saveLibroNovedadesMesaModel, deleteLibroNovedadesMesaModel,
-  getLibroResumenModel, saveLibroReporteModel, getLibroReporteModel
+  getLibroResumenModel, saveLibroReporteModel, getLibroReporteModel,
+  getTipoClientesModel, createTipoClienteModel, updateTipoClienteModel, deleteTipoClienteModel,
+  getClientesModel, getClientesFilterOptionsModel, createClienteModel, updateClienteModel, deleteClienteModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2340,6 +2342,79 @@ export async function saveLibroReporte(request, reply) {
   try {
     const { id } = request.params;
     const result = await saveLibroReporteModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// ==========================================
+// 🏷️ TIPO CLIENTES (CONFIGURACIÓN)
+// ==========================================
+const tipoClientesCtrl = buildCrudControllers(getTipoClientesModel, createTipoClienteModel, updateTipoClienteModel, deleteTipoClienteModel);
+export const getTipoClientes = tipoClientesCtrl.get;
+export const createTipoCliente = tipoClientesCtrl.create;
+export const updateTipoCliente = tipoClientesCtrl.update;
+export const deleteTipoCliente = tipoClientesCtrl.delete;
+
+// ==========================================
+// 👥 CLIENTES (CECOM)
+// ==========================================
+export async function getClientesFilterOptions(request, reply) {
+  try {
+    const q = request.query || {};
+    const parseIds = (val) => val ? String(val).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
+    const tipoClienteIds = parseIds(q.tipo_cliente_ids);
+
+    const result = await getClientesFilterOptionsModel({
+      userSalaIds,
+      salaIds,
+      tipoClienteIds,
+      search: q.search
+    });
+    return reply.send(result);
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function getClientes(request, reply) {
+  try {
+    const result = await getClientesModel(request.query);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function createCliente(request, reply) {
+  try {
+    const data = parseBody(request.body);
+    const result = await createClienteModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateCliente(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = parseBody(request.body);
+    const result = await updateClienteModel(id, data);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteCliente(request, reply) {
+  try {
+    const { id } = request.params;
+    const result = await deleteClienteModel(id);
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });

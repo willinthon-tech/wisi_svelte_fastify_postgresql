@@ -165,6 +165,8 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('legal', masterLegalStore),
     fetchEntity('excepciones', masterExcepcionesStore),
     fetchEntity('fechas-patrias', masterFechasPatriasStore),
+    fetchEntity('tipo-clientes', masterTipoClientesStore),
+    fetchEntity('clientes', masterClientesStore),
     fetchUserSalas(),
     fetchUserPerms()
   ]);
@@ -446,3 +448,15 @@ masterFechasPatriasStore.subscribe(val => saveStore('fechas_patrias_v1', val));
 
 export const masterExcepcionesActions = createMasterEntityActions(masterExcepcionesStore, 'excepciones');
 export const masterFechasPatriasActions = createMasterEntityActions(masterFechasPatriasStore, 'fechas-patrias');
+
+// ==========================================
+// 👥 CLIENTES Y TIPO CLIENTES
+// ==========================================
+export const masterTipoClientesStore = writable(loadStore('tipo_clientes_v1', []));
+export const masterClientesStore = writable(loadStore('clientes_v1', []));
+
+masterTipoClientesStore.subscribe(val => saveStore('tipo_clientes_v1', val));
+masterClientesStore.subscribe(val => saveStore('clientes_v1', val));
+
+export const masterTipoClientesActions = createMasterEntityActions(masterTipoClientesStore, 'tipo-clientes');
+export const masterClientesActions = createMasterEntityActions(masterClientesStore, 'clientes');

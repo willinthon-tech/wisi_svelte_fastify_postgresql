@@ -31,16 +31,49 @@
   let activeResumenTab = 'detallado';
   let busquedaClienteResumen = '';
 
+  // Estado para el cliente seleccionado
+  let selectedClienteId = null;
+  let selectedTipoClienteNombre = '';
+
   // Extraer clientes únicos para sugerencias locales
   $: clientesLocales = [...new Set(records.map(r => r.cliente).filter(Boolean))];
 
-  // Sugerencias combinadas filtradas por lo que escribe el usuario
+  // Sugerencias combinadas estructuradas filtradas por lo que escribe el usuario
   $: sugerenciasFiltradas = (() => {
     const q = (cliente || '').trim().toLowerCase();
     if (!q) return [];
-    const pool = [...new Set([...clientesLocales, ...sugerenciasRemotas])];
-    return pool
-      .filter(name => name.toLowerCase().includes(q))
+
+    const map = new Map();
+    // 1. Sugerencias remotas de la tabla clientes (vinculadas a la sala)
+    for (const item of sugerenciasRemotas) {
+      if (!item) continue;
+      const nombre = typeof item === 'object' ? item.nombre : String(item);
+      if (!nombre) continue;
+      const key = nombre.toLowerCase().trim();
+      if (!map.has(key)) {
+        map.set(key, {
+          id: typeof item === 'object' ? item.id : null,
+          nombre: nombre,
+          tipo_cliente_nombre: typeof item === 'object' ? (item.tipo_cliente_nombre || '') : ''
+        });
+      }
+    }
+
+    // 2. Clientes locales de registros previos
+    for (const r of records) {
+      if (!r || !r.cliente) continue;
+      const key = r.cliente.toLowerCase().trim();
+      if (!map.has(key)) {
+        map.set(key, {
+          id: r.cliente_id || null,
+          nombre: r.cliente,
+          tipo_cliente_nombre: r.tipo_cliente_nombre || ''
+        });
+      }
+    }
+
+    return Array.from(map.values())
+      .filter(item => item.nombre.toLowerCase().includes(q))
       .slice(0, 8);
   })();
 
@@ -261,6 +294,17 @@
   function onClienteInput() {
     showSugerencias = true;
     selectedSugerenciaIndex = -1;
+    const q = (cliente || '').trim().toLowerCase();
+    const match = sugerenciasRemotas.find(s => 
+      (typeof s === 'object' ? s.nombre : String(s)).toLowerCase().trim() === q
+    );
+    if (match && typeof match === 'object') {
+      selectedClienteId = match.id || null;
+      selectedTipoClienteNombre = match.tipo_cliente_nombre || '';
+    } else {
+      selectedClienteId = null;
+      selectedTipoClienteNombre = '';
+    }
     if (cliente.trim().length >= 1) {
       loadSugerenciasRemotas(cliente.trim());
     }
@@ -281,16 +325,13 @@
         ? sugerenciasFiltradas[selectedSugerenciaIndex] 
         : sugerenciasFiltradas[0];
       if (match) {
-        cliente = match;
-        showSugerencias = false;
-        selectedSugerenciaIndex = -1;
+        e.preventDefault();
+        seleccionarSugerencia(match);
       }
     } else if (e.key === 'Enter') {
-      if (selectedSugerenciaIndex >= 0) {
+      if (selectedSugerenciaIndex >= 0 && sugerenciasFiltradas[selectedSugerenciaIndex]) {
         e.preventDefault();
-        cliente = sugerenciasFiltradas[selectedSugerenciaIndex];
-        showSugerencias = false;
-        selectedSugerenciaIndex = -1;
+        seleccionarSugerencia(sugerenciasFiltradas[selectedSugerenciaIndex]);
       }
     } else if (e.key === 'Escape') {
       showSugerencias = false;
@@ -298,8 +339,16 @@
     }
   }
 
-  function seleccionarSugerencia(nombre) {
-    cliente = nombre;
+  function seleccionarSugerencia(sug) {
+    if (typeof sug === 'object' && sug !== null) {
+      cliente = sug.nombre || '';
+      selectedClienteId = sug.id || null;
+      selectedTipoClienteNombre = sug.tipo_cliente_nombre || '';
+    } else {
+      cliente = String(sug || '');
+      selectedClienteId = null;
+      selectedTipoClienteNombre = '';
+    }
     showSugerencias = false;
     selectedSugerenciaIndex = -1;
   }
@@ -334,6 +383,7 @@
     try {
       const payload = {
         cliente: cleanCliente,
+        cliente_id: selectedClienteId || null,
         tipo: tipo || 'Compra',
         monto: cleanMonto,
         metodo: 'General', // Por defecto General según requerimiento
@@ -350,6 +400,8 @@
       if (res.ok && json && json.success) {
         triggerToast('Registro de cliente guardado exitosamente', 'success');
         cliente = '';
+        selectedClienteId = null;
+        selectedTipoClienteNombre = '';
         monto = '';
         tipo = 'Compra';
         showSugerencias = false;
@@ -455,49 +507,49 @@
       <!-- Campo Cliente con Autocompletado / Recomendación -->
       <div class="form-group relative-autocomplete">
         <label for="input-cliente-nombre" class="form-label">CLIENTE: *</label>
-        <div class="input-with-hint">
+        <div class="cell-autocomplete-container">
           <input 
             id="input-cliente-nombre" 
             type="text" 
-            class="form-input" 
+            class="form-input {showSugerencias && sugerenciasFiltradas.length > 0 ? 'input-active' : ''}" 
             placeholder="Escriba el nombre del cliente..." 
             bind:value={cliente}
             on:input={onClienteInput}
             on:keydown={onClienteKeyDown}
             on:blur={onClienteBlur}
             on:focus={onClienteInput}
-            list="clientes-datalist-native"
+            autocomplete="off"
             required
           />
-          <datalist id="clientes-datalist-native">
-            {#each [...new Set([...clientesLocales, ...sugerenciasRemotas])] as item}
-              <option value={item}></option>
-            {/each}
-          </datalist>
-        </div>
 
-        <!-- Desplegable visual de sugerencias rápidas -->
-        {#if showSugerencias && sugerenciasFiltradas.length > 0}
-          <div class="sugerencias-dropdown">
-            <div class="sugerencias-header">
-              <span>Sugerencias (Pulsa <b>Tab</b> para autocompletar):</span>
+          <!-- Desplegable visual de sugerencias rápidas -->
+          {#if showSugerencias && sugerenciasFiltradas.length > 0}
+            <div class="inline-dropdown">
+              <div class="inline-dropdown-header">
+                <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+              </div>
+              <ul class="inline-dropdown-list">
+                {#each sugerenciasFiltradas as sug, idx}
+                  <!-- svelte-ignore a11y-click-events-have-key-events -->
+                  <li 
+                    class="inline-dropdown-item {idx === selectedSugerenciaIndex ? 'selected' : ''}"
+                    on:mousedown|preventDefault={() => seleccionarSugerencia(sug)}
+                  >
+                    <span class="sug-avatar">👤</span>
+                    <div class="sug-info">
+                      <span class="sug-name">{sug.nombre}</span>
+                      {#if sug.tipo_cliente_nombre}
+                        <span class="sug-cargo">{sug.tipo_cliente_nombre}</span>
+                      {/if}
+                    </div>
+                    <span class="sug-tab-badge">Tab ⇥</span>
+                  </li>
+                {/each}
+              </ul>
             </div>
-            <ul class="sugerencias-list">
-              {#each sugerenciasFiltradas as sug, idx}
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <li 
-                  class="sugerencia-item {idx === selectedSugerenciaIndex ? 'active' : ''}"
-                  on:mousedown|preventDefault={() => seleccionarSugerencia(sug)}
-                >
-                  <span class="sug-icon">👤</span>
-                  <span class="sug-text">{sug}</span>
-                  <span class="sug-tab-badge">Tab ⇥</span>
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
-        <span class="field-hint">Al escribir saldrán sugerencias. Pulsa <b>Tab</b> para rellenar rápido.</span>
+          {/if}
+        </div>
+        <span class="field-hint">Al escribir saldrán sugerencias. Pulsa <b>Tab ⇥</b> para rellenar rápido.</span>
       </div>
 
       <!-- Sección Tipo: Compra o Pago (2 Radios) -->
@@ -722,7 +774,12 @@
                   <tr class="cliente-row">
                     <td class="td-center td-num">{idx + 1}</td>
                     <td class="td-cliente">
-                      <span class="cliente-name">{record.cliente}</span>
+                      <div class="cliente-cell-content">
+                        <span class="cliente-name">{record.cliente}</span>
+                        {#if record.tipo_cliente_nombre}
+                          <span class="cliente-tipo-pill">{record.tipo_cliente_nombre}</span>
+                        {/if}
+                      </div>
                     </td>
                     <td class="td-center td-tipo">
                       {#if record.tipo === 'Compra'}
@@ -2106,5 +2163,130 @@
   .btn-modal-save:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  /* Autocompletado y Dropdown Interactivo */
+  .cell-autocomplete-container {
+    position: relative;
+    width: 100%;
+  }
+
+  .form-input.input-active {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    background: #ffffff;
+  }
+
+  .inline-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: #ffffff;
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    margin-top: 3px;
+    min-width: 260px;
+    overflow: hidden;
+  }
+
+  .inline-dropdown-header {
+    background: #f1f5f9;
+    padding: 6px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 11px;
+    color: #475569;
+  }
+
+  .inline-dropdown-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .inline-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #1e293b;
+    border-bottom: 1px solid #f8fafc;
+    transition: background 0.1s ease;
+  }
+
+  .inline-dropdown-item:hover,
+  .inline-dropdown-item.selected {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .sug-avatar {
+    font-size: 13px;
+  }
+
+  .sug-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 1px;
+    text-align: left;
+  }
+
+  .sug-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sug-cargo {
+    font-size: 10.5px;
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .inline-dropdown-item:hover .sug-cargo,
+  .inline-dropdown-item.selected .sug-cargo {
+    color: #3b82f6;
+  }
+
+  .sug-tab-badge {
+    font-size: 10px;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 700;
+  }
+
+  /* Badge de Tipo de Cliente en la tabla */
+  .cliente-cell-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .cliente-tipo-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    text-transform: uppercase;
   }
 </style>

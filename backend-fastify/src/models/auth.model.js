@@ -44,14 +44,14 @@ export async function getUserNavMenuModel(userId) {
   `;
 
   const modules = await sql`
-    SELECT DISTINCT m.id, m.nombre, m.icono, m.ruta, m.page_id,
+    SELECT DISTINCT m.id, m.nombre, m.icono, m.ruta, m.page_id, m.orden,
            STRING_AGG(DISTINCT perm.nombre, ',') as permisos
     FROM modulos m
     INNER JOIN user_module_permissions ump ON m.id = ump.module_id
     INNER JOIN permissions perm ON ump.permission_id = perm.id
     WHERE ump.user_id = ${uId}
-    GROUP BY m.id, m.nombre, m.icono, m.ruta, m.page_id
-    ORDER BY m.id ASC
+    GROUP BY m.id, m.nombre, m.icono, m.ruta, m.page_id, m.orden
+    ORDER BY COALESCE(m.orden, m.id) ASC, m.id ASC
   `;
 
   return pages.map(p => ({

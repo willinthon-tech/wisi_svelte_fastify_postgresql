@@ -30,6 +30,7 @@ export const navMenuStore = writable([
     icono: 'file',
     modulos: [
       { id: 5, nombre: 'Libro', ruta: '/cecom/libro', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
+      { id: 37, nombre: 'Clientes', ruta: '/cecom/clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 32, nombre: 'Llaves', ruta: '/cecom/llaves', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 33, nombre: 'Llaves Borradas', ruta: '/cecom/llaves-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
     ]
@@ -79,6 +80,14 @@ export const navMenuStore = writable([
       { id: 12, nombre: 'Mesas', ruta: '/gestion-de-mesas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 34, nombre: 'Juegos', ruta: '/mesas/juegos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 35, nombre: 'Mesas Borradas', ruta: '/mesas/mesas-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+    ]
+  },
+  {
+    id: 8,
+    nombre: 'CONFIGURACION',
+    icono: 'file',
+    modulos: [
+      { id: 38, nombre: 'Tipo Clientes', ruta: '/configuracion/tipo-clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
     ]
   }
 ]);

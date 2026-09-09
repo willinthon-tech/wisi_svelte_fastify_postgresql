@@ -29,6 +29,7 @@
   import LibroView from "./views/cecom/LibroView.svelte";
   import LibroTrabajoView from "./views/cecom/LibroTrabajoView.svelte";
   import LibroResumenView from "./views/cecom/LibroResumenView.svelte";
+  import ClientesView from "./views/cecom/ClientesView.svelte";
   import LlavesView from "./views/cecom/LlavesView.svelte";
   import LlavesBorradasView from "./views/cecom/LlavesBorradasView.svelte";
 
@@ -61,6 +62,7 @@
   import LegalView from "./views/maquinas/LegalView.svelte";
   import ExcepcionesConfigView from "./views/rrhh/ExcepcionesConfigView.svelte";
   import FechasPatriasConfigView from "./views/rrhh/FechasPatriasConfigView.svelte";
+  import TipoClientesView from "./views/configuracion/TipoClientesView.svelte";
 
   // Import MESAS EN VIVO Views
   import MesasView from "./views/mesas-en-vivo/MesasView.svelte";
@@ -410,6 +412,10 @@
     "cortes",
     "rrhh/cortes/calculos",
     "cortes/calculos",
+    "cecom/clientes",
+    "clientes",
+    "configuracion/tipo-clientes",
+    "tipo-clientes",
   ];
 
   $: activeTabStore.set($currentRouteStore);
@@ -438,6 +444,8 @@
     if (tab === "profile") return "Perfil de Usuario";
     if (tab === "auth") return "Autenticación";
     if (tab === "settings") return "Diagnóstico del Sistema";
+    if (tab === "cecom/clientes" || tab === "clientes") return "Clientes";
+    if (tab === "configuracion/tipo-clientes" || tab === "tipo-clientes") return "Tipo Clientes";
     if (tab === "rrhh/marcajes" || tab === "marcajes") return "Marcajes";
     if (tab === "rrhh/cortes" || tab === "cortes") return "Cortes";
     if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Reportes";
@@ -854,6 +862,8 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
+        {:else if $currentRouteStore === "cecom/clientes" || $currentRouteStore === "clientes"}
+          <ClientesView />
         {:else if $currentRouteStore === "cecom/llaves" || $currentRouteStore === "llaves"}
           <LlavesView
             items={$itemsStore}
@@ -1005,6 +1015,8 @@
           <ExcepcionesConfigView />
         {:else if $currentRouteStore === "configuracion/fechas-patrias" || $currentRouteStore === "fechas-patrias"}
           <FechasPatriasConfigView />
+        {:else if $currentRouteStore === "configuracion/tipo-clientes" || $currentRouteStore === "tipo-clientes"}
+          <TipoClientesView />
 
           <!-- MESAS EN VIVO Module Views -->
         {:else if $currentRouteStore === "mesas-en-vivo/mesas" || $currentRouteStore === "mesas"}

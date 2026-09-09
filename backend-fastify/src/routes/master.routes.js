@@ -41,7 +41,9 @@ import {
   getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente,
   getLibroDatos, saveLibroDatos,
   getLibroNovedadesMesas, saveLibroNovedadesMesa, deleteLibroNovedadesMesa,
-  getLibroResumen, getLibroReporte, saveLibroReporte
+  getLibroResumen, getLibroReporte, saveLibroReporte,
+  getTipoClientes, createTipoCliente, updateTipoCliente, deleteTipoCliente,
+  getClientes, getClientesFilterOptions, createCliente, updateCliente, deleteCliente
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -324,6 +326,27 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/reportes/cecom/ibro/:id/data', getLibroReporte);
   fastify.get('/api/reportes/cecom/ibro/:id/data', getLibroReporte);
 
+  // Clientes (CECOM: Clientes)
+  fastify.get('/master/clientes/filter-options', getClientesFilterOptions);
+  fastify.get('/api/master/clientes/filter-options', getClientesFilterOptions);
+  fastify.get('/master/clientes', getClientes);
+  fastify.get('/api/master/clientes', getClientes);
+  fastify.post('/master/clientes', createCliente);
+  fastify.post('/api/master/clientes', createCliente);
+  fastify.put('/master/clientes/:id', updateCliente);
+  fastify.put('/api/master/clientes/:id', updateCliente);
+  fastify.delete('/master/clientes/:id', deleteCliente);
+  fastify.delete('/api/master/clientes/:id', deleteCliente);
+
+  // Tipo Clientes (Configuración: Tipo Clientes)
+  fastify.get('/master/tipo-clientes', getTipoClientes);
+  fastify.get('/api/master/tipo-clientes', getTipoClientes);
+  fastify.post('/master/tipo-clientes', createTipoCliente);
+  fastify.post('/api/master/tipo-clientes', createTipoCliente);
+  fastify.put('/master/tipo-clientes/:id', updateTipoCliente);
+  fastify.put('/api/master/tipo-clientes/:id', updateTipoCliente);
+  fastify.delete('/master/tipo-clientes/:id', deleteTipoCliente);
+  fastify.delete('/api/master/tipo-clientes/:id', deleteTipoCliente);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)

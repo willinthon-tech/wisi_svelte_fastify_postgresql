@@ -5559,6 +5559,13 @@ export const createEstadoModel = estadosCrud.create;
 export const updateEstadoModel = estadosCrud.update;
 export const deleteEstadoModel = estadosCrud.delete;
 
+// 1.1. TIPO CLIENTES
+const tipoClientesCrud = buildSimpleConfigCrud('tipo_clientes', 'tipo de cliente', 'tipo_clientes');
+export const getTipoClientesModel = tipoClientesCrud.get;
+export const createTipoClienteModel = tipoClientesCrud.create;
+export const updateTipoClienteModel = tipoClientesCrud.update;
+export const deleteTipoClienteModel = tipoClientesCrud.delete;
+
 // 2. SOCIEDADES
 const sociedadesCrud = buildSimpleConfigCrud('sociedades', 'sociedad');
 export const getSociedadesModel = sociedadesCrud.get;
@@ -7918,10 +7925,14 @@ export async function getLibroControlClientesModel(libroId) {
 
   const rows = await sql`
     SELECT 
-      id, libro_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
-    FROM libro_control_clientes
-    WHERE libro_id = ${lId}
-    ORDER BY hora DESC, id DESC
+      lcc.id, lcc.libro_id, lcc.cliente_id, lcc.cliente, lcc.tipo, lcc.monto, lcc.metodo, lcc.hora, 
+      lcc.created_at, lcc.updated_at,
+      tc.nombre AS tipo_cliente_nombre
+    FROM libro_control_clientes lcc
+    LEFT JOIN clientes c ON lcc.cliente_id = c.id
+    LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+    WHERE lcc.libro_id = ${lId}
+    ORDER BY lcc.hora DESC, lcc.id DESC
   `;
 
   return rows;
@@ -7933,11 +7944,16 @@ export async function getClientesSugerenciasModel(query = '', options = {}) {
   const libroId = options.libroId ? Number(options.libroId) : null;
 
   if (!isPgConnected || !sql) {
-    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
-    const all = inMemoryData.libro_control_clientes.map(c => c.cliente).filter(Boolean);
-    const unique = [...new Set(all)];
-    if (!cleanQ) return unique.slice(0, 30);
-    return unique.filter(n => n.toLowerCase().includes(cleanQ)).slice(0, 30);
+    inMemoryData.clientes = inMemoryData.clientes || [];
+    let all = inMemoryData.clientes.map(c => ({
+      id: c.id,
+      nombre: c.nombre,
+      tipo_cliente_nombre: '',
+      sala_id: c.sala_id
+    }));
+    if (salaId) all = all.filter(c => Number(c.sala_id) === salaId);
+    if (cleanQ) all = all.filter(c => c.nombre.toLowerCase().includes(cleanQ));
+    return all.slice(0, 30);
   }
 
   // Si no tenemos salaId pero sí libroId, obtener el sala_id del libro
@@ -7952,27 +7968,34 @@ export async function getClientesSugerenciasModel(query = '', options = {}) {
   let rows;
   if (resolvedSalaId) {
     rows = await sql`
-      SELECT DISTINCT lcc.cliente
-      FROM libro_control_clientes lcc
-      INNER JOIN libros l ON lcc.libro_id = l.id
-      WHERE lcc.cliente IS NOT NULL AND lcc.cliente <> ''
-        AND l.sala_id = ${resolvedSalaId}
-        ${cleanQ ? sql`AND LOWER(lcc.cliente) LIKE ${`%${cleanQ}%`}` : sql``}
-      ORDER BY lcc.cliente ASC
+      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, tc.nombre AS tipo_cliente_nombre
+      FROM clientes c
+      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+      WHERE (c.active IS NULL OR c.active = 1)
+        AND c.sala_id = ${resolvedSalaId}
+        ${cleanQ ? sql`AND (LOWER(c.nombre) LIKE ${`%${cleanQ}%`} OR LOWER(COALESCE(tc.nombre, '')) LIKE ${`%${cleanQ}%`})` : sql``}
+      ORDER BY c.nombre ASC
       LIMIT 30
     `;
   } else {
     rows = await sql`
-      SELECT DISTINCT cliente
-      FROM libro_control_clientes
-      WHERE cliente IS NOT NULL AND cliente <> ''
-        ${cleanQ ? sql`AND LOWER(cliente) LIKE ${`%${cleanQ}%`}` : sql``}
-      ORDER BY cliente ASC
+      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, tc.nombre AS tipo_cliente_nombre
+      FROM clientes c
+      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+      WHERE (c.active IS NULL OR c.active = 1)
+        ${cleanQ ? sql`AND (LOWER(c.nombre) LIKE ${`%${cleanQ}%`} OR LOWER(COALESCE(tc.nombre, '')) LIKE ${`%${cleanQ}%`})` : sql``}
+      ORDER BY c.nombre ASC
       LIMIT 30
     `;
   }
 
-  return rows.map(r => r.cliente);
+  return rows.map(r => ({
+    id: r.id,
+    nombre: r.nombre,
+    tipo_cliente_id: r.tipo_cliente_id,
+    tipo_cliente_nombre: r.tipo_cliente_nombre || '',
+    sala_id: r.sala_id
+  }));
 }
 
 export async function createLibroControlClienteModel(data) {
@@ -7982,6 +8005,7 @@ export async function createLibroControlClienteModel(data) {
   const cliente = (data.cliente || '').trim();
   if (!cliente) throw new Error('El nombre del cliente es obligatorio');
 
+  const clienteId = data.cliente_id ? Number(data.cliente_id) : null;
   const tipo = (data.tipo || 'Compra').trim();
   const monto = parseFloat(data.monto) || 0;
   if (monto <= 0) throw new Error('El monto debe ser mayor a 0');
@@ -7999,6 +8023,7 @@ export async function createLibroControlClienteModel(data) {
     const newRecord = {
       id: nextId,
       libro_id: libroId,
+      cliente_id: clienteId,
       cliente,
       tipo,
       monto,
@@ -8013,12 +8038,12 @@ export async function createLibroControlClienteModel(data) {
 
   const res = await sql`
     INSERT INTO libro_control_clientes (
-      libro_id, cliente, tipo, monto, metodo, hora
+      libro_id, cliente_id, cliente, tipo, monto, metodo, hora
     )
     VALUES (
-      ${libroId}, ${cliente}, ${tipo}, ${monto}, ${metodo}, ${hora}
+      ${libroId}, ${clienteId}, ${cliente}, ${tipo}, ${monto}, ${metodo}, ${hora}
     )
-    RETURNING id, libro_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
   `;
 
   return res[0];
@@ -8032,6 +8057,8 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
   const metodo = (data.metodo || 'General').trim();
   const hora = (data.hora || '').trim();
   if (!hora) throw new Error('La hora es obligatoria');
+  const clienteId = data.cliente_id !== undefined ? (data.cliente_id ? Number(data.cliente_id) : null) : undefined;
+  const cliente = data.cliente !== undefined ? String(data.cliente).trim() : undefined;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
@@ -8039,6 +8066,8 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     if (idx !== -1) {
       inMemoryData.libro_control_clientes[idx].metodo = metodo;
       inMemoryData.libro_control_clientes[idx].hora = hora;
+      if (clienteId !== undefined) inMemoryData.libro_control_clientes[idx].cliente_id = clienteId;
+      if (cliente !== undefined) inMemoryData.libro_control_clientes[idx].cliente = cliente;
       inMemoryData.libro_control_clientes[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_control_clientes[idx];
     }
@@ -8050,9 +8079,11 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     SET 
       metodo = ${metodo},
       hora = ${hora},
+      cliente_id = ${clienteId !== undefined ? clienteId : sql`cliente_id`},
+      cliente = COALESCE(${cliente}, cliente),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, cliente, tipo, monto, metodo, hora, created_at, updated_at
   `;
 
   return rows[0];
@@ -8075,6 +8106,239 @@ export async function deleteLibroControlClienteModel(id, libroId) {
   `;
 
   return { success: true, id: cId };
+}
+
+// --- CLIENTES (CECOM / GESTIÓN DE CLIENTES) ---
+export function buildClienteConditions(options = {}) {
+  const conds = [];
+
+  if (options.userSalaIds && options.userSalaIds.length > 0) {
+    conds.push(sql`c.sala_id = ANY(${options.userSalaIds})`);
+  }
+
+  if (options.salaIds && options.salaIds.length > 0) {
+    conds.push(sql`c.sala_id = ANY(${options.salaIds})`);
+  }
+
+  if (options.tipoClienteIds && options.tipoClienteIds.length > 0) {
+    conds.push(sql`c.tipo_cliente_id = ANY(${options.tipoClienteIds})`);
+  }
+
+  if (options.active !== undefined && options.active !== null && options.active !== 'all') {
+    conds.push(sql`c.active = ${Number(options.active)}`);
+  }
+
+  if (options.search) {
+    const s = `%${options.search}%`;
+    conds.push(sql`(
+      LOWER(c.nombre) LIKE ${s} OR 
+      LOWER(COALESCE(tc.nombre, '')) LIKE ${s} OR 
+      LOWER(COALESCE(s.nombre, '')) LIKE ${s} OR 
+      c.id::text LIKE ${s}
+    )`);
+  }
+
+  return conds;
+}
+
+export async function getClientesModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    inMemoryData.clientes = inMemoryData.clientes || [];
+    return { success: true, data: inMemoryData.clientes, total: inMemoryData.clientes.length, page: 1, limit: 10, totalPages: 1 };
+  }
+
+  const page = Math.max(1, Number(params.page) || 1);
+  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
+  const search = String(params.search || '').trim().toLowerCase();
+  const sortBy = params.sortBy || 'id';
+  const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  let userSalaIds = null;
+  if (params.user_sala_ids) {
+    userSalaIds = String(params.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+  let salaIds = null;
+  if (params.sala_ids) {
+    salaIds = String(params.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+  let tipoClienteIds = null;
+  if (params.tipo_cliente_ids) {
+    tipoClienteIds = String(params.tipo_cliente_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+  }
+
+  const conds = buildClienteConditions({
+    userSalaIds,
+    salaIds,
+    tipoClienteIds,
+    active: params.active,
+    search
+  });
+
+  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+
+  const allowedSortColumns = {
+    'id': 'c.id',
+    'nombre': 'c.nombre',
+    'tipo_cliente_nombre': 'tc.nombre',
+    'sala_nombre': 's.nombre',
+    'created_at': 'c.created_at'
+  };
+  const orderCol = allowedSortColumns[sortBy] || 'c.id';
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, c.id DESC`);
+
+  const countRes = await sql`
+    SELECT COUNT(c.id)::int AS total
+    FROM clientes c
+    LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+    LEFT JOIN salas s ON c.sala_id = s.id
+    ${where}
+  `;
+  const total = countRes[0]?.total || 0;
+
+  let data;
+  if (limit > 0) {
+    data = await sql`
+      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id,
+             to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
+             tc.nombre AS tipo_cliente_nombre,
+             s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
+      FROM clientes c
+      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+      LEFT JOIN salas s ON c.sala_id = s.id
+      ${where}
+      ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  } else {
+    data = await sql`
+      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id,
+             to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
+             tc.nombre AS tipo_cliente_nombre,
+             s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
+      FROM clientes c
+      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+      LEFT JOIN salas s ON c.sala_id = s.id
+      ${where}
+      ${orderClause}
+    `;
+  }
+
+  return {
+    success: true,
+    data,
+    total,
+    page,
+    limit: limit > 0 ? limit : total,
+    totalPages: limit > 0 ? Math.ceil(total / limit) : 1
+  };
+}
+
+export async function getClientesFilterOptionsModel(options = {}) {
+  if (!isPgConnected || !sql) {
+    return { success: true, data: { salas: [], tipo_clientes: [] } };
+  }
+
+  const userSalaIds = options.userSalaIds || [];
+  let allSalas;
+  if (userSalaIds.length > 0) {
+    allSalas = await sql`SELECT id, nombre FROM salas WHERE id = ANY(${userSalaIds}) ORDER BY nombre ASC`;
+  } else {
+    allSalas = await sql`SELECT id, nombre FROM salas ORDER BY nombre ASC`;
+  }
+
+  const countsSalasRes = await sql`
+    SELECT c.sala_id AS id, COUNT(c.id)::int AS count
+    FROM clientes c
+    WHERE c.sala_id IS NOT NULL
+    GROUP BY c.sala_id
+  `;
+  const countSalasMap = new Map(countsSalasRes.map(r => [r.id, r.count]));
+  const salas = allSalas.map(s => ({
+    id: s.id,
+    nombre: s.nombre,
+    count: countSalasMap.get(s.id) || 0
+  }));
+
+  const allTipos = await sql`SELECT id, nombre FROM tipo_clientes ORDER BY nombre ASC`;
+  const countsTiposRes = await sql`
+    SELECT c.tipo_cliente_id AS id, COUNT(c.id)::int AS count
+    FROM clientes c
+    WHERE c.tipo_cliente_id IS NOT NULL
+    GROUP BY c.tipo_cliente_id
+  `;
+  const countTiposMap = new Map(countsTiposRes.map(r => [r.id, r.count]));
+  const tipo_clientes = allTipos.map(t => ({
+    id: t.id,
+    nombre: t.nombre,
+    count: countTiposMap.get(t.id) || 0
+  }));
+
+  return {
+    success: true,
+    data: {
+      salas,
+      tipo_clientes
+    }
+  };
+}
+
+export async function createClienteModel(data) {
+  const nombre = (data.nombre || '').trim();
+  if (!nombre) throw new Error('El nombre del cliente es obligatorio');
+  const tipoClienteId = data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null;
+  const salaId = data.sala_id ? Number(data.sala_id) : null;
+
+  if (isPgConnected && sql) {
+    const res = await sql`
+      INSERT INTO clientes (nombre, tipo_cliente_id, sala_id)
+      VALUES (${nombre}, ${tipoClienteId}, ${salaId})
+      RETURNING id, nombre, tipo_cliente_id, sala_id, created_at, updated_at
+    `;
+    return res[0];
+  } else {
+    inMemoryData.clientes = inMemoryData.clientes || [];
+    const nextId = inMemoryData.clientes.length > 0 ? Math.max(...inMemoryData.clientes.map(c => c.id)) + 1 : 1;
+    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, created_at: new Date().toISOString() };
+    inMemoryData.clientes.unshift(newItem);
+    return newItem;
+  }
+}
+
+export async function updateClienteModel(id, data) {
+  const cId = Number(id);
+  if (!cId) throw new Error('ID de cliente inválido');
+
+  const nombre = data.nombre !== undefined ? String(data.nombre).trim() : undefined;
+  const tipoClienteId = data.tipo_cliente_id !== undefined ? (data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null) : undefined;
+  const salaId = data.sala_id !== undefined ? (data.sala_id ? Number(data.sala_id) : null) : undefined;
+
+  if (isPgConnected && sql) {
+    const res = await sql`
+      UPDATE clientes
+      SET
+        nombre = COALESCE(${nombre}, nombre),
+        tipo_cliente_id = ${tipoClienteId !== undefined ? tipoClienteId : sql`tipo_cliente_id`},
+        sala_id = ${salaId !== undefined ? salaId : sql`sala_id`},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${cId}
+      RETURNING id, nombre, tipo_cliente_id, sala_id, created_at, updated_at
+    `;
+    return res[0];
+  } else {
+    inMemoryData.clientes = inMemoryData.clientes || [];
+    const idx = inMemoryData.clientes.findIndex(c => c.id === cId);
+    if (idx !== -1) {
+      inMemoryData.clientes[idx] = { ...inMemoryData.clientes[idx], ...data, updated_at: new Date().toISOString() };
+      return inMemoryData.clientes[idx];
+    }
+    throw new Error('Cliente no encontrado');
+  }
+}
+
+export async function deleteClienteModel(id) {
+  return await deleteEntityDynamic('clientes', 'cliente', id);
 }
 
 // --- DATOS DEL LIBRO (CECOM: LIBRO DATOS OPERATIVOS) ---
