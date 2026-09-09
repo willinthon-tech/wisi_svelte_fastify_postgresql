@@ -310,10 +310,10 @@
       <!-- Controls Bar: Room Selector & Audit Button -->
       <div class="sync-controls-bar">
         <div class="sync-select-group">
-          <label for="sync-sala-select" class="sync-label">Sala a Auditar (Tipo 1):</label>
           <select 
             id="sync-sala-select" 
             class="sync-select" 
+            aria-label="Seleccionar Sala"
             bind:value={selectedSalaId}
             disabled={isAuditing || isExecutingAction}
           >
@@ -330,9 +330,9 @@
           disabled={isAuditing || isExecutingAction || !selectedSalaId}
         >
           {#if isAuditing}
-            <span class="sync-spinner"></span> Conectando y auditando...
+            <span class="sync-spinner"></span> Conectando...
           {:else}
-            <span>🔍 Checar / Auditar Biométricos</span>
+            <span>Chequear</span>
           {/if}
         </button>
       </div>
@@ -352,7 +352,7 @@
             <div style="font-size: 48px; margin-bottom: 12px;">📡</div>
             <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0 0 6px 0;">Auditoría no iniciada</h3>
             <p style="font-size: 13px; color: #64748b; margin: 0; max-width: 420px; text-align: center;">
-              Selecciona la sala que deseas checar arriba y presiona <strong>"Checar / Auditar Biométricos"</strong> para consultar el estado en vivo de los equipos.
+              Selecciona la sala que deseas checar arriba y presiona <strong>"Chequear"</strong> para consultar el estado en vivo de los equipos.
             </p>
           </div>
         {:else if auditResult.devices.length === 0}
