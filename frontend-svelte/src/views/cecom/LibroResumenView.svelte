@@ -1,5 +1,8 @@
 <script>
   import { onMount } from "svelte";
+  import html2canvas from "html2canvas";
+  import { jsPDF } from "jspdf";
+  import { saveOrShareFile } from "../../utils/fileSaver.js";
   import { triggerToast } from "../../controllers/ui.store.js";
   import { getPublicWebUrl } from "../../config/api.config.js";
   import { navigateToRoute } from "../../controllers/router.store.js";
@@ -14,8 +17,10 @@
   export let libroId = null;
   export let onSelectSubvista = null;
 
+  let sheetContainerElement = null;
   let isLoading = true;
   let isSyncing = false;
+  let isGeneratingPdf = false;
   let loadError = null;
   let reporteExists = false;
   let updatedAt = null;
@@ -581,6 +586,153 @@
   function handleImprimir() {
     window.print();
   }
+
+  async function handleDescargarPdf() {
+    if (isGeneratingPdf) return;
+    isGeneratingPdf = true;
+
+    const id =
+      libroId ||
+      libro?.id ||
+      activeLibro?.id ||
+      resumenData.libro?.id ||
+      "CECOM";
+    const fechaClean = (dateParts?.formatted || "reporte")
+      .replace(/[\/\s:]+/g, "-")
+      .replace(/[^a-zA-Z0-9_-]/g, "");
+    const fileName = `Reporte_CECOM_Libro_${id}_${fechaClean}.pdf`;
+
+    triggerToast("Preparando descarga del PDF...", "info");
+
+    try {
+      const targetElement =
+        sheetContainerElement ||
+        document.querySelector(".official-sheet-container");
+
+      if (!targetElement) {
+        throw new Error("No se encontró el contenedor de la hoja oficial");
+      }
+
+      // Captura de alta resolución con html2canvas
+      const canvas = await html2canvas(targetElement, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        onclone: (clonedDoc, clonedElement) => {
+          clonedElement.style.animation = "none";
+          clonedElement.style.transition = "none";
+          clonedElement.style.transform = "none";
+          clonedElement.style.boxShadow = "none";
+          clonedElement.style.border = "none";
+          clonedElement.style.margin = "0";
+          clonedElement.style.width = "100%";
+          const allAnim = clonedElement.querySelectorAll("*");
+          allAnim.forEach((el) => {
+            el.style.animation = "none";
+            el.style.transition = "none";
+          });
+        },
+      });
+
+      // Dimensiones de hoja estándar A4 en milímetros
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // 210 mm
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // 297 mm
+      const margin = 8; // 8 mm de margen
+      const printWidth = pdfWidth - margin * 2; // 194 mm
+      const printHeight = pdfHeight - margin * 2; // 281 mm
+
+      // Conversión de pixeles de canvas a mm
+      const pxToMm = printWidth / canvas.width;
+      const totalHeightMm = canvas.height * pxToMm;
+
+      if (totalHeightMm <= printHeight) {
+        // Entra perfectamente en 1 página
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        pdf.addImage(
+          imgData,
+          "JPEG",
+          margin,
+          margin,
+          printWidth,
+          totalHeightMm,
+        );
+      } else {
+        // Multi-página: segmentar canvas respetando la altura imprimible por hoja
+        const sliceHeightPx = Math.floor(printHeight / pxToMm);
+        let yOffset = 0;
+        let pageNum = 0;
+
+        while (yOffset < canvas.height) {
+          const currentSliceHeight = Math.min(
+            sliceHeightPx,
+            canvas.height - yOffset,
+          );
+
+          const pageCanvas = document.createElement("canvas");
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = currentSliceHeight;
+          const pageCtx = pageCanvas.getContext("2d");
+
+          pageCtx.fillStyle = "#ffffff";
+          pageCtx.fillRect(0, 0, pageCanvas.width, currentSliceHeight);
+
+          pageCtx.drawImage(
+            canvas,
+            0,
+            yOffset,
+            canvas.width,
+            currentSliceHeight,
+            0,
+            0,
+            canvas.width,
+            currentSliceHeight,
+          );
+
+          const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+          const currentSliceHeightMm = currentSliceHeight * pxToMm;
+
+          if (pageNum > 0) {
+            pdf.addPage();
+          }
+
+          pdf.addImage(
+            pageImgData,
+            "JPEG",
+            margin,
+            margin,
+            printWidth,
+            currentSliceHeightMm,
+          );
+
+          yOffset += currentSliceHeight;
+          pageNum++;
+        }
+      }
+
+      // Convertir a blob y descargar universalmente
+      const pdfBlob = pdf.output("blob");
+      await saveOrShareFile({
+        blob: pdfBlob,
+        fileName,
+        dialogTitle: "Descargar Reporte PDF CECOM",
+        mimeType: "application/pdf",
+      });
+
+      triggerToast("PDF descargado con éxito.", "success");
+    } catch (err) {
+      console.error("[PDF] Error al generar archivo PDF:", err);
+      triggerToast(
+        "No se pudo generar PDF directo. Abriendo diálogo de impresión...",
+        "warning",
+      );
+      window.print();
+    } finally {
+      isGeneratingPdf = false;
+    }
+  }
 </script>
 
 <div
@@ -588,35 +740,12 @@
     ? 'is-public-mode'
     : 'is-internal-mode'}"
 >
-  {#if isPublic}
-    <!-- Barra Superior en Modo Público -->
-    <div class="report-tools-bar no-print">
-      <div class="tools-left">
-        <span class="report-tag">📋 Reporte Consolidado Libro CECOM</span>
-        <span class="public-badge">Vista Pública</span>
-        <span class="libro-badge"
-          >Libro #{libroId || libro?.id || activeLibro?.id || resumenData.libro?.id || "—"}</span
-        >
-        <span class="date-badge">{dateParts.formatted}</span>
-      </div>
-      <div class="tools-right">
-        <button
-          type="button"
-          class="btn-tool btn-print"
-          on:click={handleImprimir}
-          title="Imprimir reporte"
-        >
-          <span>🖨️</span>
-          <span>Imprimir</span>
-        </button>
-      </div>
-    </div>
-  {:else}
+  {#if !isPublic}
     <!-- ============================================================
          TARJETA SUPERIOR "RESUMEN LIBRO" (Conforme a la foto compartida)
          ============================================================ -->
     <div class="resumen-overview-card no-print">
-      <!-- Fila 1: Cabecera con Icono, Título y Botón Principal (con la flecha roja indicada por el usuario) -->
+      <!-- Fila 1: Cabecera con Icono, Título y Botones -->
       <div class="overview-header-row">
         <div class="header-titles-group">
           <div class="overview-icon-container">
@@ -640,25 +769,14 @@
         </div>
 
         <div class="header-actions-group">
-          <!-- BOTÓN COMPARTIR -->
-          <button
-            type="button"
-            class="btn-action-share"
-            on:click={handleCompartir}
-            title="Abrir vista de compartir y copiar enlace al portapapeles"
-          >
-            <span class="share-icon">🔗</span>
-            <span>Compartir</span>
-          </button>
-
-          <!-- BOTÓN PRINCIPAL: "Generar Reporte" (si no existe) o "Actualizar Reporte" (si ya existe) -->
+          <!-- 1. ACTUALIZAR REPORTE -->
           <button
             type="button"
             class="btn-action-primary {reporteExists
               ? 'btn-actualizar'
               : 'btn-generar'}"
             on:click={handleGenerarOActualizarReporte}
-            disabled={isSyncing}
+            disabled={isSyncing || isGeneratingPdf}
             title={reporteExists
               ? "Actualizar y sincronizar snapshot en tabla libro_reporte"
               : "Generar y consolidar reporte en tabla libro_reporte"}
@@ -670,6 +788,35 @@
               <span>Actualizar Reporte</span>
             {:else}
               <span>Generar Reporte</span>
+            {/if}
+          </button>
+
+          <!-- 2. COMPARTIR -->
+          <button
+            type="button"
+            class="btn-action-share"
+            on:click={handleCompartir}
+            disabled={isGeneratingPdf}
+            title="Abrir vista de compartir y copiar enlace al portapapeles"
+          >
+            <span class="share-icon">🔗</span>
+            <span>Compartir</span>
+          </button>
+
+          <!-- 3. PDF -->
+          <button
+            type="button"
+            class="btn-action-pdf"
+            on:click={handleDescargarPdf}
+            disabled={isGeneratingPdf || isSyncing}
+            title="Bajar reporte consolidado a PDF"
+          >
+            {#if isGeneratingPdf}
+              <span class="btn-spinner"></span>
+              <span>Generando...</span>
+            {:else}
+              <span class="pdf-icon">📄</span>
+              <span>PDF</span>
             {/if}
           </button>
         </div>
@@ -695,7 +842,7 @@
       >
     </div>
   {:else}
-    <div class="official-sheet-container">
+    <div class="official-sheet-container" bind:this={sheetContainerElement}>
       <!-- ============================================================
            ENCABEZADO: SALA Y FECHA (Sin las 5 estrellas del logo)
            ============================================================ -->
@@ -1529,6 +1676,37 @@
   .btn-action-primary:disabled {
     opacity: 0.7;
     cursor: not-allowed;
+  }
+
+  /* Botón PDF (Bajar reporte consolidado a PDF) */
+  .btn-action-pdf {
+    background: #dc2626;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+    transition: all 0.15s ease;
+  }
+  .btn-action-pdf:hover:not(:disabled) {
+    background: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35);
+  }
+  .btn-action-pdf:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .pdf-icon {
+    font-size: 1rem;
+    line-height: 1;
   }
 
   .btn-action-secondary {
