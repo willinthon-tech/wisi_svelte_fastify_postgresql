@@ -30,6 +30,7 @@
     datos: 0,
     drop_mesas: 0,
     novedades_mesas: 0,
+    aportes: 0,
     control_llaves: 0,
     control_clientes: 0,
     incidencias_generales: 0,
@@ -41,6 +42,7 @@
     datos: null,
     drop_mesas: [],
     novedades_mesas: [],
+    aportes: [],
     control_llaves: [],
     control_clientes: [],
     incidencias_generales: [],
@@ -114,6 +116,7 @@
             datos: payload.datos || null,
             drop_mesas: payload.drop_mesas || [],
             novedades_mesas: payload.novedades_mesas || [],
+            aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
             control_clientes: payload.control_clientes || [],
             incidencias_generales: payload.incidencias_generales || [],
@@ -169,6 +172,7 @@
             datos: payload.datos || null,
             drop_mesas: payload.drop_mesas || [],
             novedades_mesas: payload.novedades_mesas || [],
+            aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
             control_clientes: payload.control_clientes || [],
             incidencias_generales: payload.incidencias_generales || [],
@@ -314,6 +318,7 @@
   $: sortedControlClientes = sortByMasReciente(resumenData.control_clientes);
   $: sortedControlLlaves = sortByMasReciente(resumenData.control_llaves);
   $: sortedIncidenciasGenerales = sortByMasReciente(resumenData.incidencias_generales);
+  $: sortedAportes = sortByMasReciente(resumenData.aportes_maquinas || resumenData.aportes || []);
 
   const DEFAULT_TIPOS_INCIDENCIA = [
     { id: 1, nombre: "General" },
@@ -534,6 +539,62 @@
       }
     }
     return { total: list.length, enCustodia, devueltas };
+  })();
+
+  // Resumen de Aportes Máquinas
+  $: aportesTotales = (() => {
+    const list = sortedAportes;
+    const totalMonto = list.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
+    const totalOps = list.length;
+    const promedio = totalOps > 0 ? totalMonto / totalOps : 0;
+    return { totalMonto, totalOps, promedio };
+  })();
+
+  // Agrupado de Aportes por Rango
+  $: aportesPorRango = (() => {
+    const list = sortedAportes;
+    const map = {};
+    for (const a of list) {
+      const rId = a.rango_id || 0;
+      const rNom = a.rango_nombre || `Rango #${rId}`;
+      if (!map[rId]) {
+        map[rId] = { rango_id: rId, rango_nombre: rNom, cantidad: 0, monto: 0 };
+      }
+      map[rId].cantidad++;
+      map[rId].monto += parseFloat(a.monto) || 0;
+    }
+    const grandTotal = aportesTotales.totalMonto || 1;
+    return Object.values(map)
+      .map(item => ({
+        ...item,
+        porcentaje: (item.monto / grandTotal) * 100,
+        promedio: item.cantidad > 0 ? item.monto / item.cantidad : 0
+      }))
+      .sort((a, b) => b.monto - a.monto);
+  })();
+
+  // Agrupado de Aportes por Empleado
+  $: aportesPorEmpleado = (() => {
+    const list = sortedAportes;
+    const map = {};
+    for (const a of list) {
+      const empId = a.empleado_id || 0;
+      const empNom = a.empleado_nombre || 'Empleado';
+      const cargoNom = a.cargo_nombre || '—';
+      if (!map[empId]) {
+        map[empId] = { empleado_id: empId, empleado_nombre: empNom, cargo_nombre: cargoNom, cantidad: 0, monto: 0 };
+      }
+      map[empId].cantidad++;
+      map[empId].monto += parseFloat(a.monto) || 0;
+    }
+    const grandTotal = aportesTotales.totalMonto || 1;
+    return Object.values(map)
+      .map(item => ({
+        ...item,
+        porcentaje: (item.monto / grandTotal) * 100,
+        promedio: item.cantidad > 0 ? item.monto / item.cantidad : 0
+      }))
+      .sort((a, b) => b.monto - a.monto);
   })();
 
   // Formatear montos en dólares
@@ -1481,7 +1542,177 @@
       </div>
 
       <!-- ============================================================
-           7. OPERADORES CECOM (APERTURA Y CIERRE) Y AUDITORÍA FINAL
+           7. APORTES MÁQUINAS (Detallado + 2 Tablitas Agrupadas: Rangos y Empleados)
+           ============================================================ -->
+      <div class="sheet-section sub-module-section">
+        <div class="sub-header-row">
+          <div class="sub-title-group">
+            <h2 class="sub-section-title">
+              🎰 7. Aportes Máquinas
+            </h2>
+            <span class="sub-count-badge"
+              >{aportesTotales.totalOps} aportes registrados</span
+            >
+          </div>
+          <div class="badges-status-group">
+            <span class="badge-kpi-pill success"
+              >Total Aportes: <b>{formatMoney(aportesTotales.totalMonto)}</b></span
+            >
+            <span class="badge-kpi-pill info"
+              >Promedio: <b>{formatMoney(aportesTotales.promedio)}</b></span
+            >
+          </div>
+        </div>
+
+        <!-- 7.1 Detallado de Aportes -->
+        {#if sortedAportes.length === 0}
+          <div class="empty-sub-alert">
+            No hay aportes de máquinas registrados en este libro.
+          </div>
+        {:else}
+          <div class="table-responsive-wrapper">
+            <table class="sheet-detail-table">
+              <thead>
+                <tr>
+                  <th class="th-num">N°</th>
+                  <th class="th-hora">HORA</th>
+                  <th class="th-cliente">EMPLEADO</th>
+                  <th class="th-metodo">CARGO</th>
+                  <th class="th-tipo">RANGO</th>
+                  <th class="th-total">MONTO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each sortedAportes as a, idx}
+                  <tr>
+                    <td class="cell-center">{idx + 1}</td>
+                    <td class="cell-center">{a.hora || (a.created_at ? new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—')}</td>
+                    <td class="cell-client-name font-bold">👤 {a.empleado_nombre || "—"}</td>
+                    <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
+                    <td class="cell-center">
+                      <span class="tag-tipo tag-pago">
+                        🏅 {a.rango_nombre || `Rango #${a.rango_id}`}
+                      </span>
+                    </td>
+                    <td class="cell-total-money font-bold">{formatMoney(a.monto)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+              <tfoot>
+                <tr class="tfoot-totals">
+                  <td colspan="5">TOTAL APORTES MÁQUINAS</td>
+                  <td class="cell-grand-total"
+                    >{formatMoney(aportesTotales.totalMonto)}</td
+                  >
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- 7.2 Las 2 Tablitas Agrupadas (Por Rango y Por Empleado) -->
+          <div class="client-summaries-grid">
+            <!-- Tablita A: Resumen por Rango -->
+            <div class="summary-subtable-box">
+              <div class="subtable-header">
+                <h4 class="subtable-title">🏅 Resumen por Rango</h4>
+                <span class="incidencia-badge"
+                  >{aportesPorRango.length} rangos</span
+                >
+              </div>
+              <div class="table-responsive-wrapper">
+                <table class="compact-table">
+                  <thead>
+                    <tr>
+                      <th>RANGO</th>
+                      <th>CANT</th>
+                      <th>MONTO TOTAL</th>
+                      <th>% TOTAL</th>
+                      <th>PROMEDIO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each aportesPorRango as rg}
+                      <tr>
+                        <td class="cell-left font-bold">🏅 {rg.rango_nombre}</td>
+                        <td class="cell-center">{rg.cantidad} ops</td>
+                        <td class="cell-total-money font-bold">{formatMoney(rg.monto)}</td>
+                        <td class="cell-center tag-metodo-text">{rg.porcentaje.toFixed(1)}%</td>
+                        <td class="cell-total-money">{formatMoney(rg.promedio)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td>TOTAL</td>
+                      <td class="cell-center">{aportesTotales.totalOps} ops</td>
+                      <td class="cell-total-money"
+                        >{formatMoney(aportesTotales.totalMonto)}</td
+                      >
+                      <td class="cell-center">100%</td>
+                      <td class="cell-grand-total"
+                        >{formatMoney(aportesTotales.promedio)}</td
+                      >
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <!-- Tablita B: Resumen por Empleado -->
+            <div class="summary-subtable-box">
+              <div class="subtable-header">
+                <h4 class="subtable-title">👤 Resumen por Empleado</h4>
+                <span class="incidencia-badge"
+                  >{aportesPorEmpleado.length} empleados</span
+                >
+              </div>
+              <div class="table-responsive-wrapper">
+                <table class="compact-table">
+                  <thead>
+                    <tr>
+                      <th>EMPLEADO</th>
+                      <th>CARGO</th>
+                      <th>CANT</th>
+                      <th>MONTO TOTAL</th>
+                      <th>% TOTAL</th>
+                      <th>PROMEDIO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each aportesPorEmpleado as emp}
+                      <tr>
+                        <td class="cell-left font-bold">👤 {emp.empleado_nombre}</td>
+                        <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
+                        <td class="cell-center">{emp.cantidad} ops</td>
+                        <td class="cell-total-money font-bold">{formatMoney(emp.monto)}</td>
+                        <td class="cell-center tag-metodo-text">{emp.porcentaje.toFixed(1)}%</td>
+                        <td class="cell-total-money">{formatMoney(emp.promedio)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td>TOTAL</td>
+                      <td>—</td>
+                      <td class="cell-center">{aportesTotales.totalOps} ops</td>
+                      <td class="cell-total-money"
+                        >{formatMoney(aportesTotales.totalMonto)}</td
+                      >
+                      <td class="cell-center">100%</td>
+                      <td class="cell-grand-total"
+                        >{formatMoney(aportesTotales.promedio)}</td
+                      >
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- ============================================================
+           8. OPERADORES CECOM (APERTURA Y CIERRE) Y AUDITORÍA FINAL
            ============================================================ -->
       <div class="sheet-section sub-module-section operadores-final-section">
         <div class="operadores-section-box">

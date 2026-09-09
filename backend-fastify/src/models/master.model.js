@@ -9309,6 +9309,7 @@ export async function saveLibroReporteModel(libroId) {
     drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
     aportes: Array.isArray(aportesRes) ? aportesRes.length : 0,
+    aportes_maquinas: Array.isArray(aportesRes) ? aportesRes.length : 0,
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
@@ -9324,6 +9325,7 @@ export async function saveLibroReporteModel(libroId) {
     drop_mesas: Array.isArray(dropRes) ? dropRes : [],
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
     aportes: Array.isArray(aportesRes) ? aportesRes : [],
+    aportes_maquinas: Array.isArray(aportesRes) ? aportesRes : [],
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []
@@ -9410,6 +9412,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
     aportes: Array.isArray(aportesRes) ? aportesRes.length : 0,
+    aportes_maquinas: Array.isArray(aportesRes) ? aportesRes.length : 0,
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
@@ -9427,6 +9430,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     drop_mesas: Array.isArray(dropRes) ? dropRes : [],
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
     aportes: Array.isArray(aportesRes) ? aportesRes : [],
+    aportes_maquinas: Array.isArray(aportesRes) ? aportesRes : [],
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []
