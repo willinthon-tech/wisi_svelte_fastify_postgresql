@@ -986,13 +986,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 14px;
+    box-sizing: border-box;
     animation: fadeIn 0.15s ease-out;
   }
 
   .global-modal-container {
     position: relative;
-    max-width: 580px;
+    max-width: 560px;
     width: 100%;
     display: flex;
     align-items: center;
@@ -1003,7 +1004,7 @@
     background: #ffffff;
     border-radius: 16px;
     width: 100%;
-    max-height: 92vh;
+    max-height: calc(100vh - 28px);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1012,13 +1013,14 @@
     position: relative;
     color: #0f172a;
     animation: zoomIn 0.15s ease-out;
+    box-sizing: border-box;
   }
 
   .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 20px;
+    padding: 10px 18px;
     background: #ffffff;
     border-bottom: 1px solid #e2e8f0;
     gap: 12px;
@@ -1155,13 +1157,12 @@
   }
 
   .modal-photo-area {
-    padding: 16px 20px;
+    padding: 10px 16px;
     background: #0f172a;
     text-align: center;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 220px;
     position: relative;
     flex-shrink: 0;
   }
@@ -1230,12 +1231,12 @@
 
   .modal-main-img {
     max-width: 100%;
-    max-height: 350px;
+    max-height: min(260px, 34vh);
     width: auto;
     height: auto;
-    border-radius: 12px;
+    border-radius: 10px;
     object-fit: contain;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
     border: 3px solid #334155;
     display: block;
   }
@@ -1255,13 +1256,13 @@
   }
 
   .modal-info-grid {
-    padding: 16px 20px;
+    padding: 12px 18px 18px 18px;
     background: #ffffff;
     border-top: 1px solid #e2e8f0;
-    font-size: 12.5px;
+    font-size: 12px;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 11px 16px;
+    gap: 8px 14px;
     align-items: flex-start;
     flex-shrink: 0;
   }
@@ -1327,16 +1328,16 @@
   .cliente-desc-cell {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-top: 2px;
+    border-radius: 6px;
+    padding: 5px 10px;
+    margin-top: 1px;
   }
 
   .cliente-desc-text {
-    font-size: 12.5px;
+    font-size: 11.5px;
     font-weight: 600;
     color: #1e293b;
-    line-height: 1.45;
+    line-height: 1.35;
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -1352,8 +1353,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 4px;
-    padding-top: 10px;
+    margin-top: 3px;
+    padding-top: 8px;
+    padding-bottom: 2px;
     border-top: 1px dashed #e2e8f0;
   }
 
