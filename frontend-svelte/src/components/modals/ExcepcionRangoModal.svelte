@@ -18,10 +18,14 @@
   let loadingExceptions = false;
 
   let plantillasExcepcion = [];
+  let rangosAsignados = [];
+  let loadingRangos = false;
+  let deletingIds = [];
 
   $: if (show && empleado) {
     initData();
     fetchExceptions();
+    fetchEmpleadoRangos();
   }
 
   function ensureSelectedValue() {
@@ -94,6 +98,77 @@
     dispatch('close');
   }
 
+  function formatDateDisplay(d) {
+    if (!d) return '';
+    const clean = String(d).split('T')[0].split(' ')[0];
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return d;
+  }
+
+  async function fetchEmpleadoRangos() {
+    if (!empleado || !empleado.id) {
+      rangosAsignados = [];
+      return;
+    }
+    loadingRangos = true;
+    try {
+      const res = await fetch(`/api/reports/excepciones-empleado?empleado_id=${empleado.id}`);
+      const json = await res.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        rangosAsignados = json.data;
+      } else {
+        rangosAsignados = [];
+      }
+    } catch (err) {
+      console.error("Error loading employee exception ranges:", err);
+      rangosAsignados = [];
+    } finally {
+      loadingRangos = false;
+    }
+  }
+
+  async function handleDeleteRange(rango) {
+    if (!rango || !rango.ids || rango.ids.length === 0) return;
+
+    const desc = rango.nombre || rango.codigo || 'esta excepción';
+    const rangoStr = `${formatDateDisplay(rango.fecha_desde)} al ${formatDateDisplay(rango.fecha_hasta)}`;
+    const confirmMsg = `¿Deseas eliminar el rango de excepción [${rango.codigo}] ${desc} (${rangoStr}, ${rango.dias_count} días)?`;
+
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    deletingIds = [...rango.ids];
+    try {
+      const res = await fetch('/api/reports/excepciones-rango/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: rango.ids,
+          empleado_id: empleado?.id,
+          fecha_desde: rango.fecha_desde,
+          fecha_hasta: rango.fecha_hasta
+        })
+      });
+      const json = await res.json();
+      if (!json || !json.success) {
+        throw new Error(json?.error || 'Error al eliminar el rango de excepciones');
+      }
+
+      triggerToast(`✓ Rango de excepción [${rango.codigo}] eliminado (${json.count || rango.dias_count} días).`, 'success');
+      await fetchEmpleadoRangos();
+      dispatch('saved', { empleado, deletedRange: rango });
+    } catch (err) {
+      console.error("Error deleting range exception:", err);
+      triggerToast(`Error: ${err.message}`, 'error');
+    } finally {
+      deletingIds = [];
+    }
+  }
+
   async function handleSave() {
     if (!empleado || !empleado.id) {
       triggerToast('No se ha especificado el empleado.', 'error');
@@ -148,7 +223,7 @@
         fechaHasta,
         plantillaId
       });
-      closeModal();
+      await fetchEmpleadoRangos();
     } catch (err) {
       console.error("Error saving range exception:", err);
       triggerToast(`Error: ${err.message}`, 'error');
@@ -326,6 +401,107 @@
           {/if}
         </div>
 
+        <!-- 4. Sección y Tabla de Excepciones Rango Asignadas -->
+        <div class="section-divider">
+          <div class="section-title-wrap">
+            <h4 class="section-title">
+              <span>📑</span> Excepciones en Rango Asignadas ({rangosAsignados.length})
+            </h4>
+            <span class="section-subtitle">
+              Listado de excepciones asignadas por rango a este empleado. Puedes eliminar el rango completo.
+            </span>
+          </div>
+          <button 
+            type="button" 
+            class="btn-refresh-sm" 
+            on:click={fetchEmpleadoRangos} 
+            disabled={loadingRangos}
+            title="Actualizar listado de rangos"
+          >
+            {#if loadingRangos}
+              <span class="spinner-inline-sm"></span>
+            {:else}
+              🔄
+            {/if}
+          </button>
+        </div>
+
+        {#if loadingRangos}
+          <div class="empty-state-card">
+            <span class="spinner-inline-blue"></span>
+            <span>Cargando excepciones asignadas al empleado...</span>
+          </div>
+        {:else if rangosAsignados.length === 0}
+          <div class="empty-state-card">
+            <span style="font-size: 20px;">ℹ️</span>
+            <span>Este empleado no tiene excepciones asignadas por rango.</span>
+          </div>
+        {:else}
+          <div class="table-container">
+            <table class="rangos-table">
+              <thead>
+                <tr>
+                  <th>Excepción</th>
+                  <th>Rango de Fechas</th>
+                  <th style="text-align: center;">Días</th>
+                  <th style="text-align: right;">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each rangosAsignados as rango (rango.fecha_desde + '_' + rango.codigo)}
+                  <tr class="rango-row">
+                    <td>
+                      <div class="excep-badge-cell">
+                        <span 
+                          class="badge-code" 
+                          style="background-color: {rango.color || '#3b82f6'}; color: #ffffff;"
+                        >
+                          {rango.codigo}
+                        </span>
+                        <span class="excep-name-text" title={rango.nombre}>
+                          {rango.nombre}
+                        </span>
+                      </div>
+                      {#if rango.observacion}
+                        <div class="rango-obs-text">📝 {rango.observacion}</div>
+                      {/if}
+                    </td>
+                    <td>
+                      <div class="rango-dates-cell">
+                        <span class="date-badge">{formatDateDisplay(rango.fecha_desde)}</span>
+                        <span class="date-arrow">➔</span>
+                        <span class="date-badge">{formatDateDisplay(rango.fecha_hasta)}</span>
+                      </div>
+                    </td>
+                    <td style="text-align: center;">
+                      <span class="days-count-pill">
+                        {rango.dias_count} {rango.dias_count === 1 ? 'día' : 'días'}
+                      </span>
+                    </td>
+                    <td style="text-align: right;">
+                      <button
+                        type="button"
+                        class="btn-delete-rango"
+                        on:click={() => handleDeleteRange(rango)}
+                        disabled={deletingIds.length > 0}
+                        title="Eliminar este rango de excepciones"
+                      >
+                        {#if deletingIds.includes(rango.ids[0])}
+                          <span class="spinner-inline-sm"></span>
+                          <span>Borrando...</span>
+                        {:else}
+                          <span>🗑️</span>
+                          <span>Eliminar Rango</span>
+                        {/if}
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+
       </div>
 
       <!-- Footer con botones Salir y Guardar -->
@@ -336,7 +512,7 @@
           class="btn-secondary"
           disabled={isSaving}
         >
-          Cancelar
+          Cerrar
         </button>
 
         <button 
@@ -376,7 +552,10 @@
     border-radius: 14px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
     width: 100%;
-    max-width: 520px;
+    max-width: 680px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid #e2e8f0;
     animation: modalPop 0.15s ease-out;
@@ -532,6 +711,9 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow-y: auto;
+    flex: 1;
+    max-height: calc(92vh - 145px);
   }
 
   .form-group {
@@ -681,5 +863,226 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  .section-divider {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 16px;
+    border-top: 1.5px dashed #cbd5e1;
+    margin-top: 4px;
+    gap: 12px;
+  }
+
+  .section-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .section-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .section-subtitle {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 600;
+  }
+
+  .btn-refresh-sm {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-refresh-sm:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+  }
+
+  .table-container {
+    width: 100%;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+
+  .rangos-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .rangos-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 800;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 9px 12px;
+    border-bottom: 1.5px solid #e2e8f0;
+    text-align: left;
+  }
+
+  .rangos-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  .rango-row:hover {
+    background-color: #f8fafc;
+  }
+
+  .excep-badge-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge-code {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.4px;
+    min-width: 32px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+
+  .excep-name-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+
+  .rango-obs-text {
+    font-size: 10.5px;
+    color: #64748b;
+    margin-top: 3px;
+    font-style: italic;
+  }
+
+  .rango-dates-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: monospace;
+    font-size: 11.5px;
+  }
+
+  .date-badge {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-weight: 700;
+  }
+
+  .date-arrow {
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .days-count-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .btn-delete-rango {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-delete-rango:hover:not(:disabled) {
+    background: #dc2626;
+    border-color: #b91c1c;
+    color: #ffffff;
+    box-shadow: 0 2px 5px rgba(220, 38, 38, 0.25);
+    transform: translateY(-1px);
+  }
+
+  .btn-delete-rango:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .empty-state-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1.5px dashed #cbd5e1;
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .spinner-inline-sm {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(220, 38, 38, 0.3);
+    border-top-color: #dc2626;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  .spinner-inline-blue {
+    width: 16px;
+    height: 16px;
+    border: 2.5px solid rgba(59, 130, 246, 0.25);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
   }
 </style>

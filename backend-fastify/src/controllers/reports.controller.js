@@ -3,6 +3,8 @@ import {
   saveExcepcionHorarioModel,
   saveExcepcionRangoHorarioModel,
   deleteExcepcionHorarioModel,
+  getExcepcionesEmpleadoModel,
+  deleteExcepcionesRangoModel,
   getMarcajesRapidosModel,
   updateAttlogStatusModel
 } from '../models/reports.model.js';
@@ -102,6 +104,38 @@ export async function deleteExcepcionHorario(req, reply) {
     return reply.status(500).send({
       success: false,
       error: 'Error al eliminar la excepción de horario',
+      details: error.message
+    });
+  }
+}
+
+export async function getExcepcionesEmpleado(req, reply) {
+  try {
+    const { empleado_id } = req.query;
+    const result = await getExcepcionesEmpleadoModel(empleado_id);
+    return reply.send(result);
+  } catch (error) {
+    req.log.error(error);
+    return reply.status(500).send({
+      success: false,
+      error: 'Error al obtener excepciones del empleado',
+      details: error.message
+    });
+  }
+}
+
+export async function deleteExcepcionesRango(req, reply) {
+  try {
+    const result = await deleteExcepcionesRangoModel(req.body);
+    if (result.success) {
+      attlogEvents.emit('excepcion_deleted', { ...req.body, count: result.count });
+    }
+    return reply.send(result);
+  } catch (error) {
+    req.log.error(error);
+    return reply.status(500).send({
+      success: false,
+      error: 'Error al eliminar rango de excepciones',
       details: error.message
     });
   }

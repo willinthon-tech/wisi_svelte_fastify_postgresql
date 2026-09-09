@@ -1139,6 +1139,111 @@ export async function deleteExcepcionHorarioModel(id) {
   return { success: true };
 }
 
+export async function getExcepcionesEmpleadoModel(empleado_id) {
+  if (!isPgConnected || !sql) return { success: false, error: 'Base de datos no conectada' };
+  const empId = Number(empleado_id);
+  if (!empId || isNaN(empId)) return { success: false, error: 'empleado_id inválido' };
+
+  try {
+    const rows = await sql`
+      SELECT eh.id, eh.empleado_id, TO_CHAR(eh.fecha, 'YYYY-MM-DD') AS fecha_str, eh.horario_id, eh.excepcion_id, eh.es_libre, eh.observacion,
+             ph.codigo AS horario_codigo, ph.nombre AS horario_nombre, ph.color AS horario_color,
+             exc.codigo AS excepcion_codigo, exc.descripcion AS excepcion_nombre, exc.color AS excepcion_color, exc.tipo AS excepcion_tipo
+      FROM empleados_excepciones_horarios eh
+      LEFT JOIN horarios ph ON eh.horario_id = ph.id
+      LEFT JOIN excepciones exc ON eh.excepcion_id = exc.id
+      WHERE eh.empleado_id = ${empId}
+      ORDER BY eh.fecha ASC
+    `;
+
+    const ranges = [];
+    let currentRange = null;
+
+    for (const row of rows) {
+      const rowFecha = row.fecha_str;
+      const rowTypeKey = `${row.excepcion_id || 'null'}_${row.horario_id || 'null'}_${row.es_libre ? 1 : 0}`;
+
+      if (currentRange) {
+        const prevDate = new Date(currentRange.fecha_hasta + 'T00:00:00Z');
+        const nextExpectedDate = new Date(prevDate);
+        nextExpectedDate.setUTCDate(nextExpectedDate.getUTCDate() + 1);
+        const nextExpectedStr = nextExpectedDate.toISOString().slice(0, 10);
+
+        if (rowTypeKey === currentRange.typeKey && rowFecha === nextExpectedStr) {
+          currentRange.fecha_hasta = rowFecha;
+          currentRange.dias_count += 1;
+          currentRange.ids.push(row.id);
+          continue;
+        } else {
+          ranges.push(currentRange);
+          currentRange = null;
+        }
+      }
+
+      currentRange = {
+        typeKey: rowTypeKey,
+        empleado_id: row.empleado_id,
+        fecha_desde: rowFecha,
+        fecha_hasta: rowFecha,
+        dias_count: 1,
+        ids: [row.id],
+        horario_id: row.horario_id,
+        excepcion_id: row.excepcion_id,
+        es_libre: row.es_libre,
+        observacion: row.observacion,
+        codigo: row.excepcion_codigo || row.horario_codigo || (row.es_libre ? 'L' : 'EX'),
+        nombre: row.excepcion_nombre || row.horario_nombre || (row.es_libre ? 'Libre' : 'Excepción'),
+        color: row.excepcion_color || row.horario_color || (row.es_libre ? '#D9D9D9' : '#3B82F6'),
+        tipo: row.horario_id ? 'Horario' : 'Excepción'
+      };
+    }
+    if (currentRange) {
+      ranges.push(currentRange);
+    }
+
+    ranges.sort((a, b) => b.fecha_desde.localeCompare(a.fecha_desde));
+
+    return { success: true, data: ranges, total_records: rows.length };
+  } catch (err) {
+    console.error('Error fetching employee exception ranges:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteExcepcionesRangoModel(params) {
+  if (!isPgConnected || !sql) return { success: false, error: 'Base de datos no conectada' };
+  const { ids, empleado_id, fecha_desde, fecha_hasta } = params || {};
+
+  let deletedCount = 0;
+  if (Array.isArray(ids) && ids.length > 0) {
+    const validIds = ids.map(Number).filter(n => !isNaN(n) && n > 0);
+    if (validIds.length > 0) {
+      const res = await sql`
+        DELETE FROM empleados_excepciones_horarios
+        WHERE id = ANY(${validIds})
+        RETURNING id
+      `;
+      deletedCount = res.length;
+    }
+  } else if (empleado_id && fecha_desde && fecha_hasta) {
+    const empId = Number(empleado_id);
+    const fDesde = String(fecha_desde).trim();
+    const fHasta = String(fecha_hasta).trim();
+    const res = await sql`
+      DELETE FROM empleados_excepciones_horarios
+      WHERE empleado_id = ${empId}
+        AND fecha >= ${fDesde}::date
+        AND fecha <= ${fHasta}::date
+      RETURNING id
+    `;
+    deletedCount = res.length;
+  } else {
+    return { success: false, error: 'Se requieren ids o (empleado_id, fecha_desde, fecha_hasta)' };
+  }
+
+  return { success: true, count: deletedCount };
+}
+
 export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
   if (!isPgConnected || !sql) return { success: false, error: 'Base de datos no conectada' };
   const empId = Number(empleado_id);
