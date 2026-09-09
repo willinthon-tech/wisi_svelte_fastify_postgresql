@@ -141,6 +141,8 @@ export function toBackendUrl(path, options = {}) {
       normalized = `/api${normalized}`;
     } else if (normalized.startsWith('/empleados/') && !normalized.startsWith('/api/empleados/')) {
       normalized = `/api${normalized}`;
+    } else if (normalized.startsWith('/clientes/') && !normalized.startsWith('/api/clientes/')) {
+      normalized = `/api${normalized}`;
     } else if (normalized.startsWith('/salas/') && !normalized.startsWith('/api/salas/')) {
       normalized = `/api${normalized}`;
     }
@@ -148,9 +150,9 @@ export function toBackendUrl(path, options = {}) {
     normalized = `${base}${normalized}`;
   }
 
-  // Adjuntar parámetros de optimización para fotos de empleados o marcajes
+  // Adjuntar parámetros de optimización para fotos de empleados, clientes o marcajes
   if (options && typeof options === 'object') {
-    const isImageRoute = normalized.includes('/empleados/') || normalized.includes('/attlogs/');
+    const isImageRoute = normalized.includes('/empleados/') || normalized.includes('/attlogs/') || normalized.includes('/clientes/');
     if (isImageRoute) {
       try {
         const urlObj = new URL(normalized);
@@ -234,8 +236,40 @@ export function toEmployeePhotoUrl(empOrFoto, id = null, options = { thumb: true
 }
 
 /**
+ * Resuelve la URL absoluta al backend para la fotografía de un cliente.
+ */
+export function toClientePhotoUrl(clientOrFoto, id = null, options = { thumb: true }) {
+  if (!clientOrFoto && !id) return '';
+  let foto = '';
+  if (typeof clientOrFoto === 'string') {
+    foto = clientOrFoto.trim();
+  } else if (clientOrFoto && typeof clientOrFoto === 'object') {
+    foto = clientOrFoto.foto || clientOrFoto.cliente_foto || '';
+    if (!id) id = clientOrFoto.id || clientOrFoto.cliente_id;
+  }
+  if (!foto && id) {
+    foto = `${id}.jpg`;
+  }
+  if (!foto) return '';
+  if (foto.startsWith('data:') || foto.startsWith('blob:')) return foto;
+
+  let cleanFoto = String(foto)
+    .replace(/^\/+/, '')
+    .replace(/^api\//, '')
+    .replace(/^clientes\//, '')
+    .trim();
+
+  if (!cleanFoto) {
+    if (id) cleanFoto = `${id}.jpg`;
+    else return '';
+  }
+
+  return toBackendUrl(`/clientes/${cleanFoto}`, options);
+}
+
+/**
  * Interceptor global de window.fetch.
- * Redirige automáticamente todas las peticiones relativas (/api, /attlogs, /empleados, /salas, etc.)
+ * Redirige automáticamente todas las peticiones relativas (/api, /attlogs, /empleados, /clientes, /salas, etc.)
  * al servidor backend cloud (https://willinthon.wisi.space) cuando se ejecuta en Tauri o cuando sea necesario.
  */
 export function setupGlobalFetchInterceptor() {
@@ -243,7 +277,7 @@ export function setupGlobalFetchInterceptor() {
   window.__WISI_FETCH_INTERCEPTED__ = true;
 
   const originalFetch = window.fetch;
-  const backendPrefixes = ['/api', '/attlogs', '/empleados', '/salas', '/reports', '/ws'];
+  const backendPrefixes = ['/api', '/attlogs', '/empleados', '/clientes', '/salas', '/reports', '/ws'];
 
   window.fetch = async function(input, init) {
     const isTauri = isTauriApp();

@@ -8388,6 +8388,7 @@ export async function getClientesModel(params = {}) {
     data = await sql`
       SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
+             to_char(COALESCE(c.updated_at, c.created_at), 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
              tc.nombre AS tipo_cliente_nombre,
              s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
       FROM clientes c
@@ -8401,6 +8402,7 @@ export async function getClientesModel(params = {}) {
     data = await sql`
       SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
+             to_char(COALESCE(c.updated_at, c.created_at), 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
              tc.nombre AS tipo_cliente_nombre,
              s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
       FROM clientes c
@@ -8472,21 +8474,43 @@ export async function getClientesFilterOptionsModel(options = {}) {
 
 function resolveClientesDir() {
   const candidates = [
+    path.join(process.cwd(), 'clientes'),
+    path.join(process.cwd(), 'backend-fastify', 'clientes'),
     path.resolve(__dirname, '../../clientes'),
     path.resolve(__dirname, '../clientes'),
-    path.join(process.cwd(), 'backend-fastify', 'clientes'),
-    path.join(process.cwd(), 'clientes'),
     '/var/www/wisi/backend-fastify/clientes',
     '/var/www/wisi/clientes'
   ];
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir;
   }
-  const fallback = path.resolve(__dirname, '../../clientes');
+  const fallback = path.join(process.cwd(), 'clientes');
   try {
     fs.mkdirSync(fallback, { recursive: true });
   } catch (e) {}
   return fallback;
+}
+
+function invalidateClienteThumbnails(cId) {
+  if (!cId) return;
+  try {
+    const candidateCacheDirs = [
+      path.join(process.cwd(), 'cache', 'thumbs'),
+      path.join(process.cwd(), 'backend-fastify', 'cache', 'thumbs'),
+      '/var/www/wisi/backend-fastify/cache/thumbs',
+      '/var/www/wisi/cache/thumbs'
+    ];
+    for (const cDir of candidateCacheDirs) {
+      if (fs.existsSync(cDir)) {
+        const files = fs.readdirSync(cDir);
+        for (const file of files) {
+          if (file.startsWith(`cliente_${cId}_`) || file.startsWith(`${cId}_`)) {
+            try { fs.unlinkSync(path.join(cDir, file)); } catch (e) {}
+          }
+        }
+      }
+    }
+  } catch (e) {}
 }
 
 export async function createClienteModel(data) {
@@ -8516,6 +8540,7 @@ export async function createClienteModel(data) {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, `${nextId}.jpg`), buffer);
       foto = `/clientes/${nextId}.jpg`;
+      invalidateClienteThumbnails(nextId);
     } catch (e) {
       console.error('Error guardando foto de cliente:', e);
     }
@@ -8530,7 +8555,7 @@ export async function createClienteModel(data) {
     return res[0];
   } else {
     inMemoryData.clientes = inMemoryData.clientes || [];
-    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, foto, created_at: new Date().toISOString() };
+    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, foto, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     inMemoryData.clientes.unshift(newItem);
     return newItem;
   }
@@ -8553,6 +8578,7 @@ export async function updateClienteModel(id, data) {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, `${cId}.jpg`), buffer);
       foto = `/clientes/${cId}.jpg`;
+      invalidateClienteThumbnails(cId);
     } catch (e) {
       console.error('Error actualizando foto de cliente:', e);
     }
@@ -8562,6 +8588,7 @@ export async function updateClienteModel(id, data) {
       const dir = resolveClientesDir();
       const filePath = path.join(dir, `${cId}.jpg`);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      invalidateClienteThumbnails(cId);
     } catch (e) {}
   }
 

@@ -694,17 +694,20 @@
 
   function getPhotoUrl(item, opts = { thumb: true }) {
     if (!item) return '';
+    let rawPath = '';
     if (item.foto && typeof item.foto === 'string' && item.foto.trim().length > 0) {
-      return toBackendUrl(item.foto, opts);
+      rawPath = item.foto;
+    } else if (entityType === 'cliente') {
+      rawPath = item.id ? `/clientes/${item.id}.jpg` : '';
+    } else {
+      const empId = item.empleado_id || item.id;
+      rawPath = empId ? `/empleados/${empId}.jpg` : '';
     }
-    if (entityType === 'cliente') {
-      return item.id ? toBackendUrl(`/clientes/${item.id}.jpg`, opts) : '';
-    }
-    const empId = item.empleado_id || item.id;
-    if (empId) {
-      return toBackendUrl(`/empleados/${empId}.jpg`, opts);
-    }
-    return '';
+    if (!rawPath) return '';
+    const ts = item.updated_at ? new Date(item.updated_at).getTime() : '';
+    const sep = rawPath.includes('?') ? '&' : '?';
+    const pathWithTs = ts ? `${rawPath}${sep}t=${ts}` : rawPath;
+    return toBackendUrl(pathWithTs, opts);
   }
 
   // Precarga en segundo plano de las fotos visibles en la página actual para respuesta instantánea (0ms)

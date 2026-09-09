@@ -244,11 +244,17 @@
     
     // Si es un cliente, buscar estrictamente su foto de cliente (NUNCA de empleados)
     if (mode === 'cliente') {
+      let rawPath = "";
       if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
-        return toBackendUrl(record.foto, opts);
+        rawPath = record.foto;
+      } else if (record.id) {
+        rawPath = `/clientes/${record.id}.jpg`;
       }
-      if (record.id) return toBackendUrl(`/clientes/${record.id}.jpg`, opts);
-      return "";
+      if (!rawPath) return "";
+      const ts = record.updated_at ? new Date(record.updated_at).getTime() : '';
+      const sep = rawPath.includes('?') ? '&' : '?';
+      const pathWithTs = ts ? `${rawPath}${sep}t=${ts}` : rawPath;
+      return toBackendUrl(pathWithTs, opts);
     }
 
     // Si es un empleado o desincorporado (sin evento de marcaje), usa su foto de empleado
@@ -296,7 +302,8 @@
 
   function resolveItemPhoto(record) {
     if (!record) return "";
-    const key = record.id ? `rec_${record.id}` : `ced_${record.cedula || record.employee_no}`;
+    const ts = record.updated_at || '';
+    const key = record.id ? `rec_${record.id}_${ts}` : `ced_${record.cedula || record.employee_no}_${ts}`;
     if (resolvedPhotoUrlCache.has(key)) {
       const cached = resolvedPhotoUrlCache.get(key);
       if (cached) return cached;

@@ -172,9 +172,14 @@ async function startServer() {
       }
 
       // Comprobar caché en disco para respuesta sub-milisegundo (0ms)
+      const isClienteReq = req.url.includes('/clientes');
+      const isEmpleadoReq = req.url.includes('/empleados');
+      const isAttlogReq = req.url.includes('/attlogs');
+      const prefix = isClienteReq ? 'cliente' : (isEmpleadoReq ? 'empleado' : (isAttlogReq ? 'attlog' : 'misc'));
+
       const baseName = path.basename(foundPath, path.extname(foundPath));
       const cacheExt = isPng ? '.png' : '.jpg';
-      const cacheFileName = `${baseName}_${targetW}x${targetH}_q${targetQ}_${fitMode}${cacheExt}`;
+      const cacheFileName = `${prefix}_${baseName}_${targetW}x${targetH}_q${targetQ}_${fitMode}${cacheExt}`;
       const cacheFilePath = path.join(cacheThumbsDir, cacheFileName);
 
       const clientEtag = req.headers['if-none-match'];
@@ -256,10 +261,12 @@ async function startServer() {
           ? [path.join(process.cwd(), 'empleados'), path.resolve(__dirname, '../empleados')]
           : isClienteReq
             ? [
-                path.resolve(__dirname, '../clientes'),
-                path.join(process.cwd(), 'backend-fastify', 'clientes'),
                 path.join(process.cwd(), 'clientes'),
-                '/var/www/wisi/backend-fastify/clientes'
+                path.join(process.cwd(), 'backend-fastify', 'clientes'),
+                path.resolve(__dirname, '../clientes'),
+                path.resolve(__dirname, '../../clientes'),
+                '/var/www/wisi/backend-fastify/clientes',
+                '/var/www/wisi/clientes'
               ]
             : [
                 path.join(process.cwd(), 'attlogs'),
@@ -300,10 +307,10 @@ async function startServer() {
             console.warn('Error in cliente photo lookup:', e);
           }
         }
-        // Fallback para cliente: SVG avatar por defecto (NUNCA foto de empleado)
+        // Fallback para cliente: SVG avatar por defecto (NUNCA foto de empleado y sin caché agresivo)
         reply.header('Access-Control-Allow-Origin', '*');
         reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        reply.header('Cache-Control', 'public, max-age=86400');
+        reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
         reply.type('image/svg+xml').status(200);
         return reply.send(DEFAULT_AVATAR_SVG);
       }

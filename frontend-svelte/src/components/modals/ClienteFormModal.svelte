@@ -86,7 +86,7 @@
       if (item.foto) {
         fotoUrl = toBackendUrl(item.foto, { preview: true });
       } else {
-        fotoUrl = toBackendUrl(`/clientes/${item.id}.jpg`, { preview: true });
+        fotoUrl = '';
       }
     } else {
       id = null;
@@ -164,13 +164,13 @@
     // Derecha
     ctx.fillRect(CROP_X + CROP_SIZE, CROP_Y, cw - (CROP_X + CROP_SIZE), CROP_SIZE);
 
-    // Borde azul del recuadro
-    ctx.strokeStyle = '#3b82f6';
+    // Borde verde del recuadro (idéntico a EmpleadoFormModal)
+    ctx.strokeStyle = '#16a34a';
     ctx.lineWidth = 2.5;
     ctx.strokeRect(CROP_X, CROP_Y, CROP_SIZE, CROP_SIZE);
 
-    // 4 Esquinas
-    ctx.fillStyle = '#3b82f6';
+    // 4 Esquinas verdes
+    ctx.fillStyle = '#16a34a';
     const hs = 10;
     ctx.fillRect(CROP_X - 2, CROP_Y - 2, hs, hs);
     ctx.fillRect(CROP_X + CROP_SIZE - hs + 2, CROP_Y - 2, hs, hs);
@@ -321,16 +321,31 @@
 
     try {
       if (isEdit) {
-        dispatch('update', { id, draft: payload });
+        dispatch('update', {
+          id,
+          draft: payload,
+          onDone: (err) => {
+            isSubmitting = false;
+            if (!err) {
+              isOpen = false;
+            }
+          }
+        });
       } else {
-        dispatch('create', payload);
+        dispatch('create', {
+          ...payload,
+          onDone: (err) => {
+            isSubmitting = false;
+            if (!err) {
+              isOpen = false;
+            }
+          }
+        });
       }
-      isOpen = false;
     } catch (e) {
       console.error(e);
-      triggerToast('Error al procesar la solicitud', 'error');
-    } finally {
       isSubmitting = false;
+      triggerToast('Error al procesar la solicitud', 'error');
     }
   }
 </script>
@@ -833,49 +848,54 @@
   }
 
   .cropper-card {
-    background: #0f172a;
-    border-radius: 16px;
-    width: 380px;
-    max-width: 95vw;
+    background: #ffffff;
+    border-radius: 14px;
+    max-width: 400px;
+    width: 100%;
+    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
-    align-items: center;
-    overflow: hidden;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
     border: 1px solid #334155;
   }
 
   .cropper-header {
-    width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 20px;
-    background: #1e293b;
-    border-bottom: 1px solid #334155;
-    box-sizing: border-box;
+    padding: 12px 18px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
   }
 
   .cropper-title {
-    font-size: 14.5px;
-    font-weight: 700;
-    color: #f8fafc;
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
   }
 
   .cropper-viewport {
-    padding: 20px;
+    position: relative;
+    width: 100%;
+    background: #0f172a;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 12px;
+    box-sizing: border-box;
   }
 
   .cropper-canvas {
-    border-radius: 10px;
-    cursor: grab;
-    box-shadow: 0 8px 16px rgba(0,0,0,0.4);
-    touch-action: none;
+    display: block;
     max-width: 100%;
+    max-height: 280px;
     height: auto;
+    aspect-ratio: 1 / 1;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   }
 
   .cropper-canvas.is-dragging {
@@ -886,88 +906,116 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    width: 85%;
-    margin-bottom: 18px;
+    padding: 10px 18px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
   }
 
   .btn-zoom-step {
-    background: #1e293b;
-    border: 1px solid #475569;
-    color: #f8fafc;
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 800;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    flex-shrink: 0;
     transition: all 0.15s;
   }
 
   .btn-zoom-step:hover {
-    background: #334155;
-    border-color: #64748b;
+    background: #e2e8f0;
+    color: #0f172a;
   }
 
   .cropper-zoom-range {
     flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: #cbd5e1;
+    border-radius: 4px;
+    outline: none;
     cursor: pointer;
-    accent-color: #3b82f6;
+  }
+
+  .cropper-zoom-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #16a34a;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  }
+
+  .cropper-zoom-range::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #16a34a;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
   }
 
   .zoom-pct-badge {
-    font-size: 12px;
-    font-weight: 700;
-    color: #94a3b8;
-    min-width: 40px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #16a34a;
+    min-width: 42px;
     text-align: right;
+    font-family: monospace;
   }
 
   .cropper-footer {
-    width: 100%;
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 12px;
-    padding: 14px 20px;
-    background: #1e293b;
-    border-top: 1px solid #334155;
-    box-sizing: border-box;
+    gap: 10px;
+    padding: 12px 18px;
+    background: #ffffff;
+    border-top: 1px solid #e2e8f0;
   }
 
   .btn-cropper-cancel {
     padding: 8px 16px;
     border-radius: 8px;
-    border: 1px solid #475569;
-    background: transparent;
+    border: 1px solid #cbd5e1;
+    background: #f1f5f9;
+    color: #475569;
     font-size: 12.5px;
     font-weight: 700;
-    color: #cbd5e1;
     cursor: pointer;
     transition: all 0.15s;
   }
 
   .btn-cropper-cancel:hover {
-    background: #334155;
-    color: #ffffff;
+    background: #e2e8f0;
+    color: #0f172a;
   }
 
   .btn-cropper-confirm {
     padding: 8px 18px;
     border-radius: 8px;
     border: none;
-    background: #2563eb;
+    background: #16a34a;
+    color: #ffffff;
     font-size: 12.5px;
     font-weight: 700;
-    color: #ffffff;
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 2px 6px rgba(22, 163, 74, 0.3);
     transition: all 0.15s;
   }
 
   .btn-cropper-confirm:hover {
-    background: #1d4ed8;
+    background: #15803d;
   }
 </style>

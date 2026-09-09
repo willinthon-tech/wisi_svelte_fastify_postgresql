@@ -262,28 +262,58 @@
   ];
 
   async function handleCreate(event) {
-    const draft = event.detail;
+    const detail = event.detail || {};
+    const onDone = detail.onDone;
+    const { onDone: _, ...draft } = detail;
     try {
-      await masterClientesActions.add(draft);
-      triggerToast('Cliente creado exitosamente', 'success');
-      isFormModalOpen = false;
-      formModalItem = null;
-      await loadServerData();
+      const res = await fetch('/api/master/clientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft)
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast('Cliente creado exitosamente', 'success');
+        isFormModalOpen = false;
+        formModalItem = null;
+        if (onDone) onDone(null);
+        await loadMasterStoresFromBackend();
+        await loadServerData();
+      } else {
+        throw new Error(json?.error || 'Error al crear cliente');
+      }
     } catch (err) {
       triggerToast(`Error al crear cliente: ${err.message}`, 'error');
+      if (onDone) onDone(err);
     }
   }
 
   async function handleSaveInline(event) {
-    const { id, draft } = event.detail;
+    const detail = event.detail || {};
+    const { id, draft } = detail;
+    const onDone = draft?.onDone || detail.onDone;
+    const cleanDraft = { ...draft };
+    delete cleanDraft.onDone;
     try {
-      await masterClientesActions.update(id, draft);
-      triggerToast('Cliente actualizado exitosamente', 'success');
-      isFormModalOpen = false;
-      formModalItem = null;
-      await loadServerData();
+      const res = await fetch(`/api/master/clientes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cleanDraft)
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast('Cliente actualizado exitosamente', 'success');
+        isFormModalOpen = false;
+        formModalItem = null;
+        if (onDone) onDone(null);
+        await loadMasterStoresFromBackend();
+        await loadServerData();
+      } else {
+        throw new Error(json?.error || 'Error al actualizar cliente');
+      }
     } catch (err) {
       triggerToast(`Error al actualizar cliente: ${err.message}`, 'error');
+      if (onDone) onDone(err);
     }
   }
 
