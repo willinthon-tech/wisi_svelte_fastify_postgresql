@@ -249,16 +249,28 @@ async function startServer() {
       // Directories to search for exact filename
       const isAttlogReq = req.url.includes('/attlogs');
       const isEmpleadoReq = req.url.includes('/empleados');
+      const isClienteReq = req.url.includes('/clientes');
       const searchDirs = isAttlogReq
         ? [path.join(process.cwd(), 'attlogs'), path.join(process.cwd(), 'photos')]
         : isEmpleadoReq
-          ? [path.join(process.cwd(), 'empleados')]
-          : [
-              path.join(process.cwd(), 'attlogs'),
-              path.join(process.cwd(), 'empleados'),
-              path.join(process.cwd(), 'salas'),
-              path.join(process.cwd(), 'photos')
-            ];
+          ? [path.join(process.cwd(), 'empleados'), path.resolve(__dirname, '../empleados')]
+          : isClienteReq
+            ? [
+                path.resolve(__dirname, '../clientes'),
+                path.join(process.cwd(), 'backend-fastify', 'clientes'),
+                path.join(process.cwd(), 'clientes'),
+                '/var/www/wisi/backend-fastify/clientes'
+              ]
+            : [
+                path.join(process.cwd(), 'attlogs'),
+                path.join(process.cwd(), 'empleados'),
+                path.resolve(__dirname, '../empleados'),
+                path.resolve(__dirname, '../clientes'),
+                path.join(process.cwd(), 'backend-fastify', 'clientes'),
+                path.join(process.cwd(), 'clientes'),
+                path.join(process.cwd(), 'salas'),
+                path.join(process.cwd(), 'photos')
+              ];
 
       // 1. Direct file match on disk
       for (const dir of searchDirs) {
@@ -376,6 +388,8 @@ async function startServer() {
 
     fastify.get('/empleados/:filename', servePhotoWithFallback);
     fastify.get('/api/empleados/:filename', servePhotoWithFallback);
+    fastify.get('/clientes/:filename', servePhotoWithFallback);
+    fastify.get('/api/clientes/:filename', servePhotoWithFallback);
     fastify.get('/attlogs/:filename', servePhotoWithFallback);
     fastify.get('/api/attlogs/:filename', servePhotoWithFallback);
     fastify.get('/attlogs/:id/image', servePhotoWithFallback);
@@ -384,6 +398,13 @@ async function startServer() {
     fastify.get('/api/attlogs/photo/:id', servePhotoWithFallback);
     fastify.get('/salas/:filename', serveSalaLogoWithFallback);
     fastify.get('/api/salas/:filename', serveSalaLogoWithFallback);
+
+    // Asegurar existencia de directorio de clientes para fotos
+    try {
+      const fsModule = await import('fs');
+      const clientesDir = path.join(process.cwd(), 'clientes');
+      if (!fsModule.existsSync(clientesDir)) fsModule.mkdirSync(clientesDir, { recursive: true });
+    } catch (e) {}
 
     const serveDownloadFile = async (req, reply) => {
       reply.header('Access-Control-Allow-Origin', '*');
@@ -449,6 +470,8 @@ async function startServer() {
 
     fastify.options('/empleados/:filename', handleStaticOptions);
     fastify.options('/api/empleados/:filename', handleStaticOptions);
+    fastify.options('/clientes/:filename', handleStaticOptions);
+    fastify.options('/api/clientes/:filename', handleStaticOptions);
     fastify.options('/attlogs/:filename', handleStaticOptions);
     fastify.options('/api/attlogs/:filename', handleStaticOptions);
     fastify.options('/salas/:filename', handleStaticOptions);

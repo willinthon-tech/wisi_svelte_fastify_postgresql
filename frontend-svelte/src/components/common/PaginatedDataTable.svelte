@@ -697,6 +697,9 @@
     if (item.foto && typeof item.foto === 'string' && item.foto.trim().length > 0) {
       return toBackendUrl(item.foto, opts);
     }
+    if (entityType === 'cliente') {
+      return item.id ? toBackendUrl(`/clientes/${item.id}.jpg`, opts) : '';
+    }
     const empId = item.empleado_id || item.id;
     if (empId) {
       return toBackendUrl(`/empleados/${empId}.jpg`, opts);
@@ -1163,14 +1166,16 @@
                       title="Ampliar fotografía">
                       <img 
                         src={getPhotoUrl(item)} 
-                        alt="Foto de {toTitleCase(item.nombre) || 'Empleado'}"
+                        alt="Foto de {toTitleCase(item.nombre) || 'Registro'}"
                         class="employee-thumb"
                         on:error={(e) => { 
                           const img = e.target;
-                          const empId = item.empleado_id || item.id;
-                          if (!img.dataset.triedEmp && empId && !img.src.includes(`/empleados/${empId}.jpg`)) {
-                            img.dataset.triedEmp = 'true';
-                            img.src = toBackendUrl(`/empleados/${empId}.jpg`, { thumb: true });
+                          const fallbackPath = entityType === 'cliente'
+                            ? (item.id ? `/clientes/${item.id}.jpg` : '')
+                            : (item.empleado_id || item.id ? `/empleados/${item.empleado_id || item.id}.jpg` : '');
+                          if (!img.dataset.triedFallback && fallbackPath && !img.src.includes(fallbackPath)) {
+                            img.dataset.triedFallback = 'true';
+                            img.src = toBackendUrl(fallbackPath, { thumb: true });
                           } else {
                             img.style.display = 'none';
                             if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';

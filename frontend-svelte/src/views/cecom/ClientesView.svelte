@@ -23,6 +23,7 @@
   import { onMount, onDestroy } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
+  import ClienteFormModal from '../../components/modals/ClienteFormModal.svelte';
   import { 
     masterSalasStore,
     masterTipoClientesStore,
@@ -220,6 +221,18 @@
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
     return assignedSalaIds.includes(s.id);
   });
+  let isFormModalOpen = false;
+  let formModalItem = null;
+
+  function openCreateFormModal() {
+    formModalItem = null;
+    isFormModalOpen = true;
+  }
+
+  function openEditFormModal(e) {
+    formModalItem = e.detail || null;
+    isFormModalOpen = true;
+  }
 
   $: tipoClientesOptions = ($masterTipoClientesStore || []).map(t => ({
     id: t.id,
@@ -227,14 +240,15 @@
   }));
 
   $: columns = [
+    { key: 'foto', label: 'Foto', type: 'photo', sortable: false, editable: false },
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
-    { key: 'nombre', label: 'Nombre del Cliente', bold: true, sortable: true, editable: true },
+    { key: 'nombre', label: 'Nombre del Cliente', bold: true, sortable: true, editable: false },
     { 
       key: 'tipo_cliente_nombre', 
       keyId: 'tipo_cliente_id', 
       label: 'Tipo de Cliente', 
       sortable: true, 
-      editable: true, 
+      editable: false, 
       options: tipoClientesOptions 
     },
     { 
@@ -242,15 +256,9 @@
       keyId: 'sala_id', 
       label: 'Sala', 
       sortable: true, 
-      editable: true, 
+      editable: false, 
       options: filteredSalasStore 
     }
-  ];
-
-  $: createFields = [
-    { key: 'nombre', label: 'Nombre del Cliente', type: 'text', required: true, placeholder: 'Ej: Juan Pérez' },
-    { key: 'tipo_cliente_id', label: 'Tipo de Cliente', type: 'select', options: tipoClientesOptions, required: true },
-    { key: 'sala_id', label: 'Sala', type: 'select', options: filteredSalasStore, required: true }
   ];
 
   async function handleCreate(event) {
@@ -258,6 +266,8 @@
     try {
       await masterClientesActions.add(draft);
       triggerToast('Cliente creado exitosamente', 'success');
+      isFormModalOpen = false;
+      formModalItem = null;
       await loadServerData();
     } catch (err) {
       triggerToast(`Error al crear cliente: ${err.message}`, 'error');
@@ -269,6 +279,8 @@
     try {
       await masterClientesActions.update(id, draft);
       triggerToast('Cliente actualizado exitosamente', 'success');
+      isFormModalOpen = false;
+      formModalItem = null;
       await loadServerData();
     } catch (err) {
       triggerToast(`Error al actualizar cliente: ${err.message}`, 'error');
@@ -348,12 +360,15 @@
   {pageSize}
   isServerSide={true}
   {columns}
-  {createFields}
+  createFields={[]}
+  customCreateModal={true}
   bind:searchQuery
   searchPlaceholder="Buscar por cliente, tipo, sala o ID..."
   entityType="cliente"
-  actions={{ edit: true, delete: true }}
+  actions={{ edit: true, editModal: true, delete: true }}
   on:fetchServerData={(e) => loadServerData(e.detail)}
+  on:openModal={openCreateFormModal}
+  on:openEdit={openEditFormModal}
   on:create={handleCreate}
   on:saveInline={handleSaveInline}
   on:delete={handleDelete}
@@ -363,7 +378,7 @@
     <SmartMultiSelect
       id="filter-clientes-salas"
       label="Salas"
-      options={filterOptions.salas}
+      options={(filterOptions.salas || []).filter(s => !assignedSalaIds || assignedSalaIds.length === 0 || assignedSalaIds.map(Number).includes(Number(s.id)))}
       bind:selectedValues={selectedSalas}
       on:change={(e) => {
         selectedSalas = e.detail;
@@ -396,6 +411,15 @@
     {/if}
   </div>
 </PaginatedDataTable>
+
+<ClienteFormModal 
+  bind:isOpen={isFormModalOpen}
+  item={formModalItem}
+  {assignedSalaIds}
+  on:create={handleCreate}
+  on:update={handleSaveInline}
+  on:close={() => { isFormModalOpen = false; formModalItem = null; }}
+/>
 
 <style>
   .smart-filters-grid {

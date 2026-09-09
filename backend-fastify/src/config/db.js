@@ -46,6 +46,13 @@ export async function initDb() {
     await sql`SET TIME ZONE 'UTC';`;
     await sql`SELECT 1;`;
 
+    // Asegurar columna foto en tabla clientes
+    try {
+      await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS foto VARCHAR(255);`;
+    } catch (e) {
+      // Ignorar si la tabla aún no existe
+    }
+
     isPgConnected = true;
     console.log(`\x1b[32m🟢 [CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {

@@ -8399,7 +8399,7 @@ export async function getClientesModel(params = {}) {
     `;
   } else {
     data = await sql`
-      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id,
+      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
              tc.nombre AS tipo_cliente_nombre,
              s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
@@ -8470,23 +8470,67 @@ export async function getClientesFilterOptionsModel(options = {}) {
   };
 }
 
+function resolveClientesDir() {
+  const candidates = [
+    path.resolve(__dirname, '../../clientes'),
+    path.resolve(__dirname, '../clientes'),
+    path.join(process.cwd(), 'backend-fastify', 'clientes'),
+    path.join(process.cwd(), 'clientes'),
+    '/var/www/wisi/backend-fastify/clientes',
+    '/var/www/wisi/clientes'
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir)) return dir;
+  }
+  const fallback = path.resolve(__dirname, '../../clientes');
+  try {
+    fs.mkdirSync(fallback, { recursive: true });
+  } catch (e) {}
+  return fallback;
+}
+
 export async function createClienteModel(data) {
   const nombre = (data.nombre || '').trim();
   if (!nombre) throw new Error('El nombre del cliente es obligatorio');
   const tipoClienteId = data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null;
   const salaId = data.sala_id ? Number(data.sala_id) : null;
 
+  let nextId = 1;
+  if (isPgConnected && sql) {
+    try {
+      await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS foto VARCHAR(255);`;
+    } catch (e) {}
+    const nextIdRes = await sql`SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM clientes`;
+    nextId = Number(nextIdRes[0].next_id);
+  } else {
+    inMemoryData.clientes = inMemoryData.clientes || [];
+    nextId = inMemoryData.clientes.length > 0 ? Math.max(...inMemoryData.clientes.map(c => c.id)) + 1 : 1;
+  }
+
+  let foto = data.foto || null;
+  if (data.fotoBase64) {
+    try {
+      const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      const dir = resolveClientesDir();
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${nextId}.jpg`), buffer);
+      foto = `/clientes/${nextId}.jpg`;
+    } catch (e) {
+      console.error('Error guardando foto de cliente:', e);
+    }
+  }
+
   if (isPgConnected && sql) {
     const res = await sql`
-      INSERT INTO clientes (nombre, tipo_cliente_id, sala_id)
-      VALUES (${nombre}, ${tipoClienteId}, ${salaId})
-      RETURNING id, nombre, tipo_cliente_id, sala_id, created_at, updated_at
+      INSERT INTO clientes (id, nombre, tipo_cliente_id, sala_id, foto)
+      VALUES (${nextId}, ${nombre}, ${tipoClienteId}, ${salaId}, ${foto})
+      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, created_at, updated_at
     `;
     return res[0];
   } else {
     inMemoryData.clientes = inMemoryData.clientes || [];
-    const nextId = inMemoryData.clientes.length > 0 ? Math.max(...inMemoryData.clientes.map(c => c.id)) + 1 : 1;
-    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, created_at: new Date().toISOString() };
+    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, foto, created_at: new Date().toISOString() };
     inMemoryData.clientes.unshift(newItem);
     return newItem;
   }
@@ -8500,23 +8544,54 @@ export async function updateClienteModel(id, data) {
   const tipoClienteId = data.tipo_cliente_id !== undefined ? (data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null) : undefined;
   const salaId = data.sala_id !== undefined ? (data.sala_id ? Number(data.sala_id) : null) : undefined;
 
+  let foto = data.foto;
+  if (data.fotoBase64) {
+    try {
+      const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      const dir = resolveClientesDir();
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${cId}.jpg`), buffer);
+      foto = `/clientes/${cId}.jpg`;
+    } catch (e) {
+      console.error('Error actualizando foto de cliente:', e);
+    }
+  } else if (data.removeFoto) {
+    foto = null;
+    try {
+      const dir = resolveClientesDir();
+      const filePath = path.join(dir, `${cId}.jpg`);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch (e) {}
+  }
+
   if (isPgConnected && sql) {
+    try {
+      await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS foto VARCHAR(255);`;
+    } catch (e) {}
+
     const res = await sql`
       UPDATE clientes
       SET
         nombre = COALESCE(${nombre}, nombre),
         tipo_cliente_id = ${tipoClienteId !== undefined ? tipoClienteId : sql`tipo_cliente_id`},
         sala_id = ${salaId !== undefined ? salaId : sql`sala_id`},
+        foto = ${foto !== undefined ? foto : sql`foto`},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${cId}
-      RETURNING id, nombre, tipo_cliente_id, sala_id, created_at, updated_at
+      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, created_at, updated_at
     `;
     return res[0];
   } else {
     inMemoryData.clientes = inMemoryData.clientes || [];
     const idx = inMemoryData.clientes.findIndex(c => c.id === cId);
     if (idx !== -1) {
-      inMemoryData.clientes[idx] = { ...inMemoryData.clientes[idx], ...data, updated_at: new Date().toISOString() };
+      inMemoryData.clientes[idx] = { 
+        ...inMemoryData.clientes[idx], 
+        ...data, 
+        ...(foto !== undefined ? { foto } : {}),
+        updated_at: new Date().toISOString() 
+      };
       return inMemoryData.clientes[idx];
     }
     throw new Error('Cliente no encontrado');
@@ -8524,7 +8599,16 @@ export async function updateClienteModel(id, data) {
 }
 
 export async function deleteClienteModel(id) {
-  return await deleteEntityDynamic('clientes', 'cliente', id);
+  const cId = Number(id);
+  const result = await deleteEntityDynamic('clientes', 'cliente', id);
+  if (result && (result.success || result.id)) {
+    try {
+      const dir = resolveClientesDir();
+      const filePath = path.join(dir, `${cId}.jpg`);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch (e) {}
+  }
+  return result;
 }
 
 // --- DATOS DEL LIBRO (CECOM: LIBRO DATOS OPERATIVOS) ---
