@@ -539,57 +539,65 @@
                           </tr>
                         </thead>
                         <tbody>
-                          {#each filteredSincronizados as emp}
-                            {@const isSelected = selectedSyncIds.has(emp.id)}
-                            <tr class={isSelected ? 'row-selected-sync' : ''}>
-                              <td style="text-align: center;">
-                                <input 
-                                  type="checkbox" 
-                                  checked={isSelected}
-                                  on:change={() => toggleSelectSync(emp.id)}
-                                  disabled={isExecutingAction}
-                                />
-                              </td>
-                              <td style="text-align: center;">
-                                <img 
-                                  src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
-                                  alt={emp.nombre}
-                                  class="sync-emp-avatar" 
-                                  on:error={(e) => { e.currentTarget.src = '/favicon.png'; }}
-                                />
-                              </td>
-                              <td class="font-mono font-bold">{emp.cedula}</td>
-                              <td>
-                                <div class="font-bold">{emp.nombre}</div>
-                                {#if emp.nameDiffers}
-                                  <div class="sync-diff-badge" title="El nombre registrado en el equipo difiere del sistema">
-                                    ⚠️ En equipo: "{emp.deviceUser.name}"
-                                  </div>
-                                {/if}
-                              </td>
-                              <td>{emp.cargo_nombre}</td>
-                              <td>{emp.departamento_nombre}</td>
-                              <td style="text-align: center;">
-                                <div style="display: flex; flex-direction: column; gap: 3px; align-items: center;">
-                                  <span class="sync-chip-badge-ok">✓ Sincronizado</span>
-                                  {#if !emp.hasFaceOnDevice}
-                                    <span class="sync-diff-badge-warn">Sin rostro en equipo</span>
-                                  {/if}
-                                </div>
-                              </td>
-                              <td style="text-align: center;">
-                                <button
-                                  type="button"
-                                  class="sync-btn-update-single"
-                                  on:click={() => handleUpdateEmployees([emp.id])}
-                                  disabled={isExecutingAction}
-                                  title="Actualizar nombre, foto y tarjeta en el biométrico y panel"
-                                >
-                                  🔄 Actualizar
-                                </button>
+                          {#if filteredSincronizados.length === 0}
+                            <tr>
+                              <td colspan="8" style="text-align: center; padding: 36px 16px; color: #64748b; font-weight: 600;">
+                                No se encontraron empleados sincronizados que coincidan con la búsqueda "{searchSync}".
                               </td>
                             </tr>
-                          {/each}
+                          {:else}
+                            {#each filteredSincronizados as emp}
+                              {@const isSelected = selectedSyncIds.has(emp.id)}
+                              <tr class={isSelected ? 'row-selected-sync' : ''}>
+                                <td style="text-align: center;">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected}
+                                    on:change={() => toggleSelectSync(emp.id)}
+                                    disabled={isExecutingAction}
+                                  />
+                                </td>
+                                <td style="text-align: center;">
+                                  <img 
+                                    src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
+                                    alt={emp.nombre}
+                                    class="sync-emp-avatar" 
+                                    on:error={(e) => { e.currentTarget.src = '/favicon.png'; }}
+                                  />
+                                </td>
+                                <td class="font-mono font-bold">{emp.cedula}</td>
+                                <td>
+                                  <div class="font-bold">{emp.nombre}</div>
+                                  {#if emp.nameDiffers}
+                                    <div class="sync-diff-badge" title="El nombre registrado en el equipo difiere del sistema">
+                                      ⚠️ En equipo: "{emp.deviceUser.name}"
+                                    </div>
+                                  {/if}
+                                </td>
+                                <td>{emp.cargo_nombre}</td>
+                                <td>{emp.departamento_nombre}</td>
+                                <td style="text-align: center;">
+                                  <div style="display: flex; flex-direction: column; gap: 3px; align-items: center;">
+                                    <span class="sync-chip-badge-ok">✓ Sincronizado</span>
+                                    {#if !emp.hasFaceOnDevice}
+                                      <span class="sync-diff-badge-warn">Sin rostro en equipo</span>
+                                    {/if}
+                                  </div>
+                                </td>
+                                <td style="text-align: center;">
+                                  <button
+                                    type="button"
+                                    class="sync-btn-update-single"
+                                    on:click={() => handleUpdateEmployees([emp.id])}
+                                    disabled={isExecutingAction}
+                                    title="Actualizar nombre, foto y tarjeta en el biométrico y panel"
+                                  >
+                                    🔄 Actualizar
+                                  </button>
+                                </td>
+                              </tr>
+                            {/each}
+                          {/if}
                         </tbody>
                       </table>
                     </div>
@@ -678,41 +686,49 @@
                           </tr>
                         </thead>
                         <tbody>
-                          {#each filteredFaltan as emp}
-                            {@const isSelected = selectedFaltanIds.has(emp.id)}
-                            <tr class={isSelected ? 'row-selected-add' : ''}>
-                              <td style="text-align: center;">
-                                <input 
-                                  type="checkbox" 
-                                  checked={isSelected}
-                                  on:change={() => toggleSelectFaltan(emp.id)}
-                                  disabled={isExecutingAction}
-                                />
-                              </td>
-                              <td style="text-align: center;">
-                                <img 
-                                  src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
-                                  alt={emp.nombre}
-                                  class="sync-emp-avatar" 
-                                  on:error={(e) => { e.currentTarget.src = '/favicon.png'; }}
-                                />
-                              </td>
-                              <td class="font-mono font-bold" style="color: #d97706;">{emp.cedula}</td>
-                              <td class="font-bold">{emp.nombre}</td>
-                              <td>{emp.cargo_nombre}</td>
-                              <td>{emp.departamento_nombre}</td>
-                              <td style="text-align: center;">
-                                <button 
-                                  type="button" 
-                                  class="sync-btn-add-single"
-                                  on:click={() => handleAddEmployees([emp.id])}
-                                  disabled={isExecutingAction}
-                                >
-                                  ➕ Agregar
-                                </button>
+                          {#if filteredFaltan.length === 0}
+                            <tr>
+                              <td colspan="7" style="text-align: center; padding: 36px 16px; color: #64748b; font-weight: 600;">
+                                No se encontraron empleados pendientes que coincidan con la búsqueda "{searchFaltan}".
                               </td>
                             </tr>
-                          {/each}
+                          {:else}
+                            {#each filteredFaltan as emp}
+                              {@const isSelected = selectedFaltanIds.has(emp.id)}
+                              <tr class={isSelected ? 'row-selected-add' : ''}>
+                                <td style="text-align: center;">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected}
+                                    on:change={() => toggleSelectFaltan(emp.id)}
+                                    disabled={isExecutingAction}
+                                  />
+                                </td>
+                                <td style="text-align: center;">
+                                  <img 
+                                    src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
+                                    alt={emp.nombre}
+                                    class="sync-emp-avatar" 
+                                    on:error={(e) => { e.currentTarget.src = '/favicon.png'; }}
+                                  />
+                                </td>
+                                <td class="font-mono font-bold" style="color: #d97706;">{emp.cedula}</td>
+                                <td class="font-bold">{emp.nombre}</td>
+                                <td>{emp.cargo_nombre}</td>
+                                <td>{emp.departamento_nombre}</td>
+                                <td style="text-align: center;">
+                                  <button 
+                                    type="button" 
+                                    class="sync-btn-add-single"
+                                    on:click={() => handleAddEmployees([emp.id])}
+                                    disabled={isExecutingAction}
+                                  >
+                                    ➕ Agregar
+                                  </button>
+                                </td>
+                              </tr>
+                            {/each}
+                          {/if}
                         </tbody>
                       </table>
                     </div>
@@ -801,42 +817,50 @@
                           </tr>
                         </thead>
                         <tbody>
-                          {#each filteredSobran as u}
-                            {@const isSelected = selectedSobranNos.has(u.employeeNo)}
-                            <tr class={isSelected ? 'row-selected-del' : ''}>
-                              <td style="text-align: center;">
-                                <input 
-                                  type="checkbox" 
-                                  checked={isSelected}
-                                  on:change={() => toggleSelectSobran(u.employeeNo)}
-                                  disabled={isExecutingAction}
-                                />
-                              </td>
-                              <td class="font-mono font-bold" style="color: #b91c1c;">{u.employeeNo}</td>
-                              <td class="font-bold">{u.name}</td>
-                              <td>
-                                <span class="sync-chip-system-status {u.systemStatus.includes('Desincorporado') ? 'chip-desinc' : u.systemStatus.includes('Activo') ? 'chip-other-sala' : u.systemStatus.includes('Coincide') ? 'chip-name-match' : 'chip-unknown'}">
-                                  {u.systemStatus}
-                                </span>
-                              </td>
-                              <td style="text-align: center;">
-                                {u.numOfFace > 0 ? '👤 Sí' : '—'}
-                              </td>
-                              <td style="text-align: center;">
-                                {u.numOfCard > 0 ? '💳 Sí' : '—'}
-                              </td>
-                              <td style="text-align: center;">
-                                <button 
-                                  type="button" 
-                                  class="sync-btn-del-single"
-                                  on:click={() => handleDeleteUsers([u.employeeNo])}
-                                  disabled={isExecutingAction}
-                                >
-                                  🗑️ Eliminar
-                                </button>
+                          {#if filteredSobran.length === 0}
+                            <tr>
+                              <td colspan="7" style="text-align: center; padding: 36px 16px; color: #64748b; font-weight: 600;">
+                                No se encontraron usuarios sobrantes que coincidan con la búsqueda "{searchSobran}".
                               </td>
                             </tr>
-                          {/each}
+                          {:else}
+                            {#each filteredSobran as u}
+                              {@const isSelected = selectedSobranNos.has(u.employeeNo)}
+                              <tr class={isSelected ? 'row-selected-del' : ''}>
+                                <td style="text-align: center;">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isSelected}
+                                    on:change={() => toggleSelectSobran(u.employeeNo)}
+                                    disabled={isExecutingAction}
+                                  />
+                                </td>
+                                <td class="font-mono font-bold" style="color: #b91c1c;">{u.employeeNo}</td>
+                                <td class="font-bold">{u.name}</td>
+                                <td>
+                                  <span class="sync-chip-system-status {u.systemStatus.includes('Desincorporado') ? 'chip-desinc' : u.systemStatus.includes('Activo') ? 'chip-other-sala' : u.systemStatus.includes('Coincide') ? 'chip-name-match' : 'chip-unknown'}">
+                                    {u.systemStatus}
+                                  </span>
+                                </td>
+                                <td style="text-align: center;">
+                                  {u.numOfFace > 0 ? '👤 Sí' : '—'}
+                                </td>
+                                <td style="text-align: center;">
+                                  {u.numOfCard > 0 ? '💳 Sí' : '—'}
+                                </td>
+                                <td style="text-align: center;">
+                                  <button 
+                                    type="button" 
+                                    class="sync-btn-del-single"
+                                    on:click={() => handleDeleteUsers([u.employeeNo])}
+                                    disabled={isExecutingAction}
+                                  >
+                                    🗑️ Eliminar
+                                  </button>
+                                </td>
+                              </tr>
+                            {/each}
+                          {/if}
                         </tbody>
                       </table>
                     </div>
@@ -1054,14 +1078,14 @@
   }
 
   .sync-modal-body {
-    flex: 1 1 0%;
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     padding: 16px 22px;
     background: #f8fafc;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
   }
 
   .sync-loading-container, .sync-placeholder-container {
@@ -1187,9 +1211,7 @@
     flex-direction: column;
     gap: 12px;
     box-shadow: 0 4px 6px -1px rgba(0,0,0,0.03);
-    flex: 1 1 0%;
-    min-height: 0;
-    overflow: hidden;
+    flex-shrink: 0;
   }
 
   .sync-device-info-bar {
@@ -1282,9 +1304,6 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    flex: 1 1 0%;
-    min-height: 0;
-    overflow: hidden;
   }
 
   .sync-tab-intro {
@@ -1423,31 +1442,34 @@
   }
 
   .sync-table-wrapper {
-    flex: 1 1 0%;
-    min-height: 280px;
+    height: clamp(340px, 44vh, 500px);
+    min-height: 320px;
+    max-height: 520px;
     overflow-y: auto !important;
     overflow-x: auto !important;
     border: 1.5px solid #cbd5e1;
     border-radius: 12px;
     background: #ffffff;
+    position: relative;
     scrollbar-width: thin !important;
     scrollbar-color: #94a3b8 #f1f5f9 !important;
   }
 
   .sync-table-wrapper::-webkit-scrollbar {
     display: block !important;
-    width: 8px !important;
-    height: 8px !important;
+    width: 9px !important;
+    height: 9px !important;
   }
 
   .sync-table-wrapper::-webkit-scrollbar-track {
     background: #f1f5f9 !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
   }
 
   .sync-table-wrapper::-webkit-scrollbar-thumb {
     background: #94a3b8 !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
+    border: 2px solid #f1f5f9 !important;
   }
 
   .sync-table-wrapper::-webkit-scrollbar-thumb:hover {
@@ -1456,7 +1478,9 @@
 
   .sync-table {
     width: 100%;
-    border-collapse: collapse;
+    min-width: 860px;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 13px;
     text-align: left;
   }
@@ -1464,15 +1488,16 @@
   .sync-table th {
     background: #f8fafc;
     color: #475569;
-    padding: 11px 14px;
+    padding: 12px 14px;
     font-size: 11.5px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.4px;
     position: sticky;
     top: 0;
-    z-index: 5;
+    z-index: 10;
     border-bottom: 2px solid #cbd5e1;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .sync-table td {
@@ -1480,21 +1505,22 @@
     border-bottom: 1px solid #f1f5f9;
     color: #0f172a;
     vertical-align: middle;
+    background: #ffffff;
   }
 
-  .sync-table tbody tr:hover {
+  .sync-table tbody tr:hover td {
     background: #f8fafc;
   }
 
-  .row-selected-sync {
+  .row-selected-sync td {
     background: #f0fdf4 !important;
   }
 
-  .row-selected-add {
+  .row-selected-add td {
     background: #fefce8 !important;
   }
 
-  .row-selected-del {
+  .row-selected-del td {
     background: #fef2f2 !important;
   }
 
