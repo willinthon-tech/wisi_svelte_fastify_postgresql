@@ -1,10 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterSalasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterSalasStore, masterLibrosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
 
   // Estado del formulario
   let cliente = '';
@@ -188,9 +190,10 @@
     ]);
   });
 
-  $: if (libroId) {
+  $: if (libroId || targetSalaId) {
     loadRecords();
     loadDropRecords();
+    loadSugerenciasRemotas('');
   }
 
   async function loadRecords() {
@@ -233,9 +236,15 @@
 
   async function loadSugerenciasRemotas(q = '') {
     try {
-      const url = q 
-        ? `/api/master/libros/control-clientes/sugerencias?q=${encodeURIComponent(q)}` 
-        : `/api/master/libros/control-clientes/sugerencias`;
+      const lId = libroId || libro?.id;
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (targetSalaId) params.set('sala_id', String(targetSalaId));
+
+      const url = lId 
+        ? `/api/master/libros/${lId}/control-clientes/sugerencias?${params.toString()}` 
+        : `/api/master/libros/control-clientes/sugerencias?${params.toString()}`;
+
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();

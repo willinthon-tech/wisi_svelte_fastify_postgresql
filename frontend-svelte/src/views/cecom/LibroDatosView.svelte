@@ -1,10 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterSalasStore, masterEmpleadosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterSalasStore, masterEmpleadosStore, masterLibrosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
 
   // Estado del formulario
   let aperturaSalaInicio = '';
@@ -59,26 +61,48 @@
     return `${salaName} - ${dateFormatted}`;
   })();
 
-  // Sugerencias de empleados para operadores CECOM
-  $: listaEmpleados = ($masterEmpleadosStore || []).map(e => {
-    const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim();
-    return nom || e.nombre || '';
-  }).filter(Boolean);
+  // Sugerencias de empleados para operadores CECOM (filtrados por la sala del libro)
+  $: listaEmpleados = ($masterEmpleadosStore || [])
+    .filter(e => {
+      if (targetSalaId) {
+        if (Number(e.sala_id) !== targetSalaId) return false;
+      }
+      if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
+      return true;
+    })
+    .map(e => {
+      const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || '';
+      return {
+        id: e.id,
+        nombre: nom,
+        cargo_nombre: (e.cargo_nombre || '').trim(),
+        sala_id: e.sala_id
+      };
+    })
+    .filter(e => Boolean(e.nombre))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  function matchEmpleado(emp, q) {
+    if (!q) return true;
+    const matchNom = emp.nombre.toLowerCase().includes(q);
+    const matchCargo = emp.cargo_nombre.toLowerCase().includes(q);
+    return matchNom || matchCargo;
+  }
 
   // Sugerencias filtradas reactivas para Turno A
   $: sugerenciasFiltradasA = (() => {
     const q = (inputTempOperadorA || '').trim().toLowerCase();
-    const disponibles = listaEmpleados.filter(emp => !operadoresTurnoAList.includes(emp));
-    if (!q) return disponibles.slice(0, 8);
-    return disponibles.filter(emp => emp.toLowerCase().includes(q)).slice(0, 8);
+    const disponibles = listaEmpleados.filter(emp => !operadoresTurnoAList.includes(emp.nombre));
+    if (!q) return disponibles.slice(0, 10);
+    return disponibles.filter(emp => matchEmpleado(emp, q)).slice(0, 10);
   })();
 
   // Sugerencias filtradas reactivas para Turno C
   $: sugerenciasFiltradasC = (() => {
     const q = (inputTempOperadorC || '').trim().toLowerCase();
-    const disponibles = listaEmpleados.filter(emp => !operadoresTurnoCList.includes(emp));
-    if (!q) return disponibles.slice(0, 8);
-    return disponibles.filter(emp => emp.toLowerCase().includes(q)).slice(0, 8);
+    const disponibles = listaEmpleados.filter(emp => !operadoresTurnoCList.includes(emp.nombre));
+    if (!q) return disponibles.slice(0, 10);
+    return disponibles.filter(emp => matchEmpleado(emp, q)).slice(0, 10);
   })();
 
   function formatDateDisplay(d) {
@@ -120,7 +144,8 @@
   // Funciones de Turno A
   function addOperadorA(val) {
     if (!val) return;
-    const parts = String(val)
+    const strVal = (typeof val === 'object' && val.nombre) ? val.nombre : String(val);
+    const parts = strVal
       .split(',')
       .map(s => s.trim())
       .filter(Boolean);
@@ -205,7 +230,8 @@
   // Funciones de Turno C
   function addOperadorC(val) {
     if (!val) return;
-    const parts = String(val)
+    const strVal = (typeof val === 'object' && val.nombre) ? val.nombre : String(val);
+    const parts = strVal
       .split(',')
       .map(s => s.trim())
       .filter(Boolean);
@@ -745,7 +771,12 @@
                         on:mousedown|preventDefault={() => addOperadorA(sug)}
                       >
                         <span class="sug-icon">👤</span>
-                        <span class="sug-text">{sug}</span>
+                        <div class="sug-info">
+                          <span class="sug-name">{sug.nombre}</span>
+                          {#if sug.cargo_nombre}
+                            <span class="sug-cargo">{sug.cargo_nombre}</span>
+                          {/if}
+                        </div>
                         <span class="sug-tab-badge">Tab ⇥</span>
                       </li>
                     {/each}
@@ -818,7 +849,12 @@
                         on:mousedown|preventDefault={() => addOperadorC(sug)}
                       >
                         <span class="sug-icon">👤</span>
-                        <span class="sug-text">{sug}</span>
+                        <div class="sug-info">
+                          <span class="sug-name">{sug.nombre}</span>
+                          {#if sug.cargo_nombre}
+                            <span class="sug-cargo">{sug.cargo_nombre}</span>
+                          {/if}
+                        </div>
                         <span class="sug-tab-badge">Tab ⇥</span>
                       </li>
                     {/each}
@@ -1436,6 +1472,37 @@
   .sug-icon {
     font-size: 12px;
     opacity: 0.6;
+  }
+
+  .sug-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 1px;
+    text-align: left;
+  }
+
+  .sug-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sug-cargo {
+    font-size: 10.5px;
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sugerencia-item:hover .sug-cargo,
+  .sugerencia-item.active .sug-cargo {
+    color: #3b82f6;
   }
 
   .sug-text {

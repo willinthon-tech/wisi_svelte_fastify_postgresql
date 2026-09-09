@@ -7,6 +7,7 @@
     masterSalasStore, 
     masterJuegosStore, 
     masterEmpleadosStore,
+    masterLibrosStore,
     userSalasStore as masterUserSalasStore,
     loadMasterStoresFromBackend 
   } from '../../controllers/master.store.js';
@@ -91,11 +92,36 @@
     });
   })();
 
-  // Lista de empleados disponibles para sugerencias y autocompletado
-  $: listaEmpleados = ($masterEmpleadosStore || []).map(e => {
-    const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim();
-    return nom || e.nombre || '';
-  }).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
+
+  // Lista de empleados disponibles para sugerencias y autocompletado (filtrados por la sala del libro)
+  $: listaEmpleados = ($masterEmpleadosStore || [])
+    .filter(e => {
+      // Filtrar estrictamente por la sala asociada al libro
+      if (targetSalaId) {
+        if (Number(e.sala_id) !== targetSalaId) return false;
+      }
+      if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
+      return true;
+    })
+    .map(e => {
+      const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || '';
+      return {
+        id: e.id,
+        nombre: nom,
+        cargo_nombre: (e.cargo_nombre || '').trim(),
+        sala_id: e.sala_id
+      };
+    })
+    .filter(e => Boolean(e.nombre))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  function matchEmpleado(emp, q) {
+    if (!q) return true;
+    const matchNom = emp.nombre.toLowerCase().includes(q);
+    const matchCargo = emp.cargo_nombre.toLowerCase().includes(q);
+    return matchNom || matchCargo;
+  }
 
   // --- Sugerencias de Croupiers en tabla ---
   $: currentQueryCroupier = (activeSug && rowsData[activeSug.mesaId]) 
@@ -104,8 +130,8 @@
 
   $: filteredCroupierSuggestions = (() => {
     if (!activeSug) return [];
-    if (!currentQueryCroupier) return listaEmpleados.slice(0, 8);
-    return listaEmpleados.filter(emp => emp.toLowerCase().includes(currentQueryCroupier)).slice(0, 8);
+    if (!currentQueryCroupier) return listaEmpleados.slice(0, 10);
+    return listaEmpleados.filter(emp => matchEmpleado(emp, currentQueryCroupier)).slice(0, 10);
   })();
 
   // --- Sugerencias de Pitboss (con coincidencias y Tab) ---
@@ -115,8 +141,8 @@
 
   $: filteredPitbossSuggestions = (() => {
     if (!pitbossSugTarget) return [];
-    if (!currentQueryPitboss) return listaEmpleados.slice(0, 8);
-    return listaEmpleados.filter(emp => emp.toLowerCase().includes(currentQueryPitboss)).slice(0, 8);
+    if (!currentQueryPitboss) return listaEmpleados.slice(0, 10);
+    return listaEmpleados.filter(emp => matchEmpleado(emp, currentQueryPitboss)).slice(0, 10);
   })();
 
   // Encabezado superior: Nombre de Sala - Fecha
@@ -564,8 +590,9 @@
     }
   }
 
-  function selectSuggestion(mesaId, field, name) {
-    updateField(mesaId, field, name);
+  function selectSuggestion(mesaId, field, sugOrName) {
+    const val = (sugOrName && typeof sugOrName === 'object') ? sugOrName.nombre : (sugOrName || '');
+    updateField(mesaId, field, val);
     activeSug = null;
     activeSugIndex = -1;
     triggerAutoSave(mesaId, 0);
@@ -619,9 +646,10 @@
     }
   }
 
-  function selectPitbossSuggestion(target, name) {
-    if (target === 'batch') batchPitboss = name;
-    if (target === 'modal') modalPitboss = name;
+  function selectPitbossSuggestion(target, sugOrName) {
+    const val = (sugOrName && typeof sugOrName === 'object') ? sugOrName.nombre : (sugOrName || '');
+    if (target === 'batch') batchPitboss = val;
+    if (target === 'modal') modalPitboss = val;
     pitbossSugTarget = null;
     pitbossSugIndex = -1;
   }
@@ -714,7 +742,12 @@
                     on:mousedown|preventDefault={() => selectPitbossSuggestion('batch', sug)}
                   >
                     <span class="sug-avatar">👤</span>
-                    <span class="sug-name">{sug}</span>
+                    <div class="sug-info">
+                      <span class="sug-name">{sug.nombre}</span>
+                      {#if sug.cargo_nombre}
+                        <span class="sug-cargo">{sug.cargo_nombre}</span>
+                      {/if}
+                    </div>
                     <span class="sug-tab-badge">Tab ⇥</span>
                   </li>
                 {/each}
@@ -869,7 +902,12 @@
                               on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_apertura', sug)}
                             >
                               <span class="sug-avatar">👤</span>
-                              <span class="sug-name">{sug}</span>
+                              <div class="sug-info">
+                                <span class="sug-name">{sug.nombre}</span>
+                                {#if sug.cargo_nombre}
+                                  <span class="sug-cargo">{sug.cargo_nombre}</span>
+                                {/if}
+                              </div>
                               <span class="sug-tab-badge">Tab ⇥</span>
                             </li>
                           {/each}
@@ -907,7 +945,12 @@
                               on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_cierre', sug)}
                             >
                               <span class="sug-avatar">👤</span>
-                              <span class="sug-name">{sug}</span>
+                              <div class="sug-info">
+                                <span class="sug-name">{sug.nombre}</span>
+                                {#if sug.cargo_nombre}
+                                  <span class="sug-cargo">{sug.cargo_nombre}</span>
+                                {/if}
+                              </div>
                               <span class="sug-tab-badge">Tab ⇥</span>
                             </li>
                           {/each}
@@ -1047,7 +1090,12 @@
                         on:mousedown|preventDefault={() => selectPitbossSuggestion('modal', sug)}
                       >
                         <span class="sug-avatar">👤</span>
-                        <span class="sug-name">{sug}</span>
+                        <div class="sug-info">
+                          <span class="sug-name">{sug.nombre}</span>
+                          {#if sug.cargo_nombre}
+                            <span class="sug-cargo">{sug.cargo_nombre}</span>
+                          {/if}
+                        </div>
                         <span class="sug-tab-badge">Tab ⇥</span>
                       </li>
                     {/each}
@@ -1488,7 +1536,7 @@
     border-radius: 6px;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
     margin-top: 3px;
-    min-width: 210px;
+    min-width: 250px;
     overflow: hidden;
   }
 
@@ -1512,7 +1560,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 10px;
+    padding: 6px 10px;
     cursor: pointer;
     font-size: 12.5px;
     color: #1e293b;
@@ -1530,9 +1578,35 @@
     font-size: 12px;
   }
 
-  .sug-name {
+  .sug-info {
+    display: flex;
+    flex-direction: column;
     flex: 1;
+    min-width: 0;
+    gap: 1px;
+    text-align: left;
+  }
+
+  .sug-name {
+    font-size: 12.5px;
     font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sug-cargo {
+    font-size: 10.5px;
+    color: #64748b;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .inline-dropdown-item:hover .sug-cargo,
+  .inline-dropdown-item.selected .sug-cargo {
+    color: #3b82f6;
   }
 
   .sug-tab-badge {

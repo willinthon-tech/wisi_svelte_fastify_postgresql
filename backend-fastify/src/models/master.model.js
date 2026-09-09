@@ -7927,8 +7927,10 @@ export async function getLibroControlClientesModel(libroId) {
   return rows;
 }
 
-export async function getClientesSugerenciasModel(query = '') {
+export async function getClientesSugerenciasModel(query = '', options = {}) {
   const cleanQ = (query || '').trim().toLowerCase();
+  const salaId = options.salaId ? Number(options.salaId) : null;
+  const libroId = options.libroId ? Number(options.libroId) : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
@@ -7938,14 +7940,37 @@ export async function getClientesSugerenciasModel(query = '') {
     return unique.filter(n => n.toLowerCase().includes(cleanQ)).slice(0, 30);
   }
 
-  const rows = await sql`
-    SELECT DISTINCT cliente
-    FROM libro_control_clientes
-    WHERE cliente IS NOT NULL AND cliente <> ''
-      ${cleanQ ? sql`AND LOWER(cliente) LIKE ${`%${cleanQ}%`}` : sql``}
-    ORDER BY cliente ASC
-    LIMIT 30
-  `;
+  // Si no tenemos salaId pero sí libroId, obtener el sala_id del libro
+  let resolvedSalaId = salaId;
+  if (!resolvedSalaId && libroId) {
+    const lib = await sql`SELECT sala_id FROM libros WHERE id = ${libroId} LIMIT 1`;
+    if (lib.length > 0 && lib[0].sala_id) {
+      resolvedSalaId = Number(lib[0].sala_id);
+    }
+  }
+
+  let rows;
+  if (resolvedSalaId) {
+    rows = await sql`
+      SELECT DISTINCT lcc.cliente
+      FROM libro_control_clientes lcc
+      INNER JOIN libros l ON lcc.libro_id = l.id
+      WHERE lcc.cliente IS NOT NULL AND lcc.cliente <> ''
+        AND l.sala_id = ${resolvedSalaId}
+        ${cleanQ ? sql`AND LOWER(lcc.cliente) LIKE ${`%${cleanQ}%`}` : sql``}
+      ORDER BY lcc.cliente ASC
+      LIMIT 30
+    `;
+  } else {
+    rows = await sql`
+      SELECT DISTINCT cliente
+      FROM libro_control_clientes
+      WHERE cliente IS NOT NULL AND cliente <> ''
+        ${cleanQ ? sql`AND LOWER(cliente) LIKE ${`%${cleanQ}%`}` : sql``}
+      ORDER BY cliente ASC
+      LIMIT 30
+    `;
+  }
 
   return rows.map(r => r.cliente);
 }

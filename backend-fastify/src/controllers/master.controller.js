@@ -2218,7 +2218,9 @@ export async function getLibroControlClientes(request, reply) {
 export async function getClientesSugerencias(request, reply) {
   try {
     const query = request.query?.q || '';
-    const data = await getClientesSugerenciasModel(query);
+    const libroId = request.params?.id || request.query?.libro_id || null;
+    const salaId = request.query?.sala_id || null;
+    const data = await getClientesSugerenciasModel(query, { libroId, salaId });
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
