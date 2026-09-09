@@ -5,6 +5,7 @@
   import { navigateToRoute } from "../../controllers/router.store.js";
   import {
     masterSalasStore,
+    masterTipoIncidenciasStore,
     loadMasterStoresFromBackend,
   } from "../../controllers/master.store.js";
 
@@ -278,42 +279,87 @@
   $: sortedControlLlaves = sortByMasReciente(resumenData.control_llaves);
   $: sortedIncidenciasGenerales = sortByMasReciente(resumenData.incidencias_generales);
 
-  // 1. Clasificación reactiva de Incidencias en Bloque de 3 (Mercancía, Generales, Empleados)
-  $: incidenciasBloque = (() => {
+  const DEFAULT_TIPOS_INCIDENCIA = [
+    { id: 1, nombre: "General" },
+    { id: 2, nombre: "Empleado" },
+    { id: 3, nombre: "Mercancía" },
+  ];
+
+  $: availableTiposIncidencia = ($masterTipoIncidenciasStore && $masterTipoIncidenciasStore.length > 0)
+    ? $masterTipoIncidenciasStore
+    : DEFAULT_TIPOS_INCIDENCIA;
+
+  function normalizeText(val) {
+    return String(val || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function getPillIcon(name) {
+    const s = normalizeText(name);
+    if (s.includes("mercanc") || s.includes("proveedor")) return "📦";
+    if (s.includes("emplead") || s.includes("personal") || s.includes("rrhh")) return "👤";
+    if (s.includes("general")) return "📌";
+    if (s.includes("maquin")) return "⚠️";
+    return "⚠️";
+  }
+
+  // 1. Clasificación reactiva y dinámica de Incidencias según los Tipos registrados (CONF.M: CECOM)
+  $: incidenciasPorTipo = (() => {
     const list = sortedIncidenciasGenerales;
-    const mercancia = [];
-    const empleado = [];
-    const generales = [];
+
+    // Crear categorías a partir de los tipos configurados
+    const categories = availableTiposIncidencia.map(t => ({
+      id: t.id,
+      nombre: t.nombre,
+      items: []
+    }));
 
     for (const inc of list) {
-      const t = (inc.tipo || "").toLowerCase().trim();
-      const desc = (inc.descripcion || "").toLowerCase();
-      if (
-        t.includes("mercanc") ||
-        t.includes("proveedor") ||
-        desc.includes("proveedor") ||
-        desc.includes("mercanc") ||
-        desc.includes("factura") ||
-        desc.includes("insumo")
-      ) {
-        mercancia.push(inc);
-      } else if (
-        t.includes("emplead") ||
-        t.includes("personal") ||
-        t.includes("rrhh") ||
-        t.includes("croupier") ||
-        desc.includes("emplead") ||
-        desc.includes("croupier") ||
-        desc.includes("personal") ||
-        desc.includes("asistencia") ||
-        desc.includes("retraso")
-      ) {
-        empleado.push(inc);
+      const incId = inc.tipo_incidencia_id != null ? Number(inc.tipo_incidencia_id) : null;
+      const incTipoNorm = normalizeText(inc.tipo || inc.tipo_incidencia_nombre);
+      const descNorm = (inc.descripcion || "").toLowerCase();
+
+      // 1. Coincidencia directa por ID o por Nombre del Tipo
+      let matchedCat = categories.find(c => 
+        (incId && Number(c.id) === incId) ||
+        (normalizeText(c.nombre) === incTipoNorm)
+      );
+
+      // 2. Coincidencia heurística para registros históricos si no coincidió por ID
+      if (!matchedCat) {
+        if (incTipoNorm.includes("mercanc") || descNorm.includes("mercanc") || descNorm.includes("proveedor")) {
+          matchedCat = categories.find(c => normalizeText(c.nombre).includes("mercanc"));
+        } else if (incTipoNorm.includes("emplead") || incTipoNorm.includes("personal") || descNorm.includes("emplead") || descNorm.includes("croupier")) {
+          matchedCat = categories.find(c => normalizeText(c.nombre).includes("emplead") || normalizeText(c.nombre).includes("personal"));
+        } else if (incTipoNorm.includes("maquin") || descNorm.includes("maquin")) {
+          matchedCat = categories.find(c => normalizeText(c.nombre).includes("maquin"));
+        }
+      }
+
+      if (matchedCat) {
+        matchedCat.items.push(inc);
       } else {
-        generales.push(inc);
+        const customName = (inc.tipo || inc.tipo_incidencia_nombre || "General").trim();
+        let customCat = categories.find(c => normalizeText(c.nombre) === normalizeText(customName));
+        if (!customCat) {
+          customCat = { id: `custom-${customName}`, nombre: customName, items: [] };
+          categories.push(customCat);
+        }
+        customCat.items.push(inc);
       }
     }
 
+    return categories;
+  })();
+
+  // Compatibilidad hacia atrás
+  $: incidenciasBloque = (() => {
+    const mercancia = incidenciasPorTipo.find(c => normalizeText(c.nombre).includes("mercanc"))?.items || [];
+    const empleado = incidenciasPorTipo.find(c => normalizeText(c.nombre).includes("emplead") || normalizeText(c.nombre).includes("personal"))?.items || [];
+    const generales = incidenciasPorTipo.find(c => normalizeText(c.nombre).includes("general"))?.items || [];
     return { mercancia, empleado, generales };
   })();
 
@@ -899,13 +945,13 @@
       </div>
 
       <!-- ============================================================
-           4. INCIDENCIAS EN BLOQUE DE 3 (Mercancía, Generales, Empleados)
+           4. BITÁCORA DE INCIDENCIAS POR TIPO (Dinámico según Tipo Incidencias)
            ============================================================ -->
       <div class="sheet-section sub-module-section">
         <div class="sub-header-row">
           <div class="sub-title-group">
             <h2 class="sub-section-title">
-              ⚠️ 4. Bitácora de Incidencias (Mercancía, Generales y Empleados)
+              ⚠️ 4. Bitácora de Incidencias
             </h2>
             <span class="sub-count-badge"
               >{resumenData.incidencias_generales.length} reportes en total</span
@@ -914,113 +960,40 @@
         </div>
 
         <div class="incidencias-bloque-tres">
-          <!-- Bloque 1: Mercancía / Proveedores -->
-          <div class="incidencia-subbloque">
-            <div class="incidencia-subbloque-header">
-              <h3 class="incidencia-subbloque-title">
-                <span>📦 Mercancía / Proveedores</span>
-              </h3>
-              <span class="incidencia-badge"
-                >{incidenciasBloque.mercancia.length}</span
-              >
-            </div>
-            <div class="incidencia-subbloque-content">
-              {#if incidenciasBloque.mercancia.length === 0}
-                <div class="empty-sub-alert">
-                  Sin recepción de mercancía registrada.
-                </div>
-              {:else}
-                {#each incidenciasBloque.mercancia as inc}
-                  {@const parsed = parseIncidenciaContent(
-                    inc.descripcion,
-                    inc.hora,
-                  )}
-                  <div class="incidencia-item-card">
-                    <div class="inc-item-title-bold">{parsed.title}</div>
-                    {#if parsed.items && parsed.items.length > 0}
-                      <ul class="inc-subitems-list">
-                        {#each parsed.items as subItem}
-                          <li>{subItem}</li>
-                        {/each}
-                      </ul>
-                    {/if}
+          {#each incidenciasPorTipo as cat (cat.id)}
+            <div class="incidencia-subbloque">
+              <div class="incidencia-subbloque-header">
+                <h3 class="incidencia-subbloque-title">
+                  <span>{getPillIcon(cat.nombre)} {cat.nombre}</span>
+                </h3>
+                <span class="incidencia-badge">{cat.items.length}</span>
+              </div>
+              <div class="incidencia-subbloque-content">
+                {#if cat.items.length === 0}
+                  <div class="empty-sub-alert">
+                    Sin novedades de {cat.nombre.toLowerCase()} registradas.
                   </div>
-                {/each}
-              {/if}
+                {:else}
+                  {#each cat.items as inc}
+                    {@const parsed = parseIncidenciaContent(
+                      inc.descripcion,
+                      inc.hora,
+                    )}
+                    <div class="incidencia-item-card">
+                      <div class="inc-item-title-bold">{parsed.title}</div>
+                      {#if parsed.items && parsed.items.length > 0}
+                        <ul class="inc-subitems-list">
+                          {#each parsed.items as subItem}
+                            <li>{subItem}</li>
+                          {/each}
+                        </ul>
+                      {/if}
+                    </div>
+                  {/each}
+                {/if}
+              </div>
             </div>
-          </div>
-
-          <!-- Bloque 2: Generales -->
-          <div class="incidencia-subbloque">
-            <div class="incidencia-subbloque-header">
-              <h3 class="incidencia-subbloque-title">
-                <span>📋 Incidencias Generales</span>
-              </h3>
-              <span class="incidencia-badge"
-                >{incidenciasBloque.generales.length}</span
-              >
-            </div>
-            <div class="incidencia-subbloque-content">
-              {#if incidenciasBloque.generales.length === 0}
-                <div class="empty-sub-alert">
-                  Sin incidencias generales reportadas.
-                </div>
-              {:else}
-                {#each incidenciasBloque.generales as inc}
-                  {@const parsed = parseIncidenciaContent(
-                    inc.descripcion,
-                    inc.hora,
-                  )}
-                  <div class="incidencia-item-card">
-                    <div class="inc-item-title-bold">{parsed.title}</div>
-                    {#if parsed.items && parsed.items.length > 0}
-                      <ul class="inc-subitems-list">
-                        {#each parsed.items as subItem}
-                          <li>{subItem}</li>
-                        {/each}
-                      </ul>
-                    {/if}
-                  </div>
-                {/each}
-              {/if}
-            </div>
-          </div>
-
-          <!-- Bloque 3: Empleados / Personal -->
-          <div class="incidencia-subbloque">
-            <div class="incidencia-subbloque-header">
-              <h3 class="incidencia-subbloque-title">
-                <span>👤 Personal / Empleados</span>
-              </h3>
-              <span class="incidencia-badge"
-                >{incidenciasBloque.empleado.length}</span
-              >
-            </div>
-            <div class="incidencia-subbloque-content">
-              {#if incidenciasBloque.empleado.length === 0}
-                <div class="empty-sub-alert">
-                  Sin novedades de empleados registradas.
-                </div>
-              {:else}
-                {#each incidenciasBloque.empleado as inc}
-                  {@const parsed = parseIncidenciaContent(
-                    inc.descripcion,
-                    inc.hora,
-                  )}
-                  <div class="incidencia-item-card">
-                    <div class="inc-item-title-bold">{parsed.title}</div>
-                    {#if parsed.items && parsed.items.length > 0}
-                      <ul class="inc-subitems-list">
-                        {#each parsed.items as subItem}
-                          <li>{subItem}</li>
-                        {/each}
-                      </ul>
-                    {/if}
-                  </div>
-                {/each}
-              {/if}
-            </div>
-          </div>
+          {/each}
         </div>
       </div>
 
@@ -2452,7 +2425,7 @@
      ───────────────────────────────────────────────────────────── */
   .incidencias-bloque-tres {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     align-items: stretch;
     gap: 14px;
     margin-top: 12px;
@@ -2859,7 +2832,7 @@
 
     .incidencias-bloque-tres {
       display: grid !important;
-      grid-template-columns: repeat(3, 1fr) !important;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
       gap: 12px !important;
       break-inside: auto !important;
       page-break-inside: auto !important;
