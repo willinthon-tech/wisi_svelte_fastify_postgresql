@@ -43,7 +43,6 @@
 
   // Selector de visualización en pantalla
   let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
-  let mesasViewMode = "auto"; // 'auto' (unificada en desktop, dividida en mobile) | 'split' | 'unified'
 
   onMount(async () => {
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
@@ -935,165 +934,46 @@
               >{resumenData.novedades_mesas.length} registros</span
             >
           </div>
-          <!-- Selector de visualización para mesas en pantalla -->
-          <div class="mesas-view-switcher no-print">
-            <button
-              type="button"
-              class="btn-switcher-pill {mesasViewMode === 'auto' ? 'active' : ''}"
-              on:click={() => (mesasViewMode = "auto")}
-              title="Automático: Dividida en móvil, unificada en PC"
-            >
-              📱 Auto
-            </button>
-            <button
-              type="button"
-              class="btn-switcher-pill {mesasViewMode === 'split' ? 'active' : ''}"
-              on:click={() => (mesasViewMode = "split")}
-              title="2 Tablas: Horarios/Croupiers y Supervisión"
-            >
-              📑 2 Tablas
-            </button>
-            <button
-              type="button"
-              class="btn-switcher-pill {mesasViewMode === 'unified' ? 'active' : ''}"
-              on:click={() => (mesasViewMode = "unified")}
-              title="1 Tabla completa con 7 columnas"
-            >
-              📄 1 Tabla (7 col)
-            </button>
-          </div>
         </div>
 
-        <div
-          class="mesas-section {mesasViewMode === 'split'
-            ? 'force-split'
-            : mesasViewMode === 'unified'
-              ? 'force-unified'
-              : ''}"
-        >
-          <!-- Vista Unificada (7 columnas oficial) -->
-          <div class="mesas-unified-wrapper">
-            <div class="table-responsive-wrapper">
-              <table class="sheet-official-table">
-                <thead>
+        <div class="mesas-section">
+          <div class="table-responsive-wrapper">
+            <table class="sheet-official-table">
+              <thead>
+                <tr>
+                  <th class="th-hora-a">HORA<br />A</th>
+                  <th class="th-mesa">MESA</th>
+                  <th class="th-pitboss">PITBOSS</th>
+                  <th class="th-croupier">CROUPIER<br />APERTURA</th>
+                  <th class="th-croupier">CROUPIER<br />CIERRE</th>
+                  <th class="th-hora-c">HORA<br />C</th>
+                  <th class="th-obs">OBSERVACIÓN</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#if resumenData.novedades_mesas.length === 0}
                   <tr>
-                    <th class="th-hora-a">HORA<br />A</th>
-                    <th class="th-mesa">MESA</th>
-                    <th class="th-pitboss">PITBOSS</th>
-                    <th class="th-croupier">CROUPIER<br />APERTURA</th>
-                    <th class="th-croupier">CROUPIER<br />CIERRE</th>
-                    <th class="th-hora-c">HORA<br />C</th>
-                    <th class="th-obs">OBSERVACIÓN</th>
+                    <td colspan="7" class="cell-empty-text"
+                      >No hay novedades registradas de mesas para este día.</td
+                    >
                   </tr>
-                </thead>
-                <tbody>
-                  {#if resumenData.novedades_mesas.length === 0}
+                {:else}
+                  {#each resumenData.novedades_mesas as nov}
                     <tr>
-                      <td colspan="7" class="cell-empty-text"
-                        >No hay novedades registradas de mesas para este día.</td
+                      <td class="cell-center">{nov.hora_apertura || "—"}</td>
+                      <td class="cell-mesa-name"
+                        >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
                       >
+                      <td class="cell-left">{nov.pitboss || "—"}</td>
+                      <td class="cell-left">{nov.croupier_apertura || "—"}</td>
+                      <td class="cell-left">{nov.croupier_cierre || "—"}</td>
+                      <td class="cell-center">{nov.hora_cierre || "—"}</td>
+                      <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
                     </tr>
-                  {:else}
-                    {#each resumenData.novedades_mesas as nov}
-                      <tr>
-                        <td class="cell-center">{nov.hora_apertura || "—"}</td>
-                        <td class="cell-mesa-name"
-                          >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
-                        >
-                        <td class="cell-left">{nov.pitboss || "—"}</td>
-                        <td class="cell-left">{nov.croupier_apertura || "—"}</td>
-                        <td class="cell-left">{nov.croupier_cierre || "—"}</td>
-                        <td class="cell-center">{nov.hora_cierre || "—"}</td>
-                        <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
-                      </tr>
-                    {/each}
-                  {/if}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Vista Dividida (2 Tablas: Horarios/Croupiers y Pitboss/Observaciones) -->
-          <div class="mesas-split-wrapper">
-            <!-- Tabla 1: Horarios y Croupiers -->
-            <div class="mesas-split-card">
-              <div class="split-table-title-row">
-                <span class="split-table-badge">⏱️ 3.1 Horarios y Croupiers por Mesa</span>
-                <span class="split-table-note">Apertura y Cierre</span>
-              </div>
-              <div class="table-responsive-wrapper">
-                <table class="sheet-official-table split-table">
-                  <thead>
-                    <tr>
-                      <th class="th-hora-a">HORA<br />A</th>
-                      <th class="th-mesa">MESA</th>
-                      <th class="th-croupier">CROUPIER<br />APERTURA</th>
-                      <th class="th-croupier">CROUPIER<br />CIERRE</th>
-                      <th class="th-hora-c">HORA<br />C</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#if resumenData.novedades_mesas.length === 0}
-                      <tr>
-                        <td colspan="5" class="cell-empty-text"
-                          >No hay novedades registradas de mesas para este día.</td
-                        >
-                      </tr>
-                    {:else}
-                      {#each resumenData.novedades_mesas as nov}
-                        <tr>
-                          <td class="cell-center">{nov.hora_apertura || "—"}</td>
-                          <td class="cell-mesa-name"
-                            >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
-                          >
-                          <td class="cell-left">{nov.croupier_apertura || "—"}</td>
-                          <td class="cell-left">{nov.croupier_cierre || "—"}</td>
-                          <td class="cell-center">{nov.hora_cierre || "—"}</td>
-                        </tr>
-                      {/each}
-                    {/if}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Tabla 2: Supervisión y Observaciones -->
-            <div class="mesas-split-card">
-              <div class="split-table-title-row">
-                <span class="split-table-badge">👤 3.2 Supervisión (Pitboss) y Observaciones</span>
-                <span class="split-table-note">Observaciones de Mesa</span>
-              </div>
-              <div class="table-responsive-wrapper">
-                <table class="sheet-official-table split-table">
-                  <thead>
-                    <tr>
-                      <th class="th-mesa">MESA</th>
-                      <th class="th-pitboss">PITBOSS</th>
-                      <th class="th-obs">OBSERVACIÓN</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#if resumenData.novedades_mesas.length === 0}
-                      <tr>
-                        <td colspan="3" class="cell-empty-text"
-                          >No hay observaciones registradas de mesas para este día.</td
-                        >
-                      </tr>
-                    {:else}
-                      {#each resumenData.novedades_mesas as nov}
-                        <tr>
-                          <td class="cell-mesa-name"
-                            >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
-                          >
-                          <td class="cell-left">{nov.pitboss || "—"}</td>
-                          <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
-                        </tr>
-                      {/each}
-                    {/if}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  {/each}
+                {/if}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -2175,132 +2055,12 @@
     line-height: 1.35;
   }
 
-  /* Controles y Tablas de Novedades de Mesas */
-  .mesas-view-switcher {
-    display: inline-flex;
-    align-items: center;
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    padding: 2px;
-    gap: 3px;
-  }
-
-  .btn-switcher-pill {
-    border: none;
-    background: transparent;
-    padding: 4px 10px;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: #64748b;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-switcher-pill:hover {
-    color: #0f172a;
-    background: rgba(255, 255, 255, 0.6);
-  }
-
-  .btn-switcher-pill.active {
-    background: #ffffff;
-    color: #1e3a8a;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    font-weight: 800;
-  }
-
-  .mesas-unified-wrapper {
-    display: block;
-    width: 100%;
-  }
-
-  .mesas-split-wrapper {
-    display: none;
-    width: 100%;
-  }
-
-  .mesas-split-card {
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    padding: 10px 10px 4px;
-    margin-bottom: 12px;
-  }
-
-  .split-table-title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1.5px solid #0f172a;
-  }
-
-  .split-table-badge {
-    font-size: 12.5px;
-    font-weight: 900;
-    color: #0f172a;
-  }
-
-  .split-table-note {
-    font-size: 11px;
-    color: #64748b;
-    font-style: italic;
-    font-weight: 600;
-  }
-
-  .split-table {
-    margin-bottom: 6px;
-  }
-
-  .split-table .th-hora-a,
-  .split-table .th-hora-c {
-    width: 65px;
-    min-width: 55px;
-  }
-
-  .split-table .th-mesa {
-    width: 90px;
-    min-width: 75px;
-  }
-
-  .split-table .th-croupier {
-    width: auto;
-    min-width: 105px;
-  }
-
-  .split-table .th-pitboss {
-    width: 130px;
-    min-width: 100px;
-  }
-
-  .split-table .th-obs {
-    width: auto;
-    min-width: 140px;
-  }
-
+  /* Responsive wrapper genérico para tablas */
   .table-responsive-wrapper {
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     margin-bottom: 8px;
-  }
-
-  .mesas-section.force-split .mesas-unified-wrapper {
-    display: none !important;
-  }
-  .mesas-section.force-split .mesas-split-wrapper {
-    display: flex !important;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .mesas-section.force-unified .mesas-unified-wrapper {
-    display: block !important;
-  }
-  .mesas-section.force-unified .mesas-split-wrapper {
-    display: none !important;
   }
 
   /* Tabla Oficial de Mesas */
@@ -2739,14 +2499,6 @@
     .incidencias-bloque-tres {
       grid-template-columns: 1fr;
     }
-    .mesas-unified-wrapper {
-      display: none;
-    }
-    .mesas-split-wrapper {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
   }
 
   .incidencia-subbloque {
@@ -3132,18 +2884,6 @@
       page-break-inside: avoid !important;
     }
 
-    .mesas-unified-wrapper {
-      display: block !important;
-    }
-
-    .mesas-split-wrapper {
-      display: none !important;
-    }
-
-    .mesas-view-switcher {
-      display: none !important;
-    }
-
     .sheet-footer-signatures {
       break-inside: avoid !important;
       page-break-inside: avoid !important;
@@ -3179,7 +2919,7 @@
 
   @media (max-width: 768px) {
     .official-sheet-container {
-      padding: 14px 8px;
+      padding: 12px 6px;
     }
 
     .sheet-header {
@@ -3187,13 +2927,22 @@
       gap: 12px;
     }
 
+    /* Horarios en UNA SOLA LÍNEA en versión móvil */
+    .horarios-list {
+      gap: 4px;
+    }
+
     .horario-item {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 5px;
-      padding: 8px 0;
-      border-bottom: 1px dashed #e2e8f0;
+      display: flex !important;
+      flex-direction: row !important;
+      align-items: baseline !important;
+      justify-content: space-between !important;
+      flex-wrap: nowrap !important;
+      gap: 4px !important;
+      padding: 3px 0 !important;
+      border-bottom: 1px dotted #e2e8f0;
+      width: 100% !important;
+      overflow: hidden !important;
     }
 
     .horario-item:last-child {
@@ -3201,32 +2950,102 @@
     }
 
     .horario-label-group {
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-      min-width: 0;
-      width: 100%;
+      display: inline-flex !important;
+      align-items: baseline !important;
+      gap: 3px !important;
+      min-width: 0 !important;
+      flex: 1 1 auto !important;
+      overflow: hidden !important;
+      white-space: nowrap !important;
+    }
+
+    .item-num {
+      font-size: 11px !important;
+      width: 14px !important;
+      flex-shrink: 0 !important;
     }
 
     .item-label {
-      min-width: 0;
-      font-size: 13.5px;
+      font-size: 11.5px !important;
+      min-width: 0 !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
     }
 
     .item-values {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 20px;
-      padding-left: 24px;
+      display: inline-flex !important;
+      align-items: baseline !important;
+      gap: 6px !important;
+      flex-shrink: 0 !important;
+      padding-left: 4px !important;
+      white-space: nowrap !important;
+      flex-wrap: nowrap !important;
     }
 
     .h-pair {
-      display: inline-flex;
-      align-items: baseline;
-      gap: 5px;
-      white-space: nowrap;
+      display: inline-flex !important;
+      align-items: baseline !important;
+      gap: 2px !important;
+      white-space: nowrap !important;
+    }
+
+    .h-text {
+      font-size: 10px !important;
+    }
+
+    .h-val {
+      font-size: 10.5px !important;
+      min-width: 34px !important;
+      text-align: center !important;
+    }
+
+    /* Tabla completa de Novedades de Mesas (7 columnas ajustadas para móvil con fuente reducida) */
+    .sheet-official-table {
+      font-size: 10px !important;
+      margin-bottom: 10px !important;
+      width: 100% !important;
+    }
+
+    .sheet-official-table th {
+      padding: 4px 2px !important;
+      font-size: 9px !important;
+      line-height: 1.1 !important;
+      letter-spacing: 0 !important;
+    }
+
+    .sheet-official-table td {
+      padding: 3px 2px !important;
+      font-size: 9.5px !important;
+    }
+
+    .sheet-official-table .th-hora-a,
+    .sheet-official-table .th-hora-c {
+      width: 44px !important;
+      min-width: 38px !important;
+    }
+
+    .sheet-official-table .th-mesa {
+      width: 65px !important;
+      min-width: 50px !important;
+    }
+
+    .sheet-official-table .th-pitboss {
+      width: 75px !important;
+      min-width: 60px !important;
+    }
+
+    .sheet-official-table .th-croupier {
+      width: 70px !important;
+      min-width: 55px !important;
+    }
+
+    .sheet-official-table .th-obs {
+      min-width: 60px !important;
+    }
+
+    .cell-obs {
+      font-size: 9px !important;
     }
 
     .sheet-footer-signatures {
