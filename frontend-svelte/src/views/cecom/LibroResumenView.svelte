@@ -43,6 +43,7 @@
 
   // Selector de visualización en pantalla
   let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
+  let mesasViewMode = "auto"; // 'auto' (unificada en desktop, dividida en mobile) | 'split' | 'unified'
 
   onMount(async () => {
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
@@ -702,81 +703,111 @@
           <div class="horarios-list">
             <!-- 1. Apertura de la sala -->
             <div class="horario-item">
-              <span class="item-num">1.</span>
-              <span class="item-label">Apertura de la sala</span>
+              <div class="horario-label-group">
+                <span class="item-num">1.</span>
+                <span class="item-label">Apertura de la sala</span>
+              </div>
               <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.apertura_sala_inicio || "—"}</span
-                >
-                <span class="h-text">h cierre:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.apertura_sala_fin || "—"}</span
-                >
+                <span class="h-pair">
+                  <span class="h-text">h inicio:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.apertura_sala_inicio || "—"}</span
+                  >
+                </span>
+                <span class="h-pair">
+                  <span class="h-text">h cierre:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.apertura_sala_fin || "—"}</span
+                  >
+                </span>
               </div>
             </div>
 
             <!-- 2. Apertura de maquinas -->
             <div class="horario-item">
-              <span class="item-num">2.</span>
-              <span class="item-label">Apertura de maquinas</span>
+              <div class="horario-label-group">
+                <span class="item-num">2.</span>
+                <span class="item-label">Apertura de maquinas</span>
+              </div>
               <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.apertura_maquinas_inicio || "—"}</span
-                >
-                <span class="h-text">h cierre:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.apertura_maquinas_fin || "—"}</span
-                >
+                <span class="h-pair">
+                  <span class="h-text">h inicio:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.apertura_maquinas_inicio || "—"}</span
+                  >
+                </span>
+                <span class="h-pair">
+                  <span class="h-text">h cierre:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.apertura_maquinas_fin || "—"}</span
+                  >
+                </span>
               </div>
             </div>
 
             <!-- 3. Apertura de bingo -->
             <div class="horario-item">
-              <span class="item-num">3.</span>
-              <span class="item-label">Apertura de bingo</span>
+              <div class="horario-label-group">
+                <span class="item-num">3.</span>
+                <span class="item-label">Apertura de bingo</span>
+              </div>
               <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.apertura_bingo_inicio || "—"}</span
-                >
-                <span class="h-text">h cierre:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.apertura_bingo_fin || "—"}</span
-                >
+                <span class="h-pair">
+                  <span class="h-text">h inicio:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.apertura_bingo_inicio || "—"}</span
+                  >
+                </span>
+                <span class="h-pair">
+                  <span class="h-text">h cierre:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.apertura_bingo_fin || "—"}</span
+                  >
+                </span>
               </div>
             </div>
 
             <!-- 4. Retiro de dropbox general -->
             <div class="horario-item">
-              <span class="item-num">4.</span>
-              <span class="item-label">Retiro de dropbox general</span>
+              <div class="horario-label-group">
+                <span class="item-num">4.</span>
+                <span class="item-label">Retiro de dropbox general</span>
+              </div>
               <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.retiros_dropbox_inicio || "—"}</span
-                >
-                <span class="h-text">h cierre:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.retiros_dropbox_fin || "—"}</span
-                >
+                <span class="h-pair">
+                  <span class="h-text">h inicio:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.retiros_dropbox_inicio || "—"}</span
+                  >
+                </span>
+                <span class="h-pair">
+                  <span class="h-text">h cierre:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.retiros_dropbox_fin || "—"}</span
+                  >
+                </span>
               </div>
             </div>
 
             <!-- 5. Conteo DROP -->
             <div class="horario-item">
-              <span class="item-num">5.</span>
-              <span class="item-label">Conteo DROP</span>
+              <div class="horario-label-group">
+                <span class="item-num">5.</span>
+                <span class="item-label">Conteo DROP</span>
+              </div>
               <div class="item-values">
-                <span class="h-text">h inicio:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.conteo_dropbox_inicio || "—"}</span
-                >
-                <span class="h-text">h cierre:</span>
-                <span class="h-val"
-                  >{resumenData.datos?.conteo_dropbox_fin || "—"}</span
-                >
+                <span class="h-pair">
+                  <span class="h-text">h inicio:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.conteo_dropbox_inicio || "—"}</span
+                  >
+                </span>
+                <span class="h-pair">
+                  <span class="h-text">h cierre:</span>
+                  <span class="h-val"
+                    >{resumenData.datos?.conteo_dropbox_fin || "—"}</span
+                  >
+                </span>
               </div>
             </div>
           </div>
@@ -842,50 +873,52 @@
             No hay registros de drop para este libro.
           </div>
         {:else}
-          <table class="sheet-detail-table">
-            <thead>
-              <tr>
-                <th class="th-mesa">MESA</th>
-                <th class="th-num">$100</th>
-                <th class="th-num">$50</th>
-                <th class="th-num">$20</th>
-                <th class="th-num">$10</th>
-                <th class="th-num">$5</th>
-                <th class="th-num">$1</th>
-                <th class="th-total">TOTAL RECAUDADO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each resumenData.drop_mesas as d}
+          <div class="table-responsive-wrapper">
+            <table class="sheet-detail-table">
+              <thead>
                 <tr>
-                  <td class="cell-mesa-bold"
-                    >{d.mesa_nombre || `Mesa #${d.mesa_id}`}</td
-                  >
-                  <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
-                  <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
-                  <td class="cell-num">{d.denominacion_20 ?? d.b20 ?? 0}</td>
-                  <td class="cell-num">{d.denominacion_10 ?? d.b10 ?? 0}</td>
-                  <td class="cell-num">{d.denominacion_5 ?? d.b5 ?? 0}</td>
-                  <td class="cell-num">{d.denominacion_1 ?? d.b1 ?? 0}</td>
-                  <td class="cell-total-money">{formatMoney(d.total)}</td>
+                  <th class="th-mesa">MESA</th>
+                  <th class="th-num">$100</th>
+                  <th class="th-num">$50</th>
+                  <th class="th-num">$20</th>
+                  <th class="th-num">$10</th>
+                  <th class="th-num">$5</th>
+                  <th class="th-num">$1</th>
+                  <th class="th-total">TOTAL RECAUDADO</th>
                 </tr>
-              {/each}
-            </tbody>
-            <tfoot>
-              <tr class="tfoot-totals">
-                <td>TOTALES</td>
-                <td class="cell-num">{dropTotales.sum100}</td>
-                <td class="cell-num">{dropTotales.sum50}</td>
-                <td class="cell-num">{dropTotales.sum20}</td>
-                <td class="cell-num">{dropTotales.sum10}</td>
-                <td class="cell-num">{dropTotales.sum5}</td>
-                <td class="cell-num">{dropTotales.sum1}</td>
-                <td class="cell-grand-total"
-                  >{formatMoney(dropTotales.grandTotal)}</td
-                >
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody>
+                {#each resumenData.drop_mesas as d}
+                  <tr>
+                    <td class="cell-mesa-bold"
+                      >{d.mesa_nombre || `Mesa #${d.mesa_id}`}</td
+                    >
+                    <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
+                    <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
+                    <td class="cell-num">{d.denominacion_20 ?? d.b20 ?? 0}</td>
+                    <td class="cell-num">{d.denominacion_10 ?? d.b10 ?? 0}</td>
+                    <td class="cell-num">{d.denominacion_5 ?? d.b5 ?? 0}</td>
+                    <td class="cell-num">{d.denominacion_1 ?? d.b1 ?? 0}</td>
+                    <td class="cell-total-money">{formatMoney(d.total)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+              <tfoot>
+                <tr class="tfoot-totals">
+                  <td>TOTALES</td>
+                  <td class="cell-num">{dropTotales.sum100}</td>
+                  <td class="cell-num">{dropTotales.sum50}</td>
+                  <td class="cell-num">{dropTotales.sum20}</td>
+                  <td class="cell-num">{dropTotales.sum10}</td>
+                  <td class="cell-num">{dropTotales.sum5}</td>
+                  <td class="cell-num">{dropTotales.sum1}</td>
+                  <td class="cell-grand-total"
+                    >{formatMoney(dropTotales.grandTotal)}</td
+                  >
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         {/if}
       </div>
 
@@ -902,45 +935,166 @@
               >{resumenData.novedades_mesas.length} registros</span
             >
           </div>
+          <!-- Selector de visualización para mesas en pantalla -->
+          <div class="mesas-view-switcher no-print">
+            <button
+              type="button"
+              class="btn-switcher-pill {mesasViewMode === 'auto' ? 'active' : ''}"
+              on:click={() => (mesasViewMode = "auto")}
+              title="Automático: Dividida en móvil, unificada en PC"
+            >
+              📱 Auto
+            </button>
+            <button
+              type="button"
+              class="btn-switcher-pill {mesasViewMode === 'split' ? 'active' : ''}"
+              on:click={() => (mesasViewMode = "split")}
+              title="2 Tablas: Horarios/Croupiers y Supervisión"
+            >
+              📑 2 Tablas
+            </button>
+            <button
+              type="button"
+              class="btn-switcher-pill {mesasViewMode === 'unified' ? 'active' : ''}"
+              on:click={() => (mesasViewMode = "unified")}
+              title="1 Tabla completa con 7 columnas"
+            >
+              📄 1 Tabla (7 col)
+            </button>
+          </div>
         </div>
 
-        <div class="mesas-section">
-          <table class="sheet-official-table">
-            <thead>
-              <tr>
-                <th class="th-hora-a">HORA<br />A</th>
-                <th class="th-mesa">MESA</th>
-                <th class="th-pitboss">PITBOSS</th>
-                <th class="th-croupier">CROUPIER<br />APERTURA</th>
-                <th class="th-croupier">CROUPIER<br />CIERRE</th>
-                <th class="th-hora-c">HORA<br />C</th>
-                <th class="th-obs">OBSERVACIÓN</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#if resumenData.novedades_mesas.length === 0}
-                <tr>
-                  <td colspan="7" class="cell-empty-text"
-                    >No hay novedades registradas de mesas para este día.</td
-                  >
-                </tr>
-              {:else}
-                {#each resumenData.novedades_mesas as nov}
+        <div
+          class="mesas-section {mesasViewMode === 'split'
+            ? 'force-split'
+            : mesasViewMode === 'unified'
+              ? 'force-unified'
+              : ''}"
+        >
+          <!-- Vista Unificada (7 columnas oficial) -->
+          <div class="mesas-unified-wrapper">
+            <div class="table-responsive-wrapper">
+              <table class="sheet-official-table">
+                <thead>
                   <tr>
-                    <td class="cell-center">{nov.hora_apertura || "—"}</td>
-                    <td class="cell-mesa-name"
-                      >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
-                    >
-                    <td class="cell-left">{nov.pitboss || "—"}</td>
-                    <td class="cell-left">{nov.croupier_apertura || "—"}</td>
-                    <td class="cell-left">{nov.croupier_cierre || "—"}</td>
-                    <td class="cell-center">{nov.hora_cierre || "—"}</td>
-                    <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
+                    <th class="th-hora-a">HORA<br />A</th>
+                    <th class="th-mesa">MESA</th>
+                    <th class="th-pitboss">PITBOSS</th>
+                    <th class="th-croupier">CROUPIER<br />APERTURA</th>
+                    <th class="th-croupier">CROUPIER<br />CIERRE</th>
+                    <th class="th-hora-c">HORA<br />C</th>
+                    <th class="th-obs">OBSERVACIÓN</th>
                   </tr>
-                {/each}
-              {/if}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {#if resumenData.novedades_mesas.length === 0}
+                    <tr>
+                      <td colspan="7" class="cell-empty-text"
+                        >No hay novedades registradas de mesas para este día.</td
+                      >
+                    </tr>
+                  {:else}
+                    {#each resumenData.novedades_mesas as nov}
+                      <tr>
+                        <td class="cell-center">{nov.hora_apertura || "—"}</td>
+                        <td class="cell-mesa-name"
+                          >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
+                        >
+                        <td class="cell-left">{nov.pitboss || "—"}</td>
+                        <td class="cell-left">{nov.croupier_apertura || "—"}</td>
+                        <td class="cell-left">{nov.croupier_cierre || "—"}</td>
+                        <td class="cell-center">{nov.hora_cierre || "—"}</td>
+                        <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
+                      </tr>
+                    {/each}
+                  {/if}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Vista Dividida (2 Tablas: Horarios/Croupiers y Pitboss/Observaciones) -->
+          <div class="mesas-split-wrapper">
+            <!-- Tabla 1: Horarios y Croupiers -->
+            <div class="mesas-split-card">
+              <div class="split-table-title-row">
+                <span class="split-table-badge">⏱️ 3.1 Horarios y Croupiers por Mesa</span>
+                <span class="split-table-note">Apertura y Cierre</span>
+              </div>
+              <div class="table-responsive-wrapper">
+                <table class="sheet-official-table split-table">
+                  <thead>
+                    <tr>
+                      <th class="th-hora-a">HORA<br />A</th>
+                      <th class="th-mesa">MESA</th>
+                      <th class="th-croupier">CROUPIER<br />APERTURA</th>
+                      <th class="th-croupier">CROUPIER<br />CIERRE</th>
+                      <th class="th-hora-c">HORA<br />C</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#if resumenData.novedades_mesas.length === 0}
+                      <tr>
+                        <td colspan="5" class="cell-empty-text"
+                          >No hay novedades registradas de mesas para este día.</td
+                        >
+                      </tr>
+                    {:else}
+                      {#each resumenData.novedades_mesas as nov}
+                        <tr>
+                          <td class="cell-center">{nov.hora_apertura || "—"}</td>
+                          <td class="cell-mesa-name"
+                            >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
+                          >
+                          <td class="cell-left">{nov.croupier_apertura || "—"}</td>
+                          <td class="cell-left">{nov.croupier_cierre || "—"}</td>
+                          <td class="cell-center">{nov.hora_cierre || "—"}</td>
+                        </tr>
+                      {/each}
+                    {/if}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Tabla 2: Supervisión y Observaciones -->
+            <div class="mesas-split-card">
+              <div class="split-table-title-row">
+                <span class="split-table-badge">👤 3.2 Supervisión (Pitboss) y Observaciones</span>
+                <span class="split-table-note">Observaciones de Mesa</span>
+              </div>
+              <div class="table-responsive-wrapper">
+                <table class="sheet-official-table split-table">
+                  <thead>
+                    <tr>
+                      <th class="th-mesa">MESA</th>
+                      <th class="th-pitboss">PITBOSS</th>
+                      <th class="th-obs">OBSERVACIÓN</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#if resumenData.novedades_mesas.length === 0}
+                      <tr>
+                        <td colspan="3" class="cell-empty-text"
+                          >No hay observaciones registradas de mesas para este día.</td
+                        >
+                      </tr>
+                    {:else}
+                      {#each resumenData.novedades_mesas as nov}
+                        <tr>
+                          <td class="cell-mesa-name"
+                            >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
+                          >
+                          <td class="cell-left">{nov.pitboss || "—"}</td>
+                          <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
+                        </tr>
+                      {/each}
+                    {/if}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1023,44 +1177,46 @@
             No hay movimientos de control de llaves registrados en este libro.
           </div>
         {:else}
-          <table class="sheet-detail-table">
-            <thead>
-              <tr>
-                <th class="th-num">N°</th>
-                <th class="th-llave">LLAVES</th>
-                <th class="th-desc">DESCRIPCIÓN / MOTIVO</th>
-                <th class="th-hora">HORA SALIDA</th>
-                <th class="th-hora">HORA RECEPCIÓN</th>
-                <th class="th-estado">ESTADO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each sortedControlLlaves as k, idx}
-                {@const isDevuelta = Boolean(
-                  k.hora_recepcion && k.hora_recepcion.trim(),
-                )}
-                {@const llavesTexto =
-                  k.llaves_detalle && k.llaves_detalle.length > 0
-                    ? k.llaves_detalle.map((l) => l.nombre).join(", ")
-                    : k.llave_nombre ||
-                      (k.llaves_ids ? `${k.llaves_ids.length} llaves` : "—")}
+          <div class="table-responsive-wrapper">
+            <table class="sheet-detail-table">
+              <thead>
                 <tr>
-                  <td class="cell-center">{idx + 1}</td>
-                  <td class="cell-llave-bold">🔑 {llavesTexto}</td>
-                  <td class="cell-left">{k.descripcion || "General"}</td>
-                  <td class="cell-center">{k.hora_salida || "—"}</td>
-                  <td class="cell-center">{k.hora_recepcion || "—"}</td>
-                  <td class="cell-center">
-                    {#if isDevuelta}
-                      <span class="tag-status tag-success">✓ Devuelta</span>
-                    {:else}
-                      <span class="tag-status tag-warning">⏳ En Custodia</span>
-                    {/if}
-                  </td>
+                  <th class="th-num">N°</th>
+                  <th class="th-llave">LLAVES</th>
+                  <th class="th-desc">DESCRIPCIÓN / MOTIVO</th>
+                  <th class="th-hora">HORA SALIDA</th>
+                  <th class="th-hora">HORA RECEPCIÓN</th>
+                  <th class="th-estado">ESTADO</th>
                 </tr>
-              {/each}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {#each sortedControlLlaves as k, idx}
+                  {@const isDevuelta = Boolean(
+                    k.hora_recepcion && k.hora_recepcion.trim(),
+                  )}
+                  {@const llavesTexto =
+                    k.llaves_detalle && k.llaves_detalle.length > 0
+                      ? k.llaves_detalle.map((l) => l.nombre).join(", ")
+                      : k.llave_nombre ||
+                        (k.llaves_ids ? `${k.llaves_ids.length} llaves` : "—")}
+                  <tr>
+                    <td class="cell-center">{idx + 1}</td>
+                    <td class="cell-llave-bold">🔑 {llavesTexto}</td>
+                    <td class="cell-left">{k.descripcion || "General"}</td>
+                    <td class="cell-center">{k.hora_salida || "—"}</td>
+                    <td class="cell-center">{k.hora_recepcion || "—"}</td>
+                    <td class="cell-center">
+                      {#if isDevuelta}
+                        <span class="tag-status tag-success">✓ Devuelta</span>
+                      {:else}
+                        <span class="tag-status tag-warning">⏳ En Custodia</span>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
         {/if}
       </div>
 
@@ -1102,47 +1258,49 @@
             No hay operaciones de control de clientes registradas en este libro.
           </div>
         {:else}
-          <table class="sheet-detail-table">
-            <thead>
-              <tr>
-                <th class="th-num">N°</th>
-                <th class="th-hora">HORA</th>
-                <th class="th-cliente">CLIENTE / JUGADOR</th>
-                <th class="th-tipo">TIPO</th>
-                <th class="th-metodo">MÉTODO</th>
-                <th class="th-total">MONTO</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each sortedControlClientes as c, idx}
-                {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
+          <div class="table-responsive-wrapper">
+            <table class="sheet-detail-table">
+              <thead>
                 <tr>
-                  <td class="cell-center">{idx + 1}</td>
-                  <td class="cell-center">{c.hora || "—"}</td>
-                  <td class="cell-client-name">👤 {c.cliente || "—"}</td>
-                  <td class="cell-center">
-                    <span
-                      class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
-                    >
-                      {c.tipo || "Compra"}
-                    </span>
-                  </td>
-                  <td class="cell-center tag-metodo-text"
-                    >{c.metodo || "General"}</td
-                  >
-                  <td class="cell-total-money">{formatMoney(c.monto)}</td>
+                  <th class="th-num">N°</th>
+                  <th class="th-hora">HORA</th>
+                  <th class="th-cliente">CLIENTE / JUGADOR</th>
+                  <th class="th-tipo">TIPO</th>
+                  <th class="th-metodo">MÉTODO</th>
+                  <th class="th-total">MONTO</th>
                 </tr>
-              {/each}
-            </tbody>
-            <tfoot>
-              <tr class="tfoot-totals">
-                <td colspan="5">BALANCE NETO (COMPRAS - PAGOS)</td>
-                <td class="cell-grand-total"
-                  >{formatMoney(clientesTotales.balanceNeto)}</td
-                >
-              </tr>
-            </tfoot>
-          </table>
+              </thead>
+              <tbody>
+                {#each sortedControlClientes as c, idx}
+                  {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
+                  <tr>
+                    <td class="cell-center">{idx + 1}</td>
+                    <td class="cell-center">{c.hora || "—"}</td>
+                    <td class="cell-client-name">👤 {c.cliente || "—"}</td>
+                    <td class="cell-center">
+                      <span
+                        class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
+                      >
+                        {c.tipo || "Compra"}
+                      </span>
+                    </td>
+                    <td class="cell-center tag-metodo-text"
+                      >{c.metodo || "General"}</td
+                    >
+                    <td class="cell-total-money">{formatMoney(c.monto)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+              <tfoot>
+                <tr class="tfoot-totals">
+                  <td colspan="5">BALANCE NETO (COMPRAS - PAGOS)</td>
+                  <td class="cell-grand-total"
+                    >{formatMoney(clientesTotales.balanceNeto)}</td
+                  >
+                </tr>
+              </tfoot>
+            </table>
+          </div>
 
           <!-- 6.2 Las 2 Tablitas Agrupadas (Por Método de Pago y Por Cliente) -->
           <div class="client-summaries-grid">
@@ -1154,51 +1312,53 @@
                   >{clientesPorMetodo.length} métodos</span
                 >
               </div>
-              <table class="compact-table">
-                <thead>
-                  <tr>
-                    <th>MÉTODO</th>
-                    <th>OPS</th>
-                    <th>COMPRAS</th>
-                    <th>PAGOS</th>
-                    <th>BALANCE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each clientesPorMetodo as m}
+              <div class="table-responsive-wrapper">
+                <table class="compact-table">
+                  <thead>
                     <tr>
-                      <td class="cell-left font-bold">{m.metodo}</td>
-                      <td class="cell-center">{m.ops}</td>
-                      <td class="cell-total-money">{formatMoney(m.compras)}</td>
-                      <td class="cell-total-money text-blue"
-                        >{formatMoney(m.pagos)}</td
-                      >
-                      <td
-                        class="cell-total-money {m.balance >= 0
-                          ? 'text-emerald'
-                          : 'text-rose'}"
-                      >
-                        {formatMoney(m.balance)}
-                      </td>
+                      <th>MÉTODO</th>
+                      <th>OPS</th>
+                      <th>COMPRAS</th>
+                      <th>PAGOS</th>
+                      <th>BALANCE</th>
                     </tr>
-                  {/each}
-                </tbody>
-                <tfoot>
-                  <tr class="tfoot-totals">
-                    <td>TOTAL</td>
-                    <td class="cell-center">{totalesPorMetodo.ops}</td>
-                    <td class="cell-total-money"
-                      >{formatMoney(totalesPorMetodo.compras)}</td
-                    >
-                    <td class="cell-total-money text-blue"
-                      >{formatMoney(totalesPorMetodo.pagos)}</td
-                    >
-                    <td class="cell-grand-total"
-                      >{formatMoney(totalesPorMetodo.balance)}</td
-                    >
-                  </tr>
-                </tfoot>
-              </table>
+                  </thead>
+                  <tbody>
+                    {#each clientesPorMetodo as m}
+                      <tr>
+                        <td class="cell-left font-bold">{m.metodo}</td>
+                        <td class="cell-center">{m.ops}</td>
+                        <td class="cell-total-money">{formatMoney(m.compras)}</td>
+                        <td class="cell-total-money text-blue"
+                          >{formatMoney(m.pagos)}</td
+                        >
+                        <td
+                          class="cell-total-money {m.balance >= 0
+                            ? 'text-emerald'
+                            : 'text-rose'}"
+                        >
+                          {formatMoney(m.balance)}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td>TOTAL</td>
+                      <td class="cell-center">{totalesPorMetodo.ops}</td>
+                      <td class="cell-total-money"
+                        >{formatMoney(totalesPorMetodo.compras)}</td
+                      >
+                      <td class="cell-total-money text-blue"
+                        >{formatMoney(totalesPorMetodo.pagos)}</td
+                      >
+                      <td class="cell-grand-total"
+                        >{formatMoney(totalesPorMetodo.balance)}</td
+                      >
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
 
             <!-- Tablita B: Agrupado por Cliente / Jugador -->
@@ -1209,52 +1369,54 @@
                   >{clientesPorJugador.length} clientes</span
                 >
               </div>
-              <table class="compact-table">
-                <thead>
-                  <tr>
-                    <th>CLIENTE</th>
-                    <th>OPS</th>
-                    <th>COMPRAS</th>
-                    <th>PAGOS</th>
-                    <th>BALANCE</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each clientesPorJugador as cl}
+              <div class="table-responsive-wrapper">
+                <table class="compact-table">
+                  <thead>
                     <tr>
-                      <td class="cell-left font-bold">{cl.cliente}</td>
-                      <td class="cell-center">{cl.ops}</td>
-                      <td class="cell-total-money">{formatMoney(cl.compras)}</td
+                      <th>CLIENTE</th>
+                      <th>OPS</th>
+                      <th>COMPRAS</th>
+                      <th>PAGOS</th>
+                      <th>BALANCE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each clientesPorJugador as cl}
+                      <tr>
+                        <td class="cell-left font-bold">{cl.cliente}</td>
+                        <td class="cell-center">{cl.ops}</td>
+                        <td class="cell-total-money">{formatMoney(cl.compras)}</td
+                        >
+                        <td class="cell-total-money text-blue"
+                          >{formatMoney(cl.pagos)}</td
+                        >
+                        <td
+                          class="cell-total-money {cl.balance >= 0
+                            ? 'text-emerald'
+                            : 'text-rose'}"
+                        >
+                          {formatMoney(cl.balance)}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td>TOTAL</td>
+                      <td class="cell-center">{totalesPorJugador.ops}</td>
+                      <td class="cell-total-money"
+                        >{formatMoney(totalesPorJugador.compras)}</td
                       >
                       <td class="cell-total-money text-blue"
-                        >{formatMoney(cl.pagos)}</td
+                        >{formatMoney(totalesPorJugador.pagos)}</td
                       >
-                      <td
-                        class="cell-total-money {cl.balance >= 0
-                          ? 'text-emerald'
-                          : 'text-rose'}"
+                      <td class="cell-grand-total"
+                        >{formatMoney(totalesPorJugador.balance)}</td
                       >
-                        {formatMoney(cl.balance)}
-                      </td>
                     </tr>
-                  {/each}
-                </tbody>
-                <tfoot>
-                  <tr class="tfoot-totals">
-                    <td>TOTAL</td>
-                    <td class="cell-center">{totalesPorJugador.ops}</td>
-                    <td class="cell-total-money"
-                      >{formatMoney(totalesPorJugador.compras)}</td
-                    >
-                    <td class="cell-total-money text-blue"
-                      >{formatMoney(totalesPorJugador.pagos)}</td
-                    >
-                    <td class="cell-grand-total"
-                      >{formatMoney(totalesPorJugador.balance)}</td
-                    >
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           </div>
         {/if}
@@ -1905,11 +2067,18 @@
   .horario-item {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 10px;
   }
 
   .horario-item.multi-line {
     align-items: flex-start;
+  }
+
+  .horario-label-group {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 235px;
   }
 
   .item-num {
@@ -1921,14 +2090,21 @@
   .item-label {
     font-weight: 800;
     color: #111827;
-    min-width: 210px;
+    min-width: 200px;
   }
 
   .item-values {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
     flex-wrap: wrap;
+  }
+
+  .h-pair {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    white-space: nowrap;
   }
 
   .h-text {
@@ -1940,7 +2116,7 @@
   .h-val {
     font-weight: 800;
     color: #000000;
-    min-width: 50px;
+    min-width: 48px;
     border-bottom: 1px dotted #9ca3af;
   }
 
@@ -1997,6 +2173,134 @@
     font-size: 12.5px;
     color: #1e293b;
     line-height: 1.35;
+  }
+
+  /* Controles y Tablas de Novedades de Mesas */
+  .mesas-view-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 2px;
+    gap: 3px;
+  }
+
+  .btn-switcher-pill {
+    border: none;
+    background: transparent;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #64748b;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-switcher-pill:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .btn-switcher-pill.active {
+    background: #ffffff;
+    color: #1e3a8a;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    font-weight: 800;
+  }
+
+  .mesas-unified-wrapper {
+    display: block;
+    width: 100%;
+  }
+
+  .mesas-split-wrapper {
+    display: none;
+    width: 100%;
+  }
+
+  .mesas-split-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 10px 4px;
+    margin-bottom: 12px;
+  }
+
+  .split-table-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1.5px solid #0f172a;
+  }
+
+  .split-table-badge {
+    font-size: 12.5px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .split-table-note {
+    font-size: 11px;
+    color: #64748b;
+    font-style: italic;
+    font-weight: 600;
+  }
+
+  .split-table {
+    margin-bottom: 6px;
+  }
+
+  .split-table .th-hora-a,
+  .split-table .th-hora-c {
+    width: 65px;
+    min-width: 55px;
+  }
+
+  .split-table .th-mesa {
+    width: 90px;
+    min-width: 75px;
+  }
+
+  .split-table .th-croupier {
+    width: auto;
+    min-width: 105px;
+  }
+
+  .split-table .th-pitboss {
+    width: 130px;
+    min-width: 100px;
+  }
+
+  .split-table .th-obs {
+    width: auto;
+    min-width: 140px;
+  }
+
+  .table-responsive-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 8px;
+  }
+
+  .mesas-section.force-split .mesas-unified-wrapper {
+    display: none !important;
+  }
+  .mesas-section.force-split .mesas-split-wrapper {
+    display: flex !important;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .mesas-section.force-unified .mesas-unified-wrapper {
+    display: block !important;
+  }
+  .mesas-section.force-unified .mesas-split-wrapper {
+    display: none !important;
   }
 
   /* Tabla Oficial de Mesas */
@@ -2435,6 +2739,14 @@
     .incidencias-bloque-tres {
       grid-template-columns: 1fr;
     }
+    .mesas-unified-wrapper {
+      display: none;
+    }
+    .mesas-split-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
   }
 
   .incidencia-subbloque {
@@ -2820,6 +3132,18 @@
       page-break-inside: avoid !important;
     }
 
+    .mesas-unified-wrapper {
+      display: block !important;
+    }
+
+    .mesas-split-wrapper {
+      display: none !important;
+    }
+
+    .mesas-view-switcher {
+      display: none !important;
+    }
+
     .sheet-footer-signatures {
       break-inside: avoid !important;
       page-break-inside: avoid !important;
@@ -2855,16 +3179,61 @@
 
   @media (max-width: 768px) {
     .official-sheet-container {
-      padding: 16px 12px;
+      padding: 14px 8px;
     }
+
     .sheet-header {
       flex-direction: column;
       gap: 12px;
     }
+
+    .horario-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 5px;
+      padding: 8px 0;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+
+    .horario-item:last-child {
+      border-bottom: none;
+    }
+
+    .horario-label-group {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .item-label {
+      min-width: 0;
+      font-size: 13.5px;
+    }
+
+    .item-values {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 20px;
+      padding-left: 24px;
+    }
+
+    .h-pair {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
     .sheet-footer-signatures {
       flex-direction: column;
       gap: 24px;
     }
+
     .sign-line {
       width: 100%;
     }
