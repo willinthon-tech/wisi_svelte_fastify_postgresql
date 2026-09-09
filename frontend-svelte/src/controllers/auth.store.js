@@ -89,7 +89,8 @@ export const navMenuStore = writable([
     modulos: [
       { id: 38, nombre: 'Tipo Clientes', ruta: '/configuracion/tipo-clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
       { id: 39, nombre: 'Métodos de Pago', ruta: '/configuracion/metodos-pago', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+      { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
+      { id: 41, nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
     ]
   }
 ]);

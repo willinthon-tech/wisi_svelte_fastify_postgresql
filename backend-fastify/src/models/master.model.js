@@ -5692,6 +5692,13 @@ export const createTipoIncidenciaModel = tipoIncidenciasCrud.create;
 export const updateTipoIncidenciaModel = tipoIncidenciasCrud.update;
 export const deleteTipoIncidenciaModel = tipoIncidenciasCrud.delete;
 
+// 1.4. RANGOS (CONF.M: CECOM)
+const rangosCrud = buildSimpleConfigCrud('rangos', 'rango', 'rangos');
+export const getRangosModel = rangosCrud.get;
+export const createRangoModel = rangosCrud.create;
+export const updateRangoModel = rangosCrud.update;
+export const deleteRangoModel = rangosCrud.delete;
+
 // 2. SOCIEDADES
 const sociedadesCrud = buildSimpleConfigCrud('sociedades', 'sociedad');
 export const getSociedadesModel = sociedadesCrud.get;
@@ -7947,6 +7954,190 @@ export async function deleteLibroControlLlavesModel(id, libroId) {
   return { success: true, id: cId };
 }
 
+// --- APORTES DE LIBRO (CECOM: LIBRO APORTES) ---
+export async function getLibroAportesModel(libroId) {
+  const lId = Number(libroId);
+  if (!lId) throw new Error('ID de libro inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
+    return inMemoryData.libro_aportes
+      .filter(a => Number(a.libro_id) === lId)
+      .sort((a, b) => Number(b.id) - Number(a.id));
+  }
+
+  const rows = await sql`
+    SELECT 
+      la.id,
+      la.libro_id,
+      la.empleado_id,
+      la.rango_id,
+      la.monto,
+      la.created_at,
+      la.updated_at,
+      e.nombre AS empleado_nombre,
+      e.cedula AS empleado_cedula,
+      e.foto AS empleado_foto,
+      c.nombre AS cargo_nombre,
+      d.nombre AS departamento_nombre,
+      r.nombre AS rango_nombre
+    FROM libro_aportes la
+    JOIN empleados e ON e.id = la.empleado_id
+    LEFT JOIN cargos c ON c.id = e.cargo_id
+    LEFT JOIN areas a ON a.id = c.area_id
+    LEFT JOIN departamentos d ON d.id = a.departamento_id
+    JOIN rangos r ON r.id = la.rango_id
+    WHERE la.libro_id = ${lId}
+    ORDER BY la.id DESC
+  `;
+
+  return rows;
+}
+
+export async function createLibroAporteModel(data) {
+  const libroId = Number(data.libro_id);
+  const empleadoId = Number(data.empleado_id);
+  const rangoId = Number(data.rango_id);
+  const monto = Number(data.monto) || 0;
+
+  if (!libroId) throw new Error('ID de libro inválido');
+  if (!empleadoId) throw new Error('Debe seleccionar un empleado');
+  if (!rangoId) throw new Error('Debe seleccionar un rango');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
+    const nextId = (inMemoryData.libro_aportes.length > 0)
+      ? Math.max(...inMemoryData.libro_aportes.map(d => d.id)) + 1
+      : 1;
+    const newRecord = {
+      id: nextId,
+      libro_id: libroId,
+      empleado_id: empleadoId,
+      rango_id: rangoId,
+      monto,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.libro_aportes.push(newRecord);
+    return newRecord;
+  }
+
+  const res = await sql`
+    INSERT INTO libro_aportes (
+      libro_id, empleado_id, rango_id, monto
+    )
+    VALUES (
+      ${libroId}, ${empleadoId}, ${rangoId}, ${monto}
+    )
+    RETURNING id
+  `;
+
+  const insertedId = res[0].id;
+
+  const rows = await sql`
+    SELECT 
+      la.id,
+      la.libro_id,
+      la.empleado_id,
+      la.rango_id,
+      la.monto,
+      la.created_at,
+      la.updated_at,
+      e.nombre AS empleado_nombre,
+      e.cedula AS empleado_cedula,
+      e.foto AS empleado_foto,
+      c.nombre AS cargo_nombre,
+      d.nombre AS departamento_nombre,
+      r.nombre AS rango_nombre
+    FROM libro_aportes la
+    JOIN empleados e ON e.id = la.empleado_id
+    LEFT JOIN cargos c ON c.id = e.cargo_id
+    LEFT JOIN areas a ON a.id = c.area_id
+    LEFT JOIN departamentos d ON d.id = a.departamento_id
+    JOIN rangos r ON r.id = la.rango_id
+    WHERE la.id = ${insertedId}
+  `;
+
+  return rows[0];
+}
+
+export async function updateLibroAporteModel(id, libroId, data) {
+  const aId = Number(id);
+  const lId = Number(libroId);
+  if (!aId) throw new Error('ID de aporte inválido');
+
+  const empleadoId = data.empleado_id !== undefined ? Number(data.empleado_id) : null;
+  const rangoId = data.rango_id !== undefined ? Number(data.rango_id) : null;
+  const monto = data.monto !== undefined ? Number(data.monto) : null;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
+    const idx = inMemoryData.libro_aportes.findIndex(a => Number(a.id) === aId);
+    if (idx !== -1) {
+      if (empleadoId) inMemoryData.libro_aportes[idx].empleado_id = empleadoId;
+      if (rangoId) inMemoryData.libro_aportes[idx].rango_id = rangoId;
+      if (monto !== undefined) inMemoryData.libro_aportes[idx].monto = monto;
+      inMemoryData.libro_aportes[idx].updated_at = new Date().toISOString();
+      return inMemoryData.libro_aportes[idx];
+    }
+    return null;
+  }
+
+  await sql`
+    UPDATE libro_aportes
+    SET
+      empleado_id = COALESCE(${empleadoId}, empleado_id),
+      rango_id = COALESCE(${rangoId}, rango_id),
+      monto = COALESCE(${monto}, monto),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${aId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+  `;
+
+  const rows = await sql`
+    SELECT 
+      la.id,
+      la.libro_id,
+      la.empleado_id,
+      la.rango_id,
+      la.monto,
+      la.created_at,
+      la.updated_at,
+      e.nombre AS empleado_nombre,
+      e.cedula AS empleado_cedula,
+      e.foto AS empleado_foto,
+      c.nombre AS cargo_nombre,
+      d.nombre AS departamento_nombre,
+      r.nombre AS rango_nombre
+    FROM libro_aportes la
+    JOIN empleados e ON e.id = la.empleado_id
+    LEFT JOIN cargos c ON c.id = e.cargo_id
+    LEFT JOIN areas a ON a.id = c.area_id
+    LEFT JOIN departamentos d ON d.id = a.departamento_id
+    JOIN rangos r ON r.id = la.rango_id
+    WHERE la.id = ${aId}
+  `;
+
+  return rows[0] || null;
+}
+
+export async function deleteLibroAporteModel(id, libroId) {
+  const aId = Number(id);
+  const lId = Number(libroId);
+  if (!aId) throw new Error('ID de aporte inválido');
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
+    inMemoryData.libro_aportes = inMemoryData.libro_aportes.filter(a => Number(a.id) !== aId);
+    return { success: true, id: aId };
+  }
+
+  await sql`
+    DELETE FROM libro_aportes 
+    WHERE id = ${aId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+  `;
+  return { success: true, id: aId };
+}
+
 // --- INCIDENCIAS GENERALES (CECOM: LIBRO INCIDENCIAS GENERALES) ---
 export async function getLibroIncidenciasGeneralesModel(libroId) {
   const lId = Number(libroId);
@@ -9093,6 +9284,7 @@ export async function saveLibroReporteModel(libroId) {
     datosRes,
     dropRes,
     novedadesRes,
+    aportesRes,
     llavesRes,
     clientesRes,
     incidenciasRes
@@ -9101,6 +9293,7 @@ export async function saveLibroReporteModel(libroId) {
     getLibroDatosModel(lId).catch(e => null),
     getLibroDropMesasModel(lId).catch(e => []),
     getLibroNovedadesMesasModel(lId).catch(e => []),
+    getLibroAportesModel(lId).catch(e => []),
     getLibroControlLlavesModel(lId).catch(e => []),
     getLibroControlClientesModel(lId).catch(e => []),
     getLibroIncidenciasGeneralesModel(lId).catch(e => [])
@@ -9115,6 +9308,7 @@ export async function saveLibroReporteModel(libroId) {
     datos: datosRes ? 1 : 0,
     drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
+    aportes: Array.isArray(aportesRes) ? aportesRes.length : 0,
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
@@ -9129,6 +9323,7 @@ export async function saveLibroReporteModel(libroId) {
     datos: datosRes || null,
     drop_mesas: Array.isArray(dropRes) ? dropRes : [],
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
+    aportes: Array.isArray(aportesRes) ? aportesRes : [],
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []
@@ -9195,6 +9390,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     datosRes,
     dropRes,
     novedadesRes,
+    aportesRes,
     llavesRes,
     clientesRes,
     incidenciasRes
@@ -9203,6 +9399,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     getLibroDatosModel(numId).catch(() => null),
     getLibroDropMesasModel(numId).catch(() => []),
     getLibroNovedadesMesasModel(numId).catch(() => []),
+    getLibroAportesModel(numId).catch(() => []),
     getLibroControlLlavesModel(numId).catch(() => []),
     getLibroControlClientesModel(numId).catch(() => []),
     getLibroIncidenciasGeneralesModel(numId).catch(() => [])
@@ -9212,6 +9409,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     datos: datosRes ? 1 : 0,
     drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
+    aportes: Array.isArray(aportesRes) ? aportesRes.length : 0,
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
@@ -9228,6 +9426,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     datos: datosRes || null,
     drop_mesas: Array.isArray(dropRes) ? dropRes : [],
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
+    aportes: Array.isArray(aportesRes) ? aportesRes : [],
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []

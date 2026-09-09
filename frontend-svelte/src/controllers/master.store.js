@@ -168,6 +168,7 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('tipo-clientes', masterTipoClientesStore),
     fetchEntity('metodos-pago', masterMetodosPagoStore),
     fetchEntity('tipo-incidencias', masterTipoIncidenciasStore),
+    fetchEntity('rangos', masterRangosStore),
     fetchEntity('clientes', masterClientesStore),
     fetchUserSalas(),
     fetchUserPerms()
@@ -472,4 +473,11 @@ export const masterClientesActions = createMasterEntityActions(masterClientesSto
 export const masterTipoIncidenciasStore = writable(loadStore('tipo_incidencias_v1', []));
 masterTipoIncidenciasStore.subscribe(val => saveStore('tipo_incidencias_v1', val));
 export const masterTipoIncidenciasActions = createMasterEntityActions(masterTipoIncidenciasStore, 'tipo-incidencias');
+
+// ==========================================
+// 🏅 RANGOS (CONF.M: CECOM)
+// ==========================================
+export const masterRangosStore = writable(loadStore('rangos_v1', []));
+masterRangosStore.subscribe(val => saveStore('rangos_v1', val));
+export const masterRangosActions = createMasterEntityActions(masterRangosStore, 'rangos');
 

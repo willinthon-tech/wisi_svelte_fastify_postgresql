@@ -44,7 +44,9 @@ import {
   getTipoClientesModel, createTipoClienteModel, updateTipoClienteModel, deleteTipoClienteModel,
   getMetodosPagoModel, createMetodoPagoModel, updateMetodoPagoModel, deleteMetodoPagoModel,
   getTipoIncidenciasModel, createTipoIncidenciaModel, updateTipoIncidenciaModel, deleteTipoIncidenciaModel,
-  getClientesModel, getClientesFilterOptionsModel, createClienteModel, updateClienteModel, deleteClienteModel
+  getClientesModel, getClientesFilterOptionsModel, createClienteModel, updateClienteModel, deleteClienteModel,
+  getRangosModel, createRangoModel, updateRangoModel, deleteRangoModel,
+  getLibroAportesModel, createLibroAporteModel, updateLibroAporteModel, deleteLibroAporteModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2435,6 +2437,61 @@ export async function deleteCliente(request, reply) {
   try {
     const { id } = request.params;
     const result = await deleteClienteModel(id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+// ==========================================
+// 🏅 RANGOS (CONF.M: CECOM)
+// ==========================================
+const rangosCtrl = buildCrudControllers(getRangosModel, createRangoModel, updateRangoModel, deleteRangoModel);
+export const getRangos = rangosCtrl.get;
+export const createRango = rangosCtrl.create;
+export const updateRango = rangosCtrl.update;
+export const deleteRango = rangosCtrl.delete;
+
+// ==========================================
+// 💰 APORTES DE LIBRO (CECOM: LIBRO APORTES)
+// ==========================================
+export async function getLibroAportes(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroAportesModel(id);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function createLibroAporte(request, reply) {
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const data = { ...body, libro_id: id };
+    const result = await createLibroAporteModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateLibroAporte(request, reply) {
+  try {
+    const { id, aporteId } = request.params;
+    const body = parseBody(request.body);
+    const result = await updateLibroAporteModel(aporteId, id, body);
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteLibroAporte(request, reply) {
+  try {
+    const { id, aporteId } = request.params;
+    const result = await deleteLibroAporteModel(aporteId, id);
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });

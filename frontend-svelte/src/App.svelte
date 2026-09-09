@@ -66,6 +66,7 @@
   import TipoClientesView from "./views/configuracion/TipoClientesView.svelte";
   import MetodosPagoView from "./views/configuracion/MetodosPagoView.svelte";
   import TipoIncidenciasView from "./views/configuracion/TipoIncidenciasView.svelte";
+  import RangosView from "./views/configuracion/RangosView.svelte";
 
   // Import MESAS EN VIVO Views
   import MesasView from "./views/mesas-en-vivo/MesasView.svelte";
@@ -1040,6 +1041,8 @@
           <MetodosPagoView />
         {:else if $currentRouteStore === "configuracion/tipo-incidencias" || $currentRouteStore === "tipo-incidencias" || $currentRouteStore === "cecom/tipo-incidencias"}
           <TipoIncidenciasView />
+        {:else if $currentRouteStore === "configuracion/rangos" || $currentRouteStore === "rangos" || $currentRouteStore === "cecom/rangos"}
+          <RangosView />
 
           <!-- MESAS EN VIVO Module Views -->
         {:else if $currentRouteStore === "mesas-en-vivo/mesas" || $currentRouteStore === "mesas"}

@@ -7,6 +7,7 @@
   import LibroControlLlavesView from './LibroControlLlavesView.svelte';
   import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
   import LibroControlClientesView from './LibroControlClientesView.svelte';
+  import LibroAportesView from './LibroAportesView.svelte';
   import LibroNovedadesMesasView from './LibroNovedadesMesasView.svelte';
   import LibroResumenView from './LibroResumenView.svelte';
   import LibroDatosView from './LibroDatosView.svelte';
@@ -24,6 +25,7 @@
     { id: 'control-llaves', label: 'Control Llaves', icon: '🔑', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '⚠️', description: 'Eventos e incidentes reportados en sala' },
     { id: 'control-clientes', label: 'Control Clientes', icon: '👥', description: 'Seguimiento de jugadores y eventos de sala' },
+    { id: 'aportes', label: 'Aportes', icon: '💰', description: 'Registro y control de aportes asignados por empleado y rango' },
     { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '🃏', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
     { id: 'resumen-libro', label: 'Resumen Libro', icon: '📊', description: 'Consolidado general y auditoría de la jornada' }
   ];
@@ -210,6 +212,8 @@
         <LibroIncidenciasGeneralesView {libro} {libroId} />
       {:else if activeSubvista === 'control-clientes'}
         <LibroControlClientesView {libro} {libroId} />
+      {:else if activeSubvista === 'aportes'}
+        <LibroAportesView {libro} {libroId} />
       {:else if activeSubvista === 'novedades-mesas'}
         <LibroNovedadesMesasView {libro} {libroId} />
       {:else if activeSubvista === 'resumen-libro'}

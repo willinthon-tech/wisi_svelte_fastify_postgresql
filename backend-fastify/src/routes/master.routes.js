@@ -45,7 +45,9 @@ import {
   getTipoClientes, createTipoCliente, updateTipoCliente, deleteTipoCliente,
   getMetodosPago, createMetodoPago, updateMetodoPago, deleteMetodoPago,
   getTipoIncidencias, createTipoIncidencia, updateTipoIncidencia, deleteTipoIncidencia,
-  getClientes, getClientesFilterOptions, createCliente, updateCliente, deleteCliente
+  getClientes, getClientesFilterOptions, createCliente, updateCliente, deleteCliente,
+  getRangos, createRango, updateRango, deleteRango,
+  getLibroAportes, createLibroAporte, updateLibroAporte, deleteLibroAporte
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -306,6 +308,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/master/libros/:id/datos', saveLibroDatos);
   fastify.put('/api/master/libros/:id/datos', saveLibroDatos);
 
+  // Aportes de Libro (CECOM: Libro Aportes)
+  fastify.get('/master/libros/:id/aportes', getLibroAportes);
+  fastify.get('/api/master/libros/:id/aportes', getLibroAportes);
+  fastify.post('/master/libros/:id/aportes', createLibroAporte);
+  fastify.post('/api/master/libros/:id/aportes', createLibroAporte);
+  fastify.put('/master/libros/:id/aportes/:aporteId', updateLibroAporte);
+  fastify.put('/api/master/libros/:id/aportes/:aporteId', updateLibroAporte);
+  fastify.delete('/master/libros/:id/aportes/:aporteId', deleteLibroAporte);
+  fastify.delete('/api/master/libros/:id/aportes/:aporteId', deleteLibroAporte);
+
   // Novedades de Mesas (CECOM: Libro Novedades Mesas)
   fastify.get('/master/libros/:id/novedades-mesas', getLibroNovedadesMesas);
   fastify.get('/api/master/libros/:id/novedades-mesas', getLibroNovedadesMesas);
@@ -369,6 +381,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/tipo-incidencias/:id', updateTipoIncidencia);
   fastify.delete('/master/tipo-incidencias/:id', deleteTipoIncidencia);
   fastify.delete('/api/master/tipo-incidencias/:id', deleteTipoIncidencia);
+
+  // Rangos (Configuración: CONF.M: CECOM)
+  fastify.get('/master/rangos', getRangos);
+  fastify.get('/api/master/rangos', getRangos);
+  fastify.post('/master/rangos', createRango);
+  fastify.post('/api/master/rangos', createRango);
+  fastify.put('/master/rangos/:id', updateRango);
+  fastify.put('/api/master/rangos/:id', updateRango);
+  fastify.delete('/master/rangos/:id', deleteRango);
+  fastify.delete('/api/master/rangos/:id', deleteRango);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
