@@ -1,32 +1,65 @@
 <script>
   import { onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterSalasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterSalasStore, masterTipoIncidenciasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
 
+  const DEFAULT_TIPOS_INCIDENCIA = [
+    { id: 1, nombre: 'General' },
+    { id: 2, nombre: 'Empleado' },
+    { id: 3, nombre: 'Mercancía' }
+  ];
+
+  $: availableTiposIncidencia = ($masterTipoIncidenciasStore && $masterTipoIncidenciasStore.length > 0)
+    ? $masterTipoIncidenciasStore
+    : DEFAULT_TIPOS_INCIDENCIA;
+
   // Estado del formulario
-  let tipo = 'General'; // 'General', 'Empleado', 'Mercancía'
+  let tipoIncidenciaId = 1;
+  $: tipo = availableTiposIncidencia.find(t => Number(t.id) === Number(tipoIncidenciaId))?.nombre || 'General';
   let descripcion = '';
   let isSaving = false;
 
-  const TIPOS_INCIDENCIA = ['General', 'Empleado', 'Mercancía'];
-
-  // Pestaña activa para filtrar la tabla: 'all' (Detallado), 'General', 'Empleado', 'Mercancía'
+  // Pestaña activa para filtrar la tabla: 'all' (Detallado) o nombre de tipo
   let activeTab = 'all';
 
   // Lista de incidencias
   let records = [];
   let isLoadingRecords = false;
 
-  // Conteo por tipos para las pestañas
-  $: countGeneral = records.filter(r => (r.tipo || 'General').toLowerCase() === 'general').length;
-  $: countEmpleado = records.filter(r => (r.tipo || '').toLowerCase() === 'empleado').length;
-  $: countMercancia = records.filter(r => {
-    const t = (r.tipo || '').toLowerCase();
-    return t === 'mercancía' || t === 'mercancia';
-  }).length;
+  // Función para obtener conteo por tipo
+  function getCountForTipo(tItem) {
+    return records.filter(r => 
+      (r.tipo_incidencia_id && Number(r.tipo_incidencia_id) === Number(tItem.id)) ||
+      (r.tipo || '').toLowerCase().trim() === tItem.nombre.toLowerCase().trim()
+    ).length;
+  }
+
+  function getPillClass(name) {
+    const s = String(name || '').toLowerCase();
+    if (s.includes('mercanc')) return 'active-mercancia';
+    if (s.includes('emplead')) return 'active-empleado';
+    if (s.includes('general')) return 'active-general';
+    return 'active-custom';
+  }
+
+  function getPillIcon(name) {
+    const s = String(name || '').toLowerCase();
+    if (s.includes('mercanc')) return '📦';
+    if (s.includes('emplead')) return '👤';
+    if (s.includes('general')) return '📌';
+    return '⚠️';
+  }
+
+  function getBadgeClass(name) {
+    const s = String(name || '').toLowerCase();
+    if (s.includes('mercanc')) return 'badge-mercancia';
+    if (s.includes('emplead')) return 'badge-empleado';
+    if (s.includes('general')) return 'badge-general';
+    return 'badge-custom';
+  }
 
   // Lista ordenada por ID de la tabla (la más última primero / ID descendente)
   // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
@@ -36,17 +69,18 @@
   $: filteredRecords = (() => {
     if (activeTab === 'all') return sortedRecords;
     return sortedRecords.filter(r => {
-      const t = (r.tipo || 'General').toLowerCase();
-      if (activeTab === 'Mercancía') {
-        return t === 'mercancía' || t === 'mercancia';
+      const matchTipo = availableTiposIncidencia.find(t => t.nombre.toLowerCase() === activeTab.toLowerCase());
+      if (matchTipo && r.tipo_incidencia_id && Number(r.tipo_incidencia_id) === Number(matchTipo.id)) {
+        return true;
       }
-      return t === activeTab.toLowerCase();
+      return (r.tipo || '').toLowerCase().trim() === activeTab.toLowerCase().trim();
     });
   })();
 
   // Modal para editar incidencia completa (Tipo, Contenido y Hora)
   let showModalEditar = false;
   let editingRecord = null;
+  let modalTipoIncidenciaId = 1;
   let modalTipo = 'General';
   let modalDescripcion = '';
   let modalHora = '';
@@ -214,6 +248,7 @@
     try {
       const payload = {
         descripcion: cleanDesc,
+        tipo_incidencia_id: tipoIncidenciaId || 1,
         tipo: tipo || 'General',
         hora: getCurrentTimeString()
       };
@@ -228,7 +263,6 @@
       if (res.ok && json && json.success) {
         triggerToast('Incidencia registrada exitosamente', 'success');
         descripcion = '';
-        tipo = 'General';
         await loadRecords();
       } else {
         triggerToast(json?.error || 'Error al guardar incidencia', 'error');
@@ -265,7 +299,10 @@
   // Modal para editar Tipo, Contenido y Hora
   function abrirModalEditar(record) {
     editingRecord = record;
-    modalTipo = record.tipo || 'General';
+    modalTipoIncidenciaId = record.tipo_incidencia_id || 
+      availableTiposIncidencia.find(t => t.nombre.toLowerCase() === (record.tipo || '').toLowerCase())?.id || 1;
+    modalTipo = record.tipo || 
+      availableTiposIncidencia.find(t => Number(t.id) === Number(modalTipoIncidenciaId))?.nombre || 'General';
     modalDescripcion = record.descripcion || '';
     modalHora = record.hora || getCurrentTimeString();
     showModalEditar = true;
@@ -302,6 +339,7 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          tipo_incidencia_id: modalTipoIncidenciaId,
           tipo: modalTipo || 'General',
           descripcion: cleanDesc,
           hora: modalHora
@@ -334,42 +372,24 @@
     </div>
 
     <form on:submit|preventDefault={handleGuardar} class="incidencia-form">
-      <!-- Sección Tipo de Incidencia: Radios (General, Empleado, Mercancía) -->
+      <!-- Sección Tipo de Incidencia: Radios Dinámicos desde tipo_incidencias -->
       <div class="form-group">
         <label class="form-label">TIPO DE INCIDENCIA: *</label>
         <div class="radio-tipo-group">
-          <label class="radio-tipo-pill {tipo === 'General' ? 'active-general' : ''}">
-            <input 
-              type="radio" 
-              name="tipo-incidencia" 
-              value="General" 
-              bind:group={tipo} 
-            />
-            <span class="pill-icon">📌</span>
-            <span class="pill-text">General</span>
-          </label>
-
-          <label class="radio-tipo-pill {tipo === 'Empleado' ? 'active-empleado' : ''}">
-            <input 
-              type="radio" 
-              name="tipo-incidencia" 
-              value="Empleado" 
-              bind:group={tipo} 
-            />
-            <span class="pill-icon">👤</span>
-            <span class="pill-text">Empleado</span>
-          </label>
-
-          <label class="radio-tipo-pill {tipo === 'Mercancía' ? 'active-mercancia' : ''}">
-            <input 
-              type="radio" 
-              name="tipo-incidencia" 
-              value="Mercancía" 
-              bind:group={tipo} 
-            />
-            <span class="pill-icon">📦</span>
-            <span class="pill-text">Mercancía</span>
-          </label>
+          {#each availableTiposIncidencia as tItem}
+            {@const isAct = Number(tipoIncidenciaId) === Number(tItem.id)}
+            {@const pillClass = getPillClass(tItem.nombre)}
+            <label class="radio-tipo-pill {isAct ? pillClass : ''}">
+              <input 
+                type="radio" 
+                name="tipo-incidencia" 
+                value={tItem.id} 
+                bind:group={tipoIncidenciaId} 
+              />
+              <span class="pill-icon">{getPillIcon(tItem.nombre)}</span>
+              <span class="pill-text">{tItem.nombre}</span>
+            </label>
+          {/each}
         </div>
       </div>
 
@@ -455,27 +475,15 @@
         >
           <span>📋 Detallado ({records.length})</span>
         </button>
-        <button 
-          type="button" 
-          class="tab-nav-btn {activeTab === 'General' ? 'active' : ''}"
-          on:click={() => activeTab = 'General'}
-        >
-          <span>📌 General ({countGeneral})</span>
-        </button>
-        <button 
-          type="button" 
-          class="tab-nav-btn {activeTab === 'Empleado' ? 'active' : ''}"
-          on:click={() => activeTab = 'Empleado'}
-        >
-          <span>👤 Empleado ({countEmpleado})</span>
-        </button>
-        <button 
-          type="button" 
-          class="tab-nav-btn {activeTab === 'Mercancía' ? 'active' : ''}"
-          on:click={() => activeTab = 'Mercancía'}
-        >
-          <span>📦 Mercancía ({countMercancia})</span>
-        </button>
+        {#each availableTiposIncidencia as tItem}
+          <button 
+            type="button" 
+            class="tab-nav-btn {activeTab === tItem.nombre ? 'active' : ''}"
+            on:click={() => activeTab = tItem.nombre}
+          >
+            <span>{getPillIcon(tItem.nombre)} {tItem.nombre} ({getCountForTipo(tItem)})</span>
+          </button>
+        {/each}
       </div>
     </div>
 
@@ -521,13 +529,9 @@
               <tr class="incidencia-row">
                 <td class="td-center td-num">{idx + 1}</td>
                 <td class="td-center td-tipo">
-                  {#if (record.tipo || '').toLowerCase() === 'empleado'}
-                    <span class="badge-tipo badge-empleado">👤 Empleado</span>
-                  {:else if (record.tipo || '').toLowerCase() === 'mercancía' || (record.tipo || '').toLowerCase() === 'mercancia'}
-                    <span class="badge-tipo badge-mercancia">📦 Mercancía</span>
-                  {:else}
-                    <span class="badge-tipo badge-general">📌 General</span>
-                  {/if}
+                  <span class="badge-tipo {getBadgeClass(record.tipo)}">
+                    {getPillIcon(record.tipo)} {record.tipo || 'General'}
+                  </span>
                 </td>
                 <td class="td-desc">
                   <!-- Formato estilo muestra (Título en negrita con hora, e items indentados abajo) -->
@@ -592,15 +596,19 @@
         <div class="modal-field-group">
           <label class="modal-field-label">Tipo de Incidencia: *</label>
           <div class="radio-tipo-group">
-            {#each TIPOS_INCIDENCIA as t}
-              <label class="radio-tipo-pill {modalTipo === t ? 'active-' + t.toLowerCase().replace('í', 'i') : ''}">
+            {#each availableTiposIncidencia as tItem}
+              {@const isAct = Number(modalTipoIncidenciaId) === Number(tItem.id)}
+              {@const pillClass = getPillClass(tItem.nombre)}
+              <label class="radio-tipo-pill {isAct ? pillClass : ''}">
                 <input 
                   type="radio" 
                   name="modal-tipo-inc" 
-                  value={t} 
-                  bind:group={modalTipo} 
+                  value={tItem.id} 
+                  bind:group={modalTipoIncidenciaId} 
+                  on:change={() => modalTipo = tItem.nombre}
                 />
-                <span class="pill-text">{t}</span>
+                <span class="pill-icon">{getPillIcon(tItem.nombre)}</span>
+                <span class="pill-text">{tItem.nombre}</span>
               </label>
             {/each}
           </div>
@@ -795,6 +803,14 @@
     background: #fffbeb;
     color: #b45309;
     box-shadow: 0 1px 4px rgba(245, 158, 11, 0.2);
+    font-weight: 700;
+  }
+
+  .radio-tipo-pill.active-custom {
+    border-color: #10b981;
+    background: #ecfdf5;
+    color: #047857;
+    box-shadow: 0 1px 4px rgba(16, 185, 129, 0.2);
     font-weight: 700;
   }
 
@@ -1064,6 +1080,12 @@
     background: #fffbeb;
     color: #b45309;
     border: 1px solid #fde68a;
+  }
+
+  .badge-custom {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
   }
 
   /* Renderizado de la Incidencia (Estilo muestra: Título en negrita con hora e items con sangría) */

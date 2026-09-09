@@ -5573,6 +5573,13 @@ export const createMetodoPagoModel = metodosPagoCrud.create;
 export const updateMetodoPagoModel = metodosPagoCrud.update;
 export const deleteMetodoPagoModel = metodosPagoCrud.delete;
 
+// 1.3. TIPOS DE INCIDENCIA (CONF.M: CECOM)
+const tipoIncidenciasCrud = buildSimpleConfigCrud('tipo_incidencias', 'tipo de incidencia', 'tipo_incidencias');
+export const getTipoIncidenciasModel = tipoIncidenciasCrud.get;
+export const createTipoIncidenciaModel = tipoIncidenciasCrud.create;
+export const updateTipoIncidenciaModel = tipoIncidenciasCrud.update;
+export const deleteTipoIncidenciaModel = tipoIncidenciasCrud.delete;
+
 // 2. SOCIEDADES
 const sociedadesCrud = buildSimpleConfigCrud('sociedades', 'sociedad');
 export const getSociedadesModel = sociedadesCrud.get;
@@ -7805,10 +7812,19 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
 
   const rows = await sql`
     SELECT 
-      id, libro_id, descripcion, COALESCE(tipo, 'General') AS tipo, hora, created_at, updated_at
-    FROM libro_incidencias_generales
-    WHERE libro_id = ${lId}
-    ORDER BY id DESC
+      lig.id, 
+      lig.libro_id, 
+      lig.tipo_incidencia_id,
+      lig.descripcion, 
+      COALESCE(ti.nombre, lig.tipo, 'General') AS tipo, 
+      COALESCE(ti.nombre, lig.tipo, 'General') AS tipo_incidencia_nombre,
+      lig.hora, 
+      lig.created_at, 
+      lig.updated_at
+    FROM libro_incidencias_generales lig
+    LEFT JOIN tipo_incidencias ti ON lig.tipo_incidencia_id = ti.id
+    WHERE lig.libro_id = ${lId}
+    ORDER BY lig.id DESC
   `;
 
   return rows;
@@ -7823,12 +7839,16 @@ export async function createLibroIncidenciaGeneralModel(data) {
     throw new Error('La descripción de la incidencia es obligatoria');
   }
 
-  const tipo = (data.tipo || 'General').trim();
+  let tipoIncidenciaId = data.tipo_incidencia_id ? Number(data.tipo_incidencia_id) : null;
+  let tipo = (data.tipo || '').trim();
+
   const now = new Date();
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const hora = (data.hora || '').trim() || currentHHMM;
 
   if (!isPgConnected || !sql) {
+    if (!tipoIncidenciaId) tipoIncidenciaId = 1;
+    if (!tipo) tipo = 'General';
     inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
     const nextId = (inMemoryData.libro_incidencias_generales.length > 0)
       ? Math.max(...inMemoryData.libro_incidencias_generales.map(d => d.id)) + 1
@@ -7836,6 +7856,7 @@ export async function createLibroIncidenciaGeneralModel(data) {
     const newRecord = {
       id: nextId,
       libro_id: libroId,
+      tipo_incidencia_id: tipoIncidenciaId,
       descripcion,
       tipo,
       hora,
@@ -7846,14 +7867,27 @@ export async function createLibroIncidenciaGeneralModel(data) {
     return newRecord;
   }
 
+  if (!tipoIncidenciaId && tipo) {
+    const match = await sql`SELECT id, nombre FROM tipo_incidencias WHERE LOWER(TRIM(nombre)) = LOWER(${tipo}) LIMIT 1`;
+    if (match.length > 0) {
+      tipoIncidenciaId = match[0].id;
+      tipo = match[0].nombre;
+    }
+  } else if (tipoIncidenciaId && !tipo) {
+    const match = await sql`SELECT nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
+    if (match.length > 0) tipo = match[0].nombre;
+  }
+  if (!tipoIncidenciaId) tipoIncidenciaId = 1;
+  if (!tipo) tipo = 'General';
+
   const res = await sql`
     INSERT INTO libro_incidencias_generales (
-      libro_id, descripcion, tipo, hora
+      libro_id, tipo_incidencia_id, descripcion, tipo, hora
     )
     VALUES (
-      ${libroId}, ${descripcion}, ${tipo}, ${hora}
+      ${libroId}, ${tipoIncidenciaId}, ${descripcion}, ${tipo}, ${hora}
     )
-    RETURNING id, libro_id, descripcion, tipo, hora, created_at, updated_at
+    RETURNING id, libro_id, tipo_incidencia_id, descripcion, tipo, hora, created_at, updated_at
   `;
 
   return res[0];
@@ -7865,7 +7899,8 @@ export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, d
   if (!incId) throw new Error('ID de incidencia inválido');
 
   const descripcion = data.descripcion !== undefined ? (data.descripcion || '').trim() : null;
-  const tipo = data.tipo !== undefined ? (data.tipo || 'General').trim() : null;
+  const tipoIncidenciaId = data.tipo_incidencia_id !== undefined ? Number(data.tipo_incidencia_id) : null;
+  let tipo = data.tipo !== undefined ? (data.tipo || 'General').trim() : null;
   const hora = data.hora !== undefined ? (data.hora || '').trim() : null;
 
   if (!isPgConnected || !sql) {
@@ -7873,6 +7908,7 @@ export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, d
     const idx = inMemoryData.libro_incidencias_generales.findIndex(c => Number(c.id) === incId);
     if (idx !== -1) {
       if (descripcion !== null) inMemoryData.libro_incidencias_generales[idx].descripcion = descripcion;
+      if (tipoIncidenciaId !== null) inMemoryData.libro_incidencias_generales[idx].tipo_incidencia_id = tipoIncidenciaId;
       if (tipo !== null) inMemoryData.libro_incidencias_generales[idx].tipo = tipo;
       if (hora !== null) inMemoryData.libro_incidencias_generales[idx].hora = hora;
       inMemoryData.libro_incidencias_generales[idx].updated_at = new Date().toISOString();
@@ -7881,15 +7917,21 @@ export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, d
     throw new Error('Incidencia no encontrada');
   }
 
+  if (tipoIncidenciaId && !tipo) {
+    const match = await sql`SELECT nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
+    if (match.length > 0) tipo = match[0].nombre;
+  }
+
   const rows = await sql`
     UPDATE libro_incidencias_generales
     SET 
       descripcion = COALESCE(${descripcion}, descripcion),
+      tipo_incidencia_id = COALESCE(${tipoIncidenciaId}, tipo_incidencia_id),
       tipo = COALESCE(${tipo}, tipo),
       hora = COALESCE(${hora}, hora),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${incId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, descripcion, tipo, hora, created_at, updated_at
+    RETURNING id, libro_id, tipo_incidencia_id, descripcion, tipo, hora, created_at, updated_at
   `;
 
   return rows[0];

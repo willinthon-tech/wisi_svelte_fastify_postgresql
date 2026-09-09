@@ -377,10 +377,6 @@
       return;
     }
 
-    if (!confirm('¿Desea limpiar y eliminar el registro de esta mesa?')) {
-      return;
-    }
-
     try {
       const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${existing.id}`, {
         method: 'DELETE'

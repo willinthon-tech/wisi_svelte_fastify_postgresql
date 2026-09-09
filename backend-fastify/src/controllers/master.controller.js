@@ -43,6 +43,7 @@ import {
   getLibroResumenModel, saveLibroReporteModel, getLibroReporteModel,
   getTipoClientesModel, createTipoClienteModel, updateTipoClienteModel, deleteTipoClienteModel,
   getMetodosPagoModel, createMetodoPagoModel, updateMetodoPagoModel, deleteMetodoPagoModel,
+  getTipoIncidenciasModel, createTipoIncidenciaModel, updateTipoIncidenciaModel, deleteTipoIncidenciaModel,
   getClientesModel, getClientesFilterOptionsModel, createClienteModel, updateClienteModel, deleteClienteModel
 } from '../models/master.model.js';
 
@@ -2366,6 +2367,15 @@ export const getMetodosPago = metodosPagoCtrl.get;
 export const createMetodoPago = metodosPagoCtrl.create;
 export const updateMetodoPago = metodosPagoCtrl.update;
 export const deleteMetodoPago = metodosPagoCtrl.delete;
+
+// ==========================================
+// ⚠️ TIPOS DE INCIDENCIA (CONF.M: CECOM)
+// ==========================================
+const tipoIncidenciasCtrl = buildCrudControllers(getTipoIncidenciasModel, createTipoIncidenciaModel, updateTipoIncidenciaModel, deleteTipoIncidenciaModel);
+export const getTipoIncidencias = tipoIncidenciasCtrl.get;
+export const createTipoIncidencia = tipoIncidenciasCtrl.create;
+export const updateTipoIncidencia = tipoIncidenciasCtrl.update;
+export const deleteTipoIncidencia = tipoIncidenciasCtrl.delete;
 
 // ==========================================
 // 👥 CLIENTES (CECOM)

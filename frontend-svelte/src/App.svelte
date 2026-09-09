@@ -64,6 +64,7 @@
   import FechasPatriasConfigView from "./views/rrhh/FechasPatriasConfigView.svelte";
   import TipoClientesView from "./views/configuracion/TipoClientesView.svelte";
   import MetodosPagoView from "./views/configuracion/MetodosPagoView.svelte";
+  import TipoIncidenciasView from "./views/configuracion/TipoIncidenciasView.svelte";
 
   // Import MESAS EN VIVO Views
   import MesasView from "./views/mesas-en-vivo/MesasView.svelte";
@@ -444,6 +445,7 @@
     if (tab === "cecom/clientes" || tab === "clientes") return "CLIENTES";
     if (tab === "configuracion/tipo-clientes" || tab === "tipo-clientes") return "TIPO CLIENTES";
     if (tab === "configuracion/metodos-pago" || tab === "metodos-pago") return "MÉTODOS DE PAGO";
+    if (tab === "configuracion/tipo-incidencias" || tab === "tipo-incidencias" || tab === "cecom/tipo-incidencias") return "TIPO INCIDENCIAS";
     if (tab === "rrhh/marcajes" || tab === "marcajes") return "Marcajes";
     if (tab === "rrhh/cortes" || tab === "cortes") return "Cortes";
     if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Reportes";
@@ -1017,6 +1019,8 @@
           <TipoClientesView />
         {:else if $currentRouteStore === "configuracion/metodos-pago" || $currentRouteStore === "metodos-pago"}
           <MetodosPagoView />
+        {:else if $currentRouteStore === "configuracion/tipo-incidencias" || $currentRouteStore === "tipo-incidencias" || $currentRouteStore === "cecom/tipo-incidencias"}
+          <TipoIncidenciasView />
 
           <!-- MESAS EN VIVO Module Views -->
         {:else if $currentRouteStore === "mesas-en-vivo/mesas" || $currentRouteStore === "mesas"}

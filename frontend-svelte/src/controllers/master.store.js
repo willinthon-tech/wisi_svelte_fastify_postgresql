@@ -167,6 +167,7 @@ export async function loadMasterStoresFromBackend() {
     fetchEntity('fechas-patrias', masterFechasPatriasStore),
     fetchEntity('tipo-clientes', masterTipoClientesStore),
     fetchEntity('metodos-pago', masterMetodosPagoStore),
+    fetchEntity('tipo-incidencias', masterTipoIncidenciasStore),
     fetchEntity('clientes', masterClientesStore),
     fetchUserSalas(),
     fetchUserPerms()
@@ -464,4 +465,11 @@ masterClientesStore.subscribe(val => saveStore('clientes_v1', val));
 export const masterTipoClientesActions = createMasterEntityActions(masterTipoClientesStore, 'tipo-clientes');
 export const masterMetodosPagoActions = createMasterEntityActions(masterMetodosPagoStore, 'metodos-pago');
 export const masterClientesActions = createMasterEntityActions(masterClientesStore, 'clientes');
+
+// ==========================================
+// ⚠️ TIPOS DE INCIDENCIA (CONF.M: CECOM)
+// ==========================================
+export const masterTipoIncidenciasStore = writable(loadStore('tipo_incidencias_v1', []));
+masterTipoIncidenciasStore.subscribe(val => saveStore('tipo_incidencias_v1', val));
+export const masterTipoIncidenciasActions = createMasterEntityActions(masterTipoIncidenciasStore, 'tipo-incidencias');
 

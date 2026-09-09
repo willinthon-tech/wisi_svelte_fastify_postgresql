@@ -44,6 +44,7 @@ import {
   getLibroResumen, getLibroReporte, saveLibroReporte,
   getTipoClientes, createTipoCliente, updateTipoCliente, deleteTipoCliente,
   getMetodosPago, createMetodoPago, updateMetodoPago, deleteMetodoPago,
+  getTipoIncidencias, createTipoIncidencia, updateTipoIncidencia, deleteTipoIncidencia,
   getClientes, getClientesFilterOptions, createCliente, updateCliente, deleteCliente
 } from '../controllers/master.controller.js';
 
@@ -358,6 +359,16 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/metodos-pago/:id', updateMetodoPago);
   fastify.delete('/master/metodos-pago/:id', deleteMetodoPago);
   fastify.delete('/api/master/metodos-pago/:id', deleteMetodoPago);
+
+  // Tipos de Incidencia (Configuración: CONF.M: CECOM)
+  fastify.get('/master/tipo-incidencias', getTipoIncidencias);
+  fastify.get('/api/master/tipo-incidencias', getTipoIncidencias);
+  fastify.post('/master/tipo-incidencias', createTipoIncidencia);
+  fastify.post('/api/master/tipo-incidencias', createTipoIncidencia);
+  fastify.put('/master/tipo-incidencias/:id', updateTipoIncidencia);
+  fastify.put('/api/master/tipo-incidencias/:id', updateTipoIncidencia);
+  fastify.delete('/master/tipo-incidencias/:id', deleteTipoIncidencia);
+  fastify.delete('/api/master/tipo-incidencias/:id', deleteTipoIncidencia);
 
   // ==========================================
   // 🎰 CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
