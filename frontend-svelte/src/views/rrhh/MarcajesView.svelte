@@ -50,7 +50,7 @@
 
   let attlogs = [];
   let totalCount = 0;
-  let isLoading = false;
+  let isLoading = true;
   let isInitialLoad = true;
 
   // Initialize from persistent store so filters survive page and route transitions
@@ -1049,15 +1049,16 @@
       class="table-scroll-wrapper"
       style="overflow-x: auto; position: relative;"
     >
-      {#if isLoading && !isInitialLoad}
+      {#if isLoading && attlogs.length > 0}
         <div
-          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.65); backdrop-filter: blur(1px); z-index: 5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #2563eb;"
+          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.7); backdrop-filter: blur(1.5px); z-index: 5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #2563eb;"
         >
-          <span
-            style="background: #ffffff; padding: 6px 16px; border-radius: 20px; border: 1px solid #cbd5e1; box-shadow: 0 4px 6px rgba(0,0,0,0.05);"
+          <div
+            style="background: #ffffff; padding: 8px 18px; border-radius: 20px; border: 1px solid #cbd5e1; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: inline-flex; align-items: center; gap: 10px;"
           >
-            ⚡ Consultando backend PostgreSQL...
-          </span>
+            <div class="spinner-small"></div>
+            <span>Consultando marcajes...</span>
+          </div>
         </div>
       {/if}
 
@@ -1089,7 +1090,21 @@
         </thead>
 
         <tbody>
-          {#if attlogs.length === 0}
+          {#if isLoading && attlogs.length === 0}
+            <tr>
+              <td
+                colspan="9"
+                style="padding: 42px 20px; text-align: center; background: #ffffff;"
+              >
+                <div style="display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;">
+                  <div class="spinner-small"></div>
+                  <span style="font-size: 13px; font-weight: 600; color: #64748b; letter-spacing: 0.2px;">
+                    Cargando registros de marcajes...
+                  </span>
+                </div>
+              </td>
+            </tr>
+          {:else if attlogs.length === 0}
             <tr>
               <td
                 colspan="9"
@@ -1352,6 +1367,23 @@
   @media (max-width: 360px) {
     .smart-filters-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  .spinner-small {
+    width: 22px;
+    height: 22px;
+    border: 3px solid #e2e8f0;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
   }
 </style>
