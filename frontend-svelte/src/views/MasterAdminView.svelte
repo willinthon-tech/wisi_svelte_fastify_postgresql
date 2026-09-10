@@ -1225,7 +1225,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   }
 
   // User Module Permission Toggles (Declaración Reactiva $: userPermsMap para forzar re-render instantáneo en Svelte)
-  const allActions = ["VER", "AGREGAR", "REPORTE", "EDITAR", "BORRAR"];
+  const allActions = ["VER", "AGREGAR", "EDITAR", "ELIMINAR"];
 
   $: userPermsMap = $userModulePermissionsStore[selectedUserId] || {};
 
@@ -1235,13 +1235,16 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
   function isPermChecked(permsMap, moduleId, perm) {
     const perms = getUserModulePerms(permsMap, moduleId);
+    if (perm === 'ELIMINAR') {
+      return perms.includes('ELIMINAR') || perms.includes('BORRAR');
+    }
     return perms.includes(perm);
   }
 
   function togglePermission(userId, moduleId, perm) {
     userModulePermissionsStore.update((map) => {
       const userPerms = { ...(map[userId] || {}) };
-      const currentModPerms = userPerms[moduleId] || [];
+      const currentModPerms = (userPerms[moduleId] || []).map(p => p === 'BORRAR' ? 'ELIMINAR' : p);
       let updatedModPerms;
 
       if (perm === "VER") {
@@ -1252,9 +1255,10 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         }
       } else {
         if (!currentModPerms.includes("VER")) return map;
-        updatedModPerms = currentModPerms.includes(perm)
-          ? currentModPerms.filter((p) => p !== perm)
-          : [...currentModPerms, perm];
+        const target = (perm === 'BORRAR' ? 'ELIMINAR' : perm);
+        updatedModPerms = currentModPerms.includes(target)
+          ? currentModPerms.filter((p) => p !== target && p !== 'BORRAR')
+          : [...currentModPerms, target];
       }
 
       const updatedUserMap = {
@@ -1897,50 +1901,6 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         AGREGAR
                       </label>
 
-                      <!-- REPORTE -->
-                      <label
-                        style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: {isPermChecked(
-                          userPermsMap,
-                          modulo.id,
-                          'REPORTE',
-                        )
-                          ? '#f0fdf4'
-                          : '#f8fafc'}; border: 1px solid {isPermChecked(
-                          userPermsMap,
-                          modulo.id,
-                          'REPORTE',
-                        )
-                          ? '#bbf7d0'
-                          : '#cbd5e1'}; border-radius: 6px; font-size: 12px; font-weight: 700; color: #0f172a; opacity: {hasVer
-                          ? 1
-                          : 0.45}; cursor: {hasVer
-                          ? 'pointer'
-                          : 'not-allowed'};"
-                        title={hasVer
-                          ? ""
-                          : "Primero debes activar el permiso VER para habilitar esta acción"}
-                      >
-                        <input
-                          type="checkbox"
-                          disabled={!hasVer}
-                          checked={isPermChecked(
-                            userPermsMap,
-                            modulo.id,
-                            "REPORTE",
-                          )}
-                          on:change={() =>
-                            togglePermission(
-                              selectedUserId,
-                              modulo.id,
-                              "REPORTE",
-                            )}
-                          style="width: 15px; height: 15px; accent-color: #2563eb; cursor: {hasVer
-                            ? 'pointer'
-                            : 'not-allowed'};"
-                        />
-                        REPORTE
-                      </label>
-
                       <!-- EDITAR -->
                       <label
                         style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: {isPermChecked(
@@ -1985,18 +1945,18 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         EDITAR
                       </label>
 
-                      <!-- BORRAR -->
+                      <!-- ELIMINAR -->
                       <label
                         style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: {isPermChecked(
                           userPermsMap,
                           modulo.id,
-                          'BORRAR',
+                          'ELIMINAR',
                         )
                           ? '#f0fdf4'
                           : '#f8fafc'}; border: 1px solid {isPermChecked(
                           userPermsMap,
                           modulo.id,
-                          'BORRAR',
+                          'ELIMINAR',
                         )
                           ? '#bbf7d0'
                           : '#cbd5e1'}; border-radius: 6px; font-size: 12px; font-weight: 700; color: #0f172a; opacity: {hasVer
@@ -2014,19 +1974,19 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                           checked={isPermChecked(
                             userPermsMap,
                             modulo.id,
-                            "BORRAR",
+                            "ELIMINAR",
                           )}
                           on:change={() =>
                             togglePermission(
                               selectedUserId,
                               modulo.id,
-                              "BORRAR",
+                              "ELIMINAR",
                             )}
                           style="width: 15px; height: 15px; accent-color: #2563eb; cursor: {hasVer
                             ? 'pointer'
                             : 'not-allowed'};"
                         />
-                        BORRAR
+                        ELIMINAR
                       </label>
 
                       <!-- SELECCIONAR TODOS (Del módulo) -->

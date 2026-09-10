@@ -2138,8 +2138,8 @@ export async function getAttlogsStatsModel(salaIds = null, startDate = null, end
 
 const permNameToId = {
   'AGREGAR': 1,
-  'REPORTE': 2,
   'EDITAR': 3,
+  'ELIMINAR': 4,
   'BORRAR': 4,
   'VER': 5
 };

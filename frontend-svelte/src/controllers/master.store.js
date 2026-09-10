@@ -9,10 +9,14 @@ export function getUserModuleActions(route) {
   const modulos = get(masterModulosStore) || [];
 
   const cleanRoute = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
-  const mod = modulos.find(m => m.ruta && m.ruta.replace(/^\//, '') === cleanRoute);
+  const mod = modulos.find(m => {
+    if (!m.ruta) return false;
+    const modRuta = m.ruta.replace(/^\//, '').trim();
+    return modRuta === cleanRoute || cleanRoute.startsWith(modRuta + '/') || cleanRoute === modRuta;
+  });
 
   if (!mod) {
-    return { canView: true, canAdd: true, canEdit: true, canDelete: true, canReport: true };
+    return { canView: true, canAdd: true, canEdit: true, canDelete: true };
   }
 
   const userPerms = permsMap[mod.id] || [];
@@ -20,8 +24,7 @@ export function getUserModuleActions(route) {
     canView: userPerms.includes('VER'),
     canAdd: userPerms.includes('AGREGAR'),
     canEdit: userPerms.includes('EDITAR'),
-    canDelete: userPerms.includes('BORRAR'),
-    canReport: userPerms.includes('REPORTE')
+    canDelete: userPerms.includes('ELIMINAR') || userPerms.includes('BORRAR')
   };
 }
 

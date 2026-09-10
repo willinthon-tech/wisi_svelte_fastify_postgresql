@@ -650,7 +650,7 @@
                             {perm === 'VER' ? 'background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;' : ''}
                             {perm === 'AGREGAR' ? 'background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;' : ''}
                             {perm === 'EDITAR' ? 'background: #fffbeb; color: #d97706; border: 1px solid #fde68a;' : ''}
-                            {perm === 'BORRAR' ? 'background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;' : ''}
+                            {perm === 'ELIMINAR' || perm === 'BORRAR' ? 'background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;' : ''}
                             {perm === 'REPORTE' ? 'background: #faf5ff; color: #7c3aed; border: 1px solid #e9d5ff;' : ''}
                           ">
                             {perm}

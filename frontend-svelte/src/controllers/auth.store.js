@@ -29,10 +29,10 @@ export const navMenuStore = writable([
     nombre: 'CECOM',
     icono: 'file',
     modulos: [
-      { id: 5, nombre: 'Libro', ruta: '/cecom/libro', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 37, nombre: 'Clientes', ruta: '/cecom/clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 32, nombre: 'Llaves', ruta: '/cecom/llaves', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 33, nombre: 'Llaves Borradas', ruta: '/cecom/llaves-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+      { id: 5, nombre: 'Libro', ruta: '/cecom/libro', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 37, nombre: 'Clientes', ruta: '/cecom/clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 32, nombre: 'Llaves', ruta: '/cecom/llaves', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 33, nombre: 'Llaves Borradas', ruta: '/cecom/llaves-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
@@ -40,19 +40,19 @@ export const navMenuStore = writable([
     nombre: 'RRHH',
     icono: 'file',
     modulos: [
-      { id: 1, nombre: 'Marcajes', ruta: '/rrhh/marcajes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 2, nombre: 'Empleados', ruta: '/rrhh/empleados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 3, nombre: 'Cargos', ruta: '/rrhh/cargos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 4, nombre: 'Asignaciones', ruta: '/rrhh/asignaciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 24, nombre: 'Areas', ruta: '/rrhh/areas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 25, nombre: 'Departamentos', ruta: '/rrhh/departamentos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 26, nombre: 'Registros', ruta: '/rrhh/registros', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 27, nombre: 'Desincorporados', ruta: '/rrhh/desincorporados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 28, nombre: 'Carnet', ruta: '/rrhh/carnet', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 29, nombre: 'Horarios', ruta: '/rrhh/horarios', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 30, nombre: 'Cumpleaños', ruta: '/rrhh/cumpleanos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 31, nombre: 'Calendario', ruta: '/rrhh/calendario', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 36, nombre: 'Cortes', ruta: '/rrhh/cortes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+      { id: 1, nombre: 'Marcajes', ruta: '/rrhh/marcajes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 2, nombre: 'Empleados', ruta: '/rrhh/empleados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 3, nombre: 'Cargos', ruta: '/rrhh/cargos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 4, nombre: 'Asignaciones', ruta: '/rrhh/asignaciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 24, nombre: 'Areas', ruta: '/rrhh/areas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 25, nombre: 'Departamentos', ruta: '/rrhh/departamentos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 26, nombre: 'Registros', ruta: '/rrhh/registros', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 27, nombre: 'Desincorporados', ruta: '/rrhh/desincorporados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 28, nombre: 'Carnet', ruta: '/rrhh/carnet', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 29, nombre: 'Horarios', ruta: '/rrhh/horarios', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 30, nombre: 'Cumpleaños', ruta: '/rrhh/cumpleanos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 31, nombre: 'Calendario', ruta: '/rrhh/calendario', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 36, nombre: 'Cortes', ruta: '/rrhh/cortes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
@@ -60,16 +60,16 @@ export const navMenuStore = writable([
     nombre: 'MAQUINAS',
     icono: 'file',
     modulos: [
-      { id: 23, nombre: 'Máquinas', ruta: '/configuracion/maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 14, nombre: 'Estados', ruta: '/configuracion/estados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 15, nombre: 'Sociedades', ruta: '/configuracion/sociedades', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 16, nombre: 'Valores', ruta: '/configuracion/valores', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 17, nombre: 'Juegos', ruta: '/configuracion/juegos-maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 18, nombre: 'Marcas', ruta: '/configuracion/marcas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 19, nombre: 'Modelos', ruta: '/configuracion/modelos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 20, nombre: 'Tipos', ruta: '/configuracion/tipos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 21, nombre: 'Modos', ruta: '/configuracion/modos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 22, nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+      { id: 23, nombre: 'Máquinas', ruta: '/configuracion/maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 14, nombre: 'Estados', ruta: '/configuracion/estados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 15, nombre: 'Sociedades', ruta: '/configuracion/sociedades', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 16, nombre: 'Valores', ruta: '/configuracion/valores', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 17, nombre: 'Juegos', ruta: '/configuracion/juegos-maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 18, nombre: 'Marcas', ruta: '/configuracion/marcas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 19, nombre: 'Modelos', ruta: '/configuracion/modelos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 20, nombre: 'Tipos', ruta: '/configuracion/tipos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 21, nombre: 'Modos', ruta: '/configuracion/modos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 22, nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
@@ -77,9 +77,9 @@ export const navMenuStore = writable([
     nombre: 'MESAS EN VIVO',
     icono: 'file',
     modulos: [
-      { id: 12, nombre: 'Mesas', ruta: '/gestion-de-mesas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 34, nombre: 'Juegos', ruta: '/mesas/juegos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 35, nombre: 'Mesas Borradas', ruta: '/mesas/mesas-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+      { id: 12, nombre: 'Mesas', ruta: '/gestion-de-mesas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 34, nombre: 'Juegos', ruta: '/mesas/juegos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 35, nombre: 'Mesas Borradas', ruta: '/mesas/mesas-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
@@ -87,10 +87,10 @@ export const navMenuStore = writable([
     nombre: 'CONF.M: CECOM',
     icono: 'file',
     modulos: [
-      { id: 38, nombre: 'Tipo Clientes', ruta: '/configuracion/tipo-clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 39, nombre: 'Métodos de Pago', ruta: '/configuracion/metodos-pago', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] },
-      { id: 41, nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'BORRAR', 'REPORTE'] }
+      { id: 38, nombre: 'Tipo Clientes', ruta: '/configuracion/tipo-clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 39, nombre: 'Métodos de Pago', ruta: '/configuracion/metodos-pago', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 41, nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   }
 ]);
