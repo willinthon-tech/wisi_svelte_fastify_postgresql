@@ -1,7 +1,19 @@
-import { sql, initDb } from './src/config/db.js';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+import { sql, initDb, isPgConnected } from './src/config/db.js';
 
 async function main() {
   await initDb();
+
+  if (!isPgConnected || !sql) {
+    throw new Error('No se pudo conectar a la base de datos PostgreSQL.');
+  }
 
   console.log('--- Current permissions before migration ---');
   const beforePerms = await sql`SELECT * FROM permissions ORDER BY id`;
