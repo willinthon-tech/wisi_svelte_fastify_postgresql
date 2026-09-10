@@ -1047,21 +1047,8 @@
     <!-- Scrollable Table Wrapper -->
     <div
       class="table-scroll-wrapper"
-      style="overflow-x: auto; position: relative;"
+      style="overflow-x: auto;"
     >
-      {#if isLoading && attlogs.length > 0}
-        <div
-          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.7); backdrop-filter: blur(1.5px); z-index: 5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #2563eb;"
-        >
-          <div
-            style="background: #ffffff; padding: 8px 18px; border-radius: 20px; border: 1px solid #cbd5e1; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: inline-flex; align-items: center; gap: 10px;"
-          >
-            <div class="spinner-small"></div>
-            <span>Consultando marcajes...</span>
-          </div>
-        </div>
-      {/if}
-
       <table
         class="data-table"
         style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;"
@@ -1090,7 +1077,7 @@
         </thead>
 
         <tbody>
-          {#if isLoading && attlogs.length === 0}
+          {#if isLoading}
             <tr>
               <td
                 colspan="9"

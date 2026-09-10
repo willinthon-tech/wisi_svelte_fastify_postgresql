@@ -2572,7 +2572,14 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           </thead>
 
           <tbody>
-            {#each filteredItems as item (item.id)}
+            {#if filteredItems.length === 0}
+              <tr>
+                <td colspan="10" style="padding: 32px 20px; text-align: center; color: #64748b; font-size: 13px;">
+                  No hay registros disponibles en {activeTab}
+                </td>
+              </tr>
+            {:else}
+              {#each filteredItems as item (item.id)}
               {@const isEditing = editingInlineId === item.id}
               <tr
                 style="border-bottom: 1px solid #f1f5f9; background: {isEditing
@@ -2887,7 +2894,8 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 </td>
               </tr>
             {/each}
-          </tbody>
+          {/if}
+        </tbody>
         </table>
       </div>
 
