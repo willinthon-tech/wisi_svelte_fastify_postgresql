@@ -31,8 +31,8 @@
   }
 
   // Permisología dinámica en tiempo real según el usuario activo y permiso 'VER'
-  $: activeUserId = $currentUserStore?.id || 1;
-  $: activeUserPermsMap = $userModulePermissionsStore[activeUserId] || {};
+  $: activeUserId = $currentUserStore?.id ?? null;
+  $: activeUserPermsMap = (activeUserId && $userModulePermissionsStore) ? ($userModulePermissionsStore[activeUserId] || {}) : {};
 
   $: filteredNavPages = (() => {
     // Agrupar páginas por nombre normalizado para consolidar secciones duplicadas (ej: CONF.M: CECOM)

@@ -4,8 +4,8 @@ import { toBackendUrl } from '../config/api.config.js';
 
 export function getUserModuleActions(route) {
   const user = get(currentUserStore);
-  const userId = user?.id || 1;
-  const permsMap = get(userModulePermissionsStore)[userId] || {};
+  const userId = user?.id ?? null;
+  const permsMap = (userId && get(userModulePermissionsStore)) ? (get(userModulePermissionsStore)[userId] || {}) : {};
   const modulos = get(masterModulosStore) || [];
 
   const cleanRoute = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
@@ -97,7 +97,7 @@ userModulePermissionsStore.subscribe(val => saveStore('user_perms_v4', val));
 export async function loadMasterStoresFromBackend() {
   const fetchEntity = async (entityName, store) => {
     try {
-      const res = await fetch(`/api/master/${entityName}?limit=all`);
+      const res = await fetch(toBackendUrl(`/api/master/${entityName}?limit=all`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
@@ -111,7 +111,7 @@ export async function loadMasterStoresFromBackend() {
 
   const fetchUserSalas = async () => {
     try {
-      const resSalas = await fetch('/api/master/user-salas');
+      const resSalas = await fetch(toBackendUrl('/api/master/user-salas'));
       if (resSalas.ok) {
         const json = await resSalas.json();
         if (json && json.success && json.data) {
@@ -125,7 +125,7 @@ export async function loadMasterStoresFromBackend() {
 
   const fetchUserPerms = async () => {
     try {
-      const resPerms = await fetch('/api/master/user-permissions');
+      const resPerms = await fetch(toBackendUrl('/api/master/user-permissions'));
       if (resPerms.ok) {
         const json = await resPerms.json();
         if (json && json.success && json.data) {
