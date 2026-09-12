@@ -508,23 +508,57 @@
     return Array.from(salaMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
   })();
 
-  // Opciones dinámicas de Departamentos extraídas de los empleados asociados al corte
+  // Opciones dinámicas de Departamentos agrupadas por sala_nombre
   $: departamentoOptions = (() => {
     if (!processedEmployees || processedEmployees.length === 0) return [];
     const deptoMap = new Map();
 
-    processedEmployees.forEach(emp => {
-      const name = (emp.departamento_nombre || emp.departamento || '').trim();
-      const id = emp.departamento_id ? String(emp.departamento_id) : (name ? name.toLowerCase() : 'sin_depto');
-      const label = name || 'Sin Departamento';
+    // Si hay salas seleccionadas en el filtro de Salas, limitamos los departamentos a esas salas
+    const activeEmployees = (selectedSalas && selectedSalas.length > 0)
+      ? processedEmployees.filter(emp => {
+          const empSalaId = emp.sala_id ? String(emp.sala_id) : '';
+          const empSalaName = String(emp.sala_nombre || emp.sala || '').trim().toLowerCase();
+          return selectedSalas.some(sel => {
+            const selStr = String(sel).trim();
+            if (empSalaId && selStr === empSalaId) return true;
+            if (empSalaName && selStr.toLowerCase() === empSalaName) return true;
+            return false;
+          });
+        })
+      : processedEmployees;
 
-      if (!deptoMap.has(id)) {
-        deptoMap.set(id, { id, key: id, label, count: 0 });
+    activeEmployees.forEach(emp => {
+      const deptoName = (emp.departamento_nombre || emp.departamento || '').trim();
+      const deptoId = emp.departamento_id ? String(emp.departamento_id) : (deptoName ? deptoName.toLowerCase() : 'sin_depto');
+      const salaName = (emp.sala_nombre || emp.sala || '').trim() || 'General';
+      const salaId = emp.sala_id ? String(emp.sala_id) : '';
+
+      // Clave única combinada para que cada sala mantenga sus departamentos correspondientes
+      const uniqueKey = `${salaId || salaName}__${deptoId}`;
+      const label = deptoName || 'Sin Departamento';
+
+      if (!deptoMap.has(uniqueKey)) {
+        deptoMap.set(uniqueKey, { 
+          id: uniqueKey, 
+          key: uniqueKey, 
+          label, 
+          nombre: label,
+          count: 0,
+          sala_nombre: salaName,
+          sala_id: salaId,
+          departamento_id: deptoId,
+          departamento_nombre: deptoName
+        });
       }
-      deptoMap.get(id).count++;
+      deptoMap.get(uniqueKey).count++;
     });
 
-    return Array.from(deptoMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    return Array.from(deptoMap.values()).sort((a, b) => {
+      if (a.sala_nombre !== b.sala_nombre) {
+        return a.sala_nombre.localeCompare(b.sala_nombre, 'es', { sensitivity: 'base' });
+      }
+      return (b.count || 0) - (a.count || 0);
+    });
   })();
 
   $: filteredEmployees = processedEmployees.filter(emp => {
@@ -547,9 +581,13 @@
     if (selectedDepartamentos && selectedDepartamentos.length > 0) {
       const empDeptoId = emp.departamento_id ? String(emp.departamento_id) : '';
       const empDeptoName = String(emp.departamento_nombre || emp.departamento || '').trim().toLowerCase();
-      
+      const empSalaId = emp.sala_id ? String(emp.sala_id) : '';
+      const empSalaName = String(emp.sala_nombre || emp.sala || '').trim();
+      const empUniqueKey = `${empSalaId || empSalaName}__${empDeptoId || (empDeptoName ? empDeptoName.toLowerCase() : 'sin_depto')}`;
+
       const matchesDepto = selectedDepartamentos.some(sel => {
         const selStr = String(sel).trim();
+        if (selStr === empUniqueKey) return true;
         if (empDeptoId && selStr === empDeptoId) return true;
         if (empDeptoName && selStr.toLowerCase() === empDeptoName) return true;
         if (selStr === 'sin_depto' && !empDeptoId && !empDeptoName) return true;
@@ -642,6 +680,7 @@
                 label="Departamentos"
                 icon="🏢"
                 options={departamentoOptions}
+                groupBy="sala_nombre"
                 bind:selectedValues={selectedDepartamentos}
                 placeholder="Filtrar departamentos..."
                 on:change={(e) => {
