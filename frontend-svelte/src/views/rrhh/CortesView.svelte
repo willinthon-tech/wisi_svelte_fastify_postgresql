@@ -222,7 +222,7 @@
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'fecha_rango', label: 'Período Evaluado', sortable: true, editable: false },
-    { key: 'salas_ids', label: 'Salas IDs', type: 'corte_salas', sortable: false, editable: false },
+    { key: 'salas_ids', label: 'Salas', type: 'corte_salas', sortable: false, editable: false },
     { key: 'total_empleados', label: 'Empleados', type: 'corte_empleados_badge', sortable: true, editable: false },
     { key: 'calculos_btn', label: 'Reporte', type: 'corte_actions', editable: false }
   ];

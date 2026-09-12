@@ -1553,9 +1553,9 @@
                         {@const sId = item.salas_ids[0]}
                         {@const sName = (item.salas_nombres && item.salas_nombres[0]) ? item.salas_nombres[0] : `Sala #${sId}`}
                         <span 
-                          style="display: inline-flex; align-items: center; gap: 5px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; white-space: nowrap;"
-                          title="Sala #{sId}: {sName}">
-                          <strong style="color: #4f46e5; font-size: 11.5px;">#{sId}</strong> {sName}
+                          style="display: inline-flex; align-items: center; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; white-space: nowrap;"
+                          title="{sName}">
+                          {sName}
                         </span>
                       {:else}
                         <!-- Si son varias salas: botón con la cantidad que abre modal de salas -->

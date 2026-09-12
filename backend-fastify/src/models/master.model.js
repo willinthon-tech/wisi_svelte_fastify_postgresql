@@ -4653,8 +4653,29 @@ export async function getCorteByIdModel(id) {
               }
             } catch (e) {}
           }
+        let salasNombres = [];
+        if (rows[0].salas_ids && rows[0].salas_ids.length > 0) {
+          try {
+            const salasRows = await sql`SELECT id, nombre FROM salas WHERE id = ANY(${rows[0].salas_ids})`;
+            salasNombres = (rows[0].salas_ids || []).map(sid => {
+              const found = salasRows.find(s => s.id === sid);
+              return found ? found.nombre : `Sala ${sid}`;
+            });
+          } catch (e) {}
         }
-        return { success: true, data: { ...rows[0], data: corteData } };
+        const resolvedSalaNombre = salasNombres.length === 1 
+          ? salasNombres[0] 
+          : (salasNombres.length > 1 ? `${salasNombres.length} Salas` : (rows[0].sala_nombre || 'General'));
+
+        return { 
+          success: true, 
+          data: { 
+            ...rows[0], 
+            data: corteData,
+            salas_nombres: salasNombres,
+            sala_nombre: resolvedSalaNombre
+          } 
+        };
       }
       return { success: false, error: 'Corte no encontrado' };
     } catch (err) {
