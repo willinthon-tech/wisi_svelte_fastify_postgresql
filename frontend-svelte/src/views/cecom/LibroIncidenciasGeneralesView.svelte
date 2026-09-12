@@ -140,52 +140,84 @@
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   }
 
-  // Preformateo de la incidencia para renderizado tipo Word (Título con hora en negrita e items en viñeta)
-  function parseIncidenciaContent(desc, hora) {
-    if (!desc) return { title: '', items: [] };
+  // Preformateo de las incidencias divididas en bloques independientes (múltiples registros si hay títulos sin viñeta)
+  function parseIncidenciasBlocks(desc, hora) {
+    if (!desc) return [];
     const rawLines = String(desc).split('\n');
-    const lines = rawLines.map(l => l.trimEnd()).filter(l => l.trim().length > 0);
-    if (lines.length === 0) return { title: '', items: [] };
+    const blocks = [];
+    let currentBlock = null;
 
-    let titleLine = lines[0].trim();
-    
-    // Si la primera línea ya empieza con la hora (ej. 08:35 ...), la dejamos intacta.
-    // De lo contrario, se le antepone la hora para que quede como en la muestra: "08:35 Inversiones 2020..."
-    const horaRegex = /^\d{1,2}:\d{2}/;
-    if (hora && !horaRegex.test(titleLine)) {
-      titleLine = `${hora} ${titleLine}`;
+    for (const rawLine of rawLines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) continue;
+
+      // Una línea es viñeta si empieza con el caracter • o - o *
+      const isBullet = /^[•\-\*]/.test(trimmed);
+
+      if (!isBullet) {
+        // Es una línea de título (a la altura de título, sin viñeta) -> Nuevo Registro
+        let titleLine = trimmed;
+        const horaRegex = /^\d{1,2}:\d{2}/;
+        if (hora && !horaRegex.test(titleLine)) {
+          titleLine = `${hora} ${titleLine}`;
+        }
+
+        currentBlock = {
+          rawTitle: trimmed,
+          title: titleLine,
+          items: []
+        };
+        blocks.push(currentBlock);
+      } else {
+        // Es un item de viñeta subordinado al título actual
+        const cleanItem = trimmed.replace(/^[\s•\-\*]+/, '').trim();
+        if (cleanItem) {
+          if (!currentBlock) {
+            currentBlock = {
+              rawTitle: '',
+              title: hora ? `${hora} Incidencia` : 'Incidencia',
+              items: []
+            };
+            blocks.push(currentBlock);
+          }
+          currentBlock.items.push(cleanItem);
+        }
+      }
     }
 
-    const items = lines.slice(1).map(l => {
-      // Limpiar viñeta inicial si la tiene para normalizar
-      return l.replace(/^[\s•\-\*]+/, '').trim();
-    }).filter(Boolean);
+    return blocks;
+  }
 
+  function parseIncidenciaContent(desc, hora) {
+    const blocks = parseIncidenciasBlocks(desc, hora);
+    if (blocks.length === 0) return { title: '', items: [] };
     return {
-      title: titleLine,
-      items
+      title: blocks[0].title,
+      items: blocks[0].items
     };
   }
 
-  $: livePreviewParsed = parseIncidenciaContent(descripcion, getCurrentTimeString());
+  $: livePreviewBlocks = parseIncidenciasBlocks(descripcion, getCurrentTimeString());
+  $: livePreviewParsed = livePreviewBlocks[0] || { title: '', items: [] };
 
-  // Manejo de teclado inteligente en el textarea para viñetas y tabulación automática
+  // Manejo de teclado inteligente en el textarea para escritura rápida
   function handleTextareaKeyDown(e) {
     const textarea = e.target;
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      insertAtCursor(textarea, '\n     • ');
-    } else if (e.key === 'Enter') {
+    if (e.key === 'Tab' || e.key === 'Enter') {
       const start = textarea.selectionStart;
       const val = textarea.value;
       const lineStart = val.lastIndexOf('\n', start - 1) + 1;
-      const currentLine = val.substring(lineStart, start);
+      const lineEnd = val.indexOf('\n', start);
+      const nextLineIdx = lineEnd === -1 ? val.length : lineEnd;
+      const fullCurrentLine = val.substring(lineStart, nextLineIdx);
+      const currentLineUpToCursor = val.substring(lineStart, start);
 
-      // Si la línea actual es solo una viñeta vacía, cancelar viñeta
-      if (currentLine.match(/^\s*•\s*$/)) {
+      // 1. Si la línea actual es solo una viñeta vacía (o espacios + viñeta):
+      // Enter o Tab cancelan la viñeta y vuelven a la altura de título (columna 0) para iniciar otro registro
+      if (fullCurrentLine.match(/^\s*•\s*$/)) {
         e.preventDefault();
         const before = val.substring(0, lineStart);
-        const after = val.substring(start);
+        const after = val.substring(nextLineIdx);
         textarea.value = before + after;
         textarea.selectionStart = textarea.selectionEnd = lineStart;
         if (textarea.id === 'm-desc-inc') modalDescripcion = textarea.value;
@@ -193,15 +225,30 @@
         return;
       }
 
-      // Si ya hay viñeta o estamos en líneas posteriores, continuar con viñeta
-      if (currentLine.includes('•') || lineStart > 0) {
+      // 2. Si estamos en una línea con viñeta y ya tiene texto:
+      // Enter o Tab generan la siguiente línea con viñeta
+      if (currentLineUpToCursor.includes('•')) {
         e.preventDefault();
         insertAtCursor(textarea, '\n     • ');
-      } else {
-        // Primera línea (título): al dar enter empezar viñetas
-        e.preventDefault();
-        insertAtCursor(textarea, '\n     • ');
+        return;
       }
+
+      // 3. Si la línea actual es un título (sin viñeta y con texto):
+      // Enter o Tab saltan a la siguiente línea iniciando los items con viñeta
+      if (currentLineUpToCursor.trim().length > 0) {
+        e.preventDefault();
+        insertAtCursor(textarea, '\n     • ');
+        return;
+      }
+
+      // 4. Si la línea está completamente vacía a la altura de título:
+      // Tab inserta viñeta
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        insertAtCursor(textarea, '     • ');
+        return;
+      }
+      // Enter en línea vacía hace salto normal
     }
   }
 
@@ -269,32 +316,68 @@
       return;
     }
 
+    // Extraer bloques independientes (sin forzar hora en rawTitle)
+    const blocks = parseIncidenciasBlocks(cleanDesc, '');
+    if (blocks.length === 0) {
+      triggerToast('Debe ingresar una descripción válida', 'warning');
+      return;
+    }
+
     isSaving = true;
     try {
-      const payload = {
-        descripcion: cleanDesc,
-        tipo_incidencia_id: Number(tipoIncidenciaId) || 1,
-        tipo: tipo || 'General',
-        hora: getCurrentTimeString()
-      };
+      const horaActual = getCurrentTimeString();
+      const tipoId = Number(tipoIncidenciaId) || 1;
+      const tipoStr = tipo || 'General';
 
-      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let guardados = 0;
+      for (const block of blocks) {
+        // Reconstruir la descripción del registro individual: título + items con viñeta
+        const lines = [];
+        if (block.rawTitle) {
+          lines.push(block.rawTitle);
+        }
+        for (const it of block.items) {
+          lines.push(`     • ${it}`);
+        }
+        const blockDesc = lines.join('\n').trim();
+        if (!blockDesc) continue;
 
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        triggerToast('Incidencia registrada exitosamente', 'success');
-        descripcion = '';
-        await loadRecords();
-      } else {
-        triggerToast(json?.error || 'Error al guardar incidencia', 'error');
+        // Si el título contiene una hora explícita (ej. 14:10 ...), respetarla; si no, usar la actual
+        const horaMatch = block.rawTitle.match(/^(\d{1,2}:\d{2})/);
+        const horaRegistro = horaMatch ? horaMatch[1] : horaActual;
+
+        const payload = {
+          descripcion: blockDesc,
+          tipo_incidencia_id: tipoId,
+          tipo: tipoStr,
+          hora: horaRegistro
+        };
+
+        const res = await fetch(`/api/master/libros/${lId}/incidencias-generales`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+        if (res.ok && json && json.success) {
+          guardados++;
+        } else {
+          throw new Error(json?.error || `Error al guardar "${block.rawTitle || 'incidencia'}"`);
+        }
       }
+
+      if (guardados > 1) {
+        triggerToast(`${guardados} incidencias registradas exitosamente`, 'success');
+      } else {
+        triggerToast('Incidencia registrada exitosamente', 'success');
+      }
+
+      descripcion = '';
+      await loadRecords();
     } catch (err) {
-      console.error('Error al guardar incidencia:', err);
-      triggerToast(`Error de conexión: ${err.message}`, 'error');
+      console.error('Error al guardar incidencias:', err);
+      triggerToast(`Error al guardar: ${err.message}`, 'error');
     } finally {
       isSaving = false;
     }
@@ -448,25 +531,35 @@
           required
         ></textarea>
         <span class="field-hint">
-          Escribe el título en la 1ra línea y pulsa <b>Enter</b> o <b>Tab</b> para agregar items con viñetas.
+          Escribe el título en la 1ra línea y pulsa <b>Enter</b> o <b>Tab</b> para viñetas. Para otro registro, escribe un nuevo título sin viñeta.
         </span>
       </div>
 
       <!-- Vista Previa en Vivo del Preformateado -->
-      {#if descripcion.trim()}
+      {#if descripcion.trim() && livePreviewBlocks.length > 0}
         <div class="live-preview-box">
           <div class="preview-header">
             <span>👁️ Vista Previa Preformateada:</span>
-          </div>
-          <div class="preview-content">
-            <div class="preview-title">{livePreviewParsed.title}</div>
-            {#if livePreviewParsed.items.length > 0}
-              <ul class="preview-items-list">
-                {#each livePreviewParsed.items as item}
-                  <li>{item}</li>
-                {/each}
-              </ul>
+            {#if livePreviewBlocks.length > 1}
+              <span class="badge-multi-records">{livePreviewBlocks.length} registros</span>
             {/if}
+          </div>
+          <div class="preview-blocks-list">
+            {#each livePreviewBlocks as block, bIdx}
+              <div class="preview-content {livePreviewBlocks.length > 1 ? 'preview-multi-item' : ''}">
+                {#if livePreviewBlocks.length > 1}
+                  <div class="preview-record-tag">Registro #{bIdx + 1}</div>
+                {/if}
+                <div class="preview-title">{block.title}</div>
+                {#if block.items.length > 0}
+                  <ul class="preview-items-list">
+                    {#each block.items as item}
+                      <li>{item}</li>
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
+            {/each}
           </div>
         </div>
       {/if}
@@ -478,9 +571,9 @@
         disabled={isSaving}
       >
         {#if isSaving}
-          <span>Guardando...</span>
+          <span>Guardando {livePreviewBlocks.length > 1 ? `${livePreviewBlocks.length} Registros...` : 'Registro...'}</span>
         {:else}
-          <span>Guardar Registro</span>
+          <span>Guardar {livePreviewBlocks.length > 1 ? `${livePreviewBlocks.length} Registros` : 'Registro'}</span>
         {/if}
       </button>
     </form>
@@ -554,7 +647,7 @@
             </tr>
           {:else}
             {#each filteredRecords as record, idx}
-              {@const parsed = parseIncidenciaContent(record.descripcion, record.hora)}
+              {@const recordBlocks = parseIncidenciasBlocks(record.descripcion, record.hora)}
               <tr class="incidencia-row">
                 <td class="td-center td-num">{idx + 1}</td>
                 <td class="td-center td-tipo">
@@ -565,15 +658,23 @@
                 <td class="td-desc">
                   <!-- Formato estilo muestra (Título en negrita con hora, e items indentados abajo) -->
                   <div class="incidencia-content-rendered">
-                    <div class="inc-title-line">
-                      <span class="inc-title-bold">{parsed.title}</span>
-                    </div>
-                    {#if parsed.items.length > 0}
-                      <ul class="inc-items-list">
-                        {#each parsed.items as item}
-                          <li>{item}</li>
-                        {/each}
-                      </ul>
+                    {#if recordBlocks.length === 0}
+                      <span class="inc-title-bold">{record.descripcion || '—'}</span>
+                    {:else}
+                      {#each recordBlocks as rBlock, bIdx}
+                        <div class="inc-block-row {bIdx > 0 ? 'inc-block-separator' : ''}">
+                          <div class="inc-title-line">
+                            <span class="inc-title-bold">{rBlock.title}</span>
+                          </div>
+                          {#if rBlock.items.length > 0}
+                            <ul class="inc-items-list">
+                              {#each rBlock.items as item}
+                                <li>{item}</li>
+                              {/each}
+                            </ul>
+                          {/if}
+                        </div>
+                      {/each}
                     {/if}
                   </div>
                 </td>
@@ -906,10 +1007,30 @@
   }
 
   .preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     font-size: 11px;
     font-weight: 700;
     color: #64748b;
     margin-bottom: 6px;
+  }
+
+  .badge-multi-records {
+    background: #e0f2fe;
+    color: #0369a1;
+    font-weight: 700;
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    border: 1px solid #bae6fd;
+  }
+
+  .preview-blocks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
   }
 
   .preview-content {
@@ -917,6 +1038,25 @@
     border: 1px solid #e2e8f0;
     border-radius: 4px;
     padding: 8px 12px;
+  }
+
+  .preview-multi-item {
+    border-left: 3px solid #3b82f6;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+
+  .preview-record-tag {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #1d4ed8;
+    background: #eff6ff;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-bottom: 5px;
+    border: 1px solid #bfdbfe;
+    letter-spacing: 0.2px;
   }
 
   .preview-title {
@@ -1142,6 +1282,12 @@
 
   .inc-items-list li {
     margin-bottom: 2px;
+  }
+
+  .inc-block-separator {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #cbd5e1;
   }
 
   /* Acciones */
