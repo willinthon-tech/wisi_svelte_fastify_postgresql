@@ -494,6 +494,23 @@
     if (!processedEmployees || processedEmployees.length === 0) return [];
     const salaMap = new Map();
 
+    // Empleados que cumplen con los departamentos seleccionados (si hay filtro activo)
+    const empsForSalas = (selectedDepartamentos && selectedDepartamentos.length > 0)
+      ? processedEmployees.filter(emp => {
+          const empDeptoId = emp.departamento_id ? String(emp.departamento_id) : '';
+          const empDeptoName = String(emp.departamento_nombre || emp.departamento || '').trim().toLowerCase();
+          const empSalaId = emp.sala_id ? String(emp.sala_id) : '';
+          const empSalaName = String(emp.sala_nombre || emp.sala || '').trim();
+          const empUniqueKey = `${empSalaId || empSalaName}__${empDeptoId || (empDeptoName ? empDeptoName.toLowerCase() : 'sin_depto')}`;
+
+          return selectedDepartamentos.some(sel => {
+            const selStr = String(sel).trim();
+            return selStr === empUniqueKey || (empDeptoId && selStr === empDeptoId) || (empDeptoName && selStr.toLowerCase() === empDeptoName);
+          });
+        })
+      : processedEmployees;
+
+    // Poblar todas las salas disponibles en el corte
     processedEmployees.forEach(emp => {
       const name = (emp.sala_nombre || emp.sala || '').trim();
       const id = emp.sala_id ? String(emp.sala_id) : (name ? name.toLowerCase() : 'sin_sala');
@@ -502,38 +519,31 @@
       if (!salaMap.has(id)) {
         salaMap.set(id, { id, key: id, label, count: 0 });
       }
-      salaMap.get(id).count++;
+    });
+
+    // Contar según el filtro de departamentos activo
+    empsForSalas.forEach(emp => {
+      const name = (emp.sala_nombre || emp.sala || '').trim();
+      const id = emp.sala_id ? String(emp.sala_id) : (name ? name.toLowerCase() : 'sin_sala');
+      if (salaMap.has(id)) {
+        salaMap.get(id).count++;
+      }
     });
 
     return Array.from(salaMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
   })();
 
-  // Opciones dinámicas de Departamentos agrupadas por sala_nombre
-  $: departamentoOptions = (() => {
+  // Todas las opciones de departamentos en el corte (sin filtrar por salas)
+  $: allDepartamentoOptions = (() => {
     if (!processedEmployees || processedEmployees.length === 0) return [];
     const deptoMap = new Map();
 
-    // Si hay salas seleccionadas en el filtro de Salas, limitamos los departamentos a esas salas
-    const activeEmployees = (selectedSalas && selectedSalas.length > 0)
-      ? processedEmployees.filter(emp => {
-          const empSalaId = emp.sala_id ? String(emp.sala_id) : '';
-          const empSalaName = String(emp.sala_nombre || emp.sala || '').trim().toLowerCase();
-          return selectedSalas.some(sel => {
-            const selStr = String(sel).trim();
-            if (empSalaId && selStr === empSalaId) return true;
-            if (empSalaName && selStr.toLowerCase() === empSalaName) return true;
-            return false;
-          });
-        })
-      : processedEmployees;
-
-    activeEmployees.forEach(emp => {
+    processedEmployees.forEach(emp => {
       const deptoName = (emp.departamento_nombre || emp.departamento || '').trim();
       const deptoId = emp.departamento_id ? String(emp.departamento_id) : (deptoName ? deptoName.toLowerCase() : 'sin_depto');
       const salaName = (emp.sala_nombre || emp.sala || '').trim() || 'General';
       const salaId = emp.sala_id ? String(emp.sala_id) : '';
 
-      // Clave única combinada para que cada sala mantenga sus departamentos correspondientes
       const uniqueKey = `${salaId || salaName}__${deptoId}`;
       const label = deptoName || 'Sin Departamento';
 
@@ -553,13 +563,83 @@
       deptoMap.get(uniqueKey).count++;
     });
 
-    return Array.from(deptoMap.values()).sort((a, b) => {
+    return Array.from(deptoMap.values());
+  })();
+
+  // Opciones visibles en el dropdown de Departamentos (agrupadas por sala_nombre)
+  $: departamentoOptions = (() => {
+    if (!allDepartamentoOptions || allDepartamentoOptions.length === 0) return [];
+
+    // Si hay salas seleccionadas, filtramos departamentos pertenecientes a esas salas
+    if (selectedSalas && selectedSalas.length > 0) {
+      return allDepartamentoOptions
+        .filter(opt => {
+          const optSalaId = opt.sala_id ? String(opt.sala_id) : '';
+          const optSalaName = String(opt.sala_nombre || '').trim().toLowerCase();
+          return selectedSalas.some(sId => {
+            const sStr = String(sId).trim();
+            return (optSalaId && sStr === optSalaId) || (optSalaName && sStr.toLowerCase() === optSalaName);
+          });
+        })
+        .sort((a, b) => {
+          if (a.sala_nombre !== b.sala_nombre) {
+            return a.sala_nombre.localeCompare(b.sala_nombre, 'es', { sensitivity: 'base' });
+          }
+          return (b.count || 0) - (a.count || 0);
+        });
+    }
+
+    return [...allDepartamentoOptions].sort((a, b) => {
       if (a.sala_nombre !== b.sala_nombre) {
         return a.sala_nombre.localeCompare(b.sala_nombre, 'es', { sensitivity: 'base' });
       }
       return (b.count || 0) - (a.count || 0);
     });
   })();
+
+  let salaAutoSelectedByDepto = false;
+
+  function handleSalasChange(e) {
+    selectedSalas = e.detail;
+    salaAutoSelectedByDepto = false;
+
+    // Descartar departamentos que no pertenezcan a las salas recién seleccionadas
+    if (selectedSalas && selectedSalas.length > 0) {
+      selectedDepartamentos = (selectedDepartamentos || []).filter(deptoKey => {
+        const opt = allDepartamentoOptions.find(o => o.key === deptoKey || o.id === deptoKey);
+        if (!opt) return false;
+        const optSalaId = opt.sala_id ? String(opt.sala_id) : '';
+        const optSalaName = String(opt.sala_nombre || '').trim().toLowerCase();
+        return selectedSalas.some(sId => {
+          const sStr = String(sId).trim();
+          return (optSalaId && sStr === optSalaId) || (optSalaName && sStr.toLowerCase() === optSalaName);
+        });
+      });
+    }
+  }
+
+  function handleDeptosChange(e) {
+    selectedDepartamentos = e.detail;
+
+    // Al seleccionar departamentos, sincronizamos y seleccionamos automáticamente las salas de esos departamentos
+    if (selectedDepartamentos && selectedDepartamentos.length > 0) {
+      const salasSet = new Set();
+      selectedDepartamentos.forEach(deptoKey => {
+        const opt = allDepartamentoOptions.find(o => o.key === deptoKey || o.id === deptoKey);
+        if (opt) {
+          const sId = opt.sala_id ? String(opt.sala_id) : (opt.sala_nombre ? opt.sala_nombre.toLowerCase() : '');
+          if (sId) salasSet.add(sId);
+        }
+      });
+      if (salasSet.size > 0) {
+        selectedSalas = Array.from(salasSet);
+        salaAutoSelectedByDepto = true;
+      }
+    } else if (salaAutoSelectedByDepto) {
+      selectedSalas = [];
+      salaAutoSelectedByDepto = false;
+    }
+  }
 
   $: filteredEmployees = processedEmployees.filter(emp => {
     // 1. Filtro por salas seleccionadas
@@ -665,9 +745,7 @@
                 options={salaOptions}
                 bind:selectedValues={selectedSalas}
                 placeholder="Filtrar salas..."
-                on:change={(e) => {
-                  selectedSalas = e.detail;
-                }}
+                on:change={handleSalasChange}
               />
             </div>
           {/if}
@@ -683,9 +761,7 @@
                 groupBy="sala_nombre"
                 bind:selectedValues={selectedDepartamentos}
                 placeholder="Filtrar departamentos..."
-                on:change={(e) => {
-                  selectedDepartamentos = e.detail;
-                }}
+                on:change={handleDeptosChange}
               />
             </div>
           {/if}
