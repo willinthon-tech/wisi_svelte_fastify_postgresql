@@ -1543,21 +1543,31 @@
                       👥 {item.total_empleados || 0} empleados
                     </button>
                   {:else if col.type === 'corte_salas'}
-                    <!-- Salas IDs que conforman el corte -->
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 320px;">
-                      {#if item.salas_ids && Array.isArray(item.salas_ids) && item.salas_ids.length > 0}
-                        {#each item.salas_ids as sId, idx}
-                          {@const sName = (item.salas_nombres && item.salas_nombres[idx]) ? item.salas_nombres[idx] : `Sala #${sId}`}
-                          <span 
-                            style="display: inline-flex; align-items: center; gap: 4px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; padding: 2px 7px; border-radius: 6px; font-size: 11.5px; font-weight: 700; white-space: nowrap;"
-                            title="Sala #{sId}: {sName}">
-                            <strong style="color: #4f46e5; font-size: 11px;">#{sId}</strong> {sName}
-                          </span>
-                        {/each}
-                      {:else}
-                        <span style="display: inline-block; background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; font-style: italic;">
-                          Consolidado / Sin Sala
+                    <!-- Salas que conforman el corte -->
+                    <div style="display: flex; align-items: center;">
+                      {#if !item.salas_ids || !Array.isArray(item.salas_ids) || item.salas_ids.length === 0}
+                        <span style="display: inline-block; background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; padding: 3px 10px; border-radius: 8px; font-size: 11.5px; font-weight: 600; font-style: italic;">
+                          Consolidado / General
                         </span>
+                      {:else if item.salas_ids.length === 1}
+                        {@const sId = item.salas_ids[0]}
+                        {@const sName = (item.salas_nombres && item.salas_nombres[0]) ? item.salas_nombres[0] : `Sala #${sId}`}
+                        <span 
+                          style="display: inline-flex; align-items: center; gap: 5px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; white-space: nowrap;"
+                          title="Sala #{sId}: {sName}">
+                          <strong style="color: #4f46e5; font-size: 11.5px;">#{sId}</strong> {sName}
+                        </span>
+                      {:else}
+                        <!-- Si son varias salas: botón con la cantidad que abre modal de salas -->
+                        <button
+                          type="button"
+                          on:click|stopPropagation={() => dispatch('verSalasCorte', item)}
+                          style="display: inline-flex; align-items: center; gap: 6px; background: #f5f3ff; color: #6d28d9; border: 1.5px solid #8b5cf6; padding: 4px 12px; border-radius: 12px; font-size: 11.5px; font-weight: 800; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(139, 92, 246, 0.15);"
+                          on:mouseenter={(e) => { e.currentTarget.style.background = '#ede9fe'; e.currentTarget.style.borderColor = '#7c3aed'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                          on:mouseleave={(e) => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.transform = 'none'; }}
+                          title="Ver las {item.salas_ids.length} salas de este corte">
+                          🎰 {item.salas_ids.length} salas
+                        </button>
                       {/if}
                     </div>
 

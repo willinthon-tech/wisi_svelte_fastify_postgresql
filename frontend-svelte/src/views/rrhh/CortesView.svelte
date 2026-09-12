@@ -16,6 +16,7 @@
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
   import CorteEmpleadosModal from '../../components/modals/CorteEmpleadosModal.svelte';
+  import CorteSalasModal from '../../components/modals/CorteSalasModal.svelte';
   import { 
     loadMasterStoresFromBackend, 
     userSalasStore as masterUserSalasStore 
@@ -28,9 +29,17 @@
   let showEmpleadosModal = false;
   let selectedCorteParaEmpleados = null;
 
+  let showSalasModal = false;
+  let selectedCorteParaSalas = null;
+
   function handleVerEmpleadosCorte(event) {
     selectedCorteParaEmpleados = event.detail;
     showEmpleadosModal = true;
+  }
+
+  function handleVerSalasCorte(event) {
+    selectedCorteParaSalas = event.detail;
+    showSalasModal = true;
   }
 
   // Extract assigned sala IDs strictly for the logged-in user
@@ -321,6 +330,7 @@
   on:verCalculos={handleVerCalculos}
   on:compartirCorte={handleCompartirCorte}
   on:verEmpleadosCorte={handleVerEmpleadosCorte}
+  on:verSalasCorte={handleVerSalasCorte}
 >
   <div slot="filters" class="smart-filters-grid">
     <SmartMultiSelect
@@ -355,6 +365,15 @@
   on:close={() => {
     showEmpleadosModal = false;
     selectedCorteParaEmpleados = null;
+  }}
+/>
+
+<CorteSalasModal
+  isOpen={showSalasModal}
+  corte={selectedCorteParaSalas}
+  on:close={() => {
+    showSalasModal = false;
+    selectedCorteParaSalas = null;
   }}
 />
 

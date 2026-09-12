@@ -497,7 +497,7 @@
     processedEmployees.forEach(emp => {
       const name = (emp.sala_nombre || emp.sala || '').trim();
       const id = emp.sala_id ? String(emp.sala_id) : (name ? name.toLowerCase() : 'sin_sala');
-      const label = name ? (emp.sala_id ? `[#${emp.sala_id}] ${name}` : name) : (emp.sala_id ? `Sala #${emp.sala_id}` : 'Sin Sala');
+      const label = name || (emp.sala_id ? `Sala #${emp.sala_id}` : 'Sin Sala');
 
       if (!salaMap.has(id)) {
         salaMap.set(id, { id, key: id, label, count: 0 });
@@ -505,27 +505,51 @@
       salaMap.get(id).count++;
     });
 
-    return Array.from(salaMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    return Array.from(salaMap.values()).sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0));
   })();
 
-  // Opciones dinámicas de Departamentos extraídas de los empleados asociados al corte
+  // Opciones dinámicas de Departamentos agrupadas por Sala (con groupBy sala_nombre)
   $: departamentoOptions = (() => {
     if (!processedEmployees || processedEmployees.length === 0) return [];
     const deptoMap = new Map();
 
     processedEmployees.forEach(emp => {
       const name = (emp.departamento_nombre || emp.departamento || '').trim();
-      const id = emp.departamento_id ? String(emp.departamento_id) : (name ? name.toLowerCase() : 'sin_depto');
+      const sName = (emp.sala_nombre || emp.sala || '').trim() || 'Sin Sala';
+      const deptoId = emp.departamento_id ? String(emp.departamento_id) : (name ? name.toLowerCase() : 'sin_depto');
+      const uniqueKey = `${sName}__${deptoId}`;
       const label = name || 'Sin Departamento';
 
-      if (!deptoMap.has(id)) {
-        deptoMap.set(id, { id, key: id, label, count: 0 });
+      if (!deptoMap.has(uniqueKey)) {
+        deptoMap.set(uniqueKey, { 
+          id: uniqueKey, 
+          key: uniqueKey, 
+          label, 
+          depto_id: deptoId,
+          depto_nombre: name,
+          sala_nombre: sName, 
+          count: 0 
+        });
       }
-      deptoMap.get(id).count++;
+      deptoMap.get(uniqueKey).count++;
     });
 
-    return Array.from(deptoMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    return Array.from(deptoMap.values()).sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0));
   })();
+
+  $: hasActiveFilters = Boolean(
+    (searchQuery || '').trim() ||
+    selectedSalas.length > 0 ||
+    selectedDepartamentos.length > 0
+  );
+
+  $: totalFilters = ((searchQuery || '').trim() ? 1 : 0) + selectedSalas.length + selectedDepartamentos.length;
+
+  function clearAllFilters() {
+    searchQuery = '';
+    selectedSalas = [];
+    selectedDepartamentos = [];
+  }
 
   $: filteredEmployees = processedEmployees.filter(emp => {
     // 1. Filtro por salas seleccionadas
@@ -547,12 +571,14 @@
     if (selectedDepartamentos && selectedDepartamentos.length > 0) {
       const empDeptoId = emp.departamento_id ? String(emp.departamento_id) : '';
       const empDeptoName = String(emp.departamento_nombre || emp.departamento || '').trim().toLowerCase();
-      
+      const empSalaName = (emp.sala_nombre || emp.sala || '').trim() || 'Sin Sala';
+      const empUniqueKey = `${empSalaName}__${empDeptoId || (empDeptoName ? empDeptoName : 'sin_depto')}`;
+
       const matchesDepto = selectedDepartamentos.some(sel => {
         const selStr = String(sel).trim();
+        if (selStr === empUniqueKey) return true;
         if (empDeptoId && selStr === empDeptoId) return true;
         if (empDeptoName && selStr.toLowerCase() === empDeptoName) return true;
-        if (selStr === 'sin_depto' && !empDeptoId && !empDeptoName) return true;
         return false;
       });
       if (!matchesDepto) return false;
@@ -607,47 +633,13 @@
           <div class="emp-counter-chip">
             <span class="emp-icon">👥</span>
             <span class="emp-text">
-              {#if (selectedDepartamentos && selectedDepartamentos.length > 0) || (selectedSalas && selectedSalas.length > 0)}
+              {#if hasActiveFilters}
                 <strong>{filteredEmployees.length}</strong> de {processedEmployees.length} empleado(s)
               {:else}
                 <strong>{filteredEmployees.length}</strong> empleado(s)
               {/if}
             </span>
           </div>
-
-          <!-- Filtro MultiSelect de Salas asociadas a los empleados del listado -->
-          {#if salaOptions.length > 0}
-            <div class="sala-multiselect-wrap">
-              <SmartMultiSelect
-                id="corte-filtro-salas"
-                label="Salas"
-                icon="🎰"
-                options={salaOptions}
-                bind:selectedValues={selectedSalas}
-                placeholder="Filtrar salas..."
-                on:change={(e) => {
-                  selectedSalas = e.detail;
-                }}
-              />
-            </div>
-          {/if}
-
-          <!-- Filtro MultiSelect de Departamentos asociados a los empleados del listado -->
-          {#if departamentoOptions.length > 0}
-            <div class="depto-multiselect-wrap">
-              <SmartMultiSelect
-                id="corte-filtro-departamentos"
-                label="Departamentos"
-                icon="🏢"
-                options={departamentoOptions}
-                bind:selectedValues={selectedDepartamentos}
-                placeholder="Filtrar departamentos..."
-                on:change={(e) => {
-                  selectedDepartamentos = e.detail;
-                }}
-              />
-            </div>
-          {/if}
         </div>
       </div>
 
@@ -660,7 +652,55 @@
       {/if}
     </div>
 
-    <!-- Navigation Tabs & Search Controls -->
+    <!-- Filters & Search Toolbar (Salas, Departamento, Búsqueda) -->
+    <div class="filters-card no-print">
+      <!-- Fila 1: Filtros SmartMultiSelect -->
+      <div class="smart-filters-grid">
+        <SmartMultiSelect
+          id="corte-filtro-salas"
+          label="Salas"
+          options={salaOptions}
+          bind:selectedValues={selectedSalas}
+        />
+
+        <SmartMultiSelect
+          id="corte-filtro-departamentos"
+          label="Departamento"
+          options={departamentoOptions}
+          groupBy="sala_nombre"
+          bind:selectedValues={selectedDepartamentos}
+        />
+      </div>
+
+      <!-- Fila 2: Barra de Búsqueda y Limpiar Filtros -->
+      <div class="search-and-actions-row">
+        <div class="search-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input
+            type="text"
+            placeholder="Buscar por empleado, cédula, cargo, sala o departamento..."
+            bind:value={searchQuery}
+            class="global-search-input"
+          />
+          {#if searchQuery}
+            <button type="button" class="clear-search-btn" on:click={() => searchQuery = ''}>&times;</button>
+          {/if}
+        </div>
+
+        {#if hasActiveFilters}
+          <button
+            type="button"
+            on:click={clearAllFilters}
+            class="btn-limpiar-filtros"
+            title="Restablecer búsqueda y todos los filtros"
+          >
+            <span>✕</span> Limpiar Filtros ({totalFilters})
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
     <div class="toolbar-card no-print">
       <div class="tabs-group">
         <button
@@ -688,16 +728,8 @@
         </button>
       </div>
 
-      <div class="search-wrap">
-        <input
-          type="text"
-          placeholder="Buscar empleado por nombre, cédula o cargo..."
-          bind:value={searchQuery}
-          class="search-input"
-        />
-        {#if searchQuery}
-          <button type="button" class="clear-search" on:click={() => searchQuery = ''}>✕</button>
-        {/if}
+      <div class="showing-count-badge">
+        Mostrando <strong>{filteredEmployees.length}</strong> de {processedEmployees.length} empleados
       </div>
     </div>
 
@@ -1164,51 +1196,104 @@
     font-weight: 700;
   }
 
-  /* Filtros MultiSelect de Salas y Departamentos en Cabecera */
-  .sala-multiselect-wrap,
-  .depto-multiselect-wrap {
-    min-width: 175px;
-    max-width: 230px;
+  /* Filters Card matching ReportesView */
+  .filters-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  .smart-filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .search-and-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .search-input-wrapper {
     position: relative;
-    z-index: 70;
+    flex: 1;
+    display: flex;
+    align-items: center;
   }
 
-  .sala-multiselect-wrap :global(.smart-multiselect-trigger),
-  .depto-multiselect-wrap :global(.smart-multiselect-trigger) {
-    height: 31px !important;
-    background: #ffffff !important;
-    color: #581c87 !important;
-    font-weight: 800 !important;
-    font-size: 11.5px !important;
-    border: 1px solid rgba(255, 255, 255, 0.4) !important;
-    border-radius: 8px !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
-    padding: 0 10px !important;
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 13px;
+    color: #64748b;
+    pointer-events: none;
   }
 
-  .sala-multiselect-wrap :global(.smart-multiselect-trigger:hover),
-  .depto-multiselect-wrap :global(.smart-multiselect-trigger:hover) {
-    background: #fdf4ff !important;
-    border-color: #a855f7 !important;
+  .global-search-input {
+    width: 100%;
+    padding: 8px 36px 8px 34px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    outline: none;
+    transition: all 0.15s ease;
   }
 
-  .sala-multiselect-wrap :global(.smart-multiselect-trigger.active),
-  .depto-multiselect-wrap :global(.smart-multiselect-trigger.active) {
-    background: #fdf4ff !important;
-    border-color: #a855f7 !important;
-    color: #581c87 !important;
-    box-shadow: 0 0 0 1px #a855f7 !important;
+  .global-search-input:focus {
+    background: #ffffff;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
   }
 
-  .sala-multiselect-wrap :global(.smart-multiselect-trigger .trigger-badge),
-  .depto-multiselect-wrap :global(.smart-multiselect-trigger .trigger-badge) {
-    background: #7c3aed !important;
-    color: #ffffff !important;
+  .clear-search-btn {
+    position: absolute;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 4px;
   }
 
-  .sala-multiselect-wrap :global(.smart-multiselect-dropdown),
-  .depto-multiselect-wrap :global(.smart-multiselect-dropdown) {
-    z-index: 100 !important;
+  .btn-limpiar-filtros {
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #ef4444;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    background: #fef2f2;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    white-space: nowrap;
+  }
+
+  .btn-limpiar-filtros:hover {
+    background: #fee2e2;
+  }
+
+  .showing-count-badge {
+    font-size: 12px;
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    padding: 5px 12px;
+    border-radius: 8px;
   }
 
   .header-right {
