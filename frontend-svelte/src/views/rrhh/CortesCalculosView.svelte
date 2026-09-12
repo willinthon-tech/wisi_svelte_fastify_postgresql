@@ -168,6 +168,9 @@
 
   function computeCalculos(corteObj) {
     if (!corteObj) return;
+    selectedSalas = [];
+    selectedDepartamentos = [];
+    manualSalasFilter = [];
     let snapshotData = corteObj.data || {};
     if (typeof snapshotData === 'string') {
       try {
@@ -494,23 +497,7 @@
     if (!processedEmployees || processedEmployees.length === 0) return [];
     const salaMap = new Map();
 
-    // Empleados que cumplen con los departamentos seleccionados (si hay filtro activo)
-    const empsForSalas = (selectedDepartamentos && selectedDepartamentos.length > 0)
-      ? processedEmployees.filter(emp => {
-          const empDeptoId = emp.departamento_id ? String(emp.departamento_id) : '';
-          const empDeptoName = String(emp.departamento_nombre || emp.departamento || '').trim().toLowerCase();
-          const empSalaId = emp.sala_id ? String(emp.sala_id) : '';
-          const empSalaName = String(emp.sala_nombre || emp.sala || '').trim();
-          const empUniqueKey = `${empSalaId || empSalaName}__${empDeptoId || (empDeptoName ? empDeptoName.toLowerCase() : 'sin_depto')}`;
-
-          return selectedDepartamentos.some(sel => {
-            const selStr = String(sel).trim();
-            return selStr === empUniqueKey || (empDeptoId && selStr === empDeptoId) || (empDeptoName && selStr.toLowerCase() === empDeptoName);
-          });
-        })
-      : processedEmployees;
-
-    // Poblar todas las salas disponibles en el corte
+    // Mantener siempre todas las salas con su cantidad de empleados en el corte para que no desaparezcan
     processedEmployees.forEach(emp => {
       const name = (emp.sala_nombre || emp.sala || '').trim();
       const id = emp.sala_id ? String(emp.sala_id) : (name ? name.toLowerCase() : 'sin_sala');
@@ -519,15 +506,7 @@
       if (!salaMap.has(id)) {
         salaMap.set(id, { id, key: id, label, count: 0 });
       }
-    });
-
-    // Contar según el filtro de departamentos activo
-    empsForSalas.forEach(emp => {
-      const name = (emp.sala_nombre || emp.sala || '').trim();
-      const id = emp.sala_id ? String(emp.sala_id) : (name ? name.toLowerCase() : 'sin_sala');
-      if (salaMap.has(id)) {
-        salaMap.get(id).count++;
-      }
+      salaMap.get(id).count++;
     });
 
     return Array.from(salaMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
@@ -566,30 +545,30 @@
     return Array.from(deptoMap.values());
   })();
 
+  function deptoMatchesSalas(deptoOpt, salasArray) {
+    if (!salasArray || salasArray.length === 0) return true;
+    const optSalaId = deptoOpt.sala_id ? String(deptoOpt.sala_id) : '';
+    const optSalaName = String(deptoOpt.sala_nombre || '').trim().toLowerCase();
+
+    return salasArray.some(sId => {
+      const sStr = String(sId).trim();
+      return (optSalaId && sStr === optSalaId) || (optSalaName && sStr.toLowerCase() === optSalaName);
+    });
+  }
+
+  let manualSalasFilter = [];
+
   // Opciones visibles en el dropdown de Departamentos (agrupadas por sala_nombre)
   $: departamentoOptions = (() => {
     if (!allDepartamentoOptions || allDepartamentoOptions.length === 0) return [];
 
-    // Si hay salas seleccionadas, filtramos departamentos pertenecientes a esas salas
-    if (selectedSalas && selectedSalas.length > 0) {
-      return allDepartamentoOptions
-        .filter(opt => {
-          const optSalaId = opt.sala_id ? String(opt.sala_id) : '';
-          const optSalaName = String(opt.sala_nombre || '').trim().toLowerCase();
-          return selectedSalas.some(sId => {
-            const sStr = String(sId).trim();
-            return (optSalaId && sStr === optSalaId) || (optSalaName && sStr.toLowerCase() === optSalaName);
-          });
-        })
-        .sort((a, b) => {
-          if (a.sala_nombre !== b.sala_nombre) {
-            return a.sala_nombre.localeCompare(b.sala_nombre, 'es', { sensitivity: 'base' });
-          }
-          return (b.count || 0) - (a.count || 0);
-        });
+    let filtered = allDepartamentoOptions;
+    // Si el usuario aplicó filtro directo en Salas, restringir los departamentos visibles a esas salas
+    if (manualSalasFilter && manualSalasFilter.length > 0) {
+      filtered = allDepartamentoOptions.filter(opt => deptoMatchesSalas(opt, manualSalasFilter));
     }
 
-    return [...allDepartamentoOptions].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (a.sala_nombre !== b.sala_nombre) {
         return a.sala_nombre.localeCompare(b.sala_nombre, 'es', { sensitivity: 'base' });
       }
@@ -597,47 +576,50 @@
     });
   })();
 
-  let salaAutoSelectedByDepto = false;
-
   function handleSalasChange(e) {
-    selectedSalas = e.detail;
-    salaAutoSelectedByDepto = false;
+    const newSalas = Array.isArray(e.detail) ? e.detail : [];
+    manualSalasFilter = newSalas;
+    selectedSalas = newSalas;
 
-    // Descartar departamentos que no pertenezcan a las salas recién seleccionadas
-    if (selectedSalas && selectedSalas.length > 0) {
+    if (newSalas.length === 0) {
+      // Si se limpian o desmarcan todas las salas, se limpian también los departamentos seleccionados
+      selectedDepartamentos = [];
+    } else {
+      // Descartar departamentos que no pertenezcan a las salas seleccionadas
       selectedDepartamentos = (selectedDepartamentos || []).filter(deptoKey => {
         const opt = allDepartamentoOptions.find(o => o.key === deptoKey || o.id === deptoKey);
         if (!opt) return false;
-        const optSalaId = opt.sala_id ? String(opt.sala_id) : '';
-        const optSalaName = String(opt.sala_nombre || '').trim().toLowerCase();
-        return selectedSalas.some(sId => {
-          const sStr = String(sId).trim();
-          return (optSalaId && sStr === optSalaId) || (optSalaName && sStr.toLowerCase() === optSalaName);
-        });
+        return deptoMatchesSalas(opt, newSalas);
       });
     }
   }
 
   function handleDeptosChange(e) {
-    selectedDepartamentos = e.detail;
+    selectedDepartamentos = Array.isArray(e.detail) ? e.detail : [];
 
-    // Al seleccionar departamentos, sincronizamos y seleccionamos automáticamente las salas de esos departamentos
-    if (selectedDepartamentos && selectedDepartamentos.length > 0) {
-      const salasSet = new Set();
+    if (selectedDepartamentos.length > 0) {
+      // Sincronizar automáticamente las salas que corresponden a los departamentos seleccionados
+      const salasFromDeptos = new Set();
       selectedDepartamentos.forEach(deptoKey => {
         const opt = allDepartamentoOptions.find(o => o.key === deptoKey || o.id === deptoKey);
         if (opt) {
           const sId = opt.sala_id ? String(opt.sala_id) : (opt.sala_nombre ? opt.sala_nombre.toLowerCase() : '');
-          if (sId) salasSet.add(sId);
+          if (sId) salasFromDeptos.add(sId);
         }
       });
-      if (salasSet.size > 0) {
-        selectedSalas = Array.from(salasSet);
-        salaAutoSelectedByDepto = true;
+
+      if (manualSalasFilter && manualSalasFilter.length > 0) {
+        selectedSalas = Array.from(new Set([...manualSalasFilter, ...salasFromDeptos]));
+      } else {
+        selectedSalas = Array.from(salasFromDeptos);
       }
-    } else if (salaAutoSelectedByDepto) {
-      selectedSalas = [];
-      salaAutoSelectedByDepto = false;
+    } else {
+      // Si se desmarcan todos los departamentos y no hubo selección manual de salas, limpiamos salas
+      if (manualSalasFilter && manualSalasFilter.length > 0) {
+        selectedSalas = [...manualSalasFilter];
+      } else {
+        selectedSalas = [];
+      }
     }
   }
 
@@ -664,14 +646,11 @@
       const empSalaId = emp.sala_id ? String(emp.sala_id) : '';
       const empSalaName = String(emp.sala_nombre || emp.sala || '').trim();
       const empUniqueKey = `${empSalaId || empSalaName}__${empDeptoId || (empDeptoName ? empDeptoName.toLowerCase() : 'sin_depto')}`;
+      const altKey = `${empSalaName}__${empDeptoId || (empDeptoName ? empDeptoName.toLowerCase() : 'sin_depto')}`;
 
       const matchesDepto = selectedDepartamentos.some(sel => {
         const selStr = String(sel).trim();
-        if (selStr === empUniqueKey) return true;
-        if (empDeptoId && selStr === empDeptoId) return true;
-        if (empDeptoName && selStr.toLowerCase() === empDeptoName) return true;
-        if (selStr === 'sin_depto' && !empDeptoId && !empDeptoName) return true;
-        return false;
+        return selStr === empUniqueKey || selStr === altKey;
       });
       if (!matchesDepto) return false;
     }
@@ -751,7 +730,7 @@
           {/if}
 
           <!-- Filtro MultiSelect de Departamentos asociados a los empleados del listado -->
-          {#if departamentoOptions.length > 0}
+          {#if allDepartamentoOptions.length > 0}
             <div class="depto-multiselect-wrap">
               <SmartMultiSelect
                 id="corte-filtro-departamentos"
