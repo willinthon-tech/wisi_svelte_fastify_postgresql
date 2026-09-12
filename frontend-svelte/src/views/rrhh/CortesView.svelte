@@ -183,7 +183,8 @@
       if (json && json.success) {
         items = (json.data || []).map(item => ({
           ...item,
-          sala_nombre: item.sala_nombre || 'General / Consolidado',
+          salas_ids: item.salas_ids || [],
+          salas_nombres: item.salas_nombres || [],
           fecha_rango: `${formatDate(item.fecha_desde)} al ${formatDate(item.fecha_hasta)}`
         }));
         totalCount = json.total || 0;
@@ -212,7 +213,7 @@
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'fecha_rango', label: 'Período Evaluado', sortable: true, editable: false },
-    { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false },
+    { key: 'salas_ids', label: 'Salas IDs', type: 'corte_salas', sortable: false, editable: false },
     { key: 'total_empleados', label: 'Empleados', type: 'corte_empleados_badge', sortable: true, editable: false },
     { key: 'calculos_btn', label: 'Reporte', type: 'corte_actions', editable: false }
   ];

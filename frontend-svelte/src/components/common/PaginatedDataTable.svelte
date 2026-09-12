@@ -1542,6 +1542,24 @@
                       title="Ver lista de empleados incluidos en este corte">
                       👥 {item.total_empleados || 0} empleados
                     </button>
+                  {:else if col.type === 'corte_salas'}
+                    <!-- Salas IDs que conforman el corte -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 320px;">
+                      {#if item.salas_ids && Array.isArray(item.salas_ids) && item.salas_ids.length > 0}
+                        {#each item.salas_ids as sId, idx}
+                          {@const sName = (item.salas_nombres && item.salas_nombres[idx]) ? item.salas_nombres[idx] : `Sala #${sId}`}
+                          <span 
+                            style="display: inline-flex; align-items: center; gap: 4px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; padding: 2px 7px; border-radius: 6px; font-size: 11.5px; font-weight: 700; white-space: nowrap;"
+                            title="Sala #{sId}: {sName}">
+                            <strong style="color: #4f46e5; font-size: 11px;">#{sId}</strong> {sName}
+                          </span>
+                        {/each}
+                      {:else}
+                        <span style="display: inline-block; background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; font-style: italic;">
+                          Consolidado / Sin Sala
+                        </span>
+                      {/if}
+                    </div>
 
                   {:else if col.type === 'corte_actions'}
                     <!-- Botones de Acción de Corte Histórico -->

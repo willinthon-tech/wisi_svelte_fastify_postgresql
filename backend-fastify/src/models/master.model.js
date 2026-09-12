@@ -4529,7 +4529,7 @@ export async function getCortesModel(options = {}) {
   const limit = parseInt(options.limit) || 10;
   const offset = (page - 1) * limit;
   const search = options.search ? String(options.search).trim().toLowerCase() : '';
-  const validSorts = ['id', 'sala_id', 'sala_nombre', 'fecha_desde', 'fecha_hasta', 'total_empleados', 'created_at', 'updated_at'];
+  const validSorts = ['id', 'fecha_desde', 'fecha_hasta', 'total_empleados', 'created_at', 'updated_at'];
   const sortBy = validSorts.includes(options.sortBy) ? options.sortBy : 'id';
   const sortDir = (options.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
@@ -4537,39 +4537,47 @@ export async function getCortesModel(options = {}) {
     try {
       const conds = [];
       // Filtrar solo cortes con visible = TRUE (o NULL como TRUE para compatibilidad)
-      conds.push(sql`COALESCE(visible, TRUE) = TRUE`);
+      conds.push(sql`COALESCE(cortes.visible, TRUE) = TRUE`);
 
       if (options.userSalaIds && options.userSalaIds.length > 0) {
-        conds.push(sql`(sala_id IS NULL OR sala_id = ANY(${options.userSalaIds}))`);
+        conds.push(sql`(cortes.salas_ids IS NULL OR cardinality(cortes.salas_ids) = 0 OR cortes.salas_ids && ${options.userSalaIds}::int[])`);
       }
 
       if (options.salaIds && options.salaIds.length > 0) {
-        conds.push(sql`sala_id = ANY(${options.salaIds})`);
+        conds.push(sql`cortes.salas_ids && ${options.salaIds}::int[]`);
       }
 
       if (search) {
         const term = `%${search}%`;
         conds.push(sql`(
-          LOWER(COALESCE(sala_nombre, '')) LIKE ${term} OR
-          CAST(id AS TEXT) LIKE ${term}
+          CAST(cortes.id AS TEXT) LIKE ${term} OR
+          EXISTS (
+            SELECT 1 FROM salas s 
+            WHERE s.id = ANY(cortes.salas_ids) 
+              AND (LOWER(COALESCE(s.nombre_comercial, '')) LIKE ${term} OR LOWER(COALESCE(s.nombre, '')) LIKE ${term})
+          )
         )`);
       }
 
       const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
-      const order = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, id DESC`);
+      const order = sql.unsafe(`ORDER BY cortes.${sortBy} ${sortDir}, cortes.id DESC`);
 
       const [countResult, rows] = await Promise.all([
         sql`SELECT COUNT(*)::int AS total FROM cortes ${where}`,
         sql`
           SELECT 
-            id, 
-            sala_id, 
-            sala_nombre, 
-            fecha_desde, 
-            fecha_hasta, 
-            total_empleados, 
-            created_at, 
-            updated_at 
+            cortes.id, 
+            cortes.salas_ids, 
+            cortes.fecha_desde, 
+            cortes.fecha_hasta, 
+            cortes.total_empleados, 
+            cortes.created_at, 
+            cortes.updated_at,
+            (
+              SELECT ARRAY_AGG(COALESCE(s.nombre_comercial, s.nombre))
+              FROM salas s
+              WHERE s.id = ANY(cortes.salas_ids)
+            ) AS salas_nombres
           FROM cortes 
           ${where}
           ${order}
@@ -4592,15 +4600,17 @@ export async function getCortesModel(options = {}) {
   // Fallback in-memory
   let items = [...(inMemoryData.cortes || [])].filter(c => c.visible !== false && c.visible !== 0);
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    items = items.filter(c => c.sala_id && options.userSalaIds.map(Number).includes(Number(c.sala_id)));
+    const userIds = options.userSalaIds.map(Number);
+    items = items.filter(c => !c.salas_ids || c.salas_ids.length === 0 || (Array.isArray(c.salas_ids) && c.salas_ids.some(id => userIds.includes(Number(id)))));
   }
   if (options.salaIds && options.salaIds.length > 0) {
-    items = items.filter(c => options.salaIds.map(Number).includes(Number(c.sala_id)));
+    const filterIds = options.salaIds.map(Number);
+    items = items.filter(c => Array.isArray(c.salas_ids) && c.salas_ids.some(id => filterIds.includes(Number(id))));
   }
   if (search) {
     items = items.filter(c => 
-      (c.sala_nombre || '').toLowerCase().includes(search) ||
-      String(c.id).includes(search)
+      String(c.id).includes(search) ||
+      (c.salas_nombres || []).some(n => String(n).toLowerCase().includes(search))
     );
   }
   items.sort((a, b) => b.id - a.id);
@@ -4675,8 +4685,8 @@ export async function getCorteByIdModel(id) {
 
 export async function createCorteModel(payload = {}) {
   const {
+    salas_ids,
     sala_id,
-    sala_nombre,
     fecha_desde,
     fecha_hasta,
     total_empleados,
@@ -4698,29 +4708,44 @@ export async function createCorteModel(payload = {}) {
     }
   }
 
+  // Extraer salas_ids limpios
+  let cleanSalasIds = [];
+  if (Array.isArray(salas_ids) && salas_ids.length > 0) {
+    cleanSalasIds = Array.from(new Set(salas_ids.map(Number).filter(n => !isNaN(n) && n > 0)));
+  } else if (sala_id) {
+    cleanSalasIds = [Number(sala_id)];
+  }
+
+  // Si no vinieron salas_ids explícitos, extraer de los empleados en data
+  if (cleanSalasIds.length === 0 && parsedData) {
+    const emps = parsedData.empleados || (parsedData.reportData && parsedData.reportData.empleados) || [];
+    if (Array.isArray(emps) && emps.length > 0) {
+      const ids = emps.map(e => Number(e.sala_id)).filter(n => !isNaN(n) && n > 0);
+      cleanSalasIds = Array.from(new Set(ids));
+    }
+  }
+
   const jsonStr = typeof parsedData === 'string' ? parsedData : JSON.stringify(parsedData || {});
 
   if (isPgConnected && sql) {
     try {
       const rows = await sql`
         INSERT INTO cortes (
-          sala_id, 
-          sala_nombre, 
+          salas_ids, 
           fecha_desde, 
           fecha_hasta, 
           total_empleados, 
           data,
           visible
         ) VALUES (
-          ${sala_id ? Number(sala_id) : null},
-          ${sala_nombre || null},
+          ${cleanSalasIds}::int[],
           ${fecha_desde},
           ${fecha_hasta},
           ${total_empleados ? Number(total_empleados) : 0},
           CAST(${jsonStr} AS JSONB),
           ${isVisible}
         )
-        RETURNING id, sala_id, sala_nombre, fecha_desde, fecha_hasta, total_empleados, visible, created_at, updated_at
+        RETURNING id, salas_ids, fecha_desde, fecha_hasta, total_empleados, visible, created_at, updated_at
       `;
 
       if (rows && rows.length > 0) {
@@ -4740,8 +4765,7 @@ export async function createCorteModel(payload = {}) {
   const nextId = inMemoryData.cortes.length > 0 ? Math.max(...inMemoryData.cortes.map(c => Number(c.id) || 0)) + 1 : 1;
   const newCorte = {
     id: nextId,
-    sala_id: sala_id ? Number(sala_id) : null,
-    sala_nombre: sala_nombre || null,
+    salas_ids: cleanSalasIds,
     fecha_desde,
     fecha_hasta,
     total_empleados: total_empleados ? Number(total_empleados) : 0,

@@ -1174,7 +1174,6 @@
   {fechaDesde}
   {fechaHasta}
   salas={filterOptions.salas || []}
-  selectedSalaId={selectedSalas && selectedSalas.length === 1 ? selectedSalas[0] : null}
   totalEmpleados={activeCorteTotal}
   payloadData={activeCortePayload}
   on:close={() => { showGenerarCorteModal = false; }}

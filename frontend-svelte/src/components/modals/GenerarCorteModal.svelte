@@ -7,23 +7,33 @@
   export let fechaDesde = '';
   export let fechaHasta = '';
   export let salas = [];
-  export let selectedSalaId = null;
   export let totalEmpleados = 0;
   export let payloadData = null;
 
   const dispatch = createEventDispatcher();
 
-  let salaId = selectedSalaId;
   let savingType = null; // 'guardar' | 'no_guardar' | null
   $: isSaving = savingType !== null;
 
-  $: if (isOpen) {
-    salaId = selectedSalaId || (salas && salas.length > 0 ? salas[0].id : null);
-  }
+  // Extraer automáticamente las salas que conforman el corte desde los empleados evaluados
+  $: rawEmployees = payloadData?.empleados || [];
+  $: salasDetectadas = (() => {
+    const map = new Map();
+    rawEmployees.forEach(e => {
+      const sId = Number(e.sala_id);
+      if (sId && !map.has(sId)) {
+        const found = (salas || []).find(s => Number(s.id) === sId);
+        const name = found ? (found.nombre_comercial || found.nombre) : (e.sala_nombre || `Sala #${sId}`);
+        map.set(sId, { id: sId, nombre: name, count: 0 });
+      }
+      if (sId && map.has(sId)) {
+        map.get(sId).count++;
+      }
+    });
+    return Array.from(map.values());
+  })();
 
-  function handleSalaChange(e) {
-    salaId = e.target.value;
-  }
+  $: salasIds = salasDetectadas.map(s => s.id);
 
   async function compressPayload(rawObj) {
     if (!rawObj) return {};
@@ -58,15 +68,11 @@
 
     savingType = guardarVisible ? 'guardar' : 'no_guardar';
     try {
-      const salaObj = (salas || []).find(s => Number(s.id) === Number(salaId));
-      const salaNombre = salaObj ? (salaObj.nombre_comercial || salaObj.nombre) : null;
-
       // Optimizar y comprimir el payload del corte para transferencias ultra rápidas
       const finalData = await compressPayload(payloadData || {});
 
       const body = {
-        sala_id: salaId ? Number(salaId) : null,
-        sala_nombre: salaNombre,
+        salas_ids: salasIds,
         fecha_desde: fechaDesde,
         fecha_hasta: fechaHasta,
         total_empleados: totalEmpleados || 0,
@@ -177,26 +183,30 @@
           Al generar este corte, se congelará y guardará el histórico completo con todos los empleados evaluados, turnos, excepciones y horas calculadas en este rango de fechas.
         </p>
 
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label for="corte-sala" class="input-label">Sala Asignada:</label>
-            <select
-              id="corte-sala"
-              value={salaId}
-              on:change={handleSalaChange}
-              class="select-input"
-              disabled={isSaving}
-            >
-              <option value="">-- Sin Sala / Consolidado --</option>
-              {#each salas as sala}
-                <option value={sala.id}>{sala.nombre_comercial || sala.nombre}</option>
-              {/each}
-            </select>
+        <!-- Salas detectadas automáticamente y Resumen de Empleados -->
+        <div class="corte-summary-grid">
+          <div class="summary-card salas-card">
+            <div class="summary-header">
+              <span class="summary-icon">🎰</span>
+              <span class="summary-title">Salas en este Corte ({salasDetectadas.length}):</span>
+            </div>
+            <div class="salas-chips-wrap">
+              {#if salasDetectadas.length > 0}
+                {#each salasDetectadas as s}
+                  <span class="sala-chip" title="Sala ID #{s.id}">
+                    <strong class="sala-chip-id">#{s.id}</strong> {s.nombre} <span class="sala-chip-count">({s.count} emp.)</span>
+                  </span>
+                {/each}
+              {:else}
+                <span class="sala-chip-empty">Consolidado general (todas las salas)</span>
+              {/if}
+            </div>
           </div>
 
-          <div class="form-group badge-summary-box">
-            <span class="summary-label">Empleados en Corte:</span>
-            <span class="summary-badge">{totalEmpleados} empleados</span>
+          <div class="summary-card emp-card">
+            <span class="emp-summary-label">Empleados en Corte:</span>
+            <span class="emp-summary-value">{totalEmpleados}</span>
+            <span class="emp-summary-sub">evaluados</span>
           </div>
         </div>
 
@@ -344,58 +354,107 @@
     margin: 0;
   }
 
-  .form-group {
+  .corte-summary-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+  }
+
+  .summary-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+  }
+
+  .salas-card {
+    gap: 8px;
+    min-height: 70px;
+  }
+
+  .summary-header {
+    display: flex;
+    align-items: center;
     gap: 6px;
   }
 
-  .form-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 14px;
+  .summary-icon {
+    font-size: 14px;
   }
 
-  .flex-1 {
-    flex: 1;
-  }
-
-  .input-label {
-    font-size: 12px;
+  .summary-title {
+    font-size: 11.5px;
     font-weight: 700;
-    color: #334155;
+    color: #475569;
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
 
-  .select-input {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 8px;
-    font-size: 13.5px;
-    color: #0f172a;
-    background: #ffffff;
-    box-sizing: border-box;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-
-  .select-input:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-  }
-
-  .badge-summary-box {
-    background: #f1f5f9;
-    padding: 8px 14px;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
+  .salas-chips-wrap {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .sala-chip {
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 130px;
+    gap: 4px;
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .sala-chip-id {
+    color: #4f46e5;
+    font-weight: 800;
+  }
+
+  .sala-chip-count {
+    color: #6366f1;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .sala-chip-empty {
+    font-size: 12px;
+    color: #94a3b8;
+    font-style: italic;
+  }
+
+  .emp-card {
+    align-items: center;
+    min-width: 140px;
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .emp-summary-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e40af;
+    text-transform: uppercase;
+  }
+
+  .emp-summary-value {
+    font-size: 22px;
+    font-weight: 900;
+    color: #1d4ed8;
+    line-height: 1.1;
+    margin: 2px 0;
+  }
+
+  .emp-summary-sub {
+    font-size: 11px;
+    color: #3b82f6;
+    font-weight: 600;
   }
 
   .summary-label {

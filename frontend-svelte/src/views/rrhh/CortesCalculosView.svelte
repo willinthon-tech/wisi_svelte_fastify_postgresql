@@ -13,6 +13,7 @@
   let isLoading = true;
   let activeTab = 'marcajes'; // 'marcajes' | 'calculos' | 'puntualidad'
   let searchQuery = '';
+  let selectedSalas = [];
   let selectedDepartamentos = [];
 
   // Días y meses del corte
@@ -488,6 +489,25 @@
     });
   }
 
+  // Opciones dinámicas de Salas extraídas de los empleados asociados al corte
+  $: salaOptions = (() => {
+    if (!processedEmployees || processedEmployees.length === 0) return [];
+    const salaMap = new Map();
+
+    processedEmployees.forEach(emp => {
+      const name = (emp.sala_nombre || emp.sala || '').trim();
+      const id = emp.sala_id ? String(emp.sala_id) : (name ? name.toLowerCase() : 'sin_sala');
+      const label = name ? (emp.sala_id ? `[#${emp.sala_id}] ${name}` : name) : (emp.sala_id ? `Sala #${emp.sala_id}` : 'Sin Sala');
+
+      if (!salaMap.has(id)) {
+        salaMap.set(id, { id, key: id, label, count: 0 });
+      }
+      salaMap.get(id).count++;
+    });
+
+    return Array.from(salaMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+  })();
+
   // Opciones dinámicas de Departamentos extraídas de los empleados asociados al corte
   $: departamentoOptions = (() => {
     if (!processedEmployees || processedEmployees.length === 0) return [];
@@ -508,7 +528,22 @@
   })();
 
   $: filteredEmployees = processedEmployees.filter(emp => {
-    // 1. Filtro por departamentos seleccionados
+    // 1. Filtro por salas seleccionadas
+    if (selectedSalas && selectedSalas.length > 0) {
+      const empSalaId = emp.sala_id ? String(emp.sala_id) : '';
+      const empSalaName = String(emp.sala_nombre || emp.sala || '').trim().toLowerCase();
+      
+      const matchesSala = selectedSalas.some(sel => {
+        const selStr = String(sel).trim();
+        if (empSalaId && selStr === empSalaId) return true;
+        if (empSalaName && selStr.toLowerCase() === empSalaName) return true;
+        if (selStr === 'sin_sala' && !empSalaId && !empSalaName) return true;
+        return false;
+      });
+      if (!matchesSala) return false;
+    }
+
+    // 2. Filtro por departamentos seleccionados
     if (selectedDepartamentos && selectedDepartamentos.length > 0) {
       const empDeptoId = emp.departamento_id ? String(emp.departamento_id) : '';
       const empDeptoName = String(emp.departamento_nombre || emp.departamento || '').trim().toLowerCase();
@@ -523,13 +558,14 @@
       if (!matchesDepto) return false;
     }
 
-    // 2. Filtro por término de búsqueda (nombre, cédula, cargo o departamento)
+    // 3. Filtro por término de búsqueda (nombre, cédula, cargo, sala o departamento)
     if (!searchQuery.trim()) return true;
     const term = searchQuery.toLowerCase().trim();
     return (
       (emp.nombre || '').toLowerCase().includes(term) ||
       (emp.cedula || '').toLowerCase().includes(term) ||
       (emp.cargo || '').toLowerCase().includes(term) ||
+      (emp.sala_nombre || '').toLowerCase().includes(term) ||
       (emp.departamento_nombre || '').toLowerCase().includes(term)
     );
   });
@@ -558,18 +594,43 @@
       <div class="header-left">
         <div class="header-badge-row">
           <span class="corte-id-badge">Corte #{corte.id}</span>
-          <span class="corte-sala-badge">{corte.sala_nombre || 'General'}</span>
+          {#if corte.salas_ids && Array.isArray(corte.salas_ids) && corte.salas_ids.length > 0}
+            <span class="corte-sala-badge" title="Salas IDs: {corte.salas_ids.join(', ')}">
+              🎰 Salas IDs: [{corte.salas_ids.join(', ')}]
+            </span>
+          {:else if corte.sala_nombre}
+            <span class="corte-sala-badge">🎰 {corte.sala_nombre}</span>
+          {:else}
+            <span class="corte-sala-badge">🎰 General</span>
+          {/if}
           <span class="corte-fecha-badge">Desde: {formatDate(corte.fecha_desde)} - Hasta: {formatDate(corte.fecha_hasta)}</span>
           <div class="emp-counter-chip">
             <span class="emp-icon">👥</span>
             <span class="emp-text">
-              {#if selectedDepartamentos && selectedDepartamentos.length > 0}
+              {#if (selectedDepartamentos && selectedDepartamentos.length > 0) || (selectedSalas && selectedSalas.length > 0)}
                 <strong>{filteredEmployees.length}</strong> de {processedEmployees.length} empleado(s)
               {:else}
                 <strong>{filteredEmployees.length}</strong> empleado(s)
               {/if}
             </span>
           </div>
+
+          <!-- Filtro MultiSelect de Salas asociadas a los empleados del listado -->
+          {#if salaOptions.length > 0}
+            <div class="sala-multiselect-wrap">
+              <SmartMultiSelect
+                id="corte-filtro-salas"
+                label="Salas"
+                icon="🎰"
+                options={salaOptions}
+                bind:selectedValues={selectedSalas}
+                placeholder="Filtrar salas..."
+                on:change={(e) => {
+                  selectedSalas = e.detail;
+                }}
+              />
+            </div>
+          {/if}
 
           <!-- Filtro MultiSelect de Departamentos asociados a los empleados del listado -->
           {#if departamentoOptions.length > 0}
@@ -1103,14 +1164,16 @@
     font-weight: 700;
   }
 
-  /* Filtro MultiSelect de Departamentos en Cabecera */
+  /* Filtros MultiSelect de Salas y Departamentos en Cabecera */
+  .sala-multiselect-wrap,
   .depto-multiselect-wrap {
-    min-width: 190px;
-    max-width: 240px;
+    min-width: 175px;
+    max-width: 230px;
     position: relative;
     z-index: 70;
   }
 
+  .sala-multiselect-wrap :global(.smart-multiselect-trigger),
   .depto-multiselect-wrap :global(.smart-multiselect-trigger) {
     height: 31px !important;
     background: #ffffff !important;
@@ -1123,11 +1186,13 @@
     padding: 0 10px !important;
   }
 
+  .sala-multiselect-wrap :global(.smart-multiselect-trigger:hover),
   .depto-multiselect-wrap :global(.smart-multiselect-trigger:hover) {
     background: #fdf4ff !important;
     border-color: #a855f7 !important;
   }
 
+  .sala-multiselect-wrap :global(.smart-multiselect-trigger.active),
   .depto-multiselect-wrap :global(.smart-multiselect-trigger.active) {
     background: #fdf4ff !important;
     border-color: #a855f7 !important;
@@ -1135,11 +1200,13 @@
     box-shadow: 0 0 0 1px #a855f7 !important;
   }
 
+  .sala-multiselect-wrap :global(.smart-multiselect-trigger .trigger-badge),
   .depto-multiselect-wrap :global(.smart-multiselect-trigger .trigger-badge) {
     background: #7c3aed !important;
     color: #ffffff !important;
   }
 
+  .sala-multiselect-wrap :global(.smart-multiselect-dropdown),
   .depto-multiselect-wrap :global(.smart-multiselect-dropdown) {
     z-index: 100 !important;
   }
