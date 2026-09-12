@@ -541,16 +541,33 @@
     return { total: list.length, enCustodia, devueltas };
   })();
 
-  // Resumen de Aportes Máquinas
+  // Resumen de Aportes Máquinas (Aportes y Devoluciones)
   $: aportesTotales = (() => {
     const list = sortedAportes;
-    const totalMonto = list.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
+    const aportesList = list.filter(a => (a.tipo || 'Aporte') === 'Aporte');
+    const devolucionesList = list.filter(a => (a.tipo || 'Aporte') === 'Devolución');
+
+    const totalAportes = aportesList.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
+    const totalDevoluciones = devolucionesList.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
+    const netoMonto = totalAportes - totalDevoluciones;
     const totalOps = list.length;
-    const promedio = totalOps > 0 ? totalMonto / totalOps : 0;
-    return { totalMonto, totalOps, promedio };
+    const cantAportes = aportesList.length;
+    const cantDevoluciones = devolucionesList.length;
+    const promedio = cantAportes > 0 ? totalAportes / cantAportes : (totalOps > 0 ? netoMonto / totalOps : 0);
+
+    return {
+      totalMonto: netoMonto, // retrocompatibilidad
+      totalAportes,
+      totalDevoluciones,
+      netoMonto,
+      totalOps,
+      cantAportes,
+      cantDevoluciones,
+      promedio
+    };
   })();
 
-  // Agrupado de Aportes por Rango
+  // Agrupado de Aportes por Rango (Separando Aportes y Devoluciones)
   $: aportesPorRango = (() => {
     const list = sortedAportes;
     const map = {};
@@ -558,22 +575,43 @@
       const rId = a.rango_id || 0;
       const rNom = a.rango_nombre || `Rango #${rId}`;
       if (!map[rId]) {
-        map[rId] = { rango_id: rId, rango_nombre: rNom, cantidad: 0, monto: 0 };
+        map[rId] = {
+          rango_id: rId,
+          rango_nombre: rNom,
+          cantidad: 0,
+          cantAportes: 0,
+          cantDevoluciones: 0,
+          montoAportes: 0,
+          montoDevoluciones: 0,
+          neto: 0,
+          monto: 0
+        };
       }
       map[rId].cantidad++;
-      map[rId].monto += parseFloat(a.monto) || 0;
+      const val = parseFloat(a.monto) || 0;
+      if ((a.tipo || 'Aporte') === 'Devolución') {
+        map[rId].cantDevoluciones++;
+        map[rId].montoDevoluciones += val;
+        map[rId].neto -= val;
+        map[rId].monto -= val;
+      } else {
+        map[rId].cantAportes++;
+        map[rId].montoAportes += val;
+        map[rId].neto += val;
+        map[rId].monto += val;
+      }
     }
-    const grandTotal = aportesTotales.totalMonto || 1;
+    const grandTotal = aportesTotales.totalAportes || 1;
     return Object.values(map)
       .map(item => ({
         ...item,
-        porcentaje: (item.monto / grandTotal) * 100,
-        promedio: item.cantidad > 0 ? item.monto / item.cantidad : 0
+        porcentaje: (item.montoAportes / grandTotal) * 100,
+        promedio: item.cantAportes > 0 ? item.montoAportes / item.cantAportes : 0
       }))
-      .sort((a, b) => b.monto - a.monto);
+      .sort((a, b) => b.montoAportes - a.montoAportes);
   })();
 
-  // Agrupado de Aportes por Empleado
+  // Agrupado de Aportes por Empleado (Separando Aportes y Devoluciones)
   $: aportesPorEmpleado = (() => {
     const list = sortedAportes;
     const map = {};
@@ -582,19 +620,41 @@
       const empNom = a.empleado_nombre || 'Empleado';
       const cargoNom = a.cargo_nombre || '—';
       if (!map[empId]) {
-        map[empId] = { empleado_id: empId, empleado_nombre: empNom, cargo_nombre: cargoNom, cantidad: 0, monto: 0 };
+        map[empId] = {
+          empleado_id: empId,
+          empleado_nombre: empNom,
+          cargo_nombre: cargoNom,
+          cantidad: 0,
+          cantAportes: 0,
+          cantDevoluciones: 0,
+          montoAportes: 0,
+          montoDevoluciones: 0,
+          neto: 0,
+          monto: 0
+        };
       }
       map[empId].cantidad++;
-      map[empId].monto += parseFloat(a.monto) || 0;
+      const val = parseFloat(a.monto) || 0;
+      if ((a.tipo || 'Aporte') === 'Devolución') {
+        map[empId].cantDevoluciones++;
+        map[empId].montoDevoluciones += val;
+        map[empId].neto -= val;
+        map[empId].monto -= val;
+      } else {
+        map[empId].cantAportes++;
+        map[empId].montoAportes += val;
+        map[empId].neto += val;
+        map[empId].monto += val;
+      }
     }
-    const grandTotal = aportesTotales.totalMonto || 1;
+    const grandTotal = aportesTotales.totalAportes || 1;
     return Object.values(map)
       .map(item => ({
         ...item,
-        porcentaje: (item.monto / grandTotal) * 100,
-        promedio: item.cantidad > 0 ? item.monto / item.cantidad : 0
+        porcentaje: (item.montoAportes / grandTotal) * 100,
+        promedio: item.cantAportes > 0 ? item.montoAportes / item.cantAportes : 0
       }))
-      .sort((a, b) => b.monto - a.monto);
+      .sort((a, b) => b.montoAportes - a.montoAportes);
   })();
 
   // Formatear montos en dólares
@@ -1551,13 +1611,21 @@
               🎰 7. Aportes Máquinas
             </h2>
             <span class="sub-count-badge"
-              >{aportesTotales.totalOps} aportes registrados</span
+              >{aportesTotales.totalOps} {aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
             >
           </div>
           <div class="badges-status-group">
             <span class="badge-kpi-pill success"
-              >Total Aportes: <b>{formatMoney(aportesTotales.totalMonto)}</b></span
+              >Total Aportes: <b>{formatMoney(aportesTotales.totalAportes)}</b></span
             >
+            {#if aportesTotales.totalDevoluciones > 0}
+              <span class="badge-kpi-pill warning"
+                >Total Devoluciones: <b>-{formatMoney(aportesTotales.totalDevoluciones)}</b></span
+              >
+              <span class="badge-kpi-pill {aportesTotales.netoMonto >= 0 ? 'highlight-positive' : 'highlight-negative'}"
+                >Neto Aportes: <b>{formatMoney(aportesTotales.netoMonto)}</b></span
+              >
+            {/if}
             <span class="badge-kpi-pill info"
               >Promedio: <b>{formatMoney(aportesTotales.promedio)}</b></span
             >
@@ -1567,7 +1635,7 @@
         <!-- 7.1 Detallado de Aportes -->
         {#if sortedAportes.length === 0}
           <div class="empty-sub-alert">
-            No hay aportes de máquinas registrados en este libro.
+            No hay aportes ni devoluciones de máquinas registradas en este libro.
           </div>
         {:else}
           <div class="table-responsive-wrapper">
@@ -1575,6 +1643,7 @@
               <thead>
                 <tr>
                   <th class="th-num">N°</th>
+                  <th class="th-tipo">TIPO</th>
                   <th class="th-hora">HORA</th>
                   <th class="th-cliente">EMPLEADO</th>
                   <th class="th-metodo">CARGO</th>
@@ -1584,25 +1653,39 @@
               </thead>
               <tbody>
                 {#each sortedAportes as a, idx}
+                  {@const isAporte = (a.tipo || "Aporte") === "Aporte"}
                   <tr>
                     <td class="cell-center">{idx + 1}</td>
+                    <td class="cell-center">
+                      <span class="tag-tipo {isAporte ? 'tag-aporte' : 'tag-devolucion'}">
+                        {isAporte ? '💰 Aporte' : '🔄 Devolución'}
+                      </span>
+                    </td>
                     <td class="cell-center">{a.hora || (a.created_at ? new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—')}</td>
                     <td class="cell-client-name font-bold">👤 {a.empleado_nombre || "—"}</td>
                     <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
                     <td class="cell-center">
-                      <span class="tag-tipo tag-pago">
+                      <span class="tag-tipo tag-rango">
                         🏅 {a.rango_nombre || `Rango #${a.rango_id}`}
                       </span>
                     </td>
-                    <td class="cell-total-money font-bold">{formatMoney(a.monto)}</td>
+                    <td class="cell-total-money font-bold {isAporte ? '' : 'text-danger-money'}">
+                      {isAporte ? '' : '-'}{formatMoney(a.monto)}
+                    </td>
                   </tr>
                 {/each}
               </tbody>
               <tfoot>
                 <tr class="tfoot-totals">
-                  <td colspan="5">TOTAL APORTES MÁQUINAS</td>
+                  <td colspan="6">
+                    {#if aportesTotales.totalDevoluciones > 0}
+                      TOTAL APORTES ({formatMoney(aportesTotales.totalAportes)}) - DEVOLUCIONES ({formatMoney(aportesTotales.totalDevoluciones)}) = NETO APORTES MÁQUINAS
+                    {:else}
+                      TOTAL APORTES MÁQUINAS
+                    {/if}
+                  </td>
                   <td class="cell-grand-total"
-                    >{formatMoney(aportesTotales.totalMonto)}</td
+                    >{formatMoney(aportesTotales.netoMonto)}</td
                   >
                 </tr>
               </tfoot>
@@ -1624,8 +1707,14 @@
                   <thead>
                     <tr>
                       <th>RANGO</th>
-                      <th>CANT</th>
-                      <th>MONTO TOTAL</th>
+                      <th>OPS</th>
+                      <th>APORTES</th>
+                      {#if aportesTotales.totalDevoluciones > 0}
+                        <th>DEVOLUCIONES</th>
+                        <th>TOTAL NETO</th>
+                      {:else}
+                        <th>MONTO TOTAL</th>
+                      {/if}
                       <th>% TOTAL</th>
                       <th>PROMEDIO</th>
                     </tr>
@@ -1635,7 +1724,11 @@
                       <tr>
                         <td class="cell-left font-bold">🏅 {rg.rango_nombre}</td>
                         <td class="cell-center">{rg.cantidad} ops</td>
-                        <td class="cell-total-money font-bold">{formatMoney(rg.monto)}</td>
+                        <td class="cell-total-money font-bold">{formatMoney(rg.montoAportes)}</td>
+                        {#if aportesTotales.totalDevoluciones > 0}
+                          <td class="cell-total-money text-danger-money">{rg.montoDevoluciones > 0 ? `-${formatMoney(rg.montoDevoluciones)}` : '$0'}</td>
+                          <td class="cell-total-money font-bold">{formatMoney(rg.neto)}</td>
+                        {/if}
                         <td class="cell-center tag-metodo-text">{rg.porcentaje.toFixed(1)}%</td>
                         <td class="cell-total-money">{formatMoney(rg.promedio)}</td>
                       </tr>
@@ -1645,9 +1738,11 @@
                     <tr class="tfoot-totals">
                       <td>TOTAL</td>
                       <td class="cell-center">{aportesTotales.totalOps} ops</td>
-                      <td class="cell-total-money"
-                        >{formatMoney(aportesTotales.totalMonto)}</td
-                      >
+                      <td class="cell-total-money">{formatMoney(aportesTotales.totalAportes)}</td>
+                      {#if aportesTotales.totalDevoluciones > 0}
+                        <td class="cell-total-money text-danger-money">-{formatMoney(aportesTotales.totalDevoluciones)}</td>
+                        <td class="cell-grand-total">{formatMoney(aportesTotales.netoMonto)}</td>
+                      {/if}
                       <td class="cell-center">100%</td>
                       <td class="cell-grand-total"
                         >{formatMoney(aportesTotales.promedio)}</td
@@ -1672,8 +1767,14 @@
                     <tr>
                       <th>EMPLEADO</th>
                       <th>CARGO</th>
-                      <th>CANT</th>
-                      <th>MONTO TOTAL</th>
+                      <th>OPS</th>
+                      <th>APORTES</th>
+                      {#if aportesTotales.totalDevoluciones > 0}
+                        <th>DEVOLUCIONES</th>
+                        <th>TOTAL NETO</th>
+                      {:else}
+                        <th>MONTO TOTAL</th>
+                      {/if}
                       <th>% TOTAL</th>
                       <th>PROMEDIO</th>
                     </tr>
@@ -1684,7 +1785,11 @@
                         <td class="cell-left font-bold">👤 {emp.empleado_nombre}</td>
                         <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
                         <td class="cell-center">{emp.cantidad} ops</td>
-                        <td class="cell-total-money font-bold">{formatMoney(emp.monto)}</td>
+                        <td class="cell-total-money font-bold">{formatMoney(emp.montoAportes)}</td>
+                        {#if aportesTotales.totalDevoluciones > 0}
+                          <td class="cell-total-money text-danger-money">{emp.montoDevoluciones > 0 ? `-${formatMoney(emp.montoDevoluciones)}` : '$0'}</td>
+                          <td class="cell-total-money font-bold">{formatMoney(emp.neto)}</td>
+                        {/if}
                         <td class="cell-center tag-metodo-text">{emp.porcentaje.toFixed(1)}%</td>
                         <td class="cell-total-money">{formatMoney(emp.promedio)}</td>
                       </tr>
@@ -1695,9 +1800,11 @@
                       <td>TOTAL</td>
                       <td>—</td>
                       <td class="cell-center">{aportesTotales.totalOps} ops</td>
-                      <td class="cell-total-money"
-                        >{formatMoney(aportesTotales.totalMonto)}</td
-                      >
+                      <td class="cell-total-money">{formatMoney(aportesTotales.totalAportes)}</td>
+                      {#if aportesTotales.totalDevoluciones > 0}
+                        <td class="cell-total-money text-danger-money">-{formatMoney(aportesTotales.totalDevoluciones)}</td>
+                        <td class="cell-grand-total">{formatMoney(aportesTotales.netoMonto)}</td>
+                      {/if}
                       <td class="cell-center">100%</td>
                       <td class="cell-grand-total"
                         >{formatMoney(aportesTotales.promedio)}</td
@@ -2879,6 +2986,22 @@
   .tag-pago {
     background: #eff6ff;
     color: #1d4ed8;
+  }
+  .tag-aporte {
+    background: #dcfce7;
+    color: #15803d;
+  }
+  .tag-devolucion {
+    background: #ede9fe;
+    color: #6d28d9;
+  }
+  .tag-rango {
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+  }
+  .text-danger-money {
+    color: #dc2626 !important;
   }
   .tag-inc-tipo {
     background: #f1f5f9;
