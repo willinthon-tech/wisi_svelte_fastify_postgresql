@@ -8051,6 +8051,7 @@ export async function getLibroAportesModel(libroId) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
     return inMemoryData.libro_aportes
       .filter(a => Number(a.libro_id) === lId)
+      .map(a => ({ ...a, tipo: a.tipo || 'Aporte' }))
       .sort((a, b) => Number(b.id) - Number(a.id));
   }
 
@@ -8061,6 +8062,7 @@ export async function getLibroAportesModel(libroId) {
       la.empleado_id,
       la.rango_id,
       la.monto,
+      COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
       la.updated_at,
       e.nombre AS empleado_nombre,
@@ -8087,6 +8089,7 @@ export async function createLibroAporteModel(data) {
   const empleadoId = Number(data.empleado_id);
   const rangoId = Number(data.rango_id);
   const monto = Number(data.monto) || 0;
+  const tipo = (data.tipo || '').trim() || 'Aporte';
 
   if (!libroId) throw new Error('ID de libro inválido');
   if (!empleadoId) throw new Error('Debe seleccionar un empleado');
@@ -8103,6 +8106,7 @@ export async function createLibroAporteModel(data) {
       empleado_id: empleadoId,
       rango_id: rangoId,
       monto,
+      tipo,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -8112,10 +8116,10 @@ export async function createLibroAporteModel(data) {
 
   const res = await sql`
     INSERT INTO libro_aportes (
-      libro_id, empleado_id, rango_id, monto
+      libro_id, empleado_id, rango_id, monto, tipo
     )
     VALUES (
-      ${libroId}, ${empleadoId}, ${rangoId}, ${monto}
+      ${libroId}, ${empleadoId}, ${rangoId}, ${monto}, ${tipo}
     )
     RETURNING id
   `;
@@ -8129,6 +8133,7 @@ export async function createLibroAporteModel(data) {
       la.empleado_id,
       la.rango_id,
       la.monto,
+      COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
       la.updated_at,
       e.nombre AS empleado_nombre,
@@ -8157,6 +8162,7 @@ export async function updateLibroAporteModel(id, libroId, data) {
   const empleadoId = data.empleado_id !== undefined ? Number(data.empleado_id) : null;
   const rangoId = data.rango_id !== undefined ? Number(data.rango_id) : null;
   const monto = data.monto !== undefined ? Number(data.monto) : null;
+  const tipo = data.tipo !== undefined ? (String(data.tipo).trim() || 'Aporte') : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
@@ -8165,6 +8171,7 @@ export async function updateLibroAporteModel(id, libroId, data) {
       if (empleadoId) inMemoryData.libro_aportes[idx].empleado_id = empleadoId;
       if (rangoId) inMemoryData.libro_aportes[idx].rango_id = rangoId;
       if (monto !== undefined) inMemoryData.libro_aportes[idx].monto = monto;
+      if (tipo !== null) inMemoryData.libro_aportes[idx].tipo = tipo;
       inMemoryData.libro_aportes[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_aportes[idx];
     }
@@ -8177,6 +8184,7 @@ export async function updateLibroAporteModel(id, libroId, data) {
       empleado_id = COALESCE(${empleadoId}, empleado_id),
       rango_id = COALESCE(${rangoId}, rango_id),
       monto = COALESCE(${monto}, monto),
+      tipo = COALESCE(${tipo}, tipo),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${aId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
   `;
@@ -8188,6 +8196,7 @@ export async function updateLibroAporteModel(id, libroId, data) {
       la.empleado_id,
       la.rango_id,
       la.monto,
+      COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
       la.updated_at,
       e.nombre AS empleado_nombre,

@@ -26,6 +26,7 @@
   let showRangoDropdown = false;
   let selectedRangoDropdownIndex = -1;
 
+  let tipo = 'Aporte'; // 'Aporte' | 'Devolución'
   let monto = '';
   let isSaving = false;
 
@@ -46,6 +47,7 @@
   // Modal de Edición
   let showModalEditar = false;
   let editingRecord = null;
+  let modalTipo = 'Aporte';
   let modalEmpleadoId = null;
   let modalRangoId = null;
   let modalMonto = '';
@@ -150,9 +152,17 @@
   $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
 
   // --- CÁLCULOS ESTADÍSTICOS Y TOTALES ---
-  $: totalAportesCount = records.length;
-  $: totalMonto = records.reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
-  $: promedioMonto = totalAportesCount > 0 ? (totalMonto / totalAportesCount) : 0;
+  $: aportesList = records.filter(r => (r.tipo || 'Aporte') === 'Aporte');
+  $: devolucionesList = records.filter(r => r.tipo === 'Devolución');
+
+  $: totalAportesMonto = aportesList.reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
+  $: totalDevolucionesMonto = devolucionesList.reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
+  $: netoMonto = totalAportesMonto - totalDevolucionesMonto;
+
+  $: totalAportesCount = aportesList.length;
+  $: totalDevolucionesCount = devolucionesList.length;
+  $: totalMonto = totalAportesMonto;
+  $: promedioMonto = totalAportesCount > 0 ? (totalAportesMonto / totalAportesCount) : 0;
 
   // Resumen agrupado por Rango (ordenado por monto mayor a menor)
   $: resumenRangos = (() => {
@@ -170,12 +180,17 @@
       }
       const entry = map.get(rId);
       entry.cantidad += 1;
-      entry.total_monto += Number(r.monto) || 0;
+      const val = Number(r.monto) || 0;
+      if (r.tipo === 'Devolución') {
+        entry.total_monto -= val;
+      } else {
+        entry.total_monto += val;
+      }
     }
 
     const list = Array.from(map.values()).map(item => ({
       ...item,
-      porcentaje: totalMonto > 0 ? ((item.total_monto / totalMonto) * 100) : 0,
+      porcentaje: netoMonto > 0 ? ((item.total_monto / netoMonto) * 100) : 0,
       promedio: item.cantidad > 0 ? (item.total_monto / item.cantidad) : 0
     }));
 
@@ -200,14 +215,19 @@
       }
       const entry = map.get(eId);
       entry.cantidad += 1;
-      entry.total_monto += Number(r.monto) || 0;
+      const val = Number(r.monto) || 0;
+      if (r.tipo === 'Devolución') {
+        entry.total_monto -= val;
+      } else {
+        entry.total_monto += val;
+      }
       if (r.rango_nombre) entry.rangos_usados.add(r.rango_nombre);
     }
 
     const list = Array.from(map.values()).map(item => ({
       ...item,
       rangos_texto: Array.from(item.rangos_usados).join(', '),
-      porcentaje: totalMonto > 0 ? ((item.total_monto / totalMonto) * 100) : 0,
+      porcentaje: netoMonto > 0 ? ((item.total_monto / netoMonto) * 100) : 0,
       promedio: item.cantidad > 0 ? (item.total_monto / item.cantidad) : 0
     }));
 
@@ -458,13 +478,14 @@
         body: JSON.stringify({
           empleado_id: empId,
           rango_id: rId,
-          monto: numMonto
+          monto: numMonto,
+          tipo: tipo || 'Aporte'
         })
       });
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Aporte de máquina guardado correctamente', 'success');
+        triggerToast(`${tipo === 'Devolución' ? 'Devolución' : 'Aporte'} guardado correctamente`, 'success');
         
         // Limpiar formulario
         selectedEmpleado = null;
@@ -473,6 +494,7 @@
         selectedRangoId = '';
         rangoSearchQuery = '';
         monto = '';
+        tipo = 'Aporte';
         
         await loadRecords();
 
@@ -481,10 +503,10 @@
           if (empleadoInputEl) empleadoInputEl.focus();
         });
       } else {
-        triggerToast(json?.error || 'Error al registrar aporte de máquina', 'error');
+        triggerToast(json?.error || 'Error al registrar operación', 'error');
       }
     } catch (err) {
-      console.error('Error al guardar aporte:', err);
+      console.error('Error al guardar:', err);
       triggerToast(`Error: ${err.message}`, 'error');
     } finally {
       isSaving = false;
@@ -492,7 +514,8 @@
   }
 
   async function handleEliminar(record) {
-    if (!confirm(`¿Está seguro de eliminar el registro de aporte de $${formatMonto(record.monto)} para ${record.empleado_nombre}?`)) {
+    const label = record.tipo === 'Devolución' ? 'la devolución' : 'el aporte';
+    if (!confirm(`¿Está seguro de eliminar ${label} de $${formatMonto(record.monto)} para ${record.empleado_nombre}?`)) {
       return;
     }
 
@@ -503,19 +526,20 @@
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Aporte eliminado correctamente', 'success');
+        triggerToast('Registro eliminado correctamente', 'success');
         await loadRecords();
       } else {
-        triggerToast(json?.error || 'Error al eliminar aporte', 'error');
+        triggerToast(json?.error || 'Error al eliminar', 'error');
       }
     } catch (err) {
-      console.error('Error al eliminar aporte:', err);
+      console.error('Error al eliminar:', err);
       triggerToast(`Error: ${err.message}`, 'error');
     }
   }
 
   function abrirModalEditar(record) {
     editingRecord = record;
+    modalTipo = record.tipo || 'Aporte';
     modalEmpleadoId = record.empleado_id;
     modalRangoId = String(record.rango_id);
     modalMonto = String(record.monto);
@@ -525,6 +549,7 @@
   function cerrarModalEditar() {
     showModalEditar = false;
     editingRecord = null;
+    modalTipo = 'Aporte';
     modalEmpleadoId = null;
     modalRangoId = null;
     modalMonto = '';
@@ -542,26 +567,27 @@
 
     isSavingModal = true;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes/${editingRecord.id}`, {
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${editingRecord.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           empleado_id: Number(modalEmpleadoId),
           rango_id: Number(modalRangoId),
-          monto: numMonto
+          monto: numMonto,
+          tipo: modalTipo || 'Aporte'
         })
       });
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Aporte actualizado exitosamente', 'success');
+        triggerToast('Registro actualizado exitosamente', 'success');
         cerrarModalEditar();
         await loadRecords();
       } else {
-        triggerToast(json?.error || 'Error al actualizar aporte', 'error');
+        triggerToast(json?.error || 'Error al actualizar', 'error');
       }
     } catch (err) {
-      console.error('Error al actualizar aporte:', err);
+      console.error('Error al actualizar:', err);
       triggerToast(`Error: ${err.message}`, 'error');
     } finally {
       isSavingModal = false;
@@ -630,6 +656,34 @@
         <span class="field-hint">Escriba nombre o cargo del empleado. Pulsa <b>Tab ⇥</b> para autocompletar.</span>
       </div>
 
+      <!-- Campo Tipo de Operación: Aporte o Devolución (Estilo idéntico a Control Clientes) -->
+      <div class="form-group">
+        <label class="form-label">TIPO: *</label>
+        <div class="radio-toggle-group">
+          <label class="radio-option {tipo === 'Aporte' ? 'selected-aporte' : ''}">
+            <input 
+              type="radio" 
+              name="tipo-aporte" 
+              value="Aporte" 
+              bind:group={tipo}
+            />
+            <span class="radio-custom"></span>
+            <span class="radio-text">💰 Aporte</span>
+          </label>
+
+          <label class="radio-option {tipo === 'Devolución' ? 'selected-devolucion' : ''}">
+            <input 
+              type="radio" 
+              name="tipo-aporte" 
+              value="Devolución" 
+              bind:group={tipo}
+            />
+            <span class="radio-custom"></span>
+            <span class="radio-text">🔄 Devolución</span>
+          </label>
+        </div>
+      </div>
+
       <!-- Campo 2: Rango con Autocompletado / Coincidencias idéntico a Empleado -->
       <div class="form-group relative-autocomplete">
         <label for="input-rango-nombre" class="form-label">RANGO: *</label>
@@ -691,7 +745,7 @@
             bind:this={montoInputEl}
             type="number" 
             step="0.01" 
-            min="0.01"
+            min="0.01" 
             class="form-input input-currency" 
             placeholder="0.00" 
             bind:value={monto}
@@ -699,19 +753,19 @@
             required
           />
         </div>
-        <span class="field-hint">Ingrese el monto del aporte en divisas. Pulsa <b>Enter ↵</b> para guardar.</span>
+        <span class="field-hint">Ingrese el monto en divisas. Pulsa <b>Enter ↵</b> para guardar.</span>
       </div>
 
-      <!-- Botón Guardar Verde -->
+      <!-- Botón Guardar -->
       <button 
         type="submit" 
-        class="btn-guardar"
+        class="btn-guardar {tipo === 'Devolución' ? 'btn-guardar-devolucion' : ''}"
         disabled={isSaving}
       >
         {#if isSaving}
           <span>Guardando...</span>
         {:else}
-          <span>Guardar Registro</span>
+          <span>Guardar {tipo}</span>
         {/if}
       </button>
     </form>
@@ -738,38 +792,38 @@
             <span class="kpi-label">TOTAL APORTES</span>
           </div>
           <div class="kpi-value-row">
-            <span class="kpi-value text-green">${formatMonto(totalMonto)}</span>
+            <span class="kpi-value text-green">${formatMonto(totalAportesMonto)}</span>
           </div>
           <div class="kpi-subtext">
             <span>{totalAportesCount} {totalAportesCount === 1 ? 'operación' : 'operaciones'}</span>
           </div>
         </div>
 
-        <!-- KPI 2: Cantidad Aportes -->
+        <!-- KPI 2: Total Devoluciones $ -->
         <div class="kpi-card kpi-pagos">
           <div class="kpi-header">
-            <span class="kpi-icon">📊</span>
-            <span class="kpi-label">CANTIDAD APORTES</span>
+            <span class="kpi-icon">🔄</span>
+            <span class="kpi-label">TOTAL DEVOLUCIONES</span>
           </div>
           <div class="kpi-value-row">
-            <span class="kpi-value text-purple">{totalAportesCount}</span>
+            <span class="kpi-value text-purple">${formatMonto(totalDevolucionesMonto)}</span>
           </div>
           <div class="kpi-subtext">
-            <span>registros en jornada</span>
+            <span>{totalDevolucionesCount} {totalDevolucionesCount === 1 ? 'operación' : 'operaciones'}</span>
           </div>
         </div>
 
-        <!-- KPI 3: Promedio / Aporte -->
+        <!-- KPI 3: Neto Aportes $ -->
         <div class="kpi-card kpi-balance">
           <div class="kpi-header">
             <span class="kpi-icon">📈</span>
-            <span class="kpi-label">PROMEDIO / APORTE</span>
+            <span class="kpi-label">NETO APORTES</span>
           </div>
           <div class="kpi-value-row">
-            <span class="kpi-value text-blue">${formatMonto(promedioMonto)}</span>
+            <span class="kpi-value text-blue">${formatMonto(netoMonto)}</span>
           </div>
           <div class="kpi-subtext">
-            <span>media por entrega</span>
+            <span>Aportes - Devoluciones</span>
           </div>
         </div>
 
@@ -834,6 +888,7 @@
             <thead>
               <tr>
                 <th class="th-center th-num">N°</th>
+                <th class="th-center th-tipo-col">Tipo</th>
                 <th class="th-cliente">Empleado</th>
                 <th class="th-center th-tipo">Rango</th>
                 <th class="th-right th-monto">Monto</th>
@@ -845,23 +900,30 @@
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
+                  <td colspan="8" class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
-                      <span>Cargando registros de aportes...</span>
+                      <span>Cargando registros de operaciones...</span>
                     </div>
                   </td>
                 </tr>
               {:else if sortedRecords.length === 0}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
-                    <span class="empty-text">No hay aportes registrados en esta fecha.</span>
+                  <td colspan="8" class="empty-state-cell">
+                    <span class="empty-text">No hay operaciones registradas en esta fecha.</span>
                   </td>
                 </tr>
               {:else}
                 {#each sortedRecords as record, idx (record.id)}
                   <tr class="cliente-row">
                     <td class="td-center td-num">{idx + 1}</td>
+                    <td class="td-center td-tipo-col">
+                      {#if (record.tipo || 'Aporte') === 'Devolución'}
+                        <span class="badge-tipo badge-devolucion">🔄 Devolución</span>
+                      {:else}
+                        <span class="badge-tipo badge-aporte">💰 Aporte</span>
+                      {/if}
+                    </td>
                     <td class="td-cliente">
                       <div class="cliente-cell-content">
                         <span class="cliente-name">{record.empleado_nombre}</span>
@@ -871,7 +933,9 @@
                       <span class="badge-tipo badge-pago">🏅 {record.rango_nombre || `Rango #${record.rango_id}`}</span>
                     </td>
                     <td class="td-right td-monto">
-                      <span class="monto-value">${formatMonto(record.monto)}</span>
+                      <span class="monto-value {record.tipo === 'Devolución' ? 'monto-devolucion' : ''}">
+                        {record.tipo === 'Devolución' ? '-' : ''}${formatMonto(record.monto)}
+                      </span>
                     </td>
                     <td class="td-center td-metodo">
                       <span class="badge-metodo metodo-pdv">
@@ -1052,6 +1116,34 @@
         </div>
 
         <div class="modal-inputs-grid">
+          <!-- Tipo de Operación en Modal -->
+          <div class="modal-field-group">
+            <label class="modal-field-label">Tipo: *</label>
+            <div class="radio-toggle-group">
+              <label class="radio-option {modalTipo === 'Aporte' ? 'selected-aporte' : ''}">
+                <input 
+                  type="radio" 
+                  name="modal-tipo-aporte" 
+                  value="Aporte" 
+                  bind:group={modalTipo}
+                />
+                <span class="radio-custom"></span>
+                <span class="radio-text">💰 Aporte</span>
+              </label>
+
+              <label class="radio-option {modalTipo === 'Devolución' ? 'selected-devolucion' : ''}">
+                <input 
+                  type="radio" 
+                  name="modal-tipo-aporte" 
+                  value="Devolución" 
+                  bind:group={modalTipo}
+                />
+                <span class="radio-custom"></span>
+                <span class="radio-text">🔄 Devolución</span>
+              </label>
+            </div>
+          </div>
+
           <!-- Selección de Empleado -->
           <div class="modal-field-group">
             <label for="modal-select-emp" class="modal-field-label">Empleado: *</label>
@@ -1347,6 +1439,52 @@
     font-weight: 600;
   }
 
+  /* Radio Toggle Group (Estilo idéntico a Control Clientes) */
+  .radio-toggle-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .radio-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #f8fafc;
+    transition: all 0.2s ease;
+    user-select: none;
+  }
+
+  .radio-option input[type="radio"] {
+    accent-color: #2563eb;
+    cursor: pointer;
+  }
+
+  .radio-option.selected-aporte {
+    border-color: #22c55e;
+    background: #f0fdf4;
+    color: #15803d;
+    font-weight: 700;
+  }
+
+  .radio-option.selected-devolucion {
+    border-color: #8b5cf6;
+    background: #f5f3ff;
+    color: #6d28d9;
+    font-weight: 700;
+  }
+
+  .radio-text {
+    font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   /* Botón Guardar Verde */
   .btn-guardar {
     width: 100%;
@@ -1369,6 +1507,16 @@
   .btn-guardar:hover:not(:disabled) {
     background-color: #4ca66e;
     box-shadow: 0 4px 8px rgba(91, 184, 126, 0.35);
+  }
+
+  .btn-guardar.btn-guardar-devolucion {
+    background-color: #8b5cf6;
+    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.25);
+  }
+
+  .btn-guardar.btn-guardar-devolucion:hover:not(:disabled) {
+    background-color: #7c3aed;
+    box-shadow: 0 4px 8px rgba(139, 92, 246, 0.35);
   }
 
   .btn-guardar:disabled {
@@ -1605,6 +1753,8 @@
   .th-center { text-align: center; }
   .th-right { text-align: right; }
   .th-num { width: 45px; }
+  .th-tipo-col { width: 130px; }
+  .td-tipo-col { width: 130px; }
   .th-cliente { min-width: 180px; }
   .th-tipo { width: 140px; }
   .th-monto { width: 120px; }
@@ -1665,6 +1815,18 @@
     font-weight: 700;
   }
 
+  .badge-aporte {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+
+  .badge-devolucion {
+    background: #ede9fe;
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+  }
+
   .badge-pago {
     background: #ede9fe;
     color: #6d28d9;
@@ -1681,6 +1843,10 @@
     font-weight: 700;
     color: #0f172a;
     font-variant-numeric: tabular-nums;
+  }
+
+  .monto-value.monto-devolucion {
+    color: #dc2626;
   }
 
   /* Badges de Método */
