@@ -4540,7 +4540,7 @@ export async function getCortesModel(options = {}) {
       conds.push(sql`COALESCE(visible, TRUE) = TRUE`);
 
       if (options.userSalaIds && options.userSalaIds.length > 0) {
-        conds.push(sql`sala_id = ANY(${options.userSalaIds})`);
+        conds.push(sql`(sala_id IS NULL OR sala_id = ANY(${options.userSalaIds}))`);
       }
 
       if (options.salaIds && options.salaIds.length > 0) {
