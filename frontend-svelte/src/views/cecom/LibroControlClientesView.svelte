@@ -11,6 +11,7 @@
   // Estado del formulario
   let cliente = '';
   let tipo = 'Compra'; // 'Compra' o 'Pago'
+  let selectedMetodoPagoId = 1;
   let monto = '';
   let isSaving = false;
 
@@ -107,6 +108,33 @@
   $: metodosDisponibles = ($masterMetodosPagoStore && $masterMetodosPagoStore.length > 0)
     ? $masterMetodosPagoStore
     : DEFAULT_METODOS;
+
+  $: if (metodosDisponibles && metodosDisponibles.length > 0) {
+    if (!selectedMetodoPagoId || !metodosDisponibles.some(m => Number(m.id) === Number(selectedMetodoPagoId))) {
+      const gen = metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === 'general');
+      selectedMetodoPagoId = gen ? gen.id : metodosDisponibles[0].id;
+    }
+  }
+
+  $: currentMetodoNombre = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId))?.nombre || 'General';
+
+  function getMetodoIcon(nombre) {
+    const n = (nombre || '').toLowerCase().trim();
+    if (n.includes('cash') || n.includes('efectivo')) return '💵';
+    if (n.includes('pdv') || n.includes('tarjeta') || n.includes('punto')) return '💳';
+    if (n.includes('usdt') || n.includes('crypto') || n.includes('cripto') || n.includes('binance')) return '🪙';
+    if (n.includes('zelle')) return '💲';
+    if (n.includes('pago movil') || n.includes('pagomovil') || n.includes('transfer')) return '📱';
+    return '🏷️';
+  }
+
+  function getMetodoClass(nombre) {
+    const n = (nombre || '').toLowerCase().trim();
+    if (n.includes('cash') || n.includes('efectivo')) return 'metodo-cash';
+    if (n.includes('pdv') || n.includes('tarjeta')) return 'metodo-pdv';
+    if (n.includes('usdt') || n.includes('crypto') || n.includes('cripto')) return 'metodo-usdt';
+    return 'metodo-general';
+  }
 
   // Encabezado oscuro de la tabla con nombre de sala (no comercial) y fecha
   $: tableHeaderTitle = (() => {
@@ -410,14 +438,16 @@
 
     isSaving = true;
     try {
-      const defaultMetodo = metodosDisponibles.find(m => (m.nombre || '').toLowerCase() === 'general') || metodosDisponibles[0] || { id: 1, nombre: 'General' };
+      const matchedMetodo = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId)) || 
+                            metodosDisponibles.find(m => (m.nombre || '').toLowerCase() === 'general') || 
+                            metodosDisponibles[0] || { id: 1, nombre: 'General' };
       const payload = {
         cliente: cleanCliente,
         cliente_id: selectedClienteId || null,
         tipo: tipo || 'Compra',
         monto: cleanMonto,
-        metodo_pago_id: defaultMetodo.id || 1,
-        metodo: defaultMetodo.nombre || 'General',
+        metodo_pago_id: matchedMetodo.id || 1,
+        metodo: matchedMetodo.nombre || 'General',
         hora: getCurrentTimeString() // Hora en curso automáticamente
       };
 
@@ -435,6 +465,8 @@
         selectedTipoClienteNombre = '';
         monto = '';
         tipo = 'Compra';
+        const genMetodo = metodosDisponibles.find(m => (m.nombre || '').toLowerCase() === 'general');
+        selectedMetodoPagoId = genMetodo ? genMetodo.id : (metodosDisponibles[0]?.id || 1);
         showSugerencias = false;
         await loadRecords();
         loadSugerenciasRemotas();
@@ -621,6 +653,25 @@
         </div>
       </div>
 
+      <!-- Sección Método de Pago (Estilo idéntico a Tipo de Operación) -->
+      <div class="form-group">
+        <label class="form-label">MÉTODO DE PAGO: *</label>
+        <div class="radio-toggle-group metodos-grid">
+          {#each metodosDisponibles as met}
+            <label class="radio-option {Number(selectedMetodoPagoId) === Number(met.id) ? `selected-metodo ${getMetodoClass(met.nombre)}` : ''}">
+              <input 
+                type="radio" 
+                name="form-metodo-pago" 
+                value={met.id} 
+                bind:group={selectedMetodoPagoId}
+              />
+              <span class="radio-custom"></span>
+              <span class="radio-text">{getMetodoIcon(met.nombre)} {met.nombre}</span>
+            </label>
+          {/each}
+        </div>
+      </div>
+
       <!-- Campo Monto -->
       <div class="form-group">
         <label for="input-cliente-monto" class="form-label">MONTO: *</label>
@@ -637,7 +688,7 @@
             required
           />
         </div>
-        <span class="field-hint">Se registrará automáticamente con el método <b>General</b> y la hora en curso.</span>
+        <span class="field-hint">Se registrará con el método <b>{currentMetodoNombre}</b> y la hora en curso.</span>
       </div>
 
       <!-- Botón Guardar Verde -->
@@ -1371,8 +1422,43 @@
     font-weight: 700;
   }
 
+  /* Métodos de Pago Grid y Seleccionados */
+  .metodos-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .radio-option.selected-metodo {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 700;
+  }
+
+  .radio-option.selected-metodo.metodo-cash {
+    border-color: #16a34a;
+    background: #f0fdf4;
+    color: #15803d;
+  }
+
+  .radio-option.selected-metodo.metodo-pdv {
+    border-color: #0891b2;
+    background: #ecfeff;
+    color: #0e7490;
+  }
+
+  .radio-option.selected-metodo.metodo-usdt {
+    border-color: #d97706;
+    background: #fffbeb;
+    color: #b45309;
+  }
+
   .radio-text {
     font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Input Currency */
