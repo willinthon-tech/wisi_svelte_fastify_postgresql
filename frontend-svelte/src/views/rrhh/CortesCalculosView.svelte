@@ -595,8 +595,10 @@
         <div class="header-badge-row">
           <span class="corte-id-badge">Corte #{corte.id}</span>
           <span class="corte-sala-badge">
-            {#if corte.salas_ids && corte.salas_ids.length > 1}
-              {corte.salas_ids.length} Salas
+            {#if (salaOptions && salaOptions.length > 1) || (corte.salas_ids && corte.salas_ids.length > 1)}
+              {(salaOptions && salaOptions.length > 1) ? salaOptions.length : corte.salas_ids.length} Salas
+            {:else if salaOptions && salaOptions.length === 1}
+              {salaOptions[0].label}
             {:else if corte.salas_nombres && corte.salas_nombres.length === 1}
               {corte.salas_nombres[0]}
             {:else}
@@ -1167,8 +1169,8 @@
   /* Filtros MultiSelect de Salas y Departamentos en Cabecera */
   .sala-multiselect-wrap,
   .depto-multiselect-wrap {
-    min-width: 175px;
-    max-width: 230px;
+    min-width: 145px;
+    max-width: 195px;
     position: relative;
     z-index: 70;
   }

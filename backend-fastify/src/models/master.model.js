@@ -4558,6 +4558,38 @@ export async function getCortesModel(options = {}) {
           )
         )`);
       }
+      // Auto-reparar cortes históricos con salas_ids desactualizados
+      try {
+        const cortesToCheck = await sql`
+          SELECT id, salas_ids, data 
+          FROM cortes 
+          WHERE salas_ids IS NULL OR array_length(salas_ids, 1) <= 1
+        `;
+        for (const c of cortesToCheck) {
+          let d = c.data;
+          if (typeof d === 'string') {
+            if (d.startsWith('gzip:') || d.startsWith('H4sI')) {
+              try {
+                const cleanBase64 = d.replace(/^gzip:/, '');
+                const buf = Buffer.from(cleanBase64, 'base64');
+                d = JSON.parse(zlib.gunzipSync(buf).toString('utf-8'));
+              } catch(e) {}
+            } else {
+              try {
+                d = JSON.parse(d);
+                if (typeof d === 'string') d = JSON.parse(d);
+              } catch(e) {}
+            }
+          }
+          const emps = d?.empleados || (d?.reportData && d?.reportData?.empleados) || [];
+          if (Array.isArray(emps) && emps.length > 0) {
+            const uniqueSalas = Array.from(new Set(emps.map(e => Number(e.sala_id)).filter(n => !isNaN(n) && n > 0)));
+            if (uniqueSalas.length > 1) {
+              await sql`UPDATE cortes SET salas_ids = ${uniqueSalas}::int[] WHERE id = ${c.id}`;
+            }
+          }
+        }
+      } catch (eSync) {}
 
       const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
       const order = sql.unsafe(`ORDER BY cortes.${sortBy} ${sortDir}, cortes.id DESC`);
@@ -4654,6 +4686,16 @@ export async function getCorteByIdModel(id) {
             } catch (e) {}
           }
         }
+
+        const emps = corteData?.empleados || (corteData?.reportData && corteData?.reportData?.empleados) || [];
+        if (Array.isArray(emps) && emps.length > 0) {
+          const uniqueSalas = Array.from(new Set(emps.map(e => Number(e.sala_id)).filter(n => !isNaN(n) && n > 0)));
+          if (uniqueSalas.length > 1) {
+            rows[0].salas_ids = uniqueSalas;
+            sql`UPDATE cortes SET salas_ids = ${uniqueSalas}::int[] WHERE id = ${numId}`.catch(() => {});
+          }
+        }
+
         let salasNombres = [];
         if (rows[0].salas_ids && rows[0].salas_ids.length > 0) {
           try {
