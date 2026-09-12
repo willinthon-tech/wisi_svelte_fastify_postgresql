@@ -4653,6 +4653,7 @@ export async function getCorteByIdModel(id) {
               }
             } catch (e) {}
           }
+        }
         let salasNombres = [];
         if (rows[0].salas_ids && rows[0].salas_ids.length > 0) {
           try {
