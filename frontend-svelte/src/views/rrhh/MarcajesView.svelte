@@ -42,6 +42,7 @@
     userSalasStore as authUserSalasStore,
   } from "../../controllers/auth.store.js";
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
+  import CachedImage from "../../components/common/CachedImage.svelte";
   import { 
     photoModalStore, 
     openPhotoModal as triggerGlobalPhotoModal, 
@@ -1119,22 +1120,11 @@
                     style="padding: 0; border: none; background: transparent; cursor: pointer; border-radius: 6px; outline: none; position: relative; display: inline-flex; align-items: center; justify-content: center;"
                     title="Ampliar fotografía"
                   >
-                    <img
+                    <CachedImage
                       src={getPhotoUrl(item.id)}
                       alt="Miniatura marcaje"
+                      isImmutable={true}
                       style="width: 26px; height: 26px; border-radius: 6px; object-fit: cover; border: 1px solid #3b82f6; background: #f1f5f9;"
-                      on:error={(e) => {
-                        const img = e.currentTarget;
-                        const fallback = getFallbackProfilePhoto(item);
-                        if (!img.dataset.triedProfile && fallback && img.src !== fallback && !img.src.endsWith(fallback)) {
-                          img.dataset.triedProfile = "true";
-                          img.src = fallback;
-                        } else {
-                          img.style.display = "none";
-                          if (img.nextElementSibling)
-                            img.nextElementSibling.style.display = "flex";
-                        }
-                      }}
                     />
                     <div
                       style="display: none; width: 26px; height: 26px; border-radius: 6px; background: {getAvatarColor(

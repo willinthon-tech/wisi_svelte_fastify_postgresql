@@ -28,6 +28,7 @@
     return { label: "PUERTA / OTROS", color: "#c2410c", bgDot: "#f97316", borderColor: "#fdba74" };
   }
 
+  import CachedImage from "./common/CachedImage.svelte";
   import { 
     photoModalStore, 
     openPhotoModal as triggerGlobalPhotoModal, 
@@ -774,26 +775,11 @@
               style="position: relative; width: 44px; height: 44px; flex-shrink: 0; padding: 0; border: none; background: transparent; cursor: pointer; border-radius: 10px; outline: none;"
               title="Hacer clic para ampliar fotografía en grande"
             >
-              <img
+              <CachedImage
                 src={getPhotoUrl(log.id)}
                 alt="Foto marcaje"
+                isImmutable={true}
                 style="width: 44px; height: 44px; border-radius: 10px; object-fit: cover; border: 2px solid {stBadge.borderColor}; background: #f1f5f9; transition: transform 0.2s ease;"
-                on:error={(e) => {
-                  const img = e.currentTarget;
-                  const empFoto = log.empleado_foto || log.foto;
-                  const empId = log.empleado_id;
-                  if (!img.dataset.triedProfile && empFoto) {
-                    img.dataset.triedProfile = "true";
-                    img.src = toBackendUrl(empFoto, { thumb: true });
-                  } else if (!img.dataset.triedProfile && empId) {
-                    img.dataset.triedProfile = "true";
-                    img.src = toBackendUrl(`/empleados/${empId}.jpg`, { thumb: true });
-                  } else {
-                    img.style.display = "none";
-                    if (img.nextElementSibling)
-                      img.nextElementSibling.style.display = "flex";
-                  }
-                }}
               />
 
               <div
