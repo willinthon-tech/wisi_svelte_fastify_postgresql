@@ -12,6 +12,12 @@ export async function initPushNotifications(userId, onNotificationReceived) {
     return;
   }
 
+  // REGLA ESTRICTA: Solo registrar notificaciones si hay un usuario autenticado
+  if (!userId) {
+    console.log('[Push] Omitiendo registro push: usuario no autenticado.');
+    return;
+  }
+
   try {
     // 1. Crear canal de notificaciones de alta prioridad para Android 8.0+
     try {
@@ -42,7 +48,7 @@ export async function initPushNotifications(userId, onNotificationReceived) {
     }
 
     async function syncTokenWithBackend(tokenVal, uId) {
-      if (!tokenVal) return;
+      if (!tokenVal || !uId) return;
       try {
         localStorage.setItem('wisi_fcm_token', tokenVal);
       } catch (e) {}
@@ -53,7 +59,7 @@ export async function initPushNotifications(userId, onNotificationReceived) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            user_id: uId || null,
+            user_id: uId,
             token: tokenVal,
             platform: Capacitor.getPlatform(),
             fecha: new Date().toISOString()
@@ -93,6 +99,22 @@ export async function initPushNotifications(userId, onNotificationReceived) {
       try {
         const data = notification?.data || {};
         if (data.attlog_id || data.id || data.nombre) {
+          // Filtrar en primer plano: solo procesar si el usuario está autenticado y tiene asignada esta sala
+          const notifSalaId = data.sala_id ? Number(data.sala_id) : null;
+          let assignedIds = [];
+          try {
+            const rawSalas = localStorage.getItem('wisi_salas');
+            const parsed = rawSalas ? JSON.parse(rawSalas) : [];
+            assignedIds = Array.isArray(parsed)
+              ? parsed.map(s => typeof s === 'object' ? s.id : Number(s)).filter(Boolean)
+              : [];
+          } catch (e) {}
+
+          if (!notifSalaId || assignedIds.length === 0 || !assignedIds.includes(notifSalaId)) {
+            console.log('🔇 [Push] Notificación en primer plano descartada: sala no asignada al usuario actual.');
+            return;
+          }
+
           const status = String(data.tipo || data.attendancestatus || '').toLowerCase().trim();
           const rec = {
             id: data.attlog_id || data.id,
@@ -100,7 +122,7 @@ export async function initPushNotifications(userId, onNotificationReceived) {
             nombre: data.nombre || notification.title || '',
             cargo_nombre: data.cargo || '',
             sala_nombre: data.sala || '',
-            sala_id: data.sala_id ? Number(data.sala_id) : null,
+            sala_id: notifSalaId,
             attendancestatus: status,
             status: status,
             foto: data.image_url || null
@@ -156,6 +178,7 @@ export async function unregisterPushNotifications() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })
       }).catch(() => {});
+      localStorage.removeItem('wisi_fcm_token');
     }
   } catch (e) {}
 }

@@ -490,7 +490,6 @@
   onMount(async () => {
     initRouter();
     loadMasterStoresFromBackend();
-    initPushNotifications($currentUserStore?.id);
     await loadUserSession();
     await refreshData();
 
@@ -562,9 +561,10 @@
         currentTab.includes('willinthontech')
       ) return;
 
-      // --- Sala filter: only show if the device's sala belongs to this user ---
+      // --- Filtro estricto de sala: solo mostrar si el usuario tiene asignada la sala del marcaje ---
+      if (!assignedSalaIds || assignedSalaIds.length === 0) return;
       const recSalaId = Number(rec.sala_id);
-      if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(recSalaId)) return;
+      if (!recSalaId || !assignedSalaIds.includes(recSalaId)) return;
 
       const backendUrl = getCloudBaseUrl();
       const base = backendUrl.endsWith('/api') ? backendUrl : `${backendUrl}/api`;

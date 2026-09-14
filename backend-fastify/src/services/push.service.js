@@ -73,13 +73,62 @@ function initFirebase() {
 // Inicializar al cargar el módulo
 initFirebase();
 
+let tableInitialized = false;
+
+/**
+ * Asegura la existencia de la tabla fcm_tokens e índices requeridos
+ */
+export async function ensureFcmTokensTable() {
+  if (tableInitialized || !isPgConnected || !sql) return;
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS fcm_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES usuarios(id) ON DELETE CASCADE,
+        token TEXT UNIQUE NOT NULL,
+        platform VARCHAR(50) DEFAULT 'android',
+        activo BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_fcm_tokens_user_id ON fcm_tokens(user_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_fcm_tokens_activo ON fcm_tokens(activo);`;
+    tableInitialized = true;
+  } catch (err) {
+    console.warn('⚠️ [Push FCM] Error asegurando tabla fcm_tokens:', err.message);
+  }
+}
+
 /**
  * Registra o actualiza el token FCM de un dispositivo móvil (Android / iOS)
+ * Si el usuario no está autenticado (user_id nulo), el token se desactiva para evitar recibir alertas.
  */
 export async function registerDeviceToken({ user_id = null, token, platform = 'android' }) {
   if (!token || typeof token !== 'string') return;
   const cleanToken = token.trim();
   if (!cleanToken) return;
+
+  await ensureFcmTokensTable();
+
+  const numUserId = user_id ? Number(user_id) : null;
+
+  // Si no hay usuario autenticado (deslogueado), desactivar cualquier registro de este token
+  if (!numUserId) {
+    inMemoryTokens.delete(cleanToken);
+    if (isPgConnected && sql) {
+      try {
+        await sql`
+          UPDATE fcm_tokens 
+          SET activo = FALSE, user_id = NULL, updated_at = NOW() 
+          WHERE token = ${cleanToken};
+        `;
+      } catch (err) {
+        console.warn('⚠️ [Push FCM] Error desactivando token no autenticado:', err.message);
+      }
+    }
+    return;
+  }
 
   inMemoryTokens.add(cleanToken);
 
@@ -87,7 +136,7 @@ export async function registerDeviceToken({ user_id = null, token, platform = 'a
     try {
       await sql`
         INSERT INTO fcm_tokens (user_id, token, platform, activo, updated_at)
-        VALUES (${user_id}, ${cleanToken}, ${platform}, TRUE, NOW())
+        VALUES (${numUserId}, ${cleanToken}, ${platform}, TRUE, NOW())
         ON CONFLICT (token) 
         DO UPDATE SET 
           user_id = EXCLUDED.user_id,
@@ -109,11 +158,13 @@ export async function unregisterDeviceToken({ token }) {
   const cleanToken = token.trim();
   inMemoryTokens.delete(cleanToken);
 
+  await ensureFcmTokensTable();
+
   if (isPgConnected && sql) {
     try {
       await sql`
         UPDATE fcm_tokens 
-        SET activo = FALSE, updated_at = NOW() 
+        SET activo = FALSE, user_id = NULL, updated_at = NOW() 
         WHERE token = ${cleanToken};
       `;
     } catch (err) {
@@ -124,47 +175,45 @@ export async function unregisterDeviceToken({ token }) {
 
 /**
  * Envía una notificación push FCM filtrada estrictamente por la sala del marcaje.
- * Solo reciben la notificación los usuarios que tienen asignada esa sala en `user_salas`,
- * o aquellos que no tienen ninguna restricción de salas configurada en `user_salas`.
+ * REGLAS OBLIGATORIAS:
+ * 1. El usuario DEBE estar autenticado (user_id no nulo y activo = TRUE).
+ * 2. El usuario DEBE tener asignada esa sala específica en `user_salas`.
+ * 3. Si el usuario no tiene salas asignadas o está deslogueado, NO recibe ninguna notificación.
  */
 export async function sendPushNotificationForAttlog({ salaId = null, title, body, data = {}, imageUrl = null, icon = null }) {
   let tokens = [];
+  const numSalaId = salaId ? Number(salaId) : null;
+
+  // Si el evento no tiene sala_id, no se puede asociar a salas de usuarios -> no enviar
+  if (!numSalaId) {
+    return { success: true, message: 'Marcaje sin sala_id especificada, omitiendo alerta push.' };
+  }
+
+  await ensureFcmTokensTable();
 
   if (isPgConnected && sql) {
     try {
-      const numSalaId = salaId ? Number(salaId) : null;
-      if (numSalaId) {
-        // Consultar tokens de usuarios asignados a esta sala,
-        // usuarios con acceso global irrestricto (sin registros en user_salas),
-        // o dispositivos registrados donde user_id es null
-        const rows = await sql`
-          SELECT DISTINCT ft.token 
-          FROM fcm_tokens ft
-          WHERE ft.activo = TRUE 
-            AND (
-              ft.user_id IS NULL
-              OR NOT EXISTS (
-                SELECT 1 FROM user_salas us 
-                WHERE us.user_id = ft.user_id
-              )
-              OR EXISTS (
-                SELECT 1 FROM user_salas us 
-                WHERE us.user_id = ft.user_id AND us.sala_id = ${numSalaId}
-              )
-            )
-        `;
-        tokens = rows.map(r => r.token);
-      } else {
-        // Sin sala específica, enviar a todos los usuarios activos
-        const rows = await sql`SELECT token FROM fcm_tokens WHERE activo = TRUE`;
-        tokens = rows.map(r => r.token);
-      }
+      // Consulta estricta: INNER JOIN con user_salas para garantizar que el usuario
+      // autenticado tenga asignada ESTA sala_id. Si no tiene salas o está deslogueado, retorna 0 filas.
+      const rows = await sql`
+        SELECT DISTINCT ft.token 
+        FROM fcm_tokens ft
+        INNER JOIN user_salas us ON us.user_id = ft.user_id
+        WHERE ft.activo = TRUE 
+          AND ft.user_id IS NOT NULL
+          AND us.sala_id = ${numSalaId}
+      `;
+      tokens = rows.map(r => r.token).filter(Boolean);
     } catch (err) {
       console.warn('⚠️ [Push FCM] Error consultando tokens por sala:', err.message);
       tokens = [];
     }
   } else {
-    tokens = Array.from(inMemoryTokens);
+    tokens = [];
+  }
+
+  if (tokens.length === 0) {
+    return { success: true, message: 'No hay usuarios asignados a esta sala con dispositivos activos.' };
   }
 
   return executeMulticastSend({ tokens, title, body, data, imageUrl, icon });
