@@ -559,9 +559,9 @@
                           type="button" 
                           class="btn-hora-accion"
                           on:click={() => abrirModalHoras(record)}
-                          title="Definir o modificar horas de entrega/recepción"
+                          title="Editar este registro"
                         >
-                          Hora
+                          Editar
                         </button>
                       {/if}
                       {#if canDelete}
