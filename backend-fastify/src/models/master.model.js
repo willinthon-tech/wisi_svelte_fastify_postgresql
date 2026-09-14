@@ -9616,7 +9616,8 @@ export async function getDeltaSyncModel(params = {}) {
     'libro_novedades_mesas',
     'libro_datos',
     'metodos_pago',
-    'tipo_clientes'
+    'tipo_clientes',
+    'dispositivos'
   ];
 
   let targetTables = allowedTables;

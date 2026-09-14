@@ -117,9 +117,9 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
             }
           }
         } else if (payload.type === 'MASTER_SYNC') {
-          // Dynamic real-time sync with PostgreSQL
-          import('./master.store.js').then(({ loadMasterStoresFromBackend }) => {
-            loadMasterStoresFromBackend().catch(() => {});
+          // Dynamic real-time sync with PostgreSQL via Delta Sync
+          import('./master.store.js').then(({ syncMasterStoresDelta }) => {
+            syncMasterStoresDelta().catch(() => {});
           });
         }
       } catch (err) {

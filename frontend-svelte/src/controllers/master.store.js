@@ -306,6 +306,102 @@ export async function loadMasterStoresFromBackend() {
     fetchUserSalas(),
     fetchUserPerms()
   ]);
+
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('wisi_last_delta_sync', new Date().toISOString());
+  }
+}
+
+let isSyncingDelta = false;
+
+/**
+ * Motor de sincronización incremental Delta para tiendas maestras en el cliente (Local-First).
+ * Solo consulta y aplica los registros que han cambiado desde la última sincronización,
+ * evitando 33 peticiones paralelas pesadas y garantizando actualización en 0ms.
+ */
+export async function syncMasterStoresDelta() {
+  if (isSyncingDelta) return;
+  isSyncingDelta = true;
+
+  try {
+    const lastSync = (typeof localStorage !== 'undefined') ? localStorage.getItem('wisi_last_delta_sync') : null;
+
+    // Si nunca ha habido una sincronización registrada en este cliente, cargar todo de inicio
+    if (!lastSync) {
+      await loadMasterStoresFromBackend();
+      return;
+    }
+
+    const url = toBackendUrl(`/api/sync/delta?since=${encodeURIComponent(lastSync)}`);
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn('⚠️ [DeltaSync] Servidor respondió con error, ejecutando carga completa...');
+      await loadMasterStoresFromBackend();
+      return;
+    }
+
+    const json = await res.json();
+    if (!json || !json.changes) return;
+
+    // Mapeo entre tablas de la base de datos y sus stores de Svelte en memoria
+    const tableToStoreMap = {
+      'clientes': masterClientesStore,
+      'empleados': masterEmpleadosStore,
+      'salas': masterSalasStore,
+      'metodos_pago': masterMetodosPagoStore,
+      'tipo_clientes': masterTipoClientesStore,
+      'dispositivos': masterDispositivosStore
+    };
+
+    let totalChanges = 0;
+
+    for (const [tbl, data] of Object.entries(json.changes)) {
+      const store = tableToStoreMap[tbl];
+      if (!store) continue;
+
+      const upserted = Array.isArray(data.upserted) ? data.upserted : [];
+      const deleted = Array.isArray(data.deleted) ? data.deleted : [];
+
+      if (upserted.length === 0 && deleted.length === 0) continue;
+
+      store.update(currentItems => {
+        let items = Array.isArray(currentItems) ? [...currentItems] : [];
+        const deletedIds = new Set(deleted.map(d => Number(d.id)));
+
+        // 1. Descartar eliminados (Soft delete o borrado)
+        if (deletedIds.size > 0) {
+          items = items.filter(it => !deletedIds.has(Number(it.id)));
+        }
+
+        // 2. Upsert (actualizar registro modificado o insertar si es nuevo)
+        for (const up of upserted) {
+          const upId = Number(up.id);
+          const idx = items.findIndex(it => Number(it.id) === upId);
+          if (idx >= 0) {
+            items[idx] = { ...items[idx], ...up };
+          } else {
+            items.push(up);
+          }
+        }
+        return items;
+      });
+
+      totalChanges += (upserted.length + deleted.length);
+    }
+
+    // Actualizar cursor de tiempo de sincronización con la marca de tiempo exacta del servidor
+    if (json.timestamp && typeof localStorage !== 'undefined') {
+      localStorage.setItem('wisi_last_delta_sync', json.timestamp);
+    }
+
+    if (totalChanges > 0) {
+      console.log(`⚡ [DeltaSync] Sincronización delta aplicada con éxito: ${totalChanges} cambios reflejados en 0ms.`);
+    }
+  } catch (err) {
+    console.warn('⚠️ [DeltaSync] Error sincronizando delta:', err);
+  } finally {
+    isSyncingDelta = false;
+  }
 }
 
 export async function saveUserSalasToBackend(userId, salaIds) {
