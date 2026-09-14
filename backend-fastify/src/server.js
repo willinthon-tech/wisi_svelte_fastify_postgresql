@@ -173,6 +173,10 @@ async function startServer() {
         if (q.q) targetQ = parseInt(q.q, 10) || 80;
       }
 
+      // Comprobar si el cliente soporta WebP para máxima optimización (hasta 80% menos peso)
+      const acceptsWebp = (req.headers['accept'] && req.headers['accept'].includes('image/webp')) || q.format === 'webp';
+      const useWebp = !isOriginalRequested && acceptsWebp && q.format !== 'png' && q.format !== 'jpg' && q.format !== 'jpeg';
+
       // Comprobar caché en disco para respuesta sub-milisegundo (0ms)
       const isClienteReq = req.url.includes('/clientes');
       const isEmpleadoReq = req.url.includes('/empleados');
@@ -180,16 +184,21 @@ async function startServer() {
       const prefix = isClienteReq ? 'cliente' : (isEmpleadoReq ? 'empleado' : (isAttlogReq ? 'attlog' : 'misc'));
 
       const baseName = path.basename(foundPath, path.extname(foundPath));
-      const cacheExt = isPng ? '.png' : '.jpg';
+      let cacheExt = isPng ? '.png' : '.jpg';
+      if (useWebp) {
+        cacheExt = '.webp';
+      }
       const cacheFileName = `${prefix}_${baseName}_${targetW}x${targetH}_q${targetQ}_${fitMode}${cacheExt}`;
       const cacheFilePath = path.join(cacheThumbsDir, cacheFileName);
 
       const clientEtag = req.headers['if-none-match'];
-      const targetEtag = `"${stat.size}-${Math.floor(stat.mtimeMs)}-${targetW}x${targetH}q${targetQ}"`;
+      const targetEtag = `"${stat.size}-${Math.floor(stat.mtimeMs)}-${targetW}x${targetH}q${targetQ}${cacheExt}"`;
 
       if (clientEtag && clientEtag === targetEtag) {
         return reply.status(304).send();
       }
+
+      const contentType = useWebp ? 'image/webp' : (isPng ? 'image/png' : 'image/jpeg');
 
       if (fs.existsSync(cacheFilePath)) {
         try {
@@ -199,7 +208,7 @@ async function startServer() {
             reply.header('Content-Length', cacheStat.size);
             reply.header('Last-Modified', cacheStat.mtime.toUTCString());
             reply.header('ETag', targetEtag);
-            reply.type(isPng ? 'image/png' : 'image/jpeg');
+            reply.type(contentType);
             return fs.createReadStream(cacheFilePath);
           }
         } catch (e) {
@@ -217,7 +226,9 @@ async function startServer() {
         }
 
         let outputBuf;
-        if (isPng) {
+        if (useWebp) {
+          outputBuf = await sharpInst.webp({ quality: targetQ, effort: 4 }).toBuffer();
+        } else if (isPng) {
           outputBuf = await sharpInst.png({ compressionLevel: 8 }).toBuffer();
         } else {
           outputBuf = await sharpInst.jpeg({ quality: targetQ, progressive: true }).toBuffer();
@@ -229,7 +240,7 @@ async function startServer() {
         reply.header('Cache-Control', 'public, max-age=31536000, immutable');
         reply.header('Content-Length', outputBuf.length);
         reply.header('ETag', targetEtag);
-        reply.type(isPng ? 'image/png' : 'image/jpeg');
+        reply.type(contentType);
         return reply.send(outputBuf);
       } catch (err) {
         console.warn('Sharp processing failed, serving original file:', err.message);
