@@ -142,6 +142,7 @@
   import BlockedDeleteModal from '../modals/BlockedDeleteModal.svelte';
   import BatchDeleteConfirmModal from '../modals/BatchDeleteConfirmModal.svelte';
   import BatchDeleteReportModal from '../modals/BatchDeleteReportModal.svelte';
+  import CachedImage from './CachedImage.svelte';
 
   export let items = [];
   export let totalCount = 0;
@@ -1300,23 +1301,11 @@
                       class="photo-btn"
                       on:click={() => openPhotoModal(item)}
                       title="Ampliar fotografía">
-                      <img 
+                      <CachedImage 
                         src={getPhotoUrl(item)} 
                         alt="Foto de {toTitleCase(item.nombre) || 'Registro'}"
-                        class="employee-thumb"
-                        on:error={(e) => { 
-                          const img = e.target;
-                          const fallbackPath = entityType === 'cliente'
-                            ? (item.id ? `/clientes/${item.id}.jpg` : '')
-                            : (item.empleado_id || item.id ? `/empleados/${item.empleado_id || item.id}.jpg` : '');
-                          if (!img.dataset.triedFallback && fallbackPath && !img.src.includes(fallbackPath)) {
-                            img.dataset.triedFallback = 'true';
-                            img.src = toBackendUrl(fallbackPath, { thumb: true });
-                          } else {
-                            img.style.display = 'none';
-                            if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
-                          }
-                        }}
+                        className="employee-thumb"
+                        version={item.updated_at}
                       />
                       <div class="fallback-avatar-icon" style="display: none;">
                         {getInitials(toTitleCase(item.nombre), item.cedula)}
@@ -3020,21 +3009,11 @@
         <!-- Employee Info Summary Card -->
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
           <div style="width: 48px; height: 48px; border-radius: 50%; overflow: hidden; border: 2px solid #3b82f6; display: flex; align-items: center; justify-content: center; background: #eff6ff; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <img 
+            <CachedImage 
               src={getPhotoUrl(itemToReincorporar)} 
               alt="Foto de {toTitleCase(itemToReincorporar.nombre)}"
               style="width: 100%; height: 100%; object-fit: cover;"
-              on:error={(e) => { 
-                const img = e.target;
-                const empId = itemToReincorporar?.empleado_id || itemToReincorporar?.id;
-                if (!img.dataset.triedEmp && empId && !img.src.includes(`/empleados/${empId}.jpg`)) {
-                  img.dataset.triedEmp = 'true';
-                  img.src = toBackendUrl(`/empleados/${empId}.jpg`, { thumb: true });
-                } else {
-                  img.style.display = 'none';
-                  if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
-                }
-              }}
+              version={itemToReincorporar.updated_at}
             />
             <div class="fallback-avatar-icon" style="display: none; width: 100%; height: 100%; background: #2563eb; color: #ffffff; font-weight: 800; align-items: center; justify-content: center; font-size: 15px;">
               {getInitials(toTitleCase(itemToReincorporar.nombre), itemToReincorporar.cedula)}
