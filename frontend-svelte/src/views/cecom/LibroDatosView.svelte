@@ -1,10 +1,21 @@
 <script>
   import { onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterSalasStore, masterEmpleadosStore, masterLibrosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { 
+    masterSalasStore, 
+    masterEmpleadosStore, 
+    masterLibrosStore, 
+    loadMasterStoresFromBackend,
+    currentRoutePermissionsStore
+  } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
+  $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
+  $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
+  $: canModify = canAdd || canEdit;
 
   $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
 
@@ -134,7 +145,7 @@
 
   // Disparar autoguardado con debounce para guardar al escribir o cambiar
   function triggerAutoSave() {
-    if (isLoadingData) return;
+    if (isLoadingData || !canModify) return;
     if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
     autoSaveTimeout = setTimeout(() => {
       handleGuardar(true);
@@ -165,6 +176,10 @@
   }
 
   function removeOperadorA(name) {
+    if (!canDelete) {
+      triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
+      return;
+    }
     operadoresTurnoAList = operadoresTurnoAList.filter(n => n !== name);
     operadorTurnoA = operadoresTurnoAList.join(', ');
     triggerAutoSave();
@@ -251,6 +266,10 @@
   }
 
   function removeOperadorC(name) {
+    if (!canDelete) {
+      triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
+      return;
+    }
     operadoresTurnoCList = operadoresTurnoCList.filter(n => n !== name);
     operadorTurnoC = operadoresTurnoCList.join(', ');
     triggerAutoSave();
@@ -385,6 +404,10 @@
   }
 
   async function handleGuardar(silent = false) {
+    if (!canModify) {
+      if (!silent) triggerToast('No tienes permiso para modificar datos operativos en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId) {
       if (!silent) triggerToast('No se encontró el ID del libro', 'error');
@@ -494,17 +517,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="sala-inicio" class="mini-label">Hora Inicio:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { aperturaSalaInicio = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { aperturaSalaInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="sala-inicio" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={aperturaSalaInicio} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -513,17 +539,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="sala-fin" class="mini-label">Hora Fin:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { aperturaSalaFin = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { aperturaSalaFin = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="sala-fin" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={aperturaSalaFin} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -541,17 +570,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="maq-inicio" class="mini-label">Hora Inicio:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { aperturaMaquinasInicio = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { aperturaMaquinasInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="maq-inicio" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={aperturaMaquinasInicio} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -560,17 +592,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="maq-fin" class="mini-label">Hora Fin:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { aperturaMaquinasFin = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { aperturaMaquinasFin = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="maq-fin" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={aperturaMaquinasFin} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -588,17 +623,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="bingo-inicio" class="mini-label">Hora Inicio:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { aperturaBingoInicio = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { aperturaBingoInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="bingo-inicio" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={aperturaBingoInicio} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -607,17 +645,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="bingo-fin" class="mini-label">Hora Fin:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { aperturaBingoFin = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { aperturaBingoFin = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="bingo-fin" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={aperturaBingoFin} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -635,17 +676,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="retiro-inicio" class="mini-label">Hora Inicio:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { retirosDropboxInicio = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { retirosDropboxInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="retiro-inicio" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={retirosDropboxInicio} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -654,17 +698,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="retiro-fin" class="mini-label">Hora Fin:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { retirosDropboxFin = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { retirosDropboxFin = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="retiro-fin" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={retirosDropboxFin} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -682,17 +729,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="conteo-inicio" class="mini-label">Hora Inicio:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { conteoDropboxInicio = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { conteoDropboxInicio = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="conteo-inicio" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={conteoDropboxInicio} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -701,17 +751,20 @@
           <div class="time-col">
             <div class="col-header-mini">
               <label for="conteo-fin" class="mini-label">Hora Fin:</label>
-              <button 
-                type="button" 
-                class="btn-mini-now" 
-                on:click={() => { conteoDropboxFin = getCurrentTimeString(); triggerAutoSave(); }}
-                title="Poner hora actual y guardar"
-              >⚡ Ahora</button>
+              {#if canModify}
+                <button 
+                  type="button" 
+                  class="btn-mini-now" 
+                  on:click={() => { conteoDropboxFin = getCurrentTimeString(); triggerAutoSave(); }}
+                  title="Poner hora actual y guardar"
+                >⚡ Ahora</button>
+              {/if}
             </div>
             <input 
               id="conteo-fin" 
               type="time" 
               class="form-time-input" 
+              disabled={!canModify}
               bind:value={conteoDropboxFin} 
               on:change={triggerAutoSave}
               on:blur={triggerAutoSave}
@@ -741,6 +794,7 @@
                 type="text" 
                 class="form-text-input" 
                 placeholder="Escriba o elija operador..."
+                disabled={!canModify}
                 bind:value={inputTempOperadorA} 
                 on:input={onInputOperadorA}
                 on:keydown={onKeyDownOperadorA}
@@ -782,12 +836,14 @@
                 {#each operadoresTurnoAList as op}
                   <span class="op-chip chip-a">
                     <span class="chip-text">{op}</span>
-                    <button 
-                      type="button" 
-                      class="chip-del-btn" 
-                      on:click={() => removeOperadorA(op)}
-                      title="Quitar operador"
-                    >×</button>
+                    {#if canDelete}
+                      <button 
+                        type="button" 
+                        class="chip-del-btn" 
+                        on:click={() => removeOperadorA(op)}
+                        title="Quitar operador"
+                      >×</button>
+                    {/if}
                   </span>
                 {/each}
               </div>
@@ -809,6 +865,7 @@
                 type="text" 
                 class="form-text-input" 
                 placeholder="Escriba o elija operador..."
+                disabled={!canModify}
                 bind:value={inputTempOperadorC} 
                 on:input={onInputOperadorC}
                 on:keydown={onKeyDownOperadorC}
@@ -850,12 +907,14 @@
                 {#each operadoresTurnoCList as op}
                   <span class="op-chip chip-c">
                     <span class="chip-text">{op}</span>
-                    <button 
-                      type="button" 
-                      class="chip-del-btn" 
-                      on:click={() => removeOperadorC(op)}
-                      title="Quitar operador"
-                    >×</button>
+                    {#if canDelete}
+                      <button 
+                        type="button" 
+                        class="chip-del-btn" 
+                        on:click={() => removeOperadorC(op)}
+                        title="Quitar operador"
+                      >×</button>
+                    {/if}
                   </span>
                 {/each}
               </div>

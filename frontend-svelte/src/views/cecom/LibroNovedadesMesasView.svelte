@@ -9,11 +9,16 @@
     masterEmpleadosStore,
     masterLibrosStore,
     userSalasStore as masterUserSalasStore,
-    loadMasterStoresFromBackend 
+    loadMasterStoresFromBackend,
+    currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
+  $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
+  $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
   // Estado de carga y datos
   let isLoadingRecords = true;
@@ -305,6 +310,13 @@
     if (!row) return;
 
     const existing = recordsMap.get(Number(mesaId));
+    if (existing && !canEdit) {
+      return;
+    }
+    if (!existing && !canAdd) {
+      return;
+    }
+
     const hasAnyValue = Boolean(
       row.hora_apertura || row.hora_cierre || row.pitboss ||
       row.croupier_apertura || row.croupier_cierre || row.observacion
@@ -363,6 +375,10 @@
 
   // Eliminar o limpiar el registro de una mesa
   async function handleEliminar(mesaId) {
+    if (!canDelete) {
+      triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId || !mesaId) return;
 
@@ -408,6 +424,10 @@
 
   // Asignar en Lote a TODAS las mesas disponibles de la sala
   async function handleBatchAssign() {
+    if (!canAdd && !canEdit) {
+      triggerToast('No tienes permiso para modificar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
@@ -479,6 +499,10 @@
 
   // --- Handlers de Modal de Edición Individual ---
   function abrirModalEditar(mesaId) {
+    if (!canEdit) {
+      triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
+      return;
+    }
     editingMesaId = mesaId;
     modalMesa = availableMesas.find(m => m.id === mesaId);
     const r = getRow(mesaId);
@@ -498,6 +522,10 @@
   }
 
   async function handleGuardarModal() {
+    if (!canEdit) {
+      triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId || !editingMesaId) return;
 
@@ -765,20 +793,22 @@
       </div>
 
       <!-- Botón de Guardar -->
-      <div class="form-actions-batch">
-        <button 
-          type="submit" 
-          class="btn-primary-batch" 
-          disabled={isSavingBatch || availableMesas.length === 0}
-        >
-          {#if isSavingBatch}
-            <span class="btn-spinner"></span>
-            <span>Guardando...</span>
-          {:else}
-            <span>Guardar</span>
-          {/if}
-        </button>
-      </div>
+      {#if canAdd || canEdit}
+        <div class="form-actions-batch">
+          <button 
+            type="submit" 
+            class="btn-primary-batch" 
+            disabled={isSavingBatch || availableMesas.length === 0}
+          >
+            {#if isSavingBatch}
+              <span class="btn-spinner"></span>
+              <span>Guardando...</span>
+            {:else}
+              <span>Guardar</span>
+            {/if}
+          </button>
+        </div>
+      {/if}
     </form>
   </div>
 
@@ -820,13 +850,15 @@
             <th class="th-left th-col-mesa">MESA</th>
             <th class="th-left th-col-croupier">CROUPIER APERTURA</th>
             <th class="th-left th-col-croupier">CROUPIER CIERRE</th>
-            <th class="th-center th-col-acciones">ACCIONES</th>
+            {#if canEdit || canDelete}
+              <th class="th-center th-col-acciones">ACCIONES</th>
+            {/if}
           </tr>
         </thead>
         <tbody>
           {#if isLoadingRecords || isLoadingMesas}
             <tr>
-              <td colspan="4" class="empty-state-cell">
+              <td colspan={canEdit || canDelete ? 4 : 3} class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
                   <span>Cargando mesas y novedades...</span>
@@ -835,7 +867,7 @@
             </tr>
           {:else if availableMesas.length === 0}
             <tr>
-              <td colspan="4" class="empty-state-cell">
+              <td colspan={canEdit || canDelete ? 4 : 3} class="empty-state-cell">
                 <div class="empty-msg-box">
                   <p class="empty-text">No se encontraron mesas activas configuradas para esta sala.</p>
                 </div>
@@ -843,7 +875,7 @@
             </tr>
           {:else if filteredMesas.length === 0}
             <tr>
-              <td colspan="4" class="empty-state-cell">
+              <td colspan={canEdit || canDelete ? 4 : 3} class="empty-state-cell">
                 <div class="empty-msg-box">
                   <p class="empty-text">No hay mesas que coincidan con la búsqueda "{searchQuery}".</p>
                 </div>
@@ -874,6 +906,7 @@
                       class="inline-text-input {activeSug?.mesaId === mesa.id && activeSug?.field === 'croupier_apertura' ? 'input-active' : ''}" 
                       placeholder="Escriba Croupier Apertura..." 
                       value={row.croupier_apertura}
+                      disabled={!canEdit && !canAdd}
                       on:focus={() => handleFocusAutocomplete(mesa.id, 'croupier_apertura')}
                       on:input={(e) => handleInputAutocomplete(mesa.id, 'croupier_apertura', e.target.value)}
                       on:keydown={(e) => handleKeyDownAutocomplete(e, mesa.id, 'croupier_apertura')}
@@ -916,6 +949,7 @@
                       class="inline-text-input {activeSug?.mesaId === mesa.id && activeSug?.field === 'croupier_cierre' ? 'input-active' : ''}" 
                       placeholder="Escriba Croupier Cierre..." 
                       value={row.croupier_cierre}
+                      disabled={!canEdit && !canAdd}
                       on:focus={() => handleFocusAutocomplete(mesa.id, 'croupier_cierre')}
                       on:input={(e) => handleInputAutocomplete(mesa.id, 'croupier_cierre', e.target.value)}
                       on:keydown={(e) => handleKeyDownAutocomplete(e, mesa.id, 'croupier_cierre')}
@@ -951,36 +985,40 @@
                 </td>
 
                 <!-- ACCIONES (Botón Editar Modal + Botón Eliminar) -->
-                <td class="td-center td-col-acciones">
-                  <div class="row-status-actions">
-                    {#if isSavingThis}
-                      <span class="status-saving-inline" title="Guardando cambios...">
-                        <span class="mini-spinner"></span>
-                      </span>
-                    {/if}
+                {#if canEdit || canDelete}
+                  <td class="td-center td-col-acciones">
+                    <div class="row-status-actions">
+                      {#if isSavingThis}
+                        <span class="status-saving-inline" title="Guardando cambios...">
+                          <span class="mini-spinner"></span>
+                        </span>
+                      {/if}
 
-                    <!-- Botón de Editar individual que abre el Modal -->
-                    <button 
-                      type="button" 
-                      class="btn-inline-edit" 
-                      on:click={() => abrirModalEditar(mesa.id)}
-                      title="Editar individualmente hora apertura/cierre, pitboss y observación"
-                    >
-                      Editar
-                    </button>
+                      <!-- Botón de Editar individual que abre el Modal -->
+                      {#if canEdit}
+                        <button 
+                          type="button" 
+                          class="btn-inline-edit" 
+                          on:click={() => abrirModalEditar(mesa.id)}
+                          title="Editar individualmente hora apertura/cierre, pitboss y observación"
+                        >
+                          Editar
+                        </button>
+                      {/if}
 
-                    {#if hasData || recordsMap.has(Number(mesa.id))}
-                      <button 
-                        type="button" 
-                        class="btn-inline-delete" 
-                        on:click={() => handleEliminar(mesa.id)}
-                        title="Limpiar novedad de esta mesa"
-                      >
-                        Limpiar
-                      </button>
-                    {/if}
-                  </div>
-                </td>
+                      {#if canDelete && (hasData || recordsMap.has(Number(mesa.id)))}
+                        <button 
+                          type="button" 
+                          class="btn-inline-delete" 
+                          on:click={() => handleEliminar(mesa.id)}
+                          title="Eliminar o limpiar novedad de esta mesa"
+                        >
+                          Eliminar
+                        </button>
+                      {/if}
+                    </div>
+                  </td>
+                {/if}
 
               </tr>
             {/each}
@@ -995,7 +1033,7 @@
      MODAL DE EDICIÓN INDIVIDUAL POR MESA
      (NO se cierra al dar clic afuera)
      ============================================================ -->
-{#if isEditModalOpen && modalMesa}
+{#if isEditModalOpen && modalMesa && canEdit}
   <div class="modal-overlay">
     <div class="modal-card" role="dialog" aria-modal="true">
       <div class="modal-header">

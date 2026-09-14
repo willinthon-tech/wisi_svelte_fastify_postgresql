@@ -1,10 +1,19 @@
 <script>
   import { onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterSalasStore, masterTipoIncidenciasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { 
+    masterSalasStore, 
+    masterTipoIncidenciasStore, 
+    loadMasterStoresFromBackend,
+    currentRoutePermissionsStore
+  } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
+  $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
+  $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
   $: availableTiposIncidencia = $masterTipoIncidenciasStore || [];
 
@@ -295,6 +304,10 @@
   }
 
   async function handleGuardar() {
+    if (!canAdd) {
+      triggerToast('No tienes permiso para agregar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
@@ -375,6 +388,10 @@
   }
 
   async function handleEliminar(recordId) {
+    if (!canDelete) {
+      triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId || !recordId) return;
 
@@ -397,6 +414,10 @@
 
   // Modal para editar Tipo, Contenido y Hora
   function abrirModalEditar(record) {
+    if (!canEdit) {
+      triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
+      return;
+    }
     editingRecord = record;
     const rTipoNorm = normalizeText(record.tipo || record.tipo_incidencia_nombre);
     const match = availableTiposIncidencia.find(t => 
@@ -420,6 +441,10 @@
   }
 
   async function handleGuardarModal() {
+    if (!canEdit) {
+      triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
+      return;
+    }
     if (!editingRecord) return;
     const lId = libroId || libro?.id;
     if (!lId) return;
@@ -555,17 +580,19 @@
       {/if}
 
       <!-- Botón Guardar Verde -->
-      <button 
-        type="submit" 
-        class="btn-guardar"
-        disabled={isSaving}
-      >
-        {#if isSaving}
-          <span>Guardando {livePreviewBlocks.length > 1 ? `${livePreviewBlocks.length} Registros...` : 'Registro...'}</span>
-        {:else}
-          <span>Guardar {livePreviewBlocks.length > 1 ? `${livePreviewBlocks.length} Registros` : 'Registro'}</span>
-        {/if}
-      </button>
+      {#if canAdd}
+        <button 
+          type="submit" 
+          class="btn-guardar"
+          disabled={isSaving}
+        >
+          {#if isSaving}
+            <span>Guardando {livePreviewBlocks.length > 1 ? `${livePreviewBlocks.length} Registros...` : 'Registro...'}</span>
+          {:else}
+            <span>Guardar {livePreviewBlocks.length > 1 ? `${livePreviewBlocks.length} Registros` : 'Registro'}</span>
+          {/if}
+        </button>
+      {/if}
     </form>
   </div>
 
@@ -607,13 +634,15 @@
             <th class="th-center th-num">N°</th>
             <th class="th-center th-tipo">Tipo</th>
             <th class="th-desc">Descripción / Novedad</th>
-            <th class="th-center th-acciones">Acciones</th>
+            {#if canEdit || canDelete}
+              <th class="th-center th-acciones">Acciones</th>
+            {/if}
           </tr>
         </thead>
         <tbody>
           {#if isLoadingRecords}
             <tr>
-              <td colspan="4" class="empty-state-cell">
+              <td colspan={canEdit || canDelete ? 4 : 3} class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
                   <span>Cargando incidencias generales...</span>
@@ -622,7 +651,7 @@
             </tr>
           {:else if filteredRecords.length === 0}
             <tr>
-              <td colspan="4" class="empty-state-cell">
+              <td colspan={canEdit || canDelete ? 4 : 3} class="empty-state-cell">
                 <div class="empty-msg-box">
                   <p class="empty-text">
                     {#if activeTab === 'all'}
@@ -667,26 +696,32 @@
                     {/if}
                   </div>
                 </td>
-                <td class="td-center td-acciones">
-                  <div class="acciones-btns-row">
-                    <button 
-                      type="button" 
-                      class="btn-editar-accion"
-                      on:click={() => abrirModalEditar(record)}
-                      title="Editar contenido, tipo u hora"
-                    >
-                      Editar
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn-eliminar"
-                      on:click={() => handleEliminar(record.id)}
-                      title="Eliminar esta incidencia"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </td>
+                {#if canEdit || canDelete}
+                  <td class="td-center td-acciones">
+                    <div class="acciones-btns-row">
+                      {#if canEdit}
+                        <button 
+                          type="button" 
+                          class="btn-editar-accion"
+                          on:click={() => abrirModalEditar(record)}
+                          title="Editar contenido, tipo u hora"
+                        >
+                          Editar
+                        </button>
+                      {/if}
+                      {#if canDelete}
+                        <button 
+                          type="button" 
+                          class="btn-eliminar"
+                          on:click={() => handleEliminar(record.id)}
+                          title="Eliminar esta incidencia"
+                        >
+                          Eliminar
+                        </button>
+                      {/if}
+                    </div>
+                  </td>
+                {/if}
               </tr>
             {/each}
           {/if}
@@ -700,7 +735,7 @@
      MODAL: EDITAR CONTENIDO, TIPO Y HORA DE LA INCIDENCIA
      (NO se cierra al hacer clic afuera)
 ======================================================== -->
-{#if showModalEditar && editingRecord}
+{#if showModalEditar && editingRecord && canEdit}
   <div class="modal-backdrop-fixed">
     <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-inc-title">
       <div class="modal-header">

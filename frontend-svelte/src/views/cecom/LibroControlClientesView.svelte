@@ -1,10 +1,21 @@
 <script>
   import { onMount } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterSalasStore, masterLibrosStore, masterMetodosPagoStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { 
+    masterSalasStore, 
+    masterLibrosStore, 
+    masterMetodosPagoStore, 
+    currentRoutePermissionsStore, 
+    loadMasterStoresFromBackend 
+  } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  // Permisologías del módulo en tiempo real
+  $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
+  $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
+  $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
   $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
 
@@ -442,6 +453,10 @@
   }
 
   async function handleGuardar() {
+    if (!canAdd) {
+      triggerToast('No tienes permiso para registrar operaciones en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
@@ -514,6 +529,10 @@
   }
 
   async function handleEliminar(recordId) {
+    if (!canDelete) {
+      triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId || !recordId) return;
 
@@ -536,6 +555,10 @@
 
   // Modal para editar Método, Hora y Nota
   function abrirModalEditar(record) {
+    if (!canEdit) {
+      triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
+      return;
+    }
     editingRecord = record;
     modalMetodoPagoId = record.metodo_pago_id 
       ? Number(record.metodo_pago_id) 
@@ -558,6 +581,7 @@
   }
 
   async function handleGuardarModal() {
+    if (!canEdit) return;
     if (!editingRecord) return;
     const lId = libroId || libro?.id;
     if (!lId) return;
@@ -743,17 +767,19 @@
       </div>
 
       <!-- Botón Guardar Verde -->
-      <button 
-        type="submit" 
-        class="btn-guardar"
-        disabled={isSaving}
-      >
-        {#if isSaving}
-          <span>Guardando...</span>
-        {:else}
-          <span>Guardar Registro</span>
-        {/if}
-      </button>
+      {#if canAdd}
+        <button 
+          type="submit" 
+          class="btn-guardar"
+          disabled={isSaving}
+        >
+          {#if isSaving}
+            <span>Guardando...</span>
+          {:else}
+            <span>Guardar Registro</span>
+          {/if}
+        </button>
+      {/if}
     </form>
   </div>
 
@@ -883,13 +909,15 @@
                 <th class="th-right th-monto">Monto</th>
                 <th class="th-center th-metodo">Método</th>
                 <th class="th-center th-hora">Hora</th>
-                <th class="th-center th-acciones">Acciones</th>
+                {#if canEdit || canDelete}
+                  <th class="th-center th-acciones">Acciones</th>
+                {/if}
               </tr>
             </thead>
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
+                  <td colspan="{canEdit || canDelete ? 7 : 6}" class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
                       <span>Cargando registros de clientes...</span>
@@ -898,7 +926,7 @@
                 </tr>
               {:else if records.length === 0}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
+                  <td colspan="{canEdit || canDelete ? 7 : 6}" class="empty-state-cell">
                     <div class="empty-msg-box">
                       <p class="empty-text">
                         No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
@@ -939,26 +967,32 @@
                     <td class="td-center td-hora-val">
                       <span class="time-badge">{record.hora || '—'}</span>
                     </td>
-                    <td class="td-center td-acciones">
-                      <div class="acciones-btns-row">
-                        <button 
-                          type="button" 
-                          class="btn-metodo-hora-accion"
-                          on:click={() => abrirModalEditar(record)}
-                          title="Editar Método y Hora"
-                        >
-                          Método / Hora
-                        </button>
-                        <button 
-                          type="button" 
-                          class="btn-eliminar"
-                          on:click={() => handleEliminar(record.id)}
-                          title="Eliminar este registro"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
+                    {#if canEdit || canDelete}
+                      <td class="td-center td-acciones">
+                        <div class="acciones-btns-row">
+                          {#if canEdit}
+                            <button 
+                              type="button" 
+                              class="btn-metodo-hora-accion"
+                              on:click={() => abrirModalEditar(record)}
+                              title="Editar Método y Hora"
+                            >
+                              Método / Hora
+                            </button>
+                          {/if}
+                          {#if canDelete}
+                            <button 
+                              type="button" 
+                              class="btn-eliminar"
+                              on:click={() => handleEliminar(record.id)}
+                              title="Eliminar este registro"
+                            >
+                              Eliminar
+                            </button>
+                          {/if}
+                        </div>
+                      </td>
+                    {/if}
                   </tr>
                 {/each}
               {/if}

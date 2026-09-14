@@ -1,32 +1,164 @@
-import { get } from 'svelte/store';
+import { get, writable, derived } from 'svelte/store';
 import { currentUserStore, userSalasStore as authUserSalasStore } from './auth.store.js';
+import { currentRouteStore } from './router.store.js';
 import { toBackendUrl } from '../config/api.config.js';
 
-export function getUserModuleActions(route) {
-  const user = get(currentUserStore);
-  const userId = user?.id ?? null;
-  const permsMap = (userId && get(userModulePermissionsStore)) ? (get(userModulePermissionsStore)[userId] || {}) : {};
-  const modulos = get(masterModulosStore) || [];
+const ROUTE_ALIASES = {
+  'libro': 'cecom/libro',
+  'libros': 'cecom/libro',
+  'clientes': 'cecom/clientes',
+  'llaves': 'cecom/llaves',
+  'llaves-borradas': 'cecom/llaves-borradas',
+  'marcajes': 'rrhh/marcajes',
+  'empleados': 'rrhh/empleados',
+  'cargos': 'rrhh/cargos',
+  'asignaciones': 'rrhh/asignaciones',
+  'areas': 'rrhh/areas',
+  'departamentos': 'rrhh/departamentos',
+  'registros': 'rrhh/registros',
+  'desincorporados': 'rrhh/desincorporados',
+  'carnet': 'rrhh/carnet',
+  'cumpleanos': 'rrhh/cumpleanos',
+  'calendario': 'rrhh/calendario',
+  'cortes': 'rrhh/cortes',
+  'maquinas': 'configuracion/maquinas',
+  'maquinas/maquinas': 'configuracion/maquinas',
+  'estados': 'configuracion/estados',
+  'sociedades': 'configuracion/sociedades',
+  'valores': 'configuracion/valores',
+  'maquinas/juegos': 'configuracion/juegos',
+  'juegos-maquinas': 'configuracion/juegos',
+  'marcas': 'configuracion/marcas',
+  'modelos': 'configuracion/modelos',
+  'tipos': 'configuracion/tipos',
+  'modos': 'configuracion/modos',
+  'legal': 'configuracion/legal',
+  'rangos': 'configuracion/rangos',
+  'cecom/rangos': 'configuracion/rangos',
+  'maquinas/rangos': 'configuracion/rangos',
+  'mesas': 'mesas-en-vivo/mesas',
+  'gestion-de-mesas': 'mesas-en-vivo/mesas',
+  'mesas/juegos': 'configuracion/juegos',
+  'mesas-en-vivo/juegos': 'configuracion/juegos',
+  'mesas-borradas': 'mesas-en-vivo/mesas-borradas',
+  'tipo-clientes': 'configuracion/tipo-clientes',
+  'metodos-pago': 'configuracion/metodos-pago',
+  'tipo-incidencias': 'configuracion/tipo-incidencias',
+  'cecom/tipo-incidencias': 'configuracion/tipo-incidencias',
+  'horarios': 'configuracion/horarios',
+  'rrhh/horarios': 'configuracion/horarios',
+  'plantillas': 'configuracion/horarios',
+  'configuracion/plantillas': 'configuracion/horarios',
+  'rrhh/plantillas': 'configuracion/horarios',
+  'excepciones': 'configuracion/excepciones',
+  'fechas-patrias': 'configuracion/fechas-patrias'
+};
 
-  const cleanRoute = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
-  const mod = modulos.find(m => {
-    if (!m.ruta) return false;
-    const modRuta = m.ruta.replace(/^\//, '').trim();
-    return modRuta === cleanRoute || cleanRoute.startsWith(modRuta + '/') || cleanRoute === modRuta;
-  });
+const NON_MODULE_ROUTES = [
+  'dashboard',
+  'analytics',
+  'products',
+  'companies',
+  'invoice',
+  'components',
+  'vector-maps',
+  'drag',
+  'profile',
+  'auth',
+  'settings',
+  'master',
+  'willinthontech'
+];
 
-  if (!mod) {
-    return { canView: true, canAdd: true, canEdit: true, canDelete: true };
+export function normalizeModuleRoute(route) {
+  if (!route) return '';
+  let clean = String(route).replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim().toLowerCase();
+  
+  if (clean.startsWith('cecom/libro') || clean.startsWith('libro') || /^\d+(\/|$)/.test(clean)) {
+    return 'cecom/libro';
   }
 
-  const userPerms = permsMap[mod.id] || [];
+  if (ROUTE_ALIASES[clean]) {
+    return ROUTE_ALIASES[clean];
+  }
+
+  return clean;
+}
+
+export function findModuleByRoute(route, modulos = []) {
+  const norm = normalizeModuleRoute(route);
+  if (!norm) return null;
+
+  let found = modulos.find(m => {
+    if (!m.ruta) return false;
+    const mRuta = m.ruta.replace(/^\//, '').trim().toLowerCase();
+    return mRuta === norm;
+  });
+  if (found) return found;
+
+  found = modulos.find(m => {
+    if (!m.ruta) return false;
+    const mRuta = m.ruta.replace(/^\//, '').trim().toLowerCase();
+    return norm.startsWith(mRuta + '/');
+  });
+  if (found) return found;
+
+  found = modulos.find(m => {
+    if (!m.ruta) return false;
+    const mRuta = m.ruta.replace(/^\//, '').trim().toLowerCase();
+    const mAlias = ROUTE_ALIASES[mRuta] || mRuta;
+    return mAlias === norm || norm.startsWith(mAlias + '/');
+  });
+  if (found) return found;
+
+  const lastSegment = norm.split('/').pop();
+  found = modulos.find(m => {
+    if (!m.ruta) return false;
+    const mRuta = m.ruta.replace(/^\//, '').trim().toLowerCase();
+    return mRuta.split('/').pop() === lastSegment;
+  });
+  return found || null;
+}
+
+export function calculateUserModuleActions(route, user, permsMapAll, modulos = []) {
+  const clean = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim().toLowerCase() : '';
+  if (!clean || NON_MODULE_ROUTES.includes(clean)) {
+    return { canView: true, canAdd: true, canEdit: true, canDelete: true, isModule: false };
+  }
+
+  const mod = findModuleByRoute(clean, modulos);
+  if (!mod) {
+    return { canView: true, canAdd: true, canEdit: true, canDelete: true, isModule: false };
+  }
+
+  const userId = user?.id ?? null;
+  const userPerms = (userId && permsMapAll && permsMapAll[userId]) ? (permsMapAll[userId][mod.id] || []) : [];
+
   return {
     canView: userPerms.includes('VER'),
     canAdd: userPerms.includes('AGREGAR'),
     canEdit: userPerms.includes('EDITAR'),
-    canDelete: userPerms.includes('ELIMINAR') || userPerms.includes('BORRAR')
+    canDelete: userPerms.includes('ELIMINAR') || userPerms.includes('BORRAR'),
+    isModule: true,
+    moduleId: mod.id,
+    moduleNombre: mod.nombre
   };
 }
+
+export function getUserModuleActions(route) {
+  const user = get(currentUserStore);
+  const permsMap = get(userModulePermissionsStore) || {};
+  const modulos = get(masterModulosStore) || [];
+  const targetRoute = route || get(currentRouteStore);
+  return calculateUserModuleActions(targetRoute, user, permsMap, modulos);
+}
+
+export const currentRoutePermissionsStore = derived(
+  [currentUserStore, userModulePermissionsStore, masterModulosStore, currentRouteStore],
+  ([$user, $permsMap, $modulos, $route]) => {
+    return calculateUserModuleActions($route, $user, $permsMap, $modulos);
+  }
+);
 
 export function getActiveUserAssignedSalaIds() {
   const userMap = get(userSalasStore) || {};
@@ -54,8 +186,6 @@ export function filterOptionsByActiveSalas(items = [], salaIdKey = 'sala_id') {
     return true;
   });
 }
-
-import { writable } from 'svelte/store';
 
 // Helper to load from localStorage with fallback
 function loadStore(key, fallback) {

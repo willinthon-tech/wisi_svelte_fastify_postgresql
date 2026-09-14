@@ -101,6 +101,7 @@
   import {
     loadMasterStoresFromBackend,
     userSalasStore as masterUserSalasStore,
+    currentRoutePermissionsStore,
   } from "./controllers/master.store.js";
   import {
     currentUserStore,
@@ -484,7 +485,9 @@
   function handleGlobalKeydown(e) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
       e.preventDefault();
-      openCreateModalUI();
+      if ($currentRoutePermissionsStore && $currentRoutePermissionsStore.canAdd) {
+        openCreateModalUI();
+      }
     }
   }
 
@@ -832,7 +835,7 @@
                 </button>
               {/if}
 
-              {#if !isBuiltInTab($currentRouteStore)}
+              {#if !isBuiltInTab($currentRouteStore) && $currentRoutePermissionsStore.canAdd}
                 <button
                   on:click={openCreateModalUI}
                   type="button"
@@ -848,7 +851,25 @@
 
         <!-- Hash Router Views -->
 
-        {#if $currentRouteStore === "dashboard"}
+        {#if !isBuiltInTab($currentRouteStore) && !$currentRoutePermissionsStore.canView}
+          <div style="background: #ffffff; border: 1px solid #fecaca; border-radius: 14px; padding: 48px 24px; text-align: center; max-width: 520px; margin: 40px auto; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
+            <div style="width: 58px; height: 58px; border-radius: 50%; background: #fee2e2; color: #dc2626; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
+              <span class="material-icons" style="font-size: 32px;">lock</span>
+            </div>
+            <h2 style="margin: 0 0 8px 0; font-size: 19px; font-weight: 800; color: #991b1b;">Acceso Restringido</h2>
+            <p style="margin: 0 0 22px 0; font-size: 13.5px; color: #64748b; line-height: 1.6;">
+              No tienes permiso asignado para visualizar este módulo (<b>{currentTitle}</b>). Si requieres acceso, solicita la asignación del permiso <b>VER</b> al administrador del sistema.
+            </p>
+            <button
+              type="button"
+              on:click={() => navigateToRoute('dashboard')}
+              class="btn-flow"
+              style="padding: 10px 22px; font-size: 13.5px; font-weight: 700; border-radius: 8px; cursor: pointer; border: none;"
+            >
+              Volver al Inicio
+            </button>
+          </div>
+        {:else if $currentRouteStore === "dashboard"}
           <DashboardView items={$itemsStore} />
         {:else if $currentRouteStore === "analytics"}
           <AnalyticsView items={$itemsStore} />

@@ -6,11 +6,16 @@
     masterEmpleadosStore,
     masterRangosStore,
     masterLibrosStore,
-    loadMasterStoresFromBackend
+    loadMasterStoresFromBackend,
+    currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
+  $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
+  $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
   $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
 
@@ -428,6 +433,10 @@
   }
 
   async function handleGuardar() {
+    if (!canAdd) {
+      triggerToast('No tienes permiso para agregar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
@@ -514,6 +523,10 @@
   }
 
   async function handleEliminar(record) {
+    if (!canDelete) {
+      triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
+      return;
+    }
     const label = record.tipo === 'Devolución' ? 'la devolución' : 'el aporte';
     if (!confirm(`¿Está seguro de eliminar ${label} de $${formatMonto(record.monto)} para ${record.empleado_nombre}?`)) {
       return;
@@ -538,6 +551,10 @@
   }
 
   function abrirModalEditar(record) {
+    if (!canEdit) {
+      triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
+      return;
+    }
     editingRecord = record;
     modalTipo = record.tipo || 'Aporte';
     modalEmpleadoId = record.empleado_id;
@@ -556,6 +573,10 @@
   }
 
   async function handleGuardarEdicion() {
+    if (!canEdit) {
+      triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libroId || libro?.id;
     if (!lId || !editingRecord) return;
 
@@ -757,17 +778,19 @@
       </div>
 
       <!-- Botón Guardar -->
-      <button 
-        type="submit" 
-        class="btn-guardar {tipo === 'Devolución' ? 'btn-guardar-devolucion' : ''}"
-        disabled={isSaving}
-      >
-        {#if isSaving}
-          <span>Guardando...</span>
-        {:else}
-          <span>Guardar {tipo}</span>
-        {/if}
-      </button>
+      {#if canAdd}
+        <button 
+          type="submit" 
+          class="btn-guardar {tipo === 'Devolución' ? 'btn-guardar-devolucion' : ''}"
+          disabled={isSaving}
+        >
+          {#if isSaving}
+            <span>Guardando...</span>
+          {:else}
+            <span>Guardar {tipo}</span>
+          {/if}
+        </button>
+      {/if}
     </form>
   </div>
 
@@ -889,13 +912,15 @@
                 <th class="th-right th-monto">Monto</th>
                 <th class="th-center th-metodo">Cargo</th>
                 <th class="th-center th-hora">Hora</th>
-                <th class="th-center th-acciones">Acciones</th>
+                {#if canEdit || canDelete}
+                  <th class="th-center th-acciones">Acciones</th>
+                {/if}
               </tr>
             </thead>
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="8" class="empty-state-cell">
+                  <td colspan={canEdit || canDelete ? 8 : 7} class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
                       <span>Cargando registros de operaciones...</span>
@@ -904,7 +929,7 @@
                 </tr>
               {:else if sortedRecords.length === 0}
                 <tr>
-                  <td colspan="8" class="empty-state-cell">
+                  <td colspan={canEdit || canDelete ? 8 : 7} class="empty-state-cell">
                     <span class="empty-text">No hay operaciones registradas en esta fecha.</span>
                   </td>
                 </tr>
@@ -940,26 +965,32 @@
                     <td class="td-center td-hora-val">
                       <span class="time-badge">{formatHora(record.created_at)}</span>
                     </td>
-                    <td class="td-center td-acciones">
-                      <div class="acciones-btns-row">
-                        <button 
-                          type="button" 
-                          class="btn-metodo-hora-accion"
-                          on:click={() => abrirModalEditar(record)}
-                          title="Editar Aporte"
-                        >
-                          Editar
-                        </button>
-                        <button 
-                          type="button" 
-                          class="btn-eliminar"
-                          on:click={() => handleEliminar(record)}
-                          title="Eliminar este registro"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
+                    {#if canEdit || canDelete}
+                      <td class="td-center td-acciones">
+                        <div class="acciones-btns-row">
+                          {#if canEdit}
+                            <button 
+                              type="button" 
+                              class="btn-metodo-hora-accion"
+                              on:click={() => abrirModalEditar(record)}
+                              title="Editar Aporte"
+                            >
+                              Editar
+                            </button>
+                          {/if}
+                          {#if canDelete}
+                            <button 
+                              type="button" 
+                              class="btn-eliminar"
+                              on:click={() => handleEliminar(record)}
+                              title="Eliminar este registro"
+                            >
+                              Eliminar
+                            </button>
+                          {/if}
+                        </div>
+                      </td>
+                    {/if}
                   </tr>
                 {/each}
               {/if}
@@ -1087,7 +1118,7 @@
 </div>
 
 <!-- Modal para editar Aporte (idéntico a Control de Clientes) -->
-{#if showModalEditar && editingRecord}
+{#if showModalEditar && editingRecord && canEdit}
   <div class="modal-backdrop-fixed">
     <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-title">
       <div class="modal-header">

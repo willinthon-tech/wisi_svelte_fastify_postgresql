@@ -126,7 +126,12 @@
   import html2canvas from 'html2canvas';
   import { saveOrShareFile } from '../../utils/fileSaver.js';
   import { triggerToast, globalCreateModalTriggerStore } from '../../controllers/ui.store.js';
-  import { masterCargosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { 
+    masterCargosStore, 
+    loadMasterStoresFromBackend, 
+    currentRoutePermissionsStore, 
+    getUserModuleActions 
+  } from '../../controllers/master.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
   import { 
     photoModalStore, 
@@ -155,6 +160,13 @@
   export let createModalTitle = ''; // Optional custom modal title override
   export let customCreateModal = false; // When true, parent handles create modal via on:openModal
   export let isLoading = undefined; // Controlled loading prop from parent
+  export let moduleRoute = null; // Optional override if view specifies custom route/module
+
+  // Permisologías efectivas en tiempo real para el módulo actual
+  $: effectivePerms = moduleRoute ? getUserModuleActions(moduleRoute) : $currentRoutePermissionsStore;
+  $: canEdit = effectivePerms ? Boolean(effectivePerms.canEdit) : true;
+  $: canDelete = effectivePerms ? Boolean(effectivePerms.canDelete) : true;
+  $: canAdd = effectivePerms ? Boolean(effectivePerms.canAdd) : true;
 
   // Automatic loading detection: on mount starts loading if items is empty
   let previousItemsRef = items;
@@ -178,7 +190,12 @@
   let allMasterCargos = [];
   $: allMasterCargos = $masterCargosStore || [];
   $: activeCargosList = (cargosOptions && cargosOptions.length > 0) ? cargosOptions : allMasterCargos;
-  $: hasRowActions = actions && (actions.edit !== false || actions.delete !== false || actions.reincorporate || actions.desincorporate || actions.restore);
+  $: hasRowActions = actions && (
+    (actions.edit !== false && canEdit) || 
+    ((actions.delete !== false || actions.reincorporate || actions.desincorporate || actions.restore) && canDelete) ||
+    actions.trabajar || 
+    actions.compartir
+  );
 
   // Reincorporar Modal State
   let isReincorporarModalOpen = false;
@@ -187,6 +204,7 @@
   let reincorporarCargoId = '';
 
   async function promptReincorporar(item) {
+    if (!canDelete) return;
     itemToReincorporar = item;
     reincorporarFecha = new Date().toISOString().split('T')[0];
     reincorporarCargoId = item.cargo_id || '';
@@ -499,6 +517,7 @@
     }
     if (val > lastTriggerVal) {
       lastTriggerVal = val;
+      if (!canAdd) return;
       dispatch('openModal');
       if (!customCreateModal && createFields && createFields.length > 0) {
         openCreateModal();
@@ -886,24 +905,28 @@
   }
 
   function handleBatchDesincorporate() {
+    if (!canDelete) return;
     const ids = Array.from(selectedIds);
     dispatch('batchDesincorporate', ids);
     selectedIds = new Set();
   }
 
   function handleBatchReincorporate() {
+    if (!canDelete) return;
     const ids = Array.from(selectedIds);
     dispatch('batchReincorporate', ids);
     selectedIds = new Set();
   }
 
   function handleBatchRestore() {
+    if (!canDelete) return;
     const ids = Array.from(selectedIds);
     dispatch('batchRestore', ids);
     selectedIds = new Set();
   }
 
   function handleBatchDelete() {
+    if (!canDelete) return;
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     if (ids.length === 1) {
@@ -958,6 +981,7 @@
 
   // Inline Editing Methods
   function startInlineEdit(item) {
+    if (!canEdit) return;
     editingInlineId = item.id;
     const draft = {
       ...item,
@@ -987,6 +1011,7 @@
   }
 
   function saveInlineEdit(id) {
+    if (!canEdit) return;
     if (inlineDuplicateError) {
       triggerToast(inlineDuplicateError, 'error');
       return;
@@ -998,12 +1023,14 @@
 
   // Delete Methods
   function promptDesincorporar(item) {
+    if (!canDelete) return;
     itemToDesincorporar = item;
     motivoDesincorporacion = '';
     isDesincorporarModalOpen = true;
   }
 
   function confirmDesincorporar() {
+    if (!canDelete) return;
     if (!motivoDesincorporacion.trim()) {
       triggerToast('Debe ingresar el motivo de la desincorporación', 'warning');
       return;
@@ -1018,6 +1045,7 @@
   }
 
   function promptDelete(item) {
+    if (!canDelete) return;
     itemToDelete = item;
     isDeleteModalOpen = true;
   }
@@ -1141,29 +1169,29 @@
 
       <slot name="info-banner" />
 
-      {#if showCheckbox && selectedIds.size > 0}
+      {#if showCheckbox && canDelete && selectedIds.size > 0}
         <div class="batch-toolbar" style="display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; text-align: left;">
           <span class="batch-badge">{selectedIds.size} seleccionados</span>
           
-          {#if actions.desincorporate}
+          {#if actions.desincorporate && canDelete}
             <button type="button" on:click={handleBatchDesincorporate} class="btn-batch btn-batch-desincorporate">
               Desincorporar
             </button>
           {/if}
 
-          {#if actions.reincorporate}
+          {#if actions.reincorporate && canDelete}
             <button type="button" on:click={handleBatchReincorporate} class="btn-batch btn-batch-reincorporate">
               Reincorporar
             </button>
           {/if}
 
-          {#if actions.restore}
+          {#if actions.restore && canDelete}
             <button type="button" on:click={handleBatchRestore} class="btn-batch btn-batch-reincorporate">
               {actions.restoreLabel || 'Restaurar'}
             </button>
           {/if}
 
-          {#if actions.delete !== false}
+          {#if actions.delete !== false && canDelete}
             <button type="button" on:click={handleBatchDelete} class="btn-batch {actions.deleteLabel === 'Desincorporar' ? 'btn-batch-desincorporate' : 'btn-batch-delete'}">
               {actions.deleteLabel || 'Eliminar'}
             </button>
@@ -1179,7 +1207,7 @@
       <thead>
         <tr>
           <!-- Batch Selection Checkbox Column Header -->
-          {#if showCheckbox}
+          {#if showCheckbox && canDelete}
             <th style="width: 40px; padding: 6px 10px; text-align: center;">
               <input 
                 type="checkbox" 
@@ -1213,7 +1241,7 @@
       <tbody>
         {#if effectiveLoading}
           <tr>
-            <td colspan={columns.length + (showCheckbox ? 1 : 0) + (hasRowActions ? 1 : 0)} class="datatable-loading-cell">
+            <td colspan={columns.length + (showCheckbox && canDelete ? 1 : 0) + (hasRowActions ? 1 : 0)} class="datatable-loading-cell">
               <div class="datatable-spinner-wrapper">
                 <div class="spinner-small"></div>
                 <span class="datatable-loading-text">Cargando registros...</span>
@@ -1222,7 +1250,7 @@
           </tr>
         {:else if paginatedItems.length === 0}
           <tr>
-            <td colspan={columns.length + (showCheckbox ? 1 : 0) + (hasRowActions ? 1 : 0)} class="empty-state">
+            <td colspan={columns.length + (showCheckbox && canDelete ? 1 : 0) + (hasRowActions ? 1 : 0)} class="empty-state">
               No se encontraron registros
             </td>
           </tr>
@@ -1231,7 +1259,7 @@
             {@const isEditingThisRow = editingInlineId === item.id}
             <tr class="{isEditingThisRow ? 'editing-row' : ''} {selectedIds.has(item.id) ? 'selected-row' : ''} {item.is_system ? 'system-base-row' : ''}">
               <!-- Batch Checkbox Column -->
-              {#if showCheckbox}
+              {#if showCheckbox && canDelete}
               <td style="text-align: center; width: 40px; padding: 4px 10px;">
                 {#if item.disabled || item.disableDelete || item.is_system}
                   <input 
@@ -1751,7 +1779,7 @@
                       Cancelar
                     </button>
                   {:else}
-                    {#if actions.desincorporate}
+                    {#if actions.desincorporate && canDelete}
                       <button 
                         type="button"
                         class="btn-action btn-desincorporate"
@@ -1761,7 +1789,7 @@
                       </button>
                     {/if}
 
-                    {#if actions.reincorporate}
+                    {#if actions.reincorporate && canDelete}
                       <button 
                         type="button"
                         class="btn-action btn-reincorporate"
@@ -1771,7 +1799,7 @@
                       </button>
                     {/if}
 
-                    {#if actions.restore}
+                    {#if actions.restore && canDelete}
                       <button 
                         type="button"
                         class="btn-action btn-reincorporate"
@@ -1791,7 +1819,7 @@
                       </button>
                     {/if}
 
-                    {#if actions.edit !== false}
+                    {#if actions.edit !== false && canEdit}
                       {#if item.disabled || item.disableEdit || item.is_system}
                         <button 
                           type="button" 
@@ -1832,7 +1860,7 @@
                       </button>
                     {/if}
 
-                    {#if actions.delete !== false}
+                    {#if actions.delete !== false && canDelete}
                       {#if item.disabled || item.disableDelete || item.is_system}
                         <button 
                           type="button" 
