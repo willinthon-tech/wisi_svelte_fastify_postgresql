@@ -8620,6 +8620,8 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
   }
 
   const nota = data.nota !== undefined ? String(data.nota).trim() : undefined;
+  const tipo = data.tipo !== undefined ? (String(data.tipo).trim() || 'Compra') : undefined;
+  const monto = data.monto !== undefined && data.monto !== '' ? Number(data.monto) : undefined;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
@@ -8630,6 +8632,8 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       if (metodoNombre !== undefined) inMemoryData.libro_control_clientes[idx].metodo = metodoNombre;
       if (clienteId !== undefined) inMemoryData.libro_control_clientes[idx].cliente_id = clienteId;
       if (clienteNombre !== undefined) inMemoryData.libro_control_clientes[idx].cliente = clienteNombre;
+      if (tipo !== undefined) inMemoryData.libro_control_clientes[idx].tipo = tipo;
+      if (monto !== undefined && !isNaN(monto)) inMemoryData.libro_control_clientes[idx].monto = monto;
       if (nota !== undefined) inMemoryData.libro_control_clientes[idx].nota = nota;
       inMemoryData.libro_control_clientes[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_control_clientes[idx];
@@ -8643,6 +8647,8 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       hora = ${hora},
       metodo_pago_id = ${metodoPagoId !== undefined ? metodoPagoId : sql`metodo_pago_id`},
       cliente_id = ${clienteId !== undefined ? clienteId : sql`cliente_id`},
+      tipo = ${tipo !== undefined ? tipo : sql`tipo`},
+      monto = ${monto !== undefined && !isNaN(monto) ? monto : sql`monto`},
       nota = ${nota !== undefined ? nota : sql`nota`},
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}

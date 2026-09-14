@@ -102,9 +102,13 @@
   // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
   $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
 
-  // Modal para editar Método y Hora
+  // Modal para editar Registro
   let showModalEditar = false;
   let editingRecord = null;
+  let modalCliente = '';
+  let modalClienteId = null;
+  let modalTipo = 'Compra';
+  let modalMonto = '';
   let modalMetodoPagoId = null;
   let modalMetodo = '';
   let modalHora = '';
@@ -553,13 +557,17 @@
     }
   }
 
-  // Modal para editar Método, Hora y Nota
+  // Modal para editar Registro Completo
   function abrirModalEditar(record) {
     if (!canEdit) {
       triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
       return;
     }
     editingRecord = record;
+    modalCliente = record.cliente || '';
+    modalClienteId = record.cliente_id || null;
+    modalTipo = record.tipo || 'Compra';
+    modalMonto = record.monto != null ? String(record.monto) : '';
     modalMetodoPagoId = record.metodo_pago_id 
       ? Number(record.metodo_pago_id) 
       : (metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === (record.metodo || '').toLowerCase().trim())?.id || metodosDisponibles[0]?.id || null);
@@ -573,6 +581,10 @@
   function cerrarModalEditar() {
     showModalEditar = false;
     editingRecord = null;
+    modalCliente = '';
+    modalClienteId = null;
+    modalTipo = 'Compra';
+    modalMonto = '';
     modalNota = '';
   }
 
@@ -586,6 +598,16 @@
     const lId = libroId || libro?.id;
     if (!lId) return;
 
+    if (!modalCliente || !modalCliente.trim()) {
+      triggerToast('Debe indicar el nombre del cliente', 'warning');
+      return;
+    }
+
+    if (!modalMonto || isNaN(Number(modalMonto)) || Number(modalMonto) <= 0) {
+      triggerToast('Debe indicar un monto válido mayor a 0', 'warning');
+      return;
+    }
+
     if (!modalHora) {
       triggerToast('Debe indicar una hora válida', 'warning');
       return;
@@ -597,6 +619,10 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          cliente_id: modalClienteId,
+          cliente: modalCliente.trim(),
+          tipo: modalTipo,
+          monto: Number(modalMonto),
           metodo_pago_id: modalMetodoPagoId,
           metodo: modalMetodo || '',
           hora: modalHora,
@@ -609,11 +635,12 @@
         triggerToast('Registro actualizado correctamente', 'success');
         cerrarModalEditar();
         await loadRecords();
+        loadSugerenciasRemotas();
       } else {
         triggerToast(json?.error || 'Error al actualizar', 'error');
       }
     } catch (err) {
-      console.error('Error al actualizar método y hora:', err);
+      console.error('Error al actualizar registro:', err);
       triggerToast(`Error: ${err.message}`, 'error');
     } finally {
       isSavingModal = false;
@@ -975,9 +1002,9 @@
                               type="button" 
                               class="btn-metodo-hora-accion"
                               on:click={() => abrirModalEditar(record)}
-                              title="Editar Método y Hora"
+                              title="Editar este registro"
                             >
-                              Método / Hora
+                              Editar
                             </button>
                           {/if}
                           {#if canDelete}
@@ -1160,31 +1187,67 @@
   </div>
 </div>
 
-<!-- Modal para editar Método y Hora (NO se cierra al hacer clic afuera) -->
+<!-- Modal para editar Operación Completa (NO se cierra al hacer clic afuera) -->
 {#if showModalEditar && editingRecord}
   <div class="modal-backdrop-fixed">
     <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-title">
       <div class="modal-header">
-        <h4 id="modal-editar-title" class="modal-title">Editar Método y Hora</h4>
+        <h4 id="modal-editar-title" class="modal-title">Editar Operación</h4>
         <button type="button" class="btn-close-modal" on:click={cerrarModalEditar} aria-label="Cerrar">
           &times;
         </button>
       </div>
 
       <form on:submit|preventDefault={handleGuardarModal} class="modal-body-form">
-        <!-- Resumen del Registro -->
-        <div class="modal-info-banner">
-          <span class="info-label">Cliente:</span>
-          <span class="info-val">{editingRecord.cliente}</span>
-          <span class="info-sep">•</span>
-          <span class="info-label">Tipo:</span>
-          <span class="info-badge {editingRecord.tipo === 'Compra' ? 'badge-compra' : 'badge-pago'}">{editingRecord.tipo}</span>
-          <span class="info-sep">•</span>
-          <span class="info-label">Monto:</span>
-          <span class="info-val">${formatMonto(editingRecord.monto)}</span>
-        </div>
-
         <div class="modal-inputs-grid">
+          <!-- Campo Cliente -->
+          <div class="modal-field-group">
+            <label for="m-cliente-nombre" class="modal-field-label">Cliente: *</label>
+            <input 
+              id="m-cliente-nombre" 
+              type="text" 
+              class="form-input" 
+              placeholder="Nombre del cliente..." 
+              bind:value={modalCliente} 
+              required
+            />
+          </div>
+
+          <!-- Tipo de Transacción: Compra / Pago -->
+          <div class="modal-field-group">
+            <label class="modal-field-label">Tipo de Transacción: *</label>
+            <div class="modal-tipo-buttons">
+              <button 
+                type="button" 
+                class="modal-btn-tipo btn-compra {modalTipo === 'Compra' ? 'active' : ''}" 
+                on:click={() => modalTipo = 'Compra'}
+              >
+                COMPRA
+              </button>
+              <button 
+                type="button" 
+                class="modal-btn-tipo btn-pago {modalTipo === 'Pago' ? 'active' : ''}" 
+                on:click={() => modalTipo = 'Pago'}
+              >
+                PAGO
+              </button>
+            </div>
+          </div>
+
+          <!-- Monto ($) -->
+          <div class="modal-field-group">
+            <label for="m-monto-cliente" class="modal-field-label">Monto ($): *</label>
+            <input 
+              id="m-monto-cliente" 
+              type="number" 
+              step="any" 
+              min="0.01" 
+              class="form-input font-mono" 
+              placeholder="0.00" 
+              bind:value={modalMonto} 
+              required
+            />
+          </div>
           <!-- Selección de Método -->
           <div class="modal-field-group">
             <label class="modal-field-label">Método de Pago: *</label>
@@ -2320,6 +2383,38 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .modal-tipo-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .modal-btn-tipo {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .modal-btn-tipo.btn-compra.active {
+    background: #10b981;
+    color: #ffffff;
+    border-color: #059669;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+  }
+
+  .modal-btn-tipo.btn-pago.active {
+    background: #8b5cf6;
+    color: #ffffff;
+    border-color: #7c3aed;
+    box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);
   }
 
   .modal-field-group {
