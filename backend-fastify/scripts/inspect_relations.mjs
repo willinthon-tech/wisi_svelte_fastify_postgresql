@@ -45,9 +45,28 @@ async function run() {
       LEFT JOIN cargos c ON e.cargo_id = c.id 
       LIMIT 3
     `;
-    console.log('\nMuestra de empleados con su UUID y relación cargo_uuid vinculada:');
-    for (const s of samples) {
-      console.log(`  ID: ${s.id} | UUID: ${s.uuid} | Cargo: ${s.cargo_nombre} (ID: ${s.cargo_id} -> UUID: ${s.cargo_uuid})`);
+    console.log('\n--- VERIFICACIÓN DE ENLACES UUID (0 HUÉRFANOS) ---');
+    const checks = [
+      { table: 'empleados', col: 'cargo_uuid', idCol: 'cargo_id' },
+      { table: 'cargos', col: 'area_uuid', idCol: 'area_id' },
+      { table: 'areas', col: 'departamento_uuid', idCol: 'departamento_id' },
+      { table: 'departamentos', col: 'sala_uuid', idCol: 'sala_id' },
+      { table: 'clientes', col: 'sala_uuid', idCol: 'sala_id' },
+      { table: 'libros', col: 'sala_uuid', idCol: 'sala_id' },
+      { table: 'dispositivos', col: 'sala_uuid', idCol: 'sala_id' }
+    ];
+    for (const c of checks) {
+      try {
+        const [{ nulls }] = await sql`
+          SELECT COUNT(*)::int AS nulls 
+          FROM ${sql(c.table)} 
+          WHERE ${sql(c.col)} IS NULL AND ${sql(c.idCol)} IS NOT NULL
+        `;
+        const [{ total }] = await sql`SELECT COUNT(*)::int AS total FROM ${sql(c.table)}`;
+        console.log(`  ${c.table}.${c.col}: ${total} filas en total | 0 huérfanos sin UUID: ${nulls === 0}`);
+      } catch (e) {
+        console.log(`  ${c.table}.${c.col}: error -> ${e.message}`);
+      }
     }
   } catch (err) {
     console.error('Error querying foreign keys:', err.message);

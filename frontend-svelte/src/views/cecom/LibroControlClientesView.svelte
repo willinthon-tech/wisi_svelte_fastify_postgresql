@@ -8,6 +8,13 @@
     currentRoutePermissionsStore, 
     loadMasterStoresFromBackend 
   } from '../../controllers/master.store.js';
+  import {
+    getLocalItems,
+    saveLocalItems,
+    upsertLocalItem,
+    deleteLocalItem,
+    queueOutboxAction
+  } from '../../services/localDb.service.js';
 
   export let libro = null;
   export let libroId = null;
@@ -320,16 +327,28 @@
     const lId = libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
+
+    // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_control_clientes', r => Number(r.libro_id) === Number(lId) || String(r.libro_uuid) === String(libro?.uuid));
+      if (Array.isArray(local) && local.length > 0) {
+        records = local;
+        isLoadingRecords = false;
+      }
+    } catch (e) {}
+
+    // 2. Consulta al backend si hay conexión para refrescar
     try {
       const res = await fetch(`/api/master/libros/${lId}/control-clientes`);
       if (res.ok) {
         const json = await res.json();
-        if (json && json.success) {
-          records = json.data || [];
+        if (json && json.success && Array.isArray(json.data)) {
+          records = json.data;
+          saveLocalItems('libro_control_clientes', json.data).catch(() => {});
         }
       }
     } catch (err) {
-      console.error('Error al cargar control de clientes:', err);
+      console.warn('[LocalDb] Sin conexión al backend para control-clientes (usando datos locales):', err);
     } finally {
       isLoadingRecords = false;
     }
@@ -339,16 +358,27 @@
     const lId = libroId || libro?.id;
     if (!lId) return;
     isLoadingDrop = true;
+
+    // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_drop_mesas', r => Number(r.libro_id) === Number(lId) || String(r.libro_uuid) === String(libro?.uuid));
+      if (Array.isArray(local) && local.length > 0) {
+        dropRecords = local;
+        isLoadingDrop = false;
+      }
+    } catch (e) {}
+
     try {
       const res = await fetch(`/api/master/libros/${lId}/drop-mesas`);
       if (res.ok) {
         const json = await res.json();
-        if (json && json.success) {
-          dropRecords = json.data || [];
+        if (json && json.success && Array.isArray(json.data)) {
+          dropRecords = json.data;
+          saveLocalItems('libro_drop_mesas', json.data).catch(() => {});
         }
       }
     } catch (err) {
-      console.error('Error al cargar drop mesas para resumen:', err);
+      console.warn('[LocalDb] Sin conexión al backend para drop-mesas (usando datos locales):', err);
     } finally {
       isLoadingDrop = false;
     }
@@ -480,6 +510,7 @@
     }
 
     isSaving = true;
+    const itemUuid = crypto.randomUUID();
     try {
       const matchedMetodo = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId)) || 
                             metodosDisponibles[0];
@@ -488,6 +519,7 @@
         return;
       }
       const payload = {
+        uuid: itemUuid,
         cliente: cleanCliente,
         cliente_id: selectedClienteId || null,
         tipo: tipo || 'Compra',
@@ -507,6 +539,8 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro de cliente guardado exitosamente', 'success');
+        const savedData = json.data || { ...payload, id: `local_${Date.now()}` };
+        await upsertLocalItem('libro_control_clientes', savedData);
         cliente = '';
         selectedClienteId = null;
         selectedTipoClienteNombre = '';
@@ -525,8 +559,44 @@
         triggerToast(json?.error || 'Error al registrar cliente', 'error');
       }
     } catch (err) {
-      console.error('Error al registrar cliente:', err);
-      triggerToast(`Error de conexión: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline: guardando cliente en base de datos local y encolando outbox:', err);
+      const matchedMetodo = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId)) || metodosDisponibles[0];
+      const offlineRecord = {
+        id: `temp_${Date.now()}`,
+        uuid: itemUuid,
+        libro_id: lId,
+        libro_uuid: libro?.uuid || null,
+        cliente: cleanCliente,
+        cliente_id: selectedClienteId || null,
+        tipo: tipo || 'Compra',
+        monto: cleanMonto,
+        metodo_pago_id: matchedMetodo?.id || 1,
+        metodo: matchedMetodo?.nombre || 'General',
+        hora: getCurrentTimeString(),
+        nota: (nota || '').trim(),
+        created_at: new Date().toISOString()
+      };
+
+      records = [offlineRecord, ...records];
+      await upsertLocalItem('libro_control_clientes', offlineRecord);
+      await queueOutboxAction({
+        entity: 'libro_control_clientes',
+        action: 'create',
+        endpoint: `/api/master/libros/${lId}/control-clientes`,
+        method: 'POST',
+        payload: offlineRecord,
+        uuid: itemUuid
+      });
+
+      triggerToast('Modo Offline: Operación guardada en base de datos local. Se sincronizará automáticamente al conectar.', 'info');
+      cliente = '';
+      selectedClienteId = null;
+      selectedTipoClienteNombre = '';
+      monto = '';
+      nota = '';
+      tipo = 'Compra';
+      selectedMetodoPagoId = metodosDisponibles[0]?.id || null;
+      showSugerencias = false;
     } finally {
       isSaving = false;
     }
@@ -547,13 +617,23 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'info');
-        records = records.filter(r => Number(r.id) !== Number(recordId));
+        records = records.filter(r => String(r.id) !== String(recordId) && String(r.uuid) !== String(recordId));
+        await deleteLocalItem('libro_control_clientes', recordId);
       } else {
         triggerToast(json?.error || 'Error al eliminar registro', 'error');
       }
     } catch (err) {
-      console.error('Error al eliminar registro:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline para eliminación:', err);
+      records = records.filter(r => String(r.id) !== String(recordId) && String(r.uuid) !== String(recordId));
+      await deleteLocalItem('libro_control_clientes', recordId);
+      await queueOutboxAction({
+        entity: 'libro_control_clientes',
+        action: 'delete',
+        endpoint: `/api/master/libros/${lId}/control-clientes/${recordId}`,
+        method: 'DELETE',
+        targetId: recordId
+      });
+      triggerToast('Modo Offline: Registro eliminado localmente.', 'info');
     }
   }
 
@@ -614,25 +694,30 @@
     }
 
     isSavingModal = true;
+    const editPayload = {
+      cliente_id: modalClienteId,
+      cliente: modalCliente.trim(),
+      tipo: modalTipo,
+      monto: Number(modalMonto),
+      metodo_pago_id: modalMetodoPagoId,
+      metodo: modalMetodo || '',
+      hora: modalHora,
+      nota: (modalNota || '').trim()
+    };
+
     try {
-      const res = await fetch(`/api/master/libros/${lId}/control-clientes/${editingRecord.id}`, {
+      const targetId = editingRecord.id;
+      const res = await fetch(`/api/master/libros/${lId}/control-clientes/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente_id: modalClienteId,
-          cliente: modalCliente.trim(),
-          tipo: modalTipo,
-          monto: Number(modalMonto),
-          metodo_pago_id: modalMetodoPagoId,
-          metodo: modalMetodo || '',
-          hora: modalHora,
-          nota: (modalNota || '').trim()
-        })
+        body: JSON.stringify(editPayload)
       });
 
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro actualizado correctamente', 'success');
+        const updated = json.data || { ...editingRecord, ...editPayload };
+        await upsertLocalItem('libro_control_clientes', updated);
         cerrarModalEditar();
         await loadRecords();
         loadSugerenciasRemotas();
@@ -640,8 +725,21 @@
         triggerToast(json?.error || 'Error al actualizar', 'error');
       }
     } catch (err) {
-      console.error('Error al actualizar registro:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline para edición:', err);
+      const updatedLocal = { ...editingRecord, ...editPayload, updated_at: new Date().toISOString() };
+      records = records.map(r => (String(r.id) === String(editingRecord.id) || (r.uuid && r.uuid === editingRecord.uuid)) ? updatedLocal : r);
+      await upsertLocalItem('libro_control_clientes', updatedLocal);
+      await queueOutboxAction({
+        entity: 'libro_control_clientes',
+        action: 'update',
+        endpoint: `/api/master/libros/${lId}/control-clientes/${editingRecord.id}`,
+        method: 'PUT',
+        payload: editPayload,
+        targetId: editingRecord.id,
+        uuid: editingRecord.uuid || null
+      });
+      triggerToast('Modo Offline: Registro actualizado localmente.', 'info');
+      cerrarModalEditar();
     } finally {
       isSavingModal = false;
     }
