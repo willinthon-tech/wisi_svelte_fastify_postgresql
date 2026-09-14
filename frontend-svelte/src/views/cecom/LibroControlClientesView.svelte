@@ -13,6 +13,7 @@
   let tipo = 'Compra'; // 'Compra' o 'Pago'
   let selectedMetodoPagoId = 1;
   let monto = '';
+  let nota = '';
   let isSaving = false;
 
   // Sugerencias interactivas de clientes
@@ -96,6 +97,7 @@
   let modalMetodoPagoId = 1;
   let modalMetodo = 'General';
   let modalHora = '';
+  let modalNota = '';
   let isSavingModal = false;
 
   const DEFAULT_METODOS = [
@@ -448,7 +450,8 @@
         monto: cleanMonto,
         metodo_pago_id: matchedMetodo.id || 1,
         metodo: matchedMetodo.nombre || 'General',
-        hora: getCurrentTimeString() // Hora en curso automáticamente
+        hora: getCurrentTimeString(), // Hora en curso automáticamente
+        nota: (nota || '').trim()
       };
 
       const res = await fetch(`/api/master/libros/${lId}/control-clientes`, {
@@ -464,6 +467,7 @@
         selectedClienteId = null;
         selectedTipoClienteNombre = '';
         monto = '';
+        nota = '';
         tipo = 'Compra';
         const genMetodo = metodosDisponibles.find(m => (m.nombre || '').toLowerCase() === 'general');
         selectedMetodoPagoId = genMetodo ? genMetodo.id : (metodosDisponibles[0]?.id || 1);
@@ -506,7 +510,7 @@
     }
   }
 
-  // Modal para editar Método y Hora
+  // Modal para editar Método, Hora y Nota
   function abrirModalEditar(record) {
     editingRecord = record;
     modalMetodoPagoId = record.metodo_pago_id 
@@ -515,12 +519,14 @@
     const matched = metodosDisponibles.find(m => Number(m.id) === Number(modalMetodoPagoId));
     modalMetodo = matched ? matched.nombre : (record.metodo || 'General');
     modalHora = record.hora || getCurrentTimeString();
+    modalNota = record.nota || '';
     showModalEditar = true;
   }
 
   function cerrarModalEditar() {
     showModalEditar = false;
     editingRecord = null;
+    modalNota = '';
   }
 
   function ponerHoraActualModal() {
@@ -545,13 +551,14 @@
         body: JSON.stringify({
           metodo_pago_id: modalMetodoPagoId,
           metodo: modalMetodo || 'General',
-          hora: modalHora
+          hora: modalHora,
+          nota: (modalNota || '').trim()
         })
       });
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        triggerToast('Método y hora actualizados correctamente', 'success');
+        triggerToast('Registro actualizado correctamente', 'success');
         cerrarModalEditar();
         await loadRecords();
       } else {
@@ -689,6 +696,18 @@
           />
         </div>
         <span class="field-hint">Se registrará con el método <b>{currentMetodoNombre}</b> y la hora en curso.</span>
+      </div>
+
+      <!-- Campo Nota -->
+      <div class="form-group">
+        <label for="input-cliente-nota" class="form-label">NOTA:</label>
+        <textarea 
+          id="input-cliente-nota" 
+          class="form-input textarea-nota" 
+          rows="2" 
+          placeholder="Escriba una observación o nota (opcional)..." 
+          bind:value={nota}
+        ></textarea>
       </div>
 
       <!-- Botón Guardar Verde -->
@@ -836,6 +855,7 @@
                 <th class="th-center th-tipo">Tipo</th>
                 <th class="th-right th-monto">Monto</th>
                 <th class="th-center th-metodo">Método</th>
+                <th class="th-center th-nota">Nota</th>
                 <th class="th-center th-hora">Hora</th>
                 <th class="th-center th-acciones">Acciones</th>
               </tr>
@@ -843,7 +863,7 @@
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
+                  <td colspan="8" class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
                       <span>Cargando registros de clientes...</span>
@@ -852,7 +872,7 @@
                 </tr>
               {:else if records.length === 0}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
+                  <td colspan="8" class="empty-state-cell">
                     <div class="empty-msg-box">
                       <span class="empty-icon">👥</span>
                       <p class="empty-text">
@@ -887,6 +907,9 @@
                       <span class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}">
                         {record.metodo || 'General'}
                       </span>
+                    </td>
+                    <td class="td-center td-nota">
+                      <span class="nota-cell-badge" title={record.nota || ''}>{record.nota || '—'}</span>
                     </td>
                     <td class="td-center td-hora-val">
                       <span class="time-badge">{record.hora || '—'}</span>
@@ -1142,6 +1165,18 @@
               bind:value={modalHora} 
               required
             />
+          </div>
+
+          <!-- Nota de la Operación en Modal -->
+          <div class="modal-field-group">
+            <label for="m-nota-cliente" class="modal-field-label">Nota / Observación:</label>
+            <textarea 
+              id="m-nota-cliente" 
+              class="form-input textarea-nota" 
+              rows="2" 
+              placeholder="Escriba una observación o nota (opcional)..." 
+              bind:value={modalNota}
+            ></textarea>
           </div>
         </div>
 
@@ -2483,5 +2518,48 @@
     border: 1px solid #cbd5e1;
     border-radius: 4px;
     text-transform: uppercase;
+  }
+
+  /* Estilos para el campo y celda de Nota */
+  .textarea-nota {
+    resize: vertical;
+    min-height: 54px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    padding: 8px 10px;
+    font-family: inherit;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    transition: border-color 0.15s ease;
+  }
+
+  .textarea-nota:focus {
+    border-color: #3b82f6;
+    outline: none;
+  }
+
+  .th-nota {
+    width: 140px;
+    text-align: center;
+  }
+
+  .td-nota {
+    max-width: 160px;
+    padding: 6px 8px;
+    text-align: center;
+  }
+
+  .nota-cell-badge {
+    display: inline-block;
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 11.5px;
+    color: #475569;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    padding: 2px 7px;
+    border-radius: 4px;
   }
 </style>

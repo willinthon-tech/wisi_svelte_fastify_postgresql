@@ -1446,6 +1446,7 @@
                   <th class="th-cliente">CLIENTE / JUGADOR</th>
                   <th class="th-tipo">TIPO</th>
                   <th class="th-metodo">MÉTODO</th>
+                  <th class="th-nota">NOTA</th>
                   <th class="th-total">MONTO</th>
                 </tr>
               </thead>
@@ -1466,13 +1467,16 @@
                     <td class="cell-center tag-metodo-text"
                       >{c.metodo || "General"}</td
                     >
+                    <td class="cell-nota tag-nota-text" title={c.nota || ""}>
+                      {c.nota ? c.nota : "—"}
+                    </td>
                     <td class="cell-total-money">{formatMoney(c.monto)}</td>
                   </tr>
                 {/each}
               </tbody>
               <tfoot>
                 <tr class="tfoot-totals">
-                  <td colspan="5">BALANCE NETO (COMPRAS - PAGOS)</td>
+                  <td colspan="6">BALANCE NETO (COMPRAS - PAGOS)</td>
                   <td class="cell-grand-total"
                     >{formatMoney(clientesTotales.balanceNeto)}</td
                   >
@@ -2922,6 +2926,10 @@
     width: 110px;
     text-align: center;
   }
+  .th-nota {
+    min-width: 130px;
+    text-align: center;
+  }
   .th-total {
     width: 130px;
     text-align: right;
@@ -3011,6 +3019,15 @@
   .tag-metodo-text {
     font-weight: 600;
     color: #475569;
+  }
+  .cell-nota {
+    font-size: 11px;
+    color: #475569;
+    font-style: italic;
+    max-width: 220px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    text-align: left;
   }
 
   .tag-status {

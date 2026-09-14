@@ -8337,6 +8337,7 @@ export async function getLibroControlClientesModel(libroId) {
       lcc.tipo, lcc.monto, lcc.metodo_pago_id, 
       COALESCE(mp.nombre, 'General') AS metodo,
       lcc.hora, 
+      COALESCE(lcc.nota, '') AS nota,
       lcc.created_at, lcc.updated_at,
       COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre,
       c.tipo_cliente_id
@@ -8473,6 +8474,7 @@ export async function createLibroControlClienteModel(data) {
   const now = new Date();
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const hora = (data.hora || '').trim() || currentHHMM;
+  const nota = (data.nota || '').trim();
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
@@ -8489,6 +8491,7 @@ export async function createLibroControlClienteModel(data) {
       metodo_pago_id: metodoPagoId,
       metodo: metodoNombre || 'General',
       hora,
+      nota,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -8498,12 +8501,12 @@ export async function createLibroControlClienteModel(data) {
 
   const res = await sql`
     INSERT INTO libro_control_clientes (
-      libro_id, cliente_id, tipo, monto, metodo_pago_id, hora
+      libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, nota
     )
     VALUES (
-      ${libroId}, ${clienteId}, ${tipo}, ${monto}, ${metodoPagoId}, ${hora}
+      ${libroId}, ${clienteId}, ${tipo}, ${monto}, ${metodoPagoId}, ${hora}, ${nota}
     )
-    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, nota, created_at, updated_at
   `;
 
   let clientInfo = null;
@@ -8581,6 +8584,8 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     }
   }
 
+  const nota = data.nota !== undefined ? String(data.nota).trim() : undefined;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
     const idx = inMemoryData.libro_control_clientes.findIndex(c => Number(c.id) === cId);
@@ -8590,6 +8595,7 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       if (metodoNombre !== undefined) inMemoryData.libro_control_clientes[idx].metodo = metodoNombre;
       if (clienteId !== undefined) inMemoryData.libro_control_clientes[idx].cliente_id = clienteId;
       if (clienteNombre !== undefined) inMemoryData.libro_control_clientes[idx].cliente = clienteNombre;
+      if (nota !== undefined) inMemoryData.libro_control_clientes[idx].nota = nota;
       inMemoryData.libro_control_clientes[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_control_clientes[idx];
     }
@@ -8602,9 +8608,10 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       hora = ${hora},
       metodo_pago_id = ${metodoPagoId !== undefined ? metodoPagoId : sql`metodo_pago_id`},
       cliente_id = ${clienteId !== undefined ? clienteId : sql`cliente_id`},
+      nota = ${nota !== undefined ? nota : sql`nota`},
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, created_at, updated_at
+    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, nota, created_at, updated_at
   `;
 
   if (!rows || rows.length === 0) {
