@@ -7,11 +7,16 @@
     masterSalasStore, 
     masterJuegosStore, 
     userSalasStore as masterUserSalasStore,
-    loadMasterStoresFromBackend 
+    loadMasterStoresFromBackend,
+    currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
 
   export let libro = null;
   export let libroId = null;
+
+  $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
+  $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
+  $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
   // Estado del formulario
   let selectedMesaId = '';
@@ -396,17 +401,19 @@
       </div>
 
       <!-- Botón Guardar -->
-      <button 
-        type="submit" 
-        class="btn-guardar"
-        disabled={isSaving}
-      >
-        {#if isSaving}
-          <span>Guardando...</span>
-        {:else}
-          <span>Guardar</span>
-        {/if}
-      </button>
+      {#if canAdd || canEdit}
+        <button 
+          type="submit" 
+          class="btn-guardar"
+          disabled={isSaving}
+        >
+          {#if isSaving}
+            <span>Guardando...</span>
+          {:else}
+            <span>Guardar</span>
+          {/if}
+        </button>
+      {/if}
     </form>
   </div>
 
@@ -431,13 +438,15 @@
             <th class="th-center">$ 5</th>
             <th class="th-center">$ 1</th>
             <th class="th-center th-total">Total</th>
-            <th class="th-center th-acciones">Acciones</th>
+            {#if canEdit || canDelete}
+              <th class="th-center th-acciones">Acciones</th>
+            {/if}
           </tr>
         </thead>
         <tbody>
           {#if isLoadingRecords}
             <tr>
-              <td colspan="10" class="empty-state-cell">
+              <td colspan={canEdit || canDelete ? 10 : 9} class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
                   <span>Cargando registros de drop...</span>
@@ -446,7 +455,7 @@
             </tr>
           {:else if dropRecords.length === 0}
             <tr>
-              <td colspan="10" class="empty-state-cell">
+              <td colspan={canEdit || canDelete ? 10 : 9} class="empty-state-cell">
                 <div class="empty-msg-box">
                   <p class="empty-text">
                     La tabla de drop está vacía para esta fecha. Seleccione una mesa en el formulario de la izquierda e ingrese los billetes para agregar registros.
@@ -478,16 +487,32 @@
                 <td class="td-center">{rec5}</td>
                 <td class="td-center">{rec1}</td>
                 <td class="td-center td-total-val">${recTotal.toFixed(2)}</td>
-                <td class="td-center td-acciones">
-                  <button 
-                    type="button" 
-                    class="btn-eliminar"
-                    on:click|stopPropagation={() => handleEliminar(record.id)}
-                    title="Eliminar este registro"
-                  >
-                    Eliminar
-                  </button>
-                </td>
+                {#if canEdit || canDelete}
+                  <td class="td-center td-acciones">
+                    <div class="acciones-btns-row">
+                      {#if canEdit}
+                        <button 
+                          type="button" 
+                          class="btn-editar-accion"
+                          on:click|stopPropagation={() => seleccionarMesaDesdeTabla(record.mesa_id)}
+                          title="Cargar y editar esta mesa"
+                        >
+                          Editar
+                        </button>
+                      {/if}
+                      {#if canDelete}
+                        <button 
+                          type="button" 
+                          class="btn-eliminar"
+                          on:click|stopPropagation={() => handleEliminar(record.id)}
+                          title="Eliminar este registro"
+                        >
+                          Eliminar
+                        </button>
+                      {/if}
+                    </div>
+                  </td>
+                {/if}
               </tr>
             {/each}
           {/if}
@@ -496,7 +521,7 @@
         <!-- Fila de Totales con línea separadora azul -->
         <tfoot>
           <tr class="divider-row">
-            <td colspan="10" class="divider-cell"></td>
+            <td colspan={canEdit || canDelete ? 10 : 9} class="divider-cell"></td>
           </tr>
           <tr class="total-row">
             <td colspan="2" class="total-label-cell">TOTAL</td>
@@ -507,7 +532,9 @@
             <td class="td-center total-val-cell">$ {totalMoney5}</td>
             <td class="td-center total-val-cell">$ {totalMoney1}</td>
             <td class="td-center grand-total-cell">$ {grandTotal.toFixed(0)}</td>
-            <td class="td-center"></td>
+            {#if canEdit || canDelete}
+              <td class="td-center"></td>
+            {/if}
           </tr>
         </tfoot>
       </table>
@@ -872,6 +899,48 @@
     border-top-color: #3b82f6;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
+  }
+
+  /* Acciones */
+  .acciones-btns-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .btn-editar-accion {
+    background: #3b82f6;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-editar-accion:hover {
+    background: #2563eb;
+  }
+
+  .btn-eliminar {
+    background: #dc2626;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-eliminar:hover {
+    background: #b91c1c;
   }
 
   @keyframes spin {
