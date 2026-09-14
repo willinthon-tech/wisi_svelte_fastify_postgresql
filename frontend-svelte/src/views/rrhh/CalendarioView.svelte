@@ -17,6 +17,7 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toEmployeePhotoUrl } from '../../config/api.config.js';
+  import CachedImage from '../../components/common/CachedImage.svelte';
 
   // Extraer las salas asignadas estrictamente para el usuario logueado
   $: assignedSalaIds = (function () {
@@ -907,19 +908,12 @@
                     class="cal-event-item evt-cumple" 
                     title="{evt.title} (cumple {evt.age} años) - {evt.salaNombre} ({evt.cargoNombre})"
                   >
-                    <img 
+                    <CachedImage 
                       src="{evt.foto || toEmployeePhotoUrl(evt, evt.id)}" 
                       alt="{evt.title}" 
-                      class="cal-avatar-img"
-                      on:error={(e) => { 
-                        e.currentTarget.style.display = 'none';
-                        const fb = e.currentTarget.nextElementSibling;
-                        if (fb) fb.style.display = 'flex';
-                      }}
+                      className="cal-avatar-img"
+                      version={evt.updated_at}
                     />
-                    <div class="cal-avatar-fallback" style="display: none;">
-                      {(evt.title || 'E').charAt(0).toUpperCase()}
-                    </div>
                     {#if evt.age !== null && evt.age > 0}
                       <span class="cal-age-single-green">{evt.age}</span>
                     {/if}
@@ -1044,19 +1038,12 @@
             <div class="modal-cumples-cards-grid">
               {#each selectedDayModalData.cumples as c}
                 <div class="modal-cumple-item-card">
-                  <img 
+                  <CachedImage 
                     src="{c.foto || toEmployeePhotoUrl(c, c.id)}" 
                     alt="{c.title}" 
-                    class="modal-emp-img" 
-                    on:error={(e) => { 
-                      e.currentTarget.style.display = 'none';
-                      const fb = e.currentTarget.nextElementSibling;
-                      if (fb) fb.style.display = 'flex';
-                    }}
+                    className="modal-emp-img" 
+                    version={c.updated_at}
                   />
-                  <div class="modal-emp-fallback" style="display: none;">
-                    {(c.title || 'E').charAt(0).toUpperCase()}
-                  </div>
                   <div class="modal-emp-details">
                     <div class="modal-emp-top">
                       <span class="modal-emp-name">{c.title}</span>

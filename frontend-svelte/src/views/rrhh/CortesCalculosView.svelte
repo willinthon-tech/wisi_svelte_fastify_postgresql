@@ -5,6 +5,7 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl, toEmployeePhotoUrl } from '../../config/api.config.js';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
+  import CachedImage from '../../components/common/CachedImage.svelte';
 
   export let isPublic = false;
   export let corteId = null;
@@ -847,19 +848,12 @@
                     <div class="emp-sticky-content">
                       <div class="emp-avatar-box">
                         {#if toEmployeePhotoUrl(emp, emp.id)}
-                          <img
+                          <CachedImage
                             src={toEmployeePhotoUrl(emp, emp.id)}
                             alt={emp.nombre || 'Empleado'}
-                            class="emp-avatar-img"
-                            on:error={(e) => { 
-                              e.currentTarget.style.display = 'none'; 
-                              const fb = e.currentTarget.nextElementSibling;
-                              if (fb) fb.style.display = 'flex';
-                            }}
+                            className="emp-avatar-img"
+                            version={emp.updated_at}
                           />
-                          <div class="emp-avatar-fallback" style="display: none;">
-                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
-                          </div>
                         {:else}
                           <div class="emp-avatar-fallback">
                             {(emp.nombre || 'E').charAt(0).toUpperCase()}
@@ -988,19 +982,12 @@
                     <div class="emp-sticky-content">
                       <div class="emp-avatar-box">
                         {#if toEmployeePhotoUrl(emp, emp.id)}
-                          <img
+                          <CachedImage
                             src={toEmployeePhotoUrl(emp, emp.id)}
                             alt={emp.nombre || 'Empleado'}
-                            class="emp-avatar-img"
-                            on:error={(e) => { 
-                              e.currentTarget.style.display = 'none'; 
-                              const fb = e.currentTarget.nextElementSibling;
-                              if (fb) fb.style.display = 'flex';
-                            }}
+                            className="emp-avatar-img"
+                            version={emp.updated_at}
                           />
-                          <div class="emp-avatar-fallback" style="display: none;">
-                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
-                          </div>
                         {:else}
                           <div class="emp-avatar-fallback">
                             {(emp.nombre || 'E').charAt(0).toUpperCase()}
@@ -1089,19 +1076,12 @@
                     <div class="emp-sticky-content">
                       <div class="emp-avatar-box">
                         {#if toEmployeePhotoUrl(emp, emp.id)}
-                          <img
+                          <CachedImage
                             src={toEmployeePhotoUrl(emp, emp.id)}
                             alt={emp.nombre || 'Empleado'}
-                            class="emp-avatar-img"
-                            on:error={(e) => { 
-                              e.currentTarget.style.display = 'none'; 
-                              const fb = e.currentTarget.nextElementSibling;
-                              if (fb) fb.style.display = 'flex';
-                            }}
+                            className="emp-avatar-img"
+                            version={emp.updated_at}
                           />
-                          <div class="emp-avatar-fallback" style="display: none;">
-                            {(emp.nombre || 'E').charAt(0).toUpperCase()}
-                          </div>
                         {:else}
                           <div class="emp-avatar-fallback">
                             {(emp.nombre || 'E').charAt(0).toUpperCase()}

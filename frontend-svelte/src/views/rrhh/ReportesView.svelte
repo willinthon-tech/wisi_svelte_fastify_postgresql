@@ -33,6 +33,7 @@
   import { triggerToast } from "../../controllers/ui.store.js";
   import { navigateToRoute } from "../../controllers/router.store.js";
   import SmartMultiSelect from "../../components/common/SmartMultiSelect.svelte";
+  import CachedImage from "../../components/common/CachedImage.svelte";
   import ExcepcionHorarioModal from "../../components/modals/ExcepcionHorarioModal.svelte";
   import ExcepcionRangoModal from "../../components/modals/ExcepcionRangoModal.svelte";
   import GenerarCorteModal from "../../components/modals/GenerarCorteModal.svelte";
@@ -954,19 +955,12 @@
                       on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openExcepcionRangoModal(emp); }}
                     >
                       {#if getFotoUrl(emp)}
-                        <img
+                        <CachedImage
                           src={getFotoUrl(emp)}
                           alt={emp.nombre}
-                          class="emp-avatar-img"
-                          on:error={(e) => {
-                            e.currentTarget.style.display = "none";
-                            const fallback = e.currentTarget.nextElementSibling;
-                            if (fallback) fallback.style.display = "flex";
-                          }}
+                          className="emp-avatar-img"
+                          version={emp.updated_at}
                         />
-                        <div class="emp-avatar-fallback" style="display: none;">
-                          {(emp.nombre || "E").charAt(0).toUpperCase()}
-                        </div>
                       {:else}
                         <div class="emp-avatar-fallback">
                           {(emp.nombre || "E").charAt(0).toUpperCase()}
