@@ -449,6 +449,7 @@
     if (tab === "configuracion/tipo-clientes" || tab === "tipo-clientes") return "TIPO CLIENTES";
     if (tab === "configuracion/metodos-pago" || tab === "metodos-pago") return "MÉTODOS DE PAGO";
     if (tab === "configuracion/tipo-incidencias" || tab === "tipo-incidencias" || tab === "cecom/tipo-incidencias") return "TIPO INCIDENCIAS";
+    if (tab === "configuracion/rangos" || tab === "rangos" || tab === "cecom/rangos" || tab === "maquinas/rangos") return "RANGOS";
     if (tab === "rrhh/marcajes" || tab === "marcajes") return "Marcajes";
     if (tab === "rrhh/cortes" || tab === "cortes") return "Cortes";
     if (tab === "rrhh/cortes/calculos" || tab === "cortes/calculos" || String(tab || '').startsWith("rrhh/cortes/calculos")) return "Reportes";
@@ -1034,7 +1035,7 @@
           <MetodosPagoView />
         {:else if $currentRouteStore === "configuracion/tipo-incidencias" || $currentRouteStore === "tipo-incidencias" || $currentRouteStore === "cecom/tipo-incidencias"}
           <TipoIncidenciasView />
-        {:else if $currentRouteStore === "configuracion/rangos" || $currentRouteStore === "rangos" || $currentRouteStore === "cecom/rangos"}
+        {:else if $currentRouteStore === "configuracion/rangos" || $currentRouteStore === "rangos" || $currentRouteStore === "cecom/rangos" || $currentRouteStore === "maquinas/rangos"}
           <RangosView />
 
           <!-- MESAS EN VIVO Module Views -->

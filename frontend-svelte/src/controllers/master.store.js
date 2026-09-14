@@ -478,7 +478,7 @@ masterTipoIncidenciasStore.subscribe(val => saveStore('tipo_incidencias_v1', val
 export const masterTipoIncidenciasActions = createMasterEntityActions(masterTipoIncidenciasStore, 'tipo-incidencias');
 
 // ==========================================
-// 🏅 RANGOS (CONF.M: CECOM)
+// 🏅 RANGOS (CONF.M: MAQUINAS)
 // ==========================================
 export const masterRangosStore = writable(loadStore('rangos_v1', []));
 masterRangosStore.subscribe(val => saveStore('rangos_v1', val));

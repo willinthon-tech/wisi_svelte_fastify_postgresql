@@ -56,7 +56,7 @@ export const navMenuStore = writable([
   },
   {
     id: 3,
-    nombre: 'MAQUINAS',
+    nombre: 'CONF.M: MAQUINAS',
     icono: 'file',
     modulos: [
       { id: 23, nombre: 'Máquinas', ruta: '/configuracion/maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
@@ -68,7 +68,8 @@ export const navMenuStore = writable([
       { id: 19, nombre: 'Modelos', ruta: '/configuracion/modelos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 20, nombre: 'Tipos', ruta: '/configuracion/tipos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 21, nombre: 'Modos', ruta: '/configuracion/modos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 22, nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { id: 22, nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 41, nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
@@ -88,8 +89,7 @@ export const navMenuStore = writable([
     modulos: [
       { id: 38, nombre: 'Tipo Clientes', ruta: '/configuracion/tipo-clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 39, nombre: 'Métodos de Pago', ruta: '/configuracion/metodos-pago', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 41, nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
