@@ -148,13 +148,7 @@
   }
 
   function getMetodoIcon(nombre) {
-    const n = (nombre || '').toLowerCase().trim();
-    if (n.includes('cash') || n.includes('efectivo')) return '💵';
-    if (n.includes('pdv') || n.includes('tarjeta') || n.includes('punto')) return '💳';
-    if (n.includes('usdt') || n.includes('crypto') || n.includes('cripto') || n.includes('binance')) return '🪙';
-    if (n.includes('zelle')) return '💲';
-    if (n.includes('pago movil') || n.includes('pagomovil') || n.includes('transfer')) return '📱';
-    return '🏷️';
+    return '';
   }
 
   function getMetodoClass(nombre) {
@@ -674,7 +668,7 @@
               bind:group={tipo}
             />
             <span class="radio-custom"></span>
-            <span class="radio-text">🛒 Compra</span>
+            <span class="radio-text">Compra</span>
           </label>
 
           <label class="radio-option {tipo === 'Pago' ? 'selected-pago' : ''}">
@@ -685,7 +679,7 @@
               bind:group={tipo}
             />
             <span class="radio-custom"></span>
-            <span class="radio-text">💳 Pago</span>
+            <span class="radio-text">Pago</span>
           </label>
         </div>
       </div>
@@ -711,7 +705,7 @@
                 class="radio-custom"
                 style="{isSelected ? `border-color: ${mColor}; background: ${mColor}; box-shadow: 0 0 0 3px ${mColor}30;` : ''}"
               ></span>
-              <span class="radio-text">{getMetodoIcon(met.nombre)} {met.nombre}</span>
+              <span class="radio-text">{met.nombre}</span>
             </label>
           {/each}
         </div>
@@ -779,7 +773,6 @@
         <!-- KPI 1: Compras -->
         <div class="kpi-card kpi-compras">
           <div class="kpi-header">
-            <span class="kpi-icon">🛒</span>
             <span class="kpi-label">TOTAL COMPRAS</span>
           </div>
           <div class="kpi-value-row">
@@ -793,7 +786,6 @@
         <!-- KPI 2: Pagos -->
         <div class="kpi-card kpi-pagos">
           <div class="kpi-header">
-            <span class="kpi-icon">💳</span>
             <span class="kpi-label">TOTAL PAGOS</span>
           </div>
           <div class="kpi-value-row">
@@ -807,7 +799,6 @@
         <!-- KPI 3: Balance Neto Clientes (Compras - Pagos) -->
         <div class="kpi-card kpi-balance {balanceNeto >= 0 ? 'border-favor-casa' : 'border-favor-cliente'}">
           <div class="kpi-header">
-            <span class="kpi-icon">⚖️</span>
             <span class="kpi-label">RESULTADO CLIENTES (COMPRA - PAGO)</span>
           </div>
           <div class="kpi-value-row">
@@ -817,11 +808,11 @@
           </div>
           <div class="kpi-subtext">
             {#if balanceNeto > 0}
-              <span class="badge-kpi-status status-casa">🟢 Casa a favor</span>
+              <span class="badge-kpi-status status-casa">Casa a favor</span>
             {:else if balanceNeto < 0}
-              <span class="badge-kpi-status status-jugadores">🔴 Clientes a favor</span>
+              <span class="badge-kpi-status status-jugadores">Clientes a favor</span>
             {:else}
-              <span class="badge-kpi-status status-tablas">⚪ En tablas</span>
+              <span class="badge-kpi-status status-tablas">En tablas</span>
             {/if}
           </div>
         </div>
@@ -829,7 +820,6 @@
         <!-- KPI 4: Drop Mesas & Total Combinado -->
         <div class="kpi-card kpi-drop">
           <div class="kpi-header">
-            <span class="kpi-icon">🎲</span>
             <span class="kpi-label">PRODUCCIÓN DÍA</span>
           </div>
           <div class="kpi-value-row">
@@ -851,27 +841,26 @@
             class="tab-nav-btn {activeResumenTab === 'detallado' ? 'active' : ''}"
             on:click={() => activeResumenTab = 'detallado'}
           >
-            <span>📋 Detallado de Operaciones ({records.length})</span>
+            <span>Detallado de Operaciones ({records.length})</span>
           </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeResumenTab === 'metodos' ? 'active' : ''}"
             on:click={() => activeResumenTab = 'metodos'}
           >
-            <span>💳 Resumen por Métodos de Pago</span>
+            <span>Resumen por Métodos de Pago</span>
           </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeResumenTab === 'clientes' ? 'active' : ''}"
             on:click={() => activeResumenTab = 'clientes'}
           >
-            <span>👥 Resumen por Cliente ({resumenClientes.length})</span>
+            <span>Resumen por Cliente ({resumenClientes.length})</span>
           </button>
         </div>
 
         {#if activeResumenTab === 'clientes'}
           <div class="tab-search-wrapper">
-            <span class="search-icon">🔍</span>
             <input 
               type="text" 
               class="input-search-cliente-resumen" 
@@ -911,7 +900,6 @@
                 <tr>
                   <td colspan="7" class="empty-state-cell">
                     <div class="empty-msg-box">
-                      <span class="empty-icon">👥</span>
                       <p class="empty-text">
                         No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
                       </p>
@@ -932,9 +920,9 @@
                     </td>
                     <td class="td-center td-tipo">
                       {#if record.tipo === 'Compra'}
-                        <span class="badge-tipo badge-compra">🛒 Compra</span>
+                        <span class="badge-tipo badge-compra">Compra</span>
                       {:else}
-                        <span class="badge-tipo badge-pago">💳 Pago</span>
+                        <span class="badge-tipo badge-pago">Pago</span>
                       {/if}
                     </td>
                     <td class="td-right td-monto">
@@ -959,7 +947,7 @@
                           on:click={() => abrirModalEditar(record)}
                           title="Editar Método y Hora"
                         >
-                          ⚙️ Método / Hora
+                          Método / Hora
                         </button>
                         <button 
                           type="button" 
@@ -1076,7 +1064,7 @@
                   <tr>
                     <td class="td-center td-num">{idx + 1}</td>
                     <td>
-                      <span class="cliente-resumen-name">👤 {c.cliente}</span>
+                      <span class="cliente-resumen-name">{c.cliente}</span>
                     </td>
                     <td class="td-right font-mono text-green">
                       ${formatMonto(c.compras)}
@@ -1090,15 +1078,15 @@
                     <td class="td-center">
                       {#if c.balance < 0}
                         <span class="badge-jugador-res ganando" title="El jugador cobró más premios de lo que compró">
-                          🏆 Ganando (${formatMonto(Math.abs(c.balance))})
+                          Ganando (${formatMonto(Math.abs(c.balance))})
                         </span>
                       {:else if c.balance > 0}
                         <span class="badge-jugador-res perdiendo" title="La sala retuvo más compras de este jugador">
-                          🔴 En Contra (-${formatMonto(c.balance)})
+                          En Contra (-${formatMonto(c.balance)})
                         </span>
                       {:else}
                         <span class="badge-jugador-res tablas">
-                          ⚪ En Tablas ($0.00)
+                          En Tablas ($0.00)
                         </span>
                       {/if}
                     </td>
@@ -1143,7 +1131,7 @@
   <div class="modal-backdrop-fixed">
     <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-title">
       <div class="modal-header">
-        <h4 id="modal-editar-title" class="modal-title">⚙️ Editar Método y Hora</h4>
+        <h4 id="modal-editar-title" class="modal-title">Editar Método y Hora</h4>
         <button type="button" class="btn-close-modal" on:click={cerrarModalEditar} aria-label="Cerrar">
           &times;
         </button>

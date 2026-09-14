@@ -353,7 +353,7 @@
               <span class="placeholder-text">Seleccione una o varias llaves...</span>
             {:else}
               <span class="selected-count-badge">
-                🔑 {selectedLlavesIds.length} {selectedLlavesIds.length === 1 ? 'llave seleccionada' : 'llaves seleccionadas'}
+                {selectedLlavesIds.length} {selectedLlavesIds.length === 1 ? 'llave seleccionada' : 'llaves seleccionadas'}
               </span>
             {/if}
             <span class="chevron-arrow">{isMultiselectOpen ? '▲' : '▼'}</span>
@@ -480,7 +480,6 @@
             <tr>
               <td colspan="6" class="empty-state-cell">
                 <div class="empty-msg-box">
-                  <span class="empty-icon">🔑</span>
                   <p class="empty-text">
                     No hay registros de control de llaves para esta fecha. Seleccione una o varias llaves en el formulario de la izquierda para registrar la entrega.
                   </p>
@@ -504,7 +503,7 @@
                       on:click={() => abrirModalLlaves(record)}
                       title="Ver detalle de la llave"
                     >
-                      🔑 {singleLlaveName}
+                      {singleLlaveName}
                     </button>
                   {:else}
                     <button 
@@ -513,7 +512,7 @@
                       on:click={() => abrirModalLlaves(record)}
                       title="Ver listado de llaves asociadas"
                     >
-                      🔑 {numLlaves} Llaves
+                      {numLlaves} Llaves
                     </button>
                   {/if}
                 </td>
@@ -535,7 +534,7 @@
                       on:click={() => abrirModalHoras(record)}
                       title="Definir o modificar horas de entrega/recepción"
                     >
-                      🕒 Hora
+                      Hora
                     </button>
                     <button 
                       type="button" 
@@ -564,7 +563,6 @@
     <div class="modal-box">
       <div class="modal-header">
         <div class="modal-title-left">
-          <span class="modal-header-icon">🔑</span>
           <div>
             <h4 class="modal-heading">Llaves del Registro</h4>
             <span class="modal-subheading">{modalDescripcion}</span>
@@ -605,7 +603,6 @@
     <div class="modal-box modal-box-horas">
       <div class="modal-header">
         <div class="modal-title-left">
-          <span class="modal-header-icon">🕒</span>
           <div>
             <h4 class="modal-heading">Registrar Horas de Llaves</h4>
             <span class="modal-subheading">{editingRecord?.descripcion || 'General'}</span>

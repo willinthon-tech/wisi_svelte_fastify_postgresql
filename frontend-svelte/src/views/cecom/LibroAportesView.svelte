@@ -668,7 +668,7 @@
               bind:group={tipo}
             />
             <span class="radio-custom"></span>
-            <span class="radio-text">💰 Aporte</span>
+            <span class="radio-text">Aporte</span>
           </label>
 
           <label class="radio-option {tipo === 'Devolución' ? 'selected-devolucion' : ''}">
@@ -679,7 +679,7 @@
               bind:group={tipo}
             />
             <span class="radio-custom"></span>
-            <span class="radio-text">🔄 Devolución</span>
+            <span class="radio-text">Devolución</span>
           </label>
         </div>
       </div>
@@ -788,7 +788,6 @@
         <!-- KPI 1: Total Aportes $ -->
         <div class="kpi-card kpi-compras">
           <div class="kpi-header">
-            <span class="kpi-icon">💰</span>
             <span class="kpi-label">TOTAL APORTES</span>
           </div>
           <div class="kpi-value-row">
@@ -802,7 +801,6 @@
         <!-- KPI 2: Total Devoluciones $ -->
         <div class="kpi-card kpi-pagos">
           <div class="kpi-header">
-            <span class="kpi-icon">🔄</span>
             <span class="kpi-label">TOTAL DEVOLUCIONES</span>
           </div>
           <div class="kpi-value-row">
@@ -816,7 +814,6 @@
         <!-- KPI 3: Neto Aportes $ -->
         <div class="kpi-card kpi-balance">
           <div class="kpi-header">
-            <span class="kpi-icon">📈</span>
             <span class="kpi-label">NETO APORTES</span>
           </div>
           <div class="kpi-value-row">
@@ -830,7 +827,6 @@
         <!-- KPI 4: Rango Líder -->
         <div class="kpi-card kpi-drop">
           <div class="kpi-header">
-            <span class="kpi-icon">🏅</span>
             <span class="kpi-label">RANGO CON MÁS APORTES</span>
           </div>
           <div class="kpi-value-row">
@@ -850,27 +846,26 @@
             class="tab-nav-btn {activeTab === 'detallado' ? 'active' : ''}"
             on:click={() => activeTab = 'detallado'}
           >
-            <span>📋 Detallado de Operaciones ({records.length})</span>
+            <span>Detallado de Operaciones ({records.length})</span>
           </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeTab === 'rangos' ? 'active' : ''}"
             on:click={() => activeTab = 'rangos'}
           >
-            <span>🏅 Resumen por Rango ({resumenRangos.length})</span>
+            <span>Resumen por Rango ({resumenRangos.length})</span>
           </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeTab === 'empleados' ? 'active' : ''}"
             on:click={() => activeTab = 'empleados'}
           >
-            <span>👥 Resumen por Empleado ({resumenEmpleados.length})</span>
+            <span>Resumen por Empleado ({resumenEmpleados.length})</span>
           </button>
         </div>
 
         {#if activeTab === 'empleados'}
           <div class="tab-search-wrapper">
-            <span class="search-icon">🔍</span>
             <input 
               type="text" 
               class="input-search-cliente-resumen" 
@@ -919,9 +914,9 @@
                     <td class="td-center td-num">{idx + 1}</td>
                     <td class="td-center td-tipo-col">
                       {#if (record.tipo || 'Aporte') === 'Devolución'}
-                        <span class="badge-tipo badge-devolucion">🔄 Devolución</span>
+                        <span class="badge-tipo badge-devolucion">Devolución</span>
                       {:else}
-                        <span class="badge-tipo badge-aporte">💰 Aporte</span>
+                        <span class="badge-tipo badge-aporte">Aporte</span>
                       {/if}
                     </td>
                     <td class="td-cliente">
@@ -930,7 +925,7 @@
                       </div>
                     </td>
                     <td class="td-center td-tipo">
-                      <span class="badge-tipo badge-pago">🏅 {record.rango_nombre || `Rango #${record.rango_id}`}</span>
+                      <span class="badge-tipo badge-pago">{record.rango_nombre || `Rango #${record.rango_id}`}</span>
                     </td>
                     <td class="td-right td-monto">
                       <span class="monto-value {record.tipo === 'Devolución' ? 'monto-devolucion' : ''}">
@@ -953,7 +948,7 @@
                           on:click={() => abrirModalEditar(record)}
                           title="Editar Aporte"
                         >
-                          ✏️ Editar
+                          Editar
                         </button>
                         <button 
                           type="button" 
@@ -1096,7 +1091,7 @@
   <div class="modal-backdrop-fixed">
     <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-title">
       <div class="modal-header">
-        <h4 id="modal-editar-title" class="modal-title">⚙️ Editar Aporte #{editingRecord.id}</h4>
+        <h4 id="modal-editar-title" class="modal-title">Editar Aporte #{editingRecord.id}</h4>
         <button type="button" class="btn-close-modal" on:click={cerrarModalEditar} aria-label="Cerrar">
           &times;
         </button>
@@ -1128,7 +1123,7 @@
                   bind:group={modalTipo}
                 />
                 <span class="radio-custom"></span>
-                <span class="radio-text">💰 Aporte</span>
+                <span class="radio-text">Aporte</span>
               </label>
 
               <label class="radio-option {modalTipo === 'Devolución' ? 'selected-devolucion' : ''}">
@@ -1139,7 +1134,7 @@
                   bind:group={modalTipo}
                 />
                 <span class="radio-custom"></span>
-                <span class="radio-text">🔄 Devolución</span>
+                <span class="radio-text">Devolución</span>
               </label>
             </div>
           </div>

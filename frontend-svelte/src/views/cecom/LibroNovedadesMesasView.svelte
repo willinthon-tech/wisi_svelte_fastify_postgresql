@@ -737,7 +737,6 @@
                     class="inline-dropdown-item {idx === pitbossSugIndex ? 'selected' : ''}"
                     on:mousedown|preventDefault={() => selectPitbossSuggestion('batch', sug)}
                   >
-                    <span class="sug-avatar">👤</span>
                     <div class="sug-info">
                       <span class="sug-name">{sug.nombre}</span>
                       {#if sug.cargo_nombre}
@@ -795,7 +794,6 @@
       <div class="top-bar-right">
         <!-- Buscador de mesa o empleado -->
         <div class="search-box">
-          <span class="search-icon">🔍</span>
           <input 
             type="text" 
             class="search-input" 
@@ -839,7 +837,6 @@
             <tr>
               <td colspan="4" class="empty-state-cell">
                 <div class="empty-msg-box">
-                  <span class="empty-icon">🎲</span>
                   <p class="empty-text">No se encontraron mesas activas configuradas para esta sala.</p>
                 </div>
               </td>
@@ -848,7 +845,6 @@
             <tr>
               <td colspan="4" class="empty-state-cell">
                 <div class="empty-msg-box">
-                  <span class="empty-icon">🔍</span>
                   <p class="empty-text">No hay mesas que coincidan con la búsqueda "{searchQuery}".</p>
                 </div>
               </td>
@@ -897,7 +893,6 @@
                               class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
                               on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_apertura', sug)}
                             >
-                              <span class="sug-avatar">👤</span>
                               <div class="sug-info">
                                 <span class="sug-name">{sug.nombre}</span>
                                 {#if sug.cargo_nombre}
@@ -940,7 +935,6 @@
                               class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
                               on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_cierre', sug)}
                             >
-                              <span class="sug-avatar">👤</span>
                               <div class="sug-info">
                                 <span class="sug-name">{sug.nombre}</span>
                                 {#if sug.cargo_nombre}
@@ -972,7 +966,7 @@
                       on:click={() => abrirModalEditar(mesa.id)}
                       title="Editar individualmente hora apertura/cierre, pitboss y observación"
                     >
-                      ✏️
+                      Editar
                     </button>
 
                     {#if hasData || recordsMap.has(Number(mesa.id))}
@@ -982,7 +976,7 @@
                         on:click={() => handleEliminar(mesa.id)}
                         title="Limpiar novedad de esta mesa"
                       >
-                        🗑️
+                        Limpiar
                       </button>
                     {/if}
                   </div>
@@ -1006,7 +1000,6 @@
     <div class="modal-card" role="dialog" aria-modal="true">
       <div class="modal-header">
         <div class="modal-header-info">
-          <span class="modal-header-icon">🎲</span>
           <div>
             <h3 class="modal-heading">Editar Mesa: {modalMesa.nombre}</h3>
             <span class="modal-subheading">{modalMesa.juego_nombre || 'Mesa Operativa'} • Novedad individual</span>
@@ -1085,7 +1078,6 @@
                         class="inline-dropdown-item {idx === pitbossSugIndex ? 'selected' : ''}"
                         on:mousedown|preventDefault={() => selectPitbossSuggestion('modal', sug)}
                       >
-                        <span class="sug-avatar">👤</span>
                         <div class="sug-info">
                           <span class="sug-name">{sug.nombre}</span>
                           {#if sug.cargo_nombre}

@@ -20,14 +20,14 @@
 
   // Subvistas disponibles
   const SUBVISTAS = [
-    { id: 'datos', label: 'Datos', icon: '📋', description: 'Horarios operativos de sala y asignación de operadores' },
-    { id: 'drop-mesas', label: 'Drop Mesas', icon: '🎲', description: 'Registro y cuadre de drop de mesas en vivo' },
-    { id: 'control-llaves', label: 'Control Llaves', icon: '🔑', description: 'Bitácora de entrega y recepción de llaves' },
-    { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '⚠️', description: 'Eventos e incidentes reportados en sala' },
-    { id: 'control-clientes', label: 'Control Clientes', icon: '👥', description: 'Seguimiento de jugadores y eventos de sala' },
-    { id: 'aportes-maquinas', label: 'Aportes Máquinas', icon: '🎰', description: 'Registro y control de aportes de máquinas por empleado y rango' },
-    { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '🃏', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
-    { id: 'resumen-libro', label: 'Resumen Libro', icon: '📊', description: 'Consolidado general y auditoría de la jornada' }
+    { id: 'datos', label: 'Datos', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
+    { id: 'drop-mesas', label: 'Drop Mesas', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
+    { id: 'control-llaves', label: 'Control Llaves', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
+    { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '', description: 'Eventos e incidentes reportados en sala' },
+    { id: 'control-clientes', label: 'Control Clientes', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
+    { id: 'aportes-maquinas', label: 'Aportes Máquinas', icon: '', description: 'Registro y control de aportes de máquinas por empleado y rango' },
+    { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
+    { id: 'resumen-libro', label: 'Resumen Libro', icon: '', description: 'Consolidado general y auditoría de la jornada' }
   ];
 
   let activeSubvista = 'datos';
@@ -152,7 +152,7 @@
           </h1>
           {#if libro?.sala_nombre || libro?.sala_nombre_comercial}
             <span class="badge-sala">
-              📍 {libro.sala_nombre || libro.sala_nombre_comercial}
+              {libro.sala_nombre || libro.sala_nombre_comercial}
             </span>
           {/if}
           {#if libro?.id}
@@ -200,7 +200,6 @@
       </div>
     {:else if loadError}
       <div class="state-card error-state">
-        <span class="state-icon">⚠️</span>
         <h3>Error al cargar libro</h3>
         <p>{loadError}</p>
         <button type="button" class="btn-retry" on:click={() => loadLibro(libroId)}>Reintentar</button>

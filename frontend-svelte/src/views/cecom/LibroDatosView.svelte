@@ -488,7 +488,7 @@
       <!-- 1. Apertura de Sala -->
       <div class="form-section-box">
         <div class="section-label-header">
-          <span class="section-title">🏛️ Apertura de Sala</span>
+          <span class="section-title">Apertura de Sala</span>
         </div>
         <div class="time-dual-row">
           <div class="time-col">
@@ -535,7 +535,7 @@
       <!-- 2. Apertura de Máquinas -->
       <div class="form-section-box">
         <div class="section-label-header">
-          <span class="section-title">🎰 Apertura de Máquinas</span>
+          <span class="section-title">Apertura de Máquinas</span>
         </div>
         <div class="time-dual-row">
           <div class="time-col">
@@ -582,7 +582,7 @@
       <!-- 3. Apertura de Bingo -->
       <div class="form-section-box">
         <div class="section-label-header">
-          <span class="section-title">🎱 Apertura de Bingo</span>
+          <span class="section-title">Apertura de Bingo</span>
         </div>
         <div class="time-dual-row">
           <div class="time-col">
@@ -629,7 +629,7 @@
       <!-- 4. Retiros de Dropbox -->
       <div class="form-section-box">
         <div class="section-label-header">
-          <span class="section-title">📦 Retiros de Dropbox</span>
+          <span class="section-title">Retiros de Dropbox</span>
         </div>
         <div class="time-dual-row">
           <div class="time-col">
@@ -676,7 +676,7 @@
       <!-- 5. Conteo Dropbox -->
       <div class="form-section-box">
         <div class="section-label-header">
-          <span class="section-title">💰 Conteo Dropbox</span>
+          <span class="section-title">Conteo Dropbox</span>
         </div>
         <div class="time-dual-row">
           <div class="time-col">
@@ -723,7 +723,7 @@
       <!-- 6. Operadores CECOM -->
       <div class="form-section-box">
         <div class="section-label-header">
-          <span class="section-title">👥 Operadores CECOM</span>
+          <span class="section-title">Operadores CECOM</span>
         </div>
         <div class="operadores-dual-row">
           <!-- Turno A (Apertura) -->
@@ -762,7 +762,6 @@
                         class="sugerencia-item {idx === selectedIndexA ? 'active' : ''}"
                         on:mousedown|preventDefault={() => addOperadorA(sug)}
                       >
-                        <span class="sug-icon">👤</span>
                         <div class="sug-info">
                           <span class="sug-name">{sug.nombre}</span>
                           {#if sug.cargo_nombre}
@@ -782,7 +781,6 @@
               <div class="chips-box">
                 {#each operadoresTurnoAList as op}
                   <span class="op-chip chip-a">
-                    <span class="chip-avatar">👤</span>
                     <span class="chip-text">{op}</span>
                     <button 
                       type="button" 
@@ -832,7 +830,6 @@
                         class="sugerencia-item {idx === selectedIndexC ? 'active' : ''}"
                         on:mousedown|preventDefault={() => addOperadorC(sug)}
                       >
-                        <span class="sug-icon">👤</span>
                         <div class="sug-info">
                           <span class="sug-name">{sug.nombre}</span>
                           {#if sug.cargo_nombre}
@@ -852,7 +849,6 @@
               <div class="chips-box">
                 {#each operadoresTurnoCList as op}
                   <span class="op-chip chip-c">
-                    <span class="chip-avatar">👤</span>
                     <span class="chip-text">{op}</span>
                     <button 
                       type="button" 
@@ -880,7 +876,7 @@
           {#if seccionesCompletadas === totalSecciones}
             <span class="badge-status complete">✓ Completo ({seccionesCompletadas}/{totalSecciones})</span>
           {:else if seccionesCompletadas > 0}
-            <span class="badge-status partial">⚡ En Progreso ({seccionesCompletadas}/{totalSecciones})</span>
+            <span class="badge-status partial">En Progreso ({seccionesCompletadas}/{totalSecciones})</span>
           {:else}
             <span class="badge-status pending">Pendiente de registro</span>
           {/if}
@@ -893,7 +889,6 @@
       <!-- Métrica 1: Apertura Sala -->
       <div class="metric-card">
         <div class="mc-header">
-          <span class="mc-icon">🏛️</span>
           <span class="mc-title">Apertura de Sala</span>
         </div>
         <div class="mc-value-box">
@@ -908,7 +903,6 @@
       <!-- Métrica 2: Máquinas -->
       <div class="metric-card">
         <div class="mc-header">
-          <span class="mc-icon">🎰</span>
           <span class="mc-title">Máquinas</span>
         </div>
         <div class="mc-value-box">
@@ -923,7 +917,6 @@
       <!-- Métrica 3: Bingo -->
       <div class="metric-card">
         <div class="mc-header">
-          <span class="mc-icon">🎱</span>
           <span class="mc-title">Bingo</span>
         </div>
         <div class="mc-value-box">
@@ -938,7 +931,6 @@
       <!-- Métrica 4: Operadores CECOM -->
       <div class="metric-card">
         <div class="mc-header">
-          <span class="mc-icon">👥</span>
           <span class="mc-title">Personal CECOM</span>
         </div>
         <div class="mc-value-box">
@@ -969,7 +961,6 @@
             <tr class="datos-row">
               <td class="td-center td-num">1</td>
               <td class="td-left td-name">
-                <span class="item-icon">🏛️</span>
                 <strong>Apertura de Sala</strong>
               </td>
               <td class="td-center">
@@ -1001,7 +992,6 @@
             <tr class="datos-row">
               <td class="td-center td-num">2</td>
               <td class="td-left td-name">
-                <span class="item-icon">🎰</span>
                 <strong>Apertura de Máquinas</strong>
               </td>
               <td class="td-center">
@@ -1033,7 +1023,6 @@
             <tr class="datos-row">
               <td class="td-center td-num">3</td>
               <td class="td-left td-name">
-                <span class="item-icon">🎱</span>
                 <strong>Apertura de Bingo</strong>
               </td>
               <td class="td-center">
@@ -1065,7 +1054,6 @@
             <tr class="datos-row">
               <td class="td-center td-num">4</td>
               <td class="td-left td-name">
-                <span class="item-icon">📦</span>
                 <strong>Retiros de Dropbox</strong>
               </td>
               <td class="td-center">
@@ -1097,7 +1085,6 @@
             <tr class="datos-row">
               <td class="td-center td-num">5</td>
               <td class="td-left td-name">
-                <span class="item-icon">💰</span>
                 <strong>Conteo Dropbox</strong>
               </td>
               <td class="td-center">
@@ -1132,7 +1119,6 @@
     <!-- Sección de Operadores CECOM Asignados -->
     <div class="card-operadores">
       <div class="operadores-header">
-        <span class="op-icon">👥</span>
         <div>
           <h4 class="op-title">Operadores CECOM de la Jornada</h4>
           <span class="op-subtitle">Personal responsable registrado para el control y seguimiento operativo</span>
@@ -1149,7 +1135,7 @@
               <span class="op-empty-name">No asignado</span>
             {:else}
               {#each operadoresTurnoAList as op}
-                <span class="op-badge-view badge-a">👤 {op}</span>
+                <span class="op-badge-view badge-a">{op}</span>
               {/each}
             {/if}
           </div>
@@ -1165,7 +1151,7 @@
               <span class="op-empty-name">No asignado</span>
             {:else}
               {#each operadoresTurnoCList as op}
-                <span class="op-badge-view badge-c">👤 {op}</span>
+                <span class="op-badge-view badge-c">{op}</span>
               {/each}
             {/if}
           </div>

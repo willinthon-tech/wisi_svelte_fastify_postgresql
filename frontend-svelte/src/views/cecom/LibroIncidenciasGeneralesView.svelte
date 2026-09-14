@@ -62,11 +62,7 @@
   }
 
   function getPillIcon(name) {
-    const s = normalizeText(name);
-    if (s.includes('mercanc')) return '📦';
-    if (s.includes('emplead')) return '👤';
-    if (s.includes('general')) return '📌';
-    return '⚠️';
+    return '';
   }
 
   function getBadgeClass(name) {
@@ -493,7 +489,6 @@
                 bind:group={tipoIncidenciaId} 
                 on:change={() => tipo = tItem.nombre}
               />
-              <span class="pill-icon">{getPillIcon(tItem.nombre)}</span>
               <span class="pill-text">{tItem.nombre}</span>
             </label>
           {/each}
@@ -534,7 +529,7 @@
       {#if descripcion.trim() && livePreviewBlocks.length > 0}
         <div class="live-preview-box">
           <div class="preview-header">
-            <span>👁️ Vista Previa Preformateada:</span>
+            <span>Vista Previa Preformateada:</span>
             {#if livePreviewBlocks.length > 1}
               <span class="badge-multi-records">{livePreviewBlocks.length} registros</span>
             {/if}
@@ -590,7 +585,7 @@
           class="tab-nav-btn {activeTab === 'all' ? 'active' : ''}"
           on:click={() => activeTab = 'all'}
         >
-          <span>📋 Detallado ({records.length})</span>
+          <span>Detallado ({records.length})</span>
         </button>
         {#each availableTiposIncidencia as tItem}
           <button 
@@ -598,7 +593,7 @@
             class="tab-nav-btn {activeTab === tItem.nombre ? 'active' : ''}"
             on:click={() => activeTab = tItem.nombre}
           >
-            <span>{getPillIcon(tItem.nombre)} {tItem.nombre} ({countsByTipo[tItem.id] || 0})</span>
+            <span>{tItem.nombre} ({countsByTipo[tItem.id] || 0})</span>
           </button>
         {/each}
       </div>
@@ -629,7 +624,6 @@
             <tr>
               <td colspan="4" class="empty-state-cell">
                 <div class="empty-msg-box">
-                  <span class="empty-icon">⚠️</span>
                   <p class="empty-text">
                     {#if activeTab === 'all'}
                       No se han reportado incidencias para esta fecha. Use el formulario de la izquierda para registrar una.
@@ -647,7 +641,7 @@
                 <td class="td-center td-num">{idx + 1}</td>
                 <td class="td-center td-tipo">
                   <span class="badge-tipo {getBadgeClass(record.tipo)}">
-                    {getPillIcon(record.tipo)} {record.tipo || 'General'}
+                    {record.tipo || 'General'}
                   </span>
                 </td>
                 <td class="td-desc">
@@ -681,7 +675,7 @@
                       on:click={() => abrirModalEditar(record)}
                       title="Editar contenido, tipo u hora"
                     >
-                      ✏️ Editar
+                      Editar
                     </button>
                     <button 
                       type="button" 
@@ -710,7 +704,7 @@
   <div class="modal-backdrop-fixed">
     <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-inc-title">
       <div class="modal-header">
-        <h4 id="modal-editar-inc-title" class="modal-title">✏️ Editar Incidencia</h4>
+        <h4 id="modal-editar-inc-title" class="modal-title">Editar Incidencia</h4>
         <button type="button" class="btn-close-modal" on:click={cerrarModalEditar} aria-label="Cerrar">
           &times;
         </button>
@@ -732,7 +726,6 @@
                   bind:group={modalTipoIncidenciaId} 
                   on:change={() => modalTipo = tItem.nombre}
                 />
-                <span class="pill-icon">{getPillIcon(tItem.nombre)}</span>
                 <span class="pill-text">{tItem.nombre}</span>
               </label>
             {/each}

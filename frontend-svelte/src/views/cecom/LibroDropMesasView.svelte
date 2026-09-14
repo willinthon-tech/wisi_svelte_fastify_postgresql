@@ -448,7 +448,6 @@
             <tr>
               <td colspan="10" class="empty-state-cell">
                 <div class="empty-msg-box">
-                  <span class="empty-icon">🎲</span>
                   <p class="empty-text">
                     La tabla de drop está vacía para esta fecha. Seleccione una mesa en el formulario de la izquierda e ingrese los billetes para agregar registros.
                   </p>

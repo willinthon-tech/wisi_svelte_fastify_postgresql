@@ -332,12 +332,7 @@
   }
 
   function getPillIcon(name) {
-    const s = normalizeText(name);
-    if (s.includes("mercanc") || s.includes("proveedor")) return "📦";
-    if (s.includes("emplead") || s.includes("personal") || s.includes("rrhh")) return "👤";
-    if (s.includes("general")) return "📌";
-    if (s.includes("maquin")) return "⚠️";
-    return "⚠️";
+    return "";
   }
 
   // 1. Clasificación reactiva y dinámica de Incidencias según los Tipos registrados (CONF.M: CECOM)
@@ -897,7 +892,11 @@
       <div class="overview-header-row">
         <div class="header-titles-group">
           <div class="overview-icon-container">
-            <span class="icon-graphic">📊</span>
+            <svg class="icon-svg-action" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
           </div>
           <div class="overview-title-box">
             <h2 class="overview-title">Resumen Libro</h2>
@@ -947,7 +946,6 @@
             disabled={isGeneratingPdf}
             title="Abrir vista de compartir y copiar enlace al portapapeles"
           >
-            <span class="share-icon">🔗</span>
             <span>Compartir</span>
           </button>
 
@@ -963,7 +961,6 @@
               <span class="btn-spinner"></span>
               <span>Generando...</span>
             {:else}
-              <span class="pdf-icon">📄</span>
               <span>PDF</span>
             {/if}
           </button>
@@ -979,7 +976,6 @@
     </div>
   {:else if loadError}
     <div class="report-state-card error">
-      <span class="error-icon">⚠️</span>
       <h3>Error al generar reporte</h3>
       <p>{loadError}</p>
       <button
@@ -1146,7 +1142,7 @@
         <div class="sub-header-row">
           <div class="sub-title-group">
             <h2 class="sub-section-title">
-              🎲 2. Drop de Mesas (Arqueo de Efectivo)
+              2. Drop de Mesas (Arqueo de Efectivo)
             </h2>
             <span class="sub-count-badge"
               >{resumenData.drop_mesas.length} mesas registradas</span
@@ -1254,7 +1250,7 @@
         <div class="sub-header-row">
           <div class="sub-title-group">
             <h2 class="sub-section-title">
-              🎭 3. Novedades de Mesas (Apertura y Cierre)
+              3. Novedades de Mesas (Apertura y Cierre)
             </h2>
             <span class="sub-count-badge"
               >{resumenData.novedades_mesas.length} registros</span
@@ -1311,7 +1307,7 @@
         <div class="sub-header-row">
           <div class="sub-title-group">
             <h2 class="sub-section-title">
-              ⚠️ 4. Bitácora de Incidencias
+              4. Bitácora de Incidencias
             </h2>
             <span class="sub-count-badge"
               >{resumenData.incidencias_generales.length} reportes en total</span
@@ -1324,7 +1320,7 @@
             <div class="incidencia-subbloque">
               <div class="incidencia-subbloque-header">
                 <h3 class="incidencia-subbloque-title">
-                  <span>{getPillIcon(cat.nombre)} {cat.nombre}</span>
+                  <span>{cat.nombre}</span>
                 </h3>
                 <span class="incidencia-badge">{cat.items.length}</span>
               </div>
@@ -1364,7 +1360,7 @@
         <div class="sub-header-row">
           <div class="sub-title-group">
             <h2 class="sub-section-title">
-              🔑 5. Bitácora de Control de Llaves
+              5. Bitácora de Control de Llaves
             </h2>
             <span class="sub-count-badge">{llavesTotales.total} registros</span>
           </div>
@@ -1407,15 +1403,15 @@
                         (k.llaves_ids ? `${k.llaves_ids.length} llaves` : "—")}
                   <tr>
                     <td class="cell-center">{idx + 1}</td>
-                    <td class="cell-llave-bold">🔑 {llavesTexto}</td>
+                    <td class="cell-llave-bold">{llavesTexto}</td>
                     <td class="cell-left">{k.descripcion || "General"}</td>
                     <td class="cell-center">{k.hora_salida || "—"}</td>
                     <td class="cell-center">{k.hora_recepcion || "—"}</td>
                     <td class="cell-center">
                       {#if isDevuelta}
-                        <span class="tag-status tag-success">✓ Devuelta</span>
+                        <span class="tag-status tag-success">Devuelta</span>
                       {:else}
-                        <span class="tag-status tag-warning">⏳ En Custodia</span>
+                        <span class="tag-status tag-warning">En Custodia</span>
                       {/if}
                     </td>
                   </tr>
@@ -1433,7 +1429,7 @@
         <div class="sub-header-row">
           <div class="sub-title-group">
             <h2 class="sub-section-title">
-              👥 6. Control de Clientes / Jugadores en Sala
+              6. Control de Clientes / Jugadores en Sala
             </h2>
             <span class="sub-count-badge"
               >{clientesTotales.totalOps} transacciones</span
@@ -1483,7 +1479,7 @@
                   <tr>
                     <td class="cell-center">{idx + 1}</td>
                     <td class="cell-center">{c.hora || "—"}</td>
-                    <td class="cell-client-name">👤 {c.cliente || "—"}</td>
+                    <td class="cell-client-name">{c.cliente || "—"}</td>
                     <td class="cell-center">
                       <span
                         class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
@@ -1522,7 +1518,7 @@
             <!-- Tablita A: Agrupado por Método de Pago -->
             <div class="summary-subtable-box">
               <div class="subtable-header">
-                <h4 class="subtable-title">💳 Resumen por Método de Pago</h4>
+                <h4 class="subtable-title">Resumen por Método de Pago</h4>
                 <span class="incidencia-badge"
                   >{clientesPorMetodo.length} métodos</span
                 >
@@ -1586,7 +1582,7 @@
             <!-- Tablita B: Agrupado por Cliente / Jugador -->
             <div class="summary-subtable-box">
               <div class="subtable-header">
-                <h4 class="subtable-title">👤 Resumen por Cliente / Jugador</h4>
+                <h4 class="subtable-title">Resumen por Cliente / Jugador</h4>
                 <span class="incidencia-badge"
                   >{clientesPorJugador.length} clientes</span
                 >
@@ -1651,7 +1647,7 @@
         <div class="sub-header-row">
           <div class="sub-title-group">
             <h2 class="sub-section-title">
-              🎰 7. Aportes Máquinas
+              7. Aportes Máquinas
             </h2>
             <span class="sub-count-badge"
               >{aportesTotales.totalOps} {aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
@@ -1701,15 +1697,15 @@
                     <td class="cell-center">{idx + 1}</td>
                     <td class="cell-center">
                       <span class="tag-tipo {isAporte ? 'tag-aporte' : 'tag-devolucion'}">
-                        {isAporte ? '💰 Aporte' : '🔄 Devolución'}
+                        {isAporte ? 'Aporte' : 'Devolución'}
                       </span>
                     </td>
                     <td class="cell-center">{a.hora || (a.created_at ? new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—')}</td>
-                    <td class="cell-client-name font-bold">👤 {a.empleado_nombre || "—"}</td>
+                    <td class="cell-client-name font-bold">{a.empleado_nombre || "—"}</td>
                     <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
                     <td class="cell-center">
                       <span class="tag-tipo tag-rango">
-                        🏅 {a.rango_nombre || `Rango #${a.rango_id}`}
+                        {a.rango_nombre || `Rango #${a.rango_id}`}
                       </span>
                     </td>
                     <td class="cell-total-money font-bold {isAporte ? '' : 'text-danger-money'}">
@@ -1740,7 +1736,7 @@
             <!-- Tablita A: Resumen por Rango -->
             <div class="summary-subtable-box">
               <div class="subtable-header">
-                <h4 class="subtable-title">🏅 Resumen por Rango</h4>
+                <h4 class="subtable-title">Resumen por Rango</h4>
                 <span class="incidencia-badge"
                   >{aportesPorRango.length} rangos</span
                 >
@@ -1765,7 +1761,7 @@
                   <tbody>
                     {#each aportesPorRango as rg}
                       <tr>
-                        <td class="cell-left font-bold">🏅 {rg.rango_nombre}</td>
+                        <td class="cell-left font-bold">{rg.rango_nombre}</td>
                         <td class="cell-center">{rg.cantidad} ops</td>
                         <td class="cell-total-money font-bold">{formatMoney(rg.montoAportes)}</td>
                         {#if aportesTotales.totalDevoluciones > 0}
@@ -1799,7 +1795,7 @@
             <!-- Tablita B: Resumen por Empleado -->
             <div class="summary-subtable-box">
               <div class="subtable-header">
-                <h4 class="subtable-title">👤 Resumen por Empleado</h4>
+                <h4 class="subtable-title">Resumen por Empleado</h4>
                 <span class="incidencia-badge"
                   >{aportesPorEmpleado.length} empleados</span
                 >
@@ -1825,7 +1821,7 @@
                   <tbody>
                     {#each aportesPorEmpleado as emp}
                       <tr>
-                        <td class="cell-left font-bold">👤 {emp.empleado_nombre}</td>
+                        <td class="cell-left font-bold">{emp.empleado_nombre}</td>
                         <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
                         <td class="cell-center">{emp.cantidad} ops</td>
                         <td class="cell-total-money font-bold">{formatMoney(emp.montoAportes)}</td>
