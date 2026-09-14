@@ -3618,6 +3618,7 @@ export async function getPlantillasHorariosModel(params = {}) {
     'horas_trabajo': 'p.hora_entrada',
     'hora_entrada': 'p.hora_entrada',
     'hora_salida': 'p.hora_salida',
+    'descanso': 'p.descanso',
     'jornada': "COALESCE(p.hora_salida, '00:00:00') - COALESCE(p.hora_entrada, '00:00:00')",
     'color': 'p.color'
   };
@@ -3692,11 +3693,12 @@ export async function createPlantillaHorarioModel(data) {
 
     const rows = await sql`
       INSERT INTO horarios (
-        nombre, codigo, hora_entrada, hora_salida, color
+        nombre, codigo, hora_entrada, hora_salida, descanso, color
       )
       VALUES (
         ${nombre}, ${codigo}, 
         ${data.hora_entrada || null}, ${data.hora_salida || null}, 
+        ${data.descanso || '00:00:00'},
         ${data.color || '#FFFF99'}
       )
       RETURNING *
@@ -3710,7 +3712,7 @@ export async function updatePlantillaHorarioModel(id, data) {
   const pId = Number(id);
   if (isPgConnected && sql) {
     const [current] = await sql`
-      SELECT id, codigo, nombre 
+      SELECT id, codigo, nombre, descanso 
       FROM horarios 
       WHERE id = ${pId}
     `;
@@ -3750,6 +3752,7 @@ export async function updatePlantillaHorarioModel(id, data) {
     const nombre = data.nombre !== undefined ? data.nombre : current.nombre;
     const horaEntrada = data.hora_entrada !== undefined ? data.hora_entrada : null;
     const horaSalida = data.hora_salida !== undefined ? data.hora_salida : null;
+    const descanso = data.descanso !== undefined ? data.descanso : (current.descanso || '00:00:00');
     const color = data.color !== undefined ? data.color : '#FFFF99';
 
     const rows = await sql`
@@ -3758,6 +3761,7 @@ export async function updatePlantillaHorarioModel(id, data) {
           codigo = ${finalCodigo},
           hora_entrada = ${horaEntrada},
           hora_salida = ${horaSalida},
+          descanso = ${descanso},
           color = ${color},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${pId}

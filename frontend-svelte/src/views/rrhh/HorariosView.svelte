@@ -114,6 +114,7 @@
     { key: 'codigo', label: 'Código', bold: true, sortable: true, editable: true },
     { key: 'nombre', label: 'Descripción / Nombre', bold: true, sortable: true, editable: true },
     { key: 'horas_trabajo', label: 'Horas de Trabajo', type: 'horario_badge', sortable: true, editable: true },
+    { key: 'descanso', label: 'Descanso', type: 'time', sortable: true, editable: true },
     { key: 'jornada', label: 'Jornada', type: 'jornada', sortable: true, editable: false },
     { key: 'color', label: 'Color', type: 'color', sortable: true, editable: true }
   ];
@@ -128,6 +129,7 @@
         { key: 'hora_salida', label: 'Hora Salida', type: 'time', placeholder: '17:00:00', required: true }
       ]
     },
+    { key: 'descanso', label: 'Tiempo de Descanso', type: 'time', defaultValue: '00:00:00' },
     { key: 'color', label: 'Color de Identificación', type: 'color', defaultValue: '#86EFAC' }
   ];
 

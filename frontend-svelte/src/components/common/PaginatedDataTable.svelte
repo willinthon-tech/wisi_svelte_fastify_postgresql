@@ -973,6 +973,9 @@
         if (col.type === 'date' && item[col.key] !== undefined && item[col.key] !== null) {
           draft[col.key] = formatDateForInput(item[col.key]) || item[col.key];
         }
+        if (col.type === 'time' && item[col.key] !== undefined && item[col.key] !== null) {
+          draft[col.key] = String(item[col.key]).slice(0, 5);
+        }
       }
     }
     inlineDraft = draft;
@@ -1412,6 +1415,16 @@
                         />
                       </div>
 
+                    {:else if col.type === 'time'}
+                      <!-- Time Input -->
+                      <input 
+                        type="time" 
+                        step="60"
+                        bind:value={inlineDraft[col.key]}
+                        class="inline-input"
+                        style="padding: 3px 6px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: 1px solid #2563eb; background: #ffffff; width: 95px;"
+                      />
+
                     {:else}
                       <!-- Standard Text Input -->
                       <input 
@@ -1691,6 +1704,19 @@
                       </span>
                     {:else}
                       <span style="color: #94a3b8; font-style: italic; font-size: 12px;">—</span>
+                    {/if}
+
+                  {:else if col.type === 'time'}
+                    <!-- READ-ONLY Time HH:MM -->
+                    {#if item[col.key] && item[col.key] !== '00:00:00' && item[col.key] !== '00:00'}
+                      <span style="display: inline-flex; align-items: center; gap: 4px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 6px; font-family: monospace; font-size: 12px; font-weight: 700; color: #166534;">
+                        <span style="font-size: 11px;">☕</span>
+                        {String(item[col.key]).slice(0, 5)}
+                      </span>
+                    {:else}
+                      <span style="display: inline-flex; align-items: center; gap: 4px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 2px 8px; border-radius: 6px; font-family: monospace; font-size: 12px; font-weight: 600; color: #94a3b8;">
+                        00:00
+                      </span>
                     {/if}
 
                   {:else}

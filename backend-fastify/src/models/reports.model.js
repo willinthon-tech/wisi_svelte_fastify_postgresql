@@ -101,7 +101,7 @@ export const BASE_PLANTILLA_LIBRE = {
   id: 'SYS-L',
   codigo: 'L',
   nombre: 'Libre',
-  color: '#D9D9D9',
+  color: '#DCFCE7',
   tipo: 'plantilla'
 };
 
