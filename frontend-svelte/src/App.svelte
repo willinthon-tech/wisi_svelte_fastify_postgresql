@@ -985,15 +985,8 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "rrhh/horarios" || $currentRouteStore === "horarios" || $currentRouteStore === "rrhh/plantillas" || $currentRouteStore === "plantillas"}
-          <HorariosView
-            items={$itemsStore}
-            on:toggle={handleToggle}
-            on:edit={(e) => openEditModalUI(e.detail)}
-            on:delete={handleDeleteRequest}
-            on:openModal={openCreateModalUI}
-            on:saveInline={handleSaveInline}
-          />
+        {:else if $currentRouteStore === "configuracion/horarios" || $currentRouteStore === "horarios" || $currentRouteStore === "rrhh/horarios" || $currentRouteStore === "configuracion/plantillas" || $currentRouteStore === "rrhh/plantillas" || $currentRouteStore === "plantillas"}
+          <HorariosView />
         {:else if $currentRouteStore === "rrhh/cumpleanos" || $currentRouteStore === "cumpleanos"}
           <CumpleanosView
             items={$itemsStore}

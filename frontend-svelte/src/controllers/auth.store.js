@@ -49,7 +49,6 @@ export const navMenuStore = writable([
       { id: 26, nombre: 'Registros', ruta: '/rrhh/registros', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 27, nombre: 'Desincorporados', ruta: '/rrhh/desincorporados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 28, nombre: 'Carnet', ruta: '/rrhh/carnet', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 29, nombre: 'Horarios', ruta: '/rrhh/horarios', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 30, nombre: 'Cumpleaños', ruta: '/rrhh/cumpleanos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 31, nombre: 'Calendario', ruta: '/rrhh/calendario', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 36, nombre: 'Cortes', ruta: '/rrhh/cortes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
@@ -91,6 +90,16 @@ export const navMenuStore = writable([
       { id: 39, nombre: 'Métodos de Pago', ruta: '/configuracion/metodos-pago', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { id: 41, nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+    ]
+  },
+  {
+    id: 10,
+    nombre: 'CONF.M: RRHH',
+    icono: 'file',
+    modulos: [
+      { id: 29, nombre: 'Horarios', ruta: '/configuracion/horarios', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 37, nombre: 'Excepciones', ruta: '/configuracion/excepciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { id: 38, nombre: 'Fechas Patrias', ruta: '/configuracion/fechas-patrias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   }
 ]);

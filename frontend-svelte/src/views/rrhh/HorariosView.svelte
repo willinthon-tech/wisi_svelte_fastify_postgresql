@@ -3,7 +3,6 @@
 
   // Persistent Filter State across view navigations
   export const persistentHorariosFilters = writable({
-    selectedSalas: [],
     searchQuery: ""
   });
 </script>
@@ -11,17 +10,7 @@
 <script>
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
-  import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
-  import { masterSalasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
-  import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
-  import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
-
-  $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -30,29 +19,16 @@
   });
   unsubInit();
 
-  // Smart Multiselect Filters State
-  let selectedSalas = initial.selectedSalas || [];
   let searchQuery = initial.searchQuery || "";
 
-  // Sync back to persistent store whenever any filter parameter changes
+  // Sync back to persistent store whenever search query changes
   $: {
     persistentHorariosFilters.set({
-      selectedSalas,
       searchQuery
     });
   }
 
-  // Cascading Facet Options from Backend
-  let filterOptions = {
-    salas: []
-  };
-
-  $: hasActiveFilters = Boolean(
-    (searchQuery || "").trim() ||
-    selectedSalas.length > 0
-  );
-
-  $: totalFilters = ((searchQuery || "").trim() ? 1 : 0) + selectedSalas.length;
+  $: hasActiveFilters = Boolean((searchQuery || "").trim());
 
   let items = [];
   let totalCount = 0;
@@ -92,44 +68,16 @@
     page: 1,
     limit: 10,
     search: '',
-    sortBy: 'id',
-    sortDir: 'desc'
+    sortBy: 'codigo',
+    sortDir: 'asc'
   };
 
   onMount(async () => {
     await Promise.all([
-      loadMasterStoresFromBackend(),
       loadExcepciones(),
       loadServerData(currentParams)
     ]);
   });
-
-  // Fetch filter options ONLY when active filters, user assigned salas or search change
-  let lastFilterKey = "";
-  $: filterKey = `${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${(searchQuery || "").trim()}`;
-  $: if (filterKey !== lastFilterKey) {
-    lastFilterKey = filterKey;
-    fetchFilterOptions();
-  }
-
-  async function fetchFilterOptions() {
-    try {
-      const q = new URLSearchParams();
-      if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
-      if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
-      if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
-
-      const res = await fetch(`/api/master/horarios/filter-options?${q.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.success && json.data) {
-          filterOptions = json.data;
-        }
-      }
-    } catch (e) {
-      console.warn("Error fetching filter options from backend:", e);
-    }
-  }
 
   async function loadServerData(params = {}) {
     currentParams = { ...currentParams, ...params };
@@ -138,17 +86,11 @@
         page: currentParams.page || 1,
         limit: currentParams.limit || 10,
         search: currentParams.search || '',
-        sort_by: currentParams.sortBy || currentParams.sort_by || 'id',
+        sort_by: currentParams.sortBy || currentParams.sort_by || 'codigo',
         sort_order: currentParams.sortDir || currentParams.sort_order || 'asc'
       });
-      if (assignedSalaIds && assignedSalaIds.length > 0) {
-        q.set('user_sala_ids', assignedSalaIds.join(','));
-      }
-      if (selectedSalas.length > 0) {
-        q.set('sala_ids', selectedSalas.join(','));
-      }
 
-      const res = await fetch(`/api/master/plantillas-horarios?${q.toString()}`);
+      const res = await fetch(`/api/master/horarios?${q.toString()}`);
       const json = await res.json();
       if (json && json.success) {
         items = json.data || [];
@@ -164,32 +106,21 @@
 
   function clearAllFilters() {
     searchQuery = "";
-    selectedSalas = [];
     loadServerData({ page: 1, search: "" });
   }
-
-  $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
-    if (s.grupo_id && Number(s.grupo_id) === 2) return false;
-    if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.includes(s.id);
-  });
 
   $: columns = [
     { key: 'id', label: 'N°', type: 'id', sortable: true, editable: false },
     { key: 'codigo', label: 'Código', bold: true, sortable: true, editable: true },
-    { key: 'nombre', label: 'Descripción', bold: true, sortable: true, editable: true },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala', sortable: true, editable: false },
+    { key: 'nombre', label: 'Descripción / Nombre', bold: true, sortable: true, editable: true },
     { key: 'horas_trabajo', label: 'Horas de Trabajo', type: 'horario_badge', sortable: true, editable: true },
     { key: 'jornada', label: 'Jornada', type: 'jornada', sortable: true, editable: false },
     { key: 'color', label: 'Color', type: 'color', sortable: true, editable: true }
   ];
 
-  $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : '';
-
   $: createFields = [
     { key: 'codigo', label: 'Código', type: 'text', placeholder: 'Ej. M, T, N, ADM', required: true },
     { key: 'nombre', label: 'Descripción / Nombre', type: 'text', placeholder: 'Ej. TURNO MAÑANA', required: true },
-    { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true, defaultValue: defaultSalaId },
     {
       type: 'row',
       fields: [
@@ -311,7 +242,7 @@
       <span class="excepciones-pin">📌</span>
       <strong class="excepciones-title">Excepciones Base del Sistema:</strong>
       <span class="excepciones-subtitle">
-        Se cuenta con {globalExcepciones.length} excepciones predeterminadas de horario y asistencia (aplican a todas las salas):
+        Se cuenta con {globalExcepciones.length} excepciones predeterminadas de horario y asistencia (códigos reservados globales):
       </span>
     </div>
     <div class="excepciones-badges-grid">
@@ -334,7 +265,6 @@
   {items}
   existingItems={items}
   reservedCodes={globalExcepciones}
-  uniqueCodeByField="sala_id"
   {totalCount}
   {currentPage}
   {pageSize}
@@ -342,7 +272,7 @@
   {columns}
   {createFields}
   bind:searchQuery
-  searchPlaceholder="Buscar por código, descripción, sala..."
+  searchPlaceholder="Buscar por código o descripción de horario..."
   entityType="horario"
   createModalTitle="Agregar Horario"
   on:fetchServerData={(e) => loadServerData(e.detail)}
@@ -351,28 +281,15 @@
   on:delete={handleDelete}
   on:batchDelete={handleBatchDelete}
 >
-  <div slot="filters" class="smart-filters-grid">
-    <SmartMultiSelect
-      id="filter-horarios-salas"
-      label="Salas"
-      options={filterOptions.salas}
-      bind:selectedValues={selectedSalas}
-      on:change={(e) => {
-        selectedSalas = e.detail;
-        loadServerData({ page: 1 });
-      }}
-    />
-  </div>
-
   <div slot="search-actions">
     {#if hasActiveFilters}
       <button
         type="button"
         on:click={clearAllFilters}
         style="padding: 7px 14px; font-size: 12px; font-weight: 700; color: #ef4444; border: 1px solid #fca5a5; border-radius: 8px; background: #fef2f2; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.04); white-space: nowrap;"
-        title="Restablecer búsqueda y filtros"
+        title="Restablecer búsqueda"
       >
-        <span>✕</span> Limpiar Filtros ({totalFilters})
+        <span>✕</span> Limpiar Búsqueda
       </button>
     {/if}
   </div>
@@ -462,13 +379,5 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .smart-filters-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    width: 100%;
-    align-items: center;
   }
 </style>

@@ -3580,23 +3580,12 @@ export function buildPlantillasHorariosConditions(options = {}) {
   // Excluir excepciones y plantillas sin horas asignadas (esta tabla es exclusivamente para Horarios de trabajo)
   conds.push(sql`p.hora_entrada IS NOT NULL AND p.hora_salida IS NOT NULL AND COALESCE(p.codigo, '') NOT IN ('L', 'U')`);
 
-  // 1. Restricción por salas asignadas al usuario logueado
-  if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`(p.sala_id IS NULL OR p.sala_id = ANY(${options.userSalaIds}))`);
-  }
-
-  // 2. Salas seleccionadas
-  if (!options.skipSalas && options.salaIds && options.salaIds.length > 0) {
-    conds.push(sql`p.sala_id = ANY(${options.salaIds})`);
-  }
-
-  // 3. Búsqueda por texto
+  // Búsqueda por texto
   if (options.search && String(options.search).trim()) {
     const term = `%${String(options.search).trim().toLowerCase()}%`;
     conds.push(sql`(
       LOWER(COALESCE(p.nombre, '')) LIKE ${term} OR
       LOWER(COALESCE(p.codigo, '')) LIKE ${term} OR
-      LOWER(COALESCE(s.nombre, '')) LIKE ${term} OR
       CAST(p.id AS TEXT) LIKE ${term}
     )`);
   }
@@ -3605,46 +3594,10 @@ export function buildPlantillasHorariosConditions(options = {}) {
 }
 
 export async function getPlantillasHorariosFilterOptionsModel(options = {}) {
-  if (!isPgConnected || !sql) {
-    return {
-      success: true,
-      data: { salas: [] }
-    };
-  }
-
-  const conds = buildPlantillasHorariosConditions({ ...options, skipSalas: true });
-  const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
-
-  let allSalas;
-  if (options.userSalaIds && options.userSalaIds.length > 0) {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
-  } else {
-    allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;
-  }
-
-  const countsRes = await sql`
-    SELECT p.sala_id AS id, COUNT(p.id)::int AS count
-    FROM horarios p
-    LEFT JOIN salas s ON p.sala_id = s.id
-    ${where}
-    GROUP BY p.sala_id
-  `;
-  const countMap = new Map(countsRes.map(r => [r.id, r.count]));
-  const activeSalas = new Set((options.salaIds || []).map(Number));
-
-  const salas = allSalas
-    .map(s => ({
-      id: s.id,
-      nombre: s.nombre,
-      count: countMap.get(s.id) || 0
-    }))
-    .filter(s => s.count > 0 || activeSalas.has(Number(s.id)))
-    .sort((a, b) => b.count - a.count);
-
   return {
     success: true,
     data: {
-      salas
+      salas: []
     }
   };
 }
@@ -3658,22 +3611,13 @@ export async function getPlantillasHorariosModel(params = {}) {
   const sortBy = params.sortBy || params.sort_by || 'codigo';
   const sortDir = String(params.sortDir || params.sort_order || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
 
-  let userSalaIds = null;
-  if (params.user_sala_ids) {
-    userSalaIds = String(params.user_sala_ids).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
-  }
-  let salaIds = null;
-  if (params.sala_ids) {
-    salaIds = String(params.sala_ids).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
-  }
-
   const allowedSortColumns = {
     'id': 'p.id',
     'codigo': "CASE WHEN p.codigo ~ '^[0-9]+$' THEN LPAD(p.codigo, 10, '0') ELSE UPPER(p.codigo) END",
     'nombre': 'UPPER(p.nombre)',
-    'sala_nombre': 'UPPER(s.nombre)',
     'horas_trabajo': 'p.hora_entrada',
     'hora_entrada': 'p.hora_entrada',
+    'hora_salida': 'p.hora_salida',
     'jornada': "COALESCE(p.hora_salida, '00:00:00') - COALESCE(p.hora_entrada, '00:00:00')",
     'color': 'p.color'
   };
@@ -3683,8 +3627,6 @@ export async function getPlantillasHorariosModel(params = {}) {
 
   if (isPgConnected && sql) {
     const conds = buildPlantillasHorariosConditions({
-      userSalaIds,
-      salaIds,
       search
     });
 
@@ -3695,15 +3637,13 @@ export async function getPlantillasHorariosModel(params = {}) {
     const countRes = await sql`
       SELECT COUNT(*)::int AS total
       FROM horarios p
-      LEFT JOIN salas s ON p.sala_id = s.id
       ${whereClause}
     `;
     const total = countRes[0]?.total || 0;
 
     const dataRes = await sql`
-      SELECT p.*, s.nombre AS sala_nombre
+      SELECT p.*
       FROM horarios p
-      LEFT JOIN salas s ON p.sala_id = s.id
       ${whereClause}
       ${orderClause}
       LIMIT ${limit} OFFSET ${offset}
@@ -3720,16 +3660,12 @@ export async function createPlantillaHorarioModel(data) {
   if (isPgConnected && sql) {
     const codigo = (data.codigo !== null && data.codigo !== undefined) ? String(data.codigo).trim().toUpperCase() : '';
     const nombre = (data.nombre || '').trim();
-    const salaId = (data.sala_id !== null && data.sala_id !== undefined && data.sala_id !== '') ? Number(data.sala_id) : null;
 
     if (!codigo) {
       throw new Error('El código del horario es obligatorio.');
     }
     if (!nombre) {
       throw new Error('La descripción o nombre del horario es obligatorio.');
-    }
-    if (!salaId) {
-      throw new Error('La sala asignada es obligatoria para el horario.');
     }
 
     // 1. Validar unicidad global contra excepciones
@@ -3743,25 +3679,23 @@ export async function createPlantillaHorarioModel(data) {
       throw new Error(`El código "${codigo}" no puede usarse porque pertenece a la excepción global "${excConflict.descripcion}".`);
     }
 
-    // 2. Validar unicidad de código dentro de la misma sala
+    // 2. Validar unicidad global de código en horarios
     const [horConflict] = await sql`
-      SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'esta sala') AS sala_nombre 
+      SELECT h.id, h.codigo, h.nombre 
       FROM horarios h 
-      LEFT JOIN salas s ON h.sala_id = s.id 
       WHERE LOWER(TRIM(h.codigo)) = LOWER(${codigo}) 
-        AND ((${salaId}::int IS NULL AND h.sala_id IS NULL) OR h.sala_id = ${salaId}::int)
       LIMIT 1
     `;
     if (horConflict) {
-      throw new Error(`El código "${codigo}" ya pertenece al horario "${horConflict.nombre}" de la sala "${horConflict.sala_nombre}".`);
+      throw new Error(`El código "${codigo}" ya pertenece al horario "${horConflict.nombre}".`);
     }
 
     const rows = await sql`
       INSERT INTO horarios (
-        nombre, sala_id, codigo, hora_entrada, hora_salida, color
+        nombre, codigo, hora_entrada, hora_salida, color
       )
       VALUES (
-        ${nombre}, ${salaId}, ${codigo}, 
+        ${nombre}, ${codigo}, 
         ${data.hora_entrada || null}, ${data.hora_salida || null}, 
         ${data.color || '#FFFF99'}
       )
@@ -3776,7 +3710,7 @@ export async function updatePlantillaHorarioModel(id, data) {
   const pId = Number(id);
   if (isPgConnected && sql) {
     const [current] = await sql`
-      SELECT id, codigo, sala_id, nombre 
+      SELECT id, codigo, nombre 
       FROM horarios 
       WHERE id = ${pId}
     `;
@@ -3787,10 +3721,6 @@ export async function updatePlantillaHorarioModel(id, data) {
     const finalCodigo = (data.codigo !== undefined && data.codigo !== null)
       ? String(data.codigo).trim().toUpperCase()
       : (current.codigo ? String(current.codigo).trim().toUpperCase() : null);
-
-    const finalSalaId = (data.sala_id !== undefined && data.sala_id !== null && data.sala_id !== '')
-      ? Number(data.sala_id)
-      : (current.sala_id !== null ? Number(current.sala_id) : null);
 
     if (finalCodigo) {
       // 1. Validar contra excepciones globales
@@ -3804,18 +3734,16 @@ export async function updatePlantillaHorarioModel(id, data) {
         throw new Error(`El código "${finalCodigo}" no puede usarse porque pertenece a la excepción global "${excConflict.descripcion}".`);
       }
 
-      // 2. Validar contra horarios en la misma sala excluyendo el registro actual
+      // 2. Validar contra horarios globales excluyendo el actual
       const [horConflict] = await sql`
-        SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'esta sala') AS sala_nombre 
+        SELECT h.id, h.codigo, h.nombre 
         FROM horarios h 
-        LEFT JOIN salas s ON h.sala_id = s.id 
         WHERE LOWER(TRIM(h.codigo)) = LOWER(${finalCodigo}) 
-          AND ((${finalSalaId}::int IS NULL AND h.sala_id IS NULL) OR h.sala_id = ${finalSalaId}::int)
           AND h.id != ${pId}
         LIMIT 1
       `;
       if (horConflict) {
-        throw new Error(`El código "${finalCodigo}" ya pertenece al horario "${horConflict.nombre}" de la sala "${horConflict.sala_nombre}".`);
+        throw new Error(`El código "${finalCodigo}" ya pertenece al horario "${horConflict.nombre}".`);
       }
     }
 
@@ -3827,7 +3755,6 @@ export async function updatePlantillaHorarioModel(id, data) {
     const rows = await sql`
       UPDATE horarios
       SET nombre = ${nombre},
-          sala_id = ${finalSalaId},
           codigo = ${finalCodigo},
           hora_entrada = ${horaEntrada},
           hora_salida = ${horaSalida},
@@ -3983,11 +3910,10 @@ export async function getDepartamentoEmpleadosCiclosModel(deptId, search = '') {
 
     if (!dept) return { success: false, error: 'Departamento no encontrado' };
 
-    // Get all shift horarios for this department's sala
+    // Get all shift horarios globally
     const plantillasSala = await sql`
       SELECT id, codigo, nombre, hora_entrada, hora_salida, color
       FROM horarios
-      WHERE sala_id = ${dept.sala_id}
       ORDER BY codigo ASC, id ASC
     `;
 
@@ -6141,16 +6067,15 @@ export async function createExcepcionModel(data) {
       throw new Error(`El código "${codigo}" ya está registrado en la excepción "${existingExc.descripcion}".`);
     }
 
-    // 2. Validar que no pertenezca a ningún horario de ninguna sala en toda la tabla horarios
+    // 2. Validar que no pertenezca a ningún horario en la tabla horarios
     const [existingHor] = await sql`
-      SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'Sin Sala') AS sala_nombre 
+      SELECT h.id, h.codigo, h.nombre 
       FROM horarios h 
-      LEFT JOIN salas s ON h.sala_id = s.id 
       WHERE LOWER(TRIM(h.codigo)) = LOWER(${codigo}) 
       LIMIT 1
     `;
     if (existingHor) {
-      throw new Error(`El código "${codigo}" no puede usarse porque ya pertenece al horario "${existingHor.nombre}" de la sala "${existingHor.sala_nombre}".`);
+      throw new Error(`El código "${codigo}" no puede usarse porque ya pertenece al horario "${existingHor.nombre}".`);
     }
 
     const rows = await sql`
@@ -6188,16 +6113,15 @@ export async function updateExcepcionModel(id, data) {
         throw new Error(`El código "${codigo}" ya está registrado en la excepción "${existingExc.descripcion}".`);
       }
 
-      // 2. Validar que no pertenezca a ningún horario de ninguna sala en toda la tabla horarios
+      // 2. Validar que no pertenezca a ningún horario en la tabla horarios
       const [existingHor] = await sql`
-        SELECT h.id, h.codigo, h.nombre, COALESCE(s.nombre, 'Sin Sala') AS sala_nombre 
+        SELECT h.id, h.codigo, h.nombre 
         FROM horarios h 
-        LEFT JOIN salas s ON h.sala_id = s.id 
         WHERE LOWER(TRIM(h.codigo)) = LOWER(${codigo}) 
         LIMIT 1
       `;
       if (existingHor) {
-        throw new Error(`El código "${codigo}" no puede usarse porque ya pertenece al horario "${existingHor.nombre}" de la sala "${existingHor.sala_nombre}".`);
+        throw new Error(`El código "${codigo}" no puede usarse porque ya pertenece al horario "${existingHor.nombre}".`);
       }
     }
     const rows = await sql`
