@@ -10,17 +10,26 @@ async function run() {
   console.log('Iniciando migración Local-First en PostgreSQL...');
   await initDb();
 
-  const sqlFilePath = path.join(__dirname, 'migrations_local_first_sync.sql');
-  const sqlContent = fs.readFileSync(sqlFilePath, 'utf8');
+  const sqlFiles = [
+    'migrations_local_first_sync.sql',
+    'migrations_dual_key_relations.sql'
+  ];
 
-  try {
-    await sql.unsafe(sqlContent);
-    console.log('\x1b[32m✔ Migración Local-First ejecutada exitosamente en PostgreSQL.\x1b[0m');
-  } catch (err) {
-    console.error('\x1b[31m✖ Error ejecutando migración:\x1b[0m', err.message);
-    process.exit(1);
+  for (const file of sqlFiles) {
+    const filePath = path.join(__dirname, file);
+    if (!fs.existsSync(filePath)) continue;
+    const content = fs.readFileSync(filePath, 'utf8');
+    try {
+      console.log(`Ejecutando script: ${file}...`);
+      await sql.unsafe(content);
+      console.log(`\x1b[32m✔ Script ${file} ejecutado con éxito.\x1b[0m`);
+    } catch (err) {
+      console.error(`\x1b[31m✖ Error ejecutando ${file}:\x1b[0m`, err.message);
+      process.exit(1);
+    }
   }
 
+  console.log('\x1b[32m✔ Todas las migraciones Local-First y Dual-Key ejecutadas exitosamente en PostgreSQL.\x1b[0m');
   process.exit(0);
 }
 
