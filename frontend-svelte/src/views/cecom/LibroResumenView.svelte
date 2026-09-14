@@ -9,6 +9,7 @@
   import {
     masterSalasStore,
     masterTipoIncidenciasStore,
+    masterMetodosPagoStore,
     loadMasterStoresFromBackend,
   } from "../../controllers/master.store.js";
 
@@ -320,15 +321,7 @@
   $: sortedIncidenciasGenerales = sortByMasReciente(resumenData.incidencias_generales);
   $: sortedAportes = sortByMasReciente(resumenData.aportes_maquinas || resumenData.aportes || []);
 
-  const DEFAULT_TIPOS_INCIDENCIA = [
-    { id: 1, nombre: "General" },
-    { id: 2, nombre: "Empleado" },
-    { id: 3, nombre: "Mercancía" },
-  ];
-
-  $: availableTiposIncidencia = ($masterTipoIncidenciasStore && $masterTipoIncidenciasStore.length > 0)
-    ? $masterTipoIncidenciasStore
-    : DEFAULT_TIPOS_INCIDENCIA;
+  $: availableTiposIncidencia = $masterTipoIncidenciasStore || [];
 
   function normalizeText(val) {
     return String(val || "")
@@ -404,14 +397,48 @@
     return { mercancia, empleado, generales };
   })();
 
+  function getContrastColor(hexColor) {
+    if (!hexColor || typeof hexColor !== "string") return "#ffffff";
+    let hex = hexColor.replace("#", "");
+    if (hex.length === 3) {
+      hex = hex.split("").map((c) => c + c).join("");
+    }
+    if (hex.length !== 6) return "#ffffff";
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 140 ? "#0f172a" : "#ffffff";
+  }
+
+  function getMetodoColor(metodoName, recordColor) {
+    if (recordColor) return recordColor;
+    if (!metodoName) return "#64748B";
+    const n = metodoName.toLowerCase().trim();
+    const metodos = $masterMetodosPagoStore || [];
+    const found = metodos.find((m) => (m.nombre || "").toLowerCase().trim() === n);
+    if (found && found.color) return found.color;
+    return "#64748B";
+  }
+
+  function getMetodoBadgeStyle(metodoName, recordColor) {
+    const color = getMetodoColor(metodoName, recordColor);
+    const textCol = getContrastColor(color);
+    return `background-color: ${color} !important; color: ${textCol} !important; border: 1px solid rgba(0, 0, 0, 0.15) !important; box-shadow: 0 1px 2px rgba(0,0,0,0.06);`;
+  }
+
   // 2. Agrupación reactiva de Clientes por Método de Pago
   $: clientesPorMetodo = (() => {
     const list = resumenData.control_clientes || [];
     const map = {};
     for (const c of list) {
       const metodo = (c.metodo || "No especificado").trim();
+      const color = c.metodo_color || null;
       if (!map[metodo]) {
-        map[metodo] = { metodo, ops: 0, compras: 0, pagos: 0, balance: 0 };
+        map[metodo] = { metodo, color, ops: 0, compras: 0, pagos: 0, balance: 0 };
+      }
+      if (!map[metodo].color && color) {
+        map[metodo].color = color;
       }
       const m = parseFloat(c.monto) || 0;
       const t = (c.tipo || "compra").toLowerCase();
@@ -1464,9 +1491,14 @@
                         {c.tipo || "Compra"}
                       </span>
                     </td>
-                    <td class="cell-center tag-metodo-text"
-                      >{c.metodo || "General"}</td
-                    >
+                    <td class="cell-center">
+                      <span
+                        class="tag-metodo-badge"
+                        style="{getMetodoBadgeStyle(c.metodo, c.metodo_color)}"
+                      >
+                        {c.metodo || "General"}
+                      </span>
+                    </td>
                     <td class="cell-nota tag-nota-text" title={c.nota || ""}>
                       {c.nota ? c.nota : "—"}
                     </td>
@@ -1509,7 +1541,14 @@
                   <tbody>
                     {#each clientesPorMetodo as m}
                       <tr>
-                        <td class="cell-left font-bold">{m.metodo}</td>
+                        <td class="cell-left font-bold">
+                          <span
+                            class="tag-metodo-badge"
+                            style="{getMetodoBadgeStyle(m.metodo, m.color)}"
+                          >
+                            {m.metodo}
+                          </span>
+                        </td>
                         <td class="cell-center">{m.ops}</td>
                         <td class="cell-total-money">{formatMoney(m.compras)}</td>
                         <td class="cell-total-money text-blue"
@@ -3019,6 +3058,16 @@
   .tag-metodo-text {
     font-weight: 600;
     color: #475569;
+  }
+  .tag-metodo-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
   }
   .cell-nota {
     font-size: 11px;

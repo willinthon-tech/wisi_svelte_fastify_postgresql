@@ -5600,6 +5600,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
     create: async function(data) {
       const cleanName = (data.nombre || '').trim();
       if (!cleanName) throw new Error(`El nombre de ${entityLabel} es obligatorio`);
+      const cleanColor = data.color !== undefined ? (String(data.color).trim() || '#3B82F6') : undefined;
 
       if (isPgConnected && sql) {
         const existing = await sql`
@@ -5611,11 +5612,20 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
           throw new Error(`Ya existe un registro de ${entityLabel} con el nombre "${toTitleCase(cleanName)}"`);
         }
 
-        const rows = await sql`
-          INSERT INTO ${sql(tableName)} (nombre)
-          VALUES (${cleanName})
-          RETURNING *
-        `;
+        let rows;
+        if (cleanColor !== undefined) {
+          rows = await sql`
+            INSERT INTO ${sql(tableName)} (nombre, color)
+            VALUES (${cleanName}, ${cleanColor})
+            RETURNING *
+          `;
+        } else {
+          rows = await sql`
+            INSERT INTO ${sql(tableName)} (nombre)
+            VALUES (${cleanName})
+            RETURNING *
+          `;
+        }
         return { ...rows[0], nombre: toTitleCase(rows[0].nombre) };
       } else {
         const list = inMemoryData[memKey] || [];
@@ -5627,6 +5637,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
         const newItem = {
           id: nextId,
           nombre: toTitleCase(cleanName),
+          ...(cleanColor !== undefined ? { color: cleanColor } : {}),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -5638,6 +5649,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
     update: async function(id, data) {
       const rId = Number(id);
       const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
+      const cleanColor = data.color !== undefined ? String(data.color).trim() : null;
 
       if (isPgConnected && sql) {
         if (cleanName) {
@@ -5651,14 +5663,27 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
           }
         }
 
-        const rows = await sql`
-          UPDATE ${sql(tableName)}
-          SET 
-            nombre = COALESCE(${cleanName}, nombre),
-            updated_at = CURRENT_TIMESTAMP
-          WHERE id = ${rId}
-          RETURNING *
-        `;
+        let rows;
+        if (cleanColor !== null) {
+          rows = await sql`
+            UPDATE ${sql(tableName)}
+            SET 
+              nombre = COALESCE(${cleanName}, nombre),
+              color = ${cleanColor},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${rId}
+            RETURNING *
+          `;
+        } else {
+          rows = await sql`
+            UPDATE ${sql(tableName)}
+            SET 
+              nombre = COALESCE(${cleanName}, nombre),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${rId}
+            RETURNING *
+          `;
+        }
         return rows[0] ? { ...rows[0], nombre: toTitleCase(rows[0].nombre) } : null;
       } else {
         const list = inMemoryData[memKey] || [];
@@ -5666,6 +5691,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
         if (idx !== -1) {
           list[idx] = { ...list[idx], ...data, updated_at: new Date().toISOString() };
           if (cleanName) list[idx].nombre = toTitleCase(cleanName);
+          if (cleanColor) list[idx].color = cleanColor;
           return list[idx];
         }
         return null;
@@ -8336,6 +8362,7 @@ export async function getLibroControlClientesModel(libroId) {
       COALESCE(c.nombre, '') AS cliente, 
       lcc.tipo, lcc.monto, lcc.metodo_pago_id, 
       COALESCE(mp.nombre, 'General') AS metodo,
+      COALESCE(mp.color, '#3B82F6') AS metodo_color,
       lcc.hora, 
       COALESCE(lcc.nota, '') AS nota,
       lcc.created_at, lcc.updated_at,
@@ -8469,7 +8496,10 @@ export async function createLibroControlClienteModel(data) {
     `;
     if (mRow.length > 0) metodoPagoId = mRow[0].id;
   }
-  if (!metodoPagoId) metodoPagoId = 1; // Por defecto 1 (General)
+  if (!metodoPagoId && sql && isPgConnected) {
+    const firstM = await sql`SELECT id FROM metodos_pago ORDER BY id ASC LIMIT 1`;
+    if (firstM.length > 0) metodoPagoId = firstM[0].id;
+  }
 
   const now = new Date();
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -8523,7 +8553,7 @@ export async function createLibroControlClienteModel(data) {
 
   let metodoInfo = null;
   if (metodoPagoId) {
-    const mRows = await sql`SELECT nombre FROM metodos_pago WHERE id = ${metodoPagoId} LIMIT 1`;
+    const mRows = await sql`SELECT nombre, COALESCE(color, '#3B82F6') AS color FROM metodos_pago WHERE id = ${metodoPagoId} LIMIT 1`;
     if (mRows.length > 0) metodoInfo = mRows[0];
   }
 
@@ -8533,6 +8563,7 @@ export async function createLibroControlClienteModel(data) {
     tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : 'General',
     tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : 1,
     metodo: metodoInfo ? metodoInfo.nombre : (metodoNombre || 'General'),
+    metodo_color: metodoInfo ? metodoInfo.color : '#3B82F6',
     metodo_pago_id: metodoPagoId
   };
 }
@@ -8633,7 +8664,7 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
 
   let metodoInfo = null;
   if (updatedRecord.metodo_pago_id) {
-    const mRows = await sql`SELECT nombre FROM metodos_pago WHERE id = ${updatedRecord.metodo_pago_id} LIMIT 1`;
+    const mRows = await sql`SELECT nombre, COALESCE(color, '#3B82F6') AS color FROM metodos_pago WHERE id = ${updatedRecord.metodo_pago_id} LIMIT 1`;
     if (mRows.length > 0) metodoInfo = mRows[0];
   }
 
@@ -8643,6 +8674,7 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : '',
     tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : null,
     metodo: metodoInfo ? metodoInfo.nombre : (metodoNombre || 'General'),
+    metodo_color: metodoInfo ? metodoInfo.color : '#3B82F6',
     metodo_pago_id: updatedRecord.metodo_pago_id
   };
 }

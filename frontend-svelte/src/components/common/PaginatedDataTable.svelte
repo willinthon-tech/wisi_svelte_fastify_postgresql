@@ -1395,6 +1395,23 @@
                         style="padding: 3px 6px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: 1px solid #2563eb; background: #ffffff;"
                       />
 
+                    {:else if col.type === 'color'}
+                      <!-- Color Picker Input for Color Column -->
+                      <div style="display: inline-flex; align-items: center; gap: 6px;">
+                        <input 
+                          type="color" 
+                          bind:value={inlineDraft[col.key]}
+                          style="width: 28px; height: 26px; padding: 1px; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; background: #ffffff;"
+                        />
+                        <input 
+                          type="text" 
+                          bind:value={inlineDraft[col.key]}
+                          class="inline-input"
+                          style="width: 80px; font-family: monospace; font-size: 11px; font-weight: 700; text-transform: uppercase;"
+                          placeholder="#000000"
+                        />
+                      </div>
+
                     {:else}
                       <!-- Standard Text Input -->
                       <input 
@@ -2858,6 +2875,20 @@
                     {/each}
                   {/if}
                 </select>
+              {:else if field.type === 'color'}
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <input 
+                    type="color" 
+                    bind:value={createDraft[field.key]}
+                    style="width: 48px; height: 42px; padding: 2px; border-radius: 8px; border: 1.5px solid #cbd5e1; cursor: pointer; background: #ffffff;"
+                  />
+                  <input 
+                    type="text" 
+                    bind:value={createDraft[field.key]}
+                    placeholder={field.defaultValue || '#3B82F6'}
+                    style="flex: 1; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 700; font-family: monospace; outline: none; background: #ffffff; text-transform: uppercase;"
+                  />
+                </div>
               {:else}
                 <div>
                   <input 

@@ -6,19 +6,14 @@
   export let libro = null;
   export let libroId = null;
 
-  const DEFAULT_TIPOS_INCIDENCIA = [
-    { id: 1, nombre: 'General' },
-    { id: 2, nombre: 'Empleado' },
-    { id: 3, nombre: 'Mercancía' }
-  ];
-
-  $: availableTiposIncidencia = ($masterTipoIncidenciasStore && $masterTipoIncidenciasStore.length > 0)
-    ? $masterTipoIncidenciasStore
-    : DEFAULT_TIPOS_INCIDENCIA;
+  $: availableTiposIncidencia = $masterTipoIncidenciasStore || [];
 
   // Estado del formulario
-  let tipoIncidenciaId = 1;
-  $: tipo = availableTiposIncidencia.find(t => Number(t.id) === Number(tipoIncidenciaId))?.nombre || 'General';
+  let tipoIncidenciaId = null;
+  $: if (availableTiposIncidencia && availableTiposIncidencia.length > 0 && (!tipoIncidenciaId || !availableTiposIncidencia.some(t => Number(t.id) === Number(tipoIncidenciaId)))) {
+    tipoIncidenciaId = availableTiposIncidencia[0].id;
+  }
+  $: tipo = availableTiposIncidencia.find(t => Number(t.id) === Number(tipoIncidenciaId))?.nombre || '';
   let descripcion = '';
   let isSaving = false;
 

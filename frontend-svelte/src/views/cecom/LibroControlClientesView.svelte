@@ -94,31 +94,58 @@
   // Modal para editar Método y Hora
   let showModalEditar = false;
   let editingRecord = null;
-  let modalMetodoPagoId = 1;
-  let modalMetodo = 'General';
+  let modalMetodoPagoId = null;
+  let modalMetodo = '';
   let modalHora = '';
   let modalNota = '';
   let isSavingModal = false;
 
-  const DEFAULT_METODOS = [
-    { id: 1, nombre: 'General' },
-    { id: 2, nombre: 'PDV' },
-    { id: 3, nombre: 'Cash' },
-    { id: 4, nombre: 'USDT' }
-  ];
-
-  $: metodosDisponibles = ($masterMetodosPagoStore && $masterMetodosPagoStore.length > 0)
-    ? $masterMetodosPagoStore
-    : DEFAULT_METODOS;
+  $: metodosDisponibles = $masterMetodosPagoStore || [];
 
   $: if (metodosDisponibles && metodosDisponibles.length > 0) {
     if (!selectedMetodoPagoId || !metodosDisponibles.some(m => Number(m.id) === Number(selectedMetodoPagoId))) {
-      const gen = metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === 'general');
-      selectedMetodoPagoId = gen ? gen.id : metodosDisponibles[0].id;
+      selectedMetodoPagoId = metodosDisponibles[0].id;
     }
   }
 
-  $: currentMetodoNombre = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId))?.nombre || 'General';
+  $: currentMetodoNombre = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId))?.nombre || '';
+
+  function getContrastColor(hexColor) {
+    if (!hexColor || typeof hexColor !== 'string') return '#ffffff';
+    let hex = hexColor.replace('#', '');
+    if (hex.length === 3) {
+      hex = hex.split('').map(c => c + c).join('');
+    }
+    if (hex.length !== 6) return '#ffffff';
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 140 ? '#0f172a' : '#ffffff';
+  }
+
+  function getMetodoColor(recordOrName) {
+    if (!recordOrName) return '#64748B';
+    if (typeof recordOrName === 'object') {
+      if (recordOrName.metodo_color) return recordOrName.metodo_color;
+      if (recordOrName.color) return recordOrName.color;
+      const mId = recordOrName.metodo_pago_id ? Number(recordOrName.metodo_pago_id) : (recordOrName.id ? Number(recordOrName.id) : null);
+      const mNom = (recordOrName.metodo || recordOrName.nombre || '').toLowerCase().trim();
+      const found = metodosDisponibles.find(m => (mId && Number(m.id) === mId) || (m.nombre || '').toLowerCase().trim() === mNom);
+      if (found && found.color) return found.color;
+    } else if (typeof recordOrName === 'string') {
+      const mNom = recordOrName.toLowerCase().trim();
+      const found = metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === mNom);
+      if (found && found.color) return found.color;
+    }
+    return '#64748B';
+  }
+
+  function getMetodoBadgeStyle(recordOrName) {
+    const color = getMetodoColor(recordOrName);
+    const textCol = getContrastColor(color);
+    return `background-color: ${color} !important; color: ${textCol} !important; border: 1px solid rgba(0, 0, 0, 0.15) !important; box-shadow: 0 1px 2px rgba(0,0,0,0.06);`;
+  }
 
   function getMetodoIcon(nombre) {
     const n = (nombre || '').toLowerCase().trim();
@@ -219,6 +246,7 @@
     return {
       id: met.id,
       metodo: met.nombre,
+      color: met.color || getMetodoColor(met),
       compras,
       pagos,
       neto,
@@ -441,15 +469,18 @@
     isSaving = true;
     try {
       const matchedMetodo = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId)) || 
-                            metodosDisponibles.find(m => (m.nombre || '').toLowerCase() === 'general') || 
-                            metodosDisponibles[0] || { id: 1, nombre: 'General' };
+                            metodosDisponibles[0];
+      if (!matchedMetodo) {
+        triggerToast('No hay métodos de pago disponibles en el sistema', 'warning');
+        return;
+      }
       const payload = {
         cliente: cleanCliente,
         cliente_id: selectedClienteId || null,
         tipo: tipo || 'Compra',
         monto: cleanMonto,
-        metodo_pago_id: matchedMetodo.id || 1,
-        metodo: matchedMetodo.nombre || 'General',
+        metodo_pago_id: matchedMetodo.id,
+        metodo: matchedMetodo.nombre,
         hora: getCurrentTimeString(), // Hora en curso automáticamente
         nota: (nota || '').trim()
       };
@@ -469,8 +500,7 @@
         monto = '';
         nota = '';
         tipo = 'Compra';
-        const genMetodo = metodosDisponibles.find(m => (m.nombre || '').toLowerCase() === 'general');
-        selectedMetodoPagoId = genMetodo ? genMetodo.id : (metodosDisponibles[0]?.id || 1);
+        selectedMetodoPagoId = metodosDisponibles[0]?.id || null;
         showSugerencias = false;
         await loadRecords();
         loadSugerenciasRemotas();
@@ -515,9 +545,9 @@
     editingRecord = record;
     modalMetodoPagoId = record.metodo_pago_id 
       ? Number(record.metodo_pago_id) 
-      : (metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === (record.metodo || '').toLowerCase().trim())?.id || 1);
+      : (metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === (record.metodo || '').toLowerCase().trim())?.id || metodosDisponibles[0]?.id || null);
     const matched = metodosDisponibles.find(m => Number(m.id) === Number(modalMetodoPagoId));
-    modalMetodo = matched ? matched.nombre : (record.metodo || 'General');
+    modalMetodo = matched ? matched.nombre : (record.metodo || metodosDisponibles[0]?.nombre || '');
     modalHora = record.hora || getCurrentTimeString();
     modalNota = record.nota || '';
     showModalEditar = true;
@@ -550,7 +580,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           metodo_pago_id: modalMetodoPagoId,
-          metodo: modalMetodo || 'General',
+          metodo: modalMetodo || '',
           hora: modalHora,
           nota: (modalNota || '').trim()
         })
@@ -665,14 +695,22 @@
         <label class="form-label">MÉTODO DE PAGO: *</label>
         <div class="radio-toggle-group metodos-grid">
           {#each metodosDisponibles as met}
-            <label class="radio-option {Number(selectedMetodoPagoId) === Number(met.id) ? `selected-metodo ${getMetodoClass(met.nombre)}` : ''}">
+            {@const isSelected = Number(selectedMetodoPagoId) === Number(met.id)}
+            {@const mColor = met.color || getMetodoColor(met)}
+            <label 
+              class="radio-option {isSelected ? `selected-metodo ${getMetodoClass(met.nombre)}` : ''}"
+              style="{isSelected ? `border-color: ${mColor}; background: ${mColor}15; color: ${mColor}; font-weight: 700;` : ''}"
+            >
               <input 
                 type="radio" 
                 name="form-metodo-pago" 
                 value={met.id} 
                 bind:group={selectedMetodoPagoId}
               />
-              <span class="radio-custom"></span>
+              <span 
+                class="radio-custom"
+                style="{isSelected ? `border-color: ${mColor}; background: ${mColor}; box-shadow: 0 0 0 3px ${mColor}30;` : ''}"
+              ></span>
               <span class="radio-text">{getMetodoIcon(met.nombre)} {met.nombre}</span>
             </label>
           {/each}
@@ -903,7 +941,10 @@
                       <span class="monto-value">${formatMonto(record.monto)}</span>
                     </td>
                     <td class="td-center td-metodo">
-                      <span class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}">
+                      <span 
+                        class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}" 
+                        style="{getMetodoBadgeStyle(record)}"
+                      >
                         {record.metodo || 'General'}
                       </span>
                     </td>
@@ -966,7 +1007,7 @@
                 {#each resumenMetodos as m}
                 <tr>
                   <td>
-                    <span class="badge-metodo metodo-{m.metodo.toLowerCase()}">{m.metodo}</span>
+                    <span class="badge-metodo metodo-{m.metodo.toLowerCase()}" style="{getMetodoBadgeStyle(m)}">{m.metodo}</span>
                   </td>
                   <td class="td-right font-mono text-green">
                     ${formatMonto(m.compras)}
@@ -1127,7 +1168,11 @@
             <label class="modal-field-label">Método de Pago: *</label>
             <div class="metodos-options-grid">
               {#each metodosDisponibles as met}
-                <label class="metodo-radio-pill {Number(modalMetodoPagoId) === Number(met.id) ? 'active' : ''}">
+                {@const isSelected = Number(modalMetodoPagoId) === Number(met.id)}
+                <label 
+                  class="metodo-radio-pill {isSelected ? 'active' : ''}"
+                  style="{isSelected ? getMetodoBadgeStyle(met) : ''}"
+                >
                   <input 
                     type="radio" 
                     name="modal-metodo" 

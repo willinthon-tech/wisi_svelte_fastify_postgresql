@@ -81,11 +81,13 @@
 
   $: columns = [
     { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
-    { key: 'nombre', label: 'Método de Pago', bold: true, sortable: true, editable: true }
+    { key: 'nombre', label: 'Método de Pago', bold: true, sortable: true, editable: true },
+    { key: 'color', label: 'Color', type: 'color', sortable: true, editable: true }
   ];
 
   $: createFields = [
-    { key: 'nombre', label: 'Método de Pago', type: 'text', placeholder: 'Ej. General, PDV, Cash, USDT...', required: true }
+    { key: 'nombre', label: 'Método de Pago', type: 'text', placeholder: 'Ej. General, PDV, Cash, USDT...', required: true },
+    { key: 'color', label: 'Color de Identificación', type: 'color', defaultValue: '#3B82F6' }
   ];
 
   async function handleCreate(event) {
