@@ -47,7 +47,8 @@ import {
   getTipoIncidencias, createTipoIncidencia, updateTipoIncidencia, deleteTipoIncidencia,
   getClientes, getClientesFilterOptions, createCliente, updateCliente, deleteCliente,
   getRangos, createRango, updateRango, deleteRango,
-  getLibroAportes, createLibroAporte, updateLibroAporte, deleteLibroAporte
+  getLibroAportes, createLibroAporte, updateLibroAporte, deleteLibroAporte,
+  getDeltaSync
 } from '../controllers/master.controller.js';
 
 import fs from 'fs';
@@ -61,6 +62,10 @@ const __dirname = path.dirname(__filename);
 const attlogsDir = path.join(__dirname, '../../attlogs');
 
 export default async function masterRoutes(fastify, options) {
+
+  // Sincronización Delta Local-First
+  fastify.get('/sync/delta', getDeltaSync);
+  fastify.get('/api/sync/delta', getDeltaSync);
 
   // Ciclos Horarios
   fastify.get('/master/departamentos-ciclos', getDepartamentosCiclos);

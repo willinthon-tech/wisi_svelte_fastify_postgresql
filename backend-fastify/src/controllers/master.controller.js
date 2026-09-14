@@ -46,7 +46,8 @@ import {
   getTipoIncidenciasModel, createTipoIncidenciaModel, updateTipoIncidenciaModel, deleteTipoIncidenciaModel,
   getClientesModel, getClientesFilterOptionsModel, createClienteModel, updateClienteModel, deleteClienteModel,
   getRangosModel, createRangoModel, updateRangoModel, deleteRangoModel,
-  getLibroAportesModel, createLibroAporteModel, updateLibroAporteModel, deleteLibroAporteModel
+  getLibroAportesModel, createLibroAporteModel, updateLibroAporteModel, deleteLibroAporteModel,
+  getDeltaSyncModel
 } from '../models/master.model.js';
 
 export async function getAttlogsStats(request, reply) {
@@ -2497,3 +2498,16 @@ export async function deleteLibroAporte(request, reply) {
     return reply.status(400).send({ success: false, error: err.message });
   }
 }
+
+/**
+ * Endpoint de sincronización delta para Local-First.
+ */
+export async function getDeltaSync(request, reply) {
+  try {
+    const result = await getDeltaSyncModel(request.query);
+    return reply.send({ success: true, ...result });
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+

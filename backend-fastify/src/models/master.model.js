@@ -9582,3 +9582,80 @@ export async function getLibroResumenModel(libroId) {
   return res.data?.data || res.data || res;
 }
 
+/**
+ * Motor de sincronización Delta para arquitectura Local-First.
+ * Devuelve únicamente registros modificados (upserted) o eliminados (deleted) desde 'since'.
+ */
+export async function getDeltaSyncModel(params = {}) {
+  if (!isPgConnected || !sql) {
+    return {
+      timestamp: new Date().toISOString(),
+      since: params.since || new Date(0).toISOString(),
+      changes: {}
+    };
+  }
+
+  const since = params.since ? new Date(params.since) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const validSince = isNaN(since.getTime()) ? new Date(0) : since;
+  const currentTimestamp = new Date().toISOString();
+
+  const allowedTables = [
+    'clientes',
+    'empleados',
+    'salas',
+    'libro_control_clientes',
+    'libro_aportes',
+    'libro_control_llaves',
+    'libro_incidencias_generales',
+    'libro_novedades_mesas',
+    'libro_datos',
+    'metodos_pago',
+    'tipo_clientes'
+  ];
+
+  let targetTables = allowedTables;
+  if (params.entities) {
+    const list = String(params.entities).split(',').map(e => e.trim().toLowerCase());
+    targetTables = allowedTables.filter(t => list.includes(t));
+  }
+
+  const changes = {};
+
+  for (const tbl of targetTables) {
+    try {
+      // Upserted: records where updated_at >= since and is_deleted is false (or null)
+      const upserted = await sql`
+        SELECT * FROM ${sql(tbl)}
+        WHERE updated_at >= ${validSince} AND (is_deleted IS FALSE OR is_deleted IS NULL)
+        ORDER BY updated_at ASC
+        LIMIT 1000
+      `;
+
+      // Deleted: records where updated_at >= since and is_deleted is true
+      const deleted = await sql`
+        SELECT id, uuid, deleted_at FROM ${sql(tbl)}
+        WHERE updated_at >= ${validSince} AND is_deleted IS TRUE
+        ORDER BY updated_at ASC
+        LIMIT 1000
+      `;
+
+      changes[tbl] = {
+        upserted: upserted || [],
+        deleted: deleted || []
+      };
+    } catch (tblErr) {
+      changes[tbl] = {
+        upserted: [],
+        deleted: [],
+        error: tblErr.message
+      };
+    }
+  }
+
+  return {
+    timestamp: currentTimestamp,
+    since: validSince.toISOString(),
+    changes
+  };
+}
+
