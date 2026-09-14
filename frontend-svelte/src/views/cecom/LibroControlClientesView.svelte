@@ -855,7 +855,6 @@
                 <th class="th-center th-tipo">Tipo</th>
                 <th class="th-right th-monto">Monto</th>
                 <th class="th-center th-metodo">Método</th>
-                <th class="th-center th-nota">Nota</th>
                 <th class="th-center th-hora">Hora</th>
                 <th class="th-center th-acciones">Acciones</th>
               </tr>
@@ -863,7 +862,7 @@
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="8" class="empty-state-cell">
+                  <td colspan="7" class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
                       <span>Cargando registros de clientes...</span>
@@ -872,7 +871,7 @@
                 </tr>
               {:else if records.length === 0}
                 <tr>
-                  <td colspan="8" class="empty-state-cell">
+                  <td colspan="7" class="empty-state-cell">
                     <div class="empty-msg-box">
                       <span class="empty-icon">👥</span>
                       <p class="empty-text">
@@ -907,9 +906,6 @@
                       <span class="badge-metodo metodo-{String(record.metodo || 'General').toLowerCase()}">
                         {record.metodo || 'General'}
                       </span>
-                    </td>
-                    <td class="td-center td-nota">
-                      <span class="nota-cell-badge" title={record.nota || ''}>{record.nota || '—'}</span>
                     </td>
                     <td class="td-center td-hora-val">
                       <span class="time-badge">{record.hora || '—'}</span>
@@ -2536,30 +2532,5 @@
   .textarea-nota:focus {
     border-color: #3b82f6;
     outline: none;
-  }
-
-  .th-nota {
-    width: 140px;
-    text-align: center;
-  }
-
-  .td-nota {
-    max-width: 160px;
-    padding: 6px 8px;
-    text-align: center;
-  }
-
-  .nota-cell-badge {
-    display: inline-block;
-    max-width: 150px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 11.5px;
-    color: #475569;
-    background: #f8fafc;
-    border: 1px dashed #cbd5e1;
-    padding: 2px 7px;
-    border-radius: 4px;
   }
 </style>
