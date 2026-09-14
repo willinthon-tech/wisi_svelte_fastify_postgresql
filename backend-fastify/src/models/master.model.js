@@ -10,6 +10,18 @@ function getSalaIdsClause(params, salaAlias = 's.id') {
   return `AND ${salaAlias} IN (${ids.join(',')})`;
 }
 
+export function isUuid(val) {
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+}
+
+export function toIdOrUuid(val) {
+  if (!val) return { isUuid: false, value: null, uuid: null, id: null };
+  const s = String(val).trim();
+  if (isUuid(s)) return { isUuid: true, value: s, uuid: s, id: null };
+  const n = Number(s);
+  return { isUuid: false, value: isNaN(n) ? s : n, uuid: null, id: isNaN(n) ? null : n };
+}
+
 export function toTitleCase(str) {
   if (!str || typeof str !== 'string') return str;
   return str
@@ -121,40 +133,68 @@ export async function getDynamicTableDependencies(tableName, recordId) {
 }
 
 export async function deleteEntityDynamic(tableName, entityTypeLabel, id) {
-  const rId = Number(id);
-  if (isNaN(rId) || rId <= 0) {
-    return {
-      success: false,
-      message: 'ID de registro inválido'
-    };
-  }
+  const isU = isUuid(id);
+  let rId = !isU ? Number(id) : null;
+  let rUuid = isU ? String(id).trim() : null;
+  let record = null;
+
   if (isPgConnected && sql) {
-    let name = `ID: ${rId}`;
     try {
-      const rows = await sql.unsafe(`SELECT * FROM "${tableName}" WHERE id = $1`, [rId]);
-      if (rows && rows.length > 0) {
-        name = rows[0].nombre || rows[0].title || rows[0].nombre_apellido || rows[0].usuario || rows[0].name || `ID: ${rId}`;
+      if (rUuid) {
+        const rows = await sql.unsafe(`SELECT * FROM "${tableName}" WHERE uuid = $1::uuid LIMIT 1`, [rUuid]);
+        if (rows && rows.length > 0) {
+          record = rows[0];
+          rId = record.id;
+        }
+      } else if (!isNaN(rId) && rId > 0) {
+        const rows = await sql.unsafe(`SELECT * FROM "${tableName}" WHERE id = $1 LIMIT 1`, [rId]);
+        if (rows && rows.length > 0) {
+          record = rows[0];
+          rUuid = record.uuid;
+        }
       }
     } catch (e) {
-      // Ignore if table structure differs
+      // Si la tabla no tiene columna uuid, continuar con rId
+    }
+  }
+
+  if (!record && (rId === null || isNaN(rId) || rId <= 0) && !rUuid) {
+    return {
+      success: false,
+      message: 'ID o UUID de registro inválido'
+    };
+  }
+
+  const effectiveId = rId || (record ? record.id : null);
+  const effectiveUuid = rUuid || (record ? record.uuid : null);
+
+  if (isPgConnected && sql) {
+    let name = effectiveUuid || `ID: ${effectiveId}`;
+    if (record) {
+      name = record.nombre || record.title || record.nombre_apellido || record.usuario || record.name || effectiveUuid || `ID: ${effectiveId}`;
     }
 
-    const dependencies = await getDynamicTableDependencies(tableName, rId);
-
-    if (dependencies && dependencies.length > 0) {
-      return {
-        success: false,
-        blocked: true,
-        entityType: entityTypeLabel || tableName,
-        entityName: name,
-        entityId: rId,
-        message: `No se puede eliminar ${entityTypeLabel || tableName} porque tiene elementos asociados.`,
-        dependencies
-      };
+    if (effectiveId) {
+      const dependencies = await getDynamicTableDependencies(tableName, effectiveId);
+      if (dependencies && dependencies.length > 0) {
+        return {
+          success: false,
+          blocked: true,
+          entityType: entityTypeLabel || tableName,
+          entityName: name,
+          entityId: effectiveUuid || effectiveId,
+          message: `No se puede eliminar ${entityTypeLabel || tableName} porque tiene elementos asociados.`,
+          dependencies
+        };
+      }
     }
 
     try {
-      await sql.unsafe(`DELETE FROM "${tableName}" WHERE id = $1`, [rId]);
+      if (effectiveUuid) {
+        await sql.unsafe(`DELETE FROM "${tableName}" WHERE uuid = $1::uuid`, [effectiveUuid]);
+      } else {
+        await sql.unsafe(`DELETE FROM "${tableName}" WHERE id = $1`, [effectiveId]);
+      }
     } catch (err) {
       if (err.code === '23503') { // PostgreSQL foreign_key_violation
         return {
@@ -162,15 +202,21 @@ export async function deleteEntityDynamic(tableName, entityTypeLabel, id) {
           blocked: true,
           entityType: entityTypeLabel || tableName,
           entityName: name,
-          entityId: rId,
+          entityId: effectiveUuid || effectiveId,
           message: `No se puede eliminar ${entityTypeLabel || tableName} porque está referenciado en la base de datos.`,
           dependencies: [{ label: 'Registros Vinculados', count: 1 }]
         };
       }
       throw err;
     }
+  } else {
+    if (inMemoryData[tableName]) {
+      inMemoryData[tableName] = inMemoryData[tableName].filter(item => 
+        String(item.uuid) !== String(id) && Number(item.id) !== Number(id)
+      );
+    }
   }
-  return { success: true, id: rId };
+  return { success: true, id: effectiveUuid || effectiveId, uuid: effectiveUuid };
 }
 
 
@@ -213,19 +259,20 @@ export async function createUsuarioModel(data) {
 }
 
 export async function updateUsuarioModel(id, data) {
-  const uId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   const { nombre_apellido, usuario, password } = data || {};
 
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE usuarios
       SET nombre_apellido = ${nombre_apellido}, usuario = ${usuario}, password = ${password}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${uId}
-      RETURNING id, nombre_apellido, usuario, password
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+      RETURNING id, uuid, nombre_apellido, usuario, password
     `;
     return rows[0];
   } else {
-    const idx = inMemoryData.usuarios.findIndex(u => u.id === uId);
+    const idx = inMemoryData.usuarios.findIndex(u => String(u.uuid) === String(id) || Number(u.id) === Number(id));
     if (idx !== -1) {
       inMemoryData.usuarios[idx] = { ...inMemoryData.usuarios[idx], ...data };
       return inMemoryData.usuarios[idx];
@@ -264,18 +311,19 @@ export async function createSalaModel(data) {
 }
 
 export async function updateSalaModel(id, data) {
-  const sId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE salas
       SET grupo_id = ${data.grupo_id}, nombre = ${data.nombre}, nombre_comercial = ${data.nombre_comercial},
           rif = ${data.rif}, ubicacion = ${data.ubicacion}, correo = ${data.correo}, telefono = ${data.telefono}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${sId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
       RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = inMemoryData.salas.findIndex(s => s.id === sId);
+    const idx = inMemoryData.salas.findIndex(s => String(s.uuid) === String(id) || Number(s.id) === Number(id));
     if (idx !== -1) {
       inMemoryData.salas[idx] = { ...inMemoryData.salas[idx], ...data };
       return inMemoryData.salas[idx];
@@ -312,17 +360,18 @@ export async function createPaginaModel(data) {
 }
 
 export async function updatePaginaModel(id, data) {
-  const pId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE paginas
       SET nombre = ${data.nombre}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${pId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
       RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = inMemoryData.paginas.findIndex(p => p.id === pId);
+    const idx = inMemoryData.paginas.findIndex(p => String(p.uuid) === String(id) || Number(p.id) === Number(id));
     if (idx !== -1) {
       inMemoryData.paginas[idx] = { ...inMemoryData.paginas[idx], ...data };
       return inMemoryData.paginas[idx];
@@ -400,7 +449,8 @@ export async function createModuloModel(data) {
 }
 
 export async function updateModuloModel(id, data) {
-  const mId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE modulos
@@ -410,12 +460,12 @@ export async function updateModuloModel(id, data) {
           page_id = ${data.page_id}, 
           orden = ${data.orden !== undefined ? Number(data.orden) : sql`orden`},
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${mId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
       RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = inMemoryData.modulos.findIndex(m => m.id === mId);
+    const idx = inMemoryData.modulos.findIndex(m => String(m.uuid) === String(id) || Number(m.id) === Number(id));
     if (idx !== -1) {
       inMemoryData.modulos[idx] = { ...inMemoryData.modulos[idx], ...data };
       return inMemoryData.modulos[idx];
@@ -478,21 +528,47 @@ export async function createDispositivoModel(data) {
   }
 }
 
+export async function getDispositivoByIdModel(id) {
+  const isU = isUuid(id);
+  const dId = !isU ? Number(id) : null;
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      SELECT d.*, COALESCE(d.ip_panel, '') AS ip_panel, COALESCE(d.ip_panel, '') AS ip_panel_remoto, s.nombre AS sala_nombre
+      FROM dispositivos d
+      LEFT JOIN salas s ON (d.sala_uuid = s.uuid OR d.sala_id = s.id)
+      WHERE ${isU ? sql`d.uuid = ${id}::uuid` : sql`d.id = ${dId}`}
+      LIMIT 1
+    `;
+    return rows[0] || null;
+  }
+  return (inMemoryData.dispositivos || []).find(d => String(d.uuid) === String(id) || Number(d.id) === dId) || null;
+}
+
 export async function updateDispositivoModel(id, data) {
-  const dId = Number(id);
+  const isU = isUuid(id);
+  const dId = !isU ? Number(id) : null;
   const ipPanelVal = data.ip_panel || data.ip_panel_remoto || '';
+  let salaId = data.sala_id && !isUuid(data.sala_id) ? Number(data.sala_id) : null;
+  let salaUuid = isUuid(data.sala_id) ? String(data.sala_id).trim() : (data.sala_uuid || null);
+
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE dispositivos
-      SET nombre = ${data.nombre}, sala_id = ${data.sala_id}, ip_local = ${data.ip_local},
-          ip_remota = ${data.ip_remota}, ip_panel = ${ipPanelVal}, usuario = ${data.usuario || 'admin'},
-          clave = ${data.clave || '123456'}
-      WHERE id = ${dId}
+      SET nombre = COALESCE(${data.nombre}, nombre), 
+          sala_id = COALESCE(${salaId}, sala_id),
+          sala_uuid = COALESCE(${salaUuid}::uuid, sala_uuid),
+          ip_local = COALESCE(${data.ip_local}, ip_local),
+          ip_remota = COALESCE(${data.ip_remota}, ip_remota), 
+          ip_panel = COALESCE(${ipPanelVal}, ip_panel), 
+          usuario = COALESCE(${data.usuario}, usuario),
+          clave = COALESCE(${data.clave}, clave),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${dId}`}
       RETURNING *, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto
     `;
     return rows[0];
   } else {
-    const idx = inMemoryData.dispositivos.findIndex(d => d.id === dId);
+    const idx = inMemoryData.dispositivos.findIndex(d => String(d.uuid) === String(id) || Number(d.id) === dId);
     if (idx !== -1) {
       inMemoryData.dispositivos[idx] = { ...inMemoryData.dispositivos[idx], ...data, ip_panel: ipPanelVal, ip_panel_remoto: ipPanelVal };
       return inMemoryData.dispositivos[idx];
@@ -502,17 +578,22 @@ export async function updateDispositivoModel(id, data) {
 }
 
 export async function injectDispositivoPushConfigModel(id, serverUrl) {
-  const dId = Number(id);
+  const isU = isUuid(id);
+  const dId = !isU ? Number(id) : null;
   let dev = null;
   if (isPgConnected && sql) {
-    const rows = await sql`SELECT * FROM dispositivos WHERE id = ${dId}`;
+    const rows = await sql`
+      SELECT * FROM dispositivos 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${dId}`}
+      LIMIT 1
+    `;
     dev = rows[0];
   } else {
-    dev = (inMemoryData.dispositivos || []).find(d => d.id === dId);
+    dev = (inMemoryData.dispositivos || []).find(d => String(d.uuid) === String(id) || Number(d.id) === dId);
   }
 
   if (!dev) {
-    throw new Error(`Dispositivo con ID ${id} no encontrado`);
+    throw new Error(`Dispositivo ${id} no encontrado`);
   }
 
   const rawIp = dev.ip_remota || dev.ip_local || '127.0.0.1';
@@ -655,13 +736,18 @@ function isapiHttpRequest(targetUrl, options = {}) {
 }
 
 export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
-  const dId = Number(id);
+  if (!id) throw new Error('Dispositivo no encontrado');
+  const isU = isUuid(id);
   let dev = null;
   if (isPgConnected && sql) {
-    const rows = await sql`SELECT *, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto FROM dispositivos WHERE id = ${dId}`;
+    const rows = await sql`
+      SELECT *, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto 
+      FROM dispositivos 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+    `;
     dev = rows[0];
   } else {
-    dev = (inMemoryData.dispositivos || []).find(d => d.id === dId);
+    dev = (inMemoryData.dispositivos || []).find(d => String(d.uuid) === String(id) || Number(d.id) === Number(id));
   }
 
   if (!dev) {
@@ -768,7 +854,7 @@ ${hostXml}
         const retryText = await retryRes.text();
         const isRetryOk = retryRes.ok || retryText.includes('statusCode>1<') || retryText.includes('statusString>OK<') || retryText.includes('subStatusCode>ok<');
         if (isRetryOk) {
-          console.log(`[ISAPI SUCCESS] ✅ HTTP Listening configurado en '${dev.nombre}' vía reintento Digest`);
+          console.log(`[ISAPI SUCCESS] HTTP Listening configurado en '${dev.nombre}' vía reintento Digest`);
           return {
             success: true,
             message: `¡HTTP Listening configurado exitosamente en '${dev.nombre}'! (${ipAddress}:${portNo}${urlPath})`,
@@ -801,7 +887,7 @@ ${hostXml}
     const isSuccess = putRes.ok || respText.includes('statusCode>1<') || respText.includes('statusString>OK<') || respText.includes('subStatusCode>ok<');
 
     if (isSuccess) {
-      console.log(`[ISAPI SUCCESS] ✅ HTTP Listening aplicado en '${dev.nombre}' (${baseHost})`);
+      console.log(`[ISAPI SUCCESS] HTTP Listening aplicado en '${dev.nombre}' (${baseHost})`);
       return {
         success: true,
         message: `¡HTTP Listening configurado exitosamente en '${dev.nombre}'! (${ipAddress}:${portNo}${urlPath})`,
@@ -1643,12 +1729,13 @@ export async function getAttlogsFilterOptionsModel(options = {}) {
 }
 
 export async function getAttlogPositionModel(id, salaIds = null, estados = null) {
-  if (!isPgConnected || !sql) return { id: Number(id), globalIndex: 0, position: 1 };
+  if (!isPgConnected || !sql) return { id, globalIndex: 0, position: 1 };
+  const isU = isUuid(id);
 
   const target = await sql`
-    SELECT id, event_time, attendancestatus, employee_no
+    SELECT id, uuid, event_time, attendancestatus, employee_no
     FROM attlogs
-    WHERE id = ${Number(id)}
+    WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
     LIMIT 1
   `;
   if (!target || target.length === 0) return null;
@@ -1674,7 +1761,8 @@ export async function getAttlogPositionModel(id, salaIds = null, estados = null)
 
   const globalIndex = res[0]?.total || 0;
   return {
-    id: Number(id),
+    id: rec.id,
+    uuid: rec.uuid,
     globalIndex,
     position: globalIndex + 1
   };
@@ -1682,8 +1770,8 @@ export async function getAttlogPositionModel(id, salaIds = null, estados = null)
 
 export async function getAttlogDetailModel(id) {
   if (!isPgConnected || !sql) return null;
-  const targetId = Number(id);
-  if (isNaN(targetId)) return null;
+  const isU = isUuid(id);
+  if (!isU && isNaN(Number(id))) return null;
 
   try {
     const config = await getConfiguracionModel();
@@ -1691,7 +1779,9 @@ export async function getAttlogDetailModel(id) {
 
     const rows = await sql`
       SELECT a.id,
+             a.uuid,
              a.dispositivo_id,
+             a.dispositivo_uuid,
              a.employee_no,
              a.attendancestatus,
              a.currentverifymode,
@@ -1703,17 +1793,22 @@ export async function getAttlogDetailModel(id) {
              to_char(a.event_time AT TIME ZONE 'UTC' AT TIME ZONE ${tz}, 'HH24:MI:SS') AS hora,
              COALESCE(e.nombre, a.nombre) AS nombre,
              e.id AS empleado_id,
+             e.uuid AS empleado_uuid,
              e.cedula,
              e.foto AS empleado_foto,
              e.foto,
              c.id AS cargo_id,
+             c.uuid AS cargo_uuid,
              c.nombre AS cargo_nombre,
              c.nombre AS cargo,
              ar.id AS area_id,
+             ar.uuid AS area_uuid,
              ar.nombre AS area_nombre,
              dep.id AS departamento_id,
+             dep.uuid AS departamento_uuid,
              dep.nombre AS departamento_nombre,
              s.id AS sala_id,
+             s.uuid AS sala_uuid,
              s.nombre AS sala_nombre,
              d.nombre AS dispositivo_nombre,
              to_char(e.fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
@@ -1722,7 +1817,7 @@ export async function getAttlogDetailModel(id) {
              (SELECT count(*)::int FROM attlogs a2 WHERE a2.employee_no = a.employee_no AND LOWER(COALESCE(a2.attendancestatus, '')) IN ('checkin', 'checkout')) AS total_employee_attlogs
       FROM attlogs a
       LEFT JOIN LATERAL (
-        SELECT e.id, e.cedula, e.nombre, e.foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento, e.cargo_id, e.activo
+        SELECT e.id, e.uuid, e.cedula, e.nombre, e.foto, e.sexo, e.fecha_ingreso, e.fecha_nacimiento, e.cargo_id, e.cargo_uuid, e.activo
         FROM empleados e
         WHERE NULLIF(TRIM(a.employee_no), '') IS NOT NULL
           AND (
@@ -1732,12 +1827,12 @@ export async function getAttlogDetailModel(id) {
         ORDER BY e.activo DESC, e.id DESC
         LIMIT 1
       ) e ON TRUE
-      LEFT JOIN cargos c ON e.cargo_id = c.id
-      LEFT JOIN areas ar ON c.area_id = ar.id
-      LEFT JOIN departamentos dep ON ar.departamento_id = dep.id
-      LEFT JOIN dispositivos d ON a.dispositivo_id = d.id
-      LEFT JOIN salas s ON d.sala_id = s.id
-      WHERE a.id = ${targetId}
+      LEFT JOIN cargos c ON (e.cargo_uuid = c.uuid OR e.cargo_id = c.id)
+      LEFT JOIN areas ar ON (c.area_uuid = ar.uuid OR c.area_id = ar.id)
+      LEFT JOIN departamentos dep ON (ar.departamento_uuid = dep.uuid OR ar.departamento_id = dep.id)
+      LEFT JOIN dispositivos d ON (a.dispositivo_uuid = d.uuid OR a.dispositivo_id = d.id)
+      LEFT JOIN salas s ON (d.sala_uuid = s.uuid OR d.sala_id = s.id)
+      WHERE ${isU ? sql`a.uuid = ${id}::uuid` : sql`a.id = ${Number(id)}`}
       LIMIT 1
     `;
 
@@ -1780,7 +1875,7 @@ export async function syncAttlogsModel(data) {
       let attlogId;
       if (existingAtt.length > 0) {
         attlogId = existingAtt[0].id;
-        console.log(`\x1b[33m⚠️  [ATTLOG]\x1b[0m Marcaje duplicado detectado (id: ${attlogId}) para emp: ${log.employee_no} @ ${log.event_time} - se actualiza pero NO se emite evento`);
+        console.log(`\x1b[33m[ATTLOG]\x1b[0m Marcaje duplicado detectado (id: ${attlogId}) para emp: ${log.employee_no} @ ${log.event_time} - se actualiza pero NO se emite evento`);
         await sql`
           UPDATE attlogs
           SET updated_at = CURRENT_TIMESTAMP,
@@ -1865,7 +1960,7 @@ export async function syncAttlogsModel(data) {
           dispositivo_nombre: data.dispositivo_nombre
         });
         const empName = fullRecord?.nombre || log.nombre || log.employee_no;
-        console.log(`\x1b[32m🟢 [ATTLOG]\x1b[0m Evento emitido | emp: ${empName} | sala: ${fullRecord?.sala_nombre || data.sala_nombre} | status: ${fullRecord?.attendancestatus || log.attendanceStatus} | id: ${attlogId}`);
+        console.log(`\x1b[32m[ATTLOG]\x1b[0m Evento emitido | emp: ${empName} | sala: ${fullRecord?.sala_nombre || data.sala_nombre} | status: ${fullRecord?.attendancestatus || log.attendanceStatus} | id: ${attlogId}`);
       }
       count++;
     }
@@ -2367,7 +2462,9 @@ export async function getDepartamentosModel(params = {}) {
 export async function createDepartamentoModel(data) {
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre del departamento es obligatorio');
-  if (!data.sala_id) throw new Error('Debe seleccionar una sala para el departamento');
+  const rawSala = data.sala_uuid || data.sala_id;
+  if (!rawSala) throw new Error('Debe seleccionar una sala para el departamento');
+  const isSalaU = isUuid(rawSala);
 
   if (isPgConnected && sql) {
     const existing = await sql`
@@ -2380,8 +2477,13 @@ export async function createDepartamentoModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO departamentos (id, nombre, sala_id)
-      VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM departamentos), ${cleanName}, ${Number(data.sala_id)})
+      INSERT INTO departamentos (id, nombre, sala_id, sala_uuid)
+      VALUES (
+        (SELECT COALESCE(MAX(id), 0) + 1 FROM departamentos), 
+        ${cleanName}, 
+        ${!isSalaU ? Number(rawSala) : null},
+        ${isSalaU ? sql`${rawSala}::uuid` : sql`NULL`}
+      )
       RETURNING *
     `;
     return rows[0];
@@ -2390,25 +2492,26 @@ export async function createDepartamentoModel(data) {
 }
 
 export async function updateDepartamentoModel(id, data) {
-  const dId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre del departamento es obligatorio');
 
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM departamentos 
-      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND id != ${dId}
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+        AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${Number(id)}`}
       LIMIT 1
     `;
     if (existing.length > 0) {
       throw new Error(`Ya existe otro departamento registrado con el nombre "${toTitleCase(cleanName)}"`);
     }
 
-    // sala_id is immutable once created
     const rows = await sql`
       UPDATE departamentos
       SET nombre = ${cleanName}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${dId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
       RETURNING *
     `;
     return rows[0];
@@ -2619,6 +2722,10 @@ export async function createAreaModel(data) {
   if (!cleanName) throw new Error('El nombre del área es obligatorio');
   if (!data.departamento_id) throw new Error('Debe seleccionar un departamento para el área');
 
+  const rawDep = data.departamento_uuid || data.departamento_id;
+  if (!rawDep) throw new Error('Debe seleccionar un departamento para el área');
+  const isDepU = isUuid(rawDep);
+
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM areas 
@@ -2630,8 +2737,13 @@ export async function createAreaModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO areas (id, nombre, departamento_id)
-      VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM areas), ${cleanName}, ${Number(data.departamento_id)})
+      INSERT INTO areas (id, nombre, departamento_id, departamento_uuid)
+      VALUES (
+        (SELECT COALESCE(MAX(id), 0) + 1 FROM areas), 
+        ${cleanName}, 
+        ${!isDepU ? Number(rawDep) : null},
+        ${isDepU ? sql`${rawDep}::uuid` : sql`NULL`}
+      )
       RETURNING *
     `;
     return rows[0];
@@ -2640,14 +2752,19 @@ export async function createAreaModel(data) {
 }
 
 export async function updateAreaModel(id, data) {
-  const aId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre del área es obligatorio');
+
+  const rawDep = data.departamento_uuid !== undefined ? data.departamento_uuid : data.departamento_id;
+  const isDepU = rawDep && isUuid(rawDep);
 
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM areas 
-      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND id != ${aId}
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+        AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${Number(id)}`}
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -2657,9 +2774,10 @@ export async function updateAreaModel(id, data) {
     const rows = await sql`
       UPDATE areas
       SET nombre = ${cleanName}, 
-          departamento_id = ${data.departamento_id ? Number(data.departamento_id) : sql`departamento_id`},
+          departamento_id = ${rawDep !== undefined ? (!isDepU ? (rawDep ? Number(rawDep) : null) : sql`departamento_id`) : sql`departamento_id`},
+          departamento_uuid = ${rawDep !== undefined ? (isDepU ? sql`${rawDep}::uuid` : sql`departamento_uuid`) : sql`departamento_uuid`},
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${aId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
       RETURNING *
     `;
     return rows[0];
@@ -2917,7 +3035,9 @@ export async function getCargosModel(params = {}) {
 export async function createCargoModel(data) {
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre del cargo es obligatorio');
-  if (!data.area_id) throw new Error('Debe seleccionar un área para el cargo');
+  const rawArea = data.area_uuid || data.area_id;
+  if (!rawArea) throw new Error('Debe seleccionar un área para el cargo');
+  const isAreaU = isUuid(rawArea);
 
   if (isPgConnected && sql) {
     const existing = await sql`
@@ -2930,8 +3050,13 @@ export async function createCargoModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO cargos (id, nombre, area_id)
-      VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM cargos), ${cleanName}, ${Number(data.area_id)})
+      INSERT INTO cargos (id, nombre, area_id, area_uuid)
+      VALUES (
+        (SELECT COALESCE(MAX(id), 0) + 1 FROM cargos), 
+        ${cleanName}, 
+        ${!isAreaU ? Number(rawArea) : null},
+        ${isAreaU ? sql`${rawArea}::uuid` : sql`NULL`}
+      )
       RETURNING *
     `;
     return rows[0];
@@ -2940,14 +3065,19 @@ export async function createCargoModel(data) {
 }
 
 export async function updateCargoModel(id, data) {
-  const cId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre del cargo es obligatorio');
+
+  const rawArea = data.area_uuid !== undefined ? data.area_uuid : data.area_id;
+  const isAreaU = rawArea && isUuid(rawArea);
 
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM cargos 
-      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND id != ${cId}
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+        AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${Number(id)}`}
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -2957,9 +3087,10 @@ export async function updateCargoModel(id, data) {
     const rows = await sql`
       UPDATE cargos
       SET nombre = ${cleanName}, 
-          area_id = ${data.area_id ? Number(data.area_id) : sql`area_id`},
+          area_id = ${rawArea !== undefined ? (!isAreaU ? (rawArea ? Number(rawArea) : null) : sql`area_id`) : sql`area_id`},
+          area_uuid = ${rawArea !== undefined ? (isAreaU ? sql`${rawArea}::uuid` : sql`area_uuid`) : sql`area_uuid`},
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${cId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
       RETURNING *
     `;
     return rows[0];
@@ -3446,11 +3577,14 @@ export async function createEmpleadoModel(data) {
     }
 
     const fIngreso = cleanDateOnly(data.fecha_ingreso);
-    const fNacimiento = cleanDateOnly(data.fecha_nacimiento);
+    const rawCargo = data.cargo_uuid || data.cargo_id;
+    const isCargoU = rawCargo && isUuid(rawCargo);
+    const cargo_id = !isCargoU && rawCargo ? Number(rawCargo) : null;
+    const cargo_uuid = isCargoU ? rawCargo : null;
 
     const rows = await sql`
-      INSERT INTO empleados (id, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_id, activo, motivo_desincorporacion)
-      VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${fIngreso}::date, ${fNacimiento}::date, ${data.sexo || 'Masculino'}, ${data.cargo_id || null}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
+      INSERT INTO empleados (id, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_id, cargo_uuid, activo, motivo_desincorporacion)
+      VALUES (${nextId}, ${foto}, ${data.nombre}, ${data.cedula}, ${fIngreso}::date, ${fNacimiento}::date, ${data.sexo || 'Masculino'}, ${cargo_id}, ${cargo_uuid ? sql`${cargo_uuid}::uuid` : sql`NULL`}, ${data.activo ?? true}, ${data.motivo_desincorporacion || null})
       RETURNING *
     `;
     const emp = rows[0];
@@ -3458,17 +3592,18 @@ export async function createEmpleadoModel(data) {
     // Sincronizar dispositivos seleccionados
     if (Array.isArray(data.dispositivo_ids)) {
       for (const devId of data.dispositivo_ids) {
-        const dNum = Number(devId);
-        if (!isNaN(dNum) && dNum > 0) {
-          await sql`
-            INSERT INTO empleado_dispositivos (id, empleado_id, dispositivo_id)
-            VALUES (
-              (SELECT COALESCE(MAX(id), 0) + 1 FROM empleado_dispositivos),
-              ${nextId},
-              ${dNum}
-            )
-          `;
-        }
+        const isDevU = isUuid(devId);
+        const dNum = !isDevU ? Number(devId) : null;
+        await sql`
+          INSERT INTO empleado_dispositivos (id, empleado_id, empleado_uuid, dispositivo_id, dispositivo_uuid)
+          VALUES (
+            (SELECT COALESCE(MAX(id), 0) + 1 FROM empleado_dispositivos),
+            ${nextId},
+            (SELECT uuid FROM empleados WHERE id = ${nextId}),
+            ${dNum},
+            ${isDevU ? sql`${devId}::uuid` : sql`NULL`}
+          )
+        `;
       }
     }
 
@@ -3478,12 +3613,18 @@ export async function createEmpleadoModel(data) {
 }
 
 export async function updateEmpleadoModel(id, data) {
-  const eId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   if (isPgConnected && sql) {
     // 1. Fetch current employee record to preserve fields not included in partial update
-    const currentRows = await sql`SELECT * FROM empleados WHERE id = ${eId}`;
+    const currentRows = await sql`
+      SELECT * FROM empleados 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+    `;
     if (currentRows.length === 0) throw new Error('Empleado no encontrado');
     const existing = currentRows[0];
+    const eId = existing.id;
+    const eUuid = existing.uuid;
 
     // Validar cédula única si se está actualizando
     const cedula = data.cedula !== undefined ? data.cedula : existing.cedula;
@@ -3523,7 +3664,12 @@ export async function updateEmpleadoModel(id, data) {
     const rawNac = data.fecha_nacimiento !== undefined ? data.fecha_nacimiento : existing.fecha_nacimiento;
     const fecha_nacimiento = cleanDateOnly(rawNac);
     const sexo = data.sexo !== undefined ? data.sexo : existing.sexo;
-    const cargo_id = data.cargo_id !== undefined ? (data.cargo_id ? Number(data.cargo_id) : null) : existing.cargo_id;
+
+    const rawCargo = data.cargo_uuid !== undefined ? data.cargo_uuid : data.cargo_id;
+    const isCargoU = rawCargo && isUuid(rawCargo);
+    const cargo_id = rawCargo !== undefined ? (!isCargoU ? (rawCargo ? Number(rawCargo) : null) : null) : existing.cargo_id;
+    const cargo_uuid = rawCargo !== undefined ? (isCargoU ? rawCargo : null) : existing.cargo_uuid;
+
     const activo = data.activo !== undefined ? Boolean(data.activo) : existing.activo;
     const motivo_desincorporacion = data.motivo_desincorporacion !== undefined ? data.motivo_desincorporacion : existing.motivo_desincorporacion;
 
@@ -3535,7 +3681,8 @@ export async function updateEmpleadoModel(id, data) {
           fecha_ingreso = ${fecha_ingreso}::date,
           fecha_nacimiento = ${fecha_nacimiento}::date,
           sexo = ${sexo},
-          cargo_id = ${cargo_id},
+          cargo_id = ${cargo_id !== undefined ? cargo_id : existing.cargo_id},
+          cargo_uuid = ${cargo_uuid !== undefined ? (cargo_uuid ? sql`${cargo_uuid}::uuid` : sql`NULL`) : sql`cargo_uuid`},
           activo = ${activo},
           motivo_desincorporacion = ${motivo_desincorporacion},
           updated_at = CURRENT_TIMESTAMP
@@ -3546,19 +3693,20 @@ export async function updateEmpleadoModel(id, data) {
 
     // Sincronizar dispositivos seleccionados si se enviaron
     if (Array.isArray(data.dispositivo_ids)) {
-      await sql`DELETE FROM empleado_dispositivos WHERE empleado_id = ${eId}`;
+      await sql`DELETE FROM empleado_dispositivos WHERE empleado_id = ${eId} OR empleado_uuid = ${eUuid}::uuid`;
       for (const devId of data.dispositivo_ids) {
-        const dNum = Number(devId);
-        if (!isNaN(dNum) && dNum > 0) {
-          await sql`
-            INSERT INTO empleado_dispositivos (id, empleado_id, dispositivo_id)
-            VALUES (
-              (SELECT COALESCE(MAX(id), 0) + 1 FROM empleado_dispositivos),
-              ${eId},
-              ${dNum}
-            )
-          `;
-        }
+        const isDevU = isUuid(devId);
+        const dNum = !isDevU ? Number(devId) : null;
+        await sql`
+          INSERT INTO empleado_dispositivos (id, empleado_id, empleado_uuid, dispositivo_id, dispositivo_uuid)
+          VALUES (
+            (SELECT COALESCE(MAX(id), 0) + 1 FROM empleado_dispositivos),
+            ${eId},
+            ${eUuid ? sql`${eUuid}::uuid` : sql`NULL`},
+            ${dNum},
+            ${isDevU ? sql`${devId}::uuid` : sql`NULL`}
+          )
+        `;
       }
     }
 
@@ -3709,16 +3857,19 @@ export async function createPlantillaHorarioModel(data) {
 }
 
 export async function updatePlantillaHorarioModel(id, data) {
-  const pId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   if (isPgConnected && sql) {
     const [current] = await sql`
-      SELECT id, codigo, nombre, descanso 
+      SELECT id, uuid, codigo, nombre, descanso 
       FROM horarios 
-      WHERE id = ${pId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
     `;
     if (!current) {
-      throw new Error(`El horario con ID ${pId} no existe.`);
+      throw new Error(`El horario con ID ${id} no existe.`);
     }
+
+    const pId = current.id;
 
     const finalCodigo = (data.codigo !== undefined && data.codigo !== null)
       ? String(data.codigo).trim().toUpperCase()
@@ -4075,7 +4226,7 @@ export async function updateDepartamentoEmpleadosCiclosModel(deptId, payload = {
 }
 
 // ==========================================
-// 📅 MODELOS DE FERIADOS / CALENDARIO
+// MODELOS DE FERIADOS / CALENDARIO
 // ==========================================
 
 const MESES_MAP = {
@@ -4277,19 +4428,28 @@ export async function createFeriadoModel(data) {
 }
 
 export async function updateFeriadoModel(id, data) {
-  const fId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
   if (isPgConnected && sql) {
-    const current = await sql`SELECT * FROM feriados WHERE id = ${fId}`;
+    const current = await sql`
+      SELECT * FROM feriados 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+    `;
     if (current.length === 0) throw new Error('Feriado no encontrado');
+    const fId = current[0].id;
 
-    const targetSalaId = data.sala_id ? Number(data.sala_id) : current[0].sala_id;
+    const rawSala = data.sala_uuid || data.sala_id;
+    const isSalaU = rawSala && isUuid(rawSala);
+    const targetSalaId = rawSala ? (!isSalaU ? Number(rawSala) : null) : current[0].sala_id;
+    const targetSalaUuid = rawSala ? (isSalaU ? rawSala : null) : current[0].sala_uuid;
     const targetMes = data.mes ? Math.min(12, Math.max(1, parseInt(data.mes))) : current[0].mes;
     const targetDia = data.dia ? Math.min(31, Math.max(1, parseInt(data.dia))) : current[0].dia;
 
     const existing = await sql`
       SELECT f.id, f.nombre 
       FROM feriados f
-      WHERE f.sala_id = ${targetSalaId} AND f.mes = ${targetMes} AND f.dia = ${targetDia} AND f.id != ${fId}
+      WHERE (f.sala_id = ${targetSalaId} OR (f.sala_uuid IS NOT NULL AND f.sala_uuid = ${targetSalaUuid}::uuid))
+        AND f.mes = ${targetMes} AND f.dia = ${targetDia} AND f.id != ${fId}
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -4299,7 +4459,8 @@ export async function updateFeriadoModel(id, data) {
     const rows = await sql`
       UPDATE feriados
       SET nombre = ${data.nombre ? data.nombre.trim() : sql`nombre`},
-          sala_id = ${targetSalaId},
+          sala_id = ${targetSalaId !== null ? targetSalaId : sql`sala_id`},
+          sala_uuid = ${targetSalaUuid ? sql`${targetSalaUuid}::uuid` : sql`sala_uuid`},
           mes = ${targetMes},
           dia = ${targetDia},
           updated_at = CURRENT_TIMESTAMP
@@ -4451,7 +4612,7 @@ export async function getCarnetsModel(params = {}) {
 }
 
 // ==========================================
-// 📊 HISTÓRICOS DE CORTES DE ASISTENCIA
+// HISTÓRICOS DE CORTES DE ASISTENCIA
 // ==========================================
 
 export async function getCortesModel(options = {}) {
@@ -4592,10 +4753,14 @@ export async function getCortesModel(options = {}) {
 }
 
 export async function getCorteByIdModel(id) {
-  const numId = Number(id);
+  if (!id) return { success: false, error: 'ID inválido' };
+  const isU = isUuid(id);
+  const numId = !isU ? Number(id) : null;
   if (isPgConnected && sql) {
     try {
-      const rows = await sql`SELECT * FROM cortes WHERE id = ${numId} LIMIT 1`;
+      const rows = isU
+        ? await sql`SELECT * FROM cortes WHERE uuid = ${id}::uuid LIMIT 1`
+        : await sql`SELECT * FROM cortes WHERE id = ${numId} LIMIT 1`;
       if (rows && rows.length > 0) {
         let corteData = rows[0].data;
         if (typeof corteData === 'string') {
@@ -4622,7 +4787,8 @@ export async function getCorteByIdModel(id) {
           const uniqueSalas = Array.from(new Set(emps.map(e => Number(e.sala_id)).filter(n => !isNaN(n) && n > 0)));
           if (uniqueSalas.length > 1) {
             rows[0].salas_ids = uniqueSalas;
-            sql`UPDATE cortes SET salas_ids = ${uniqueSalas}::int[] WHERE id = ${numId}`.catch(() => {});
+            const updateWhere = isU ? sql`uuid = ${id}::uuid` : sql`id = ${numId}`;
+            sql`UPDATE cortes SET salas_ids = ${uniqueSalas}::int[] WHERE ${updateWhere}`.catch(() => {});
           }
         }
 
@@ -4656,7 +4822,7 @@ export async function getCorteByIdModel(id) {
     }
   }
 
-  const found = (inMemoryData.cortes || []).find(c => Number(c.id) === numId);
+  const found = (inMemoryData.cortes || []).find(c => isU ? c.uuid === id : Number(c.id) === numId);
   if (found) {
     let corteData = found.data;
     if (typeof corteData === 'string') {
@@ -4774,24 +4940,8 @@ export async function createCorteModel(payload = {}) {
 }
 
 export async function deleteCorteModel(id) {
-  const numId = Number(id);
-  if (isPgConnected && sql) {
-    try {
-      await sql`DELETE FROM cortes WHERE id = ${numId}`;
-      if (inMemoryData.cortes) {
-        inMemoryData.cortes = inMemoryData.cortes.filter(c => Number(c.id) !== numId);
-      }
-      return { success: true };
-    } catch (err) {
-      console.error('Error deleteCorteModel en PG:', err);
-      throw err;
-    }
-  }
-
-  if (inMemoryData.cortes) {
-    inMemoryData.cortes = inMemoryData.cortes.filter(c => Number(c.id) !== numId);
-  }
-  return { success: true };
+  if (!id) throw new Error('ID de corte requerido');
+  return await deleteEntityDynamic('cortes', 'Corte', id);
 }
 
 export async function getCortesFilterOptionsModel(options = {}) {
@@ -4994,24 +5144,32 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
 }
 
 export async function deleteDescargaModel(id) {
-  const numId = Number(id);
+  if (!id) throw new Error('ID de descarga requerido');
+  const isU = isUuid(id);
+  const numId = !isU ? Number(id) : null;
   const fs = await import('fs');
   const path = await import('path');
 
   if (isPgConnected && sql) {
-    const existing = await sql`SELECT archivo FROM descargas WHERE id = ${numId}`;
+    const existing = isU
+      ? await sql`SELECT id, uuid, archivo FROM descargas WHERE uuid = ${id}::uuid LIMIT 1`
+      : await sql`SELECT id, uuid, archivo FROM descargas WHERE id = ${numId} LIMIT 1`;
     if (existing.length > 0 && existing[0].archivo) {
       const filePath = path.join(process.cwd(), 'downloads', existing[0].archivo);
       if (fs.existsSync(filePath)) {
         try { fs.unlinkSync(filePath); } catch (e) {}
       }
     }
-    await sql`DELETE FROM descargas WHERE id = ${numId}`;
+    if (isU) {
+      await sql`DELETE FROM descargas WHERE uuid = ${id}::uuid`;
+    } else {
+      await sql`DELETE FROM descargas WHERE id = ${numId}`;
+    }
     return { success: true };
   }
 
   if (inMemoryData.descargas) {
-    inMemoryData.descargas = inMemoryData.descargas.filter(d => Number(d.id) !== numId);
+    inMemoryData.descargas = inMemoryData.descargas.filter(d => isU ? d.uuid !== id : Number(d.id) !== numId);
   }
   return { success: true };
 }
@@ -5139,14 +5297,17 @@ export async function createJuegoModel(data) {
 }
 
 export async function updateJuegoModel(id, data) {
-  const jId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const jId = !isU ? Number(id) : null;
   const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
 
   if (isPgConnected && sql) {
     if (cleanName) {
       const existing = await sql`
-        SELECT id FROM juegos 
-        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND id != ${jId}
+        SELECT id, uuid FROM juegos 
+        WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+          AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${jId}`}
         LIMIT 1
       `;
       if (existing.length > 0) {
@@ -5159,12 +5320,12 @@ export async function updateJuegoModel(id, data) {
       SET 
         nombre = COALESCE(${cleanName}, nombre),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${jId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${jId}`}
       RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = (inMemoryData.juegos || []).findIndex(j => j.id === jId);
+    const idx = (inMemoryData.juegos || []).findIndex(j => isU ? j.uuid === id : j.id === jId);
     if (idx !== -1) {
       inMemoryData.juegos[idx] = { ...inMemoryData.juegos[idx], ...data, updated_at: new Date().toISOString() };
       return inMemoryData.juegos[idx];
@@ -5174,28 +5335,8 @@ export async function updateJuegoModel(id, data) {
 }
 
 export async function deleteJuegoModel(id) {
-  const jId = Number(id);
-  if (isPgConnected && sql) {
-    // Validar si tiene mesas asociadas
-    const mesasCount = await sql`SELECT count(*)::int AS count FROM mesas WHERE juego_id = ${jId}`;
-    if (mesasCount[0]?.count > 0) {
-      const jNameRes = await sql`SELECT nombre FROM juegos WHERE id = ${jId}`;
-      return {
-        success: false,
-        blocked: true,
-        entityType: 'juego',
-        entityName: jNameRes[0]?.nombre || `ID: ${jId}`,
-        entityId: jId,
-        message: `No se puede eliminar el juego porque tiene ${mesasCount[0].count} mesa(s) asociada(s). Elimine o reasigne primero las mesas vinculadas.`,
-        dependencies: [{ label: 'Mesas Vinculadas', count: mesasCount[0].count }]
-      };
-    }
-    await sql`DELETE FROM juegos WHERE id = ${jId}`;
-    return { success: true, id: jId };
-  } else {
-    inMemoryData.juegos = (inMemoryData.juegos || []).filter(j => j.id !== jId);
-    return { success: true, id: jId };
-  }
+  if (!id) throw new Error('ID de juego requerido');
+  return await deleteEntityDynamic('juegos', 'Juego', id);
 }
 
 
@@ -5407,13 +5548,20 @@ export async function getMesasModel(params = {}) {
 export async function createMesaModel(data) {
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre de la mesa es obligatorio');
-  if (!data.juego_id) throw new Error('Debe seleccionar un juego para la mesa');
-  if (!data.sala_id) throw new Error('Debe seleccionar una sala para la mesa');
+  const rawJuego = data.juego_id || data.juego_uuid;
+  if (!rawJuego) throw new Error('Debe seleccionar un juego para la mesa');
+  const rawSala = data.sala_id || data.sala_uuid;
+  if (!rawSala) throw new Error('Debe seleccionar una sala para la mesa');
+
+  const isSalaU = isUuid(rawSala);
+  const isJuegoU = isUuid(rawJuego);
+  const mesaUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM mesas 
-      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND sala_id = ${Number(data.sala_id)}
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+        AND ${isSalaU ? sql`sala_uuid = ${rawSala}::uuid` : sql`sala_id = ${Number(rawSala)}`}
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -5421,23 +5569,40 @@ export async function createMesaModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO mesas (nombre, juego_id, sala_id, active)
-      VALUES (${cleanName}, ${Number(data.juego_id)}, ${Number(data.sala_id)}, 1)
+      INSERT INTO mesas (
+        ${mesaUuid ? sql`uuid,` : sql``}
+        nombre, 
+        juego_id, juego_uuid, 
+        sala_id, sala_uuid, 
+        active
+      )
+      VALUES (
+        ${mesaUuid ? sql`${mesaUuid}::uuid,` : sql``}
+        ${cleanName}, 
+        ${!isJuegoU ? Number(rawJuego) : null}, 
+        ${isJuegoU ? sql`${rawJuego}::uuid` : sql`NULL`}, 
+        ${!isSalaU ? Number(rawSala) : null}, 
+        ${isSalaU ? sql`${rawSala}::uuid` : sql`NULL`}, 
+        1
+      )
       RETURNING *
     `;
     return rows[0];
   } else {
     const cleanLower = cleanName.toLowerCase();
-    const existing = (inMemoryData.mesas || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && Number(m.sala_id) === Number(data.sala_id));
+    const existing = (inMemoryData.mesas || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && (isSalaU ? m.sala_uuid === rawSala : Number(m.sala_id) === Number(rawSala)));
     if (existing) {
       throw new Error(`Ya existe una mesa registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
     }
     const nextId = (inMemoryData.mesas?.length || 0) > 0 ? Math.max(...inMemoryData.mesas.map(m => m.id)) + 1 : 1;
     const newMesa = {
       id: nextId,
+      uuid: mesaUuid || `mesa-${Date.now()}`,
       nombre: cleanName,
-      juego_id: Number(data.juego_id),
-      sala_id: Number(data.sala_id),
+      juego_id: !isJuegoU ? Number(rawJuego) : null,
+      juego_uuid: isJuegoU ? rawJuego : null,
+      sala_id: !isSalaU ? Number(rawSala) : null,
+      sala_uuid: isSalaU ? rawSala : null,
       active: 1,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -5449,26 +5614,40 @@ export async function createMesaModel(data) {
 }
 
 export async function updateMesaModel(id, data) {
-  const mId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const mId = !isU ? Number(id) : null;
   const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
-  const juegoId = data.juego_id ? Number(data.juego_id) : null;
-  let salaId = data.sala_id ? Number(data.sala_id) : null;
+  const rawJuego = data.juego_id !== undefined ? data.juego_id : data.juego_uuid;
+  const rawSala = data.sala_id !== undefined ? data.sala_id : data.sala_uuid;
   const active = data.active !== undefined ? Number(data.active) : null;
 
   if (isPgConnected && sql) {
-    if (cleanName && !salaId) {
-      const cur = await sql`SELECT sala_id FROM mesas WHERE id = ${mId} LIMIT 1`;
+    let currentSalaId = null;
+    let currentSalaUuid = null;
+    if (rawSala) {
+      if (isUuid(rawSala)) currentSalaUuid = rawSala;
+      else currentSalaId = Number(rawSala);
+    } else if (cleanName) {
+      const cur = isU 
+        ? await sql`SELECT sala_id, sala_uuid FROM mesas WHERE uuid = ${id}::uuid LIMIT 1`
+        : await sql`SELECT sala_id, sala_uuid FROM mesas WHERE id = ${mId} LIMIT 1`;
       if (cur.length > 0) {
-        salaId = cur[0].sala_id;
+        currentSalaId = cur[0].sala_id;
+        currentSalaUuid = cur[0].sala_uuid;
       }
     }
 
     if (cleanName) {
+      const salaMatch = currentSalaUuid 
+        ? sql`sala_uuid = ${currentSalaUuid}::uuid` 
+        : (currentSalaId ? sql`sala_id = ${currentSalaId}` : sql`1=1`);
+
       const existing = await sql`
         SELECT id FROM mesas 
         WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
-          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
-          AND id != ${mId}
+          AND ${salaMatch}
+          AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${mId}`}
         LIMIT 1
       `;
       if (existing.length > 0) {
@@ -5476,20 +5655,27 @@ export async function updateMesaModel(id, data) {
       }
     }
 
+    const juegoId = rawJuego !== undefined ? (!isUuid(rawJuego) ? Number(rawJuego) : null) : null;
+    const juegoUuid = rawJuego !== undefined ? (isUuid(rawJuego) ? String(rawJuego).trim() : null) : null;
+    const salaId = rawSala !== undefined ? (!isUuid(rawSala) ? Number(rawSala) : null) : null;
+    const salaUuid = rawSala !== undefined ? (isUuid(rawSala) ? String(rawSala).trim() : null) : null;
+
     const rows = await sql`
       UPDATE mesas
       SET 
         nombre = COALESCE(${cleanName}, nombre),
-        juego_id = COALESCE(${juegoId}, juego_id),
-        sala_id = COALESCE(${salaId}, sala_id),
+        juego_id = ${rawJuego !== undefined ? (juegoId !== null ? juegoId : sql`juego_id`) : sql`juego_id`},
+        juego_uuid = ${rawJuego !== undefined ? (juegoUuid ? sql`${juegoUuid}::uuid` : sql`juego_uuid`) : sql`juego_uuid`},
+        sala_id = ${rawSala !== undefined ? (salaId !== null ? salaId : sql`sala_id`) : sql`sala_id`},
+        sala_uuid = ${rawSala !== undefined ? (salaUuid ? sql`${salaUuid}::uuid` : sql`sala_uuid`) : sql`sala_uuid`},
         active = COALESCE(${active}, active),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${mId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${mId}`}
       RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = (inMemoryData.mesas || []).findIndex(m => m.id === mId);
+    const idx = (inMemoryData.mesas || []).findIndex(m => isU ? m.uuid === id : m.id === mId);
     if (idx !== -1) {
       inMemoryData.mesas[idx] = { ...inMemoryData.mesas[idx], ...data, updated_at: new Date().toISOString() };
       return inMemoryData.mesas[idx];
@@ -5500,37 +5686,41 @@ export async function updateMesaModel(id, data) {
 
 // Soft delete: Marca active = 0 (envía a Mesas Borradas)
 export async function softDeleteMesaModel(id) {
-  const mId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const mId = !isU ? Number(id) : null;
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE mesas 
       SET active = 0, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ${mId} 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${mId}`} 
       RETURNING *
     `;
-    return { success: true, id: mId, mesa: rows[0] };
+    return { success: true, id: isU ? id : mId, mesa: rows[0] };
   } else {
-    const mesa = (inMemoryData.mesas || []).find(m => m.id === mId);
+    const mesa = (inMemoryData.mesas || []).find(m => isU ? m.uuid === id : m.id === mId);
     if (mesa) mesa.active = 0;
-    return { success: true, id: mId };
+    return { success: true, id: isU ? id : mId };
   }
 }
 
 // Restore: Marca active = 1 (restaura de Mesas Borradas a Mesas)
 export async function restoreMesaModel(id) {
-  const mId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const mId = !isU ? Number(id) : null;
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE mesas 
       SET active = 1, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ${mId} 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${mId}`} 
       RETURNING *
     `;
-    return { success: true, id: mId, mesa: rows[0] };
+    return { success: true, id: isU ? id : mId, mesa: rows[0] };
   } else {
-    const mesa = (inMemoryData.mesas || []).find(m => m.id === mId);
+    const mesa = (inMemoryData.mesas || []).find(m => isU ? m.uuid === id : m.id === mId);
     if (mesa) mesa.active = 1;
-    return { success: true, id: mId };
+    return { success: true, id: isU ? id : mId };
   }
 }
 
@@ -5540,7 +5730,7 @@ export async function purgeMesaModel(id) {
 }
 
 // =========================================================================
-// 🎰 MODELOS PARA CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
+// MODELOS PARA CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
 // =========================================================================
 
 function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
@@ -5651,15 +5841,17 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
     },
 
     update: async function(id, data) {
-      const rId = Number(id);
+      if (!id) throw new Error('ID inválido');
+      const isU = isUuid(id);
       const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
       const cleanColor = data.color !== undefined ? String(data.color).trim() : null;
 
       if (isPgConnected && sql) {
         if (cleanName) {
           const existing = await sql`
-            SELECT id FROM ${sql(tableName)} 
-            WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND id != ${rId}
+            SELECT id, uuid FROM ${sql(tableName)} 
+            WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+              AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${Number(id)}`}
             LIMIT 1
           `;
           if (existing.length > 0) {
@@ -5675,7 +5867,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
               nombre = COALESCE(${cleanName}, nombre),
               color = ${cleanColor},
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${rId}
+            WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
             RETURNING *
           `;
         } else {
@@ -5684,14 +5876,14 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
             SET 
               nombre = COALESCE(${cleanName}, nombre),
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${rId}
+            WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
             RETURNING *
           `;
         }
         return rows[0] ? { ...rows[0], nombre: toTitleCase(rows[0].nombre) } : null;
       } else {
         const list = inMemoryData[memKey] || [];
-        const idx = list.findIndex(i => i.id === rId);
+        const idx = list.findIndex(i => String(i.uuid) === String(id) || Number(i.id) === Number(id));
         if (idx !== -1) {
           list[idx] = { ...list[idx], ...data, updated_at: new Date().toISOString() };
           if (cleanName) list[idx].nombre = toTitleCase(cleanName);
@@ -5896,13 +6088,18 @@ export async function getModelosFilterOptionsModel(options = {}) {
 
 export async function createModeloModel(data) {
   const cleanName = (data.nombre || '').trim();
-  const marcaId = data.marca_id ? Number(data.marca_id) : null;
+  const rawMarca = data.marca_id !== undefined ? data.marca_id : data.marca_uuid;
+  const isMarcaU = rawMarca && isUuid(rawMarca);
+  const marcaId = rawMarca && !isMarcaU ? Number(rawMarca) : null;
+  const marcaUuid = isMarcaU ? String(rawMarca).trim() : (data.marca_uuid || null);
+  const modeloUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
+
   if (!cleanName) throw new Error('El nombre del modelo es obligatorio');
 
   if (isPgConnected && sql) {
-    const marcaCond = marcaId !== null 
-      ? sql`marca_id = ${marcaId}` 
-      : sql`marca_id IS NULL`;
+    const marcaCond = marcaUuid 
+      ? sql`marca_uuid = ${marcaUuid}::uuid` 
+      : (marcaId !== null ? sql`marca_id = ${marcaId}` : sql`marca_id IS NULL`);
 
     const existing = await sql`
       SELECT id FROM modelos 
@@ -5915,14 +6112,22 @@ export async function createModeloModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO modelos (nombre, marca_id)
-      VALUES (${cleanName}, ${marcaId})
+      INSERT INTO modelos (
+        ${modeloUuid ? sql`uuid,` : sql``}
+        nombre, marca_id, marca_uuid
+      )
+      VALUES (
+        ${modeloUuid ? sql`${modeloUuid}::uuid,` : sql``}
+        ${cleanName}, 
+        ${marcaId}, 
+        ${marcaUuid ? sql`${marcaUuid}::uuid` : sql`NULL`}
+      )
       RETURNING *
     `;
     const full = await sql`
       SELECT m.*, ma.nombre AS marca_nombre
       FROM modelos m
-      LEFT JOIN marcas ma ON m.marca_id = ma.id
+      LEFT JOIN marcas ma ON (m.marca_uuid = ma.uuid OR m.marca_id = ma.id)
       WHERE m.id = ${rows[0].id}
     `;
     return {
@@ -5933,11 +6138,13 @@ export async function createModeloModel(data) {
   } else {
     const list = inMemoryData.modelos || [];
     const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
-    const marca = (inMemoryData.marcas || []).find(ma => ma.id === marcaId);
+    const marca = (inMemoryData.marcas || []).find(ma => isMarcaU ? ma.uuid === rawMarca : ma.id === marcaId);
     const newModelo = {
       id: nextId,
+      uuid: modeloUuid || `modelo-${Date.now()}`,
       nombre: toTitleCase(cleanName),
       marca_id: marcaId,
+      marca_uuid: marcaUuid,
       marca_nombre: marca ? toTitleCase(marca.nombre) : 'Sin Marca',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -5948,20 +6155,37 @@ export async function createModeloModel(data) {
 }
 
 export async function updateModeloModel(id, data) {
-  const mId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const mId = !isU ? Number(id) : null;
   const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
-  const marcaId = data.marca_id !== undefined ? (data.marca_id ? Number(data.marca_id) : null) : undefined;
+  const rawMarca = data.marca_id !== undefined ? data.marca_id : data.marca_uuid;
+  const isMarcaU = rawMarca && isUuid(rawMarca);
+  const marcaId = rawMarca !== undefined ? (rawMarca && !isMarcaU ? Number(rawMarca) : null) : undefined;
+  const marcaUuid = rawMarca !== undefined ? (isMarcaU ? String(rawMarca).trim() : null) : undefined;
 
   if (isPgConnected && sql) {
     if (cleanName) {
-      const marcaCond = marcaId !== undefined
-        ? (marcaId !== null ? sql`marca_id = ${marcaId}` : sql`marca_id IS NULL`)
-        : sql`1=1`;
+      let currentMarcaId = marcaId;
+      let currentMarcaUuid = marcaUuid;
+      if (currentMarcaId === undefined && currentMarcaUuid === undefined) {
+        const cur = isU
+          ? await sql`SELECT marca_id, marca_uuid FROM modelos WHERE uuid = ${id}::uuid LIMIT 1`
+          : await sql`SELECT marca_id, marca_uuid FROM modelos WHERE id = ${mId} LIMIT 1`;
+        if (cur.length > 0) {
+          currentMarcaId = cur[0].marca_id;
+          currentMarcaUuid = cur[0].marca_uuid;
+        }
+      }
+
+      const marcaCond = currentMarcaUuid
+        ? sql`marca_uuid = ${currentMarcaUuid}::uuid`
+        : (currentMarcaId !== null && currentMarcaId !== undefined ? sql`marca_id = ${currentMarcaId}` : sql`marca_id IS NULL`);
 
       const existing = await sql`
         SELECT id FROM modelos 
         WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
-          AND id != ${mId}
+          AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${mId}`}
           AND ${marcaCond}
         LIMIT 1
       `;
@@ -5974,16 +6198,17 @@ export async function updateModeloModel(id, data) {
       UPDATE modelos
       SET 
         nombre = COALESCE(${cleanName}, nombre),
-        marca_id = ${marcaId !== undefined ? marcaId : sql`marca_id`},
+        marca_id = ${marcaId !== undefined ? (marcaId !== null ? marcaId : sql`marca_id`) : sql`marca_id`},
+        marca_uuid = ${marcaUuid !== undefined ? (marcaUuid ? sql`${marcaUuid}::uuid` : sql`marca_uuid`) : sql`marca_uuid`},
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${mId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${mId}`}
     `;
 
     const full = await sql`
       SELECT m.*, ma.nombre AS marca_nombre
       FROM modelos m
-      LEFT JOIN marcas ma ON m.marca_id = ma.id
-      WHERE m.id = ${mId}
+      LEFT JOIN marcas ma ON (m.marca_uuid = ma.uuid OR m.marca_id = ma.id)
+      WHERE ${isU ? sql`m.uuid = ${id}::uuid` : sql`m.id = ${mId}`}
     `;
     return full[0] ? {
       ...full[0],
@@ -5992,12 +6217,13 @@ export async function updateModeloModel(id, data) {
     } : null;
   } else {
     const list = inMemoryData.modelos || [];
-    const idx = list.findIndex(i => i.id === mId);
+    const idx = list.findIndex(i => isU ? i.uuid === id : i.id === mId);
     if (idx !== -1) {
       if (cleanName) list[idx].nombre = toTitleCase(cleanName);
-      if (marcaId !== undefined) {
+      if (rawMarca !== undefined) {
         list[idx].marca_id = marcaId;
-        const marca = (inMemoryData.marcas || []).find(ma => ma.id === marcaId);
+        list[idx].marca_uuid = marcaUuid;
+        const marca = (inMemoryData.marcas || []).find(ma => isMarcaU ? ma.uuid === rawMarca : ma.id === marcaId);
         list[idx].marca_nombre = marca ? toTitleCase(marca.nombre) : 'Sin Marca';
       }
       list[idx].updated_at = new Date().toISOString();
@@ -6080,6 +6306,7 @@ export async function createExcepcionModel(data) {
   const descripcion = (data.descripcion || '').trim();
   const color = (data.color || '#3B82F6').trim();
   const tipo = (data.tipo || 'Asignable').trim();
+  const excUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (!codigo || !descripcion) {
     throw new Error('El código y la descripción de la excepción son obligatorios.');
@@ -6109,22 +6336,39 @@ export async function createExcepcionModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO excepciones (codigo, descripcion, color, tipo)
-      VALUES (${codigo}, ${descripcion}, ${color}, ${tipo})
+      INSERT INTO excepciones (
+        ${excUuid ? sql`uuid,` : sql``}
+        codigo, descripcion, color, tipo
+      )
+      VALUES (
+        ${excUuid ? sql`${excUuid}::uuid,` : sql``}
+        ${codigo}, ${descripcion}, ${color}, ${tipo}
+      )
       RETURNING *
     `;
     return rows[0];
   } else {
     const list = inMemoryData.excepciones || [];
     const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
-    const newItem = { id: nextId, codigo, descripcion, color, tipo, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const newItem = { 
+      id: nextId, 
+      uuid: excUuid || `exc-${Date.now()}`,
+      codigo, 
+      descripcion, 
+      color, 
+      tipo, 
+      created_at: new Date().toISOString(), 
+      updated_at: new Date().toISOString() 
+    };
     inMemoryData.excepciones = [newItem, ...list];
     return newItem;
   }
 }
 
 export async function updateExcepcionModel(id, data) {
-  const eId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const eId = !isU ? Number(id) : null;
   const codigo = data.codigo !== undefined && data.codigo !== null ? String(data.codigo).trim().toUpperCase() : null;
   const descripcion = data.descripcion !== undefined && data.descripcion !== null ? String(data.descripcion).trim() : null;
   const color = data.color !== undefined && data.color !== null ? String(data.color).trim() : null;
@@ -6134,9 +6378,10 @@ export async function updateExcepcionModel(id, data) {
     if (codigo) {
       // 1. Validar que no exista en otra excepción
       const [existingExc] = await sql`
-        SELECT id, codigo, descripcion 
+        SELECT id, uuid, codigo, descripcion 
         FROM excepciones 
-        WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) AND id != ${eId} 
+        WHERE LOWER(TRIM(codigo)) = LOWER(${codigo}) 
+          AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${eId}`} 
         LIMIT 1
       `;
       if (existingExc) {
@@ -6162,13 +6407,13 @@ export async function updateExcepcionModel(id, data) {
         color = COALESCE(${color}, color),
         tipo = COALESCE(${tipo}, tipo),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${eId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${eId}`}
       RETURNING *
     `;
     return rows[0] || null;
   } else {
     const list = inMemoryData.excepciones || [];
-    const idx = list.findIndex(i => i.id === eId);
+    const idx = list.findIndex(i => isU ? i.uuid === id : i.id === eId);
     if (idx !== -1) {
       if (codigo) list[idx].codigo = codigo;
       if (descripcion) list[idx].descripcion = descripcion;
@@ -6228,6 +6473,7 @@ export async function createFechaPatriaModel(data) {
   const descripcion = (data.descripcion || '').trim();
   const dia = Number(data.dia);
   const mes = Number(data.mes);
+  const fechaUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (!descripcion) throw new Error('La descripción de la fecha patria es obligatoria');
   if (isNaN(dia) || dia < 1 || dia > 31) throw new Error('El día debe ser un número entre 1 y 31');
@@ -6243,8 +6489,14 @@ export async function createFechaPatriaModel(data) {
       throw new Error(`Ya existe una fecha patria registrada para el ${dia}/${mes} ("${existing[0].descripcion}")`);
     }
     const rows = await sql`
-      INSERT INTO fechas_patrias (descripcion, dia, mes)
-      VALUES (${descripcion}, ${dia}, ${mes})
+      INSERT INTO fechas_patrias (
+        ${fechaUuid ? sql`uuid,` : sql``}
+        descripcion, dia, mes
+      )
+      VALUES (
+        ${fechaUuid ? sql`${fechaUuid}::uuid,` : sql``}
+        ${descripcion}, ${dia}, ${mes}
+      )
       RETURNING *
     `;
     return rows[0];
@@ -6254,14 +6506,24 @@ export async function createFechaPatriaModel(data) {
       throw new Error(`Ya existe una fecha patria registrada para el ${dia}/${mes}`);
     }
     const nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
-    const newItem = { id: nextId, descripcion, dia, mes, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const newItem = { 
+      id: nextId, 
+      uuid: fechaUuid || `fp-${Date.now()}`,
+      descripcion, 
+      dia, 
+      mes, 
+      created_at: new Date().toISOString(), 
+      updated_at: new Date().toISOString() 
+    };
     inMemoryData.fechas_patrias = [newItem, ...list];
     return newItem;
   }
 }
 
 export async function updateFechaPatriaModel(id, data) {
-  const fId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const fId = !isU ? Number(id) : null;
   const descripcion = data.descripcion !== undefined ? String(data.descripcion).trim() : null;
   const dia = data.dia !== undefined ? Number(data.dia) : null;
   const mes = data.mes !== undefined ? Number(data.mes) : null;
@@ -6270,15 +6532,18 @@ export async function updateFechaPatriaModel(id, data) {
   if (mes !== null && (isNaN(mes) || mes < 1 || mes > 12)) throw new Error('El mes debe ser un número entre 1 y 12');
 
   if (isPgConnected && sql) {
-    const current = await sql`SELECT * FROM fechas_patrias WHERE id = ${fId}`;
+    const current = isU
+      ? await sql`SELECT * FROM fechas_patrias WHERE uuid = ${id}::uuid LIMIT 1`
+      : await sql`SELECT * FROM fechas_patrias WHERE id = ${fId} LIMIT 1`;
     if (current.length === 0) throw new Error('Fecha patria no encontrada');
 
     const targetDia = dia !== null ? dia : current[0].dia;
     const targetMes = mes !== null ? mes : current[0].mes;
 
     const existing = await sql`
-      SELECT id, descripcion FROM fechas_patrias 
-      WHERE dia = ${targetDia} AND mes = ${targetMes} AND id != ${fId}
+      SELECT id, uuid, descripcion FROM fechas_patrias 
+      WHERE dia = ${targetDia} AND mes = ${targetMes} 
+        AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${fId}`}
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -6292,17 +6557,17 @@ export async function updateFechaPatriaModel(id, data) {
         dia = COALESCE(${dia}, dia),
         mes = COALESCE(${mes}, mes),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${fId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${fId}`}
       RETURNING *
     `;
     return rows[0] || null;
   } else {
     const list = inMemoryData.fechas_patrias || [];
-    const idx = list.findIndex(i => i.id === fId);
+    const idx = list.findIndex(i => isU ? i.uuid === id : i.id === fId);
     if (idx !== -1) {
       const targetDia = dia !== null ? dia : list[idx].dia;
       const targetMes = mes !== null ? mes : list[idx].mes;
-      if (list.some(i => Number(i.dia) === Number(targetDia) && Number(i.mes) === Number(targetMes) && i.id !== fId)) {
+      if (list.some(i => Number(i.dia) === Number(targetDia) && Number(i.mes) === Number(targetMes) && (isU ? i.uuid !== id : i.id !== fId))) {
         throw new Error(`Ya existe otra fecha patria registrada para el ${targetDia}/${targetMes}`);
       }
       if (descripcion !== null) list[idx].descripcion = descripcion;
@@ -6320,7 +6585,7 @@ export async function deleteFechaPatriaModel(id) {
 }
 
 // ==========================================
-// 🎰 12. MÁQUINAS (CRUD PRINCIPAL)
+// 12. MÁQUINAS (CRUD PRINCIPAL)
 // ==========================================
 
 export function buildMaquinasConditions(params = {}) {
@@ -6810,54 +7075,66 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
 }
 
 export async function getMaquinaByIdModel(id) {
-  const mId = Number(id);
+  if (!id) return null;
+  const isU = isUuid(id);
+  const mId = !isU ? Number(id) : null;
   if (isPgConnected && sql) {
     const rows = await sql`
       SELECT 
         m.id,
+        m.uuid,
         m.nombre,
         m.serial,
         m.puestos,
         m.sala_id,
+        m.sala_uuid,
         s.nombre AS sala_nombre,
         s.nombre_comercial AS sala_nombre_comercial,
         s.grupo_id AS grupo_sala_id,
         gs.nombre AS grupo_sala_nombre,
         m.juego_id,
+        m.juego_uuid,
         j.nombre AS juego_nombre,
         m.estado_id,
+        m.estado_uuid,
         e.nombre AS estado_nombre,
         m.sociedad_id,
+        m.sociedad_uuid,
         soc.nombre AS sociedad_nombre,
         m.valor_id,
+        m.valor_uuid,
         v.nombre AS valor_nombre,
         m.modelo_id,
+        m.modelo_uuid,
         mod.nombre AS modelo_nombre,
         m.tipo_id,
+        m.tipo_uuid,
         t.nombre AS tipo_nombre,
         m.modo_id,
+        m.modo_uuid,
         mo.nombre AS modo_nombre,
         m.legal_id,
+        m.legal_uuid,
         l.nombre AS legal_nombre,
         m.created_at,
         m.updated_at
       FROM maquinas m
-      LEFT JOIN salas s ON m.sala_id = s.id
-      LEFT JOIN grupo_salas gs ON s.grupo_id = gs.id
-      LEFT JOIN juegos_maquinas j ON m.juego_id = j.id
-      LEFT JOIN estados e ON m.estado_id = e.id
-      LEFT JOIN sociedades soc ON m.sociedad_id = soc.id
-      LEFT JOIN valores v ON m.valor_id = v.id
-      LEFT JOIN modelos mod ON m.modelo_id = mod.id
-      LEFT JOIN tipos t ON m.tipo_id = t.id
-      LEFT JOIN modos mo ON m.modo_id = mo.id
-      LEFT JOIN legal l ON m.legal_id = l.id
-      WHERE m.id = ${mId}
+      LEFT JOIN salas s ON (m.sala_uuid = s.uuid OR m.sala_id = s.id)
+      LEFT JOIN grupo_salas gs ON (s.grupo_id = gs.id)
+      LEFT JOIN juegos_maquinas j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)
+      LEFT JOIN estados e ON (m.estado_uuid = e.uuid OR m.estado_id = e.id)
+      LEFT JOIN sociedades soc ON (m.sociedad_uuid = soc.uuid OR m.sociedad_id = soc.id)
+      LEFT JOIN valores v ON (m.valor_uuid = v.uuid OR m.valor_id = v.id)
+      LEFT JOIN modelos mod ON (m.modelo_uuid = mod.uuid OR m.modelo_id = mod.id)
+      LEFT JOIN tipos t ON (m.tipo_uuid = t.uuid OR m.tipo_id = t.id)
+      LEFT JOIN modos mo ON (m.modo_uuid = mo.uuid OR m.modo_id = mo.id)
+      LEFT JOIN legal l ON (m.legal_uuid = l.uuid OR m.legal_id = l.id)
+      WHERE ${isU ? sql`m.uuid = ${id}::uuid` : sql`m.id = ${mId}`}
       LIMIT 1
     `;
     return rows[0] || null;
   } else {
-    return (inMemoryData.maquinas || []).find(m => m.id === mId) || null;
+    return (inMemoryData.maquinas || []).find(m => isU ? m.uuid === id : m.id === mId) || null;
   }
 }
 
@@ -6867,20 +7144,57 @@ export async function createMaquinaModel(data) {
   const rawSerial = (data.serial !== undefined && data.serial !== null) ? String(data.serial).trim() : '';
   const serial = rawSerial || 'N/A';
   const puestos = Number(data.puestos) > 0 ? Number(data.puestos) : 1;
-  const sala_id = data.sala_id ? Number(data.sala_id) : null;
-  const juego_id = data.juego_id ? Number(data.juego_id) : null;
-  const estado_id = data.estado_id ? Number(data.estado_id) : null;
-  const sociedad_id = data.sociedad_id ? Number(data.sociedad_id) : null;
-  const valor_id = data.valor_id ? Number(data.valor_id) : null;
-  const modelo_id = data.modelo_id ? Number(data.modelo_id) : null;
-  const tipo_id = data.tipo_id ? Number(data.tipo_id) : null;
-  const modo_id = data.modo_id ? Number(data.modo_id) : null;
-  const legal_id = data.legal_id ? Number(data.legal_id) : null;
+  const maquinaUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
+
+  const rawSala = data.sala_id !== undefined ? data.sala_id : data.sala_uuid;
+  const isSalaU = rawSala && isUuid(rawSala);
+  const sala_id = rawSala && !isSalaU ? Number(rawSala) : null;
+  const sala_uuid = isSalaU ? String(rawSala).trim() : (data.sala_uuid || null);
+
+  const rawJuego = data.juego_id !== undefined ? data.juego_id : data.juego_uuid;
+  const isJuegoU = rawJuego && isUuid(rawJuego);
+  const juego_id = rawJuego && !isJuegoU ? Number(rawJuego) : null;
+  const juego_uuid = isJuegoU ? String(rawJuego).trim() : (data.juego_uuid || null);
+
+  const rawEstado = data.estado_id !== undefined ? data.estado_id : data.estado_uuid;
+  const isEstadoU = rawEstado && isUuid(rawEstado);
+  const estado_id = rawEstado && !isEstadoU ? Number(rawEstado) : null;
+  const estado_uuid = isEstadoU ? String(rawEstado).trim() : (data.estado_uuid || null);
+
+  const rawSociedad = data.sociedad_id !== undefined ? data.sociedad_id : data.sociedad_uuid;
+  const isSociedadU = rawSociedad && isUuid(rawSociedad);
+  const sociedad_id = rawSociedad && !isSociedadU ? Number(rawSociedad) : null;
+  const sociedad_uuid = isSociedadU ? String(rawSociedad).trim() : (data.sociedad_uuid || null);
+
+  const rawValor = data.valor_id !== undefined ? data.valor_id : data.valor_uuid;
+  const isValorU = rawValor && isUuid(rawValor);
+  const valor_id = rawValor && !isValorU ? Number(rawValor) : null;
+  const valor_uuid = isValorU ? String(rawValor).trim() : (data.valor_uuid || null);
+
+  const rawModelo = data.modelo_id !== undefined ? data.modelo_id : data.modelo_uuid;
+  const isModeloU = rawModelo && isUuid(rawModelo);
+  const modelo_id = rawModelo && !isModeloU ? Number(rawModelo) : null;
+  const modelo_uuid = isModeloU ? String(rawModelo).trim() : (data.modelo_uuid || null);
+
+  const rawTipo = data.tipo_id !== undefined ? data.tipo_id : data.tipo_uuid;
+  const isTipoU = rawTipo && isUuid(rawTipo);
+  const tipo_id = rawTipo && !isTipoU ? Number(rawTipo) : null;
+  const tipo_uuid = isTipoU ? String(rawTipo).trim() : (data.tipo_uuid || null);
+
+  const rawModo = data.modo_id !== undefined ? data.modo_id : data.modo_uuid;
+  const isModoU = rawModo && isUuid(rawModo);
+  const modo_id = rawModo && !isModoU ? Number(rawModo) : null;
+  const modo_uuid = isModoU ? String(rawModo).trim() : (data.modo_uuid || null);
+
+  const rawLegal = data.legal_id !== undefined ? data.legal_id : data.legal_uuid;
+  const isLegalU = rawLegal && isUuid(rawLegal);
+  const legal_id = rawLegal && !isLegalU ? Number(rawLegal) : null;
+  const legal_uuid = isLegalU ? String(rawLegal).trim() : (data.legal_uuid || null);
 
   if (isPgConnected && sql) {
     if (serial.toUpperCase() !== 'N/A') {
       const existing = await sql`
-        SELECT id, nombre, serial FROM maquinas 
+        SELECT id, uuid, nombre, serial FROM maquinas 
         WHERE LOWER(TRIM(serial)) = LOWER(${serial}) AND UPPER(TRIM(serial)) != 'N/A'
         LIMIT 1
       `;
@@ -6891,11 +7205,29 @@ export async function createMaquinaModel(data) {
 
     const rows = await sql`
       INSERT INTO maquinas (
-        nombre, serial, puestos, sala_id, juego_id, estado_id,
-        sociedad_id, valor_id, modelo_id, tipo_id, modo_id, legal_id
+        ${maquinaUuid ? sql`uuid,` : sql``}
+        nombre, serial, puestos, 
+        sala_id, sala_uuid, 
+        juego_id, juego_uuid, 
+        estado_id, estado_uuid,
+        sociedad_id, sociedad_uuid, 
+        valor_id, valor_uuid, 
+        modelo_id, modelo_uuid, 
+        tipo_id, tipo_uuid, 
+        modo_id, modo_uuid, 
+        legal_id, legal_uuid
       ) VALUES (
-        ${nombre}, ${serial}, ${puestos}, ${sala_id}, ${juego_id}, ${estado_id},
-        ${sociedad_id}, ${valor_id}, ${modelo_id}, ${tipo_id}, ${modo_id}, ${legal_id}
+        ${maquinaUuid ? sql`${maquinaUuid}::uuid,` : sql``}
+        ${nombre}, ${serial}, ${puestos}, 
+        ${sala_id}, ${sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`}, 
+        ${juego_id}, ${juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`}, 
+        ${estado_id}, ${estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`},
+        ${sociedad_id}, ${sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`}, 
+        ${valor_id}, ${valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`}, 
+        ${modelo_id}, ${modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`}, 
+        ${tipo_id}, ${tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`}, 
+        ${modo_id}, ${modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`}, 
+        ${legal_id}, ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`}
       )
       RETURNING *
     `;
@@ -6911,18 +7243,28 @@ export async function createMaquinaModel(data) {
     const nextId = inMemoryData.maquinas.length > 0 ? Math.max(...inMemoryData.maquinas.map(m => m.id)) + 1 : 1;
     const item = {
       id: nextId,
+      uuid: maquinaUuid || `maq-${Date.now()}`,
       nombre,
       serial,
       puestos,
       sala_id,
+      sala_uuid,
       juego_id,
+      juego_uuid,
       estado_id,
+      estado_uuid,
       sociedad_id,
+      sociedad_uuid,
       valor_id,
+      valor_uuid,
       modelo_id,
+      modelo_uuid,
       tipo_id,
+      tipo_uuid,
       modo_id,
+      modo_uuid,
       legal_id,
+      legal_uuid,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -6932,25 +7274,64 @@ export async function createMaquinaModel(data) {
 }
 
 export async function updateMaquinaModel(id, data) {
-  const mId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const mId = !isU ? Number(id) : null;
   const nombre = data.nombre !== undefined ? (String(data.nombre).trim() || 'N/A') : undefined;
   const serial = data.serial !== undefined ? (String(data.serial).trim() || 'N/A') : undefined;
   const puestos = data.puestos !== undefined ? (Number(data.puestos) > 0 ? Number(data.puestos) : 1) : undefined;
-  const sala_id = data.sala_id !== undefined ? (data.sala_id ? Number(data.sala_id) : null) : undefined;
-  const juego_id = data.juego_id !== undefined ? (data.juego_id ? Number(data.juego_id) : null) : undefined;
-  const estado_id = data.estado_id !== undefined ? (data.estado_id ? Number(data.estado_id) : null) : undefined;
-  const sociedad_id = data.sociedad_id !== undefined ? (data.sociedad_id ? Number(data.sociedad_id) : null) : undefined;
-  const valor_id = data.valor_id !== undefined ? (data.valor_id ? Number(data.valor_id) : null) : undefined;
-  const modelo_id = data.modelo_id !== undefined ? (data.modelo_id ? Number(data.modelo_id) : null) : undefined;
-  const tipo_id = data.tipo_id !== undefined ? (data.tipo_id ? Number(data.tipo_id) : null) : undefined;
-  const modo_id = data.modo_id !== undefined ? (data.modo_id ? Number(data.modo_id) : null) : undefined;
-  const legal_id = data.legal_id !== undefined ? (data.legal_id ? Number(data.legal_id) : null) : undefined;
+
+  const rawSala = data.sala_id !== undefined ? data.sala_id : data.sala_uuid;
+  const isSalaU = rawSala && isUuid(rawSala);
+  const sala_id = rawSala !== undefined ? (rawSala && !isSalaU ? Number(rawSala) : null) : undefined;
+  const sala_uuid = rawSala !== undefined ? (isSalaU ? String(rawSala).trim() : null) : undefined;
+
+  const rawJuego = data.juego_id !== undefined ? data.juego_id : data.juego_uuid;
+  const isJuegoU = rawJuego && isUuid(rawJuego);
+  const juego_id = rawJuego !== undefined ? (rawJuego && !isJuegoU ? Number(rawJuego) : null) : undefined;
+  const juego_uuid = rawJuego !== undefined ? (isJuegoU ? String(rawJuego).trim() : null) : undefined;
+
+  const rawEstado = data.estado_id !== undefined ? data.estado_id : data.estado_uuid;
+  const isEstadoU = rawEstado && isUuid(rawEstado);
+  const estado_id = rawEstado !== undefined ? (rawEstado && !isEstadoU ? Number(rawEstado) : null) : undefined;
+  const estado_uuid = rawEstado !== undefined ? (isEstadoU ? String(rawEstado).trim() : null) : undefined;
+
+  const rawSociedad = data.sociedad_id !== undefined ? data.sociedad_id : data.sociedad_uuid;
+  const isSociedadU = rawSociedad && isUuid(rawSociedad);
+  const sociedad_id = rawSociedad !== undefined ? (rawSociedad && !isSociedadU ? Number(rawSociedad) : null) : undefined;
+  const sociedad_uuid = rawSociedad !== undefined ? (isSociedadU ? String(rawSociedad).trim() : null) : undefined;
+
+  const rawValor = data.valor_id !== undefined ? data.valor_id : data.valor_uuid;
+  const isValorU = rawValor && isUuid(rawValor);
+  const valor_id = rawValor !== undefined ? (rawValor && !isValorU ? Number(rawValor) : null) : undefined;
+  const valor_uuid = rawValor !== undefined ? (isValorU ? String(rawValor).trim() : null) : undefined;
+
+  const rawModelo = data.modelo_id !== undefined ? data.modelo_id : data.modelo_uuid;
+  const isModeloU = rawModelo && isUuid(rawModelo);
+  const modelo_id = rawModelo !== undefined ? (rawModelo && !isModeloU ? Number(rawModelo) : null) : undefined;
+  const modelo_uuid = rawModelo !== undefined ? (isModeloU ? String(rawModelo).trim() : null) : undefined;
+
+  const rawTipo = data.tipo_id !== undefined ? data.tipo_id : data.tipo_uuid;
+  const isTipoU = rawTipo && isUuid(rawTipo);
+  const tipo_id = rawTipo !== undefined ? (rawTipo && !isTipoU ? Number(rawTipo) : null) : undefined;
+  const tipo_uuid = rawTipo !== undefined ? (isTipoU ? String(rawTipo).trim() : null) : undefined;
+
+  const rawModo = data.modo_id !== undefined ? data.modo_id : data.modo_uuid;
+  const isModoU = rawModo && isUuid(rawModo);
+  const modo_id = rawModo !== undefined ? (rawModo && !isModoU ? Number(rawModo) : null) : undefined;
+  const modo_uuid = rawModo !== undefined ? (isModoU ? String(rawModo).trim() : null) : undefined;
+
+  const rawLegal = data.legal_id !== undefined ? data.legal_id : data.legal_uuid;
+  const isLegalU = rawLegal && isUuid(rawLegal);
+  const legal_id = rawLegal !== undefined ? (rawLegal && !isLegalU ? Number(rawLegal) : null) : undefined;
+  const legal_uuid = rawLegal !== undefined ? (isLegalU ? String(rawLegal).trim() : null) : undefined;
 
   if (isPgConnected && sql) {
     if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
       const existing = await sql`
-        SELECT id, nombre, serial FROM maquinas 
-        WHERE id != ${mId} AND LOWER(TRIM(serial)) = LOWER(${serial}) AND UPPER(TRIM(serial)) != 'N/A'
+        SELECT id, uuid, nombre, serial FROM maquinas 
+        WHERE ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${mId}`} 
+          AND LOWER(TRIM(serial)) = LOWER(${serial}) AND UPPER(TRIM(serial)) != 'N/A'
         LIMIT 1
       `;
       if (existing.length > 0) {
@@ -6964,26 +7345,35 @@ export async function updateMaquinaModel(id, data) {
         nombre = ${nombre !== undefined ? nombre : sql`nombre`},
         serial = ${serial !== undefined ? serial : sql`serial`},
         puestos = ${puestos !== undefined ? puestos : sql`puestos`},
-        sala_id = ${sala_id !== undefined ? sala_id : sql`sala_id`},
-        juego_id = ${juego_id !== undefined ? juego_id : sql`juego_id`},
-        estado_id = ${estado_id !== undefined ? estado_id : sql`estado_id`},
-        sociedad_id = ${sociedad_id !== undefined ? sociedad_id : sql`sociedad_id`},
-        valor_id = ${valor_id !== undefined ? valor_id : sql`valor_id`},
-        modelo_id = ${modelo_id !== undefined ? modelo_id : sql`modelo_id`},
-        tipo_id = ${tipo_id !== undefined ? tipo_id : sql`tipo_id`},
-        modo_id = ${modo_id !== undefined ? modo_id : sql`modo_id`},
-        legal_id = ${legal_id !== undefined ? legal_id : sql`legal_id`},
+        sala_id = ${sala_id !== undefined ? (sala_id !== null ? sala_id : sql`sala_id`) : sql`sala_id`},
+        sala_uuid = ${sala_uuid !== undefined ? (sala_uuid ? sql`${sala_uuid}::uuid` : sql`sala_uuid`) : sql`sala_uuid`},
+        juego_id = ${juego_id !== undefined ? (juego_id !== null ? juego_id : sql`juego_id`) : sql`juego_id`},
+        juego_uuid = ${juego_uuid !== undefined ? (juego_uuid ? sql`${juego_uuid}::uuid` : sql`juego_uuid`) : sql`juego_uuid`},
+        estado_id = ${estado_id !== undefined ? (estado_id !== null ? estado_id : sql`estado_id`) : sql`estado_id`},
+        estado_uuid = ${estado_uuid !== undefined ? (estado_uuid ? sql`${estado_uuid}::uuid` : sql`estado_uuid`) : sql`estado_uuid`},
+        sociedad_id = ${sociedad_id !== undefined ? (sociedad_id !== null ? sociedad_id : sql`sociedad_id`) : sql`sociedad_id`},
+        sociedad_uuid = ${sociedad_uuid !== undefined ? (sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`sociedad_uuid`) : sql`sociedad_uuid`},
+        valor_id = ${valor_id !== undefined ? (valor_id !== null ? valor_id : sql`valor_id`) : sql`valor_id`},
+        valor_uuid = ${valor_uuid !== undefined ? (valor_uuid ? sql`${valor_uuid}::uuid` : sql`valor_uuid`) : sql`valor_uuid`},
+        modelo_id = ${modelo_id !== undefined ? (modelo_id !== null ? modelo_id : sql`modelo_id`) : sql`modelo_id`},
+        modelo_uuid = ${modelo_uuid !== undefined ? (modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`modelo_uuid`) : sql`modelo_uuid`},
+        tipo_id = ${tipo_id !== undefined ? (tipo_id !== null ? tipo_id : sql`tipo_id`) : sql`tipo_id`},
+        tipo_uuid = ${tipo_uuid !== undefined ? (tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`tipo_uuid`) : sql`tipo_uuid`},
+        modo_id = ${modo_id !== undefined ? (modo_id !== null ? modo_id : sql`modo_id`) : sql`modo_id`},
+        modo_uuid = ${modo_uuid !== undefined ? (modo_uuid ? sql`${modo_uuid}::uuid` : sql`modo_uuid`) : sql`modo_uuid`},
+        legal_id = ${legal_id !== undefined ? (legal_id !== null ? legal_id : sql`legal_id`) : sql`legal_id`},
+        legal_uuid = ${legal_uuid !== undefined ? (legal_uuid ? sql`${legal_uuid}::uuid` : sql`legal_uuid`) : sql`legal_uuid`},
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${mId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${mId}`}
       RETURNING *
     `;
     return rows[0] || null;
   } else {
     const list = inMemoryData.maquinas || [];
-    const idx = list.findIndex(m => m.id === mId);
+    const idx = list.findIndex(m => isU ? m.uuid === id : m.id === mId);
     if (idx !== -1) {
       if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
-        const exists = list.find(m => m.id !== mId && (m.serial || '').trim().toLowerCase() === serial.toLowerCase() && (m.serial || '').trim().toUpperCase() !== 'N/A');
+        const exists = list.find(m => (isU ? m.uuid !== id : m.id !== mId) && (m.serial || '').trim().toLowerCase() === serial.toLowerCase() && (m.serial || '').trim().toUpperCase() !== 'N/A');
         if (exists) {
           throw new Error(`Ya existe otra máquina registrada con el serial "${serial}" (${exists.nombre})`);
         }
@@ -6991,15 +7381,42 @@ export async function updateMaquinaModel(id, data) {
       if (nombre !== undefined) list[idx].nombre = nombre;
       if (serial !== undefined) list[idx].serial = serial;
       if (puestos !== undefined) list[idx].puestos = puestos;
-      if (sala_id !== undefined) list[idx].sala_id = sala_id;
-      if (juego_id !== undefined) list[idx].juego_id = juego_id;
-      if (estado_id !== undefined) list[idx].estado_id = estado_id;
-      if (sociedad_id !== undefined) list[idx].sociedad_id = sociedad_id;
-      if (valor_id !== undefined) list[idx].valor_id = valor_id;
-      if (modelo_id !== undefined) list[idx].modelo_id = modelo_id;
-      if (tipo_id !== undefined) list[idx].tipo_id = tipo_id;
-      if (modo_id !== undefined) list[idx].modo_id = modo_id;
-      if (legal_id !== undefined) list[idx].legal_id = legal_id;
+      if (rawSala !== undefined) {
+        list[idx].sala_id = sala_id;
+        list[idx].sala_uuid = sala_uuid;
+      }
+      if (rawJuego !== undefined) {
+        list[idx].juego_id = juego_id;
+        list[idx].juego_uuid = juego_uuid;
+      }
+      if (rawEstado !== undefined) {
+        list[idx].estado_id = estado_id;
+        list[idx].estado_uuid = estado_uuid;
+      }
+      if (rawSociedad !== undefined) {
+        list[idx].sociedad_id = sociedad_id;
+        list[idx].sociedad_uuid = sociedad_uuid;
+      }
+      if (rawValor !== undefined) {
+        list[idx].valor_id = valor_id;
+        list[idx].valor_uuid = valor_uuid;
+      }
+      if (rawModelo !== undefined) {
+        list[idx].modelo_id = modelo_id;
+        list[idx].modelo_uuid = modelo_uuid;
+      }
+      if (rawTipo !== undefined) {
+        list[idx].tipo_id = tipo_id;
+        list[idx].tipo_uuid = tipo_uuid;
+      }
+      if (rawModo !== undefined) {
+        list[idx].modo_id = modo_id;
+        list[idx].modo_uuid = modo_uuid;
+      }
+      if (rawLegal !== undefined) {
+        list[idx].legal_id = legal_id;
+        list[idx].legal_uuid = legal_uuid;
+      }
       list[idx].updated_at = new Date().toISOString();
       return list[idx];
     }
@@ -7173,15 +7590,38 @@ export async function getLlavesModel(params = {}) {
   return { success: true, data, total, page, limit, totalPages };
 }
 
+export async function getLlaveByIdModel(id) {
+  if (!id) return null;
+  const isU = isUuid(id);
+  const lId = !isU ? Number(id) : null;
+  if (isPgConnected && sql) {
+    const rows = await sql`
+      SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre
+      FROM llaves l
+      LEFT JOIN salas s ON (l.sala_uuid = s.uuid OR l.sala_id = s.id)
+      WHERE ${isU ? sql`l.uuid = ${id}::uuid` : sql`l.id = ${lId}`}
+      LIMIT 1
+    `;
+    return rows[0] || null;
+  } else {
+    return (inMemoryData.llaves || []).find(m => isU ? m.uuid === id : m.id === lId) || null;
+  }
+}
+
 export async function createLlaveModel(data) {
   const cleanName = (data.nombre || '').trim();
   if (!cleanName) throw new Error('El nombre de la llave es obligatorio');
-  if (!data.sala_id) throw new Error('Debe seleccionar una sala para la llave');
+  const rawSala = data.sala_id || data.sala_uuid;
+  if (!rawSala) throw new Error('Debe seleccionar una sala para la llave');
+
+  const isSalaU = isUuid(rawSala);
+  const llaveUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (isPgConnected && sql) {
     const existing = await sql`
       SELECT id FROM llaves 
-      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) AND sala_id = ${Number(data.sala_id)}
+      WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
+        AND ${isSalaU ? sql`sala_uuid = ${rawSala}::uuid` : sql`sala_id = ${Number(rawSala)}`}
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -7189,22 +7629,33 @@ export async function createLlaveModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO llaves (nombre, sala_id, active)
-      VALUES (${cleanName}, ${Number(data.sala_id)}, 1)
+      INSERT INTO llaves (
+        ${llaveUuid ? sql`uuid,` : sql``}
+        nombre, sala_id, sala_uuid, active
+      )
+      VALUES (
+        ${llaveUuid ? sql`${llaveUuid}::uuid,` : sql``}
+        ${cleanName}, 
+        ${!isSalaU ? Number(rawSala) : null}, 
+        ${isSalaU ? sql`${rawSala}::uuid` : sql`NULL`}, 
+        1
+      )
       RETURNING *
     `;
     return rows[0];
   } else {
     const cleanLower = cleanName.toLowerCase();
-    const existing = (inMemoryData.llaves || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && Number(m.sala_id) === Number(data.sala_id));
+    const existing = (inMemoryData.llaves || []).find(m => (m.nombre || '').trim().toLowerCase() === cleanLower && (isSalaU ? m.sala_uuid === rawSala : Number(m.sala_id) === Number(rawSala)));
     if (existing) {
       throw new Error(`Ya existe una llave registrada con el nombre "${toTitleCase(cleanName)}" en esta sala`);
     }
     const nextId = (inMemoryData.llaves?.length || 0) > 0 ? Math.max(...inMemoryData.llaves.map(m => m.id)) + 1 : 1;
     const newLlave = {
       id: nextId,
+      uuid: llaveUuid || `llave-${Date.now()}`,
       nombre: cleanName,
-      sala_id: Number(data.sala_id),
+      sala_id: !isSalaU ? Number(rawSala) : null,
+      sala_uuid: isSalaU ? rawSala : null,
       active: 1,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -7216,25 +7667,39 @@ export async function createLlaveModel(data) {
 }
 
 export async function updateLlaveModel(id, data) {
-  const lId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const lId = !isU ? Number(id) : null;
   const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
-  let salaId = data.sala_id ? Number(data.sala_id) : null;
+  const rawSala = data.sala_id !== undefined ? data.sala_id : data.sala_uuid;
   const active = data.active !== undefined ? Number(data.active) : null;
 
   if (isPgConnected && sql) {
-    if (cleanName && !salaId) {
-      const cur = await sql`SELECT sala_id FROM llaves WHERE id = ${lId} LIMIT 1`;
+    let currentSalaId = null;
+    let currentSalaUuid = null;
+    if (rawSala) {
+      if (isUuid(rawSala)) currentSalaUuid = rawSala;
+      else currentSalaId = Number(rawSala);
+    } else if (cleanName) {
+      const cur = isU
+        ? await sql`SELECT sala_id, sala_uuid FROM llaves WHERE uuid = ${id}::uuid LIMIT 1`
+        : await sql`SELECT sala_id, sala_uuid FROM llaves WHERE id = ${lId} LIMIT 1`;
       if (cur.length > 0) {
-        salaId = cur[0].sala_id;
+        currentSalaId = cur[0].sala_id;
+        currentSalaUuid = cur[0].sala_uuid;
       }
     }
 
     if (cleanName) {
+      const salaMatch = currentSalaUuid 
+        ? sql`sala_uuid = ${currentSalaUuid}::uuid` 
+        : (currentSalaId ? sql`sala_id = ${currentSalaId}` : sql`1=1`);
+
       const existing = await sql`
         SELECT id FROM llaves 
         WHERE LOWER(TRIM(nombre)) = LOWER(${cleanName}) 
-          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
-          AND id != ${lId}
+          AND ${salaMatch}
+          AND ${isU ? sql`uuid != ${id}::uuid` : sql`id != ${lId}`}
         LIMIT 1
       `;
       if (existing.length > 0) {
@@ -7242,19 +7707,23 @@ export async function updateLlaveModel(id, data) {
       }
     }
 
+    const salaId = rawSala !== undefined ? (!isUuid(rawSala) ? Number(rawSala) : null) : null;
+    const salaUuid = rawSala !== undefined ? (isUuid(rawSala) ? String(rawSala).trim() : null) : null;
+
     const rows = await sql`
       UPDATE llaves
       SET 
         nombre = COALESCE(${cleanName}, nombre),
-        sala_id = COALESCE(${salaId}, sala_id),
+        sala_id = ${rawSala !== undefined ? (salaId !== null ? salaId : sql`sala_id`) : sql`sala_id`},
+        sala_uuid = ${rawSala !== undefined ? (salaUuid ? sql`${salaUuid}::uuid` : sql`sala_uuid`) : sql`sala_uuid`},
         active = COALESCE(${active}, active),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${lId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${lId}`}
       RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = (inMemoryData.llaves || []).findIndex(m => m.id === lId);
+    const idx = (inMemoryData.llaves || []).findIndex(m => isU ? m.uuid === id : m.id === lId);
     if (idx !== -1) {
       inMemoryData.llaves[idx] = { ...inMemoryData.llaves[idx], ...data, updated_at: new Date().toISOString() };
       return inMemoryData.llaves[idx];
@@ -7265,50 +7734,47 @@ export async function updateLlaveModel(id, data) {
 
 // Soft delete: Marca active = 0 (envía a Llaves Borradas)
 export async function softDeleteLlaveModel(id) {
-  const lId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const lId = !isU ? Number(id) : null;
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE llaves 
       SET active = 0, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ${lId} 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${lId}`} 
       RETURNING *
     `;
-    return { success: true, id: lId, llave: rows[0] };
+    return { success: true, id: isU ? id : lId, llave: rows[0] };
   } else {
-    const llave = (inMemoryData.llaves || []).find(m => m.id === lId);
+    const llave = (inMemoryData.llaves || []).find(m => isU ? m.uuid === id : m.id === lId);
     if (llave) llave.active = 0;
-    return { success: true, id: lId };
+    return { success: true, id: isU ? id : lId };
   }
 }
 
 // Restore: Marca active = 1 (restaura de Llaves Borradas a Llaves)
 export async function restoreLlaveModel(id) {
-  const lId = Number(id);
+  if (!id) throw new Error('ID inválido');
+  const isU = isUuid(id);
+  const lId = !isU ? Number(id) : null;
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE llaves 
       SET active = 1, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ${lId} 
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${lId}`} 
       RETURNING *
     `;
-    return { success: true, id: lId, llave: rows[0] };
+    return { success: true, id: isU ? id : lId, llave: rows[0] };
   } else {
-    const llave = (inMemoryData.llaves || []).find(m => m.id === lId);
+    const llave = (inMemoryData.llaves || []).find(m => isU ? m.uuid === id : m.id === lId);
     if (llave) llave.active = 1;
-    return { success: true, id: lId };
+    return { success: true, id: isU ? id : lId };
   }
 }
 
 // Purge: Eliminación definitiva física de la base de datos
 export async function purgeLlaveModel(id) {
-  const lId = Number(id);
-  if (isPgConnected && sql) {
-    await sql`DELETE FROM llaves WHERE id = ${lId}`;
-    return { success: true, id: lId };
-  } else {
-    inMemoryData.llaves = (inMemoryData.llaves || []).filter(m => m.id !== lId);
-    return { success: true, id: lId };
-  }
+  return await deleteEntityDynamic('llaves', 'llave', id);
 }
 
 // ==========================================
@@ -7462,20 +7928,23 @@ export async function getLibrosModel(params = {}) {
 }
 
 export async function getLibroByIdModel(id) {
-  const lId = Number(id);
+  const isU = isUuid(id);
+  const lId = !isU ? Number(id) : null;
+  if (!isU && (!lId || isNaN(lId))) return { success: false, error: 'ID de libro inválido' };
+
   if (isPgConnected && sql) {
     const rows = await sql`
-      SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
+      SELECT l.*, s.id AS sala_id, s.uuid AS sala_uuid, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
       FROM libros l
-      LEFT JOIN salas s ON l.sala_id = s.id
-      WHERE l.id = ${lId}
+      LEFT JOIN salas s ON (l.sala_uuid = s.uuid OR l.sala_id = s.id)
+      WHERE ${isU ? sql`l.uuid = ${id}::uuid` : sql`l.id = ${lId}`}
       LIMIT 1
     `;
     if (rows && rows.length > 0) {
       return { success: true, data: rows[0] };
     }
   } else {
-    const found = (inMemoryData.libros || []).find(l => Number(l.id) === lId);
+    const found = (inMemoryData.libros || []).find(l => String(l.uuid) === String(id) || Number(l.id) === lId);
     if (found) {
       return { success: true, data: found };
     }
@@ -7486,12 +7955,27 @@ export async function getLibroByIdModel(id) {
 export async function createLibroModel(data) {
   const cleanDesc = (data.descripcion || '').trim();
   if (!cleanDesc) throw new Error('La fecha del libro es obligatoria');
-  if (!data.sala_id) throw new Error('Debe seleccionar una sala para el libro');
+  const salaIdRaw = data.sala_id || data.sala_uuid;
+  if (!salaIdRaw) throw new Error('Debe seleccionar una sala para el libro');
+
+  const isSalaU = isUuid(salaIdRaw);
+  let salaId = !isSalaU ? Number(salaIdRaw) : null;
+  let salaUuid = isSalaU ? String(salaIdRaw).trim() : (data.sala_uuid || null);
+  const libroUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (isPgConnected && sql) {
+    if (isSalaU && !salaId) {
+      const sRow = await sql`SELECT id FROM salas WHERE uuid = ${salaUuid}::uuid LIMIT 1`;
+      if (sRow.length > 0) salaId = sRow[0].id;
+    } else if (salaId && !salaUuid) {
+      const sRow = await sql`SELECT uuid FROM salas WHERE id = ${salaId} LIMIT 1`;
+      if (sRow.length > 0) salaUuid = sRow[0].uuid;
+    }
+
     const existing = await sql`
-      SELECT id FROM libros 
-      WHERE LOWER(TRIM(descripcion)) = LOWER(${cleanDesc}) AND sala_id = ${Number(data.sala_id)}
+      SELECT id, uuid FROM libros 
+      WHERE LOWER(TRIM(descripcion)) = LOWER(${cleanDesc}) 
+        AND (${salaId ? sql`sala_id = ${salaId}` : sql`sala_uuid = ${salaUuid}::uuid`})
       LIMIT 1
     `;
     if (existing.length > 0) {
@@ -7499,22 +7983,33 @@ export async function createLibroModel(data) {
     }
 
     const rows = await sql`
-      INSERT INTO libros (descripcion, sala_id)
-      VALUES (${cleanDesc}, ${Number(data.sala_id)})
+      INSERT INTO libros (
+        ${libroUuid ? sql`uuid,` : sql``}
+        descripcion, sala_id, sala_uuid
+      )
+      VALUES (
+        ${libroUuid ? sql`${libroUuid}::uuid,` : sql``}
+        ${cleanDesc}, ${salaId}, ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`}
+      )
       RETURNING *
     `;
     return rows[0];
   } else {
     const cleanLower = cleanDesc.toLowerCase();
-    const existing = (inMemoryData.libros || []).find(m => (m.descripcion || '').trim().toLowerCase() === cleanLower && Number(m.sala_id) === Number(data.sala_id));
+    const existing = (inMemoryData.libros || []).find(m => 
+      (m.descripcion || '').trim().toLowerCase() === cleanLower && 
+      (Number(m.sala_id) === Number(salaId) || String(m.sala_uuid) === String(salaUuid))
+    );
     if (existing) {
       throw new Error(`Ya existe un libro registrado con la fecha "${cleanDesc}" en esta sala`);
     }
     const nextId = (inMemoryData.libros?.length || 0) > 0 ? Math.max(...inMemoryData.libros.map(m => m.id)) + 1 : 1;
     const newLibro = {
       id: nextId,
+      uuid: libroUuid || `libro-${Date.now()}`,
       descripcion: cleanDesc,
-      sala_id: Number(data.sala_id),
+      sala_id: salaId,
+      sala_uuid: salaUuid,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -7525,24 +8020,32 @@ export async function createLibroModel(data) {
 }
 
 export async function updateLibroModel(id, data) {
-  const lId = Number(id);
+  const isU = isUuid(id);
+  const lId = !isU ? Number(id) : null;
   const cleanDesc = data.descripcion !== undefined ? String(data.descripcion).trim() : null;
-  let salaId = data.sala_id ? Number(data.sala_id) : null;
+  const salaIdRaw = data.sala_id || data.sala_uuid;
+  let salaId = salaIdRaw && !isUuid(salaIdRaw) ? Number(salaIdRaw) : null;
+  let salaUuid = isUuid(salaIdRaw) ? String(salaIdRaw).trim() : (data.sala_uuid || null);
 
   if (isPgConnected && sql) {
-    if (cleanDesc && !salaId) {
-      const cur = await sql`SELECT sala_id FROM libros WHERE id = ${lId} LIMIT 1`;
+    if (cleanDesc && !salaId && !salaUuid) {
+      const cur = await sql`
+        SELECT sala_id, sala_uuid FROM libros 
+        WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${lId}`} 
+        LIMIT 1
+      `;
       if (cur.length > 0) {
         salaId = cur[0].sala_id;
+        salaUuid = cur[0].sala_uuid;
       }
     }
 
     if (cleanDesc) {
       const existing = await sql`
-        SELECT id FROM libros 
+        SELECT id, uuid FROM libros 
         WHERE LOWER(TRIM(descripcion)) = LOWER(${cleanDesc}) 
-          AND (${salaId}::int IS NULL OR sala_id = ${salaId})
-          AND id != ${lId}
+          AND (${salaId ? sql`sala_id = ${salaId}` : sql`sala_uuid = ${salaUuid}::uuid`})
+          AND (${isU ? sql`uuid != ${id}::uuid` : sql`id != ${lId}`})
         LIMIT 1
       `;
       if (existing.length > 0) {
@@ -7555,13 +8058,14 @@ export async function updateLibroModel(id, data) {
       SET 
         descripcion = COALESCE(${cleanDesc}, descripcion),
         sala_id = COALESCE(${salaId}, sala_id),
+        sala_uuid = COALESCE(${salaUuid}::uuid, sala_uuid),
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${lId}
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${lId}`}
       RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = (inMemoryData.libros || []).findIndex(m => m.id === lId);
+    const idx = (inMemoryData.libros || []).findIndex(m => String(m.uuid) === String(id) || Number(m.id) === lId);
     if (idx !== -1) {
       inMemoryData.libros[idx] = { ...inMemoryData.libros[idx], ...data, updated_at: new Date().toISOString() };
       return inMemoryData.libros[idx];
@@ -7571,31 +8075,36 @@ export async function updateLibroModel(id, data) {
 }
 
 export async function deleteLibroModel(id) {
-  const lId = Number(id);
+  const isU = isUuid(id);
+  const lId = !isU ? Number(id) : null;
   if (isPgConnected && sql) {
-    await sql`DELETE FROM libros WHERE id = ${lId}`;
-    return { success: true, id: lId };
+    await sql`DELETE FROM libros WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${lId}`}`;
+    return { success: true, id };
   } else {
-    inMemoryData.libros = (inMemoryData.libros || []).filter(m => m.id !== lId);
-    return { success: true, id: lId };
+    inMemoryData.libros = (inMemoryData.libros || []).filter(m => String(m.uuid) !== String(id) && Number(m.id) !== lId);
+    return { success: true, id };
   }
 }
 
 // --- DROP DE MESAS (CECOM: LIBRO DROP) ---
 export async function getLibroDropMesasModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) return [];
+  if (!libroId) return [];
+  const isU = isUuid(libroId);
+  const lId = !isU ? Number(libroId) : null;
 
   if (!isPgConnected || !sql) {
     const list = inMemoryData.libro_drop_mesas || [];
-    return list.filter(d => Number(d.libro_id) === lId);
+    return list.filter(d => String(d.libro_uuid) === String(libroId) || Number(d.libro_id) === lId);
   }
 
   const rows = await sql`
     SELECT 
       d.id,
+      d.uuid,
       d.libro_id,
+      d.libro_uuid,
       d.mesa_id,
+      d.mesa_uuid,
       d.denominacion_100,
       d.denominacion_50,
       d.denominacion_20,
@@ -7616,10 +8125,10 @@ export async function getLibroDropMesasModel(libroId) {
       s.nombre AS sala_nombre,
       s.nombre_comercial AS sala_nombre_comercial
     FROM libro_drop_mesas d
-    JOIN mesas m ON d.mesa_id = m.id
-    LEFT JOIN juegos j ON m.juego_id = j.id
-    LEFT JOIN salas s ON m.sala_id = s.id
-    WHERE d.libro_id = ${lId}
+    JOIN mesas m ON (d.mesa_uuid = m.uuid OR d.mesa_id = m.id)
+    LEFT JOIN juegos j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)
+    LEFT JOIN salas s ON (m.sala_uuid = s.uuid OR m.sala_id = s.id)
+    WHERE ${isU ? sql`d.libro_uuid = ${libroId}::uuid OR d.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`d.libro_id = ${lId}`}
     ORDER BY d.id ASC
   `;
 
@@ -7631,10 +8140,18 @@ export async function getLibroDropMesasModel(libroId) {
 }
 
 export async function createLibroDropMesaModel(data) {
-  const libroId = Number(data.libro_id);
-  const mesaId = Number(data.mesa_id);
-  if (!libroId) throw new Error('El ID del libro es obligatorio');
-  if (!mesaId) throw new Error('Debe seleccionar una mesa');
+  const libroIdRaw = data.libro_id || data.libro_uuid;
+  const mesaIdRaw = data.mesa_id || data.mesa_uuid;
+  if (!libroIdRaw) throw new Error('El ID del libro es obligatorio');
+  if (!mesaIdRaw) throw new Error('Debe seleccionar una mesa');
+
+  const isLibU = isUuid(libroIdRaw);
+  let libroId = !isLibU ? Number(libroIdRaw) : null;
+  let libroUuid = isLibU ? String(libroIdRaw).trim() : (data.libro_uuid || null);
+
+  const isMesaU = isUuid(mesaIdRaw);
+  let mesaId = !isMesaU ? Number(mesaIdRaw) : null;
+  let mesaUuid = isMesaU ? String(mesaIdRaw).trim() : (data.mesa_uuid || null);
 
   const b100 = Math.max(0, parseInt(data.denominacion_100 ?? data.b100 ?? 0, 10) || 0);
   const b50 = Math.max(0, parseInt(data.denominacion_50 ?? data.b50 ?? 0, 10) || 0);
@@ -7644,14 +8161,16 @@ export async function createLibroDropMesaModel(data) {
   const b1 = Math.max(0, parseInt(data.denominacion_1 ?? data.b1 ?? 0, 10) || 0);
 
   const total = (b100 * 100) + (b50 * 50) + (b20 * 20) + (b10 * 10) + (b5 * 5) + (b1 * 1);
+  const dropUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas || [];
     const existingIdx = (inMemoryData.libro_drop_mesas || []).findIndex(
-      d => Number(d.libro_id) === libroId && Number(d.mesa_id) === mesaId
+      d => (String(d.libro_uuid) === String(libroIdRaw) || Number(d.libro_id) === libroId) &&
+           (String(d.mesa_uuid) === String(mesaIdRaw) || Number(d.mesa_id) === mesaId)
     );
 
-    const mesa = (inMemoryData.mesas || []).find(m => Number(m.id) === mesaId) || {};
+    const mesa = (inMemoryData.mesas || []).find(m => String(m.uuid) === String(mesaIdRaw) || Number(m.id) === mesaId) || {};
 
     if (existingIdx !== -1) {
       inMemoryData.libro_drop_mesas[existingIdx] = {
@@ -7675,22 +8194,20 @@ export async function createLibroDropMesaModel(data) {
 
     const newDrop = {
       id: nextId,
+      uuid: dropUuid || `drop-${Date.now()}`,
       libro_id: libroId,
+      libro_uuid: libroUuid,
       mesa_id: mesaId,
+      mesa_uuid: mesaUuid,
       denominacion_100: b100,
       denominacion_50: b50,
       denominacion_20: b20,
       denominacion_10: b10,
       denominacion_5: b5,
       denominacion_1: b1,
-      b100,
-      b50,
-      b20,
-      b10,
-      b5,
-      b1,
+      b100, b50, b20, b10, b5, b1,
       total,
-      mesa_nombre: mesa.nombre || `Mesa #${mesaId}`,
+      mesa_nombre: mesa.nombre || `Mesa #${mesaId || mesaUuid}`,
       juego_nombre: mesa.juego_nombre || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -7699,14 +8216,26 @@ export async function createLibroDropMesaModel(data) {
     return newDrop;
   }
 
+  // Resolver ID entero si vino UUID
+  if (isLibU && !libroId) {
+    const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;
+    if (lRow.length > 0) libroId = lRow[0].id;
+  }
+  if (isMesaU && !mesaId) {
+    const mRow = await sql`SELECT id FROM mesas WHERE uuid = ${mesaUuid}::uuid LIMIT 1`;
+    if (mRow.length > 0) mesaId = mRow[0].id;
+  }
+
   // Comprobar si ya existe un registro previo para esta mesa en este libro
   const existingRow = await sql`
-    SELECT id FROM libro_drop_mesas
-    WHERE libro_id = ${libroId} AND mesa_id = ${mesaId}
+    SELECT id, uuid FROM libro_drop_mesas
+    WHERE (${isLibU ? sql`libro_uuid = ${libroUuid}::uuid OR libro_id = ${libroId}` : sql`libro_id = ${libroId}`})
+      AND (${isMesaU ? sql`mesa_uuid = ${mesaUuid}::uuid OR mesa_id = ${mesaId}` : sql`mesa_id = ${mesaId}`})
     LIMIT 1
   `;
 
   let insertedId = null;
+  let insertedUuid = null;
   if (existingRow.length > 0) {
     const updated = await sql`
       UPDATE libro_drop_mesas SET
@@ -7719,31 +8248,39 @@ export async function createLibroDropMesaModel(data) {
         total = ${total},
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${existingRow[0].id}
-      RETURNING id
+      RETURNING id, uuid
     `;
     insertedId = updated[0].id;
+    insertedUuid = updated[0].uuid;
   } else {
     const res = await sql`
       INSERT INTO libro_drop_mesas (
-        libro_id, mesa_id, 
+        ${dropUuid ? sql`uuid,` : sql``}
+        libro_id, libro_uuid, mesa_id, mesa_uuid,
         denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
         total
       )
       VALUES (
-        ${libroId}, ${mesaId}, 
+        ${dropUuid ? sql`${dropUuid}::uuid,` : sql``}
+        ${libroId}, ${libroUuid ? sql`${libroUuid}::uuid` : sql`NULL`},
+        ${mesaId}, ${mesaUuid ? sql`${mesaUuid}::uuid` : sql`NULL`},
         ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
         ${total}
       )
-      RETURNING id
+      RETURNING id, uuid
     `;
     insertedId = res[0].id;
+    insertedUuid = res[0].uuid;
   }
 
   const details = await sql`
     SELECT 
       d.id,
+      d.uuid,
       d.libro_id,
+      d.libro_uuid,
       d.mesa_id,
+      d.mesa_uuid,
       d.denominacion_100,
       d.denominacion_50,
       d.denominacion_20,
@@ -7764,14 +8301,14 @@ export async function createLibroDropMesaModel(data) {
       s.nombre AS sala_nombre,
       s.nombre_comercial AS sala_nombre_comercial
     FROM libro_drop_mesas d
-    JOIN mesas m ON d.mesa_id = m.id
-    LEFT JOIN juegos j ON m.juego_id = j.id
-    LEFT JOIN salas s ON m.sala_id = s.id
+    JOIN mesas m ON (d.mesa_uuid = m.uuid OR d.mesa_id = m.id)
+    LEFT JOIN juegos j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)
+    LEFT JOIN salas s ON (m.sala_uuid = s.uuid OR m.sala_id = s.id)
     WHERE d.id = ${insertedId}
     LIMIT 1
   `;
 
-  const finalRow = details[0] || { id: insertedId };
+  const finalRow = details[0] || { id: insertedId, uuid: insertedUuid };
   return {
     ...finalRow,
     b100: finalRow.denominacion_100,
@@ -7786,37 +8323,43 @@ export async function createLibroDropMesaModel(data) {
 }
 
 export async function deleteLibroDropMesaModel(id, libroId) {
-  const dropId = Number(id);
-  const lId = Number(libroId);
-  if (!dropId) throw new Error('ID de registro de drop inválido');
+  if (!id) throw new Error('ID de registro de drop inválido');
+  const isU = isUuid(id);
+  const isLibU = isUuid(libroId);
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas || [];
-    inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas.filter(d => Number(d.id) !== dropId);
-    return { success: true, id: dropId };
+    inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas.filter(d => 
+      String(d.uuid) !== String(id) && Number(d.id) !== Number(id)
+    );
+    return { success: true, id };
   }
 
   await sql`
     DELETE FROM libro_drop_mesas
-    WHERE id = ${dropId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
   `;
 
-  return { success: true, id: dropId };
+  return { success: true, id };
 }
 
 // --- CONTROL DE LLAVES (CECOM: LIBRO CONTROL DE LLAVES) ---
 export async function getLibroControlLlavesModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isU = isUuid(libroId);
+  const lId = !isU ? Number(libroId) : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
-    const list = inMemoryData.libro_control_llaves.filter(c => Number(c.libro_id) === lId);
+    const list = inMemoryData.libro_control_llaves.filter(c => 
+      String(c.libro_uuid) === String(libroId) || Number(c.libro_id) === lId
+    );
     return list.map(c => {
       const llavesList = (inMemoryData.llaves || []).filter(l => (c.llaves_ids || []).includes(Number(l.id)));
       return {
         ...c,
-        llaves_detalle: llavesList.map(l => ({ id: l.id, nombre: l.nombre }))
+        llaves_detalle: llavesList.map(l => ({ id: l.id, uuid: l.uuid, nombre: l.nombre }))
       };
     }).sort((a, b) => Number(b.id) - Number(a.id));
   }
@@ -7824,22 +8367,25 @@ export async function getLibroControlLlavesModel(libroId) {
   const rows = await sql`
     SELECT 
       cl.id,
+      cl.uuid,
       cl.libro_id,
+      cl.libro_uuid,
       cl.descripcion,
       cl.hora_salida,
       cl.hora_recepcion,
       cl.llaves_ids,
+      cl.llaves_uuids,
       cl.created_at,
       cl.updated_at,
       COALESCE(
         (
-          SELECT json_agg(json_build_object('id', l.id, 'nombre', l.nombre) ORDER BY l.nombre)
+          SELECT json_agg(json_build_object('id', l.id, 'uuid', l.uuid, 'nombre', l.nombre) ORDER BY l.nombre)
           FROM llaves l
-          WHERE l.id = ANY(cl.llaves_ids)
+          WHERE l.id = ANY(cl.llaves_ids) OR (cl.llaves_uuids IS NOT NULL AND l.uuid = ANY(cl.llaves_uuids))
         ), '[]'::json
       ) AS llaves_detalle
     FROM libro_control_llaves cl
-    WHERE cl.libro_id = ${lId}
+    WHERE ${isU ? sql`cl.libro_uuid = ${libroId}::uuid OR cl.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`cl.libro_id = ${lId}`}
     ORDER BY cl.id DESC
   `;
 
@@ -7847,14 +8393,38 @@ export async function getLibroControlLlavesModel(libroId) {
 }
 
 export async function createLibroControlLlavesModel(data) {
-  const libroId = Number(data.libro_id);
-  if (!libroId) throw new Error('ID de libro inválido');
+  const libroIdRaw = data.libro_id || data.libro_uuid;
+  if (!libroIdRaw) throw new Error('ID de libro inválido');
 
-  let llavesIds = Array.isArray(data.llaves_ids) 
-    ? data.llaves_ids.map(Number).filter(n => !isNaN(n) && n > 0)
-    : [];
+  const isU = isUuid(libroIdRaw);
+  let libroId = !isU ? Number(libroIdRaw) : null;
+  let libroUuid = isU ? String(libroIdRaw).trim() : (data.libro_uuid || null);
 
-  if (llavesIds.length === 0) {
+  let rawLlaves = Array.isArray(data.llaves_ids) ? data.llaves_ids : (Array.isArray(data.llaves_uuids) ? data.llaves_uuids : []);
+  let llavesIds = [];
+  let llavesUuids = [];
+  for (const item of rawLlaves) {
+    if (isUuid(item)) {
+      llavesUuids.push(String(item).trim());
+    } else {
+      const n = Number(item);
+      if (!isNaN(n) && n > 0) llavesIds.push(n);
+    }
+  }
+
+  if (llavesUuids.length > 0 && isPgConnected && sql) {
+    const resolved = await sql`SELECT id, uuid FROM llaves WHERE uuid = ANY(${llavesUuids}::uuid[])`;
+    for (const r of resolved) {
+      if (!llavesIds.includes(r.id)) llavesIds.push(r.id);
+    }
+  } else if (llavesIds.length > 0 && isPgConnected && sql) {
+    const resolved = await sql`SELECT id, uuid FROM llaves WHERE id = ANY(${llavesIds})`;
+    for (const r of resolved) {
+      if (r.uuid && !llavesUuids.includes(r.uuid)) llavesUuids.push(r.uuid);
+    }
+  }
+
+  if (llavesIds.length === 0 && llavesUuids.length === 0) {
     throw new Error('Debe seleccionar al menos una llave');
   }
 
@@ -7864,36 +8434,49 @@ export async function createLibroControlLlavesModel(data) {
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const horaSalida = (data.hora_salida || '').trim() || currentHHMM;
   const horaRecepcion = (data.hora_recepcion || '').trim() || null;
+  const controlUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
     const nextId = (inMemoryData.libro_control_llaves.length > 0)
       ? Math.max(...inMemoryData.libro_control_llaves.map(d => d.id)) + 1
       : 1;
-    const llavesList = (inMemoryData.llaves || []).filter(l => llavesIds.includes(Number(l.id)));
+    const llavesList = (inMemoryData.llaves || []).filter(l => llavesIds.includes(Number(l.id)) || llavesUuids.includes(String(l.uuid)));
     const newRecord = {
       id: nextId,
+      uuid: controlUuid || `llaves-${Date.now()}`,
       libro_id: libroId,
+      libro_uuid: libroUuid,
       llaves_ids: llavesIds,
+      llaves_uuids: llavesUuids,
       descripcion,
       hora_salida: horaSalida,
       hora_recepcion: horaRecepcion,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      llaves_detalle: llavesList.map(l => ({ id: l.id, nombre: l.nombre }))
+      llaves_detalle: llavesList.map(l => ({ id: l.id, uuid: l.uuid, nombre: l.nombre }))
     };
     inMemoryData.libro_control_llaves.push(newRecord);
     return newRecord;
   }
 
+  if (isU && !libroId) {
+    const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;
+    if (lRow.length > 0) libroId = lRow[0].id;
+  }
+
   const res = await sql`
     INSERT INTO libro_control_llaves (
-      libro_id, llaves_ids, descripcion, hora_salida, hora_recepcion
+      ${controlUuid ? sql`uuid,` : sql``}
+      libro_id, libro_uuid, llaves_ids, llaves_uuids, descripcion, hora_salida, hora_recepcion
     )
     VALUES (
-      ${libroId}, ${llavesIds}, ${descripcion}, ${horaSalida}, ${horaRecepcion}
+      ${controlUuid ? sql`${controlUuid}::uuid,` : sql``}
+      ${libroId}, ${libroUuid ? sql`${libroUuid}::uuid` : sql`NULL`},
+      ${llavesIds}, ${llavesUuids.length > 0 ? sql`${llavesUuids}::uuid[]` : sql`NULL`},
+      ${descripcion}, ${horaSalida}, ${horaRecepcion}
     )
-    RETURNING id
+    RETURNING id, uuid
   `;
 
   const insertedId = res[0].id;
@@ -7901,18 +8484,21 @@ export async function createLibroControlLlavesModel(data) {
   const rows = await sql`
     SELECT 
       cl.id,
+      cl.uuid,
       cl.libro_id,
+      cl.libro_uuid,
       cl.descripcion,
       cl.hora_salida,
       cl.hora_recepcion,
       cl.llaves_ids,
+      cl.llaves_uuids,
       cl.created_at,
       cl.updated_at,
       COALESCE(
         (
-          SELECT json_agg(json_build_object('id', l.id, 'nombre', l.nombre) ORDER BY l.nombre)
+          SELECT json_agg(json_build_object('id', l.id, 'uuid', l.uuid, 'nombre', l.nombre) ORDER BY l.nombre)
           FROM llaves l
-          WHERE l.id = ANY(cl.llaves_ids)
+          WHERE l.id = ANY(cl.llaves_ids) OR (cl.llaves_uuids IS NOT NULL AND l.uuid = ANY(cl.llaves_uuids))
         ), '[]'::json
       ) AS llaves_detalle
     FROM libro_control_llaves cl
@@ -7924,16 +8510,18 @@ export async function createLibroControlLlavesModel(data) {
 }
 
 export async function updateLibroControlLlavesHorasModel(controlId, libroId, data) {
-  const cId = Number(controlId);
-  const lId = Number(libroId);
-  if (!cId) throw new Error('ID de registro de control de llaves inválido');
+  if (!controlId) throw new Error('ID de registro de control de llaves inválido');
+  const isCtrlU = isUuid(controlId);
+  const isLibU = isUuid(libroId);
 
   const horaSalida = (data.hora_salida || '').trim() || null;
   const horaRecepcion = (data.hora_recepcion || '').trim() || null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
-    const idx = inMemoryData.libro_control_llaves.findIndex(c => Number(c.id) === cId);
+    const idx = inMemoryData.libro_control_llaves.findIndex(c => 
+      String(c.uuid) === String(controlId) || Number(c.id) === Number(controlId)
+    );
     if (idx !== -1) {
       if (horaSalida) inMemoryData.libro_control_llaves[idx].hora_salida = horaSalida;
       inMemoryData.libro_control_llaves[idx].hora_recepcion = horaRecepcion;
@@ -7949,13 +8537,16 @@ export async function updateLibroControlLlavesHorasModel(controlId, libroId, dat
       hora_salida = COALESCE(${horaSalida}, hora_salida),
       hora_recepcion = ${horaRecepcion},
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    WHERE ${isCtrlU ? sql`uuid = ${controlId}::uuid` : sql`id = ${Number(controlId)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
   `;
 
   const rows = await sql`
     SELECT 
       cl.id,
+      cl.uuid,
       cl.libro_id,
+      cl.libro_uuid,
       cl.descripcion,
       cl.hora_salida,
       cl.hora_recepcion,
@@ -7964,13 +8555,13 @@ export async function updateLibroControlLlavesHorasModel(controlId, libroId, dat
       cl.updated_at,
       COALESCE(
         (
-          SELECT json_agg(json_build_object('id', l.id, 'nombre', l.nombre) ORDER BY l.nombre)
+          SELECT json_agg(json_build_object('id', l.id, 'uuid', l.uuid, 'nombre', l.nombre) ORDER BY l.nombre)
           FROM llaves l
           WHERE l.id = ANY(cl.llaves_ids)
         ), '[]'::json
       ) AS llaves_detalle
     FROM libro_control_llaves cl
-    WHERE cl.id = ${cId}
+    WHERE ${isCtrlU ? sql`cl.uuid = ${controlId}::uuid` : sql`cl.id = ${Number(controlId)}`}
     LIMIT 1
   `;
 
@@ -7978,33 +8569,37 @@ export async function updateLibroControlLlavesHorasModel(controlId, libroId, dat
 }
 
 export async function deleteLibroControlLlavesModel(id, libroId) {
-  const cId = Number(id);
-  const lId = Number(libroId);
-  if (!cId) throw new Error('ID de registro de control de llaves inválido');
+  if (!id) throw new Error('ID de registro de control de llaves inválido');
+  const isU = isUuid(id);
+  const isLibU = isUuid(libroId);
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
-    inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves.filter(c => Number(c.id) !== cId);
-    return { success: true, id: cId };
+    inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves.filter(c => 
+      String(c.uuid) !== String(id) && Number(c.id) !== Number(id)
+    );
+    return { success: true, id };
   }
 
   await sql`
     DELETE FROM libro_control_llaves
-    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
   `;
 
-  return { success: true, id: cId };
+  return { success: true, id };
 }
 
 // --- APORTES DE LIBRO (CECOM: LIBRO APORTES) ---
 export async function getLibroAportesModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isU = isUuid(libroId);
+  const lId = !isU ? Number(libroId) : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
     return inMemoryData.libro_aportes
-      .filter(a => Number(a.libro_id) === lId)
+      .filter(a => String(a.libro_uuid) === String(libroId) || Number(a.libro_id) === lId)
       .map(a => ({ ...a, tipo: a.tipo || 'Aporte' }))
       .sort((a, b) => Number(b.id) - Number(a.id));
   }
@@ -8012,9 +8607,13 @@ export async function getLibroAportesModel(libroId) {
   const rows = await sql`
     SELECT 
       la.id,
+      la.uuid,
       la.libro_id,
+      la.libro_uuid,
       la.empleado_id,
+      la.empleado_uuid,
       la.rango_id,
+      la.rango_uuid,
       la.monto,
       COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
@@ -8026,12 +8625,12 @@ export async function getLibroAportesModel(libroId) {
       d.nombre AS departamento_nombre,
       r.nombre AS rango_nombre
     FROM libro_aportes la
-    JOIN empleados e ON e.id = la.empleado_id
-    LEFT JOIN cargos c ON c.id = e.cargo_id
-    LEFT JOIN areas a ON a.id = c.area_id
-    LEFT JOIN departamentos d ON d.id = a.departamento_id
-    JOIN rangos r ON r.id = la.rango_id
-    WHERE la.libro_id = ${lId}
+    JOIN empleados e ON (la.empleado_uuid = e.uuid OR la.empleado_id = e.id)
+    LEFT JOIN cargos c ON (e.cargo_uuid = c.uuid OR e.cargo_id = c.id)
+    LEFT JOIN areas a ON (c.area_uuid = a.uuid OR c.area_id = a.id)
+    LEFT JOIN departamentos d ON (a.departamento_uuid = d.uuid OR a.departamento_id = d.id)
+    JOIN rangos r ON (la.rango_uuid = r.uuid OR la.rango_id = r.id)
+    WHERE ${isU ? sql`la.libro_uuid = ${libroId}::uuid OR la.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`la.libro_id = ${lId}`}
     ORDER BY la.id DESC
   `;
 
@@ -8039,15 +8638,29 @@ export async function getLibroAportesModel(libroId) {
 }
 
 export async function createLibroAporteModel(data) {
-  const libroId = Number(data.libro_id);
-  const empleadoId = Number(data.empleado_id);
-  const rangoId = Number(data.rango_id);
+  const libroIdRaw = data.libro_id || data.libro_uuid;
+  const empleadoIdRaw = data.empleado_id || data.empleado_uuid;
+  const rangoIdRaw = data.rango_id || data.rango_uuid;
+
+  if (!libroIdRaw) throw new Error('ID de libro inválido');
+  if (!empleadoIdRaw) throw new Error('Debe seleccionar un empleado');
+  if (!rangoIdRaw) throw new Error('Debe seleccionar un rango');
+
+  const isLibU = isUuid(libroIdRaw);
+  let libroId = !isLibU ? Number(libroIdRaw) : null;
+  let libroUuid = isLibU ? String(libroIdRaw).trim() : (data.libro_uuid || null);
+
+  const isEmpU = isUuid(empleadoIdRaw);
+  let empleadoId = !isEmpU ? Number(empleadoIdRaw) : null;
+  let empleadoUuid = isEmpU ? String(empleadoIdRaw).trim() : (data.empleado_uuid || null);
+
+  const isRangoU = isUuid(rangoIdRaw);
+  let rangoId = !isRangoU ? Number(rangoIdRaw) : null;
+  let rangoUuid = isRangoU ? String(rangoIdRaw).trim() : (data.rango_uuid || null);
+
   const monto = Number(data.monto) || 0;
   const tipo = (data.tipo || '').trim() || 'Aporte';
-
-  if (!libroId) throw new Error('ID de libro inválido');
-  if (!empleadoId) throw new Error('Debe seleccionar un empleado');
-  if (!rangoId) throw new Error('Debe seleccionar un rango');
+  const aporteUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
@@ -8056,9 +8669,13 @@ export async function createLibroAporteModel(data) {
       : 1;
     const newRecord = {
       id: nextId,
+      uuid: aporteUuid || `aporte-${Date.now()}`,
       libro_id: libroId,
+      libro_uuid: libroUuid,
       empleado_id: empleadoId,
+      empleado_uuid: empleadoUuid,
       rango_id: rangoId,
+      rango_uuid: rangoUuid,
       monto,
       tipo,
       created_at: new Date().toISOString(),
@@ -8068,14 +8685,33 @@ export async function createLibroAporteModel(data) {
     return newRecord;
   }
 
+  // Resolver IDs si vinieron UUIDs
+  if (isLibU && !libroId) {
+    const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;
+    if (lRow.length > 0) libroId = lRow[0].id;
+  }
+  if (isEmpU && !empleadoId) {
+    const eRow = await sql`SELECT id FROM empleados WHERE uuid = ${empleadoUuid}::uuid LIMIT 1`;
+    if (eRow.length > 0) empleadoId = eRow[0].id;
+  }
+  if (isRangoU && !rangoId) {
+    const rRow = await sql`SELECT id FROM rangos WHERE uuid = ${rangoUuid}::uuid LIMIT 1`;
+    if (rRow.length > 0) rangoId = rRow[0].id;
+  }
+
   const res = await sql`
     INSERT INTO libro_aportes (
-      libro_id, empleado_id, rango_id, monto, tipo
+      ${aporteUuid ? sql`uuid,` : sql``}
+      libro_id, libro_uuid, empleado_id, empleado_uuid, rango_id, rango_uuid, monto, tipo
     )
     VALUES (
-      ${libroId}, ${empleadoId}, ${rangoId}, ${monto}, ${tipo}
+      ${aporteUuid ? sql`${aporteUuid}::uuid,` : sql``}
+      ${libroId}, ${libroUuid ? sql`${libroUuid}::uuid` : sql`NULL`},
+      ${empleadoId}, ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
+      ${rangoId}, ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
+      ${monto}, ${tipo}
     )
-    RETURNING id
+    RETURNING id, uuid
   `;
 
   const insertedId = res[0].id;
@@ -8083,9 +8719,13 @@ export async function createLibroAporteModel(data) {
   const rows = await sql`
     SELECT 
       la.id,
+      la.uuid,
       la.libro_id,
+      la.libro_uuid,
       la.empleado_id,
+      la.empleado_uuid,
       la.rango_id,
+      la.rango_uuid,
       la.monto,
       COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
@@ -8097,11 +8737,11 @@ export async function createLibroAporteModel(data) {
       d.nombre AS departamento_nombre,
       r.nombre AS rango_nombre
     FROM libro_aportes la
-    JOIN empleados e ON e.id = la.empleado_id
-    LEFT JOIN cargos c ON c.id = e.cargo_id
-    LEFT JOIN areas a ON a.id = c.area_id
-    LEFT JOIN departamentos d ON d.id = a.departamento_id
-    JOIN rangos r ON r.id = la.rango_id
+    JOIN empleados e ON (la.empleado_uuid = e.uuid OR la.empleado_id = e.id)
+    LEFT JOIN cargos c ON (e.cargo_uuid = c.uuid OR e.cargo_id = c.id)
+    LEFT JOIN areas a ON (c.area_uuid = a.uuid OR c.area_id = a.id)
+    LEFT JOIN departamentos d ON (a.departamento_uuid = d.uuid OR a.departamento_id = d.id)
+    JOIN rangos r ON (la.rango_uuid = r.uuid OR la.rango_id = r.id)
     WHERE la.id = ${insertedId}
   `;
 
@@ -8109,22 +8749,36 @@ export async function createLibroAporteModel(data) {
 }
 
 export async function updateLibroAporteModel(id, libroId, data) {
-  const aId = Number(id);
-  const lId = Number(libroId);
-  if (!aId) throw new Error('ID de aporte inválido');
+  if (!id) throw new Error('ID de aporte inválido');
+  const isU = isUuid(id);
+  const isLibU = isUuid(libroId);
 
-  const empleadoId = data.empleado_id !== undefined ? Number(data.empleado_id) : null;
-  const rangoId = data.rango_id !== undefined ? Number(data.rango_id) : null;
+  const empIdRaw = data.empleado_id || data.empleado_uuid;
+  const isEmpU = isUuid(empIdRaw);
+  const empleadoId = empIdRaw && !isEmpU ? Number(empIdRaw) : null;
+  const empleadoUuid = isEmpU ? String(empIdRaw).trim() : null;
+
+  const rangoIdRaw = data.rango_id || data.rango_uuid;
+  const isRngU = isUuid(rangoIdRaw);
+  const rangoId = rangoIdRaw && !isRngU ? Number(rangoIdRaw) : null;
+  const rangoUuid = isRngU ? String(rangoIdRaw).trim() : null;
+
   const monto = data.monto !== undefined ? Number(data.monto) : null;
   const tipo = data.tipo !== undefined ? (String(data.tipo).trim() || 'Aporte') : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
-    const idx = inMemoryData.libro_aportes.findIndex(a => Number(a.id) === aId);
+    const idx = inMemoryData.libro_aportes.findIndex(a => String(a.uuid) === String(id) || Number(a.id) === Number(id));
     if (idx !== -1) {
-      if (empleadoId) inMemoryData.libro_aportes[idx].empleado_id = empleadoId;
-      if (rangoId) inMemoryData.libro_aportes[idx].rango_id = rangoId;
-      if (monto !== undefined) inMemoryData.libro_aportes[idx].monto = monto;
+      if (empleadoId || empleadoUuid) {
+        inMemoryData.libro_aportes[idx].empleado_id = empleadoId;
+        inMemoryData.libro_aportes[idx].empleado_uuid = empleadoUuid;
+      }
+      if (rangoId || rangoUuid) {
+        inMemoryData.libro_aportes[idx].rango_id = rangoId;
+        inMemoryData.libro_aportes[idx].rango_uuid = rangoUuid;
+      }
+      if (monto !== null) inMemoryData.libro_aportes[idx].monto = monto;
       if (tipo !== null) inMemoryData.libro_aportes[idx].tipo = tipo;
       inMemoryData.libro_aportes[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_aportes[idx];
@@ -8136,19 +8790,26 @@ export async function updateLibroAporteModel(id, libroId, data) {
     UPDATE libro_aportes
     SET
       empleado_id = COALESCE(${empleadoId}, empleado_id),
+      empleado_uuid = COALESCE(${empleadoUuid}::uuid, empleado_uuid),
       rango_id = COALESCE(${rangoId}, rango_id),
+      rango_uuid = COALESCE(${rangoUuid}::uuid, rango_uuid),
       monto = COALESCE(${monto}, monto),
       tipo = COALESCE(${tipo}, tipo),
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = ${aId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
   `;
 
   const rows = await sql`
     SELECT 
       la.id,
+      la.uuid,
       la.libro_id,
+      la.libro_uuid,
       la.empleado_id,
+      la.empleado_uuid,
       la.rango_id,
+      la.rango_uuid,
       la.monto,
       COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
@@ -8160,52 +8821,60 @@ export async function updateLibroAporteModel(id, libroId, data) {
       d.nombre AS departamento_nombre,
       r.nombre AS rango_nombre
     FROM libro_aportes la
-    JOIN empleados e ON e.id = la.empleado_id
-    LEFT JOIN cargos c ON c.id = e.cargo_id
-    LEFT JOIN areas a ON a.id = c.area_id
-    LEFT JOIN departamentos d ON d.id = a.departamento_id
-    JOIN rangos r ON r.id = la.rango_id
-    WHERE la.id = ${aId}
+    JOIN empleados e ON (la.empleado_uuid = e.uuid OR la.empleado_id = e.id)
+    LEFT JOIN cargos c ON (e.cargo_uuid = c.uuid OR e.cargo_id = c.id)
+    LEFT JOIN areas a ON (c.area_uuid = a.uuid OR c.area_id = a.id)
+    LEFT JOIN departamentos d ON (a.departamento_uuid = d.uuid OR a.departamento_id = d.id)
+    JOIN rangos r ON (la.rango_uuid = r.uuid OR la.rango_id = r.id)
+    WHERE ${isU ? sql`la.uuid = ${id}::uuid` : sql`la.id = ${Number(id)}`}
+    LIMIT 1
   `;
 
   return rows[0] || null;
 }
 
 export async function deleteLibroAporteModel(id, libroId) {
-  const aId = Number(id);
-  const lId = Number(libroId);
-  if (!aId) throw new Error('ID de aporte inválido');
+  if (!id) throw new Error('ID de aporte inválido');
+  const isU = isUuid(id);
+  const isLibU = isUuid(libroId);
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
-    inMemoryData.libro_aportes = inMemoryData.libro_aportes.filter(a => Number(a.id) !== aId);
-    return { success: true, id: aId };
+    inMemoryData.libro_aportes = inMemoryData.libro_aportes.filter(a => 
+      String(a.uuid) !== String(id) && Number(a.id) !== Number(id)
+    );
+    return { success: true, id };
   }
 
   await sql`
     DELETE FROM libro_aportes 
-    WHERE id = ${aId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
   `;
-  return { success: true, id: aId };
+  return { success: true, id };
 }
 
 // --- INCIDENCIAS GENERALES (CECOM: LIBRO INCIDENCIAS GENERALES) ---
 export async function getLibroIncidenciasGeneralesModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isU = isUuid(libroId);
+  const lId = !isU ? Number(libroId) : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
     return inMemoryData.libro_incidencias_generales
-      .filter(c => Number(c.libro_id) === lId)
+      .filter(c => String(c.libro_uuid) === String(libroId) || Number(c.libro_id) === lId)
       .sort((a, b) => Number(b.id) - Number(a.id));
   }
 
   const rows = await sql`
     SELECT 
       lig.id, 
+      lig.uuid,
       lig.libro_id, 
+      lig.libro_uuid,
       lig.tipo_incidencia_id,
+      lig.tipo_incidencia_uuid,
       lig.descripcion, 
       COALESCE(ti.nombre, lig.tipo, 'General') AS tipo, 
       COALESCE(ti.nombre, lig.tipo, 'General') AS tipo_incidencia_nombre,
@@ -8213,8 +8882,8 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
       lig.created_at, 
       lig.updated_at
     FROM libro_incidencias_generales lig
-    LEFT JOIN tipo_incidencias ti ON lig.tipo_incidencia_id = ti.id
-    WHERE lig.libro_id = ${lId}
+    LEFT JOIN tipo_incidencias ti ON (lig.tipo_incidencia_uuid = ti.uuid OR lig.tipo_incidencia_id = ti.id)
+    WHERE ${isU ? sql`lig.libro_uuid = ${libroId}::uuid OR lig.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`lig.libro_id = ${lId}`}
     ORDER BY lig.id DESC
   `;
 
@@ -8222,20 +8891,29 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
 }
 
 export async function createLibroIncidenciaGeneralModel(data) {
-  const libroId = Number(data.libro_id);
-  if (!libroId) throw new Error('ID de libro inválido');
+  const libroIdRaw = data.libro_id || data.libro_uuid;
+  if (!libroIdRaw) throw new Error('ID de libro inválido');
+
+  const isU = isUuid(libroIdRaw);
+  let libroId = !isU ? Number(libroIdRaw) : null;
+  let libroUuid = isU ? String(libroIdRaw).trim() : (data.libro_uuid || null);
 
   const descripcion = (data.descripcion || '').trim();
   if (!descripcion) {
     throw new Error('La descripción de la incidencia es obligatoria');
   }
 
-  let tipoIncidenciaId = data.tipo_incidencia_id ? Number(data.tipo_incidencia_id) : null;
+  const tipoIncRaw = data.tipo_incidencia_id || data.tipo_incidencia_uuid;
+  const isTipoU = isUuid(tipoIncRaw);
+  let tipoIncidenciaId = tipoIncRaw && !isTipoU ? Number(tipoIncRaw) : null;
+  let tipoIncidenciaUuid = isTipoU ? String(tipoIncRaw).trim() : (data.tipo_incidencia_uuid || null);
+
   let tipo = (data.tipo || '').trim();
 
   const now = new Date();
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const hora = (data.hora || '').trim() || currentHHMM;
+  const incUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (!isPgConnected || !sql) {
     if (!tipoIncidenciaId) tipoIncidenciaId = 1;
@@ -8246,8 +8924,11 @@ export async function createLibroIncidenciaGeneralModel(data) {
       : 1;
     const newRecord = {
       id: nextId,
+      uuid: incUuid || `inc-${Date.now()}`,
       libro_id: libroId,
+      libro_uuid: libroUuid,
       tipo_incidencia_id: tipoIncidenciaId,
+      tipo_incidencia_uuid: tipoIncidenciaUuid,
       descripcion,
       tipo,
       hora,
@@ -8258,48 +8939,72 @@ export async function createLibroIncidenciaGeneralModel(data) {
     return newRecord;
   }
 
-  if (tipoIncidenciaId) {
-    const match = await sql`SELECT nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
-    if (match.length > 0) tipo = match[0].nombre;
-  } else if (tipo) {
-    const match = await sql`SELECT id, nombre FROM tipo_incidencias WHERE LOWER(TRIM(nombre)) = LOWER(${tipo}) LIMIT 1`;
+  if (isU && !libroId) {
+    const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;
+    if (lRow.length > 0) libroId = lRow[0].id;
+  }
+
+  if (tipoIncidenciaUuid) {
+    const match = await sql`SELECT id, nombre FROM tipo_incidencias WHERE uuid = ${tipoIncidenciaUuid}::uuid LIMIT 1`;
     if (match.length > 0) {
       tipoIncidenciaId = match[0].id;
       tipo = match[0].nombre;
     }
+  } else if (tipoIncidenciaId) {
+    const match = await sql`SELECT uuid, nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
+    if (match.length > 0) {
+      tipoIncidenciaUuid = match[0].uuid;
+      tipo = match[0].nombre;
+    }
+  } else if (tipo) {
+    const match = await sql`SELECT id, uuid, nombre FROM tipo_incidencias WHERE LOWER(TRIM(nombre)) = LOWER(${tipo}) LIMIT 1`;
+    if (match.length > 0) {
+      tipoIncidenciaId = match[0].id;
+      tipoIncidenciaUuid = match[0].uuid;
+      tipo = match[0].nombre;
+    }
   }
-  if (!tipoIncidenciaId) tipoIncidenciaId = 1;
-  if (!tipo) tipo = 'General';
 
   const res = await sql`
     INSERT INTO libro_incidencias_generales (
-      libro_id, tipo_incidencia_id, descripcion, tipo, hora
+      ${incUuid ? sql`uuid,` : sql``}
+      libro_id, libro_uuid, tipo_incidencia_id, tipo_incidencia_uuid, descripcion, tipo, hora
     )
     VALUES (
-      ${libroId}, ${tipoIncidenciaId}, ${descripcion}, ${tipo}, ${hora}
+      ${incUuid ? sql`${incUuid}::uuid,` : sql``}
+      ${libroId}, ${libroUuid ? sql`${libroUuid}::uuid` : sql`NULL`},
+      ${tipoIncidenciaId || 1}, ${tipoIncidenciaUuid ? sql`${tipoIncidenciaUuid}::uuid` : sql`NULL`},
+      ${descripcion}, ${tipo || 'General'}, ${hora}
     )
-    RETURNING id, libro_id, tipo_incidencia_id, descripcion, tipo, hora, created_at, updated_at
+    RETURNING id, uuid, libro_id, libro_uuid, tipo_incidencia_id, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at
   `;
 
   return res[0];
 }
 
 export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, data) {
-  const incId = Number(incidenciaId);
-  const lId = Number(libroId);
-  if (!incId) throw new Error('ID de incidencia inválido');
+  if (!incidenciaId) throw new Error('ID de incidencia inválido');
+  const isIncU = isUuid(incidenciaId);
+  const isLibU = isUuid(libroId);
 
   const descripcion = data.descripcion !== undefined ? (data.descripcion || '').trim() : null;
-  const tipoIncidenciaId = data.tipo_incidencia_id !== undefined ? Number(data.tipo_incidencia_id) : null;
+  const tipoIncRaw = data.tipo_incidencia_id || data.tipo_incidencia_uuid;
+  const isTipoU = isUuid(tipoIncRaw);
+  const tipoIncidenciaId = tipoIncRaw && !isTipoU ? Number(tipoIncRaw) : null;
+  const tipoIncidenciaUuid = isTipoU ? String(tipoIncRaw).trim() : null;
+
   let tipo = data.tipo !== undefined ? (data.tipo || 'General').trim() : null;
   const hora = data.hora !== undefined ? (data.hora || '').trim() : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
-    const idx = inMemoryData.libro_incidencias_generales.findIndex(c => Number(c.id) === incId);
+    const idx = inMemoryData.libro_incidencias_generales.findIndex(c => 
+      String(c.uuid) === String(incidenciaId) || Number(c.id) === Number(incidenciaId)
+    );
     if (idx !== -1) {
       if (descripcion !== null) inMemoryData.libro_incidencias_generales[idx].descripcion = descripcion;
       if (tipoIncidenciaId !== null) inMemoryData.libro_incidencias_generales[idx].tipo_incidencia_id = tipoIncidenciaId;
+      if (tipoIncidenciaUuid !== null) inMemoryData.libro_incidencias_generales[idx].tipo_incidencia_uuid = tipoIncidenciaUuid;
       if (tipo !== null) inMemoryData.libro_incidencias_generales[idx].tipo = tipo;
       if (hora !== null) inMemoryData.libro_incidencias_generales[idx].hora = hora;
       inMemoryData.libro_incidencias_generales[idx].updated_at = new Date().toISOString();
@@ -8308,21 +9013,18 @@ export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, d
     throw new Error('Incidencia no encontrada');
   }
 
-  if (tipoIncidenciaId) {
-    const match = await sql`SELECT nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;
-    if (match.length > 0) tipo = match[0].nombre;
-  }
-
   const rows = await sql`
     UPDATE libro_incidencias_generales
     SET 
       descripcion = COALESCE(${descripcion}, descripcion),
       tipo_incidencia_id = COALESCE(${tipoIncidenciaId}, tipo_incidencia_id),
+      tipo_incidencia_uuid = COALESCE(${tipoIncidenciaUuid}::uuid, tipo_incidencia_uuid),
       tipo = COALESCE(${tipo}, tipo),
       hora = COALESCE(${hora}, hora),
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = ${incId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, tipo_incidencia_id, descripcion, tipo, hora, created_at, updated_at
+    WHERE ${isIncU ? sql`uuid = ${incidenciaId}::uuid` : sql`id = ${Number(incidenciaId)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
+    RETURNING id, uuid, libro_id, libro_uuid, tipo_incidencia_id, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at
   `;
 
   return rows[0];
@@ -8331,53 +9033,69 @@ export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, d
 export const updateLibroIncidenciaGeneralHoraModel = updateLibroIncidenciaGeneralModel;
 
 export async function deleteLibroIncidenciaGeneralModel(id, libroId) {
-  const incId = Number(id);
-  const lId = Number(libroId);
-  if (!incId) throw new Error('ID de incidencia inválido');
+  if (!id) throw new Error('ID de incidencia inválido');
+  const isU = isUuid(id);
+  const isLibU = isUuid(libroId);
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
-    inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales.filter(c => Number(c.id) !== incId);
-    return { success: true, id: incId };
+    inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales.filter(c => 
+      String(c.uuid) !== String(id) && Number(c.id) !== Number(id)
+    );
+    return { success: true, id };
   }
 
   await sql`
     DELETE FROM libro_incidencias_generales
-    WHERE id = ${incId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
   `;
 
-  return { success: true, id: incId };
+  return { success: true, id };
 }
 
 // --- CONTROL DE CLIENTES (CECOM: LIBRO CONTROL DE CLIENTES) ---
 export async function getLibroControlClientesModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isU = isUuid(libroId);
+  const lId = !isU ? Number(libroId) : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
-    const list = inMemoryData.libro_control_clientes.filter(c => Number(c.libro_id) === lId);
+    const list = inMemoryData.libro_control_clientes.filter(c => 
+      String(c.libro_uuid) === String(libroId) || Number(c.libro_id) === lId
+    );
     return list.sort((a, b) => Number(b.id) - Number(a.id));
   }
 
   const rows = await sql`
     SELECT 
-      lcc.id, lcc.libro_id, lcc.cliente_id, 
+      lcc.id, 
+      lcc.uuid,
+      lcc.libro_id, 
+      lcc.libro_uuid,
+      lcc.cliente_id, 
+      lcc.cliente_uuid,
       COALESCE(c.nombre, '') AS cliente, 
-      lcc.tipo, lcc.monto, lcc.metodo_pago_id, 
+      lcc.tipo, 
+      lcc.monto, 
+      lcc.metodo_pago_id, 
+      lcc.metodo_pago_uuid,
       COALESCE(mp.nombre, 'General') AS metodo,
       COALESCE(mp.color, '#3B82F6') AS metodo_color,
       lcc.hora, 
       COALESCE(lcc.nota, '') AS nota,
-      lcc.created_at, lcc.updated_at,
+      lcc.created_at, 
+      lcc.updated_at,
       COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre,
-      c.tipo_cliente_id
+      c.tipo_cliente_id,
+      c.tipo_cliente_uuid
     FROM libro_control_clientes lcc
-    LEFT JOIN clientes c ON lcc.cliente_id = c.id
-    LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-    LEFT JOIN metodos_pago mp ON lcc.metodo_pago_id = mp.id
-    WHERE lcc.libro_id = ${lId}
-    ORDER BY lcc.id DESC
+    LEFT JOIN clientes c ON (lcc.cliente_uuid = c.uuid OR lcc.cliente_id = c.id)
+    LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
+    LEFT JOIN metodos_pago mp ON (lcc.metodo_pago_uuid = mp.uuid OR lcc.metodo_pago_id = mp.id)
+    WHERE ${isU ? sql`lcc.libro_uuid = ${libroId}::uuid OR lcc.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`lcc.libro_id = ${lId}`}
+    ORDER BY lcc.created_at DESC, lcc.id DESC
   `;
 
   return rows;
@@ -8385,47 +9103,59 @@ export async function getLibroControlClientesModel(libroId) {
 
 export async function getClientesSugerenciasModel(query = '', options = {}) {
   const cleanQ = (query || '').trim().toLowerCase();
-  const salaId = options.salaId ? Number(options.salaId) : null;
-  const libroId = options.libroId ? Number(options.libroId) : null;
+  const salaIdRaw = options.salaId;
+  const libroIdRaw = options.libroId;
 
   if (!isPgConnected || !sql) {
     inMemoryData.clientes = inMemoryData.clientes || [];
     let all = inMemoryData.clientes.map(c => ({
       id: c.id,
+      uuid: c.uuid,
       nombre: c.nombre,
       tipo_cliente_nombre: '',
-      sala_id: c.sala_id
+      sala_id: c.sala_id,
+      sala_uuid: c.sala_uuid
     }));
-    if (salaId) all = all.filter(c => Number(c.sala_id) === salaId);
+    if (salaIdRaw) all = all.filter(c => String(c.sala_uuid) === String(salaIdRaw) || Number(c.sala_id) === Number(salaIdRaw));
     if (cleanQ) all = all.filter(c => c.nombre.toLowerCase().includes(cleanQ));
     return all.slice(0, 30);
   }
 
   // Si no tenemos salaId pero sí libroId, obtener el sala_id del libro
-  let resolvedSalaId = salaId;
-  if (!resolvedSalaId && libroId) {
-    const lib = await sql`SELECT sala_id FROM libros WHERE id = ${libroId} LIMIT 1`;
-    if (lib.length > 0 && lib[0].sala_id) {
-      resolvedSalaId = Number(lib[0].sala_id);
+  let resolvedSalaId = null;
+  let resolvedSalaUuid = null;
+  if (salaIdRaw) {
+    if (isUuid(salaIdRaw)) resolvedSalaUuid = String(salaIdRaw).trim();
+    else resolvedSalaId = Number(salaIdRaw);
+  } else if (libroIdRaw) {
+    const isLibU = isUuid(libroIdRaw);
+    const lib = await sql`
+      SELECT sala_id, sala_uuid FROM libros 
+      WHERE ${isLibU ? sql`uuid = ${libroIdRaw}::uuid` : sql`id = ${Number(libroIdRaw)}`} 
+      LIMIT 1
+    `;
+    if (lib.length > 0) {
+      resolvedSalaId = lib[0].sala_id;
+      resolvedSalaUuid = lib[0].sala_uuid;
     }
   }
 
   let rows;
-  if (resolvedSalaId) {
+  if (resolvedSalaUuid || resolvedSalaId) {
     rows = await sql`
-      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre
+      SELECT c.id, c.uuid, c.nombre, c.sala_id, c.sala_uuid, c.tipo_cliente_id, c.tipo_cliente_uuid, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre
       FROM clientes c
-      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-      WHERE c.sala_id = ${resolvedSalaId}
+      LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
+      WHERE ${resolvedSalaUuid ? sql`c.sala_uuid = ${resolvedSalaUuid}::uuid OR c.sala_id = ${resolvedSalaId}` : sql`c.sala_id = ${resolvedSalaId}`}
         ${cleanQ ? sql`AND (LOWER(c.nombre) LIKE ${`%${cleanQ}%`} OR LOWER(COALESCE(tc.nombre, '')) LIKE ${`%${cleanQ}%`})` : sql``}
       ORDER BY c.nombre ASC
       LIMIT 30
     `;
   } else {
     rows = await sql`
-      SELECT c.id, c.nombre, c.sala_id, c.tipo_cliente_id, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre
+      SELECT c.id, c.uuid, c.nombre, c.sala_id, c.sala_uuid, c.tipo_cliente_id, c.tipo_cliente_uuid, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre
       FROM clientes c
-      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
+      LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
       WHERE 1=1
         ${cleanQ ? sql`AND (LOWER(c.nombre) LIKE ${`%${cleanQ}%`} OR LOWER(COALESCE(tc.nombre, '')) LIKE ${`%${cleanQ}%`})` : sql``}
       ORDER BY c.nombre ASC
@@ -8435,53 +9165,69 @@ export async function getClientesSugerenciasModel(query = '', options = {}) {
 
   return rows.map(r => ({
     id: r.id,
+    uuid: r.uuid,
     nombre: r.nombre,
     tipo_cliente_id: r.tipo_cliente_id,
+    tipo_cliente_uuid: r.tipo_cliente_uuid,
     tipo_cliente_nombre: r.tipo_cliente_nombre || 'General',
-    sala_id: r.sala_id
+    sala_id: r.sala_id,
+    sala_uuid: r.sala_uuid
   }));
 }
 
 export async function createLibroControlClienteModel(data) {
-  const libroId = Number(data.libro_id);
-  if (!libroId) throw new Error('ID de libro inválido');
+  const libroIdRaw = data.libro_id || data.libro_uuid;
+  if (!libroIdRaw) throw new Error('ID de libro inválido');
+
+  const isLibU = isUuid(libroIdRaw);
+  let libroId = !isLibU ? Number(libroIdRaw) : null;
+  let libroUuid = isLibU ? String(libroIdRaw).trim() : (data.libro_uuid || null);
 
   const clienteNombre = (data.cliente || '').trim();
-  let clienteId = data.cliente_id ? Number(data.cliente_id) : null;
+  const clienteIdRaw = data.cliente_id || data.cliente_uuid;
+  const isCliU = isUuid(clienteIdRaw);
+  let clienteId = clienteIdRaw && !isCliU ? Number(clienteIdRaw) : null;
+  let clienteUuid = isCliU ? String(clienteIdRaw).trim() : (data.cliente_uuid || null);
 
-  if (!clienteId && !clienteNombre) {
+  if (!clienteId && !clienteUuid && !clienteNombre) {
     throw new Error('El nombre del cliente es obligatorio');
   }
 
-  // Resolver salaId del libro
+  // Resolver salaId y salaUuid del libro
   let resolvedSalaId = null;
+  let resolvedSalaUuid = null;
   if (sql && isPgConnected) {
-    const lib = await sql`SELECT sala_id FROM libros WHERE id = ${libroId} LIMIT 1`;
-    if (lib.length > 0 && lib[0].sala_id) {
-      resolvedSalaId = Number(lib[0].sala_id);
+    const lib = await sql`
+      SELECT id, uuid, sala_id, sala_uuid FROM libros 
+      WHERE ${isLibU ? sql`uuid = ${libroIdRaw}::uuid` : sql`id = ${libroId}`} 
+      LIMIT 1
+    `;
+    if (lib.length > 0) {
+      if (!libroId) libroId = lib[0].id;
+      resolvedSalaId = lib[0].sala_id;
+      resolvedSalaUuid = lib[0].sala_uuid;
     }
   }
 
-  // Si no viene clienteId pero viene clienteNombre, buscar si existe o crearlo automáticamente
-  if (!clienteId && clienteNombre) {
-    if (sql && isPgConnected) {
-      const existing = await sql`
-        SELECT id FROM clientes 
-        WHERE LOWER(TRIM(nombre)) = LOWER(${clienteNombre}) 
-          ${resolvedSalaId ? sql`AND sala_id = ${resolvedSalaId}` : sql``}
-        LIMIT 1
+  // Si no viene clienteId/clienteUuid pero viene clienteNombre, buscar si existe o crearlo automáticamente
+  if (!clienteId && !clienteUuid && clienteNombre && sql && isPgConnected) {
+    const existing = await sql`
+      SELECT id, uuid FROM clientes 
+      WHERE LOWER(TRIM(nombre)) = LOWER(${clienteNombre}) 
+        ${resolvedSalaId ? sql`AND (sala_id = ${resolvedSalaId} OR sala_uuid = ${resolvedSalaUuid}::uuid)` : sql``}
+      LIMIT 1
+    `;
+    if (existing.length > 0) {
+      clienteId = existing[0].id;
+      clienteUuid = existing[0].uuid;
+    } else {
+      const newClient = await sql`
+        INSERT INTO clientes (nombre, tipo_cliente_id, sala_id, sala_uuid)
+        VALUES (${clienteNombre}, 1, ${resolvedSalaId || 1}, ${resolvedSalaUuid ? sql`${resolvedSalaUuid}::uuid` : sql`NULL`})
+        RETURNING id, uuid
       `;
-      if (existing.length > 0) {
-        clienteId = existing[0].id;
-      } else {
-        // Crear cliente con tipo_cliente_id = 1 (General) por defecto
-        const newClient = await sql`
-          INSERT INTO clientes (nombre, tipo_cliente_id, sala_id)
-          VALUES (${clienteNombre}, 1, ${resolvedSalaId || 1})
-          RETURNING id
-        `;
-        clienteId = newClient[0].id;
-      }
+      clienteId = newClient[0].id;
+      clienteUuid = newClient[0].uuid;
     }
   }
 
@@ -8489,26 +9235,37 @@ export async function createLibroControlClienteModel(data) {
   const monto = parseFloat(data.monto) || 0;
   if (monto <= 0) throw new Error('El monto debe ser mayor a 0');
 
-  // Resolver metodo_pago_id
-  let metodoPagoId = data.metodo_pago_id ? Number(data.metodo_pago_id) : null;
+  // Resolver metodo_pago
+  const metodoPagoRaw = data.metodo_pago_id || data.metodo_pago_uuid;
+  const isMetU = isUuid(metodoPagoRaw);
+  let metodoPagoId = metodoPagoRaw && !isMetU ? Number(metodoPagoRaw) : null;
+  let metodoPagoUuid = isMetU ? String(metodoPagoRaw).trim() : (data.metodo_pago_uuid || null);
   const metodoNombre = (data.metodo || '').trim();
-  if (!metodoPagoId && metodoNombre && sql && isPgConnected) {
+
+  if (!metodoPagoId && !metodoPagoUuid && metodoNombre && sql && isPgConnected) {
     const mRow = await sql`
-      SELECT id FROM metodos_pago 
+      SELECT id, uuid FROM metodos_pago 
       WHERE LOWER(TRIM(nombre)) = LOWER(${metodoNombre}) 
       LIMIT 1
     `;
-    if (mRow.length > 0) metodoPagoId = mRow[0].id;
+    if (mRow.length > 0) {
+      metodoPagoId = mRow[0].id;
+      metodoPagoUuid = mRow[0].uuid;
+    }
   }
-  if (!metodoPagoId && sql && isPgConnected) {
-    const firstM = await sql`SELECT id FROM metodos_pago ORDER BY id ASC LIMIT 1`;
-    if (firstM.length > 0) metodoPagoId = firstM[0].id;
+  if (!metodoPagoId && !metodoPagoUuid && sql && isPgConnected) {
+    const firstM = await sql`SELECT id, uuid FROM metodos_pago ORDER BY id ASC LIMIT 1`;
+    if (firstM.length > 0) {
+      metodoPagoId = firstM[0].id;
+      metodoPagoUuid = firstM[0].uuid;
+    }
   }
 
   const now = new Date();
   const currentHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const hora = (data.hora || '').trim() || currentHHMM;
   const nota = (data.nota || '').trim();
+  const lccUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
@@ -8517,12 +9274,16 @@ export async function createLibroControlClienteModel(data) {
       : 1;
     const newRecord = {
       id: nextId,
+      uuid: lccUuid || `lcc-${Date.now()}`,
       libro_id: libroId,
+      libro_uuid: libroUuid,
       cliente_id: clienteId,
+      cliente_uuid: clienteUuid,
       cliente: clienteNombre,
       tipo,
       monto,
       metodo_pago_id: metodoPagoId,
+      metodo_pago_uuid: metodoPagoUuid,
       metodo: metodoNombre || 'General',
       hora,
       nota,
@@ -8533,31 +9294,55 @@ export async function createLibroControlClienteModel(data) {
     return newRecord;
   }
 
+  if (isLibU && !libroId) {
+    const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;
+    if (lRow.length > 0) libroId = lRow[0].id;
+  }
+  if (isCliU && !clienteId) {
+    const cRow = await sql`SELECT id FROM clientes WHERE uuid = ${clienteUuid}::uuid LIMIT 1`;
+    if (cRow.length > 0) clienteId = cRow[0].id;
+  }
+  if (isMetU && !metodoPagoId) {
+    const mRow = await sql`SELECT id FROM metodos_pago WHERE uuid = ${metodoPagoUuid}::uuid LIMIT 1`;
+    if (mRow.length > 0) metodoPagoId = mRow[0].id;
+  }
+
   const res = await sql`
     INSERT INTO libro_control_clientes (
-      libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, nota
+      ${lccUuid ? sql`uuid,` : sql``}
+      libro_id, libro_uuid, cliente_id, cliente_uuid, tipo, monto, metodo_pago_id, metodo_pago_uuid, hora, nota
     )
     VALUES (
-      ${libroId}, ${clienteId}, ${tipo}, ${monto}, ${metodoPagoId}, ${hora}, ${nota}
+      ${lccUuid ? sql`${lccUuid}::uuid,` : sql``}
+      ${libroId}, ${libroUuid ? sql`${libroUuid}::uuid` : sql`NULL`},
+      ${clienteId}, ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
+      ${tipo}, ${monto},
+      ${metodoPagoId}, ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
+      ${hora}, ${nota}
     )
-    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, nota, created_at, updated_at
+    RETURNING id, uuid, libro_id, libro_uuid, cliente_id, cliente_uuid, tipo, monto, metodo_pago_id, metodo_pago_uuid, hora, nota, created_at, updated_at
   `;
 
   let clientInfo = null;
-  if (clienteId) {
+  if (clienteUuid || clienteId) {
     const cRows = await sql`
-      SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id
+      SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id, c.tipo_cliente_uuid
       FROM clientes c
-      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-      WHERE c.id = ${clienteId}
+      LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
+      WHERE ${clienteUuid ? sql`c.uuid = ${clienteUuid}::uuid` : sql`c.id = ${clienteId}`}
       LIMIT 1
     `;
     if (cRows.length > 0) clientInfo = cRows[0];
   }
 
   let metodoInfo = null;
-  if (metodoPagoId) {
-    const mRows = await sql`SELECT nombre, COALESCE(color, '#3B82F6') AS color FROM metodos_pago WHERE id = ${metodoPagoId} LIMIT 1`;
+  if (metodoPagoUuid || metodoPagoId) {
+    const mRows = await sql`
+      SELECT nombre, COALESCE(color, '#3B82F6') AS color 
+      FROM metodos_pago 
+      WHERE ${metodoPagoUuid ? sql`uuid = ${metodoPagoUuid}::uuid` : sql`id = ${metodoPagoId}`} 
+      LIMIT 1
+    `;
     if (mRows.length > 0) metodoInfo = mRows[0];
   }
 
@@ -8566,56 +9351,78 @@ export async function createLibroControlClienteModel(data) {
     cliente: clientInfo ? clientInfo.cliente : clienteNombre,
     tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : 'General',
     tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : 1,
+    tipo_cliente_uuid: clientInfo ? clientInfo.tipo_cliente_uuid : null,
     metodo: metodoInfo ? metodoInfo.nombre : (metodoNombre || 'General'),
     metodo_color: metodoInfo ? metodoInfo.color : '#3B82F6',
-    metodo_pago_id: metodoPagoId
+    metodo_pago_id: metodoPagoId,
+    metodo_pago_uuid: metodoPagoUuid
   };
 }
 
 export async function updateLibroControlClienteModel(controlId, libroId, data) {
-  const cId = Number(controlId);
-  const lId = Number(libroId);
-  if (!cId) throw new Error('ID de registro inválido');
+  if (!controlId) throw new Error('ID de registro inválido');
+  const isCtrlU = isUuid(controlId);
+  const isLibU = isUuid(libroId);
 
   const hora = (data.hora || '').trim();
   if (!hora) throw new Error('La hora es obligatoria');
 
-  let metodoPagoId = data.metodo_pago_id !== undefined ? (data.metodo_pago_id ? Number(data.metodo_pago_id) : null) : undefined;
+  const metodoPagoRaw = data.metodo_pago_id || data.metodo_pago_uuid;
+  const isMetU = isUuid(metodoPagoRaw);
+  let metodoPagoId = metodoPagoRaw && !isMetU ? Number(metodoPagoRaw) : (metodoPagoRaw === null ? null : undefined);
+  let metodoPagoUuid = isMetU ? String(metodoPagoRaw).trim() : (data.metodo_pago_uuid || (metodoPagoRaw === null ? null : undefined));
   const metodoNombre = data.metodo !== undefined ? String(data.metodo).trim() : undefined;
-  if (metodoPagoId === undefined && metodoNombre && sql && isPgConnected) {
+
+  if (metodoPagoId === undefined && metodoPagoUuid === undefined && metodoNombre && sql && isPgConnected) {
     const mRow = await sql`
-      SELECT id FROM metodos_pago 
+      SELECT id, uuid FROM metodos_pago 
       WHERE LOWER(TRIM(nombre)) = LOWER(${metodoNombre}) 
       LIMIT 1
     `;
-    if (mRow.length > 0) metodoPagoId = mRow[0].id;
+    if (mRow.length > 0) {
+      metodoPagoId = mRow[0].id;
+      metodoPagoUuid = mRow[0].uuid;
+    }
   }
 
-  let clienteId = data.cliente_id !== undefined ? (data.cliente_id ? Number(data.cliente_id) : null) : undefined;
+  const clienteIdRaw = data.cliente_id || data.cliente_uuid;
+  const isCliU = isUuid(clienteIdRaw);
+  let clienteId = clienteIdRaw && !isCliU ? Number(clienteIdRaw) : (clienteIdRaw === null ? null : undefined);
+  let clienteUuid = isCliU ? String(clienteIdRaw).trim() : (data.cliente_uuid || (clienteIdRaw === null ? null : undefined));
   const clienteNombre = data.cliente !== undefined ? String(data.cliente).trim() : undefined;
 
-  // Si clienteNombre viene pero no clienteId, resolver o crear
-  if (clienteNombre && !clienteId && sql && isPgConnected) {
+  // Si clienteNombre viene pero no clienteId ni clienteUuid, resolver o crear
+  if (clienteNombre && !clienteId && !clienteUuid && sql && isPgConnected) {
     let resolvedSalaId = null;
-    if (lId) {
-      const lib = await sql`SELECT sala_id FROM libros WHERE id = ${lId} LIMIT 1`;
-      if (lib.length > 0 && lib[0].sala_id) resolvedSalaId = Number(lib[0].sala_id);
+    let resolvedSalaUuid = null;
+    if (libroId) {
+      const lib = await sql`
+        SELECT sala_id, sala_uuid FROM libros 
+        WHERE ${isLibU ? sql`uuid = ${libroId}::uuid` : sql`id = ${Number(libroId)}`} 
+        LIMIT 1
+      `;
+      if (lib.length > 0) {
+        resolvedSalaId = lib[0].sala_id;
+        resolvedSalaUuid = lib[0].sala_uuid;
+      }
     }
     const existing = await sql`
-      SELECT id FROM clientes 
+      SELECT id, uuid FROM clientes 
       WHERE LOWER(TRIM(nombre)) = LOWER(${clienteNombre}) 
-        ${resolvedSalaId ? sql`AND sala_id = ${resolvedSalaId}` : sql``}
+        ${resolvedSalaId ? sql`AND (sala_id = ${resolvedSalaId} OR sala_uuid = ${resolvedSalaUuid}::uuid)` : sql``}
       LIMIT 1
     `;
     if (existing.length > 0) {
       clienteId = existing[0].id;
+      clienteUuid = existing[0].uuid;
     } else {
       const newClient = await sql`
-        INSERT INTO clientes (nombre, tipo_cliente_id, sala_id)
-        VALUES (${clienteNombre}, 1, ${resolvedSalaId || 1})
-        RETURNING id
+        INSERT INTO clientes (nombre, tipo_cliente_id, sala_id, sala_uuid)
+        VALUES (${clienteNombre}, 1, ${resolvedSalaId || 1}, ${resolvedSalaUuid ? sql`${resolvedSalaUuid}::uuid` : sql`NULL`})
+        RETURNING id, uuid
       `;
       clienteId = newClient[0].id;
+      clienteUuid = newClient[0].uuid;
     }
   }
 
@@ -8625,12 +9432,16 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
-    const idx = inMemoryData.libro_control_clientes.findIndex(c => Number(c.id) === cId);
+    const idx = inMemoryData.libro_control_clientes.findIndex(c => 
+      String(c.uuid) === String(controlId) || Number(c.id) === Number(controlId)
+    );
     if (idx !== -1) {
       inMemoryData.libro_control_clientes[idx].hora = hora;
       if (metodoPagoId !== undefined) inMemoryData.libro_control_clientes[idx].metodo_pago_id = metodoPagoId;
+      if (metodoPagoUuid !== undefined) inMemoryData.libro_control_clientes[idx].metodo_pago_uuid = metodoPagoUuid;
       if (metodoNombre !== undefined) inMemoryData.libro_control_clientes[idx].metodo = metodoNombre;
       if (clienteId !== undefined) inMemoryData.libro_control_clientes[idx].cliente_id = clienteId;
+      if (clienteUuid !== undefined) inMemoryData.libro_control_clientes[idx].cliente_uuid = clienteUuid;
       if (clienteNombre !== undefined) inMemoryData.libro_control_clientes[idx].cliente = clienteNombre;
       if (tipo !== undefined) inMemoryData.libro_control_clientes[idx].tipo = tipo;
       if (monto !== undefined && !isNaN(monto)) inMemoryData.libro_control_clientes[idx].monto = monto;
@@ -8646,13 +9457,16 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     SET 
       hora = ${hora},
       metodo_pago_id = ${metodoPagoId !== undefined ? metodoPagoId : sql`metodo_pago_id`},
+      metodo_pago_uuid = ${metodoPagoUuid !== undefined ? (metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`) : sql`metodo_pago_uuid`},
       cliente_id = ${clienteId !== undefined ? clienteId : sql`cliente_id`},
+      cliente_uuid = ${clienteUuid !== undefined ? (clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`) : sql`cliente_uuid`},
       tipo = ${tipo !== undefined ? tipo : sql`tipo`},
       monto = ${monto !== undefined && !isNaN(monto) ? monto : sql`monto`},
       nota = ${nota !== undefined ? nota : sql`nota`},
       updated_at = CURRENT_TIMESTAMP
-    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
-    RETURNING id, libro_id, cliente_id, tipo, monto, metodo_pago_id, hora, nota, created_at, updated_at
+    WHERE ${isCtrlU ? sql`uuid = ${controlId}::uuid` : sql`id = ${Number(controlId)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
+    RETURNING id, uuid, libro_id, libro_uuid, cliente_id, cliente_uuid, tipo, monto, metodo_pago_id, metodo_pago_uuid, hora, nota, created_at, updated_at
   `;
 
   if (!rows || rows.length === 0) {
@@ -8661,20 +9475,25 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
 
   const updatedRecord = rows[0];
   let clientInfo = null;
-  if (updatedRecord.cliente_id) {
+  if (updatedRecord.cliente_uuid || updatedRecord.cliente_id) {
     const cRows = await sql`
-      SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id
+      SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id, c.tipo_cliente_uuid
       FROM clientes c
-      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-      WHERE c.id = ${updatedRecord.cliente_id}
+      LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
+      WHERE ${updatedRecord.cliente_uuid ? sql`c.uuid = ${updatedRecord.cliente_uuid}::uuid` : sql`c.id = ${updatedRecord.cliente_id}`}
       LIMIT 1
     `;
     if (cRows.length > 0) clientInfo = cRows[0];
   }
 
   let metodoInfo = null;
-  if (updatedRecord.metodo_pago_id) {
-    const mRows = await sql`SELECT nombre, COALESCE(color, '#3B82F6') AS color FROM metodos_pago WHERE id = ${updatedRecord.metodo_pago_id} LIMIT 1`;
+  if (updatedRecord.metodo_pago_uuid || updatedRecord.metodo_pago_id) {
+    const mRows = await sql`
+      SELECT nombre, COALESCE(color, '#3B82F6') AS color 
+      FROM metodos_pago 
+      WHERE ${updatedRecord.metodo_pago_uuid ? sql`uuid = ${updatedRecord.metodo_pago_uuid}::uuid` : sql`id = ${updatedRecord.metodo_pago_id}`} 
+      LIMIT 1
+    `;
     if (mRows.length > 0) metodoInfo = mRows[0];
   }
 
@@ -8683,29 +9502,34 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     cliente: clientInfo ? clientInfo.cliente : (clienteNombre || ''),
     tipo_cliente_nombre: clientInfo ? clientInfo.tipo_cliente_nombre : '',
     tipo_cliente_id: clientInfo ? clientInfo.tipo_cliente_id : null,
+    tipo_cliente_uuid: clientInfo ? clientInfo.tipo_cliente_uuid : null,
     metodo: metodoInfo ? metodoInfo.nombre : (metodoNombre || 'General'),
     metodo_color: metodoInfo ? metodoInfo.color : '#3B82F6',
-    metodo_pago_id: updatedRecord.metodo_pago_id
+    metodo_pago_id: updatedRecord.metodo_pago_id,
+    metodo_pago_uuid: updatedRecord.metodo_pago_uuid
   };
 }
 
 export async function deleteLibroControlClienteModel(id, libroId) {
-  const cId = Number(id);
-  const lId = Number(libroId);
-  if (!cId) throw new Error('ID de registro inválido');
+  if (!id) throw new Error('ID de registro inválido');
+  const isU = isUuid(id);
+  const isLibU = isUuid(libroId);
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
-    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes.filter(c => Number(c.id) !== cId);
-    return { success: true, id: cId };
+    inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes.filter(c => 
+      String(c.uuid) !== String(id) && Number(c.id) !== Number(id)
+    );
+    return { success: true, id };
   }
 
   await sql`
     DELETE FROM libro_control_clientes
-    WHERE id = ${cId} ${lId ? sql`AND libro_id = ${lId}` : sql``}
+    WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${Number(id)}`}
+      ${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}
   `;
 
-  return { success: true, id: cId };
+  return { success: true, id };
 }
 
 // --- CLIENTES (CECOM / GESTIÓN DE CLIENTES) ---
@@ -8713,15 +9537,39 @@ export function buildClienteConditions(options = {}) {
   const conds = [];
 
   if (options.userSalaIds && options.userSalaIds.length > 0) {
-    conds.push(sql`c.sala_id = ANY(${options.userSalaIds})`);
+    const numIds = options.userSalaIds.filter(x => !isUuid(x)).map(Number).filter(n => !isNaN(n));
+    const uuidIds = options.userSalaIds.filter(x => isUuid(x));
+    if (numIds.length > 0 && uuidIds.length > 0) {
+      conds.push(sql`(c.sala_id = ANY(${numIds}) OR c.sala_uuid = ANY(${uuidIds}::uuid[]))`);
+    } else if (numIds.length > 0) {
+      conds.push(sql`c.sala_id = ANY(${numIds})`);
+    } else if (uuidIds.length > 0) {
+      conds.push(sql`c.sala_uuid = ANY(${uuidIds}::uuid[])`);
+    }
   }
 
   if (options.salaIds && options.salaIds.length > 0) {
-    conds.push(sql`c.sala_id = ANY(${options.salaIds})`);
+    const numIds = options.salaIds.filter(x => !isUuid(x)).map(Number).filter(n => !isNaN(n));
+    const uuidIds = options.salaIds.filter(x => isUuid(x));
+    if (numIds.length > 0 && uuidIds.length > 0) {
+      conds.push(sql`(c.sala_id = ANY(${numIds}) OR c.sala_uuid = ANY(${uuidIds}::uuid[]))`);
+    } else if (numIds.length > 0) {
+      conds.push(sql`c.sala_id = ANY(${numIds})`);
+    } else if (uuidIds.length > 0) {
+      conds.push(sql`c.sala_uuid = ANY(${uuidIds}::uuid[])`);
+    }
   }
 
   if (options.tipoClienteIds && options.tipoClienteIds.length > 0) {
-    conds.push(sql`c.tipo_cliente_id = ANY(${options.tipoClienteIds})`);
+    const numIds = options.tipoClienteIds.filter(x => !isUuid(x)).map(Number).filter(n => !isNaN(n));
+    const uuidIds = options.tipoClienteIds.filter(x => isUuid(x));
+    if (numIds.length > 0 && uuidIds.length > 0) {
+      conds.push(sql`(c.tipo_cliente_id = ANY(${numIds}) OR c.tipo_cliente_uuid = ANY(${uuidIds}::uuid[]))`);
+    } else if (numIds.length > 0) {
+      conds.push(sql`c.tipo_cliente_id = ANY(${numIds})`);
+    } else if (uuidIds.length > 0) {
+      conds.push(sql`c.tipo_cliente_uuid = ANY(${uuidIds}::uuid[])`);
+    }
   }
 
   if (options.search) {
@@ -8731,7 +9579,8 @@ export function buildClienteConditions(options = {}) {
       LOWER(COALESCE(c.descripcion, '')) LIKE ${s} OR 
       LOWER(COALESCE(tc.nombre, '')) LIKE ${s} OR 
       LOWER(COALESCE(s.nombre, '')) LIKE ${s} OR 
-      c.id::text LIKE ${s}
+      c.id::text LIKE ${s} OR
+      c.uuid::text LIKE ${s}
     )`);
   }
 
@@ -8754,15 +9603,15 @@ export async function getClientesModel(params = {}) {
 
   let userSalaIds = null;
   if (params.user_sala_ids) {
-    userSalaIds = String(params.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    userSalaIds = String(params.user_sala_ids).split(',').map(s => s.trim()).filter(Boolean);
   }
   let salaIds = null;
   if (params.sala_ids) {
-    salaIds = String(params.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    salaIds = String(params.sala_ids).split(',').map(s => s.trim()).filter(Boolean);
   }
   let tipoClienteIds = null;
   if (params.tipo_cliente_ids) {
-    tipoClienteIds = String(params.tipo_cliente_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+    tipoClienteIds = String(params.tipo_cliente_ids).split(',').map(s => s.trim()).filter(Boolean);
   }
 
   const conds = buildClienteConditions({
@@ -8777,6 +9626,7 @@ export async function getClientesModel(params = {}) {
 
   const allowedSortColumns = {
     'id': 'c.id',
+    'uuid': 'c.uuid',
     'nombre': 'c.nombre',
     'tipo_cliente_nombre': 'tc.nombre',
     'sala_nombre': 's.nombre',
@@ -8789,8 +9639,8 @@ export async function getClientesModel(params = {}) {
   const countRes = await sql`
     SELECT COUNT(c.id)::int AS total
     FROM clientes c
-    LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-    LEFT JOIN salas s ON c.sala_id = s.id
+    LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
+    LEFT JOIN salas s ON (c.sala_uuid = s.uuid OR c.sala_id = s.id)
     ${where}
   `;
   const total = countRes[0]?.total || 0;
@@ -8798,28 +9648,28 @@ export async function getClientesModel(params = {}) {
   let data;
   if (limit > 0) {
     data = await sql`
-      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto, c.descripcion,
+      SELECT c.id, c.uuid, c.nombre, c.tipo_cliente_id, c.tipo_cliente_uuid, c.sala_id, c.sala_uuid, c.foto, c.descripcion,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
              to_char(COALESCE(c.updated_at, c.created_at), 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
              tc.nombre AS tipo_cliente_nombre,
              s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
       FROM clientes c
-      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-      LEFT JOIN salas s ON c.sala_id = s.id
+      LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
+      LEFT JOIN salas s ON (c.sala_uuid = s.uuid OR c.sala_id = s.id)
       ${where}
       ${orderClause}
       LIMIT ${limit} OFFSET ${offset}
     `;
   } else {
     data = await sql`
-      SELECT c.id, c.nombre, c.tipo_cliente_id, c.sala_id, c.foto, c.descripcion,
+      SELECT c.id, c.uuid, c.nombre, c.tipo_cliente_id, c.tipo_cliente_uuid, c.sala_id, c.sala_uuid, c.foto, c.descripcion,
              to_char(c.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
              to_char(COALESCE(c.updated_at, c.created_at), 'YYYY-MM-DD HH24:MI:SS') AS updated_at,
              tc.nombre AS tipo_cliente_nombre,
              s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
       FROM clientes c
-      LEFT JOIN tipo_clientes tc ON c.tipo_cliente_id = tc.id
-      LEFT JOIN salas s ON c.sala_id = s.id
+      LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)
+      LEFT JOIN salas s ON (c.sala_uuid = s.uuid OR c.sala_id = s.id)
       ${where}
       ${orderClause}
     `;
@@ -8843,36 +9693,56 @@ export async function getClientesFilterOptionsModel(options = {}) {
   const userSalaIds = options.userSalaIds || [];
   let allSalas;
   if (userSalaIds.length > 0) {
-    allSalas = await sql`SELECT id, nombre FROM salas WHERE id = ANY(${userSalaIds}) ORDER BY nombre ASC`;
+    const numIds = userSalaIds.filter(x => !isUuid(x)).map(Number).filter(n => !isNaN(n));
+    const uuidIds = userSalaIds.filter(x => isUuid(x));
+    if (numIds.length > 0 && uuidIds.length > 0) {
+      allSalas = await sql`SELECT id, uuid, nombre FROM salas WHERE id = ANY(${numIds}) OR uuid = ANY(${uuidIds}::uuid[]) ORDER BY nombre ASC`;
+    } else if (numIds.length > 0) {
+      allSalas = await sql`SELECT id, uuid, nombre FROM salas WHERE id = ANY(${numIds}) ORDER BY nombre ASC`;
+    } else if (uuidIds.length > 0) {
+      allSalas = await sql`SELECT id, uuid, nombre FROM salas WHERE uuid = ANY(${uuidIds}::uuid[]) ORDER BY nombre ASC`;
+    } else {
+      allSalas = await sql`SELECT id, uuid, nombre FROM salas ORDER BY nombre ASC`;
+    }
   } else {
-    allSalas = await sql`SELECT id, nombre FROM salas ORDER BY nombre ASC`;
+    allSalas = await sql`SELECT id, uuid, nombre FROM salas ORDER BY nombre ASC`;
   }
 
   const countsSalasRes = await sql`
-    SELECT c.sala_id AS id, COUNT(c.id)::int AS count
+    SELECT c.sala_id AS id, c.sala_uuid AS uuid, COUNT(c.id)::int AS count
     FROM clientes c
-    WHERE c.sala_id IS NOT NULL
-    GROUP BY c.sala_id
+    WHERE c.sala_id IS NOT NULL OR c.sala_uuid IS NOT NULL
+    GROUP BY c.sala_id, c.sala_uuid
   `;
-  const countSalasMap = new Map(countsSalasRes.map(r => [r.id, r.count]));
+  const countSalasMap = new Map();
+  countsSalasRes.forEach(r => {
+    if (r.id) countSalasMap.set(String(r.id), r.count);
+    if (r.uuid) countSalasMap.set(String(r.uuid), r.count);
+  });
   const salas = allSalas.map(s => ({
     id: s.id,
+    uuid: s.uuid,
     nombre: s.nombre,
-    count: countSalasMap.get(s.id) || 0
+    count: countSalasMap.get(String(s.uuid)) || countSalasMap.get(String(s.id)) || 0
   }));
 
-  const allTipos = await sql`SELECT id, nombre FROM tipo_clientes ORDER BY nombre ASC`;
+  const allTipos = await sql`SELECT id, uuid, nombre FROM tipo_clientes ORDER BY nombre ASC`;
   const countsTiposRes = await sql`
-    SELECT c.tipo_cliente_id AS id, COUNT(c.id)::int AS count
+    SELECT c.tipo_cliente_id AS id, c.tipo_cliente_uuid AS uuid, COUNT(c.id)::int AS count
     FROM clientes c
-    WHERE c.tipo_cliente_id IS NOT NULL
-    GROUP BY c.tipo_cliente_id
+    WHERE c.tipo_cliente_id IS NOT NULL OR c.tipo_cliente_uuid IS NOT NULL
+    GROUP BY c.tipo_cliente_id, c.tipo_cliente_uuid
   `;
-  const countTiposMap = new Map(countsTiposRes.map(r => [r.id, r.count]));
+  const countTiposMap = new Map();
+  countsTiposRes.forEach(r => {
+    if (r.id) countTiposMap.set(String(r.id), r.count);
+    if (r.uuid) countTiposMap.set(String(r.uuid), r.count);
+  });
   const tipo_clientes = allTipos.map(t => ({
     id: t.id,
+    uuid: t.uuid,
     nombre: t.nombre,
-    count: countTiposMap.get(t.id) || 0
+    count: countTiposMap.get(String(t.uuid)) || countTiposMap.get(String(t.id)) || 0
   }));
 
   return {
@@ -8928,9 +9798,33 @@ function invalidateClienteThumbnails(cId) {
 export async function createClienteModel(data) {
   const nombre = (data.nombre || '').trim();
   if (!nombre) throw new Error('El nombre del cliente es obligatorio');
-  const tipoClienteId = data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null;
-  const salaId = data.sala_id ? Number(data.sala_id) : null;
+
+  let tipoClienteId = null;
+  let tipoClienteUuid = null;
+  if (data.tipo_cliente_uuid && isUuid(data.tipo_cliente_uuid)) {
+    tipoClienteUuid = data.tipo_cliente_uuid;
+  } else if (data.tipo_cliente_id) {
+    if (isUuid(data.tipo_cliente_id)) {
+      tipoClienteUuid = data.tipo_cliente_id;
+    } else {
+      tipoClienteId = Number(data.tipo_cliente_id);
+    }
+  }
+
+  let salaId = null;
+  let salaUuid = null;
+  if (data.sala_uuid && isUuid(data.sala_uuid)) {
+    salaUuid = data.sala_uuid;
+  } else if (data.sala_id) {
+    if (isUuid(data.sala_id)) {
+      salaUuid = data.sala_id;
+    } else {
+      salaId = Number(data.sala_id);
+    }
+  }
+
   const descripcion = data.descripcion !== undefined ? (data.descripcion ? String(data.descripcion).trim() : null) : null;
+  const clientUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : null;
 
   let nextId = 1;
   if (isPgConnected && sql) {
@@ -8962,26 +9856,88 @@ export async function createClienteModel(data) {
 
   if (isPgConnected && sql) {
     const res = await sql`
-      INSERT INTO clientes (id, nombre, tipo_cliente_id, sala_id, foto, descripcion)
-      VALUES (${nextId}, ${nombre}, ${tipoClienteId}, ${salaId}, ${foto}, ${descripcion})
-      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, descripcion, created_at, updated_at
+      INSERT INTO clientes (id, uuid, nombre, tipo_cliente_id, tipo_cliente_uuid, sala_id, sala_uuid, foto, descripcion)
+      VALUES (
+        ${nextId},
+        ${clientUuid ? sql`${clientUuid}::uuid` : sql`gen_random_uuid()`},
+        ${nombre},
+        ${tipoClienteId},
+        ${tipoClienteUuid ? sql`${tipoClienteUuid}::uuid` : sql`NULL`},
+        ${salaId},
+        ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`},
+        ${foto},
+        ${descripcion}
+      )
+      RETURNING id, uuid, nombre, tipo_cliente_id, tipo_cliente_uuid, sala_id, sala_uuid, foto, descripcion, created_at, updated_at
     `;
     return res[0];
   } else {
     inMemoryData.clientes = inMemoryData.clientes || [];
-    const newItem = { id: nextId, nombre, tipo_cliente_id: tipoClienteId, sala_id: salaId, foto, descripcion, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    const newItem = { 
+      id: nextId, 
+      uuid: clientUuid || `client-${Date.now()}`,
+      nombre, 
+      tipo_cliente_id: tipoClienteId, 
+      tipo_cliente_uuid: tipoClienteUuid,
+      sala_id: salaId, 
+      sala_uuid: salaUuid,
+      foto, 
+      descripcion, 
+      created_at: new Date().toISOString(), 
+      updated_at: new Date().toISOString() 
+    };
     inMemoryData.clientes.unshift(newItem);
     return newItem;
   }
 }
 
 export async function updateClienteModel(id, data) {
-  const cId = Number(id);
-  if (!cId) throw new Error('ID de cliente inválido');
+  if (!id) throw new Error('ID de cliente inválido');
+  const isU = isUuid(id);
+  const numId = !isU ? Number(id) : null;
+  if (!isU && (!numId || isNaN(numId))) throw new Error('ID de cliente inválido');
+
+  let currentClient = null;
+  if (isPgConnected && sql) {
+    const found = await sql`
+      SELECT id, uuid FROM clientes
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${numId}`}
+      LIMIT 1
+    `;
+    if (found.length > 0) currentClient = found[0];
+  }
+
+  const effectiveId = currentClient?.id || numId;
+  const effectiveUuid = currentClient?.uuid || (isU ? id : null);
 
   const nombre = data.nombre !== undefined ? String(data.nombre).trim() : undefined;
-  const tipoClienteId = data.tipo_cliente_id !== undefined ? (data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null) : undefined;
-  const salaId = data.sala_id !== undefined ? (data.sala_id ? Number(data.sala_id) : null) : undefined;
+  
+  let tipoClienteId = undefined;
+  let tipoClienteUuid = undefined;
+  if (data.tipo_cliente_uuid !== undefined) {
+    tipoClienteUuid = data.tipo_cliente_uuid && isUuid(data.tipo_cliente_uuid) ? data.tipo_cliente_uuid : null;
+  }
+  if (data.tipo_cliente_id !== undefined) {
+    if (data.tipo_cliente_id && isUuid(data.tipo_cliente_id)) {
+      tipoClienteUuid = data.tipo_cliente_id;
+    } else {
+      tipoClienteId = data.tipo_cliente_id ? Number(data.tipo_cliente_id) : null;
+    }
+  }
+
+  let salaId = undefined;
+  let salaUuid = undefined;
+  if (data.sala_uuid !== undefined) {
+    salaUuid = data.sala_uuid && isUuid(data.sala_uuid) ? data.sala_uuid : null;
+  }
+  if (data.sala_id !== undefined) {
+    if (data.sala_id && isUuid(data.sala_id)) {
+      salaUuid = data.sala_id;
+    } else {
+      salaId = data.sala_id ? Number(data.sala_id) : null;
+    }
+  }
+
   const descripcion = data.descripcion !== undefined ? (data.descripcion ? String(data.descripcion).trim() : null) : undefined;
 
   let foto = data.foto;
@@ -8991,9 +9947,11 @@ export async function updateClienteModel(id, data) {
       const buffer = Buffer.from(base64Data, 'base64');
       const dir = resolveClientesDir();
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, `${cId}.jpg`), buffer);
-      foto = `/clientes/${cId}.jpg`;
-      invalidateClienteThumbnails(cId);
+      const filename = effectiveId ? `${effectiveId}.jpg` : `${effectiveUuid}.jpg`;
+      fs.writeFileSync(path.join(dir, filename), buffer);
+      foto = `/clientes/${filename}`;
+      if (effectiveId) invalidateClienteThumbnails(effectiveId);
+      if (effectiveUuid) invalidateClienteThumbnails(effectiveUuid);
     } catch (e) {
       console.error('Error actualizando foto de cliente:', e);
     }
@@ -9001,9 +9959,16 @@ export async function updateClienteModel(id, data) {
     foto = null;
     try {
       const dir = resolveClientesDir();
-      const filePath = path.join(dir, `${cId}.jpg`);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      invalidateClienteThumbnails(cId);
+      if (effectiveId) {
+        const filePath = path.join(dir, `${effectiveId}.jpg`);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        invalidateClienteThumbnails(effectiveId);
+      }
+      if (effectiveUuid) {
+        const filePathU = path.join(dir, `${effectiveUuid}.jpg`);
+        if (fs.existsSync(filePathU)) fs.unlinkSync(filePathU);
+        invalidateClienteThumbnails(effectiveUuid);
+      }
     } catch (e) {}
   }
 
@@ -9018,17 +9983,21 @@ export async function updateClienteModel(id, data) {
       SET
         nombre = COALESCE(${nombre}, nombre),
         tipo_cliente_id = ${tipoClienteId !== undefined ? tipoClienteId : sql`tipo_cliente_id`},
+        tipo_cliente_uuid = ${tipoClienteUuid !== undefined ? (tipoClienteUuid ? sql`${tipoClienteUuid}::uuid` : sql`NULL`) : sql`tipo_cliente_uuid`},
         sala_id = ${salaId !== undefined ? salaId : sql`sala_id`},
+        sala_uuid = ${salaUuid !== undefined ? (salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
         foto = ${foto !== undefined ? foto : sql`foto`},
         descripcion = ${descripcion !== undefined ? descripcion : sql`descripcion`},
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${cId}
-      RETURNING id, nombre, tipo_cliente_id, sala_id, foto, descripcion, created_at, updated_at
+      WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`id = ${numId}`}
+      RETURNING id, uuid, nombre, tipo_cliente_id, tipo_cliente_uuid, sala_id, sala_uuid, foto, descripcion, created_at, updated_at
     `;
     return res[0];
   } else {
     inMemoryData.clientes = inMemoryData.clientes || [];
-    const idx = inMemoryData.clientes.findIndex(c => c.id === cId);
+    const idx = inMemoryData.clientes.findIndex(c => 
+      String(c.uuid) === String(id) || Number(c.id) === Number(id)
+    );
     if (idx !== -1) {
       inMemoryData.clientes[idx] = { 
         ...inMemoryData.clientes[idx], 
@@ -9044,13 +10013,20 @@ export async function updateClienteModel(id, data) {
 }
 
 export async function deleteClienteModel(id) {
-  const cId = Number(id);
   const result = await deleteEntityDynamic('clientes', 'cliente', id);
-  if (result && (result.success || result.id)) {
+  if (result && (result.success || result.id || result.uuid)) {
     try {
       const dir = resolveClientesDir();
-      const filePath = path.join(dir, `${cId}.jpg`);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      if (result.id) {
+        const filePath = path.join(dir, `${result.id}.jpg`);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        invalidateClienteThumbnails(result.id);
+      }
+      if (result.uuid) {
+        const filePathU = path.join(dir, `${result.uuid}.jpg`);
+        if (fs.existsSync(filePathU)) fs.unlinkSync(filePathU);
+        invalidateClienteThumbnails(result.uuid);
+      }
     } catch (e) {}
   }
   return result;
@@ -9058,18 +10034,22 @@ export async function deleteClienteModel(id) {
 
 // --- DATOS DEL LIBRO (CECOM: LIBRO DATOS OPERATIVOS) ---
 export async function getLibroDatosModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isLibU = isUuid(libroId);
+  const numLibId = !isLibU ? Number(libroId) : null;
+  if (!isLibU && (!numLibId || isNaN(numLibId))) throw new Error('ID de libro inválido');
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_datos = inMemoryData.libro_datos || [];
-    const found = inMemoryData.libro_datos.find(d => Number(d.libro_id) === lId);
+    const found = inMemoryData.libro_datos.find(d => 
+      String(d.libro_uuid) === String(libroId) || Number(d.libro_id) === Number(libroId)
+    );
     return found || null;
   }
 
   const rows = await sql`
     SELECT 
-      id, libro_id,
+      id, uuid, libro_id, libro_uuid,
       apertura_sala_inicio, apertura_sala_fin,
       apertura_maquinas_inicio, apertura_maquinas_fin,
       apertura_bingo_inicio, apertura_bingo_fin,
@@ -9078,7 +10058,9 @@ export async function getLibroDatosModel(libroId) {
       operador_turno_a, operador_turno_c,
       created_at, updated_at
     FROM libro_datos
-    WHERE libro_id = ${lId}
+    WHERE ${isLibU 
+      ? sql`libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` 
+      : sql`libro_id = ${numLibId}`}
     LIMIT 1
   `;
 
@@ -9086,8 +10068,30 @@ export async function getLibroDatosModel(libroId) {
 }
 
 export async function saveLibroDatosModel(libroId, data) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isLibU = isUuid(libroId);
+
+  let resolvedLibroId = null;
+  let resolvedLibroUuid = null;
+
+  if (isPgConnected && sql) {
+    const lRows = await sql`
+      SELECT id, uuid FROM libros 
+      WHERE ${isLibU ? sql`uuid = ${libroId}::uuid` : sql`id = ${Number(libroId)}`} 
+      LIMIT 1
+    `;
+    if (lRows.length > 0) {
+      resolvedLibroId = lRows[0].id;
+      resolvedLibroUuid = lRows[0].uuid;
+    } else if (isLibU) {
+      resolvedLibroUuid = libroId;
+    } else {
+      resolvedLibroId = Number(libroId);
+    }
+  } else {
+    resolvedLibroId = isLibU ? 1 : Number(libroId);
+    resolvedLibroUuid = isLibU ? libroId : null;
+  }
 
   const aperturaSalaInicio = (data.apertura_sala_inicio || '').trim() || null;
   const aperturaSalaFin = (data.apertura_sala_fin || '').trim() || null;
@@ -9104,7 +10108,10 @@ export async function saveLibroDatosModel(libroId, data) {
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_datos = inMemoryData.libro_datos || [];
-    let idx = inMemoryData.libro_datos.findIndex(d => Number(d.libro_id) === lId);
+    let idx = inMemoryData.libro_datos.findIndex(d => 
+      (resolvedLibroUuid && String(d.libro_uuid) === String(resolvedLibroUuid)) ||
+      (resolvedLibroId && Number(d.libro_id) === Number(resolvedLibroId))
+    );
     if (idx !== -1) {
       inMemoryData.libro_datos[idx] = {
         ...inMemoryData.libro_datos[idx],
@@ -9129,7 +10136,9 @@ export async function saveLibroDatosModel(libroId, data) {
         : 1;
       const newRecord = {
         id: nextId,
-        libro_id: lId,
+        uuid: `datos-${Date.now()}`,
+        libro_id: resolvedLibroId,
+        libro_uuid: resolvedLibroUuid,
         apertura_sala_inicio: aperturaSalaInicio,
         apertura_sala_fin: aperturaSalaFin,
         apertura_maquinas_inicio: aperturaMaquinasInicio,
@@ -9152,7 +10161,7 @@ export async function saveLibroDatosModel(libroId, data) {
 
   const rows = await sql`
     INSERT INTO libro_datos (
-      libro_id,
+      libro_id, libro_uuid,
       apertura_sala_inicio, apertura_sala_fin,
       apertura_maquinas_inicio, apertura_maquinas_fin,
       apertura_bingo_inicio, apertura_bingo_fin,
@@ -9161,7 +10170,7 @@ export async function saveLibroDatosModel(libroId, data) {
       operador_turno_a, operador_turno_c
     )
     VALUES (
-      ${lId},
+      ${resolvedLibroId}, ${resolvedLibroUuid ? sql`${resolvedLibroUuid}::uuid` : sql`NULL`},
       ${aperturaSalaInicio}, ${aperturaSalaFin},
       ${aperturaMaquinasInicio}, ${aperturaMaquinasFin},
       ${aperturaBingoInicio}, ${aperturaBingoFin},
@@ -9170,6 +10179,7 @@ export async function saveLibroDatosModel(libroId, data) {
       ${operadorTurnoA}, ${operadorTurnoC}
     )
     ON CONFLICT (libro_id) DO UPDATE SET
+      libro_uuid = COALESCE(EXCLUDED.libro_uuid, libro_datos.libro_uuid),
       apertura_sala_inicio = EXCLUDED.apertura_sala_inicio,
       apertura_sala_fin = EXCLUDED.apertura_sala_fin,
       apertura_maquinas_inicio = EXCLUDED.apertura_maquinas_inicio,
@@ -9177,14 +10187,14 @@ export async function saveLibroDatosModel(libroId, data) {
       apertura_bingo_inicio = EXCLUDED.apertura_bingo_inicio,
       apertura_bingo_fin = EXCLUDED.apertura_bingo_fin,
       retiros_dropbox_inicio = EXCLUDED.retiros_dropbox_inicio,
+      conteo_dropbox_fin = EXCLUDED.conteo_dropbox_fin,
       retiros_dropbox_fin = EXCLUDED.retiros_dropbox_fin,
       conteo_dropbox_inicio = EXCLUDED.conteo_dropbox_inicio,
-      conteo_dropbox_fin = EXCLUDED.conteo_dropbox_fin,
       operador_turno_a = EXCLUDED.operador_turno_a,
       operador_turno_c = EXCLUDED.operador_turno_c,
       updated_at = CURRENT_TIMESTAMP
     RETURNING 
-      id, libro_id,
+      id, uuid, libro_id, libro_uuid,
       apertura_sala_inicio, apertura_sala_fin,
       apertura_maquinas_inicio, apertura_maquinas_fin,
       apertura_bingo_inicio, apertura_bingo_fin,
@@ -9199,22 +10209,30 @@ export async function saveLibroDatosModel(libroId, data) {
 
 // --- NOVEDADES DE MESAS (CECOM: LIBRO NOVEDADES MESAS) ---
 export async function getLibroNovedadesMesasModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isLibU = isUuid(libroId);
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
-    return inMemoryData.libro_novedades_mesas.filter(d => Number(d.libro_id) === lId);
+    return inMemoryData.libro_novedades_mesas.filter(d => 
+      String(d.libro_uuid) === String(libroId) || Number(d.libro_id) === Number(libroId)
+    );
   }
 
   const rows = await sql`
     SELECT 
       nm.id,
+      nm.uuid,
       nm.libro_id,
+      nm.libro_uuid,
       nm.mesa_id,
+      nm.mesa_uuid,
       m.nombre AS mesa_nombre,
+      m.uuid AS mesa_real_uuid,
       m.sala_id,
+      m.sala_uuid,
       j.nombre AS juego_nombre,
+      j.uuid AS juego_uuid,
       nm.hora_apertura,
       nm.hora_cierre,
       nm.pitboss,
@@ -9224,9 +10242,11 @@ export async function getLibroNovedadesMesasModel(libroId) {
       nm.created_at,
       nm.updated_at
     FROM libro_novedades_mesas nm
-    LEFT JOIN mesas m ON m.id = nm.mesa_id
-    LEFT JOIN juegos j ON j.id = m.juego_id
-    WHERE nm.libro_id = ${lId}
+    LEFT JOIN mesas m ON (nm.mesa_uuid = m.uuid OR nm.mesa_id = m.id)
+    LEFT JOIN juegos j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)
+    WHERE ${isLibU 
+      ? sql`nm.libro_uuid = ${libroId}::uuid OR nm.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` 
+      : sql`nm.libro_id = ${Number(libroId)}`}
     ORDER BY m.nombre ASC, nm.id ASC
   `;
 
@@ -9234,11 +10254,48 @@ export async function getLibroNovedadesMesasModel(libroId) {
 }
 
 export async function saveLibroNovedadesMesaModel(libroId, data) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isLibU = isUuid(libroId);
 
-  const mesaId = Number(data.mesa_id);
-  if (!mesaId) throw new Error('ID de mesa inválido');
+  let resolvedLibroId = null;
+  let resolvedLibroUuid = null;
+  if (isPgConnected && sql) {
+    const lRows = await sql`
+      SELECT id, uuid FROM libros 
+      WHERE ${isLibU ? sql`uuid = ${libroId}::uuid` : sql`id = ${Number(libroId)}`} 
+      LIMIT 1
+    `;
+    if (lRows.length > 0) {
+      resolvedLibroId = lRows[0].id;
+      resolvedLibroUuid = lRows[0].uuid;
+    } else if (isLibU) {
+      resolvedLibroUuid = libroId;
+    } else {
+      resolvedLibroId = Number(libroId);
+    }
+  }
+
+  const rawMesa = data.mesa_uuid || data.mesa_id;
+  if (!rawMesa) throw new Error('ID de mesa inválido');
+  const isMesaU = isUuid(rawMesa);
+
+  let resolvedMesaId = null;
+  let resolvedMesaUuid = null;
+  if (isPgConnected && sql) {
+    const mRows = await sql`
+      SELECT id, uuid FROM mesas 
+      WHERE ${isMesaU ? sql`uuid = ${rawMesa}::uuid` : sql`id = ${Number(rawMesa)}`} 
+      LIMIT 1
+    `;
+    if (mRows.length > 0) {
+      resolvedMesaId = mRows[0].id;
+      resolvedMesaUuid = mRows[0].uuid;
+    } else if (isMesaU) {
+      resolvedMesaUuid = rawMesa;
+    } else {
+      resolvedMesaId = Number(rawMesa);
+    }
+  }
 
   const horaApertura = (data.hora_apertura || '').trim() || null;
   const horaCierre = (data.hora_cierre || '').trim() || null;
@@ -9250,7 +10307,8 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
   if (!isPgConnected || !sql) {
     inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
     let idx = inMemoryData.libro_novedades_mesas.findIndex(
-      d => Number(d.libro_id) === lId && Number(d.mesa_id) === mesaId
+      d => ((resolvedLibroUuid && String(d.libro_uuid) === String(resolvedLibroUuid)) || Number(d.libro_id) === Number(resolvedLibroId)) &&
+           ((resolvedMesaUuid && String(d.mesa_uuid) === String(resolvedMesaUuid)) || Number(d.mesa_id) === Number(resolvedMesaId))
     );
     if (idx !== -1) {
       inMemoryData.libro_novedades_mesas[idx] = {
@@ -9270,8 +10328,11 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
         : 1;
       const newRecord = {
         id: nextId,
-        libro_id: lId,
-        mesa_id: mesaId,
+        uuid: `nov-mesa-${Date.now()}`,
+        libro_id: resolvedLibroId,
+        libro_uuid: resolvedLibroUuid,
+        mesa_id: resolvedMesaId,
+        mesa_uuid: resolvedMesaUuid,
         hora_apertura: horaApertura,
         hora_cierre: horaCierre,
         pitboss: pitboss,
@@ -9288,8 +10349,8 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
 
   const rows = await sql`
     INSERT INTO libro_novedades_mesas (
-      libro_id,
-      mesa_id,
+      libro_id, libro_uuid,
+      mesa_id, mesa_uuid,
       hora_apertura,
       hora_cierre,
       pitboss,
@@ -9298,8 +10359,8 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
       observacion
     )
     VALUES (
-      ${lId},
-      ${mesaId},
+      ${resolvedLibroId}, ${resolvedLibroUuid ? sql`${resolvedLibroUuid}::uuid` : sql`NULL`},
+      ${resolvedMesaId}, ${resolvedMesaUuid ? sql`${resolvedMesaUuid}::uuid` : sql`NULL`},
       ${horaApertura},
       ${horaCierre},
       ${pitboss},
@@ -9308,6 +10369,8 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
       ${observacion}
     )
     ON CONFLICT (libro_id, mesa_id) DO UPDATE SET
+      libro_uuid = COALESCE(EXCLUDED.libro_uuid, libro_novedades_mesas.libro_uuid),
+      mesa_uuid = COALESCE(EXCLUDED.mesa_uuid, libro_novedades_mesas.mesa_uuid),
       hora_apertura = EXCLUDED.hora_apertura,
       hora_cierre = EXCLUDED.hora_cierre,
       pitboss = EXCLUDED.pitboss,
@@ -9316,7 +10379,7 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
       observacion = EXCLUDED.observacion,
       updated_at = CURRENT_TIMESTAMP
     RETURNING 
-      id, libro_id, mesa_id,
+      id, uuid, libro_id, libro_uuid, mesa_id, mesa_uuid,
       hora_apertura, hora_cierre,
       pitboss, croupier_apertura, croupier_cierre,
       observacion,
@@ -9327,18 +10390,20 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
 }
 
 export async function deleteLibroNovedadesMesaModel(recordId) {
-  const rId = Number(recordId);
-  if (!rId) throw new Error('ID de registro inválido');
+  if (!recordId) throw new Error('ID de registro inválido');
+  const isU = isUuid(recordId);
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
-    inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas.filter(d => Number(d.id) !== rId);
+    inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas.filter(d => 
+      String(d.uuid) !== String(recordId) && Number(d.id) !== Number(recordId)
+    );
     return { success: true };
   }
 
   await sql`
     DELETE FROM libro_novedades_mesas
-    WHERE id = ${rId}
+    WHERE ${isU ? sql`uuid = ${recordId}::uuid` : sql`id = ${Number(recordId)}`}
   `;
 
   return { success: true };
@@ -9346,8 +10411,8 @@ export async function deleteLibroNovedadesMesaModel(recordId) {
 
 // --- REPORTE CONSOLIDADO DEL LIBRO (TABLA libro_reporte - HISTÓRICO Y COMPARTIR) ---
 export async function saveLibroReporteModel(libroId) {
-  const lId = Number(libroId);
-  if (!lId) throw new Error('ID de libro inválido');
+  if (!libroId) throw new Error('ID de libro inválido');
+  const isLibU = isUuid(libroId);
 
   const [
     libroRes,
@@ -9359,18 +10424,21 @@ export async function saveLibroReporteModel(libroId) {
     clientesRes,
     incidenciasRes
   ] = await Promise.all([
-    getLibroByIdModel(lId).catch(e => null),
-    getLibroDatosModel(lId).catch(e => null),
-    getLibroDropMesasModel(lId).catch(e => []),
-    getLibroNovedadesMesasModel(lId).catch(e => []),
-    getLibroAportesModel(lId).catch(e => []),
-    getLibroControlLlavesModel(lId).catch(e => []),
-    getLibroControlClientesModel(lId).catch(e => []),
-    getLibroIncidenciasGeneralesModel(lId).catch(e => [])
+    getLibroByIdModel(libroId).catch(e => null),
+    getLibroDatosModel(libroId).catch(e => null),
+    getLibroDropMesasModel(libroId).catch(e => []),
+    getLibroNovedadesMesasModel(libroId).catch(e => []),
+    getLibroAportesModel(libroId).catch(e => []),
+    getLibroControlLlavesModel(libroId).catch(e => []),
+    getLibroControlClientesModel(libroId).catch(e => []),
+    getLibroIncidenciasGeneralesModel(libroId).catch(e => [])
   ]);
 
-  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.id ? libroRes : null);
+  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.id || libroRes?.uuid ? libroRes : null);
+  const resolvedLibroId = libroObj?.id ? Number(libroObj.id) : (!isLibU ? Number(libroId) : null);
+  const resolvedLibroUuid = libroObj?.uuid || (isLibU ? libroId : null);
   const salaId = libroObj?.sala_id ? Number(libroObj.sala_id) : null;
+  const salaUuid = libroObj?.sala_uuid || null;
   const salaNombre = libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala';
   const fecha = libroObj?.descripcion || null;
 
@@ -9386,8 +10454,10 @@ export async function saveLibroReporteModel(libroId) {
   };
 
   const fullData = {
-    libro_id: lId,
+    libro_id: resolvedLibroId,
+    libro_uuid: resolvedLibroUuid,
     sala_id: salaId,
+    sala_uuid: salaUuid,
     sala_nombre: salaNombre,
     fecha: fecha,
     libro: libroObj || null,
@@ -9407,16 +10477,19 @@ export async function saveLibroReporteModel(libroId) {
     const rows = await sql`
       INSERT INTO libro_reporte (
         libro_id,
+        libro_uuid,
         data
       ) VALUES (
-        ${lId},
+        ${resolvedLibroId},
+        ${resolvedLibroUuid ? sql`${resolvedLibroUuid}::uuid` : sql`NULL`},
         CAST(${jsonStr} AS JSONB)
       )
       ON CONFLICT (libro_id) DO UPDATE
       SET
+        libro_uuid = COALESCE(EXCLUDED.libro_uuid, libro_reporte.libro_uuid),
         data = EXCLUDED.data,
         updated_at = CURRENT_TIMESTAMP
-      RETURNING id, libro_id, data, created_at, updated_at
+      RETURNING id, libro_id, libro_uuid, data, created_at, updated_at
     `;
 
     return {
@@ -9431,11 +10504,16 @@ export async function saveLibroReporteModel(libroId) {
   }
 
   if (!inMemoryData.libro_reporte) inMemoryData.libro_reporte = [];
-  const existingIdx = inMemoryData.libro_reporte.findIndex(r => Number(r.libro_id) === lId);
+  const existingIdx = inMemoryData.libro_reporte.findIndex(r => 
+    (resolvedLibroUuid && String(r.libro_uuid) === String(resolvedLibroUuid)) ||
+    (resolvedLibroId && Number(r.libro_id) === Number(resolvedLibroId))
+  );
   const record = {
     id: existingIdx !== -1 ? inMemoryData.libro_reporte[existingIdx].id : inMemoryData.libro_reporte.length + 1,
-    libro_id: lId,
+    libro_id: resolvedLibroId,
+    libro_uuid: resolvedLibroUuid,
     sala_id: salaId,
+    sala_uuid: salaUuid,
     sala_nombre: salaNombre,
     fecha: fecha,
     data: fullData,
@@ -9453,8 +10531,8 @@ export async function saveLibroReporteModel(libroId) {
 }
 
 export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
-  const numId = Number(idOrLibroId);
-  if (!numId) throw new Error('ID de reporte o libro inválido');
+  if (!idOrLibroId) throw new Error('ID de reporte o libro inválido');
+  const isU = isUuid(idOrLibroId);
 
   // Consulta en paralelo de las subvistas en vivo para conteos y vista previa
   const [
@@ -9467,14 +10545,14 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     clientesRes,
     incidenciasRes
   ] = await Promise.all([
-    getLibroByIdModel(numId).catch(() => null),
-    getLibroDatosModel(numId).catch(() => null),
-    getLibroDropMesasModel(numId).catch(() => []),
-    getLibroNovedadesMesasModel(numId).catch(() => []),
-    getLibroAportesModel(numId).catch(() => []),
-    getLibroControlLlavesModel(numId).catch(() => []),
-    getLibroControlClientesModel(numId).catch(() => []),
-    getLibroIncidenciasGeneralesModel(numId).catch(() => [])
+    getLibroByIdModel(idOrLibroId).catch(() => null),
+    getLibroDatosModel(idOrLibroId).catch(() => null),
+    getLibroDropMesasModel(idOrLibroId).catch(() => []),
+    getLibroNovedadesMesasModel(idOrLibroId).catch(() => []),
+    getLibroAportesModel(idOrLibroId).catch(() => []),
+    getLibroControlLlavesModel(idOrLibroId).catch(() => []),
+    getLibroControlClientesModel(idOrLibroId).catch(() => []),
+    getLibroIncidenciasGeneralesModel(idOrLibroId).catch(() => [])
   ]);
 
   const liveCounts = {
@@ -9488,11 +10566,15 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
   };
 
-  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.id ? libroRes : null);
+  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.id || libroRes?.uuid ? libroRes : null);
+  const resolvedLibroId = libroObj?.id ? Number(libroObj.id) : (!isU ? Number(idOrLibroId) : null);
+  const resolvedLibroUuid = libroObj?.uuid || (isU ? idOrLibroId : null);
 
   const previewData = {
-    libro_id: numId,
+    libro_id: resolvedLibroId,
+    libro_uuid: resolvedLibroUuid,
     sala_id: libroObj?.sala_id || null,
+    sala_uuid: libroObj?.sala_uuid || null,
     sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
     fecha: libroObj?.descripcion || null,
     libro: libroObj || null,
@@ -9509,20 +10591,20 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
   if (isPgConnected && sql) {
     let rows = [];
     if (libroObj) {
-      // numId es un libro_id existente: buscar estrictamente por libro_id
       rows = await sql`
-        SELECT id, libro_id, data, created_at, updated_at
+        SELECT id, libro_id, libro_uuid, data, created_at, updated_at
         FROM libro_reporte
-        WHERE libro_id = ${numId}
+        WHERE ${resolvedLibroUuid 
+          ? sql`libro_uuid = ${resolvedLibroUuid}::uuid OR libro_id = ${resolvedLibroId}` 
+          : sql`libro_id = ${resolvedLibroId}`}
         ORDER BY updated_at DESC
         LIMIT 1
       `;
     } else {
-      // Fallback si numId no coincide con ningún libro registrado en la tabla libros
       rows = await sql`
-        SELECT id, libro_id, data, created_at, updated_at
+        SELECT id, libro_id, libro_uuid, data, created_at, updated_at
         FROM libro_reporte
-        WHERE id = ${numId}
+        WHERE ${isU ? sql`libro_uuid = ${idOrLibroId}::uuid` : sql`id = ${Number(idOrLibroId)} OR libro_id = ${Number(idOrLibroId)}`}
         ORDER BY updated_at DESC
         LIMIT 1
       `;
@@ -9546,9 +10628,17 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
   } else {
     let found = null;
     if (libroObj) {
-      found = (inMemoryData.libro_reporte || []).find(r => Number(r.libro_id) === numId);
+      found = (inMemoryData.libro_reporte || []).find(r => 
+        (resolvedLibroUuid && String(r.libro_uuid) === String(resolvedLibroUuid)) ||
+        (resolvedLibroId && Number(r.libro_id) === resolvedLibroId)
+      );
     } else {
-      found = (inMemoryData.libro_reporte || []).find(r => Number(r.id) === numId);
+      found = (inMemoryData.libro_reporte || []).find(r => 
+        String(r.uuid) === String(idOrLibroId) || 
+        String(r.libro_uuid) === String(idOrLibroId) ||
+        Number(r.id) === Number(idOrLibroId) || 
+        Number(r.libro_id) === Number(idOrLibroId)
+      );
     }
     if (found) {
       return {
@@ -9560,20 +10650,20 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     }
   }
 
-  // Si no existe aún en la tabla libro_reporte:
   if (autoGenerate) {
-    return await saveLibroReporteModel(numId);
+    return await saveLibroReporteModel(idOrLibroId);
   }
 
-  // Retorna preview con exists = false para que el botón muestre "+ Generar Reporte"
   return {
     success: true,
     exists: false,
     liveCounts,
     data: {
       id: null,
-      libro_id: numId,
+      libro_id: resolvedLibroId,
+      libro_uuid: resolvedLibroUuid,
       sala_id: libroObj?.sala_id || null,
+      sala_uuid: libroObj?.sala_uuid || null,
       sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
       fecha: libroObj?.descripcion || null,
       data: previewData,

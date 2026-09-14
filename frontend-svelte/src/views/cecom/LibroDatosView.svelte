@@ -17,7 +17,8 @@
   $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
   $: canModify = canAdd || canEdit;
 
-  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
+  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
+  $: targetSalaUuid = libro?.sala_uuid || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_uuid || null;
 
   // Estado del formulario
   let aperturaSalaInicio = '';
@@ -64,10 +65,13 @@
 
   // Encabezado superior: Roraima - 07/09/2026
   $: tableHeaderTitle = (() => {
-    const salaName = libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
-      libro?.sala_nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
+    const matchedSala = ($masterSalasStore || []).find(s => 
+      (libro?.sala_uuid && s.uuid === libro.sala_uuid) || 
+      (libro?.sala_id && String(s.id) === String(libro.sala_id)) ||
+      (targetSalaUuid && s.uuid === targetSalaUuid) ||
+      (targetSalaId && String(s.id) === String(targetSalaId))
+    );
+    const salaName = libro?.sala_nombre || matchedSala?.nombre || libro?.sala_nombre_comercial || matchedSala?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();
@@ -75,7 +79,9 @@
   // Sugerencias de empleados para operadores CECOM (filtrados por la sala del libro)
   $: listaEmpleados = ($masterEmpleadosStore || [])
     .filter(e => {
-      if (targetSalaId) {
+      if (targetSalaUuid && e.sala_uuid) {
+        if (e.sala_uuid !== targetSalaUuid) return false;
+      } else if (targetSalaId) {
         if (Number(e.sala_id) !== targetSalaId) return false;
       }
       if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
@@ -339,12 +345,12 @@
     ]);
   });
 
-  $: if (libroId) {
+  $: if (libroId || libro?.id || libro?.uuid) {
     loadDatos();
   }
 
   async function loadDatos() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
 
     isLoadingData = true;
@@ -408,7 +414,7 @@
       if (!silent) triggerToast('No tienes permiso para modificar datos operativos en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) {
       if (!silent) triggerToast('No se encontró el ID del libro', 'error');
       return;

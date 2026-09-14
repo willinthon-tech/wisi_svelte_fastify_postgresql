@@ -17,7 +17,8 @@
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
   $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
-  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
+  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
+  $: targetSalaUuid = libro?.sala_uuid || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_uuid || null;
 
   // --- ESTADO DEL FORMULARIO ---
   let selectedEmpleado = null; // Objeto empleado seleccionado
@@ -119,7 +120,9 @@
   // Lista de empleados activos de la sala
   $: listaEmpleados = ($masterEmpleadosStore || [])
     .filter(e => {
-      if (targetSalaId && e.sala_id && Number(e.sala_id) !== targetSalaId) {
+      if (targetSalaUuid && e.sala_uuid) {
+        if (e.sala_uuid !== targetSalaUuid) return false;
+      } else if (targetSalaId && e.sala_id && Number(e.sala_id) !== targetSalaId) {
         return false;
       }
       if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) {
@@ -131,6 +134,7 @@
       const fullName = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || `Empleado #${e.id}`;
       return {
         id: e.id,
+        uuid: e.uuid || null,
         nombre: fullName,
         cedula: e.cedula || '',
         cargo_nombre: (e.cargo_nombre || '').trim() || 'General',
@@ -257,7 +261,7 @@
     ]);
   });
 
-  $: if (libroId) {
+  $: if (libroId || libro?.id || libro?.uuid) {
     loadRecords();
   }
 
@@ -276,7 +280,7 @@
   }
 
   async function loadRecords() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
     try {
@@ -437,7 +441,7 @@
       triggerToast('No tienes permiso para agregar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
       return;
@@ -457,12 +461,12 @@
       }
     }
 
-    let rId = Number(selectedRangoId);
+    let rId = selectedRangoId;
     if (!rId) {
       const q = (rangoSearchQuery || '').trim().toLowerCase();
       const match = listaRangos.find(r => r.nombre.toLowerCase().trim() === q);
       if (match) {
-        rId = Number(match.id);
+        rId = match.id;
         selectedRango = match;
         selectedRangoId = String(match.id);
       } else {
@@ -485,8 +489,10 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          empleado_id: empId,
-          rango_id: rId,
+          empleado_id: selectedEmpleado?.id || empId,
+          empleado_uuid: selectedEmpleado?.uuid || null,
+          rango_id: selectedRango?.id || rId,
+          rango_uuid: selectedRango?.uuid || null,
           monto: numMonto,
           tipo: tipo || 'Aporte'
         })
@@ -532,9 +538,9 @@
       return;
     }
 
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${record.id}`, {
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${record.uuid || record.id}`, {
         method: 'DELETE'
       });
       const json = await res.json();
@@ -577,7 +583,7 @@
       triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !editingRecord) return;
 
     const numMonto = parseFloat(modalMonto);
@@ -588,12 +594,12 @@
 
     isSavingModal = true;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${editingRecord.id}`, {
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${editingRecord.uuid || editingRecord.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          empleado_id: Number(modalEmpleadoId),
-          rango_id: Number(modalRangoId),
+          empleado_id: modalEmpleadoId,
+          rango_id: modalRangoId,
           monto: numMonto,
           tipo: modalTipo || 'Aporte'
         })

@@ -24,7 +24,8 @@
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
   $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
-  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
+  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
+  $: targetSalaUuid = libro?.sala_uuid || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_uuid || null;
 
   // Estado del formulario
   let cliente = '';
@@ -53,6 +54,7 @@
 
   // Estado para el cliente seleccionado
   let selectedClienteId = null;
+  let selectedClienteUuid = null;
   let selectedTipoClienteNombre = '';
 
   // Extraer clientes únicos para sugerencias locales
@@ -66,10 +68,11 @@
       if (!item) continue;
       const nombre = typeof item === 'object' ? item.nombre : String(item);
       if (!nombre) continue;
-      const key = `${item.id || nombre.toLowerCase().trim()}`;
+      const key = `${item.uuid || item.id || nombre.toLowerCase().trim()}`;
       if (!map.has(key)) {
         map.set(key, {
           id: typeof item === 'object' ? item.id : null,
+          uuid: typeof item === 'object' ? (item.uuid || null) : null,
           nombre: nombre,
           tipo_cliente_nombre: typeof item === 'object' ? (item.tipo_cliente_nombre || 'General') : 'General'
         });
@@ -79,10 +82,11 @@
     // 2. Clientes locales de registros previos
     for (const r of records) {
       if (!r || !r.cliente) continue;
-      const key = `${r.cliente_id || r.cliente.toLowerCase().trim()}`;
+      const key = `${r.cliente_uuid || r.cliente_id || r.cliente.toLowerCase().trim()}`;
       if (!map.has(key)) {
         map.set(key, {
           id: r.cliente_id || null,
+          uuid: r.cliente_uuid || null,
           nombre: r.cliente,
           tipo_cliente_nombre: r.tipo_cliente_nombre || 'General'
         });
@@ -107,13 +111,19 @@
 
   // Ordenadas por ID de la tabla (el último registrado primero / ID descendente)
   // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
-  $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
+  $: sortedRecords = [...records].sort((a, b) => {
+    if (a.created_at && b.created_at && a.created_at !== b.created_at) {
+      return new Date(b.created_at) - new Date(a.created_at);
+    }
+    return String(b.id || '').localeCompare(String(a.id || ''), undefined, { numeric: true });
+  });
 
   // Modal para editar Registro
   let showModalEditar = false;
   let editingRecord = null;
   let modalCliente = '';
   let modalClienteId = null;
+  let modalClienteUuid = null;
   let modalTipo = 'Compra';
   let modalMonto = '';
   let modalMetodoPagoId = null;
@@ -125,12 +135,12 @@
   $: metodosDisponibles = $masterMetodosPagoStore || [];
 
   $: if (metodosDisponibles && metodosDisponibles.length > 0) {
-    if (!selectedMetodoPagoId || !metodosDisponibles.some(m => Number(m.id) === Number(selectedMetodoPagoId))) {
-      selectedMetodoPagoId = metodosDisponibles[0].id;
+    if (!selectedMetodoPagoId || !metodosDisponibles.some(m => String(m.uuid || m.id) === String(selectedMetodoPagoId) || String(m.id) === String(selectedMetodoPagoId))) {
+      selectedMetodoPagoId = metodosDisponibles[0].uuid || metodosDisponibles[0].id;
     }
   }
 
-  $: currentMetodoNombre = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId))?.nombre || '';
+  $: currentMetodoNombre = metodosDisponibles.find(m => String(m.uuid || m.id) === String(selectedMetodoPagoId) || String(m.id) === String(selectedMetodoPagoId))?.nombre || '';
 
   function getContrastColor(hexColor) {
     if (!hexColor || typeof hexColor !== 'string') return '#ffffff';
@@ -151,9 +161,14 @@
     if (typeof recordOrName === 'object') {
       if (recordOrName.metodo_color) return recordOrName.metodo_color;
       if (recordOrName.color) return recordOrName.color;
-      const mId = recordOrName.metodo_pago_id ? Number(recordOrName.metodo_pago_id) : (recordOrName.id ? Number(recordOrName.id) : null);
+      const mUuid = recordOrName.metodo_pago_uuid || (typeof recordOrName.uuid === 'string' ? recordOrName.uuid : null);
+      const mId = recordOrName.metodo_pago_id != null ? String(recordOrName.metodo_pago_id) : (recordOrName.id != null ? String(recordOrName.id) : null);
       const mNom = (recordOrName.metodo || recordOrName.nombre || '').toLowerCase().trim();
-      const found = metodosDisponibles.find(m => (mId && Number(m.id) === mId) || (m.nombre || '').toLowerCase().trim() === mNom);
+      const found = metodosDisponibles.find(m => 
+        (mUuid && String(m.uuid) === mUuid) ||
+        (mId && (String(m.id) === mId || String(m.uuid) === mId)) ||
+        (m.nombre || '').toLowerCase().trim() === mNom
+      );
       if (found && found.color) return found.color;
     } else if (typeof recordOrName === 'string') {
       const mNom = recordOrName.toLowerCase().trim();
@@ -183,10 +198,13 @@
 
   // Encabezado oscuro de la tabla con nombre de sala (no comercial) y fecha
   $: tableHeaderTitle = (() => {
-    const salaName = libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
-      libro?.sala_nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
+    const matchedSala = ($masterSalasStore || []).find(s => 
+      (libro?.sala_uuid && s.uuid === libro.sala_uuid) || 
+      (libro?.sala_id && String(s.id) === String(libro.sala_id)) ||
+      (targetSalaUuid && s.uuid === targetSalaUuid) ||
+      (targetSalaId && String(s.id) === String(targetSalaId))
+    );
+    const salaName = libro?.sala_nombre || matchedSala?.nombre || libro?.sala_nombre_comercial || matchedSala?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();
@@ -246,10 +264,12 @@
 
   // 6. Resumen por Métodos de Pago
   $: resumenMetodos = metodosDisponibles.map(met => {
-    const metId = Number(met.id);
+    const metId = met.id != null ? String(met.id) : null;
+    const metUuid = met.uuid ? String(met.uuid) : null;
     const metNom = (met.nombre || '').toLowerCase().trim();
     const ops = records.filter(r => {
-      if (r.metodo_pago_id && Number(r.metodo_pago_id) === metId) return true;
+      if (metUuid && r.metodo_pago_uuid && String(r.metodo_pago_uuid) === metUuid) return true;
+      if (metId && r.metodo_pago_id && String(r.metodo_pago_id) === metId) return true;
       return (r.metodo || 'General').toLowerCase().trim() === metNom;
     });
     const compras = ops
@@ -261,6 +281,7 @@
     const neto = compras - pagos;
     return {
       id: met.id,
+      uuid: met.uuid,
       metodo: met.nombre,
       color: met.color || getMetodoColor(met),
       compras,
@@ -324,13 +345,16 @@
   }
 
   async function loadRecords() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
 
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
-      const local = await getLocalItems('libro_control_clientes', r => Number(r.libro_id) === Number(lId) || String(r.libro_uuid) === String(libro?.uuid));
+      const local = await getLocalItems('libro_control_clientes', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+      );
       if (Array.isArray(local) && local.length > 0) {
         records = local;
         isLoadingRecords = false;
@@ -355,13 +379,16 @@
   }
 
   async function loadDropRecords() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingDrop = true;
 
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
-      const local = await getLocalItems('libro_drop_mesas', r => Number(r.libro_id) === Number(lId) || String(r.libro_uuid) === String(libro?.uuid));
+      const local = await getLocalItems('libro_drop_mesas', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+      );
       if (Array.isArray(local) && local.length > 0) {
         dropRecords = local;
         isLoadingDrop = false;
@@ -386,10 +413,11 @@
 
   async function loadSugerenciasRemotas(q = '') {
     try {
-      const lId = libroId || libro?.id;
+      const lId = libro?.uuid || libroId || libro?.id;
       const params = new URLSearchParams();
       if (q) params.set('q', q);
-      if (targetSalaId) params.set('sala_id', String(targetSalaId));
+      if (targetSalaUuid) params.set('sala_uuid', targetSalaUuid);
+      else if (targetSalaId) params.set('sala_id', String(targetSalaId));
 
       const url = lId 
         ? `/api/master/libros/${lId}/control-clientes/sugerencias?${params.toString()}` 
@@ -423,9 +451,11 @@
     );
     if (match) {
       selectedClienteId = match.id || null;
+      selectedClienteUuid = match.uuid || null;
       selectedTipoClienteNombre = match.tipo_cliente_nombre || 'General';
     } else {
       selectedClienteId = null;
+      selectedClienteUuid = null;
       selectedTipoClienteNombre = '';
     }
     loadSugerenciasRemotas(cliente.trim());
@@ -491,7 +521,7 @@
       triggerToast('No tienes permiso para registrar operaciones en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
       return;
@@ -512,8 +542,9 @@
     isSaving = true;
     const itemUuid = crypto.randomUUID();
     try {
-      const matchedMetodo = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId)) || 
-                            metodosDisponibles[0];
+      const matchedMetodo = metodosDisponibles.find(m => 
+        String(m.uuid || m.id) === String(selectedMetodoPagoId) || String(m.id) === String(selectedMetodoPagoId)
+      ) || metodosDisponibles[0];
       if (!matchedMetodo) {
         triggerToast('No hay métodos de pago disponibles en el sistema', 'warning');
         return;
@@ -522,9 +553,11 @@
         uuid: itemUuid,
         cliente: cleanCliente,
         cliente_id: selectedClienteId || null,
+        cliente_uuid: selectedClienteUuid || null,
         tipo: tipo || 'Compra',
         monto: cleanMonto,
-        metodo_pago_id: matchedMetodo.id,
+        metodo_pago_id: matchedMetodo.id || null,
+        metodo_pago_uuid: matchedMetodo.uuid || null,
         metodo: matchedMetodo.nombre,
         hora: getCurrentTimeString(), // Hora en curso automáticamente
         nota: (nota || '').trim()
@@ -543,11 +576,12 @@
         await upsertLocalItem('libro_control_clientes', savedData);
         cliente = '';
         selectedClienteId = null;
+        selectedClienteUuid = null;
         selectedTipoClienteNombre = '';
         monto = '';
         nota = '';
         tipo = 'Compra';
-        selectedMetodoPagoId = metodosDisponibles[0]?.id || null;
+        selectedMetodoPagoId = metodosDisponibles[0]?.uuid || metodosDisponibles[0]?.id || null;
         showSugerencias = false;
         await loadRecords();
         loadSugerenciasRemotas();
@@ -560,7 +594,9 @@
       }
     } catch (err) {
       console.warn('[LocalDb] Modo Offline: guardando cliente en base de datos local y encolando outbox:', err);
-      const matchedMetodo = metodosDisponibles.find(m => Number(m.id) === Number(selectedMetodoPagoId)) || metodosDisponibles[0];
+      const matchedMetodo = metodosDisponibles.find(m => 
+        String(m.uuid || m.id) === String(selectedMetodoPagoId) || String(m.id) === String(selectedMetodoPagoId)
+      ) || metodosDisponibles[0];
       const offlineRecord = {
         id: `temp_${Date.now()}`,
         uuid: itemUuid,
@@ -568,6 +604,7 @@
         libro_uuid: libro?.uuid || null,
         cliente: cleanCliente,
         cliente_id: selectedClienteId || null,
+        cliente_uuid: selectedClienteUuid || null,
         tipo: tipo || 'Compra',
         monto: cleanMonto,
         metodo_pago_id: matchedMetodo?.id || 1,
@@ -602,12 +639,13 @@
     }
   }
 
-  async function handleEliminar(recordId) {
+  async function handleEliminar(recordOrId) {
     if (!canDelete) {
       triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const recordId = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !recordId) return;
 
     try {
@@ -646,12 +684,13 @@
     editingRecord = record;
     modalCliente = record.cliente || '';
     modalClienteId = record.cliente_id || null;
+    modalClienteUuid = record.cliente_uuid || null;
     modalTipo = record.tipo || 'Compra';
     modalMonto = record.monto != null ? String(record.monto) : '';
-    modalMetodoPagoId = record.metodo_pago_id 
-      ? Number(record.metodo_pago_id) 
-      : (metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === (record.metodo || '').toLowerCase().trim())?.id || metodosDisponibles[0]?.id || null);
-    const matched = metodosDisponibles.find(m => Number(m.id) === Number(modalMetodoPagoId));
+    modalMetodoPagoId = record.metodo_pago_uuid || record.metodo_pago_id 
+      ? (record.metodo_pago_uuid || record.metodo_pago_id)
+      : (metodosDisponibles.find(m => (m.nombre || '').toLowerCase().trim() === (record.metodo || '').toLowerCase().trim())?.uuid || metodosDisponibles[0]?.uuid || metodosDisponibles[0]?.id || null);
+    const matched = metodosDisponibles.find(m => String(m.uuid || m.id) === String(modalMetodoPagoId) || String(m.id) === String(modalMetodoPagoId));
     modalMetodo = matched ? matched.nombre : (record.metodo || metodosDisponibles[0]?.nombre || '');
     modalHora = record.hora || getCurrentTimeString();
     modalNota = record.nota || '';
@@ -663,6 +702,7 @@
     editingRecord = null;
     modalCliente = '';
     modalClienteId = null;
+    modalClienteUuid = null;
     modalTipo = 'Compra';
     modalMonto = '';
     modalNota = '';
@@ -675,7 +715,7 @@
   async function handleGuardarModal() {
     if (!canEdit) return;
     if (!editingRecord) return;
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
 
     if (!modalCliente || !modalCliente.trim()) {
@@ -694,19 +734,22 @@
     }
 
     isSavingModal = true;
+    const matchedMetodo = metodosDisponibles.find(m => String(m.uuid || m.id) === String(modalMetodoPagoId) || String(m.id) === String(modalMetodoPagoId));
     const editPayload = {
       cliente_id: modalClienteId,
+      cliente_uuid: modalClienteUuid || null,
       cliente: modalCliente.trim(),
       tipo: modalTipo,
       monto: Number(modalMonto),
-      metodo_pago_id: modalMetodoPagoId,
-      metodo: modalMetodo || '',
+      metodo_pago_id: matchedMetodo?.id || null,
+      metodo_pago_uuid: matchedMetodo?.uuid || null,
+      metodo: modalMetodo || matchedMetodo?.nombre || '',
       hora: modalHora,
       nota: (modalNota || '').trim()
     };
 
     try {
-      const targetId = editingRecord.id;
+      const targetId = editingRecord.uuid || editingRecord.id;
       const res = await fetch(`/api/master/libros/${lId}/control-clientes/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -732,10 +775,10 @@
       await queueOutboxAction({
         entity: 'libro_control_clientes',
         action: 'update',
-        endpoint: `/api/master/libros/${lId}/control-clientes/${editingRecord.id}`,
+        endpoint: `/api/master/libros/${lId}/control-clientes/${editingRecord.uuid || editingRecord.id}`,
         method: 'PUT',
         payload: editPayload,
-        targetId: editingRecord.id,
+        targetId: editingRecord.uuid || editingRecord.id,
         uuid: editingRecord.uuid || null
       });
       triggerToast('Modo Offline: Registro actualizado localmente.', 'info');
@@ -838,7 +881,7 @@
         <label class="form-label">MÉTODO DE PAGO: *</label>
         <div class="radio-toggle-group metodos-grid">
           {#each metodosDisponibles as met}
-            {@const isSelected = Number(selectedMetodoPagoId) === Number(met.id)}
+            {@const isSelected = String(selectedMetodoPagoId) === String(met.id) || (met.uuid && String(selectedMetodoPagoId) === String(met.uuid))}
             {@const mColor = met.color || getMetodoColor(met)}
             <label 
               class="radio-option {isSelected ? `selected-metodo ${getMetodoClass(met.nombre)}` : ''}"
@@ -847,7 +890,7 @@
               <input 
                 type="radio" 
                 name="form-metodo-pago" 
-                value={met.id} 
+                value={met.uuid || met.id} 
                 bind:group={selectedMetodoPagoId}
               />
               <span 
@@ -1109,7 +1152,7 @@
                             <button 
                               type="button" 
                               class="btn-eliminar"
-                              on:click={() => handleEliminar(record.id)}
+                              on:click={() => handleEliminar(record.uuid || record.id)}
                               title="Eliminar este registro"
                             >
                               Eliminar
@@ -1351,7 +1394,7 @@
             <label class="modal-field-label">Método de Pago: *</label>
             <div class="metodos-options-grid">
               {#each metodosDisponibles as met}
-                {@const isSelected = Number(modalMetodoPagoId) === Number(met.id)}
+                {@const isSelected = String(modalMetodoPagoId) === String(met.id) || (met.uuid && String(modalMetodoPagoId) === String(met.uuid))}
                 <label 
                   class="metodo-radio-pill {isSelected ? 'active' : ''}"
                   style="{isSelected ? getMetodoBadgeStyle(met) : ''}"
@@ -1359,7 +1402,7 @@
                   <input 
                     type="radio" 
                     name="modal-metodo" 
-                    value={met.id} 
+                    value={met.uuid || met.id} 
                     bind:group={modalMetodoPagoId}
                     on:change={() => modalMetodo = met.nombre}
                   />

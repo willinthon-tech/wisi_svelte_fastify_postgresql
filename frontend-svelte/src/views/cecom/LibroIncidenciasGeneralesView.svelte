@@ -280,12 +280,12 @@
     ]);
   });
 
-  $: if (libroId) {
+  $: if (libroId || libro?.id || libro?.uuid) {
     loadRecords();
   }
 
   async function loadRecords() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
     try {
@@ -308,7 +308,7 @@
       triggerToast('No tienes permiso para agregar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
       return;
@@ -387,12 +387,13 @@
     }
   }
 
-  async function handleEliminar(recordId) {
+  async function handleEliminar(recordOrId) {
     if (!canDelete) {
       triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const recordId = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !recordId) return;
 
     try {
@@ -402,7 +403,7 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Incidencia eliminada correctamente', 'info');
-        records = records.filter(r => Number(r.id) !== Number(recordId));
+        records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
       } else {
         triggerToast(json?.error || 'Error al eliminar incidencia', 'error');
       }
@@ -446,7 +447,7 @@
       return;
     }
     if (!editingRecord) return;
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
 
     const cleanDesc = (modalDescripcion || '').trim();
@@ -462,11 +463,12 @@
 
     isSavingModal = true;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${editingRecord.id}`, {
+      const targetId = editingRecord.uuid || editingRecord.id;
+      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tipo_incidencia_id: Number(modalTipoIncidenciaId) || 1,
+          tipo_incidencia_id: modalTipoIncidenciaId,
           tipo: modalTipo || 'General',
           descripcion: cleanDesc,
           hora: modalHora
@@ -713,7 +715,7 @@
                         <button 
                           type="button" 
                           class="btn-eliminar"
-                          on:click={() => handleEliminar(record.id)}
+                          on:click={() => handleEliminar(record.uuid || record.id)}
                           title="Eliminar esta incidencia"
                         >
                           Eliminar

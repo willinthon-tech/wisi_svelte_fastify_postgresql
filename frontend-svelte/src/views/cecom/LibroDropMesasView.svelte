@@ -125,7 +125,7 @@
   });
 
   // Reaccionar a cambios en libroId
-  $: if (libroId) {
+  $: if (libroId || libro?.id || libro?.uuid) {
     loadDropRecords();
   }
 
@@ -136,7 +136,9 @@
       if (assignedSalaIds.length > 0) {
         q.set('user_sala_ids', assignedSalaIds.join(','));
       }
-      if (libro?.sala_id) {
+      if (libro?.sala_uuid) {
+        q.set('sala_uuids', String(libro.sala_uuid));
+      } else if (libro?.sala_id) {
         q.set('sala_ids', String(libro.sala_id));
       }
       const res = await fetch(`/api/master/mesas?${q.toString()}`);
@@ -154,7 +156,7 @@
   }
 
   async function loadDropRecords() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
     try {
@@ -218,7 +220,7 @@
   }
 
   async function handleGuardar() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
       return;
@@ -266,8 +268,9 @@
     }
   }
 
-  async function handleEliminar(recordId) {
-    const lId = libroId || libro?.id;
+  async function handleEliminar(recordOrId) {
+    const recordId = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !recordId) return;
 
     try {
@@ -277,8 +280,8 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'info');
-        dropRecords = dropRecords.filter(r => Number(r.id) !== Number(recordId));
-        if (selectedMesaId && !dropRecords.some(r => Number(r.mesa_id) === Number(selectedMesaId))) {
+        dropRecords = dropRecords.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
+        if (selectedMesaId && !dropRecords.some(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) || String(r.mesa_id) === String(selectedMesaId))) {
           limpiarCampos();
         }
       } else {
@@ -504,7 +507,7 @@
                         <button 
                           type="button" 
                           class="btn-eliminar"
-                          on:click|stopPropagation={() => handleEliminar(record.id)}
+                          on:click|stopPropagation={() => handleEliminar(record.uuid || record.id)}
                           title="Eliminar este registro"
                         >
                           Eliminar

@@ -97,13 +97,16 @@
     });
   })();
 
-  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => Number(l.id) === Number(libroId))?.sala_id);
+  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
+  $: targetSalaUuid = libro?.sala_uuid || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_uuid || null;
 
   // Lista de empleados disponibles para sugerencias y autocompletado (filtrados por la sala del libro)
   $: listaEmpleados = ($masterEmpleadosStore || [])
     .filter(e => {
       // Filtrar estrictamente por la sala asociada al libro
-      if (targetSalaId) {
+      if (targetSalaUuid && e.sala_uuid) {
+        if (e.sala_uuid !== targetSalaUuid) return false;
+      } else if (targetSalaId) {
         if (Number(e.sala_id) !== targetSalaId) return false;
       }
       if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
@@ -196,7 +199,7 @@
     ]);
   });
 
-  $: if (libroId) {
+  $: if (libroId || libro?.id || libro?.uuid) {
     loadRecords();
   }
 
@@ -207,7 +210,9 @@
       if (assignedSalaIds.length > 0) {
         q.set('user_sala_ids', assignedSalaIds.join(','));
       }
-      if (libro?.sala_id) {
+      if (libro?.sala_uuid) {
+        q.set('sala_uuids', String(libro.sala_uuid));
+      } else if (libro?.sala_id) {
         q.set('sala_ids', String(libro.sala_id));
       }
       const res = await fetch(`/api/master/mesas?${q.toString()}`);
@@ -226,7 +231,7 @@
   }
 
   async function loadRecords() {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
 
     isLoadingRecords = true;
@@ -303,7 +308,7 @@
   }
 
   async function saveRowToBackend(mesaId) {
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !mesaId) return;
 
     const row = rowsData[mesaId];
@@ -379,10 +384,10 @@
       triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !mesaId) return;
 
-    const existing = recordsMap.get(Number(mesaId));
+    const existing = recordsMap.get(Number(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId) || String(r.mesa_id) === String(mesaId));
     if (!existing) {
       updateField(mesaId, 'hora_apertura', '');
       updateField(mesaId, 'hora_cierre', '');
@@ -394,13 +399,13 @@
     }
 
     try {
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${existing.id}`, {
+      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${existing.uuid || existing.id}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro de mesa eliminado', 'info');
-        novedadesRecords = novedadesRecords.filter(r => Number(r.id) !== Number(existing.id));
+        novedadesRecords = novedadesRecords.filter(r => String(r.uuid || r.id) !== String(existing.uuid || existing.id) && String(r.id) !== String(existing.id));
         updateField(mesaId, 'hora_apertura', '');
         updateField(mesaId, 'hora_cierre', '');
         updateField(mesaId, 'pitboss', '');
@@ -428,7 +433,7 @@
       triggerToast('No tienes permiso para modificar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) {
       triggerToast('No se encontró el ID del libro', 'error');
       return;
@@ -526,7 +531,7 @@
       triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
       return;
     }
-    const lId = libroId || libro?.id;
+    const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !editingMesaId) return;
 
     const cur = getRow(editingMesaId);
