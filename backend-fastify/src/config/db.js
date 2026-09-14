@@ -38,10 +38,10 @@ export async function initDb() {
       database: PGDATABASE,
       username: PGUSER,
       password: PGPASSWORD,
-      connect_timeout: 5,
-      max_lifetime: 60,
-      idle_timeout: 10,
-      max: 10,
+      connect_timeout: 10,
+      max_lifetime: 1800, // 30 minutos de vida útil para evitar reconexiones continuas
+      idle_timeout: 15,   // Cierra conexiones inactivas después de 15 segundos
+      max: 30,            // Soporta hasta 30 conexiones concurrentes (ideal para VPS de 8 vCPUs / 10GB)
       onnotice: () => { },
       parameters: {
         timezone: 'UTC'
