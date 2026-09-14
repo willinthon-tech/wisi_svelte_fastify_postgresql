@@ -11,6 +11,7 @@
   import { latestAttlogEventStore } from "../controllers/websocket.store.js";
   import { openPhotoModal, updatePhotoModalItems } from "../controllers/globalModal.store.js";
   import { currentRouteStore } from "../controllers/router.store.js";
+  import CachedImage from "./common/CachedImage.svelte";
 
   export let items = [];
 
@@ -749,25 +750,13 @@
               style="position:relative;width:60px;height:60px;flex-shrink:0;padding:0;border:none;background:transparent;cursor:pointer;border-radius:50%;outline:none;"
               title="Ver marcajes en lista global"
             >
-              <img
+              <CachedImage
                 src={getRecordPhoto(latestRecord)}
                 alt="Foto marcaje"
+                isImmutable={true}
+                lazy={false}
                 style="width:60px;height:60px;border-radius:50%;object-fit:cover;border:3px solid {statusInfo.dot};box-shadow:0 4px 12px rgba(0,0,0,0.12);"
-                on:error={(e) => {
-                  const img = e.currentTarget;
-                  const fallback = getFallbackProfilePhoto(latestRecord);
-                  if (!img.dataset.triedEmp && fallback && img.src !== fallback && !img.src.endsWith(fallback)) {
-                    img.dataset.triedEmp = 'true';
-                    img.src = fallback;
-                  } else {
-                    img.style.display = 'none';
-                    if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
-                  }
-                }}
               />
-              <div style="display:none;width:60px;height:60px;border-radius:50%;background:{getAvatarColor(latestRecord.employee_no)};color:#fff;font-weight:800;font-size:20px;align-items:center;justify-content:center;">
-                {getInitials(toTitleCase(latestRecord.nombre), latestRecord.employee_no)}
-              </div>
               <span style="position:absolute;bottom:0;right:0;width:18px;height:18px;border-radius:50%;background:#2563eb;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;">🔍</span>
             </button>
             <div style="flex:1;min-width:0;">
@@ -897,18 +886,12 @@
             <!-- Photo + Name -->
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
               <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
-                <img
+                <CachedImage
                   src={toBackendUrl(currentCelebrant.foto || `/empleados/${currentCelebrant.id}.jpg`, { thumb: true })}
                   alt="Foto cumpleañero"
+                  version={currentCelebrant.updated_at}
                   style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #d946ef;box-shadow:0 3px 10px rgba(217,70,239,0.25);"
-                  on:error={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
-                  }}
                 />
-                <div style="display:none;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg, #d946ef, #a21caf);color:#fff;font-weight:800;font-size:18px;align-items:center;justify-content:center;">
-                  {getInitials(toTitleCase(currentCelebrant.nombre), currentCelebrant.cedula)}
-                </div>
                 <span style="position:absolute;bottom:-2px;right:-2px;font-size:15px;line-height:1;" title="¡Feliz cumpleaños!">🎂</span>
               </div>
               <div style="flex:1;min-width:0;">
@@ -985,18 +968,12 @@
             <!-- Photo + Name -->
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
               <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
-                <img
+                <CachedImage
                   src={toBackendUrl(upCelebrant.foto || `/empleados/${upCelebrant.id}.jpg`, { thumb: true })}
                   alt="Foto cumpleañero"
+                  version={upCelebrant.updated_at}
                   style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #f59e0b;box-shadow:0 3px 10px rgba(245,158,11,0.25);"
-                  on:error={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
-                  }}
                 />
-                <div style="display:none;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg, #f59e0b, #d97706);color:#fff;font-weight:800;font-size:18px;align-items:center;justify-content:center;">
-                  {getInitials(toTitleCase(upCelebrant.nombre), upCelebrant.cedula)}
-                </div>
                 <span style="position:absolute;bottom:-2px;right:-2px;font-size:15px;line-height:1;">🎈</span>
               </div>
               <div style="flex:1;min-width:0;">
@@ -1079,18 +1056,12 @@
           {#if destCelebrant}
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
               <div style="position:relative;width:56px;height:56px;flex-shrink:0;">
-                <img
+                <CachedImage
                   src={toBackendUrl(destCelebrant.foto || `/empleados/${destCelebrant.id}.jpg`, { thumb: true })}
                   alt="Foto cumpleañero"
+                  version={destCelebrant.updated_at}
                   style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid {activeDestacadoType === 'mayor' ? '#6366f1' : (activeDestacadoType === 'joven' ? '#10b981' : '#f59e0b')};box-shadow:0 3px 10px rgba(0,0,0,0.12);"
-                  on:error={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'flex';
-                  }}
                 />
-                <div style="display:none;width:56px;height:56px;border-radius:50%;background:#475569;color:#fff;font-weight:800;font-size:18px;align-items:center;justify-content:center;">
-                  {getInitials(toTitleCase(destCelebrant.nombre), destCelebrant.cedula)}
-                </div>
                 <span style="position:absolute;bottom:-2px;right:-2px;font-size:15px;line-height:1;">
                   {activeDestacadoType === 'mayor' ? '👴' : (activeDestacadoType === 'joven' ? '👶' : '🏆')}
                 </span>
