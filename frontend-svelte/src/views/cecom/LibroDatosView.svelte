@@ -570,6 +570,8 @@
     })();
   }
 
+  const handleGuardar = (silent = false) => handleSaveDatos(silent);
+
   // Contar cuántas secciones están completadas
   $: totalSecciones = 6;
   $: seccionesCompletadas = [
