@@ -10008,51 +10008,73 @@ export async function saveLibroDatosModel(libroId, data) {
     }
   }
 
-  const rows = await sql`
-    INSERT INTO libro_datos (
-      uuid,
-      libro_uuid,
-      apertura_sala_inicio, apertura_sala_fin,
-      apertura_maquinas_inicio, apertura_maquinas_fin,
-      apertura_bingo_inicio, apertura_bingo_fin,
-      retiros_dropbox_inicio, retiros_dropbox_fin,
-      conteo_dropbox_inicio, conteo_dropbox_fin,
-      operador_turno_a, operador_turno_c
-    )
-    VALUES (
-      ${datosUuid}::uuid,
-      ${resolvedLibroUuid}::uuid,
-      ${aperturaSalaInicio}, ${aperturaSalaFin},
-      ${aperturaMaquinasInicio}, ${aperturaMaquinasFin},
-      ${aperturaBingoInicio}, ${aperturaBingoFin},
-      ${retirosDropboxInicio}, ${retirosDropboxFin},
-      ${conteoDropboxInicio}, ${conteoDropboxFin},
-      ${operadorTurnoA}, ${operadorTurnoC}
-    )
-    ON CONFLICT (libro_uuid) DO UPDATE SET
-      apertura_sala_inicio = EXCLUDED.apertura_sala_inicio,
-      apertura_sala_fin = EXCLUDED.apertura_sala_fin,
-      apertura_maquinas_inicio = EXCLUDED.apertura_maquinas_inicio,
-      apertura_maquinas_fin = EXCLUDED.apertura_maquinas_fin,
-      apertura_bingo_inicio = EXCLUDED.apertura_bingo_inicio,
-      apertura_bingo_fin = EXCLUDED.apertura_bingo_fin,
-      retiros_dropbox_inicio = EXCLUDED.retiros_dropbox_inicio,
-      retiros_dropbox_fin = EXCLUDED.retiros_dropbox_fin,
-      conteo_dropbox_inicio = EXCLUDED.conteo_dropbox_inicio,
-      conteo_dropbox_fin = EXCLUDED.conteo_dropbox_fin,
-      operador_turno_a = EXCLUDED.operador_turno_a,
-      operador_turno_c = EXCLUDED.operador_turno_c,
-      updated_at = CURRENT_TIMESTAMP
-    RETURNING 
-      uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id,
-      apertura_sala_inicio, apertura_sala_fin,
-      apertura_maquinas_inicio, apertura_maquinas_fin,
-      apertura_bingo_inicio, apertura_bingo_fin,
-      retiros_dropbox_inicio, retiros_dropbox_fin,
-      conteo_dropbox_inicio, conteo_dropbox_fin,
-      operador_turno_a, operador_turno_c,
-      created_at, updated_at
+  const existingRow = await sql`
+    SELECT uuid FROM libro_datos
+    WHERE libro_uuid = ${resolvedLibroUuid}::uuid
+    LIMIT 1
   `;
+
+  let rows;
+  if (existingRow.length > 0) {
+    rows = await sql`
+      UPDATE libro_datos SET
+        apertura_sala_inicio = ${aperturaSalaInicio},
+        apertura_sala_fin = ${aperturaSalaFin},
+        apertura_maquinas_inicio = ${aperturaMaquinasInicio},
+        apertura_maquinas_fin = ${aperturaMaquinasFin},
+        apertura_bingo_inicio = ${aperturaBingoInicio},
+        apertura_bingo_fin = ${aperturaBingoFin},
+        retiros_dropbox_inicio = ${retirosDropboxInicio},
+        retiros_dropbox_fin = ${retirosDropboxFin},
+        conteo_dropbox_inicio = ${conteoDropboxInicio},
+        conteo_dropbox_fin = ${conteoDropboxFin},
+        operador_turno_a = ${operadorTurnoA},
+        operador_turno_c = ${operadorTurnoC},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE uuid = ${existingRow[0].uuid}::uuid
+      RETURNING 
+        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id,
+        apertura_sala_inicio, apertura_sala_fin,
+        apertura_maquinas_inicio, apertura_maquinas_fin,
+        apertura_bingo_inicio, apertura_bingo_fin,
+        retiros_dropbox_inicio, retiros_dropbox_fin,
+        conteo_dropbox_inicio, conteo_dropbox_fin,
+        operador_turno_a, operador_turno_c,
+        created_at, updated_at
+    `;
+  } else {
+    rows = await sql`
+      INSERT INTO libro_datos (
+        uuid,
+        libro_uuid,
+        apertura_sala_inicio, apertura_sala_fin,
+        apertura_maquinas_inicio, apertura_maquinas_fin,
+        apertura_bingo_inicio, apertura_bingo_fin,
+        retiros_dropbox_inicio, retiros_dropbox_fin,
+        conteo_dropbox_inicio, conteo_dropbox_fin,
+        operador_turno_a, operador_turno_c
+      )
+      VALUES (
+        ${datosUuid}::uuid,
+        ${resolvedLibroUuid}::uuid,
+        ${aperturaSalaInicio}, ${aperturaSalaFin},
+        ${aperturaMaquinasInicio}, ${aperturaMaquinasFin},
+        ${aperturaBingoInicio}, ${aperturaBingoFin},
+        ${retirosDropboxInicio}, ${retirosDropboxFin},
+        ${conteoDropboxInicio}, ${conteoDropboxFin},
+        ${operadorTurnoA}, ${operadorTurnoC}
+      )
+      RETURNING 
+        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id,
+        apertura_sala_inicio, apertura_sala_fin,
+        apertura_maquinas_inicio, apertura_maquinas_fin,
+        apertura_bingo_inicio, apertura_bingo_fin,
+        retiros_dropbox_inicio, retiros_dropbox_fin,
+        conteo_dropbox_inicio, conteo_dropbox_fin,
+        operador_turno_a, operador_turno_c,
+        created_at, updated_at
+    `;
+  }
 
   return rows[0];
 }
@@ -10184,44 +10206,63 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
     }
   }
 
-  const rows = await sql`
-    INSERT INTO libro_novedades_mesas (
-      uuid,
-      libro_uuid,
-      mesa_uuid,
-      hora_apertura,
-      hora_cierre,
-      pitboss,
-      croupier_apertura,
-      croupier_cierre,
-      observacion
-    )
-    VALUES (
-      ${novUuid}::uuid,
-      ${resolvedLibroUuid}::uuid,
-      ${resolvedMesaUuid}::uuid,
-      ${horaApertura},
-      ${horaCierre},
-      ${pitboss},
-      ${croupierApertura},
-      ${croupierCierre},
-      ${observacion}
-    )
-    ON CONFLICT (libro_uuid, mesa_uuid) DO UPDATE SET
-      hora_apertura = EXCLUDED.hora_apertura,
-      hora_cierre = EXCLUDED.hora_cierre,
-      pitboss = EXCLUDED.pitboss,
-      croupier_apertura = EXCLUDED.croupier_apertura,
-      croupier_cierre = EXCLUDED.croupier_cierre,
-      observacion = EXCLUDED.observacion,
-      updated_at = CURRENT_TIMESTAMP
-    RETURNING 
-      uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, mesa_uuid, mesa_uuid AS mesa_id,
-      hora_apertura, hora_cierre,
-      pitboss, croupier_apertura, croupier_cierre,
-      observacion,
-      created_at, updated_at
+  const existingRow = await sql`
+    SELECT uuid FROM libro_novedades_mesas
+    WHERE libro_uuid = ${resolvedLibroUuid}::uuid AND mesa_uuid = ${resolvedMesaUuid}::uuid
+    LIMIT 1
   `;
+
+  let rows;
+  if (existingRow.length > 0) {
+    rows = await sql`
+      UPDATE libro_novedades_mesas SET
+        hora_apertura = ${horaApertura},
+        hora_cierre = ${horaCierre},
+        pitboss = ${pitboss},
+        croupier_apertura = ${croupierApertura},
+        croupier_cierre = ${croupierCierre},
+        observacion = ${observacion},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE uuid = ${existingRow[0].uuid}::uuid
+      RETURNING 
+        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, mesa_uuid, mesa_uuid AS mesa_id,
+        hora_apertura, hora_cierre,
+        pitboss, croupier_apertura, croupier_cierre,
+        observacion,
+        created_at, updated_at
+    `;
+  } else {
+    rows = await sql`
+      INSERT INTO libro_novedades_mesas (
+        uuid,
+        libro_uuid,
+        mesa_uuid,
+        hora_apertura,
+        hora_cierre,
+        pitboss,
+        croupier_apertura,
+        croupier_cierre,
+        observacion
+      )
+      VALUES (
+        ${novUuid}::uuid,
+        ${resolvedLibroUuid}::uuid,
+        ${resolvedMesaUuid}::uuid,
+        ${horaApertura},
+        ${horaCierre},
+        ${pitboss},
+        ${croupierApertura},
+        ${croupierCierre},
+        ${observacion}
+      )
+      RETURNING 
+        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, mesa_uuid, mesa_uuid AS mesa_id,
+        hora_apertura, hora_cierre,
+        pitboss, croupier_apertura, croupier_cierre,
+        observacion,
+        created_at, updated_at
+    `;
+  }
 
   return rows[0];
 }
@@ -10319,22 +10360,35 @@ export async function saveLibroReporteModel(libroId) {
   const repUuid = crypto.randomUUID();
 
   if (isPgConnected && sql) {
-    const rows = await sql`
-      INSERT INTO libro_reporte (
-        uuid,
-        libro_uuid,
-        data
-      ) VALUES (
-        ${repUuid}::uuid,
-        ${resolvedLibroUuid}::uuid,
-        CAST(${jsonStr} AS JSONB)
-      )
-      ON CONFLICT (libro_uuid) DO UPDATE
-      SET
-        data = EXCLUDED.data,
-        updated_at = CURRENT_TIMESTAMP
-      RETURNING uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, data, created_at, updated_at
+    const existingRow = await sql`
+      SELECT uuid FROM libro_reporte
+      WHERE libro_uuid = ${resolvedLibroUuid}::uuid
+      LIMIT 1
     `;
+
+    let rows;
+    if (existingRow.length > 0) {
+      rows = await sql`
+        UPDATE libro_reporte SET
+          data = CAST(${jsonStr} AS JSONB),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE uuid = ${existingRow[0].uuid}::uuid
+        RETURNING uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, data, created_at, updated_at
+      `;
+    } else {
+      rows = await sql`
+        INSERT INTO libro_reporte (
+          uuid,
+          libro_uuid,
+          data
+        ) VALUES (
+          ${repUuid}::uuid,
+          ${resolvedLibroUuid}::uuid,
+          CAST(${jsonStr} AS JSONB)
+        )
+        RETURNING uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, data, created_at, updated_at
+      `;
+    }
 
     return {
       success: true,

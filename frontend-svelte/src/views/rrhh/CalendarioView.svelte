@@ -915,6 +915,7 @@
                       src="{evt.foto || toEmployeePhotoUrl(evt, evt.id)}" 
                       alt="{evt.title}" 
                       className="cal-avatar-img"
+                      style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: #cbd5e1; flex-shrink: 0; border: 1px solid #e2e8f0; display: block;"
                       version={evt.updated_at}
                     />
                     {#if evt.age !== null && evt.age > 0}
@@ -1045,6 +1046,7 @@
                     src="{c.foto || toEmployeePhotoUrl(c, c.id)}" 
                     alt="{c.title}" 
                     className="modal-emp-img" 
+                    style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #cbd5e1; border: 2px solid #e2e8f0; flex-shrink: 0; display: block;"
                     version={c.updated_at}
                   />
                   <div class="modal-emp-details">
@@ -1529,14 +1531,15 @@
     box-sizing: border-box;
   }
 
-  .cal-avatar-img {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: #cbd5e1;
-    flex-shrink: 0;
-    border: 1px solid #e2e8f0;
+  :global(.cal-avatar-img) {
+    width: 18px !important;
+    height: 18px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    background: #cbd5e1 !important;
+    flex-shrink: 0 !important;
+    border: 1px solid #e2e8f0 !important;
+    display: block !important;
   }
 
   .cal-avatar-fallback {
@@ -2112,14 +2115,15 @@
     background: #f9fdfa;
   }
 
-  .modal-emp-img {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: #cbd5e1;
-    border: 2px solid #e2e8f0;
-    flex-shrink: 0;
+  :global(.modal-emp-img) {
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    background: #cbd5e1 !important;
+    border: 2px solid #e2e8f0 !important;
+    flex-shrink: 0 !important;
+    display: block !important;
   }
 
   .modal-emp-fallback {

@@ -867,6 +867,7 @@
                             src={toEmployeePhotoUrl(emp, emp.id)}
                             alt={emp.nombre || 'Empleado'}
                             className="emp-avatar-img"
+                            style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; display: block;"
                             version={emp.updated_at}
                           />
                         {:else}
@@ -1001,6 +1002,7 @@
                             src={toEmployeePhotoUrl(emp, emp.id)}
                             alt={emp.nombre || 'Empleado'}
                             className="emp-avatar-img"
+                            style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; display: block;"
                             version={emp.updated_at}
                           />
                         {:else}
@@ -1095,6 +1097,7 @@
                             src={toEmployeePhotoUrl(emp, emp.id)}
                             alt={emp.nombre || 'Empleado'}
                             className="emp-avatar-img"
+                            style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; display: block;"
                             version={emp.updated_at}
                           />
                         {:else}
@@ -1563,17 +1566,24 @@
   }
 
   .emp-avatar-box {
-    flex-shrink: 0;
-  }
-
-  .emp-avatar-img {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    object-fit: cover;
-    border: 1.5px solid #cbd5e1;
-    display: block;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  :global(.emp-avatar-img) {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    border: 1.5px solid #cbd5e1 !important;
+    display: block !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
   }
 
   .emp-avatar-fallback {

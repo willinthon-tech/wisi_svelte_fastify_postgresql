@@ -120,14 +120,14 @@
     </button>
 
     <!-- Dynamic DB Pages & Modules Navigation Filtered by 'VER' Permission -->
-    {#each filteredNavPages as page (page.uuid || page.id || page.nombre)}
+    {#each filteredNavPages as page (page.nombre)}
       {@const isConfM = String(page.nombre || '').toUpperCase().includes('CONF.M:') || String(page.nombre || '').toUpperCase().includes('CONF.M')}
       <div 
         class="sidebar-section-title {isConfM ? 'title-conf-m' : ''}"
         style="{isConfM ? 'color: #ef4444 !important; font-weight: 900;' : ''}">
         {page.nombre}
       </div>
-      {#each page.modulos as modulo (modulo.uuid || modulo.id || modulo.ruta)}
+      {#each page.modulos as modulo (modulo.ruta)}
         {@const routeKey = modulo.ruta.replace(/^\//, '')}
         <button
           on:click={() => selectTab(modulo.ruta)}

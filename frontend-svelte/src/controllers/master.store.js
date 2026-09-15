@@ -248,7 +248,14 @@ export function filterOptionsByActiveSalas(items = [], salaKey = 'sala_uuid') {
 }
 
 // Load real-time master data from PostgreSQL backend in parallel using Promise.allSettled
-export async function loadMasterStoresFromBackend() {
+let lastMasterStoresLoadTime = 0;
+export async function loadMasterStoresFromBackend(force = false) {
+  const now = Date.now();
+  if (!force && (now - lastMasterStoresLoadTime) < 25000) {
+    return; // Evita peticiones masivas y re-renders del DOM (flasheo de menú) al cambiar de vista
+  }
+  lastMasterStoresLoadTime = now;
+
   const fetchEntity = async (entityName, store, localStoreKey = entityName) => {
     let currentStoreVal = [];
     store.subscribe(v => currentStoreVal = v)();
@@ -532,7 +539,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
           throw new Error(json.error || `Error al crear en ${entityName}`);
         }
         await upsertLocalItem(localStoreName, json.data || createdItem);
-        await loadMasterStoresFromBackend();
+        await loadMasterStoresFromBackend(true);
         return json.data;
       } catch (err) {
         console.warn(`[LocalDb] Operando offline para crear en ${entityName}: guardando en IndexedDB y encolando outbox.`);
@@ -562,7 +569,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
           throw new Error(json.error || `Error al actualizar en ${entityName}`);
         }
         await upsertLocalItem(localStoreName, json.data || { uuid: targetUuid, ...draft });
-        await loadMasterStoresFromBackend();
+        await loadMasterStoresFromBackend(true);
         return json.data;
       } catch (err) {
         console.warn(`[LocalDb] Operando offline para actualizar en ${entityName}: guardando en IndexedDB y encolando outbox.`);
@@ -594,7 +601,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
           throw new Error(json.error || `Error al eliminar en ${entityName}`);
         }
         await deleteLocalItem(localStoreName, targetUuid);
-        await loadMasterStoresFromBackend();
+        await loadMasterStoresFromBackend(true);
         return json;
       } catch (err) {
         console.warn(`[LocalDb] Operando offline para eliminar en ${entityName}: eliminando de IndexedDB y encolando outbox.`);

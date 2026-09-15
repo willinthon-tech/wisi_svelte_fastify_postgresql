@@ -153,6 +153,19 @@ async function main() {
           END IF;
         END $$;
       `);
+
+      // Dropear NOT NULL en columna legacy ID para que nuevos registros con UUID no fallen
+      await sql.unsafe(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = '${fk.table}' AND column_name = '${fk.oldIdCol}'
+          ) THEN
+            ALTER TABLE "${fk.table}" ALTER COLUMN "${fk.oldIdCol}" DROP NOT NULL;
+          END IF;
+        END $$;
+      `);
     }
 
     // 3. Sanitizar huérfanos (evita fallo de integridad referencial si existían datos desalineados)
@@ -292,6 +305,37 @@ async function main() {
     EXCEPTION WHEN OTHERS THEN NULL;
     END $$;
   `);
+
+  // libro_reporte
+  await sql.unsafe(`
+    DO $$
+    BEGIN
+      DELETE FROM libro_reporte a USING libro_reporte b
+      WHERE a.ctid < b.ctid AND a.libro_uuid = b.libro_uuid;
+
+      ALTER TABLE libro_reporte DROP CONSTRAINT IF EXISTS libro_reporte_libro_id_key;
+      ALTER TABLE libro_reporte DROP CONSTRAINT IF EXISTS uq_libro_reporte_libro_id;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_libro_reporte_libro_uuid') THEN
+        ALTER TABLE libro_reporte ADD CONSTRAINT uq_libro_reporte_libro_uuid UNIQUE (libro_uuid);
+      END IF;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END $$;
+  `);
+
+  // libro_control_llaves llaves_ids DROP NOT NULL
+  await sql.unsafe(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'libro_control_llaves' AND column_name = 'llaves_ids'
+      ) THEN
+        ALTER TABLE libro_control_llaves ALTER COLUMN llaves_ids DROP NOT NULL;
+        ALTER TABLE libro_control_llaves ALTER COLUMN llaves_ids SET DEFAULT '{}';
+      END IF;
+    END $$;
+  `);
+
   console.log('✔ Unique constraints migrados a UUID.');
 
   console.log('\n--- PASO 4: Eliminando Foreign Keys antiguas basadas en integer ID ---');
