@@ -152,6 +152,45 @@ export function calculateUserModuleActions(route, user, permsMapAll, modulos = [
   };
 }
 
+// Helper to load from localStorage with fallback
+function loadStore(key, fallback) {
+  if (typeof localStorage === 'undefined') return fallback;
+  try {
+    const data = localStorage.getItem(`wisi_master_${key}`);
+    if (!data) return fallback;
+    return JSON.parse(data);
+  } catch {
+    return fallback;
+  }
+}
+
+// Helper to save store to localStorage
+function saveStore(key, data) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(`wisi_master_${key}`, JSON.stringify(data));
+  } catch (err) {
+    console.error('Error saving to localStorage', err);
+  }
+}
+
+export const masterSalasStore = writable(loadStore('salas_v5', []));
+export const masterPaginasStore = writable(loadStore('paginas_v5', []));
+export const masterModulosStore = writable(loadStore('modulos_v5', []));
+export const masterDispositivosStore = writable(loadStore('dispositivos_v6', []));
+export const masterUsuariosStore = writable(loadStore('usuarios_v4', []));
+export const userSalasStore = writable(loadStore('user_salas_v4', {}));
+export const userModulePermissionsStore = writable(loadStore('user_perms_v4', {}));
+
+// Sync stores to localStorage automatically
+masterSalasStore.subscribe(val => saveStore('salas_v5', val));
+masterPaginasStore.subscribe(val => saveStore('paginas_v5', val));
+masterModulosStore.subscribe(val => saveStore('modulos_v5', val));
+masterDispositivosStore.subscribe(val => saveStore('dispositivos_v6', val));
+masterUsuariosStore.subscribe(val => saveStore('usuarios_v4', val));
+userSalasStore.subscribe(val => saveStore('user_salas_v4', val));
+userModulePermissionsStore.subscribe(val => saveStore('user_perms_v4', val));
+
 export function getUserModuleActions(route) {
   const user = get(currentUserStore);
   const permsMap = get(userModulePermissionsStore) || {};
@@ -193,45 +232,6 @@ export function filterOptionsByActiveSalas(items = [], salaIdKey = 'sala_id') {
     return true;
   });
 }
-
-// Helper to load from localStorage with fallback
-function loadStore(key, fallback) {
-  if (typeof localStorage === 'undefined') return fallback;
-  try {
-    const data = localStorage.getItem(`wisi_master_${key}`);
-    if (!data) return fallback;
-    return JSON.parse(data);
-  } catch {
-    return fallback;
-  }
-}
-
-// Helper to save store to localStorage
-function saveStore(key, data) {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(`wisi_master_${key}`, JSON.stringify(data));
-  } catch (err) {
-    console.error('Error saving to localStorage', err);
-  }
-}
-
-export const masterSalasStore = writable(loadStore('salas_v5', []));
-export const masterPaginasStore = writable(loadStore('paginas_v5', []));
-export const masterModulosStore = writable(loadStore('modulos_v5', []));
-export const masterDispositivosStore = writable(loadStore('dispositivos_v6', []));
-export const masterUsuariosStore = writable(loadStore('usuarios_v4', []));
-export const userSalasStore = writable(loadStore('user_salas_v4', {}));
-export const userModulePermissionsStore = writable(loadStore('user_perms_v4', {}));
-
-// Sync stores to localStorage automatically
-masterSalasStore.subscribe(val => saveStore('salas_v5', val));
-masterPaginasStore.subscribe(val => saveStore('paginas_v5', val));
-masterModulosStore.subscribe(val => saveStore('modulos_v5', val));
-masterDispositivosStore.subscribe(val => saveStore('dispositivos_v6', val));
-masterUsuariosStore.subscribe(val => saveStore('usuarios_v4', val));
-userSalasStore.subscribe(val => saveStore('user_salas_v4', val));
-userModulePermissionsStore.subscribe(val => saveStore('user_perms_v4', val));
 
 // Load real-time master data from PostgreSQL backend in parallel using Promise.allSettled
 export async function loadMasterStoresFromBackend() {
