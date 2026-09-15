@@ -1,0 +1,2335 @@
+{
+  "areas": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "departamento_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "attlogs": [
+    {
+      "col": "employee_no",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "event_time",
+      "type": "timestamp with time zone",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "attendancestatus",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "currentverifymode",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "has_photo",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "dispositivo_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "empleado_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "cargos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "area_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "clientes": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "foto",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "descripcion",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "tipo_cliente_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "configuracion": [
+    {
+      "col": "clave",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "valor",
+      "type": "text",
+      "null": "NO"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "cortes": [
+    {
+      "col": "fecha_desde",
+      "type": "date",
+      "null": "NO"
+    },
+    {
+      "col": "fecha_hasta",
+      "type": "date",
+      "null": "NO"
+    },
+    {
+      "col": "total_empleados",
+      "type": "integer",
+      "null": "YES"
+    },
+    {
+      "col": "data",
+      "type": "jsonb",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "visible",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "salas_ids",
+      "type": "ARRAY",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "salas_uuids",
+      "type": "ARRAY",
+      "null": "YES"
+    }
+  ],
+  "departamentos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "descargas": [
+    {
+      "col": "plataforma",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "formato",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "archivo",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "peso",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "peso_bytes",
+      "type": "bigint",
+      "null": "NO"
+    },
+    {
+      "col": "version_num",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "fecha",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "dispositivos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "ip_local",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "ip_remota",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "ip_panel",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "usuario",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "clave",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "marcaje_inicio",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "marcaje_fin",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "drop_mesas": [
+    {
+      "col": "denominacion_100",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_50",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_20",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_10",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_5",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_1",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "total",
+      "type": "numeric",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "mesa_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "empleado_dispositivos": [
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "empleado_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "dispositivo_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "empleados": [
+    {
+      "col": "foto",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "cedula",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "fecha_ingreso",
+      "type": "date",
+      "null": "YES"
+    },
+    {
+      "col": "fecha_nacimiento",
+      "type": "date",
+      "null": "YES"
+    },
+    {
+      "col": "sexo",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "activo",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "motivo_desincorporacion",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "cargo_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "empleados_excepciones_horarios": [
+    {
+      "col": "fecha",
+      "type": "date",
+      "null": "NO"
+    },
+    {
+      "col": "es_libre",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "observacion",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "empleado_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "excepcion_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "horario_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "empleados_horarios": [
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "empleado_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "horario_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "estados": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "excepciones": [
+    {
+      "col": "codigo",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "descripcion",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "color",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "tipo",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "fcm_tokens": [
+    {
+      "col": "token",
+      "type": "text",
+      "null": "NO"
+    },
+    {
+      "col": "platform",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "activo",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "user_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "fechas_patrias": [
+    {
+      "col": "descripcion",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "dia",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "mes",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "feriados": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "mes",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "dia",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "grupo_salas": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "descripcion",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "horarios": [
+    {
+      "col": "nombre",
+      "type": "text",
+      "null": "NO"
+    },
+    {
+      "col": "codigo",
+      "type": "text",
+      "null": "NO"
+    },
+    {
+      "col": "hora_entrada",
+      "type": "time without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "hora_salida",
+      "type": "time without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "hora_descanso_entrada",
+      "type": "time without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "hora_descanso_salida",
+      "type": "time without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "descanso_automatico",
+      "type": "time without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "color",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "tipo",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "descanso",
+      "type": "time without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "juegos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "juegos_maquinas": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "legal": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "libro_aportes": [
+    {
+      "col": "monto",
+      "type": "numeric",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "tipo",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "empleado_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "rango_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "libro_control_clientes": [
+    {
+      "col": "tipo",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "monto",
+      "type": "numeric",
+      "null": "YES"
+    },
+    {
+      "col": "hora",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "nota",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "cliente_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "metodo_pago_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "libro_control_llaves": [
+    {
+      "col": "llaves_ids",
+      "type": "ARRAY",
+      "null": "NO"
+    },
+    {
+      "col": "descripcion",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "hora_salida",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "hora_recepcion",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "llaves_uuids",
+      "type": "ARRAY",
+      "null": "YES"
+    }
+  ],
+  "libro_datos": [
+    {
+      "col": "apertura_sala_inicio",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "apertura_sala_fin",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "apertura_maquinas_inicio",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "apertura_maquinas_fin",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "apertura_bingo_inicio",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "apertura_bingo_fin",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "retiros_dropbox_inicio",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "retiros_dropbox_fin",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "conteo_dropbox_inicio",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "conteo_dropbox_fin",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "operador_turno_a",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "operador_turno_c",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "libro_drop_mesas": [
+    {
+      "col": "denominacion_100",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_50",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_20",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_10",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_5",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "denominacion_1",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "total",
+      "type": "numeric",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "mesa_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "libro_incidencias_generales": [
+    {
+      "col": "descripcion",
+      "type": "text",
+      "null": "NO"
+    },
+    {
+      "col": "tipo",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "hora",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "tipo_incidencia_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "libro_novedades_mesas": [
+    {
+      "col": "hora_apertura",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "hora_cierre",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "pitboss",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "croupier_apertura",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "croupier_cierre",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "observacion",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "mesa_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "libro_reporte": [
+    {
+      "col": "data",
+      "type": "jsonb",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "libro_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "libros": [
+    {
+      "col": "descripcion",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "active",
+      "type": "integer",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "llaves": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "active",
+      "type": "smallint",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp without time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "maquinas": [
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "serial",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "puestos",
+      "type": "integer",
+      "null": "NO"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "juego_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "estado_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "sociedad_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "valor_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "modelo_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "tipo_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "modo_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "legal_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "marcas": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "mesas": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "active",
+      "type": "smallint",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "juego_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "metodos_pago": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "color",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "modelos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "marca_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "modos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "modulos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "icono",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "ruta",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "orden",
+      "type": "integer",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "page_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "paginas": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "permissions": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ],
+  "rangos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "salas": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "nombre_comercial",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "rif",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "ubicacion",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "correo",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "telefono",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "grupo_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "sociedades": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "tipo_clientes": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "tipo_incidencias": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "tipos": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "user_module_permissions": [
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "user_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "module_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "permission_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "user_salas": [
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "user_uuid",
+      "type": "uuid",
+      "null": "YES"
+    },
+    {
+      "col": "sala_uuid",
+      "type": "uuid",
+      "null": "YES"
+    }
+  ],
+  "usuarios": [
+    {
+      "col": "nombre_apellido",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "usuario",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "password",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "valores": [
+    {
+      "col": "nombre",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    },
+    {
+      "col": "is_deleted",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "deleted_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    }
+  ],
+  "wisi_items": [
+    {
+      "col": "title",
+      "type": "character varying",
+      "null": "NO"
+    },
+    {
+      "col": "description",
+      "type": "text",
+      "null": "YES"
+    },
+    {
+      "col": "category",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "priority",
+      "type": "character varying",
+      "null": "YES"
+    },
+    {
+      "col": "completed",
+      "type": "boolean",
+      "null": "YES"
+    },
+    {
+      "col": "created_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "updated_at",
+      "type": "timestamp with time zone",
+      "null": "YES"
+    },
+    {
+      "col": "uuid",
+      "type": "uuid",
+      "null": "NO"
+    }
+  ]
+}

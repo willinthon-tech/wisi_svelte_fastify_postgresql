@@ -9,7 +9,7 @@ import authRoutes from './routes/auth.routes.js';
 import masterRoutes from './routes/master.routes.js';
 import { reportsRoutes } from './routes/reports.routes.js';
 import biometricosSyncRoutes from './routes/biometricos-sync.routes.js';
-import { syncAttlogs, handleZkIclockCdata } from './controllers/master.controller.js';
+import { syncAttlogs } from './controllers/master.controller.js';
 import { initDb } from './config/db.js';
 
 import { initWebsockets } from './config/websocket.js';
@@ -59,8 +59,27 @@ async function startServer() {
   try {
     // Enable CORS for frontend cross-origin requests
     await fastify.register(cors, {
-      origin: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+      origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With']
+    });
+
+    // Strip URL parameters like ?id=... or ?uuid=... so that Fastify handles routes cleanly
+    fastify.addHook('onRequest', async (request, reply) => {
+      try {
+        if (request.query && typeof request.query === 'object') {
+          for (const key of Object.keys(request.query)) {
+            if (typeof request.query[key] === 'string') {
+              const val = request.query[key].trim();
+              if (val.includes('?') || val.includes('&')) {
+                request.query[key] = val.split(/[?&]/)[0];
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // silent safe catch for query mutation
+      }
     });
 
     // Initialize Real-time WebSockets
@@ -93,15 +112,8 @@ async function startServer() {
     await fastify.register(masterRoutes, { prefix: '/api' });
     await fastify.register(reportsRoutes);
     await fastify.register(biometricosSyncRoutes);
-    // Register Biometric Push Endpoints at Root Level (ZKTeco ADMS, Hikvision, Dahua, Agente WISI Sync)
+    // Register Biometric Push Endpoints at Root Level (Hikvision ISAPI)
     await fastify.register(async (app) => {
-      app.get('/iclock/cdata', handleZkIclockCdata);
-      app.post('/iclock/cdata', handleZkIclockCdata);
-      app.get('/iclock/getrequest', handleZkIclockCdata);
-      app.post('/iclock/devicecmd', handleZkIclockCdata);
-      app.get('/cdata', handleZkIclockCdata);
-      app.post('/cdata', handleZkIclockCdata);
-
       app.post('/attlogs/sync', syncAttlogs);
       app.post('/hikvision/alarm', syncAttlogs);
       app.post('/event', syncAttlogs);
@@ -306,7 +318,7 @@ async function startServer() {
       if (isClienteReq) {
         if (cleanTerm && isPgConnected && sql) {
           try {
-            const cRows = await sql`SELECT id, foto FROM clientes WHERE CAST(id AS TEXT) = ${cleanTerm} LIMIT 1`;
+            const cRows = await sql`SELECT uuid, foto FROM clientes WHERE CAST(uuid AS TEXT) = ${cleanTerm} LIMIT 1`;
             if (cRows.length > 0 && cRows[0].foto) {
               const cand = path.basename(cRows[0].foto);
               for (const dir of searchDirs) {
@@ -328,37 +340,34 @@ async function startServer() {
         return reply.send(DEFAULT_AVATAR_SVG);
       }
 
-      // 3. Si requested via attlogs (e.g. 404208.jpg), lookup attlog by ID to find employee_no / cedula!
+      // 3. Si requested via attlogs, lookup attlog by UUID to find employee_no / cedula!
       if (!isClienteReq && cleanTerm && isPgConnected && sql) {
         try {
-          const attlogId = Number(cleanTerm);
           let empNo = null;
 
-          if (!isNaN(attlogId)) {
-            const attRows = await sql`
-              SELECT employee_no, nombre FROM attlogs WHERE id = ${attlogId} LIMIT 1
-            `;
-            if (attRows.length > 0) {
-              empNo = String(attRows[0].employee_no || '').replace(/^#/, '').trim();
-            }
+          const attRows = await sql`
+            SELECT employee_no, nombre FROM attlogs WHERE uuid::text = ${cleanTerm} LIMIT 1
+          `;
+          if (attRows.length > 0) {
+            empNo = String(attRows[0].employee_no || '').replace(/^#/, '').trim();
           }
 
           const targetTerm = empNo || cleanTerm;
 
-          // 4. Lookup employee profile photo by cedula or ID
+          // 4. Lookup employee profile photo by cedula or UUID
           const empRows = await sql`
-            SELECT id, foto, cedula FROM empleados 
+            SELECT uuid, foto, cedula FROM empleados 
             WHERE cedula = ${targetTerm} 
                OR cedula = 'V' || ${targetTerm} 
                OR cedula = REPLACE(${targetTerm}, 'V', '')
-               OR CAST(id AS TEXT) = ${targetTerm}
+               OR CAST(uuid AS TEXT) = ${targetTerm}
             LIMIT 1
           `;
 
           if (empRows.length > 0) {
             const emp = empRows[0];
             const candidateFiles = [
-              `${emp.id}.jpg`,
+              `${emp.uuid}.jpg`,
               `${emp.cedula}.jpg`,
               emp.foto ? path.basename(emp.foto) : null
             ].filter(Boolean);
@@ -554,7 +563,7 @@ async function startServer() {
     //SERVIR SERVIDOR WILLINTHON
 
     await fastify.listen({ port: PORT, host: HOST });
-    console.log(`\x1b[32m🟢 [CONECTADO]\x1b[0m Servidor Nube: Fastify | Host: ${HOST} | Puerto: ${PORT}`);
+    console.log(`\x1b[32m[CONECTADO]\x1b[0m Servidor Nube: Fastify | Host: ${HOST} | Puerto: ${PORT}`);
   } catch (err) {
     console.error(err);
     process.exit(1);

@@ -1,0 +1,2719 @@
+{
+  "getDispositivosModel": {
+    "count": 1,
+    "startLine": 483,
+    "endLine": 483,
+    "items": [
+      {
+        "line": 483,
+        "reason": "sala_id",
+        "snippet": "SELECT d.*, d.uuid AS id, d.sala_uuid AS sala_id, COALESCE(d.ip_panel, '') AS ip_panel, COALESCE(d.ip_panel, '') AS ip_panel_remoto, s.nombre AS sala_nombre"
+      }
+    ]
+  },
+  "createDispositivoModel": {
+    "count": 1,
+    "startLine": 504,
+    "endLine": 504,
+    "items": [
+      {
+        "line": 504,
+        "reason": "sala_id",
+        "snippet": "RETURNING *, uuid AS id, sala_uuid AS sala_id, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto"
+      }
+    ]
+  },
+  "getDispositivoByIdModel": {
+    "count": 1,
+    "startLine": 520,
+    "endLine": 520,
+    "items": [
+      {
+        "line": 520,
+        "reason": "sala_id",
+        "snippet": "SELECT d.*, d.uuid AS id, d.sala_uuid AS sala_id, COALESCE(d.ip_panel, '') AS ip_panel, COALESCE(d.ip_panel, '') AS ip_panel_remoto, s.nombre AS sala_nombre"
+      }
+    ]
+  },
+  "updateDispositivoModel": {
+    "count": 1,
+    "startLine": 550,
+    "endLine": 550,
+    "items": [
+      {
+        "line": 550,
+        "reason": "sala_id",
+        "snippet": "RETURNING *, uuid AS id, sala_uuid AS sala_id, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto"
+      }
+    ]
+  },
+  "getAttlogsFilterOptionsModel": {
+    "count": 1,
+    "startLine": 1384,
+    "endLine": 1384,
+    "items": [
+      {
+        "line": 1384,
+        "reason": "sala_id",
+        "snippet": "SELECT d.uuid, d.uuid AS id, d.nombre, d.sala_uuid, d.sala_uuid AS sala_id, s.nombre AS sala_nombre"
+      }
+    ]
+  },
+  "getDepartamentosModel": {
+    "count": 2,
+    "startLine": 2466,
+    "endLine": 2475,
+    "items": [
+      {
+        "line": 2466,
+        "reason": "sala_id",
+        "snippet": "SELECT d.*, d.uuid AS id, d.sala_uuid AS sala_id, s.nombre AS sala_nombre"
+      },
+      {
+        "line": 2475,
+        "reason": "sala_id",
+        "snippet": "SELECT d.*, d.uuid AS id, d.sala_uuid AS sala_id, s.nombre AS sala_nombre"
+      }
+    ]
+  },
+  "createDepartamentoModel": {
+    "count": 1,
+    "startLine": 2509,
+    "endLine": 2509,
+    "items": [
+      {
+        "line": 2509,
+        "reason": "sala_id",
+        "snippet": "RETURNING *, uuid AS id, sala_uuid AS sala_id"
+      }
+    ]
+  },
+  "updateDepartamentoModel": {
+    "count": 1,
+    "startLine": 2539,
+    "endLine": 2539,
+    "items": [
+      {
+        "line": 2539,
+        "reason": "sala_id",
+        "snippet": "RETURNING *, uuid AS id, sala_uuid AS sala_id"
+      }
+    ]
+  },
+  "getAreasModel": {
+    "count": 2,
+    "startLine": 2721,
+    "endLine": 2731,
+    "items": [
+      {
+        "line": 2721,
+        "reason": "sala_id",
+        "snippet": "SELECT a.*, a.uuid AS id, a.departamento_uuid AS departamento_id, d.nombre AS departamento_nombre, s.nombre AS sala_nombre, d.sala_uuid AS sala_id, d.sala_uuid"
+      },
+      {
+        "line": 2731,
+        "reason": "sala_id",
+        "snippet": "SELECT a.*, a.uuid AS id, a.departamento_uuid AS departamento_id, d.nombre AS departamento_nombre, s.nombre AS sala_nombre, d.sala_uuid AS sala_id, d.sala_uuid"
+      }
+    ]
+  },
+  "createAreaModel": {
+    "count": 1,
+    "startLine": 2766,
+    "endLine": 2766,
+    "items": [
+      {
+        "line": 2766,
+        "reason": "departamento_id",
+        "snippet": "RETURNING *, uuid AS id, departamento_uuid AS departamento_id"
+      }
+    ]
+  },
+  "updateAreaModel": {
+    "count": 1,
+    "startLine": 2798,
+    "endLine": 2798,
+    "items": [
+      {
+        "line": 2798,
+        "reason": "departamento_id",
+        "snippet": "RETURNING *, uuid AS id, departamento_uuid AS departamento_id"
+      }
+    ]
+  },
+  "getCargosModel": {
+    "count": 2,
+    "startLine": 3029,
+    "endLine": 3040,
+    "items": [
+      {
+        "line": 3029,
+        "reason": "sala_id",
+        "snippet": "SELECT c.*, c.uuid AS id, c.area_uuid AS area_id, a.nombre AS area_nombre, d.uuid AS departamento_id, d.uuid AS departamento_uuid, d.nombre AS departamento_nombre, s.nombre AS sala_nombre, d.sala_uuid AS sala_id, d.sala_uuid"
+      },
+      {
+        "line": 3040,
+        "reason": "sala_id",
+        "snippet": "SELECT c.*, c.uuid AS id, c.area_uuid AS area_id, a.nombre AS area_nombre, d.uuid AS departamento_id, d.uuid AS departamento_uuid, d.nombre AS departamento_nombre, s.nombre AS sala_nombre, d.sala_uuid AS sala_id, d.sala_uuid"
+      }
+    ]
+  },
+  "createCargoModel": {
+    "count": 1,
+    "startLine": 3075,
+    "endLine": 3075,
+    "items": [
+      {
+        "line": 3075,
+        "reason": "area_id",
+        "snippet": "RETURNING *, uuid AS id, area_uuid AS area_id"
+      }
+    ]
+  },
+  "updateCargoModel": {
+    "count": 1,
+    "startLine": 3107,
+    "endLine": 3107,
+    "items": [
+      {
+        "line": 3107,
+        "reason": "area_id",
+        "snippet": "RETURNING *, uuid AS id, area_uuid AS area_id"
+      }
+    ]
+  },
+  "getEmpleadosModel": {
+    "count": 2,
+    "startLine": 3453,
+    "endLine": 3469,
+    "items": [
+      {
+        "line": 3453,
+        "reason": "cargo_id",
+        "snippet": "SELECT e.uuid, e.uuid AS id, e.foto, e.nombre, e.cedula, e.sexo, e.cargo_uuid, e.cargo_uuid AS cargo_id, e.activo, e.motivo_desincorporacion,"
+      },
+      {
+        "line": 3469,
+        "reason": "cargo_id",
+        "snippet": "SELECT e.uuid, e.uuid AS id, e.foto, e.nombre, e.cedula, e.sexo, e.cargo_uuid, e.cargo_uuid AS cargo_id, e.activo, e.motivo_desincorporacion,"
+      }
+    ]
+  },
+  "createEmpleadoModel": {
+    "count": 1,
+    "startLine": 3620,
+    "endLine": 3620,
+    "items": [
+      {
+        "line": 3620,
+        "reason": "cargo_id",
+        "snippet": "RETURNING *, uuid AS id, cargo_uuid AS cargo_id"
+      }
+    ]
+  },
+  "updateEmpleadoModel": {
+    "count": 1,
+    "startLine": 3709,
+    "endLine": 3709,
+    "items": [
+      {
+        "line": 3709,
+        "reason": "cargo_id",
+        "snippet": "RETURNING *, uuid AS id, cargo_uuid AS cargo_id"
+      }
+    ]
+  },
+  "createPlantillaHorarioModel": {
+    "count": 1,
+    "startLine": 3836,
+    "endLine": 3836,
+    "items": [
+      {
+        "line": 3836,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, codigo, descripcion"
+      }
+    ]
+  },
+  "updatePlantillaHorarioModel": {
+    "count": 3,
+    "startLine": 3878,
+    "endLine": 3932,
+    "items": [
+      {
+        "line": 3878,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid, codigo, nombre, descanso"
+      },
+      {
+        "line": 3895,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, codigo, descripcion"
+      },
+      {
+        "line": 3932,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE id = ${pId}"
+      }
+    ]
+  },
+  "getDepartamentosCiclosModel": {
+    "count": 12,
+    "startLine": 3993,
+    "endLine": 4053,
+    "items": [
+      {
+        "line": 3993,
+        "reason": "sala_id",
+        "snippet": "whereConditions.push(sql`d.sala_id = ANY(${userSalaIds})`);"
+      },
+      {
+        "line": 3997,
+        "reason": "sala_id",
+        "snippet": "whereConditions.push(sql`d.sala_id = ANY(${salaIds})`);"
+      },
+      {
+        "line": 4016,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON d.sala_id = s.id"
+      },
+      {
+        "line": 4028,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON d.sala_id = s.id"
+      },
+      {
+        "line": 4039,
+        "reason": "cargo_id",
+        "snippet": "JOIN cargos c ON e.cargo_id = c.id"
+      },
+      {
+        "line": 4040,
+        "reason": "area_id",
+        "snippet": "JOIN areas a ON c.area_id = a.id"
+      },
+      {
+        "line": 4041,
+        "reason": "departamento_id",
+        "snippet": "WHERE a.departamento_id = ${item.id} AND e.activo = TRUE"
+      },
+      {
+        "line": 4049,
+        "reason": "empleado_id",
+        "snippet": "JOIN empleados e ON eph.empleado_id = e.id"
+      },
+      {
+        "line": 4050,
+        "reason": "cargo_id",
+        "snippet": "JOIN cargos c ON e.cargo_id = c.id"
+      },
+      {
+        "line": 4051,
+        "reason": "area_id",
+        "snippet": "JOIN areas a ON c.area_id = a.id"
+      },
+      {
+        "line": 4052,
+        "reason": "horario_id",
+        "snippet": "JOIN horarios ph ON eph.horario_id = ph.id"
+      },
+      {
+        "line": 4053,
+        "reason": "departamento_id",
+        "snippet": "WHERE a.departamento_id = ${item.id} AND e.activo = TRUE"
+      }
+    ]
+  },
+  "getDepartamentoEmpleadosCiclosModel": {
+    "count": 9,
+    "startLine": 4074,
+    "endLine": 4123,
+    "items": [
+      {
+        "line": 4074,
+        "reason": "sala_id",
+        "snippet": "SELECT d.id, d.nombre AS departamento_nombre, d.sala_id, s.nombre AS sala_nombre"
+      },
+      {
+        "line": 4076,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON d.sala_id = s.id"
+      },
+      {
+        "line": 4077,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE d.id = ${dId}"
+      },
+      {
+        "line": 4084,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, codigo, nombre, hora_entrada, hora_salida, color"
+      },
+      {
+        "line": 4111,
+        "reason": "cargo_id",
+        "snippet": "JOIN cargos c ON e.cargo_id = c.id"
+      },
+      {
+        "line": 4112,
+        "reason": "area_id",
+        "snippet": "JOIN areas a ON c.area_id = a.id"
+      },
+      {
+        "line": 4113,
+        "reason": "departamento_id",
+        "snippet": "WHERE a.departamento_id = ${dId} AND e.activo = TRUE"
+      },
+      {
+        "line": 4122,
+        "reason": "horario_id",
+        "snippet": "JOIN horarios ph ON eph.horario_id = ph.id"
+      },
+      {
+        "line": 4123,
+        "reason": "empleado_id",
+        "snippet": "WHERE eph.empleado_id = ${emp.empleado_id}"
+      }
+    ]
+  },
+  "updateDepartamentoEmpleadosCiclosModel": {
+    "count": 19,
+    "startLine": 4152,
+    "endLine": 4226,
+    "items": [
+      {
+        "line": 4152,
+        "reason": "empleado_id",
+        "snippet": "INSERT INTO empleados_horarios (empleado_id, horario_id)"
+      },
+      {
+        "line": 4155,
+        "reason": "cargo_id",
+        "snippet": "JOIN cargos c ON e.cargo_id = c.id"
+      },
+      {
+        "line": 4156,
+        "reason": "area_id",
+        "snippet": "JOIN areas a ON c.area_id = a.id"
+      },
+      {
+        "line": 4157,
+        "reason": "departamento_id",
+        "snippet": "WHERE a.departamento_id = ${dId} AND e.activo = TRUE"
+      },
+      {
+        "line": 4167,
+        "reason": "empleado_id",
+        "snippet": "WHERE empleado_id IN ("
+      },
+      {
+        "line": 4170,
+        "reason": "cargo_id",
+        "snippet": "JOIN cargos c ON e.cargo_id = c.id"
+      },
+      {
+        "line": 4171,
+        "reason": "area_id",
+        "snippet": "JOIN areas a ON c.area_id = a.id"
+      },
+      {
+        "line": 4172,
+        "reason": "departamento_id",
+        "snippet": "WHERE a.departamento_id = ${dId} AND e.activo = TRUE"
+      },
+      {
+        "line": 4174,
+        "reason": "horario_id",
+        "snippet": "AND horario_id IN ("
+      },
+      {
+        "line": 4175,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM horarios"
+      },
+      {
+        "line": 4183,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM empleados_horarios"
+      },
+      {
+        "line": 4184,
+        "reason": "empleado_id",
+        "snippet": "WHERE empleado_id = ${empId} AND horario_id = ${plantillaId}"
+      },
+      {
+        "line": 4189,
+        "reason": "empleado_id",
+        "snippet": "WHERE empleado_id = ${empId} AND horario_id = ${plantillaId}"
+      },
+      {
+        "line": 4194,
+        "reason": "empleado_id",
+        "snippet": "INSERT INTO empleados_horarios (empleado_id, horario_id)"
+      },
+      {
+        "line": 4205,
+        "reason": "empleado_id",
+        "snippet": "WHERE empleado_id = ${empId} AND horario_id = ${plantillaId}"
+      },
+      {
+        "line": 4217,
+        "reason": "empleado_id",
+        "snippet": "WHERE empleado_id = ${eId}"
+      },
+      {
+        "line": 4218,
+        "reason": "horario_id",
+        "snippet": "AND horario_id IN ("
+      },
+      {
+        "line": 4219,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM horarios"
+      },
+      {
+        "line": 4226,
+        "reason": "empleado_id",
+        "snippet": "INSERT INTO empleados_horarios (empleado_id, horario_id)"
+      }
+    ]
+  },
+  "buildFeriadosConditions": {
+    "count": 2,
+    "startLine": 4269,
+    "endLine": 4277,
+    "items": [
+      {
+        "line": 4269,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`f.sala_id IN ${sql(ids)}`);"
+      },
+      {
+        "line": 4277,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`f.sala_id IN ${sql(ids)}`);"
+      }
+    ]
+  },
+  "getFeriadosFilterOptionsModel": {
+    "count": 4,
+    "startLine": 4306,
+    "endLine": 4314,
+    "items": [
+      {
+        "line": 4306,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id IN ${sql(userSalaIds)} AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 4308,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 4312,
+        "reason": "sala_id",
+        "snippet": "SELECT f.sala_id AS id, COUNT(f.id)::int AS count"
+      },
+      {
+        "line": 4314,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON f.sala_id = s.id"
+      }
+    ]
+  },
+  "getFeriadosModel": {
+    "count": 2,
+    "startLine": 4374,
+    "endLine": 4382,
+    "items": [
+      {
+        "line": 4374,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON f.sala_id = s.id"
+      },
+      {
+        "line": 4382,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON f.sala_id = s.id"
+      }
+    ]
+  },
+  "createFeriadoModel": {
+    "count": 4,
+    "startLine": 4413,
+    "endLine": 4432,
+    "items": [
+      {
+        "line": 4413,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON f.sala_id = s.id"
+      },
+      {
+        "line": 4414,
+        "reason": "sala_id",
+        "snippet": "WHERE f.sala_id = ${salaId} AND f.mes = ${mes} AND f.dia = ${dia}"
+      },
+      {
+        "line": 4421,
+        "reason": "sala_id",
+        "snippet": "INSERT INTO feriados (nombre, sala_id, mes, dia)"
+      },
+      {
+        "line": 4432,
+        "reason": "sala_id",
+        "snippet": "const sala = await sql`SELECT nombre FROM salas WHERE id = ${row.sala_id}`;"
+      }
+    ]
+  },
+  "updateFeriadoModel": {
+    "count": 4,
+    "startLine": 4465,
+    "endLine": 4486,
+    "items": [
+      {
+        "line": 4465,
+        "reason": "sala_id",
+        "snippet": "WHERE (f.sala_id = ${targetSalaId} OR (f.sala_uuid IS NOT NULL AND f.sala_uuid = ${targetSalaUuid}::uuid))"
+      },
+      {
+        "line": 4476,
+        "reason": "sala_id",
+        "snippet": "sala_id = ${targetSalaId !== null ? targetSalaId : sql`sala_id`},"
+      },
+      {
+        "line": 4481,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE id = ${fId}"
+      },
+      {
+        "line": 4486,
+        "reason": "sala_id",
+        "snippet": "const sala = await sql`SELECT nombre FROM salas WHERE id = ${row.sala_id}`;"
+      }
+    ]
+  },
+  "getCumpleanosModel": {
+    "count": 4,
+    "startLine": 4549,
+    "endLine": 4552,
+    "items": [
+      {
+        "line": 4549,
+        "reason": "cargo_id",
+        "snippet": "LEFT JOIN cargos c ON e.cargo_id = c.id"
+      },
+      {
+        "line": 4550,
+        "reason": "area_id",
+        "snippet": "LEFT JOIN areas a ON c.area_id = a.id"
+      },
+      {
+        "line": 4551,
+        "reason": "departamento_id",
+        "snippet": "LEFT JOIN departamentos d ON a.departamento_id = d.id"
+      },
+      {
+        "line": 4552,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON d.sala_id = s.id"
+      }
+    ]
+  },
+  "getCarnetsModel": {
+    "count": 4,
+    "startLine": 4610,
+    "endLine": 4613,
+    "items": [
+      {
+        "line": 4610,
+        "reason": "cargo_id",
+        "snippet": "LEFT JOIN cargos c ON e.cargo_id = c.id"
+      },
+      {
+        "line": 4611,
+        "reason": "area_id",
+        "snippet": "LEFT JOIN areas a ON c.area_id = a.id"
+      },
+      {
+        "line": 4612,
+        "reason": "departamento_id",
+        "snippet": "LEFT JOIN departamentos d ON a.departamento_id = d.id"
+      },
+      {
+        "line": 4613,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON d.sala_id = s.id"
+      }
+    ]
+  },
+  "getCortesModel": {
+    "count": 4,
+    "startLine": 4661,
+    "endLine": 4716,
+    "items": [
+      {
+        "line": 4661,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE s.id = ANY(cortes.salas_ids)"
+      },
+      {
+        "line": 4669,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, salas_ids, data"
+      },
+      {
+        "line": 4693,
+        "reason": "id (PK vieja)",
+        "snippet": "await sql`UPDATE cortes SET salas_ids = ${uniqueSalas}::int[] WHERE id = ${c.id}`;"
+      },
+      {
+        "line": 4716,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE s.id = ANY(cortes.salas_ids)"
+      }
+    ]
+  },
+  "getCorteByIdModel": {
+    "count": 2,
+    "startLine": 4777,
+    "endLine": 4812,
+    "items": [
+      {
+        "line": 4777,
+        "reason": "id (PK vieja)",
+        "snippet": ": await sql`SELECT * FROM cortes WHERE id = ${numId} LIMIT 1`;"
+      },
+      {
+        "line": 4812,
+        "reason": "id (PK vieja)",
+        "snippet": "const salasRows = await sql`SELECT id, nombre FROM salas WHERE id = ANY(${rows[0].salas_ids})`;"
+      }
+    ]
+  },
+  "getCortesFilterOptionsModel": {
+    "count": 2,
+    "startLine": 4968,
+    "endLine": 4970,
+    "items": [
+      {
+        "line": 4968,
+        "reason": "grupo_id",
+        "snippet": "rows = await sql`SELECT id, nombre, nombre_comercial FROM salas WHERE id = ANY(${options.userSalaIds}) AND (grupo_id IS NULL OR grupo_id = 1) ORDER BY id ASC`;"
+      },
+      {
+        "line": 4970,
+        "reason": "grupo_id",
+        "snippet": "rows = await sql`SELECT id, nombre, nombre_comercial FROM salas WHERE (grupo_id IS NULL OR grupo_id = 1) ORDER BY id ASC`;"
+      }
+    ]
+  },
+  "createDescargaUploadModel": {
+    "count": 1,
+    "startLine": 5127,
+    "endLine": 5127,
+    "items": [
+      {
+        "line": 5127,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE id = ${recordId}"
+      }
+    ]
+  },
+  "deleteDescargaModel": {
+    "count": 3,
+    "startLine": 5169,
+    "endLine": 5180,
+    "items": [
+      {
+        "line": 5169,
+        "reason": "id (PK vieja)",
+        "snippet": "? await sql`SELECT id, uuid, archivo FROM descargas WHERE uuid = ${id}::uuid LIMIT 1`"
+      },
+      {
+        "line": 5170,
+        "reason": "id (PK vieja)",
+        "snippet": ": await sql`SELECT id, uuid, archivo FROM descargas WHERE id = ${numId} LIMIT 1`;"
+      },
+      {
+        "line": 5180,
+        "reason": "id (PK vieja)",
+        "snippet": "await sql`DELETE FROM descargas WHERE id = ${numId}`;"
+      }
+    ]
+  },
+  "createJuegoModel": {
+    "count": 1,
+    "startLine": 5280,
+    "endLine": 5280,
+    "items": [
+      {
+        "line": 5280,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM juegos"
+      }
+    ]
+  },
+  "updateJuegoModel": {
+    "count": 1,
+    "startLine": 5322,
+    "endLine": 5322,
+    "items": [
+      {
+        "line": 5322,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM juegos"
+      }
+    ]
+  },
+  "buildMesaConditions": {
+    "count": 3,
+    "startLine": 5371,
+    "endLine": 5381,
+    "items": [
+      {
+        "line": 5371,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`m.sala_id = ANY(${options.userSalaIds})`);"
+      },
+      {
+        "line": 5376,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`m.sala_id = ANY(${options.salaIds})`);"
+      },
+      {
+        "line": 5381,
+        "reason": "juego_id",
+        "snippet": "conds.push(sql`m.juego_id = ANY(${options.juegoIds})`);"
+      }
+    ]
+  },
+  "getMesasFilterOptionsModel": {
+    "count": 8,
+    "startLine": 5414,
+    "endLine": 5449,
+    "items": [
+      {
+        "line": 5414,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 5416,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 5420,
+        "reason": "sala_id",
+        "snippet": "SELECT m.sala_id AS id, COUNT(m.id)::int AS count"
+      },
+      {
+        "line": 5422,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON m.sala_id = s.id"
+      },
+      {
+        "line": 5423,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos j ON m.juego_id = j.id"
+      },
+      {
+        "line": 5446,
+        "reason": "juego_id",
+        "snippet": "SELECT m.juego_id AS id, COUNT(m.id)::int AS count"
+      },
+      {
+        "line": 5448,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON m.sala_id = s.id"
+      },
+      {
+        "line": 5449,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos j ON m.juego_id = j.id"
+      }
+    ]
+  },
+  "getMesasModel": {
+    "count": 8,
+    "startLine": 5526,
+    "endLine": 5550,
+    "items": [
+      {
+        "line": 5526,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON m.sala_id = s.id"
+      },
+      {
+        "line": 5527,
+        "reason": "juego_id",
+        "snippet": "JOIN juegos j ON m.juego_id = j.id"
+      },
+      {
+        "line": 5537,
+        "reason": "sala_id",
+        "snippet": "SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial"
+      },
+      {
+        "line": 5539,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON m.sala_id = s.id"
+      },
+      {
+        "line": 5540,
+        "reason": "juego_id",
+        "snippet": "JOIN juegos j ON m.juego_id = j.id"
+      },
+      {
+        "line": 5547,
+        "reason": "sala_id",
+        "snippet": "SELECT m.*, j.nombre AS juego_nombre, s.id AS sala_id, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial"
+      },
+      {
+        "line": 5549,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON m.sala_id = s.id"
+      },
+      {
+        "line": 5550,
+        "reason": "juego_id",
+        "snippet": "JOIN juegos j ON m.juego_id = j.id"
+      }
+    ]
+  },
+  "createMesaModel": {
+    "count": 2,
+    "startLine": 5576,
+    "endLine": 5578,
+    "items": [
+      {
+        "line": 5576,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM mesas"
+      },
+      {
+        "line": 5578,
+        "reason": "sala_id",
+        "snippet": "AND ${isSalaU ? sql`sala_uuid = ${rawSala}::uuid` : sql`sala_id = ${Number(rawSala)}`}"
+      }
+    ]
+  },
+  "updateMesaModel": {
+    "count": 6,
+    "startLine": 5647,
+    "endLine": 5683,
+    "items": [
+      {
+        "line": 5647,
+        "reason": "sala_id",
+        "snippet": "? await sql`SELECT sala_id, sala_uuid FROM mesas WHERE uuid = ${id}::uuid LIMIT 1`"
+      },
+      {
+        "line": 5648,
+        "reason": "sala_id",
+        "snippet": ": await sql`SELECT sala_id, sala_uuid FROM mesas WHERE id = ${mId} LIMIT 1`;"
+      },
+      {
+        "line": 5658,
+        "reason": "sala_id",
+        "snippet": ": (currentSalaId ? sql`sala_id = ${currentSalaId}` : sql`1=1`);"
+      },
+      {
+        "line": 5661,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM mesas"
+      },
+      {
+        "line": 5681,
+        "reason": "juego_id",
+        "snippet": "juego_id = ${rawJuego !== undefined ? (juegoId !== null ? juegoId : sql`juego_id`) : sql`juego_id`},"
+      },
+      {
+        "line": 5683,
+        "reason": "sala_id",
+        "snippet": "sala_id = ${rawSala !== undefined ? (salaId !== null ? salaId : sql`sala_id`) : sql`sala_id`},"
+      }
+    ]
+  },
+  "buildSimpleConfigCrud": {
+    "count": 2,
+    "startLine": 5815,
+    "endLine": 5866,
+    "items": [
+      {
+        "line": 5815,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM ${sql(tableName)}"
+      },
+      {
+        "line": 5866,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM ${sql(tableName)}"
+      }
+    ]
+  },
+  "deleteMarcaModel": {
+    "count": 2,
+    "startLine": 5981,
+    "endLine": 5983,
+    "items": [
+      {
+        "line": 5981,
+        "reason": "marca_id",
+        "snippet": "const modelosCount = await sql`SELECT count(*)::int AS count FROM modelos WHERE marca_id = ${mId}`;"
+      },
+      {
+        "line": 5983,
+        "reason": "id (PK vieja)",
+        "snippet": "const row = await sql`SELECT nombre FROM marcas WHERE id = ${mId}`;"
+      }
+    ]
+  },
+  "getModelosModel": {
+    "count": 4,
+    "startLine": 6022,
+    "endLine": 6055,
+    "items": [
+      {
+        "line": 6022,
+        "reason": "marca_id",
+        "snippet": "conds.push(sql`m.marca_id = ANY(${params.marcaIds})`);"
+      },
+      {
+        "line": 6034,
+        "reason": "marca_id",
+        "snippet": "LEFT JOIN marcas ma ON m.marca_id = ma.id"
+      },
+      {
+        "line": 6046,
+        "reason": "marca_id",
+        "snippet": "LEFT JOIN marcas ma ON m.marca_id = ma.id"
+      },
+      {
+        "line": 6055,
+        "reason": "marca_id",
+        "snippet": "LEFT JOIN marcas ma ON m.marca_id = ma.id"
+      }
+    ]
+  },
+  "getModelosFilterOptionsModel": {
+    "count": 1,
+    "startLine": 6087,
+    "endLine": 6087,
+    "items": [
+      {
+        "line": 6087,
+        "reason": "marca_id",
+        "snippet": "JOIN marcas ma ON m.marca_id = ma.id"
+      }
+    ]
+  },
+  "createModeloModel": {
+    "count": 4,
+    "startLine": 6116,
+    "endLine": 6145,
+    "items": [
+      {
+        "line": 6116,
+        "reason": "marca_id",
+        "snippet": ": (marcaId !== null ? sql`marca_id = ${marcaId}` : sql`marca_id IS NULL`);"
+      },
+      {
+        "line": 6119,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM modelos"
+      },
+      {
+        "line": 6144,
+        "reason": "marca_id",
+        "snippet": "LEFT JOIN marcas ma ON (m.marca_uuid = ma.uuid OR m.marca_id = ma.id)"
+      },
+      {
+        "line": 6145,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE m.id = ${rows[0].id}"
+      }
+    ]
+  },
+  "updateModeloModel": {
+    "count": 6,
+    "startLine": 6187,
+    "endLine": 6224,
+    "items": [
+      {
+        "line": 6187,
+        "reason": "marca_id",
+        "snippet": "? await sql`SELECT marca_id, marca_uuid FROM modelos WHERE uuid = ${id}::uuid LIMIT 1`"
+      },
+      {
+        "line": 6188,
+        "reason": "marca_id",
+        "snippet": ": await sql`SELECT marca_id, marca_uuid FROM modelos WHERE id = ${mId} LIMIT 1`;"
+      },
+      {
+        "line": 6197,
+        "reason": "marca_id",
+        "snippet": ": (currentMarcaId !== null && currentMarcaId !== undefined ? sql`marca_id = ${currentMarcaId}` : sql`marca_id IS NULL`);"
+      },
+      {
+        "line": 6200,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM modelos"
+      },
+      {
+        "line": 6215,
+        "reason": "marca_id",
+        "snippet": "marca_id = ${marcaId !== undefined ? (marcaId !== null ? marcaId : sql`marca_id`) : sql`marca_id`},"
+      },
+      {
+        "line": 6224,
+        "reason": "marca_id",
+        "snippet": "LEFT JOIN marcas ma ON (m.marca_uuid = ma.uuid OR m.marca_id = ma.id)"
+      }
+    ]
+  },
+  "createExcepcionModel": {
+    "count": 1,
+    "startLine": 6332,
+    "endLine": 6332,
+    "items": [
+      {
+        "line": 6332,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, codigo, descripcion"
+      }
+    ]
+  },
+  "updateExcepcionModel": {
+    "count": 1,
+    "startLine": 6395,
+    "endLine": 6395,
+    "items": [
+      {
+        "line": 6395,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid, codigo, descripcion"
+      }
+    ]
+  },
+  "createFechaPatriaModel": {
+    "count": 1,
+    "startLine": 6498,
+    "endLine": 6498,
+    "items": [
+      {
+        "line": 6498,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, descripcion FROM fechas_patrias"
+      }
+    ]
+  },
+  "updateFechaPatriaModel": {
+    "count": 2,
+    "startLine": 6551,
+    "endLine": 6558,
+    "items": [
+      {
+        "line": 6551,
+        "reason": "id (PK vieja)",
+        "snippet": ": await sql`SELECT * FROM fechas_patrias WHERE id = ${fId} LIMIT 1`;"
+      },
+      {
+        "line": 6558,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid, descripcion FROM fechas_patrias"
+      }
+    ]
+  },
+  "buildMaquinasConditions": {
+    "count": 12,
+    "startLine": 6609,
+    "endLine": 6642,
+    "items": [
+      {
+        "line": 6609,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`m.sala_id = ANY(${params.userSalaIds})`);"
+      },
+      {
+        "line": 6612,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`m.sala_id = ANY(${params.salaIds})`);"
+      },
+      {
+        "line": 6615,
+        "reason": "grupo_id",
+        "snippet": "conds.push(sql`s.grupo_id = ANY(${params.grupoIds})`);"
+      },
+      {
+        "line": 6618,
+        "reason": "marca_id",
+        "snippet": "conds.push(sql`mod.marca_id = ANY(${params.marcaIds})`);"
+      },
+      {
+        "line": 6621,
+        "reason": "modelo_id",
+        "snippet": "conds.push(sql`m.modelo_id = ANY(${params.modeloIds})`);"
+      },
+      {
+        "line": 6624,
+        "reason": "juego_id",
+        "snippet": "conds.push(sql`m.juego_id = ANY(${params.juegoIds})`);"
+      },
+      {
+        "line": 6627,
+        "reason": "estado_id",
+        "snippet": "conds.push(sql`m.estado_id = ANY(${params.estadoIds})`);"
+      },
+      {
+        "line": 6630,
+        "reason": "sociedad_id",
+        "snippet": "conds.push(sql`m.sociedad_id = ANY(${params.sociedadIds})`);"
+      },
+      {
+        "line": 6633,
+        "reason": "valor_id",
+        "snippet": "conds.push(sql`m.valor_id = ANY(${params.valorIds})`);"
+      },
+      {
+        "line": 6636,
+        "reason": "tipo_id",
+        "snippet": "conds.push(sql`m.tipo_id = ANY(${params.tipoIds})`);"
+      },
+      {
+        "line": 6639,
+        "reason": "modo_id",
+        "snippet": "conds.push(sql`m.modo_id = ANY(${params.modoIds})`);"
+      },
+      {
+        "line": 6642,
+        "reason": "legal_id",
+        "snippet": "conds.push(sql`m.legal_id = ANY(${params.legalIds})`);"
+      }
+    ]
+  },
+  "getMaquinasModel": {
+    "count": 11,
+    "startLine": 6742,
+    "endLine": 6752,
+    "items": [
+      {
+        "line": 6742,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON m.sala_id = s.id"
+      },
+      {
+        "line": 6743,
+        "reason": "grupo_id",
+        "snippet": "LEFT JOIN grupo_salas gs ON s.grupo_id = gs.id"
+      },
+      {
+        "line": 6744,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos_maquinas j ON m.juego_id = j.id"
+      },
+      {
+        "line": 6745,
+        "reason": "estado_id",
+        "snippet": "LEFT JOIN estados e ON m.estado_id = e.id"
+      },
+      {
+        "line": 6746,
+        "reason": "sociedad_id",
+        "snippet": "LEFT JOIN sociedades soc ON m.sociedad_id = soc.id"
+      },
+      {
+        "line": 6747,
+        "reason": "valor_id",
+        "snippet": "LEFT JOIN valores v ON m.valor_id = v.id"
+      },
+      {
+        "line": 6748,
+        "reason": "modelo_id",
+        "snippet": "LEFT JOIN modelos mod ON m.modelo_id = mod.id"
+      },
+      {
+        "line": 6749,
+        "reason": "marca_id",
+        "snippet": "LEFT JOIN marcas mar ON mod.marca_id = mar.id"
+      },
+      {
+        "line": 6750,
+        "reason": "tipo_id",
+        "snippet": "LEFT JOIN tipos t ON m.tipo_id = t.id"
+      },
+      {
+        "line": 6751,
+        "reason": "modo_id",
+        "snippet": "LEFT JOIN modos mo ON m.modo_id = mo.id"
+      },
+      {
+        "line": 6752,
+        "reason": "legal_id",
+        "snippet": "LEFT JOIN legal l ON m.legal_id = l.id"
+      }
+    ]
+  },
+  "getMaquinasFilterOptionsModel": {
+    "count": 13,
+    "startLine": 6829,
+    "endLine": 6962,
+    "items": [
+      {
+        "line": 6829,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON m.sala_id = s.id"
+      },
+      {
+        "line": 6830,
+        "reason": "grupo_id",
+        "snippet": "LEFT JOIN grupo_salas gs ON s.grupo_id = gs.id"
+      },
+      {
+        "line": 6831,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos_maquinas j ON m.juego_id = j.id"
+      },
+      {
+        "line": 6832,
+        "reason": "estado_id",
+        "snippet": "LEFT JOIN estados e ON m.estado_id = e.id"
+      },
+      {
+        "line": 6833,
+        "reason": "sociedad_id",
+        "snippet": "LEFT JOIN sociedades soc ON m.sociedad_id = soc.id"
+      },
+      {
+        "line": 6834,
+        "reason": "valor_id",
+        "snippet": "LEFT JOIN valores v ON m.valor_id = v.id"
+      },
+      {
+        "line": 6835,
+        "reason": "modelo_id",
+        "snippet": "LEFT JOIN modelos mod ON m.modelo_id = mod.id"
+      },
+      {
+        "line": 6836,
+        "reason": "marca_id",
+        "snippet": "LEFT JOIN marcas mar ON mod.marca_id = mar.id"
+      },
+      {
+        "line": 6837,
+        "reason": "tipo_id",
+        "snippet": "LEFT JOIN tipos t ON m.tipo_id = t.id"
+      },
+      {
+        "line": 6838,
+        "reason": "modo_id",
+        "snippet": "LEFT JOIN modos mo ON m.modo_id = mo.id"
+      },
+      {
+        "line": 6839,
+        "reason": "legal_id",
+        "snippet": "LEFT JOIN legal l ON m.legal_id = l.id"
+      },
+      {
+        "line": 6902,
+        "reason": "marca_id",
+        "snippet": "SELECT mod.id, mod.nombre, mod.marca_id, mar.nombre AS marca_nombre, COUNT(DISTINCT m.id)::int AS count"
+      },
+      {
+        "line": 6962,
+        "reason": "grupo_id",
+        "snippet": "SELECT s.id, s.nombre, s.nombre_comercial, s.grupo_id, gs.nombre AS grupo_nombre, COUNT(DISTINCT m.id)::int AS count"
+      }
+    ]
+  },
+  "getMaquinaByIdModel": {
+    "count": 10,
+    "startLine": 7136,
+    "endLine": 7145,
+    "items": [
+      {
+        "line": 7136,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (m.sala_uuid = s.uuid OR m.sala_id = s.id)"
+      },
+      {
+        "line": 7137,
+        "reason": "grupo_id",
+        "snippet": "LEFT JOIN grupo_salas gs ON (s.grupo_id = gs.id)"
+      },
+      {
+        "line": 7138,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos_maquinas j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)"
+      },
+      {
+        "line": 7139,
+        "reason": "estado_id",
+        "snippet": "LEFT JOIN estados e ON (m.estado_uuid = e.uuid OR m.estado_id = e.id)"
+      },
+      {
+        "line": 7140,
+        "reason": "sociedad_id",
+        "snippet": "LEFT JOIN sociedades soc ON (m.sociedad_uuid = soc.uuid OR m.sociedad_id = soc.id)"
+      },
+      {
+        "line": 7141,
+        "reason": "valor_id",
+        "snippet": "LEFT JOIN valores v ON (m.valor_uuid = v.uuid OR m.valor_id = v.id)"
+      },
+      {
+        "line": 7142,
+        "reason": "modelo_id",
+        "snippet": "LEFT JOIN modelos mod ON (m.modelo_uuid = mod.uuid OR m.modelo_id = mod.id)"
+      },
+      {
+        "line": 7143,
+        "reason": "tipo_id",
+        "snippet": "LEFT JOIN tipos t ON (m.tipo_uuid = t.uuid OR m.tipo_id = t.id)"
+      },
+      {
+        "line": 7144,
+        "reason": "modo_id",
+        "snippet": "LEFT JOIN modos mo ON (m.modo_uuid = mo.uuid OR m.modo_id = mo.id)"
+      },
+      {
+        "line": 7145,
+        "reason": "legal_id",
+        "snippet": "LEFT JOIN legal l ON (m.legal_uuid = l.uuid OR m.legal_id = l.id)"
+      }
+    ]
+  },
+  "createMaquinaModel": {
+    "count": 10,
+    "startLine": 7211,
+    "endLine": 7244,
+    "items": [
+      {
+        "line": 7211,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid, nombre, serial FROM maquinas"
+      },
+      {
+        "line": 7236,
+        "reason": "sala_id",
+        "snippet": "${sala_id}, ${sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7237,
+        "reason": "juego_id",
+        "snippet": "${juego_id}, ${juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7238,
+        "reason": "estado_id",
+        "snippet": "${estado_id}, ${estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7239,
+        "reason": "sociedad_id",
+        "snippet": "${sociedad_id}, ${sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7240,
+        "reason": "valor_id",
+        "snippet": "${valor_id}, ${valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7241,
+        "reason": "modelo_id",
+        "snippet": "${modelo_id}, ${modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7242,
+        "reason": "tipo_id",
+        "snippet": "${tipo_id}, ${tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7243,
+        "reason": "modo_id",
+        "snippet": "${modo_id}, ${modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`},"
+      },
+      {
+        "line": 7244,
+        "reason": "legal_id",
+        "snippet": "${legal_id}, ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`}"
+      }
+    ]
+  },
+  "updateMaquinaModel": {
+    "count": 10,
+    "startLine": 7346,
+    "endLine": 7378,
+    "items": [
+      {
+        "line": 7346,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid, nombre, serial FROM maquinas"
+      },
+      {
+        "line": 7362,
+        "reason": "sala_id",
+        "snippet": "sala_id = ${sala_id !== undefined ? (sala_id !== null ? sala_id : sql`sala_id`) : sql`sala_id`},"
+      },
+      {
+        "line": 7364,
+        "reason": "juego_id",
+        "snippet": "juego_id = ${juego_id !== undefined ? (juego_id !== null ? juego_id : sql`juego_id`) : sql`juego_id`},"
+      },
+      {
+        "line": 7366,
+        "reason": "estado_id",
+        "snippet": "estado_id = ${estado_id !== undefined ? (estado_id !== null ? estado_id : sql`estado_id`) : sql`estado_id`},"
+      },
+      {
+        "line": 7368,
+        "reason": "sociedad_id",
+        "snippet": "sociedad_id = ${sociedad_id !== undefined ? (sociedad_id !== null ? sociedad_id : sql`sociedad_id`) : sql`sociedad_id`},"
+      },
+      {
+        "line": 7370,
+        "reason": "valor_id",
+        "snippet": "valor_id = ${valor_id !== undefined ? (valor_id !== null ? valor_id : sql`valor_id`) : sql`valor_id`},"
+      },
+      {
+        "line": 7372,
+        "reason": "modelo_id",
+        "snippet": "modelo_id = ${modelo_id !== undefined ? (modelo_id !== null ? modelo_id : sql`modelo_id`) : sql`modelo_id`},"
+      },
+      {
+        "line": 7374,
+        "reason": "tipo_id",
+        "snippet": "tipo_id = ${tipo_id !== undefined ? (tipo_id !== null ? tipo_id : sql`tipo_id`) : sql`tipo_id`},"
+      },
+      {
+        "line": 7376,
+        "reason": "modo_id",
+        "snippet": "modo_id = ${modo_id !== undefined ? (modo_id !== null ? modo_id : sql`modo_id`) : sql`modo_id`},"
+      },
+      {
+        "line": 7378,
+        "reason": "legal_id",
+        "snippet": "legal_id = ${legal_id !== undefined ? (legal_id !== null ? legal_id : sql`legal_id`) : sql`legal_id`},"
+      }
+    ]
+  },
+  "buildLlaveConditions": {
+    "count": 2,
+    "startLine": 7459,
+    "endLine": 7464,
+    "items": [
+      {
+        "line": 7459,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`l.sala_id = ANY(${options.userSalaIds})`);"
+      },
+      {
+        "line": 7464,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`l.sala_id = ANY(${options.salaIds})`);"
+      }
+    ]
+  },
+  "getLlavesFilterOptionsModel": {
+    "count": 4,
+    "startLine": 7496,
+    "endLine": 7504,
+    "items": [
+      {
+        "line": 7496,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 7498,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 7502,
+        "reason": "sala_id",
+        "snippet": "SELECT l.sala_id AS id, COUNT(l.id)::int AS count"
+      },
+      {
+        "line": 7504,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      }
+    ]
+  },
+  "getLlavesModel": {
+    "count": 5,
+    "startLine": 7574,
+    "endLine": 7595,
+    "items": [
+      {
+        "line": 7574,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      },
+      {
+        "line": 7584,
+        "reason": "sala_id",
+        "snippet": "SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre"
+      },
+      {
+        "line": 7586,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      },
+      {
+        "line": 7593,
+        "reason": "sala_id",
+        "snippet": "SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre"
+      },
+      {
+        "line": 7595,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      }
+    ]
+  },
+  "getLlaveByIdModel": {
+    "count": 2,
+    "startLine": 7613,
+    "endLine": 7615,
+    "items": [
+      {
+        "line": 7613,
+        "reason": "sala_id",
+        "snippet": "SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre"
+      },
+      {
+        "line": 7615,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (l.sala_uuid = s.uuid OR l.sala_id = s.id)"
+      }
+    ]
+  },
+  "createLlaveModel": {
+    "count": 2,
+    "startLine": 7636,
+    "endLine": 7638,
+    "items": [
+      {
+        "line": 7636,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM llaves"
+      },
+      {
+        "line": 7638,
+        "reason": "sala_id",
+        "snippet": "AND ${isSalaU ? sql`sala_uuid = ${rawSala}::uuid` : sql`sala_id = ${Number(rawSala)}`}"
+      }
+    ]
+  },
+  "updateLlaveModel": {
+    "count": 5,
+    "startLine": 7699,
+    "endLine": 7731,
+    "items": [
+      {
+        "line": 7699,
+        "reason": "sala_id",
+        "snippet": "? await sql`SELECT sala_id, sala_uuid FROM llaves WHERE uuid = ${id}::uuid LIMIT 1`"
+      },
+      {
+        "line": 7700,
+        "reason": "sala_id",
+        "snippet": ": await sql`SELECT sala_id, sala_uuid FROM llaves WHERE id = ${lId} LIMIT 1`;"
+      },
+      {
+        "line": 7710,
+        "reason": "sala_id",
+        "snippet": ": (currentSalaId ? sql`sala_id = ${currentSalaId}` : sql`1=1`);"
+      },
+      {
+        "line": 7713,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id FROM llaves"
+      },
+      {
+        "line": 7731,
+        "reason": "sala_id",
+        "snippet": "sala_id = ${rawSala !== undefined ? (salaId !== null ? salaId : sql`sala_id`) : sql`sala_id`},"
+      }
+    ]
+  },
+  "buildLibroConditions": {
+    "count": 2,
+    "startLine": 7803,
+    "endLine": 7808,
+    "items": [
+      {
+        "line": 7803,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`l.sala_id = ANY(${options.userSalaIds})`);"
+      },
+      {
+        "line": 7808,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`l.sala_id = ANY(${options.salaIds})`);"
+      }
+    ]
+  },
+  "getLibrosFilterOptionsModel": {
+    "count": 4,
+    "startLine": 7838,
+    "endLine": 7846,
+    "items": [
+      {
+        "line": 7838,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE s.id = ANY(${options.userSalaIds}) AND (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 7840,
+        "reason": "grupo_id",
+        "snippet": "allSalas = await sql`SELECT s.id, s.nombre FROM salas s WHERE (s.grupo_id IS NULL OR s.grupo_id = 1) ORDER BY s.nombre ASC`;"
+      },
+      {
+        "line": 7844,
+        "reason": "sala_id",
+        "snippet": "SELECT l.sala_id AS id, COUNT(l.id)::int AS count"
+      },
+      {
+        "line": 7846,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      }
+    ]
+  },
+  "getLibrosModel": {
+    "count": 5,
+    "startLine": 7912,
+    "endLine": 7933,
+    "items": [
+      {
+        "line": 7912,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      },
+      {
+        "line": 7922,
+        "reason": "sala_id",
+        "snippet": "SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre"
+      },
+      {
+        "line": 7924,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      },
+      {
+        "line": 7931,
+        "reason": "sala_id",
+        "snippet": "SELECT l.*, s.id AS sala_id, s.nombre AS sala_nombre"
+      },
+      {
+        "line": 7933,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON l.sala_id = s.id"
+      }
+    ]
+  },
+  "getLibroByIdModel": {
+    "count": 2,
+    "startLine": 7951,
+    "endLine": 7953,
+    "items": [
+      {
+        "line": 7951,
+        "reason": "sala_id",
+        "snippet": "SELECT l.*, s.id AS sala_id, s.uuid AS sala_uuid, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial"
+      },
+      {
+        "line": 7953,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (l.sala_uuid = s.uuid OR l.sala_id = s.id)"
+      }
+    ]
+  },
+  "createLibroModel": {
+    "count": 4,
+    "startLine": 7982,
+    "endLine": 7992,
+    "items": [
+      {
+        "line": 7982,
+        "reason": "id (PK vieja)",
+        "snippet": "const sRow = await sql`SELECT id FROM salas WHERE uuid = ${salaUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 7985,
+        "reason": "id (PK vieja)",
+        "snippet": "const sRow = await sql`SELECT uuid FROM salas WHERE id = ${salaId} LIMIT 1`;"
+      },
+      {
+        "line": 7990,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM libros"
+      },
+      {
+        "line": 7992,
+        "reason": "sala_id",
+        "snippet": "AND (${salaId ? sql`sala_id = ${salaId}` : sql`sala_uuid = ${salaUuid}::uuid`})"
+      }
+    ]
+  },
+  "updateLibroModel": {
+    "count": 4,
+    "startLine": 8047,
+    "endLine": 8074,
+    "items": [
+      {
+        "line": 8047,
+        "reason": "sala_id",
+        "snippet": "SELECT sala_id, sala_uuid FROM libros"
+      },
+      {
+        "line": 8059,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM libros"
+      },
+      {
+        "line": 8061,
+        "reason": "sala_id",
+        "snippet": "AND (${salaId ? sql`sala_id = ${salaId}` : sql`sala_uuid = ${salaUuid}::uuid`})"
+      },
+      {
+        "line": 8074,
+        "reason": "sala_id",
+        "snippet": "sala_id = COALESCE(${salaId}, sala_id),"
+      }
+    ]
+  },
+  "getLibroDropMesasModel": {
+    "count": 4,
+    "startLine": 8142,
+    "endLine": 8145,
+    "items": [
+      {
+        "line": 8142,
+        "reason": "mesa_id",
+        "snippet": "JOIN mesas m ON (d.mesa_uuid = m.uuid OR d.mesa_id = m.id)"
+      },
+      {
+        "line": 8143,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)"
+      },
+      {
+        "line": 8144,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (m.sala_uuid = s.uuid OR m.sala_id = s.id)"
+      },
+      {
+        "line": 8145,
+        "reason": "libro_id",
+        "snippet": "WHERE ${isU ? sql`d.libro_uuid = ${libroId}::uuid OR d.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`d.libro_id = ${lId}`}"
+      }
+    ]
+  },
+  "createLibroDropMesaModel": {
+    "count": 10,
+    "startLine": 8235,
+    "endLine": 8321,
+    "items": [
+      {
+        "line": 8235,
+        "reason": "id (PK vieja)",
+        "snippet": "const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8239,
+        "reason": "id (PK vieja)",
+        "snippet": "const mRow = await sql`SELECT id FROM mesas WHERE uuid = ${mesaUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8245,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM libro_drop_mesas"
+      },
+      {
+        "line": 8246,
+        "reason": "libro_id",
+        "snippet": "WHERE (${isLibU ? sql`libro_uuid = ${libroUuid}::uuid OR libro_id = ${libroId}` : sql`libro_id = ${libroId}`})"
+      },
+      {
+        "line": 8247,
+        "reason": "mesa_id",
+        "snippet": "AND (${isMesaU ? sql`mesa_uuid = ${mesaUuid}::uuid OR mesa_id = ${mesaId}` : sql`mesa_id = ${mesaId}`})"
+      },
+      {
+        "line": 8264,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE id = ${existingRow[0].id}"
+      },
+      {
+        "line": 8318,
+        "reason": "mesa_id",
+        "snippet": "JOIN mesas m ON (d.mesa_uuid = m.uuid OR d.mesa_id = m.id)"
+      },
+      {
+        "line": 8319,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)"
+      },
+      {
+        "line": 8320,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (m.sala_uuid = s.uuid OR m.sala_id = s.id)"
+      },
+      {
+        "line": 8321,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE d.id = ${insertedId}"
+      }
+    ]
+  },
+  "deleteLibroDropMesaModel": {
+    "count": 1,
+    "startLine": 8355,
+    "endLine": 8355,
+    "items": [
+      {
+        "line": 8355,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      }
+    ]
+  },
+  "getLibroControlLlavesModel": {
+    "count": 2,
+    "startLine": 8398,
+    "endLine": 8402,
+    "items": [
+      {
+        "line": 8398,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE l.id = ANY(cl.llaves_ids) OR (cl.llaves_uuids IS NOT NULL AND l.uuid = ANY(cl.llaves_uuids))"
+      },
+      {
+        "line": 8402,
+        "reason": "libro_id",
+        "snippet": "WHERE ${isU ? sql`cl.libro_uuid = ${libroId}::uuid OR cl.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`cl.libro_id = ${lId}`}"
+      }
+    ]
+  },
+  "createLibroControlLlavesModel": {
+    "count": 5,
+    "startLine": 8430,
+    "endLine": 8519,
+    "items": [
+      {
+        "line": 8430,
+        "reason": "id (PK vieja)",
+        "snippet": "const resolved = await sql`SELECT id, uuid FROM llaves WHERE uuid = ANY(${llavesUuids}::uuid[])`;"
+      },
+      {
+        "line": 8435,
+        "reason": "id (PK vieja)",
+        "snippet": "const resolved = await sql`SELECT id, uuid FROM llaves WHERE id = ANY(${llavesIds})`;"
+      },
+      {
+        "line": 8478,
+        "reason": "id (PK vieja)",
+        "snippet": "const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8515,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE l.id = ANY(cl.llaves_ids) OR (cl.llaves_uuids IS NOT NULL AND l.uuid = ANY(cl.llaves_uuids))"
+      },
+      {
+        "line": 8519,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE cl.id = ${insertedId}"
+      }
+    ]
+  },
+  "updateLibroControlLlavesHorasModel": {
+    "count": 2,
+    "startLine": 8555,
+    "endLine": 8574,
+    "items": [
+      {
+        "line": 8555,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      },
+      {
+        "line": 8574,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE l.id = ANY(cl.llaves_ids)"
+      }
+    ]
+  },
+  "deleteLibroControlLlavesModel": {
+    "count": 1,
+    "startLine": 8601,
+    "endLine": 8601,
+    "items": [
+      {
+        "line": 8601,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      }
+    ]
+  },
+  "getLibroAportesModel": {
+    "count": 5,
+    "startLine": 8642,
+    "endLine": 8647,
+    "items": [
+      {
+        "line": 8642,
+        "reason": "empleado_id",
+        "snippet": "JOIN empleados e ON (la.empleado_uuid = e.uuid OR la.empleado_id = e.id)"
+      },
+      {
+        "line": 8643,
+        "reason": "cargo_id",
+        "snippet": "LEFT JOIN cargos c ON (e.cargo_uuid = c.uuid OR e.cargo_id = c.id)"
+      },
+      {
+        "line": 8644,
+        "reason": "area_id",
+        "snippet": "LEFT JOIN areas a ON (c.area_uuid = a.uuid OR c.area_id = a.id)"
+      },
+      {
+        "line": 8645,
+        "reason": "departamento_id",
+        "snippet": "LEFT JOIN departamentos d ON (a.departamento_uuid = d.uuid OR a.departamento_id = d.id)"
+      },
+      {
+        "line": 8647,
+        "reason": "libro_id",
+        "snippet": "WHERE ${isU ? sql`la.libro_uuid = ${libroId}::uuid OR la.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`la.libro_id = ${lId}`}"
+      }
+    ]
+  },
+  "createLibroAporteModel": {
+    "count": 8,
+    "startLine": 8704,
+    "endLine": 8759,
+    "items": [
+      {
+        "line": 8704,
+        "reason": "id (PK vieja)",
+        "snippet": "const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8708,
+        "reason": "id (PK vieja)",
+        "snippet": "const eRow = await sql`SELECT id FROM empleados WHERE uuid = ${empleadoUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8712,
+        "reason": "id (PK vieja)",
+        "snippet": "const rRow = await sql`SELECT id FROM rangos WHERE uuid = ${rangoUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8754,
+        "reason": "empleado_id",
+        "snippet": "JOIN empleados e ON (la.empleado_uuid = e.uuid OR la.empleado_id = e.id)"
+      },
+      {
+        "line": 8755,
+        "reason": "cargo_id",
+        "snippet": "LEFT JOIN cargos c ON (e.cargo_uuid = c.uuid OR e.cargo_id = c.id)"
+      },
+      {
+        "line": 8756,
+        "reason": "area_id",
+        "snippet": "LEFT JOIN areas a ON (c.area_uuid = a.uuid OR c.area_id = a.id)"
+      },
+      {
+        "line": 8757,
+        "reason": "departamento_id",
+        "snippet": "LEFT JOIN departamentos d ON (a.departamento_uuid = d.uuid OR a.departamento_id = d.id)"
+      },
+      {
+        "line": 8759,
+        "reason": "id (PK vieja)",
+        "snippet": "WHERE la.id = ${insertedId}"
+      }
+    ]
+  },
+  "updateLibroAporteModel": {
+    "count": 6,
+    "startLine": 8806,
+    "endLine": 8841,
+    "items": [
+      {
+        "line": 8806,
+        "reason": "empleado_id",
+        "snippet": "empleado_id = COALESCE(${empleadoId}, empleado_id),"
+      },
+      {
+        "line": 8814,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      },
+      {
+        "line": 8838,
+        "reason": "empleado_id",
+        "snippet": "JOIN empleados e ON (la.empleado_uuid = e.uuid OR la.empleado_id = e.id)"
+      },
+      {
+        "line": 8839,
+        "reason": "cargo_id",
+        "snippet": "LEFT JOIN cargos c ON (e.cargo_uuid = c.uuid OR e.cargo_id = c.id)"
+      },
+      {
+        "line": 8840,
+        "reason": "area_id",
+        "snippet": "LEFT JOIN areas a ON (c.area_uuid = a.uuid OR c.area_id = a.id)"
+      },
+      {
+        "line": 8841,
+        "reason": "departamento_id",
+        "snippet": "LEFT JOIN departamentos d ON (a.departamento_uuid = d.uuid OR a.departamento_id = d.id)"
+      }
+    ]
+  },
+  "deleteLibroAporteModel": {
+    "count": 1,
+    "startLine": 8866,
+    "endLine": 8866,
+    "items": [
+      {
+        "line": 8866,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      }
+    ]
+  },
+  "getLibroIncidenciasGeneralesModel": {
+    "count": 2,
+    "startLine": 8899,
+    "endLine": 8900,
+    "items": [
+      {
+        "line": 8899,
+        "reason": "tipo_incidencia_id",
+        "snippet": "LEFT JOIN tipo_incidencias ti ON (lig.tipo_incidencia_uuid = ti.uuid OR lig.tipo_incidencia_id = ti.id)"
+      },
+      {
+        "line": 8900,
+        "reason": "libro_id",
+        "snippet": "WHERE ${isU ? sql`lig.libro_uuid = ${libroId}::uuid OR lig.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`lig.libro_id = ${lId}`}"
+      }
+    ]
+  },
+  "createLibroIncidenciaGeneralModel": {
+    "count": 5,
+    "startLine": 8957,
+    "endLine": 8993,
+    "items": [
+      {
+        "line": 8957,
+        "reason": "id (PK vieja)",
+        "snippet": "const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8962,
+        "reason": "id (PK vieja)",
+        "snippet": "const match = await sql`SELECT id, nombre FROM tipo_incidencias WHERE uuid = ${tipoIncidenciaUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 8968,
+        "reason": "id (PK vieja)",
+        "snippet": "const match = await sql`SELECT uuid, nombre FROM tipo_incidencias WHERE id = ${tipoIncidenciaId} LIMIT 1`;"
+      },
+      {
+        "line": 8974,
+        "reason": "id (PK vieja)",
+        "snippet": "const match = await sql`SELECT id, uuid, nombre FROM tipo_incidencias WHERE LOWER(TRIM(nombre)) = LOWER(${tipo}) LIMIT 1`;"
+      },
+      {
+        "line": 8993,
+        "reason": "libro_id",
+        "snippet": "RETURNING id, uuid, libro_id, libro_uuid, tipo_incidencia_id, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at"
+      }
+    ]
+  },
+  "updateLibroIncidenciaGeneralModel": {
+    "count": 3,
+    "startLine": 9034,
+    "endLine": 9041,
+    "items": [
+      {
+        "line": 9034,
+        "reason": "tipo_incidencia_id",
+        "snippet": "tipo_incidencia_id = COALESCE(${tipoIncidenciaId}, tipo_incidencia_id),"
+      },
+      {
+        "line": 9040,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      },
+      {
+        "line": 9041,
+        "reason": "libro_id",
+        "snippet": "RETURNING id, uuid, libro_id, libro_uuid, tipo_incidencia_id, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at"
+      }
+    ]
+  },
+  "deleteLibroIncidenciaGeneralModel": {
+    "count": 1,
+    "startLine": 9065,
+    "endLine": 9065,
+    "items": [
+      {
+        "line": 9065,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      }
+    ]
+  },
+  "getLibroControlClientesModel": {
+    "count": 4,
+    "startLine": 9108,
+    "endLine": 9111,
+    "items": [
+      {
+        "line": 9108,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN clientes c ON (lcc.cliente_uuid = c.uuid OR lcc.cliente_id = c.id)"
+      },
+      {
+        "line": 9109,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      },
+      {
+        "line": 9110,
+        "reason": "metodo_pago_id",
+        "snippet": "LEFT JOIN metodos_pago mp ON (lcc.metodo_pago_uuid = mp.uuid OR lcc.metodo_pago_id = mp.id)"
+      },
+      {
+        "line": 9111,
+        "reason": "libro_id",
+        "snippet": "WHERE ${isU ? sql`lcc.libro_uuid = ${libroId}::uuid OR lcc.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)` : sql`lcc.libro_id = ${lId}`}"
+      }
+    ]
+  },
+  "getClientesSugerenciasModel": {
+    "count": 6,
+    "startLine": 9147,
+    "endLine": 9172,
+    "items": [
+      {
+        "line": 9147,
+        "reason": "sala_id",
+        "snippet": "SELECT sala_id, sala_uuid FROM libros"
+      },
+      {
+        "line": 9160,
+        "reason": "sala_id",
+        "snippet": "SELECT c.id, c.uuid, c.nombre, c.sala_id, c.sala_uuid, c.tipo_cliente_id, c.tipo_cliente_uuid, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre"
+      },
+      {
+        "line": 9162,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      },
+      {
+        "line": 9163,
+        "reason": "sala_id",
+        "snippet": "WHERE ${resolvedSalaUuid ? sql`c.sala_uuid = ${resolvedSalaUuid}::uuid OR c.sala_id = ${resolvedSalaId}` : sql`c.sala_id = ${resolvedSalaId}`}"
+      },
+      {
+        "line": 9170,
+        "reason": "sala_id",
+        "snippet": "SELECT c.id, c.uuid, c.nombre, c.sala_id, c.sala_uuid, c.tipo_cliente_id, c.tipo_cliente_uuid, COALESCE(tc.nombre, 'General') AS tipo_cliente_nombre"
+      },
+      {
+        "line": 9172,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      }
+    ]
+  },
+  "createLibroControlClienteModel": {
+    "count": 12,
+    "startLine": 9215,
+    "endLine": 9345,
+    "items": [
+      {
+        "line": 9215,
+        "reason": "sala_id",
+        "snippet": "SELECT id, uuid, sala_id, sala_uuid FROM libros"
+      },
+      {
+        "line": 9229,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM clientes"
+      },
+      {
+        "line": 9231,
+        "reason": "sala_id",
+        "snippet": "${resolvedSalaId ? sql`AND (sala_id = ${resolvedSalaId} OR sala_uuid = ${resolvedSalaUuid}::uuid)` : sql``}"
+      },
+      {
+        "line": 9239,
+        "reason": "sala_id",
+        "snippet": "INSERT INTO clientes (nombre, tipo_cliente_id, sala_id, sala_uuid)"
+      },
+      {
+        "line": 9261,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM metodos_pago"
+      },
+      {
+        "line": 9271,
+        "reason": "id (PK vieja)",
+        "snippet": "const firstM = await sql`SELECT id, uuid FROM metodos_pago ORDER BY id ASC LIMIT 1`;"
+      },
+      {
+        "line": 9312,
+        "reason": "id (PK vieja)",
+        "snippet": "const lRow = await sql`SELECT id FROM libros WHERE uuid = ${libroUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 9316,
+        "reason": "id (PK vieja)",
+        "snippet": "const cRow = await sql`SELECT id FROM clientes WHERE uuid = ${clienteUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 9320,
+        "reason": "id (PK vieja)",
+        "snippet": "const mRow = await sql`SELECT id FROM metodos_pago WHERE uuid = ${metodoPagoUuid}::uuid LIMIT 1`;"
+      },
+      {
+        "line": 9337,
+        "reason": "libro_id",
+        "snippet": "RETURNING id, uuid, libro_id, libro_uuid, cliente_id, cliente_uuid, tipo, monto, metodo_pago_id, metodo_pago_uuid, hora, nota, created_at, updated_at"
+      },
+      {
+        "line": 9343,
+        "reason": "cliente_id",
+        "snippet": "SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id, c.tipo_cliente_uuid"
+      },
+      {
+        "line": 9345,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      }
+    ]
+  },
+  "updateLibroControlClienteModel": {
+    "count": 13,
+    "startLine": 9392,
+    "endLine": 9508,
+    "items": [
+      {
+        "line": 9392,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM metodos_pago"
+      },
+      {
+        "line": 9414,
+        "reason": "sala_id",
+        "snippet": "SELECT sala_id, sala_uuid FROM libros"
+      },
+      {
+        "line": 9424,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM clientes"
+      },
+      {
+        "line": 9426,
+        "reason": "sala_id",
+        "snippet": "${resolvedSalaId ? sql`AND (sala_id = ${resolvedSalaId} OR sala_uuid = ${resolvedSalaUuid}::uuid)` : sql``}"
+      },
+      {
+        "line": 9434,
+        "reason": "sala_id",
+        "snippet": "INSERT INTO clientes (nombre, tipo_cliente_id, sala_id, sala_uuid)"
+      },
+      {
+        "line": 9473,
+        "reason": "metodo_pago_id",
+        "snippet": "metodo_pago_id = ${metodoPagoId !== undefined ? metodoPagoId : sql`metodo_pago_id`},"
+      },
+      {
+        "line": 9475,
+        "reason": "cliente_id",
+        "snippet": "cliente_id = ${clienteId !== undefined ? clienteId : sql`cliente_id`},"
+      },
+      {
+        "line": 9482,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      },
+      {
+        "line": 9483,
+        "reason": "libro_id",
+        "snippet": "RETURNING id, uuid, libro_id, libro_uuid, cliente_id, cliente_uuid, tipo, monto, metodo_pago_id, metodo_pago_uuid, hora, nota, created_at, updated_at"
+      },
+      {
+        "line": 9494,
+        "reason": "cliente_id",
+        "snippet": "SELECT c.nombre AS cliente, tc.nombre AS tipo_cliente_nombre, c.tipo_cliente_id, c.tipo_cliente_uuid"
+      },
+      {
+        "line": 9496,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      },
+      {
+        "line": 9497,
+        "reason": "cliente_id",
+        "snippet": "WHERE ${updatedRecord.cliente_uuid ? sql`c.uuid = ${updatedRecord.cliente_uuid}::uuid` : sql`c.id = ${updatedRecord.cliente_id}`}"
+      },
+      {
+        "line": 9508,
+        "reason": "metodo_pago_id",
+        "snippet": "WHERE ${updatedRecord.metodo_pago_uuid ? sql`uuid = ${updatedRecord.metodo_pago_uuid}::uuid` : sql`id = ${updatedRecord.metodo_pago_id}`}"
+      }
+    ]
+  },
+  "deleteLibroControlClienteModel": {
+    "count": 1,
+    "startLine": 9543,
+    "endLine": 9543,
+    "items": [
+      {
+        "line": 9543,
+        "reason": "libro_id",
+        "snippet": "${libroId ? (isLibU ? sql`AND (libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1))` : sql`AND libro_id = ${Number(libroId)}`) : sql``}"
+      }
+    ]
+  },
+  "buildClienteConditions": {
+    "count": 6,
+    "startLine": 9557,
+    "endLine": 9583,
+    "items": [
+      {
+        "line": 9557,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`(c.sala_id = ANY(${numIds}) OR c.sala_uuid = ANY(${uuidIds}::uuid[]))`);"
+      },
+      {
+        "line": 9559,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`c.sala_id = ANY(${numIds})`);"
+      },
+      {
+        "line": 9569,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`(c.sala_id = ANY(${numIds}) OR c.sala_uuid = ANY(${uuidIds}::uuid[]))`);"
+      },
+      {
+        "line": 9571,
+        "reason": "sala_id",
+        "snippet": "conds.push(sql`c.sala_id = ANY(${numIds})`);"
+      },
+      {
+        "line": 9581,
+        "reason": "cliente_id",
+        "snippet": "conds.push(sql`(c.tipo_cliente_id = ANY(${numIds}) OR c.tipo_cliente_uuid = ANY(${uuidIds}::uuid[]))`);"
+      },
+      {
+        "line": 9583,
+        "reason": "cliente_id",
+        "snippet": "conds.push(sql`c.tipo_cliente_id = ANY(${numIds})`);"
+      }
+    ]
+  },
+  "getClientesModel": {
+    "count": 8,
+    "startLine": 9656,
+    "endLine": 9686,
+    "items": [
+      {
+        "line": 9656,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      },
+      {
+        "line": 9657,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (c.sala_uuid = s.uuid OR c.sala_id = s.id)"
+      },
+      {
+        "line": 9665,
+        "reason": "sala_id",
+        "snippet": "SELECT c.id, c.uuid, c.nombre, c.tipo_cliente_id, c.tipo_cliente_uuid, c.sala_id, c.sala_uuid, c.foto, c.descripcion,"
+      },
+      {
+        "line": 9671,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      },
+      {
+        "line": 9672,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (c.sala_uuid = s.uuid OR c.sala_id = s.id)"
+      },
+      {
+        "line": 9679,
+        "reason": "sala_id",
+        "snippet": "SELECT c.id, c.uuid, c.nombre, c.tipo_cliente_id, c.tipo_cliente_uuid, c.sala_id, c.sala_uuid, c.foto, c.descripcion,"
+      },
+      {
+        "line": 9685,
+        "reason": "cliente_id",
+        "snippet": "LEFT JOIN tipo_clientes tc ON (c.tipo_cliente_uuid = tc.uuid OR c.tipo_cliente_id = tc.id)"
+      },
+      {
+        "line": 9686,
+        "reason": "sala_id",
+        "snippet": "LEFT JOIN salas s ON (c.sala_uuid = s.uuid OR c.sala_id = s.id)"
+      }
+    ]
+  },
+  "getClientesFilterOptionsModel": {
+    "count": 10,
+    "startLine": 9713,
+    "endLine": 9747,
+    "items": [
+      {
+        "line": 9713,
+        "reason": "id (PK vieja)",
+        "snippet": "allSalas = await sql`SELECT id, uuid, nombre FROM salas WHERE id = ANY(${numIds}) OR uuid = ANY(${uuidIds}::uuid[]) ORDER BY nombre ASC`;"
+      },
+      {
+        "line": 9715,
+        "reason": "id (PK vieja)",
+        "snippet": "allSalas = await sql`SELECT id, uuid, nombre FROM salas WHERE id = ANY(${numIds}) ORDER BY nombre ASC`;"
+      },
+      {
+        "line": 9717,
+        "reason": "id (PK vieja)",
+        "snippet": "allSalas = await sql`SELECT id, uuid, nombre FROM salas WHERE uuid = ANY(${uuidIds}::uuid[]) ORDER BY nombre ASC`;"
+      },
+      {
+        "line": 9719,
+        "reason": "id (PK vieja)",
+        "snippet": "allSalas = await sql`SELECT id, uuid, nombre FROM salas ORDER BY nombre ASC`;"
+      },
+      {
+        "line": 9722,
+        "reason": "id (PK vieja)",
+        "snippet": "allSalas = await sql`SELECT id, uuid, nombre FROM salas ORDER BY nombre ASC`;"
+      },
+      {
+        "line": 9726,
+        "reason": "sala_id",
+        "snippet": "SELECT c.sala_id AS id, c.sala_uuid AS uuid, COUNT(c.id)::int AS count"
+      },
+      {
+        "line": 9728,
+        "reason": "sala_id",
+        "snippet": "WHERE c.sala_id IS NOT NULL OR c.sala_uuid IS NOT NULL"
+      },
+      {
+        "line": 9743,
+        "reason": "id (PK vieja)",
+        "snippet": "const allTipos = await sql`SELECT id, uuid, nombre FROM tipo_clientes ORDER BY nombre ASC`;"
+      },
+      {
+        "line": 9745,
+        "reason": "cliente_id",
+        "snippet": "SELECT c.tipo_cliente_id AS id, c.tipo_cliente_uuid AS uuid, COUNT(c.id)::int AS count"
+      },
+      {
+        "line": 9747,
+        "reason": "cliente_id",
+        "snippet": "WHERE c.tipo_cliente_id IS NOT NULL OR c.tipo_cliente_uuid IS NOT NULL"
+      }
+    ]
+  },
+  "createClienteModel": {
+    "count": 2,
+    "startLine": 9873,
+    "endLine": 9885,
+    "items": [
+      {
+        "line": 9873,
+        "reason": "sala_id",
+        "snippet": "INSERT INTO clientes (id, uuid, nombre, tipo_cliente_id, tipo_cliente_uuid, sala_id, sala_uuid, foto, descripcion)"
+      },
+      {
+        "line": 9885,
+        "reason": "sala_id",
+        "snippet": "RETURNING id, uuid, nombre, tipo_cliente_id, tipo_cliente_uuid, sala_id, sala_uuid, foto, descripcion, created_at, updated_at"
+      }
+    ]
+  },
+  "updateClienteModel": {
+    "count": 4,
+    "startLine": 9917,
+    "endLine": 10007,
+    "items": [
+      {
+        "line": 9917,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM clientes"
+      },
+      {
+        "line": 9999,
+        "reason": "cliente_id",
+        "snippet": "tipo_cliente_id = ${tipoClienteId !== undefined ? tipoClienteId : sql`tipo_cliente_id`},"
+      },
+      {
+        "line": 10001,
+        "reason": "sala_id",
+        "snippet": "sala_id = ${salaId !== undefined ? salaId : sql`sala_id`},"
+      },
+      {
+        "line": 10007,
+        "reason": "sala_id",
+        "snippet": "RETURNING id, uuid, nombre, tipo_cliente_id, tipo_cliente_uuid, sala_id, sala_uuid, foto, descripcion, created_at, updated_at"
+      }
+    ]
+  },
+  "getLibroDatosModel": {
+    "count": 2,
+    "startLine": 10076,
+    "endLine": 10077,
+    "items": [
+      {
+        "line": 10076,
+        "reason": "libro_id",
+        "snippet": "? sql`libro_uuid = ${libroId}::uuid OR libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)`"
+      },
+      {
+        "line": 10077,
+        "reason": "libro_id",
+        "snippet": ": sql`libro_id = ${numLibId}`}"
+      }
+    ]
+  },
+  "saveLibroDatosModel": {
+    "count": 2,
+    "startLine": 10093,
+    "endLine": 10195,
+    "items": [
+      {
+        "line": 10093,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM libros"
+      },
+      {
+        "line": 10195,
+        "reason": "libro_id",
+        "snippet": "ON CONFLICT (libro_id) DO UPDATE SET"
+      }
+    ]
+  },
+  "getLibroNovedadesMesasModel": {
+    "count": 4,
+    "startLine": 10259,
+    "endLine": 10263,
+    "items": [
+      {
+        "line": 10259,
+        "reason": "mesa_id",
+        "snippet": "LEFT JOIN mesas m ON (nm.mesa_uuid = m.uuid OR nm.mesa_id = m.id)"
+      },
+      {
+        "line": 10260,
+        "reason": "juego_id",
+        "snippet": "LEFT JOIN juegos j ON (m.juego_uuid = j.uuid OR m.juego_id = j.id)"
+      },
+      {
+        "line": 10262,
+        "reason": "libro_id",
+        "snippet": "? sql`nm.libro_uuid = ${libroId}::uuid OR nm.libro_id = (SELECT id FROM libros WHERE uuid = ${libroId}::uuid LIMIT 1)`"
+      },
+      {
+        "line": 10263,
+        "reason": "libro_id",
+        "snippet": ": sql`nm.libro_id = ${Number(libroId)}`}"
+      }
+    ]
+  },
+  "saveLibroNovedadesMesaModel": {
+    "count": 3,
+    "startLine": 10278,
+    "endLine": 10385,
+    "items": [
+      {
+        "line": 10278,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM libros"
+      },
+      {
+        "line": 10300,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid FROM mesas"
+      },
+      {
+        "line": 10385,
+        "reason": "libro_id",
+        "snippet": "ON CONFLICT (libro_id, mesa_id) DO UPDATE SET"
+      }
+    ]
+  },
+  "saveLibroReporteModel": {
+    "count": 2,
+    "startLine": 10501,
+    "endLine": 10506,
+    "items": [
+      {
+        "line": 10501,
+        "reason": "libro_id",
+        "snippet": "ON CONFLICT (libro_id) DO UPDATE"
+      },
+      {
+        "line": 10506,
+        "reason": "libro_id",
+        "snippet": "RETURNING id, libro_id, libro_uuid, data, created_at, updated_at"
+      }
+    ]
+  },
+  "getLibroReporteModel": {
+    "count": 5,
+    "startLine": 10609,
+    "endLine": 10621,
+    "items": [
+      {
+        "line": 10609,
+        "reason": "libro_id",
+        "snippet": "SELECT id, libro_id, libro_uuid, data, created_at, updated_at"
+      },
+      {
+        "line": 10612,
+        "reason": "libro_id",
+        "snippet": "? sql`libro_uuid = ${resolvedLibroUuid}::uuid OR libro_id = ${resolvedLibroId}`"
+      },
+      {
+        "line": 10613,
+        "reason": "libro_id",
+        "snippet": ": sql`libro_id = ${resolvedLibroId}`}"
+      },
+      {
+        "line": 10619,
+        "reason": "libro_id",
+        "snippet": "SELECT id, libro_id, libro_uuid, data, created_at, updated_at"
+      },
+      {
+        "line": 10621,
+        "reason": "libro_id",
+        "snippet": "WHERE ${isU ? sql`libro_uuid = ${idOrLibroId}::uuid` : sql`id = ${Number(idOrLibroId)} OR libro_id = ${Number(idOrLibroId)}`}"
+      }
+    ]
+  },
+  "getDeltaSyncModel": {
+    "count": 1,
+    "startLine": 10769,
+    "endLine": 10769,
+    "items": [
+      {
+        "line": 10769,
+        "reason": "id (PK vieja)",
+        "snippet": "SELECT id, uuid, deleted_at FROM ${sql(tbl)}"
+      }
+    ]
+  }
+}

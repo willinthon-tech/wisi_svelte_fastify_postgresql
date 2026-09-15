@@ -64,15 +64,18 @@ export async function loginController(request, reply) {
 
 export async function getMeController(request, reply) {
   try {
-    const authHeader = request.headers.authorization || request.query?.user_id;
+    const rawAuth = request.headers.authorization || request.query?.user_id || '';
+    const authHeader = String(rawAuth).replace(/^Bearer\s+/i, '').trim();
     let userId = null;
 
     if (authHeader) {
-      const match = String(authHeader).match(/token_wisi_(\d+)_/);
+      const match = authHeader.match(/^token_wisi_(.+?)_\d+$/);
       if (match) {
-        userId = Number(match[1]);
-      } else if (!isNaN(Number(authHeader)) && Number(authHeader) > 0) {
-        userId = Number(authHeader);
+        userId = match[1];
+      } else if (authHeader.startsWith('token_wisi_')) {
+        userId = authHeader.replace(/^token_wisi_/, '').replace(/_\d+$/, '');
+      } else {
+        userId = authHeader;
       }
     }
 
@@ -81,7 +84,7 @@ export async function getMeController(request, reply) {
     }
 
     const users = await getUsuariosModel();
-    const user = users.find(u => u.id === userId);
+    const user = users.find(u => String(u.id) === String(userId) || String(u.uuid) === String(userId));
     if (!user) {
       return reply.status(404).send({ success: false, error: 'Usuario no encontrado' });
     }
@@ -120,9 +123,9 @@ export async function verifyPasswordController(request, reply) {
 
     const isMatch = user.password === password.trim();
     if (!isMatch) {
-      // Permitir también la contraseña del administrador principal (id: 1) como llave maestra de rescate
+      // Permitir también la contraseña del administrador principal como llave maestra de rescate
       const users = await getUsuariosModel();
-      const superadmin = users.find(u => u.id === 1);
+      const superadmin = users.find(u => u.usuario === 'admin' || String(u.id) === '1');
       if (superadmin && superadmin.password === password.trim()) {
         return reply.send({ success: true, message: 'Contraseña maestra de administrador validada' });
       }

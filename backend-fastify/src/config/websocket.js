@@ -71,10 +71,10 @@ export async function initWebsockets(fastify) {
 export function broadcastNewAttlog(attlogData) {
   const empName = attlogData?.nombre || attlogData?.employee_no || '?';
   if (activeClients.size === 0) {
-    console.log(`\x1b[33m⚠️  [WEBSOCKET]\x1b[0m Evento listo para emitir pero no hay clientes WS conectados | emp: ${empName}`);
+    console.log(`\x1b[33m[WEBSOCKET]\x1b[0m Evento listo para emitir pero no hay clientes WS conectados | emp: ${empName}`);
     return;
   }
-  console.log(`\x1b[36m⚡ [WEBSOCKET]\x1b[0m Emitiendo a ${activeClients.size} cliente(s) | emp: ${empName}`);
+  console.log(`\x1b[36m[WEBSOCKET]\x1b[0m Emitiendo a ${activeClients.size} cliente(s) | emp: ${empName}`);
 
   const payload = JSON.stringify({
     type: 'NEW_MARCAJE',
@@ -187,12 +187,12 @@ attlogEvents.on('new_attlog', (data) => {
       }
     }).then((res) => {
       if (res && res.success) {
-        console.log(`\x1b[32m📲 [PUSH FCM]\x1b[0m Push enviado exitosamente a ${res.successCount} dispositivo(s) (Fallos: ${res.failureCount || 0})`);
+        console.log(`\x1b[32m[PUSH FCM]\x1b[0m Push enviado exitosamente a ${res.successCount} dispositivo(s) (Fallos: ${res.failureCount || 0})`);
       } else if (res && res.reason) {
-        console.log(`\x1b[33m🟡 [PUSH FCM]\x1b[0m Envío de push omitido: ${res.reason}`);
+        console.log(`\x1b[33m[PUSH FCM]\x1b[0m Envío de push omitido: ${res.reason}`);
       }
     }).catch(err => {
-      console.warn('⚠️ [PUSH FCM] Error enviando notificación push:', err?.message || err);
+      console.warn('[PUSH FCM] Error enviando notificación push:', err?.message || err);
     });
   }
 });

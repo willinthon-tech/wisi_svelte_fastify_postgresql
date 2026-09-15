@@ -8,6 +8,8 @@ import { sql, isPgConnected } from '../config/db.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const isUuid = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
 let isFirebaseInitialized = false;
 const inMemoryTokens = new Set();
 
@@ -31,7 +33,7 @@ function initFirebase() {
       try {
         serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
       } catch (e) {
-        console.warn('⚠️ [Push FCM] Error parseando FIREBASE_SERVICE_ACCOUNT de .env:', e.message);
+        console.warn('[Push FCM] Error parseando FIREBASE_SERVICE_ACCOUNT de .env:', e.message);
       }
     }
 
@@ -50,7 +52,7 @@ function initFirebase() {
             serviceAccount = JSON.parse(raw);
             break;
           } catch (err) {
-            console.warn(`⚠️ [Push FCM] Error leyendo archivo ${filePath}:`, err.message);
+            console.warn(`[Push FCM] Error leyendo archivo ${filePath}:`, err.message);
           }
         }
       }
@@ -61,12 +63,12 @@ function initFirebase() {
         credential: cert(serviceAccount)
       });
       isFirebaseInitialized = true;
-      console.log(`\x1b[32m🟢 [PUSH FCM]\x1b[0m Firebase Admin SDK inicializado exitosamente (Proyecto: ${serviceAccount.project_id || 'wisi-space'})`);
+      console.log(`[PUSH FCM] Firebase Admin SDK inicializado exitosamente (Proyecto: ${serviceAccount.project_id || 'wisi-space'})`);
     } else {
-      console.log('\x1b[33m🟡 [PUSH FCM]\x1b[0m Firebase Admin no configurado aún. Para activar notificaciones push en segundo plano en Android, coloca el archivo service-account.json en backend-fastify/');
+      console.log('[PUSH FCM] Firebase Admin no configurado aún. Para activar notificaciones push en segundo plano en Android, coloca el archivo service-account.json en backend-fastify/');
     }
   } catch (error) {
-    console.warn('⚠️ [Push FCM] No se pudo inicializar Firebase Admin SDK:', error.message);
+    console.warn('[Push FCM] No se pudo inicializar Firebase Admin SDK:', error.message);
   }
 }
 
@@ -83,8 +85,8 @@ export async function ensureFcmTokensTable() {
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS fcm_tokens (
-        id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES usuarios(id) ON DELETE CASCADE,
+        uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_uuid UUID REFERENCES usuarios(uuid) ON DELETE CASCADE,
         token TEXT UNIQUE NOT NULL,
         platform VARCHAR(50) DEFAULT 'android',
         activo BOOLEAN DEFAULT TRUE,
@@ -92,39 +94,39 @@ export async function ensureFcmTokensTable() {
         updated_at TIMESTAMP DEFAULT NOW()
       );
     `;
-    await sql`CREATE INDEX IF NOT EXISTS idx_fcm_tokens_user_id ON fcm_tokens(user_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_fcm_tokens_user_uuid ON fcm_tokens(user_uuid);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_fcm_tokens_activo ON fcm_tokens(activo);`;
     tableInitialized = true;
   } catch (err) {
-    console.warn('⚠️ [Push FCM] Error asegurando tabla fcm_tokens:', err.message);
+    console.warn('[Push FCM] Error asegurando tabla fcm_tokens:', err.message);
   }
 }
 
 /**
  * Registra o actualiza el token FCM de un dispositivo móvil (Android / iOS)
- * Si el usuario no está autenticado (user_id nulo), el token se desactiva para evitar recibir alertas.
+ * Si el usuario no está autenticado (user_uuid nulo), el token se desactiva para evitar recibir alertas.
  */
-export async function registerDeviceToken({ user_id = null, token, platform = 'android' }) {
+export async function registerDeviceToken({ user_id = null, user_uuid = null, token, platform = 'android' }) {
   if (!token || typeof token !== 'string') return;
   const cleanToken = token.trim();
   if (!cleanToken) return;
 
   await ensureFcmTokensTable();
 
-  const numUserId = user_id ? Number(user_id) : null;
+  const targetUserUuid = (user_uuid && isUuid(user_uuid)) ? user_uuid : (user_id && isUuid(user_id) ? user_id : null);
 
   // Si no hay usuario autenticado (deslogueado), desactivar cualquier registro de este token
-  if (!numUserId) {
+  if (!targetUserUuid) {
     inMemoryTokens.delete(cleanToken);
     if (isPgConnected && sql) {
       try {
         await sql`
           UPDATE fcm_tokens 
-          SET activo = FALSE, user_id = NULL, updated_at = NOW() 
+          SET activo = FALSE, user_uuid = NULL, updated_at = NOW() 
           WHERE token = ${cleanToken};
         `;
       } catch (err) {
-        console.warn('⚠️ [Push FCM] Error desactivando token no autenticado:', err.message);
+        console.warn('[Push FCM] Error desactivando token no autenticado:', err.message);
       }
     }
     return;
@@ -135,17 +137,17 @@ export async function registerDeviceToken({ user_id = null, token, platform = 'a
   if (isPgConnected && sql) {
     try {
       await sql`
-        INSERT INTO fcm_tokens (user_id, token, platform, activo, updated_at)
-        VALUES (${numUserId}, ${cleanToken}, ${platform}, TRUE, NOW())
+        INSERT INTO fcm_tokens (uuid, user_uuid, token, platform, activo, updated_at)
+        VALUES (gen_random_uuid(), ${targetUserUuid}::uuid, ${cleanToken}, ${platform}, TRUE, NOW())
         ON CONFLICT (token) 
         DO UPDATE SET 
-          user_id = EXCLUDED.user_id,
+          user_uuid = EXCLUDED.user_uuid,
           platform = EXCLUDED.platform,
           activo = TRUE,
           updated_at = NOW();
       `;
     } catch (err) {
-      console.warn('⚠️ [Push FCM] Error guardando token en PostgreSQL:', err.message);
+      console.warn('[Push FCM] Error guardando token en PostgreSQL:', err.message);
     }
   }
 }
@@ -164,11 +166,11 @@ export async function unregisterDeviceToken({ token }) {
     try {
       await sql`
         UPDATE fcm_tokens 
-        SET activo = FALSE, user_id = NULL, updated_at = NOW() 
+        SET activo = FALSE, user_uuid = NULL, updated_at = NOW() 
         WHERE token = ${cleanToken};
       `;
     } catch (err) {
-      console.warn('⚠️ [Push FCM] Error desactivando token en PostgreSQL:', err.message);
+      console.warn('[Push FCM] Error desactivando token en PostgreSQL:', err.message);
     }
   }
 }
@@ -176,17 +178,17 @@ export async function unregisterDeviceToken({ token }) {
 /**
  * Envía una notificación push FCM filtrada estrictamente por la sala del marcaje.
  * REGLAS OBLIGATORIAS:
- * 1. El usuario DEBE estar autenticado (user_id no nulo y activo = TRUE).
+ * 1. El usuario DEBE estar autenticado (user_uuid no nulo y activo = TRUE).
  * 2. El usuario DEBE tener asignada esa sala específica en `user_salas`.
  * 3. Si el usuario no tiene salas asignadas o está deslogueado, NO recibe ninguna notificación.
  */
-export async function sendPushNotificationForAttlog({ salaId = null, title, body, data = {}, imageUrl = null, icon = null }) {
+export async function sendPushNotificationForAttlog({ salaId = null, sala_uuid = null, title, body, data = {}, imageUrl = null, icon = null }) {
   let tokens = [];
-  const numSalaId = salaId ? Number(salaId) : null;
+  const targetSalaUuid = (sala_uuid && isUuid(sala_uuid)) ? sala_uuid : (salaId && isUuid(salaId) ? salaId : null);
 
-  // Si el evento no tiene sala_id, no se puede asociar a salas de usuarios -> no enviar
-  if (!numSalaId) {
-    return { success: true, message: 'Marcaje sin sala_id especificada, omitiendo alerta push.' };
+  // Si el evento no tiene sala_uuid, no se puede asociar a salas de usuarios -> no enviar
+  if (!targetSalaUuid) {
+    return { success: true, message: 'Marcaje sin sala_uuid especificada, omitiendo alerta push.' };
   }
 
   await ensureFcmTokensTable();
@@ -194,18 +196,18 @@ export async function sendPushNotificationForAttlog({ salaId = null, title, body
   if (isPgConnected && sql) {
     try {
       // Consulta estricta: INNER JOIN con user_salas para garantizar que el usuario
-      // autenticado tenga asignada ESTA sala_id. Si no tiene salas o está deslogueado, retorna 0 filas.
+      // autenticado tenga asignada ESTA sala_uuid. Si no tiene salas o está deslogueado, retorna 0 filas.
       const rows = await sql`
         SELECT DISTINCT ft.token 
         FROM fcm_tokens ft
-        INNER JOIN user_salas us ON us.user_id = ft.user_id
+        INNER JOIN user_salas us ON us.user_uuid = ft.user_uuid
         WHERE ft.activo = TRUE 
-          AND ft.user_id IS NOT NULL
-          AND us.sala_id = ${numSalaId}
+          AND ft.user_uuid IS NOT NULL
+          AND us.sala_uuid = ${targetSalaUuid}::uuid
       `;
       tokens = rows.map(r => r.token).filter(Boolean);
     } catch (err) {
-      console.warn('⚠️ [Push FCM] Error consultando tokens por sala:', err.message);
+      console.warn('[Push FCM] Error consultando tokens por sala:', err.message);
       tokens = [];
     }
   } else {
@@ -228,10 +230,10 @@ export async function getPushDiagnostics() {
   if (isPgConnected && sql) {
     try {
       const rows = await sql`
-        SELECT id, user_id, platform, activo, updated_at, 
+        SELECT uuid, uuid AS id, user_uuid, user_uuid AS user_id, platform, activo, updated_at, 
                SUBSTRING(token, 1, 15) || '...' as token_preview 
         FROM fcm_tokens 
-        ORDER BY id DESC 
+        ORDER BY updated_at DESC 
         LIMIT 20
       `;
       tokens = rows;
@@ -277,7 +279,7 @@ async function executeMulticastSend({ tokens = [], title, body, data = {}, image
   tokens = Array.from(new Set(tokens.filter(Boolean)));
 
   if (tokens.length === 0) {
-    console.log('\x1b[33m🟡 [PUSH FCM]\x1b[0m No hay tokens FCM registrados o activos para enviar.');
+    console.log('[PUSH FCM] No hay tokens FCM registrados o activos para enviar.');
     return { success: false, reason: 'No_tokens_registered' };
   }
 
@@ -287,7 +289,7 @@ async function executeMulticastSend({ tokens = [], title, body, data = {}, image
   }
 
   if (!isFirebaseInitialized) {
-    console.warn('\x1b[31m❌ [PUSH FCM]\x1b[0m Firebase Admin no está inicializado (falta service-account.json en el servidor).');
+    console.warn('[PUSH FCM] Firebase Admin no está inicializado (falta service-account.json en el servidor).');
     return { success: false, reason: 'Firebase_not_initialized' };
   }
 
@@ -322,7 +324,7 @@ async function executeMulticastSend({ tokens = [], title, body, data = {}, image
   try {
     const messaging = getMessaging();
     const response = await messaging.sendEachForMulticast(message);
-    console.log(`📡 [PUSH FCM] Notificación enviada a ${tokens.length} dispositivo(s). Éxitos: ${response.successCount} | Fallos: ${response.failureCount}`);
+    console.log(`[PUSH FCM] Notificación enviada a ${tokens.length} dispositivo(s). Éxitos: ${response.successCount} | Fallos: ${response.failureCount}`);
 
     // Limpiar tokens inválidos o desinstalados
     if (response.failureCount > 0 && isPgConnected && sql) {
@@ -350,7 +352,7 @@ async function executeMulticastSend({ tokens = [], title, body, data = {}, image
       failureCount: response.failureCount
     };
   } catch (err) {
-    console.warn('⚠️ [Push FCM] Error enviando notificaciones multicast:', err.message);
+    console.warn('[Push FCM] Error enviando notificaciones multicast:', err.message);
     return { success: false, error: err.message };
   }
 }

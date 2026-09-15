@@ -9,7 +9,7 @@ export async function findUserByUsername(usuario) {
   }
 
   const rows = await sql`
-    SELECT id, nombre_apellido, usuario, password 
+    SELECT uuid, uuid AS id, nombre_apellido, usuario, password 
     FROM usuarios 
     WHERE LOWER(TRIM(usuario)) = ${cleanInput}
     LIMIT 1
@@ -18,48 +18,49 @@ export async function findUserByUsername(usuario) {
 }
 
 export async function getUserSalasModel(userId) {
-  const uId = Number(userId);
   if (!isPgConnected || !sql) return [];
+  const uIdStr = String(userId).trim();
 
   return await sql`
-    SELECT s.* FROM salas s
-    INNER JOIN user_salas us ON s.id = us.sala_id
-    WHERE us.user_id = ${uId}
-    AND (s.grupo_id IS NULL OR s.grupo_id = 1)
-    ORDER BY s.id ASC
+    SELECT s.*, s.uuid AS id FROM salas s
+    INNER JOIN user_salas us ON s.uuid = us.sala_uuid
+    WHERE us.user_uuid::text = ${uIdStr}
+    AND (s.grupo_uuid IS NULL)
+    ORDER BY s.nombre ASC
   `;
 }
 
 export async function getUserNavMenuModel(userId) {
-  const uId = Number(userId);
   if (!isPgConnected || !sql) return [];
+  const uIdStr = String(userId).trim();
 
   const pages = await sql`
-    SELECT DISTINCT p.id, p.nombre
+    SELECT DISTINCT p.uuid, p.uuid AS id, p.nombre
     FROM paginas p
-    INNER JOIN modulos m ON p.id = m.page_id
-    INNER JOIN user_module_permissions ump ON m.id = ump.module_id
-    WHERE ump.user_id = ${uId}
-    ORDER BY p.id ASC
+    INNER JOIN modulos m ON p.uuid = m.page_uuid
+    INNER JOIN user_module_permissions ump ON m.uuid = ump.module_uuid
+    WHERE ump.user_uuid::text = ${uIdStr}
+    ORDER BY p.nombre ASC
   `;
 
   const modules = await sql`
-    SELECT m.id, m.nombre, m.icono, m.ruta, m.page_id, m.orden,
-           COALESCE(m.orden, m.id) as sort_orden,
+    SELECT m.uuid, m.uuid AS id, m.nombre, m.icono, m.ruta, m.page_uuid, m.page_uuid AS page_id, m.orden,
+           COALESCE(m.orden, 0) as sort_orden,
            STRING_AGG(DISTINCT perm.nombre, ',') as permisos
     FROM modulos m
-    INNER JOIN user_module_permissions ump ON m.id = ump.module_id
-    INNER JOIN permissions perm ON ump.permission_id = perm.id
-    WHERE ump.user_id = ${uId}
-    GROUP BY m.id, m.nombre, m.icono, m.ruta, m.page_id, m.orden
-    ORDER BY sort_orden ASC, m.id ASC
+    INNER JOIN user_module_permissions ump ON m.uuid = ump.module_uuid
+    INNER JOIN permissions perm ON ump.permission_uuid = perm.uuid
+    WHERE ump.user_uuid::text = ${uIdStr}
+    GROUP BY m.uuid, m.nombre, m.icono, m.ruta, m.page_uuid, m.orden
+    ORDER BY sort_orden ASC, m.nombre ASC
   `;
 
   return pages.map(p => ({
     ...p,
-    modulos: modules.filter(m => m.page_id === p.id).map(m => ({
+    modulos: modules.filter(m => m.page_uuid === p.uuid).map(m => ({
       ...m,
       permisos: m.permisos ? m.permisos.split(',') : []
     }))
   }));
 }
+

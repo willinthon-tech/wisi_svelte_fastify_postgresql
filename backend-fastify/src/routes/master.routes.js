@@ -2,7 +2,6 @@ import {
   getDepartamentosCiclos, getDepartamentosCiclosFilterOptions,
   getPlantillasHorarios, getPlantillasHorariosFilterOptions, createPlantillaHorario, updatePlantillaHorario, deletePlantillaHorario,
   getDepartamentoEmpleadosCiclos, updateDepartamentoEmpleadosCiclos,
-  handleZkIclockCdata,
   getUsuarios, createUsuario, updateUsuario, deleteUsuario,
   getSalas, createSala, updateSala, deleteSala,
   getPaginas, createPagina, updatePagina, deletePagina,

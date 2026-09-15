@@ -17,6 +17,10 @@ function normalizeCedula(str) {
   return String(str).trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
 }
 
+function isUuid(val) {
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+}
+
 /**
  * GET /api/biometricos/auditar-sala/:salaId
  * Audita todos los dispositivos biométricos y paneles de una sala
@@ -24,17 +28,17 @@ function normalizeCedula(str) {
 export async function auditarSalaBiometricos(request, reply) {
   try {
     const { salaId } = request.params;
-    const sId = Number(salaId);
-    if (!sId || isNaN(sId)) {
+    if (!salaId || !String(salaId).trim()) {
       return reply.status(400).send({ success: false, error: 'ID de sala inválido' });
     }
+    const isSalaU = isUuid(salaId);
 
     if (!isPgConnected || !sql) {
       return reply.status(500).send({ success: false, error: 'Base de datos no disponible' });
     }
 
     // 1. Obtener datos de la sala
-    const salaRows = await sql`SELECT id, nombre, grupo_id FROM salas WHERE id = ${sId}`;
+    const salaRows = await sql`SELECT uuid, uuid AS id, nombre FROM salas WHERE ${isSalaU ? sql`uuid = ${salaId}::uuid` : sql`uuid::text = ${salaId}`}`;
     if (salaRows.length === 0) {
       return reply.status(404).send({ success: false, error: 'Sala no encontrada' });
     }
@@ -42,10 +46,10 @@ export async function auditarSalaBiometricos(request, reply) {
 
     // 2. Obtener dispositivos de la sala
     const dispositivos = await sql`
-      SELECT id, nombre, sala_id, ip_local, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_local, ip_remota, ip_panel, usuario, clave
       FROM dispositivos
-      WHERE sala_id = ${sId}
-      ORDER BY id ASC
+      WHERE sala_uuid = ${sala.uuid}
+      ORDER BY nombre ASC
     `;
 
     if (dispositivos.length === 0) {
@@ -60,27 +64,27 @@ export async function auditarSalaBiometricos(request, reply) {
     // 3. Obtener empleados activos de esta sala
     const activeEmployees = await sql`
       SELECT 
-        e.id, e.nombre, e.cedula, e.foto, e.sexo, e.fecha_ingreso, e.activo,
-        c.id AS cargo_id, c.nombre AS cargo_nombre,
-        d.id AS departamento_id, d.nombre AS departamento_nombre,
-        s.id AS sala_id, s.nombre AS sala_nombre
+        e.uuid, e.uuid AS id, e.nombre, e.cedula, e.foto, e.sexo, e.fecha_ingreso, e.activo,
+        c.uuid AS cargo_id, c.nombre AS cargo_nombre,
+        d.uuid AS departamento_id, d.nombre AS departamento_nombre,
+        s.uuid AS sala_id, s.nombre AS sala_nombre
       FROM empleados e
-      LEFT JOIN cargos c ON e.cargo_id = c.id
-      LEFT JOIN areas a ON c.area_id = a.id
-      LEFT JOIN departamentos d ON a.departamento_id = d.id
-      LEFT JOIN salas s ON d.sala_id = s.id
-      WHERE e.activo = true AND d.sala_id = ${sId}
+      LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+      LEFT JOIN areas a ON c.area_uuid = a.uuid
+      LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+      LEFT JOIN salas s ON d.sala_uuid = s.uuid
+      WHERE e.activo = true AND d.sala_uuid = ${sala.uuid}
       ORDER BY e.nombre ASC
     `;
 
     // 4. Obtener todos los empleados del sistema (para identificar si un usuario del biométrico es inactivo/desincorporado)
     const allSystemEmployees = await sql`
-      SELECT e.id, e.nombre, e.cedula, e.activo, e.motivo_desincorporacion, s.nombre as sala_nombre
+      SELECT e.uuid, e.uuid AS id, e.nombre, e.cedula, e.activo, e.motivo_desincorporacion, s.nombre as sala_nombre
       FROM empleados e
-      LEFT JOIN cargos c ON e.cargo_id = c.id
-      LEFT JOIN areas a ON c.area_id = a.id
-      LEFT JOIN departamentos d ON a.departamento_id = d.id
-      LEFT JOIN salas s ON d.sala_id = s.id
+      LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+      LEFT JOIN areas a ON c.area_uuid = a.uuid
+      LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+      LEFT JOIN salas s ON d.sala_uuid = s.uuid
     `;
 
     const systemEmpByVariant = new Map();
@@ -98,13 +102,13 @@ export async function auditarSalaBiometricos(request, reply) {
     }
 
     // 5. Obtener mapa de asignaciones en empleado_dispositivos
-    const devIds = dispositivos.map(d => d.id);
+    const devUuids = dispositivos.map(d => d.uuid);
     const empDevRows = await sql`
-      SELECT empleado_id, dispositivo_id
+      SELECT empleado_uuid, dispositivo_uuid
       FROM empleado_dispositivos
-      WHERE dispositivo_id = ANY(${devIds})
+      WHERE dispositivo_uuid = ANY(${devUuids}::uuid[])
     `;
-    const assignedEmpDevSet = new Set(empDevRows.map(r => `${r.empleado_id}_${r.dispositivo_id}`));
+    const assignedEmpDevSet = new Set(empDevRows.map(r => `${r.empleado_uuid}_${r.dispositivo_uuid}`));
 
     // 6. Auditar cada dispositivo en paralelo
     const auditedDevices = await Promise.all(dispositivos.map(async (dev) => {
@@ -321,10 +325,10 @@ export async function auditarSalaBiometricos(request, reply) {
 export async function agregarEmpleadosABiometrico(request, reply) {
   try {
     const { dispositivoId, empleado_ids, target = 'both' } = request.body;
-    const dId = Number(dispositivoId);
-    if (!dId || isNaN(dId)) {
+    if (!dispositivoId) {
       return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }
+    const isDevU = isUuid(dispositivoId);
 
     if (!empleado_ids || !Array.isArray(empleado_ids) || empleado_ids.length === 0) {
       return reply.status(400).send({ success: false, error: 'Debe especificar al menos un empleado' });
@@ -335,20 +339,22 @@ export async function agregarEmpleadosABiometrico(request, reply) {
     }
 
     const [dev] = await sql`
-      SELECT id, nombre, sala_id, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_remota, ip_panel, usuario, clave
       FROM dispositivos
-      WHERE id = ${dId}
+      WHERE ${isDevU ? sql`uuid = ${dispositivoId}::uuid` : sql`uuid::text = ${dispositivoId}`}
+      LIMIT 1
     `;
 
     if (!dev) {
       return reply.status(404).send({ success: false, error: 'Dispositivo no encontrado' });
     }
 
-    const eIds = empleado_ids.map(Number).filter(Boolean);
+    const eUuids = empleado_ids.map(String).map(s => s.trim()).filter(Boolean);
+    const validUuids = eUuids.filter(isUuid);
     const empleados = await sql`
-      SELECT id, nombre, cedula, sexo, foto, fecha_ingreso
+      SELECT uuid, uuid AS id, nombre, cedula, sexo, foto, fecha_ingreso
       FROM empleados
-      WHERE id = ANY(${eIds})
+      WHERE uuid::text = ANY(${eUuids}) ${validUuids.length > 0 ? sql`OR uuid = ANY(${validUuids}::uuid[])` : sql``}
     `;
 
     const results = [];
@@ -359,7 +365,8 @@ export async function agregarEmpleadosABiometrico(request, reply) {
 
     for (const emp of empleados) {
       const empRes = {
-        empleado_id: emp.id,
+        empleado_id: emp.uuid,
+        empleado_uuid: emp.uuid,
         nombre: emp.nombre,
         cedula: emp.cedula,
         biometrico: { success: false, message: '' },
@@ -426,18 +433,14 @@ export async function agregarEmpleadosABiometrico(request, reply) {
       // 3. Asegurar asignación en empleado_dispositivos
       try {
         const existingRel = await sql`
-          SELECT id FROM empleado_dispositivos 
-          WHERE empleado_id = ${emp.id} AND dispositivo_id = ${dId} 
+          SELECT uuid FROM empleado_dispositivos 
+          WHERE empleado_uuid = ${emp.uuid}::uuid AND dispositivo_uuid = ${dev.uuid}::uuid 
           LIMIT 1
         `;
         if (existingRel.length === 0) {
           await sql`
-            INSERT INTO empleado_dispositivos (id, empleado_id, dispositivo_id)
-            VALUES (
-              (SELECT COALESCE(MAX(id), 0) + 1 FROM empleado_dispositivos),
-              ${emp.id},
-              ${dId}
-            )
+            INSERT INTO empleado_dispositivos (empleado_uuid, dispositivo_uuid)
+            VALUES (${emp.uuid}::uuid, ${dev.uuid}::uuid)
           `;
         }
       } catch (dbErr) {
@@ -467,10 +470,10 @@ export async function agregarEmpleadosABiometrico(request, reply) {
 export async function actualizarEmpleadosEnBiometrico(request, reply) {
   try {
     const { dispositivoId, empleado_ids, target = 'both' } = request.body;
-    const dId = Number(dispositivoId);
-    if (!dId || isNaN(dId)) {
+    if (!dispositivoId) {
       return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }
+    const isDevU = isUuid(dispositivoId);
 
     if (!empleado_ids || !Array.isArray(empleado_ids) || empleado_ids.length === 0) {
       return reply.status(400).send({ success: false, error: 'Debe especificar al menos un empleado' });
@@ -481,20 +484,22 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
     }
 
     const [dev] = await sql`
-      SELECT id, nombre, sala_id, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_remota, ip_panel, usuario, clave
       FROM dispositivos
-      WHERE id = ${dId}
+      WHERE ${isDevU ? sql`uuid = ${dispositivoId}::uuid` : sql`uuid::text = ${dispositivoId}`}
+      LIMIT 1
     `;
 
     if (!dev) {
       return reply.status(404).send({ success: false, error: 'Dispositivo no encontrado' });
     }
 
-    const eIds = empleado_ids.map(Number).filter(Boolean);
+    const eUuids = empleado_ids.map(String).map(s => s.trim()).filter(Boolean);
+    const validUuids = eUuids.filter(isUuid);
     const empleados = await sql`
-      SELECT id, nombre, cedula, sexo, foto, fecha_ingreso
+      SELECT uuid, uuid AS id, nombre, cedula, sexo, foto, fecha_ingreso
       FROM empleados
-      WHERE id = ANY(${eIds})
+      WHERE uuid::text = ANY(${eUuids}) ${validUuids.length > 0 ? sql`OR uuid = ANY(${validUuids}::uuid[])` : sql``}
     `;
 
     const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
@@ -506,7 +511,8 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
 
     for (const emp of empleados) {
       const empRes = {
-        empleado_id: emp.id,
+        empleado_id: emp.uuid,
+        empleado_uuid: emp.uuid,
         nombre: emp.nombre,
         cedula: emp.cedula,
         biometrico: { success: false, message: '' },
@@ -589,10 +595,10 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
 export async function eliminarUsuariosDeBiometrico(request, reply) {
   try {
     const { dispositivoId, employee_nos, target = 'both' } = request.body;
-    const dId = Number(dispositivoId);
-    if (!dId || isNaN(dId)) {
+    if (!dispositivoId) {
       return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }
+    const isDevU = isUuid(dispositivoId);
 
     if (!employee_nos || !Array.isArray(employee_nos) || employee_nos.length === 0) {
       return reply.status(400).send({ success: false, error: 'Debe especificar al menos un usuario' });
@@ -603,9 +609,10 @@ export async function eliminarUsuariosDeBiometrico(request, reply) {
     }
 
     const [dev] = await sql`
-      SELECT id, nombre, sala_id, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_remota, ip_panel, usuario, clave
       FROM dispositivos
-      WHERE id = ${dId}
+      WHERE ${isDevU ? sql`uuid = ${dispositivoId}::uuid` : sql`uuid::text = ${dispositivoId}`}
+      LIMIT 1
     `;
 
     if (!dev) {
@@ -657,8 +664,8 @@ export async function eliminarUsuariosDeBiometrico(request, reply) {
         for (const v of variants) {
           await sql`
             DELETE FROM empleado_dispositivos 
-            WHERE dispositivo_id = ${dId} AND empleado_id IN (
-              SELECT id FROM empleados WHERE REPLACE(UPPER(COALESCE(cedula, '')), '-', '') = ${v}
+            WHERE dispositivo_uuid = ${dev.uuid}::uuid AND empleado_uuid IN (
+              SELECT uuid FROM empleados WHERE REPLACE(UPPER(COALESCE(cedula, '')), '-', '') = ${v}
             )
           `;
         }

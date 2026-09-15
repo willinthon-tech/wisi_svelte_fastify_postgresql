@@ -50,14 +50,23 @@ import {
   getDeltaSyncModel
 } from '../models/master.model.js';
 
+function parseIds(val) {
+  if (!val) return null;
+  const list = Array.isArray(val) ? val : String(val).split(',');
+  const parsed = list.map(s => String(s).trim()).filter(s => s.length > 0 && s !== '-1');
+  return parsed.length > 0 ? parsed : null;
+}
+
+function parseStrings(val) {
+  if (!val) return null;
+  const list = Array.isArray(val) ? val : String(val).split(',');
+  const parsed = list.map(s => String(s).trim().toLowerCase()).filter(Boolean);
+  return parsed.length > 0 ? parsed : null;
+}
+
 export async function getAttlogsStats(request, reply) {
   try {
-    const salaIdsRaw = request.query?.sala_ids;
-    let salaIds = null;
-    if (salaIdsRaw && String(salaIdsRaw).trim().length > 0) {
-      const parsed = String(salaIdsRaw).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
-      if (parsed.length > 0) salaIds = parsed;
-    }
+    const salaIds = parseIds(request.query?.sala_ids);
     const startDate = request.query?.start_date || request.query?.fecha_desde || null;
     const endDate = request.query?.end_date || request.query?.fecha_hasta || null;
 
@@ -72,7 +81,7 @@ export async function getLastAttlogEventTime(request, reply) {
   try {
     const { id } = request.params || {};
     const lastEventTime = await getLastAttlogEventTimeModel(id || null);
-    return reply.send({ success: true, dispositivo_id: id ? Number(id) : null, last_event_time: lastEventTime });
+    return reply.send({ success: true, dispositivo_id: id || null, last_event_time: lastEventTime });
   } catch (err) {
     request.log.error(err);
     return reply.status(500).send({ success: false, error: err.message });
@@ -82,17 +91,8 @@ export async function getLastAttlogEventTime(request, reply) {
 export async function getAttlogPosition(request, reply) {
   try {
     const { id } = request.params;
-    const salaIdsRaw = request.query?.sala_ids || request.query?.user_sala_ids;
-    const estadosRaw = request.query?.estados;
-    let salaIds = null;
-    if (salaIdsRaw && String(salaIdsRaw).trim().length > 0 && String(salaIdsRaw) !== '-1') {
-      const parsed = String(salaIdsRaw).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
-      if (parsed.length > 0) salaIds = parsed;
-    }
-    let estados = null;
-    if (estadosRaw && String(estadosRaw).trim().length > 0) {
-      estados = String(estadosRaw).split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    }
+    const salaIds = parseIds(request.query?.sala_ids || request.query?.user_sala_ids);
+    const estados = parseStrings(request.query?.estados);
     const pos = await getAttlogPositionModel(id, salaIds, estados);
     if (!pos) return reply.status(404).send({ success: false, error: 'Marcaje no encontrado' });
     return reply.send({ success: true, data: pos });
@@ -371,18 +371,6 @@ export async function getLatestAttlogs(request, reply) {
     const sortBy = request.query?.sortBy || 'event_time';
     const sortDir = request.query?.sortDir || request.query?.sortOrder || 'desc';
 
-    const parseIds = (raw) => {
-      if (!raw || String(raw).trim().length === 0) return null;
-      const arr = String(raw).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
-      return arr.length > 0 ? arr : null;
-    };
-
-    const parseStrings = (raw) => {
-      if (!raw || String(raw).trim().length === 0) return null;
-      const arr = String(raw).split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      return arr.length > 0 ? arr : null;
-    };
-
     const userSalaIds = parseIds(request.query?.user_sala_ids);
     const salaIds = parseIds(request.query?.sala_ids);
     const dispositivoIds = parseIds(request.query?.dispositivo_ids);
@@ -431,18 +419,6 @@ export async function getLatestAttlogs(request, reply) {
 
 export async function getAttlogsFilterOptions(request, reply) {
   try {
-    const parseIds = (raw) => {
-      if (!raw || String(raw).trim().length === 0) return null;
-      const arr = String(raw).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
-      return arr.length > 0 ? arr : null;
-    };
-
-    const parseStrings = (raw) => {
-      if (!raw || String(raw).trim().length === 0) return null;
-      const arr = String(raw).split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-      return arr.length > 0 ? arr : null;
-    };
-
     const userSalaIds = parseIds(request.query?.user_sala_ids);
     const salaIds = parseIds(request.query?.sala_ids);
     const dispositivoIds = parseIds(request.query?.dispositivo_ids);
@@ -650,13 +626,13 @@ export async function syncAttlogs(request, reply) {
     const extracted = extractHikvisionPushData(body, rawStr);
 
     if (!extracted || !extracted.empNo) {
-      console.log(`\x1b[33m⚠️  [HIKVISION]\x1b[0m No se extrajo empNo del payload. CallerIp: ${callerIp} | Content-Type: ${request.headers['content-type']} | BodyBytes: ${rawBuf ? rawBuf.length : 'N/A'} | BodyPreview: ${rawStr.substring(0, 300)}`);
+      console.log(`\x1b[33m[HIKVISION]\x1b[0m No se extrajo empNo del payload. CallerIp: ${callerIp} | Content-Type: ${request.headers['content-type']} | BodyBytes: ${rawBuf ? rawBuf.length : 'N/A'} | BodyPreview: ${rawStr.substring(0, 300)}`);
       return reply.status(200).send({ status: "OK", statusCode: 1, statusString: "OK" });
     }
 
     // Log real-time biometric event cleanly
     const evtInfo = extracted.subEventType ? `(Evento: ${extracted.subEventType})` : '';
-    console.log(`\x1b[36m📡 [HIKVISION]\x1b[0m Evento recibido | empNo: ${extracted.empNo} | status: ${extracted.attendanceStatus} | verifyMode: ${extracted.currentVerifyMode} | devIp: ${extracted.deviceIp || 'N/A'} | callerIp: ${callerIp} ${evtInfo}`);
+    console.log(`\x1b[36m[HIKVISION]\x1b[0m Evento recibido | empNo: ${extracted.empNo} | status: ${extracted.attendanceStatus} | verifyMode: ${extracted.currentVerifyMode} | devIp: ${extracted.deviceIp || 'N/A'} | callerIp: ${callerIp} ${evtInfo}`);
 
     const dispositivos = await getCachedDispositivos();
     let matchedDev = null;
@@ -689,9 +665,9 @@ export async function syncAttlogs(request, reply) {
     // 4. Fallback: Si no coincide ninguna IP local específica, asignar al dispositivo más apropiado sin descartar
     if (!matchedDev && dispositivos.length > 0) {
       matchedDev = dispositivos[0];
-      console.log(`\x1b[33m⚠️  [HIKVISION]\x1b[0m No se encontró dispositivo para IP ${callerIp}. Fallback → ${matchedDev.nombre}`);
+      console.log(`\x1b[33m[HIKVISION]\x1b[0m No se encontró dispositivo para IP ${callerIp}. Fallback -> ${matchedDev.nombre}`);
     } else if (matchedDev) {
-      console.log(`\x1b[32m🟢 [HIKVISION]\x1b[0m Dispositivo matched: ${matchedDev.nombre} (sala: ${matchedDev.sala_nombre || matchedDev.sala_id})`);
+      console.log(`\x1b[32m[HIKVISION]\x1b[0m Dispositivo matched: ${matchedDev.nombre} (sala: ${matchedDev.sala_nombre || matchedDev.sala_uuid})`);
     }
 
     const devNombre = matchedDev ? (matchedDev.nombre || `Biométrico (${matchedDev.ip_local || callerIp})`) : 'Biométrico';
@@ -703,13 +679,11 @@ export async function syncAttlogs(request, reply) {
     if (!state) {
       state = { lastSeen: now, isOnline: true, devNombre, salaNombre };
       deviceStateMap.set(callerIp, state);
-      //console.log(`\x1b[32m🟢 [CONECTADO]\x1b[0m Dispositivo: ${devNombre} | Sala: ${salaNombre} | IP: ${callerIp}`);
     } else {
       state.devNombre = devNombre;
       state.salaNombre = salaNombre;
       if (!state.isOnline) {
         state.isOnline = true;
-        //console.log(`\x1b[32m🟢 [CONECTADO]\x1b[0m Dispositivo: ${devNombre} | Sala: ${salaNombre} | IP: ${callerIp}`);
       }
       state.lastSeen = now;
     }
@@ -726,9 +700,11 @@ export async function syncAttlogs(request, reply) {
     }
 
     const payload = {
-      dispositivo_id: matchedDev.id,
+      dispositivo_uuid: matchedDev?.uuid || null,
+      dispositivo_id: matchedDev?.uuid || null,
       dispositivo_nombre: devNombre,
-      sala_id: matchedDev.sala_id || null,
+      sala_uuid: matchedDev?.sala_uuid || null,
+      sala_id: matchedDev?.sala_uuid || null,
       sala_nombre: salaNombre,
       timestamp: new Date().toISOString(),
       attlogs: [{
@@ -817,14 +793,8 @@ export async function updateUserPermissions(request, reply) {
 export async function getDepartamentosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
 
     const result = await getDepartamentosFilterOptionsModel({
       userSalaIds,
@@ -879,14 +849,8 @@ export async function deleteDepartamento(request, reply) {
 export async function getJuegosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
 
     const result = await getJuegosFilterOptionsModel({
       userSalaIds,
@@ -941,18 +905,9 @@ export async function deleteJuego(request, reply) {
 export async function getMesasFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let juegoIds = null;
-    if (q.juego_ids) {
-      juegoIds = String(q.juego_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
+    const juegoIds = parseIds(q.juego_ids);
 
     const result = await getMesasFilterOptionsModel({
       active: q.active,
@@ -1034,18 +989,9 @@ export async function purgeMesa(request, reply) {
 export async function getAreasFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let departamentoIds = null;
-    if (q.departamento_ids) {
-      departamentoIds = String(q.departamento_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
+    const departamentoIds = parseIds(q.departamento_ids);
 
     const result = await getAreasFilterOptionsModel({
       userSalaIds,
@@ -1101,22 +1047,10 @@ export async function deleteArea(request, reply) {
 export async function getCargosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let departamentoIds = null;
-    if (q.departamento_ids) {
-      departamentoIds = String(q.departamento_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let areaIds = null;
-    if (q.area_ids) {
-      areaIds = String(q.area_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
+    const departamentoIds = parseIds(q.departamento_ids);
+    const areaIds = parseIds(q.area_ids);
 
     const result = await getCargosFilterOptionsModel({
       userSalaIds,
@@ -1173,30 +1107,12 @@ export async function deleteCargo(request, reply) {
 export async function getEmpleadosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let departamentoIds = null;
-    if (q.departamento_ids) {
-      departamentoIds = String(q.departamento_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let areaIds = null;
-    if (q.area_ids) {
-      areaIds = String(q.area_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let cargoIds = null;
-    if (q.cargo_ids) {
-      cargoIds = String(q.cargo_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let sexo = null;
-    if (q.sexo) {
-      sexo = String(q.sexo).split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
+    const departamentoIds = parseIds(q.departamento_ids);
+    const areaIds = parseIds(q.area_ids);
+    const cargoIds = parseIds(q.cargo_ids);
+    const sexo = parseStrings(q.sexo);
 
     const result = await getEmpleadosFilterOptionsModel({
       userSalaIds,
@@ -1271,82 +1187,14 @@ export async function deleteEmpleado(request, reply) {
   }
 }
 
-export async function handleZkIclockCdata(request, reply) {
-  try {
-    const query = request.query || {};
-    const sn = query.SN || query.sn || 'ZK_UNKNOWN';
-
-    if (request.method === 'GET') {
-      return reply.type('text/plain').send('OK');
-    }
-
-    const rawBody = typeof request.body === 'string'
-      ? request.body
-      : (Buffer.isBuffer(request.body) ? request.body.toString('utf8') : '');
-
-    const lines = rawBody.split('\n');
-    const attlogsToSync = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const parts = trimmed.split('\t');
-      if (parts.length >= 2) {
-        const empNo = parts[0].trim();
-        const eventTime = parts[1].trim();
-        if (empNo && eventTime) {
-          attlogsToSync.push({
-            employee_no: empNo,
-            event_time: eventTime,
-            nombre: null
-          });
-        }
-      }
-    }
-
-    if (attlogsToSync.length > 0) {
-      const dispositivos = await getCachedDispositivos();
-      const rawIp = (request.headers['x-forwarded-for'] || request.ip || '').split(',')[0].trim();
-      const callerIp = rawIp.replace(/^.*:/, '').trim();
-
-      const matchedDev = dispositivos.find(d => (d.ip_local && d.ip_local.includes(callerIp)) || (d.ip_remota && d.ip_remota.includes(callerIp))) || dispositivos[0];
-
-      const payload = {
-        dispositivo_id: matchedDev ? matchedDev.id : 1,
-        dispositivo_nombre: matchedDev ? matchedDev.nombre : `ZK (${sn})`,
-        sala_id: matchedDev ? matchedDev.sala_id : 1,
-        sala_nombre: matchedDev ? matchedDev.sala_nombre : 'Sin Sala',
-        attlogs: attlogsToSync
-      };
-
-      await syncAttlogsModel(payload);
-      console.log(`[32m🟢 [ATTLOG ZK][0m Recibidos ${attlogsToSync.length} marcajes de ZK (${sn})`);
-    }
-
-    return reply.type('text/plain').send('OK');
-  } catch (err) {
-    console.error('Error procesando ZK IClock CData:', err);
-    return reply.type('text/plain').send('OK');
-  }
-}
-
 
 // --- PLANTILLAS HORARIOS ---
 export async function getPlantillasHorariosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let tipo = null;
-    if (q.tipo) {
-      tipo = String(q.tipo).split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
+    const tipo = parseStrings(q.tipo);
 
     const result = await getPlantillasHorariosFilterOptionsModel({
       userSalaIds,
@@ -1419,14 +1267,8 @@ export async function getDepartamentosCiclos(request, reply) {
 export async function getDepartamentosCiclosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
 
     const res = await getDepartamentosCiclosFilterOptionsModel({
       userSalaIds,
@@ -1477,14 +1319,8 @@ export async function getFeriados(request, reply) {
 export async function getFeriadosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
     const res = await getFeriadosFilterOptionsModel({
       userSalaIds,
       salaIds,
@@ -1561,14 +1397,8 @@ export async function getCarnets(request, reply) {
 export async function getCortes(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
 
     const res = await getCortesModel({
       page: q.page,
@@ -1625,10 +1455,7 @@ export async function deleteCorte(request, reply) {
 export async function getCortesFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
     const res = await getCortesFilterOptionsModel({ userSalaIds });
     return reply.send(res);
   } catch (err) {
@@ -1763,9 +1590,8 @@ export const deleteModelo = modelosCtrl.delete;
 export async function getModelosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    const parseIds = (key) => q[key] ? String(q[key]).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
     const res = await getModelosFilterOptionsModel({
-      marcaIds: parseIds('marca_ids'),
+      marcaIds: parseIds(q.marca_ids),
       search: q.search || ''
     });
     return reply.send(res);
@@ -1813,7 +1639,6 @@ export const deleteFechaPatria = fechasPatriasCtrl.delete;
 export async function getMaquinas(request, reply) {
   try {
     const q = request.query || {};
-    const parseIds = (val) => val ? String(val).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
     const userSalaIds = parseIds(q.user_sala_ids);
     const salaIds = parseIds(q.sala_ids);
     const grupoIds = parseIds(q.grupo_ids || q.grupo_sala_ids);
@@ -1857,21 +1682,20 @@ export async function getMaquinas(request, reply) {
 export async function getMaquinasFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    const parseIds = (key) => q[key] ? String(q[key]).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
 
     const res = await getMaquinasFilterOptionsModel({
-      userSalaIds: parseIds('user_sala_ids'),
-      salaIds: parseIds('sala_ids'),
-      grupoIds: parseIds('grupo_ids'),
-      marcaIds: parseIds('marca_ids'),
-      modeloIds: parseIds('modelo_ids'),
-      juegoIds: parseIds('juego_ids'),
-      estadoIds: parseIds('estado_ids'),
-      sociedadIds: parseIds('sociedad_ids'),
-      valorIds: parseIds('valor_ids'),
-      tipoIds: parseIds('tipo_ids'),
-      modoIds: parseIds('modo_ids'),
-      legalIds: parseIds('legal_ids'),
+      userSalaIds: parseIds(q.user_sala_ids),
+      salaIds: parseIds(q.sala_ids),
+      grupoIds: parseIds(q.grupo_ids),
+      marcaIds: parseIds(q.marca_ids),
+      modeloIds: parseIds(q.modelo_ids),
+      juegoIds: parseIds(q.juego_ids),
+      estadoIds: parseIds(q.estado_ids),
+      sociedadIds: parseIds(q.sociedad_ids),
+      valorIds: parseIds(q.valor_ids),
+      tipoIds: parseIds(q.tipo_ids),
+      modoIds: parseIds(q.modo_ids),
+      legalIds: parseIds(q.legal_ids),
       searchNombre: q.search_nombre || q.searchNombre || '',
       searchSerial: q.search_serial || q.searchSerial || '',
       search: q.search || ''
@@ -1930,14 +1754,8 @@ export async function deleteMaquina(request, reply) {
 export async function getLlavesFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
 
     const result = await getLlavesFilterOptionsModel({
       active: q.active,
@@ -2018,14 +1836,8 @@ export async function purgeLlave(request, reply) {
 export async function getLibrosFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    let userSalaIds = null;
-    if (q.user_sala_ids) {
-      userSalaIds = String(q.user_sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
-    let salaIds = null;
-    if (q.sala_ids) {
-      salaIds = String(q.sala_ids).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
-    }
+    const userSalaIds = parseIds(q.user_sala_ids);
+    const salaIds = parseIds(q.sala_ids);
 
     const result = await getLibrosFilterOptionsModel({
       userSalaIds,
@@ -2386,7 +2198,6 @@ export const deleteTipoIncidencia = tipoIncidenciasCtrl.delete;
 export async function getClientesFilterOptions(request, reply) {
   try {
     const q = request.query || {};
-    const parseIds = (val) => val ? String(val).split(',').map(s => Number(s.trim())).filter(n => !isNaN(n)) : null;
     const userSalaIds = parseIds(q.user_sala_ids);
     const salaIds = parseIds(q.sala_ids);
     const tipoClienteIds = parseIds(q.tipo_cliente_ids);

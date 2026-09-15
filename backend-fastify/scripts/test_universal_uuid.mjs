@@ -40,8 +40,8 @@ async function test() {
   await sql`DELETE FROM maquinas WHERE serial = 'TEST-UUID-99999'`.catch(() => {});
 
   // Test 1: Verificar que una sala real tiene UUID y se puede buscar
-  const [testSala] = await sql`SELECT id, uuid, nombre FROM salas LIMIT 1`;
-  console.log(`1. Sala de prueba: ID ${testSala.id}, UUID ${testSala.uuid}, Nombre: ${testSala.nombre}`);
+  const [testSala] = await sql`SELECT uuid, uuid AS id, nombre FROM salas LIMIT 1`;
+  console.log(`1. Sala de prueba: UUID ${testSala.uuid}, Nombre: ${testSala.nombre}`);
 
   // Test 2: Crear y actualizar una Llave usando sala_uuid
   console.log('2. Test Llave con UUID de sala...');
@@ -49,7 +49,7 @@ async function test() {
     nombre: 'Llave Test UUID Universal',
     sala_uuid: testSala.uuid
   });
-  console.log(`   ✓ Llave creada: ID ${nuevaLlave.id}, UUID ${nuevaLlave.uuid}, sala_id ${nuevaLlave.sala_id}, sala_uuid ${nuevaLlave.sala_uuid}`);
+  console.log(`   ✓ Llave creada: UUID ${nuevaLlave.uuid}, sala_uuid ${nuevaLlave.sala_uuid}`);
   
   // Buscar por UUID
   const encontradaLlave = await getLlaveByIdModel(nuevaLlave.uuid);
@@ -69,16 +69,16 @@ async function test() {
 
   // Test 3: Crear Mesa usando UUIDs
   console.log('3. Test Mesa con UUIDs de sala y juego...');
-  let [testJuego] = await sql`SELECT id, uuid, nombre FROM juegos LIMIT 1`;
+  let [testJuego] = await sql`SELECT uuid, uuid AS id, nombre FROM juegos LIMIT 1`;
   if (!testJuego) {
-    [testJuego] = await sql`INSERT INTO juegos (nombre) VALUES ('Blackjack Test') RETURNING *`;
+    [testJuego] = await sql`INSERT INTO juegos (nombre) VALUES ('Blackjack Test') RETURNING uuid, uuid AS id, nombre`;
   }
   const nuevaMesa = await createMesaModel({
     nombre: 'Mesa Test UUID Universal',
     sala_uuid: testSala.uuid,
     juego_uuid: testJuego.uuid
   });
-  console.log(`   ✓ Mesa creada: ID ${nuevaMesa.id}, UUID ${nuevaMesa.uuid}, sala_uuid: ${nuevaMesa.sala_uuid}, juego_uuid: ${nuevaMesa.juego_uuid}`);
+  console.log(`   ✓ Mesa creada: UUID ${nuevaMesa.uuid}, sala_uuid: ${nuevaMesa.sala_uuid}, juego_uuid: ${nuevaMesa.juego_uuid}`);
 
   // Actualizar mesa por UUID
   await updateMesaModel(nuevaMesa.uuid, { nombre: 'Mesa Test UUID Actualizada' });
@@ -92,14 +92,14 @@ async function test() {
 
   // Test 4: Libro Control Llaves usando llaves_uuids
   console.log('4. Test Libro Control Llaves con UUID...');
-  const [testLibro] = await sql`SELECT id, uuid FROM libros LIMIT 1`;
+  const [testLibro] = await sql`SELECT uuid, uuid AS id FROM libros LIMIT 1`;
   if (testLibro) {
     const nuevoControl = await createLibroControlLlavesModel({
       libro_uuid: testLibro.uuid,
       llaves_uuids: [nuevaLlave.uuid],
       descripcion: 'Prueba control llaves con UUID'
     });
-    console.log(`   ✓ Control llaves creado: ID ${nuevoControl.id}, UUID ${nuevoControl.uuid}`);
+    console.log(`   ✓ Control llaves creado: UUID ${nuevoControl.uuid}`);
     const controles = await getLibroControlLlavesModel(testLibro.uuid);
     console.log(`   ✓ Controles obtenidos por libro_uuid: ${controles.length} registros`);
     // Limpieza de control
@@ -108,9 +108,9 @@ async function test() {
 
   // Test 5: Crear y actualizar Modelo con marca_uuid
   console.log('5. Test Modelo con UUID...');
-  let [testMarca] = await sql`SELECT id, uuid, nombre FROM marcas LIMIT 1`;
+  let [testMarca] = await sql`SELECT uuid, uuid AS id, nombre FROM marcas LIMIT 1`;
   if (!testMarca) {
-    [testMarca] = await sql`INSERT INTO marcas (nombre) VALUES ('Marca Test') RETURNING *`;
+    [testMarca] = await sql`INSERT INTO marcas (nombre) VALUES ('Marca Test') RETURNING uuid, uuid AS id, nombre`;
   }
   if (testMarca) {
     const nuevoModelo = await createModeloModel({
