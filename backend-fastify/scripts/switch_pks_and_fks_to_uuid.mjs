@@ -67,6 +67,9 @@ async function main() {
     console.log(`✔ Tabla ${table}: uuid, is_deleted, deleted_at, updated_at configurados.`);
   }
 
+  // Asegurar que libros tenga columna active para retrocompatibilidad
+  await sql.unsafe(`ALTER TABLE libros ADD COLUMN IF NOT EXISTS active INT DEFAULT 1;`);
+
   console.log('\n--- PASO 2: Creando y poblando columnas de Foreign Key (*_uuid) ---');
   const newFkDefinitions = [
     { table: 'departamentos', col: 'sala_uuid', parent: 'salas', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'sala_id' },

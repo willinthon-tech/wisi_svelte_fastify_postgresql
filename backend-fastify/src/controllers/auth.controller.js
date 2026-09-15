@@ -49,6 +49,7 @@ export async function loginController(request, reply) {
       success: true,
       token,
       user: {
+        id: userUuid,
         uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,
@@ -85,7 +86,21 @@ export async function getMeController(request, reply) {
     }
 
     const users = await getUsuariosModel();
-    const user = users.find(u => String(u.uuid) === String(userId) || String(u.id) === String(userId));
+    let user = users.find(u => String(u.uuid) === String(userId) || String(u.id) === String(userId));
+
+    // Fallback: Si el cliente envía un ID numérico legacy (ej. user_id=1), buscar por id entero si la tabla lo tiene
+    if (!user && !isNaN(Number(userId))) {
+      try {
+        const { sql, isPgConnected } = await import('../config/db.js');
+        if (isPgConnected && sql) {
+          const rows = await sql`SELECT uuid, uuid AS id, nombre_apellido, usuario FROM usuarios WHERE id = ${Number(userId)} LIMIT 1`;
+          if (rows && rows.length > 0) {
+            user = rows[0];
+          }
+        }
+      } catch {}
+    }
+
     if (!user) {
       return reply.status(404).send({ success: false, error: 'Usuario no encontrado' });
     }
@@ -97,6 +112,7 @@ export async function getMeController(request, reply) {
     return reply.send({
       success: true,
       user: {
+        id: userUuid,
         uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,

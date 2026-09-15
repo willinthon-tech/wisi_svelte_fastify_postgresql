@@ -19,10 +19,11 @@ export async function loginAuthModel(usuario, password) {
 export async function getMeAuthModel() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('wisi_token') : null;
   const storedUser = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('wisi_user') || 'null') : null;
-  const userId = storedUser?.id || '';
+  const userId = storedUser?.uuid || storedUser?.id || '';
 
   const headers = token ? { 'Authorization': token } : {};
-  const res = await fetch(`${getApiBase()}/auth/me?user_id=${userId}`, { headers });
+  const queryParam = userId ? `?user_id=${userId}` : '';
+  const res = await fetch(`${getApiBase()}/auth/me${queryParam}`, { headers });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || 'Error al consultar información de usuario');
   return json;

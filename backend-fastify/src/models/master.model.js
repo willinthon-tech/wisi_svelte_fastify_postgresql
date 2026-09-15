@@ -7876,7 +7876,7 @@ export async function getLibrosModel(params = {}) {
       l.uuid,
       l.uuid AS id,
       l.descripcion,
-      l.active,
+      1 AS active,
       l.sala_uuid,
       l.sala_uuid AS sala_id,
       s.nombre AS sala_nombre,
@@ -7909,32 +7909,57 @@ export async function getLibrosModel(params = {}) {
 
 export async function getLibroByIdModel(id) {
   if (!id) return { success: false, error: 'ID de libro inválido' };
-  const targetUuid = String(id).trim();
-  if (!isUuid(targetUuid)) return { success: false, error: 'ID de libro inválido' };
+  const target = String(id).trim();
 
   if (isPgConnected && sql) {
-    const rows = await sql`
-      SELECT 
-        l.uuid,
-        l.uuid AS id,
-        l.descripcion,
-        l.active,
-        l.sala_uuid,
-        l.sala_uuid AS sala_id,
-        s.nombre AS sala_nombre,
-        s.nombre_comercial AS sala_nombre_comercial,
-        l.created_at,
-        l.updated_at
-      FROM libros l
-      LEFT JOIN salas s ON l.sala_uuid = s.uuid
-      WHERE l.uuid = ${targetUuid}::uuid
-      LIMIT 1
-    `;
-    if (rows && rows.length > 0) {
-      return { success: true, data: rows[0] };
+    if (isUuid(target)) {
+      const rows = await sql`
+        SELECT 
+          l.uuid,
+          l.uuid AS id,
+          l.descripcion,
+          1 AS active,
+          l.sala_uuid,
+          l.sala_uuid AS sala_id,
+          s.nombre AS sala_nombre,
+          s.nombre_comercial AS sala_nombre_comercial,
+          l.created_at,
+          l.updated_at
+        FROM libros l
+        LEFT JOIN salas s ON l.sala_uuid = s.uuid
+        WHERE l.uuid = ${target}::uuid
+        LIMIT 1
+      `;
+      if (rows && rows.length > 0) {
+        return { success: true, data: rows[0] };
+      }
+    } else {
+      // Fallback para ID numérico antiguo (ej. 17)
+      try {
+        const rows = await sql`
+          SELECT 
+            l.uuid,
+            l.uuid AS id,
+            l.descripcion,
+            1 AS active,
+            l.sala_uuid,
+            l.sala_uuid AS sala_id,
+            s.nombre AS sala_nombre,
+            s.nombre_comercial AS sala_nombre_comercial,
+            l.created_at,
+            l.updated_at
+          FROM libros l
+          LEFT JOIN salas s ON l.sala_uuid = s.uuid
+          WHERE l.id = ${Number(target)}
+          LIMIT 1
+        `;
+        if (rows && rows.length > 0) {
+          return { success: true, data: rows[0] };
+        }
+      } catch {}
     }
   } else {
-    const found = (inMemoryData.libros || []).find(l => l.uuid === targetUuid);
+    const found = (inMemoryData.libros || []).find(l => String(l.uuid) === target || String(l.id) === target);
     if (found) {
       return { success: true, data: found };
     }
