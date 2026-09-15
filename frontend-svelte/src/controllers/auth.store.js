@@ -1,7 +1,6 @@
 import { writable } from 'svelte/store';
 import { loginAuthModel, getMeAuthModel } from '../models/auth.model.js';
 import { navigateToRoute } from './router.store.js';
-import { masterUsuariosStore } from './master.store.js';
 
 // Read initial session state from localStorage
 const initialAuth = typeof localStorage !== 'undefined' ? localStorage.getItem('wisi_auth') === 'true' : false;
@@ -133,7 +132,10 @@ export async function loginUserStore(usuario, password) {
 
     // 2. Dynamic check in Master Admin Users Store
     let masterUsers = [];
-    masterUsuariosStore.subscribe(val => masterUsers = val)();
+    try {
+      const { masterUsuariosStore } = await import('./master.store.js');
+      masterUsuariosStore.subscribe(val => masterUsers = val)();
+    } catch (e) {}
 
     const matchedUser = masterUsers.find(u => 
       (u.usuario || '').trim().toLowerCase() === cleanInputUser
