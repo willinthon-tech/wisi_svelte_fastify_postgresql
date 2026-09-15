@@ -58,10 +58,62 @@
           } catch (ricErr) {}
         }
 
-        // 3. Proteger PerformanceObserver contra el bug interno de Chromium DevTools (reportAllChanges / startTime)
+        // 3. Neutralizar 'soft-navigation' y proteger PerformanceObserver contra el bug interno de Chrome DevTools
         if (typeof window !== 'undefined' && window.PerformanceObserver) {
           try {
             var OrigPO = window.PerformanceObserver;
+
+            // Filtrar 'soft-navigation' para que los scripts de DevTools crean que no está soportado
+            var origSupported = OrigPO.supportedEntryTypes || [];
+            var filteredSupported = [];
+            for (var s = 0; s < origSupported.length; s++) {
+              if (origSupported[s] !== 'soft-navigation') {
+                filteredSupported.push(origSupported[s]);
+              }
+            }
+
+            // Anular la observación de soft-navigation en el prototipo
+            if (OrigPO.prototype && OrigPO.prototype.observe) {
+              var origObserve = OrigPO.prototype.observe;
+              OrigPO.prototype.observe = function(options) {
+                if (options) {
+                  if (options.type === 'soft-navigation') {
+                    return;
+                  }
+                  if (Array.isArray(options.entryTypes)) {
+                    options.entryTypes = options.entryTypes.filter(function(t) { return t !== 'soft-navigation'; });
+                    if (options.entryTypes.length === 0) return;
+                  }
+                }
+                return origObserve.apply(this, arguments);
+              };
+            }
+
+            // Proteger getEntries de PerformanceObserverEntryList para que ningún entry tenga startTime indefinido
+            if (typeof window.PerformanceObserverEntryList !== 'undefined' && window.PerformanceObserverEntryList.prototype) {
+              var sanitizeEntries = function(list) {
+                if (!list) return [];
+                for (var j = 0; j < list.length; j++) {
+                  if (list[j] && typeof list[j].startTime === 'undefined') {
+                    try { list[j].startTime = 0; } catch (e) {}
+                  }
+                }
+                return list;
+              };
+              var origELGet = window.PerformanceObserverEntryList.prototype.getEntries;
+              if (origELGet) {
+                window.PerformanceObserverEntryList.prototype.getEntries = function() {
+                  return sanitizeEntries(origELGet.apply(this, arguments));
+                };
+              }
+              var origELGetByType = window.PerformanceObserverEntryList.prototype.getEntriesByType;
+              if (origELGetByType) {
+                window.PerformanceObserverEntryList.prototype.getEntriesByType = function() {
+                  return sanitizeEntries(origELGetByType.apply(this, arguments));
+                };
+              }
+            }
+
             var PatchedPO = function(callback) {
               var safeCallback = function(list, observer) {
                 try {
@@ -80,10 +132,15 @@
               Object.setPrototypeOf(inst, PatchedPO.prototype);
               return inst;
             };
+
             PatchedPO.prototype = OrigPO.prototype;
-            if (OrigPO.supportedEntryTypes) {
-              PatchedPO.supportedEntryTypes = OrigPO.supportedEntryTypes;
-            }
+            try {
+              Object.defineProperty(PatchedPO, 'supportedEntryTypes', {
+                configurable: true,
+                enumerable: true,
+                get: function() { return filteredSupported; }
+              });
+            } catch (propErr) {}
             window.PerformanceObserver = PatchedPO;
           } catch (poErr) {}
         }
