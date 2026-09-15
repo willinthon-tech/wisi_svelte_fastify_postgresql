@@ -40,8 +40,12 @@
   function parseRoute(routeStr) {
     if (!routeStr) return;
     const clean = String(routeStr).replace(/^#\/?/, '').replace(/^\//, '').trim();
-    // Match pattern cecom/libro/:id(/:subvista)? o libro/:id(/:subvista)? o :id(/:subvista)?
-    const match = clean.match(/(?:cecom\/libro\/|libro\/|^)([a-f0-9-]+|\d+)(?:\/([a-z0-9-]+))?/i);
+    if (clean === 'cecom/libro' || clean === 'libro' || clean === 'libros') {
+      return; // Es la vista lista de libros, no un libro individual
+    }
+    // Match pattern cecom/libro/:id(/:subvista)? o libro/:id(/:subvista)?
+    const match = clean.match(/^(?:cecom\/libro\/|libro\/)([a-f0-9-]+|\d+)(?:\/([a-z0-9-]+))?$/i)
+      || clean.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|\d+)(?:\/([a-z0-9-]+))?$/i);
     if (match) {
       const parsedId = match[1];
       const parsedSub = match[2];

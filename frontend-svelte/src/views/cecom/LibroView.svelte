@@ -29,7 +29,7 @@
   $: currentUserSalas = $currentUserStore?.uuid ? (userSalasMap[$currentUserStore.uuid] || []) : [];
   $: assignedSalaIds = (currentUserSalas.length > 0)
     ? currentUserSalas.map(String)
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => String(typeof s === 'object' ? s.uuid : s)) : []);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => String(typeof s === 'object' ? (s.uuid || s.id) : s)) : []);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -78,15 +78,19 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
+    // 1. Carga instantánea (0ms) desde IndexedDB local (filtrada por salas asignadas para evitar pestañeo)
     try {
       const local = await getLocalItems('libros');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      } else if (Array.isArray(allLibros) && allLibros.length > 0) {
-        items = allLibros;
-        totalCount = allLibros.length;
+      let source = (Array.isArray(local) && local.length > 0) ? local : allLibros;
+      if (assignedSalaIds && assignedSalaIds.length > 0) {
+        source = source.filter(item => {
+          const sId = String(item.sala_uuid || item.sala_id || '');
+          return !sId || assignedSalaIds.includes(sId);
+        });
+      }
+      if (source && source.length > 0) {
+        items = source.slice(0, currentParams.limit || 10);
+        totalCount = source.length;
       }
     } catch (e) {}
 

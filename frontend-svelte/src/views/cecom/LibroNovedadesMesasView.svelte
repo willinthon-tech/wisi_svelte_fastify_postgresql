@@ -26,6 +26,9 @@
   $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
   $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
+  $: assignedSalaIds = ($authUserSalasStore && $authUserSalasStore.length > 0) 
+    ? $authUserSalasStore.map(s => String(typeof s === 'object' ? (s.uuid || s.id) : s)) 
+    : [];
 
   // Estado de carga y datos
   let isLoadingRecords = true;
