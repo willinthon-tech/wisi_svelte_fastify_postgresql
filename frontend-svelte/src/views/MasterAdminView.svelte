@@ -2612,7 +2612,8 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
               >
                 <td
                   style="padding: 8px 14px; font-family: monospace; color: #334155; font-weight: 600;"
-                  >#{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)}</td
+                  title={item.uuid || item.id}
+                  >#{(item.uuid ? item.uuid.slice(0, 8) : (item.id || ''))}</td
                 >
 
                 {#if activeTab === "salas"}

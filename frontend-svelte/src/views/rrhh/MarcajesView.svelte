@@ -1165,11 +1165,11 @@
                   </button>
                 </td>
 
-                <!-- ID -->
                 <td
                   style="padding: 4px 14px; font-family: monospace; color: #334155; font-weight: 700;"
+                  title={item.uuid || item.id}
                 >
-                  #{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)}
+                  #{(item.uuid ? item.uuid.slice(0, 8) : (item.id || ''))}
                 </td>
                 <td
                   style="padding: 4px 14px; font-family: monospace; color: #334155; font-weight: 700;"

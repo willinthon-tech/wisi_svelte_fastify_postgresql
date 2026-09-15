@@ -1322,7 +1322,7 @@
                     {#if item.is_system}
                       <span class="id-badge" style="background: #e2e8f0; color: #334155; border-color: #cbd5e1; font-weight: 900; letter-spacing: 0.5px;">BASE</span>
                     {:else}
-                      <span class="id-badge">#{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)}</span>
+                      <span class="id-badge" title={item.uuid || item.id} style="font-family: monospace; font-weight: 700;">#{(item.uuid ? item.uuid.slice(0, 8) : (item.id ? String(item.id).slice(0, 8) : ''))}</span>
                     {/if}
 
                   {:else if isEditingThisRow && col.editable !== false}
