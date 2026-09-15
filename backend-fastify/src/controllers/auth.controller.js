@@ -42,13 +42,14 @@ export async function loginController(request, reply) {
     const salas = await getUserSalasModel(user.id);
     const menu = await getUserNavMenuModel(user.id);
 
-    const token = `token_wisi_${user.id}_${Date.now()}`;
+    const userUuid = user.uuid || user.id;
+    const token = `token_wisi_${userUuid}_${Date.now()}`;
 
     return reply.send({
       success: true,
       token,
       user: {
-        id: user.id,
+        uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,
         salas
@@ -84,18 +85,19 @@ export async function getMeController(request, reply) {
     }
 
     const users = await getUsuariosModel();
-    const user = users.find(u => String(u.id) === String(userId) || String(u.uuid) === String(userId));
+    const user = users.find(u => String(u.uuid) === String(userId) || String(u.id) === String(userId));
     if (!user) {
       return reply.status(404).send({ success: false, error: 'Usuario no encontrado' });
     }
 
-    const salas = await getUserSalasModel(user.id);
-    const menu = await getUserNavMenuModel(user.id);
+    const userUuid = user.uuid || user.id;
+    const salas = await getUserSalasModel(userUuid);
+    const menu = await getUserNavMenuModel(userUuid);
 
     return reply.send({
       success: true,
       user: {
-        id: user.id,
+        uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,
         salas

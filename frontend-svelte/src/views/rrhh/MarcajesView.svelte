@@ -146,12 +146,12 @@
   // Extract assigned sala IDs strictly for the logged in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id || 1;
 
     // 1. If user object has specific salas assigned directly from backend API session:
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -163,10 +163,10 @@
       typeof masterMap === "object" &&
       !Array.isArray(masterMap)
     ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : s))
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
           .filter(Boolean)
           .map(String);
       }
@@ -176,7 +176,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }

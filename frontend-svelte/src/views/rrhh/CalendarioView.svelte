@@ -22,11 +22,11 @@
   // Extraer las salas asignadas estrictamente para el usuario logueado
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id || 1;
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -37,10 +37,10 @@
       typeof masterMap === "object" &&
       !Array.isArray(masterMap)
     ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : s))
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
           .filter(Boolean)
           .map(String);
       }
@@ -49,7 +49,7 @@
     const authList = $authUserSalasStore;
     if (Array.isArray(authList) && authList.length > 0) {
       return authList
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -187,18 +187,18 @@
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.includes(s.id);
+    return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
   $: columns = [
-    { key: 'id', label: 'N°', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'N°', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Fecha Patria / Feriado', bold: true, sortable: true, editable: true },
     { key: 'dia', label: 'Día', sortable: true, editable: true, type: 'number' },
     { key: 'mes_nombre', keyId: 'mes', label: 'Mes', sortable: true, editable: true, type: 'select', options: MESES },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala', sortable: true, editable: false }
+    { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala', sortable: true, editable: false }
   ];
 
-  $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : (filteredSalasStore[0]?.id || 1);
+  $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : (filteredSalasStore[0]?.uuid || filteredSalasStore[0]?.id || 1);
 
   $: createFields = [
     { key: 'nombre', label: 'Nombre de la Fecha Patria / Feriado', type: 'text', placeholder: 'Ej. Día de la Virgen del Valle', required: true },
@@ -388,14 +388,14 @@
     { id: 'CUMPLEANOS', nombre: 'Cumpleaños de Empleados' }
   ];
 
-  // Opciones limpias de salas (estrictamente las asignadas al usuario logueado)
   $: calSalasOptions = ($masterSalasStore || [])
     .filter(s => {
       if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-      return assignedSalaIds.includes(String(s.id));
+      return assignedSalaIds.includes(String(s.uuid || s.id));
     })
     .map(s => ({
-      id: s.id,
+      id: s.uuid || s.id,
+      uuid: s.uuid || s.id,
       nombre: s.nombre
     }));
 
@@ -512,11 +512,11 @@
     // 1. Si seleccionó exactamente 1 sala
     if (calSelectedSalas && calSelectedSalas.length === 1) {
       const sId = String(calSelectedSalas[0]);
-      const f1 = (calSalasOptions || []).find(s => String(s.id) === sId);
+      const f1 = (calSalasOptions || []).find(s => String(s.uuid || s.id) === sId);
       if (f1) return (f1.nombre || '').toUpperCase();
-      const f2 = ($masterSalasStore || []).find(s => String(s.id) === sId);
+      const f2 = ($masterSalasStore || []).find(s => String(s.uuid || s.id) === sId);
       if (f2) return (f2.nombre || '').toUpperCase();
-      const f3 = rawCumpleanos.find(c => String(c.sala_id) === sId);
+      const f3 = rawCumpleanos.find(c => String(c.sala_uuid || c.sala_id) === sId);
       if (f3 && f3.sala_nombre) return f3.sala_nombre.toUpperCase();
     }
     // 2. Si no seleccionó nada pero solo tiene 1 sala asignada o disponible

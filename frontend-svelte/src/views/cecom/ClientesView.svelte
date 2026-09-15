@@ -40,11 +40,11 @@
   // Extract assigned sala IDs strictly for the logged-in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id;
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -55,10 +55,10 @@
       typeof masterMap === "object" &&
       !Array.isArray(masterMap)
     ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
-      if (Array.isArray(userList)) {
+      const userList = userId ? (masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null)) : null;
+      if (Array.isArray(userList) && userList.length > 0) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : s))
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
           .filter(Boolean)
           .map(String);
       }
@@ -67,7 +67,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -118,7 +118,7 @@
     page: 1,
     limit: 10,
     search: '',
-    sortBy: 'id',
+    sortBy: 'uuid',
     sortDir: 'desc'
   };
 
@@ -198,7 +198,7 @@
         page: currentParams.page,
         limit: currentParams.limit,
         search: currentParams.search || '',
-        sortBy: currentParams.sortBy || 'id',
+        sortBy: currentParams.sortBy || 'uuid',
         sortDir: currentParams.sortDir || 'desc'
       });
       if (assignedSalaIds && assignedSalaIds.length > 0) {
@@ -244,7 +244,7 @@
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.includes(s.id);
+    return assignedSalaIds.includes(String(s.uuid || s.id));
   });
   let isFormModalOpen = false;
   let formModalItem = null;
@@ -260,7 +260,8 @@
   }
 
   $: tipoClientesOptions = ($masterTipoClientesStore || []).map(t => ({
-    id: t.id,
+    uuid: t.uuid || t.id,
+    id: t.uuid || t.id,
     nombre: t.nombre
   }));
 
@@ -444,7 +445,7 @@
     <SmartMultiSelect
       id="filter-clientes-salas"
       label="Salas"
-      options={(filterOptions.salas || []).filter(s => !assignedSalaIds || assignedSalaIds.length === 0 || assignedSalaIds.includes(String(s.id)))}
+      options={(filterOptions.salas || []).filter(s => !assignedSalaIds || assignedSalaIds.length === 0 || assignedSalaIds.includes(String(s.uuid || s.id)))}
       bind:selectedValues={selectedSalas}
       on:change={(e) => {
         selectedSalas = e.detail;

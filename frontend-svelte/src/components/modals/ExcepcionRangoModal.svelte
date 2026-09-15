@@ -24,8 +24,9 @@
   let lastEmpleadoId = null;
 
   $: if (show && empleado) {
-    if (lastEmpleadoId !== empleado.id) {
-      lastEmpleadoId = empleado.id;
+    const empKey = empleado.uuid || empleado.id;
+    if (lastEmpleadoId !== empKey) {
+      lastEmpleadoId = empKey;
       initData();
     }
     fetchExceptions();
@@ -35,7 +36,8 @@
   function ensureSelectedValue() {
     if (!selectedValue && plantillasExcepcion.length > 0) {
       const first = plantillasExcepcion[0];
-      selectedValue = first.codigo ? `EXCEPCION_${first.id}` : `PLANTILLA_${first.id}`;
+      const fKey = first.uuid || first.id;
+      selectedValue = first.codigo ? `EXCEPCION_${fKey}` : `PLANTILLA_${fKey}`;
     }
   }
 
@@ -106,13 +108,14 @@
   }
 
   async function fetchEmpleadoRangos() {
-    if (!empleado || !empleado.id) {
+    const empKey = empleado?.uuid || empleado?.id || empleado?.cedula;
+    if (!empleado || !empKey) {
       rangosAsignados = [];
       return;
     }
     loadingRangos = true;
     try {
-      const res = await fetch(`/api/reports/excepciones-empleado?empleado_id=${empleado.id}`);
+      const res = await fetch(`/api/reports/excepciones-empleado?empleado_id=${empKey}`);
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data)) {
         rangosAsignados = json.data;
@@ -138,6 +141,7 @@
       return;
     }
 
+    const empKey = empleado?.uuid || empleado?.id;
     deletingIds = [...rango.ids];
     try {
       const res = await fetch('/api/reports/excepciones-rango/delete', {
@@ -145,7 +149,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ids: rango.ids,
-          empleado_id: empleado?.id,
+          empleado_id: empKey,
+          empleado_uuid: empKey,
           fecha_desde: rango.fecha_desde,
           fecha_hasta: rango.fecha_hasta
         })
@@ -167,7 +172,8 @@
   }
 
   async function handleSave() {
-    if (!empleado || !empleado.id) {
+    const empKey = empleado?.uuid || empleado?.id;
+    if (!empleado || !empKey) {
       triggerToast('No se ha especificado el empleado.', 'error');
       return;
     }
@@ -183,9 +189,9 @@
       let excepcionId = null;
 
       if (selectedValue && selectedValue.startsWith('EXCEPCION_')) {
-        excepcionId = Number(selectedValue.replace('EXCEPCION_', ''));
+        excepcionId = selectedValue.replace('EXCEPCION_', '');
       } else if (selectedValue && selectedValue.startsWith('PLANTILLA_')) {
-        plantillaId = Number(selectedValue.replace('PLANTILLA_', ''));
+        plantillaId = selectedValue.replace('PLANTILLA_', '');
       }
 
       if (!excepcionId && !plantillaId) {
@@ -194,11 +200,14 @@
       }
 
       const payload = {
-        empleado_id: empleado.id,
+        empleado_id: empKey,
+        empleado_uuid: empKey,
         fecha_desde: fechaDesde,
         fecha_hasta: fechaHasta,
         plantilla_horario_id: plantillaId,
-        excepcion_id: excepcionId
+        horario_uuid: plantillaId,
+        excepcion_id: excepcionId,
+        excepcion_uuid: excepcionId
       };
 
       const res = await fetch('/api/reports/excepciones-rango', {
@@ -339,7 +348,8 @@
               <option value="" disabled>Cargando excepciones de asistencia...</option>
             {:else}
               {#each plantillasExcepcion as p}
-                <option value={p.descripcion ? `EXCEPCION_${p.id}` : `PLANTILLA_${p.id}`}>
+                {@const pKey = p.uuid || p.id}
+                <option value={p.descripcion ? `EXCEPCION_${pKey}` : `PLANTILLA_${pKey}`}>
                   [{p.codigo}] {p.descripcion || p.nombre}
                 </option>
               {/each}

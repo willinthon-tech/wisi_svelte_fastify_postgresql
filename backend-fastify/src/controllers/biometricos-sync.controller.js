@@ -113,7 +113,8 @@ export async function auditarSalaBiometricos(request, reply) {
     // 6. Auditar cada dispositivo en paralelo
     const auditedDevices = await Promise.all(dispositivos.map(async (dev) => {
       const result = {
-        id: dev.id,
+        uuid: dev.uuid,
+        id: dev.uuid,
         nombre: dev.nombre,
         ip_remota: dev.ip_remota || '',
         ip_panel: dev.ip_panel || '',
@@ -222,7 +223,8 @@ export async function auditarSalaBiometricos(request, reply) {
           const hasCardOnDevice = (bioUser.numOfCard || 0) > 0;
 
           result.sincronizados.push({
-            id: emp.id,
+            uuid: emp.uuid,
+            id: emp.uuid,
             nombre: emp.nombre,
             cedula: emp.cedula,
             foto: emp.foto,
@@ -242,14 +244,15 @@ export async function auditarSalaBiometricos(request, reply) {
           });
         } else {
           result.faltan.push({
-            id: emp.id,
+            uuid: emp.uuid,
+            id: emp.uuid,
             nombre: emp.nombre,
             cedula: emp.cedula,
             foto: emp.foto,
             sexo: emp.sexo,
             cargo_nombre: emp.cargo_nombre || 'Sin cargo',
             departamento_nombre: emp.departamento_nombre || 'Sin depto',
-            assignedInDb: assignedEmpDevSet.has(`${emp.id}_${dev.id}`),
+            assignedInDb: assignedEmpDevSet.has(`${emp.uuid}_${dev.uuid}`),
             faltaEnBiometrico: true,
             faltaEnPanel: dev.ip_panel ? !panelUser : false
           });
@@ -324,7 +327,9 @@ export async function auditarSalaBiometricos(request, reply) {
  */
 export async function agregarEmpleadosABiometrico(request, reply) {
   try {
-    const { dispositivoId, empleado_ids, target = 'both' } = request.body;
+    const dispositivoId = request.body.dispositivoUuid || request.body.dispositivo_uuid || request.body.dispositivoId;
+    const empleado_ids = request.body.empleado_uuids || request.body.empleado_ids;
+    const target = request.body.target || 'both';
     if (!dispositivoId) {
       return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }
@@ -469,7 +474,9 @@ export async function agregarEmpleadosABiometrico(request, reply) {
  */
 export async function actualizarEmpleadosEnBiometrico(request, reply) {
   try {
-    const { dispositivoId, empleado_ids, target = 'both' } = request.body;
+    const dispositivoId = request.body.dispositivoUuid || request.body.dispositivo_uuid || request.body.dispositivoId;
+    const empleado_ids = request.body.empleado_uuids || request.body.empleado_ids;
+    const target = request.body.target || 'both';
     if (!dispositivoId) {
       return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }
@@ -594,7 +601,9 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
  */
 export async function eliminarUsuariosDeBiometrico(request, reply) {
   try {
-    const { dispositivoId, employee_nos, target = 'both' } = request.body;
+    const dispositivoId = request.body.dispositivoUuid || request.body.dispositivo_uuid || request.body.dispositivoId;
+    const employee_nos = request.body.employee_nos;
+    const target = request.body.target || 'both';
     if (!dispositivoId) {
       return reply.status(400).send({ success: false, error: 'ID de dispositivo inválido' });
     }

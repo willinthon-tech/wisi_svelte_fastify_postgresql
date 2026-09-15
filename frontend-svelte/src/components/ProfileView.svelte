@@ -82,7 +82,7 @@
 
   // Current user helper
   $: user = $currentUserStore || {};
-  $: userId = user?.id || null;
+  $: userId = user?.uuid || user?.id || null;
 
   // Extract assigned salas
   $: assignedSalas = (function () {
@@ -97,16 +97,16 @@
     return [];
   })();
 
-  $: assignedSalaIds = assignedSalas.map((s) => (typeof s === 'object' ? String(s.id) : String(s))).filter(Boolean);
+  $: assignedSalaIds = assignedSalas.map((s) => (typeof s === 'object' ? String(s.uuid || s.id) : String(s))).filter(Boolean);
 
   // Match full details of assigned salas against masterSalasStore
   $: detailedSalas = (function () {
     const allSalas = $masterSalasStore || [];
     if (assignedSalaIds.length === 0) return assignedSalas;
     return assignedSalaIds.map((id) => {
-      const found = allSalas.find((s) => String(s.id) === String(id));
-      const fallback = assignedSalas.find((s) => typeof s === 'object' && String(s.id) === String(id));
-      return found || fallback || { id, nombre: `Sala #${id}` };
+      const found = allSalas.find((s) => String(s.uuid || s.id) === String(id));
+      const fallback = assignedSalas.find((s) => typeof s === 'object' && String(s.uuid || s.id) === String(id));
+      return found || fallback || { id, uuid: id, nombre: `Sala #${String(id).slice(0, 8)}` };
     });
   })();
 

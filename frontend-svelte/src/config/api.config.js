@@ -126,10 +126,16 @@ export function toBackendUrl(path, options = {}) {
 
   if (clean.startsWith('http://') || clean.startsWith('https://')) {
     if (clean.includes('willinthon.wisi.space')) {
-      normalized = clean
-        .replace('willinthon.wisi.space/attlogs/', 'willinthon.wisi.space/api/attlogs/')
-        .replace('willinthon.wisi.space/empleados/', 'willinthon.wisi.space/api/empleados/')
-        .replace('willinthon.wisi.space/salas/', 'willinthon.wisi.space/api/salas/');
+      if (base.includes('localhost') || base.includes('127.0.0.1')) {
+        normalized = clean.replace(/https?:\/\/willinthon\.wisi\.space/g, base);
+      } else {
+        normalized = clean;
+      }
+      normalized = normalized
+        .replace('/attlogs/', '/api/attlogs/')
+        .replace('/empleados/', '/api/empleados/')
+        .replace('/clientes/', '/api/clientes/')
+        .replace('/salas/', '/api/salas/');
     } else {
       return clean;
     }

@@ -175,7 +175,7 @@
   });
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'descripcion', label: 'Fecha', type: 'date', bold: true, sortable: true, editable: true },
     { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false }
   ];

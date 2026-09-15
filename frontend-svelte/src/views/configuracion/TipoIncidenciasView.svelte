@@ -101,8 +101,8 @@
   }
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
-    { key: 'nombre', label: 'Tipo de Incidencia', bold: true, sortable: true, editable: true }
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'nombre', label: 'Nombre de la Incidencia', bold: true, sortable: true, editable: true }
   ];
 
   $: createFields = [

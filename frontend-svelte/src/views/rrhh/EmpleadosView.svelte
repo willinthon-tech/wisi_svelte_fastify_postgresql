@@ -307,7 +307,7 @@
 
   $: columns = [
     { key: 'foto', label: 'Foto', type: 'photo', sortable: false, editable: false },
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Empleado', bold: true, sortable: true, editable: true },
     { key: 'cedula', label: 'Cédula', sortable: true, editable: true },
     { key: 'fecha_nacimiento', label: 'Fecha de Nacimiento', type: 'fecha_nacimiento', sortable: true, editable: true },

@@ -186,8 +186,9 @@ async function startServer() {
       }
 
       // Comprobar si el cliente soporta WebP para máxima optimización (hasta 80% menos peso)
-      const acceptsWebp = (req.headers['accept'] && req.headers['accept'].includes('image/webp')) || q.format === 'webp';
-      const useWebp = !isOriginalRequested && acceptsWebp && q.format !== 'png' && q.format !== 'jpg' && q.format !== 'jpeg';
+      const isWebpExtension = filename.toLowerCase().endsWith('.webp');
+      const acceptsWebp = (req.headers['accept'] && req.headers['accept'].includes('image/webp')) || q.format === 'webp' || isWebpExtension;
+      const useWebp = !isOriginalRequested && acceptsWebp && q.format !== 'png';
 
       // Comprobar caché en disco para respuesta sub-milisegundo (0ms)
       const isClienteReq = req.url.includes('/clientes');
@@ -304,11 +305,19 @@ async function startServer() {
                 path.join(process.cwd(), 'photos')
               ];
 
-      // 1. Direct file match on disk
+      // 1. Direct file match on disk or alternate extensions (.webp, .jpg, .png)
+      const baseRequested = filename.replace(/\.[^/.]+$/, "");
+      const extList = ['.webp', '.jpg', '.png', '.jpeg'];
       for (const dir of searchDirs) {
         const fullPath = path.join(dir, filename);
         if (fs.existsSync(fullPath)) {
           return deliverOptimizedImage(fullPath, filename, req, reply);
+        }
+        for (const ext of extList) {
+          const altExtPath = path.join(dir, `${baseRequested}${ext}`);
+          if (fs.existsSync(altExtPath)) {
+            return deliverOptimizedImage(altExtPath, `${baseRequested}${ext}`, req, reply);
+          }
         }
       }
 
@@ -367,8 +376,12 @@ async function startServer() {
           if (empRows.length > 0) {
             const emp = empRows[0];
             const candidateFiles = [
+              `${emp.uuid}.webp`,
               `${emp.uuid}.jpg`,
+              `${emp.uuid}.png`,
+              `${emp.cedula}.webp`,
               `${emp.cedula}.jpg`,
+              `${emp.cedula}.png`,
               emp.foto ? path.basename(emp.foto) : null
             ].filter(Boolean);
 

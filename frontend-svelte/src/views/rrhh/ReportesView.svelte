@@ -119,11 +119,11 @@
   // Extract assigned sala IDs strictly for the logged-in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id || 1;
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -134,10 +134,10 @@
       typeof masterMap === "object" &&
       !Array.isArray(masterMap)
     ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : s))
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
           .filter(Boolean)
           .map(String);
       }
@@ -146,7 +146,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -179,7 +179,7 @@
   function openExcepcionModal(emp, dia) {
     activeEmpleadoExcepcion = emp;
     activeDiaExcepcion = dia;
-    const targetSalaId = emp.sala_id || selectedSalas[0] || 1;
+    const targetSalaId = emp.sala_uuid || emp.sala_id || selectedSalas[0] || 1;
     loadPlantillasSala(targetSalaId);
     showExcepcionModal = true;
   }
@@ -203,7 +203,7 @@
   function openExcepcionRangoModal(emp) {
     if (!emp) return;
     activeEmpleadoRango = emp;
-    const targetSalaId = emp.sala_id || selectedSalas[0] || 1;
+    const targetSalaId = emp.sala_uuid || emp.sala_id || selectedSalas[0] || 1;
     loadPlantillasSala(targetSalaId);
     showExcepcionRangoModal = true;
   }
@@ -216,11 +216,11 @@
     const { empleado: newEmp, dia: newDia } = e.detail;
     activeEmpleadoExcepcion = newEmp;
     activeDiaExcepcion = newDia;
-    const targetSalaId = newEmp.sala_id || selectedSalas[0] || 1;
+    const targetSalaId = newEmp.sala_uuid || newEmp.sala_id || selectedSalas[0] || 1;
     loadPlantillasSala(targetSalaId);
 
     // Sincronizar paginación de la tabla de fondo
-    const empIdx = filteredEmployees.findIndex(emp => emp.id === newEmp.id);
+    const empIdx = filteredEmployees.findIndex(emp => (emp.uuid || emp.id) === (newEmp.uuid || newEmp.id));
     if (empIdx !== -1 && pageSize < 999999) {
       const targetPage = Math.floor(empIdx / pageSize) + 1;
       if (currentPage !== targetPage) {
@@ -352,12 +352,12 @@
       chips.push({ type: 'search', val: searchQuery, label: `"${searchQuery.trim()}"`, category: 'Búsqueda' });
     }
     (selectedSalas || []).forEach(id => {
-      const found = (filterOptions.salas || []).find(s => s.id === id || String(s.id) === String(id));
-      chips.push({ type: 'sala', val: id, label: found ? found.nombre : `Sala #${id}`, category: 'Sala' });
+      const found = (filterOptions.salas || []).find(s => (s.uuid && s.uuid === id) || (s.id && (s.id === id || String(s.id) === String(id))));
+      chips.push({ type: 'sala', val: id, label: found ? found.nombre : `Sala #${id.length > 10 ? id.slice(0, 8) : id}`, category: 'Sala' });
     });
     (selectedDepartamentos || []).forEach(id => {
-      const found = (filterOptions.departamentos || []).find(d => d.id === id || String(d.id) === String(id));
-      chips.push({ type: 'departamento', val: id, label: found ? found.nombre : `Depto #${id}`, category: 'Depto' });
+      const found = (filterOptions.departamentos || []).find(d => (d.uuid && d.uuid === id) || (d.id && (d.id === id || String(d.id) === String(id))));
+      chips.push({ type: 'departamento', val: id, label: found ? found.nombre : `Depto #${id.length > 10 ? id.slice(0, 8) : id}`, category: 'Depto' });
     });
     return chips;
   })();
@@ -371,13 +371,13 @@
     // 1. Restricción estricta por salas asignadas al usuario logueado
     if (assignedSalaIds && assignedSalaIds.length > 0) {
       const allowedSet = new Set(assignedSalaIds.map(String));
-      list = list.filter((e) => allowedSet.has(String(e.sala_id)));
+      list = list.filter((e) => allowedSet.has(String(e.sala_uuid || e.sala_id)));
     }
 
     // 2. Filtro por salas seleccionadas en el multi-select
     if (selectedSalas && selectedSalas.length > 0) {
       const setSalas = new Set(selectedSalas.map(String));
-      list = list.filter((e) => setSalas.has(String(e.sala_id)));
+      list = list.filter((e) => setSalas.has(String(e.sala_uuid || e.sala_id)));
     }
 
     const q = (searchQuery || "").toLowerCase().trim();
@@ -395,17 +395,17 @@
 
     if (selectedDepartamentos && selectedDepartamentos.length > 0) {
       const setDept = new Set(selectedDepartamentos.map(String));
-      list = list.filter((e) => setDept.has(String(e.departamento_id)));
+      list = list.filter((e) => setDept.has(String(e.departamento_uuid || e.departamento_id)));
     }
 
     if (selectedAreas && selectedAreas.length > 0) {
       const setArea = new Set(selectedAreas.map(String));
-      list = list.filter((e) => setArea.has(String(e.area_id)));
+      list = list.filter((e) => setArea.has(String(e.area_uuid || e.area_id)));
     }
 
     if (selectedCargos && selectedCargos.length > 0) {
       const setCargo = new Set(selectedCargos.map(String));
-      list = list.filter((e) => setCargo.has(String(e.cargo_id)));
+      list = list.filter((e) => setCargo.has(String(e.cargo_uuid || e.cargo_id)));
     }
 
     if (selectedSexo && selectedSexo.length > 0) {
@@ -463,20 +463,22 @@
   $: availableSalas = (function () {
     const raw = filterOptions.salas || [];
     if (!assignedSalaIds || assignedSalaIds.length === 0) return raw;
-    return raw.filter((s) => assignedSalaIds.includes(String(s.id)));
+    return raw.filter((s) => assignedSalaIds.includes(String(s.uuid || s.id)));
   })();
 
   // Dispositivos strictly filtered by user permissions and selected salas
   $: preparedDispositivos = (function () {
     let list = dispositivos || [];
     if (assignedSalaIds && assignedSalaIds.length > 0) {
-      list = list.filter((d) => assignedSalaIds.includes(String(d.sala_id)));
+      list = list.filter((d) => assignedSalaIds.includes(String(d.sala_uuid || d.sala_id)));
     }
     return list.map((d) => ({
-      id: d.id,
-      nombre: d.nombre || d.alias || `Dispositivo #${d.id}`,
+      uuid: d.uuid || d.id,
+      id: d.uuid || d.id,
+      nombre: d.nombre || d.alias || `Dispositivo #${d.uuid ? d.uuid.slice(0, 8) : d.id}`,
       sala_nombre: d.sala_nombre || "Sin Sala",
-      sala_id: d.sala_id,
+      sala_uuid: d.sala_uuid || d.sala_id,
+      sala_id: d.sala_uuid || d.sala_id,
     }));
   })();
 
@@ -680,15 +682,18 @@
     }
 
     const cleanEmpleados = targetEmployees.map(emp => ({
-      id: emp.id,
+      uuid: emp.uuid || emp.id,
+      id: emp.uuid || emp.id,
       nombre: emp.nombre,
       cedula: emp.cedula,
       cargo: emp.cargo_nombre || emp.cargo || "Personal",
-      sala_id: emp.sala_id,
+      sala_uuid: emp.sala_uuid || emp.sala_id,
+      sala_id: emp.sala_uuid || emp.sala_id,
       sala_nombre: emp.sala_nombre,
-      departamento_id: emp.departamento_id,
+      departamento_uuid: emp.departamento_uuid || emp.departamento_id,
+      departamento_id: emp.departamento_uuid || emp.departamento_id,
       departamento_nombre: emp.departamento_nombre,
-      foto: (emp.foto && !String(emp.foto).startsWith("data:")) ? emp.foto : `/empleados/${emp.id}.jpg`,
+      foto: (emp.foto && !String(emp.foto).startsWith("data:")) ? emp.foto : `/empleados/${emp.uuid || emp.id}.jpg`,
       dias: (emp.dias || []).map(d => ({
         fechaStr: d.fechaStr,
         dayOfWeek: d.dayOfWeek,

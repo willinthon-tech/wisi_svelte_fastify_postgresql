@@ -100,13 +100,13 @@ export async function initPushNotifications(userId, onNotificationReceived) {
         const data = notification?.data || {};
         if (data.attlog_id || data.id || data.nombre) {
           // Filtrar en primer plano: solo procesar si el usuario está autenticado y tiene asignada esta sala
-          const notifSalaId = data.sala_id ? String(data.sala_id) : null;
+          const notifSalaId = (data.sala_uuid || data.sala_id) ? String(data.sala_uuid || data.sala_id) : null;
           let assignedIds = [];
           try {
             const rawSalas = localStorage.getItem('wisi_salas');
             const parsed = rawSalas ? JSON.parse(rawSalas) : [];
             assignedIds = Array.isArray(parsed)
-              ? parsed.map(s => typeof s === 'object' ? String(s.id) : String(s)).filter(Boolean)
+              ? parsed.map(s => typeof s === 'object' ? String(s.uuid || s.id) : String(s)).filter(Boolean)
               : [];
           } catch (e) {}
 

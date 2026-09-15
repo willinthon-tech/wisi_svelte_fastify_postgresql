@@ -19,10 +19,11 @@
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id) ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: currentUserId = $currentUserStore?.uuid || $currentUserStore?.id;
+  $: currentUserSalas = currentUserId ? (userSalasMap[currentUserId] || userSalasMap[String(currentUserId)] || (userSalasMap[$currentUserStore.id] || [])) : [];
   $: assignedSalaIds = ((currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
+    ? currentUserSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).filter(Boolean).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -163,13 +164,13 @@
   }
 
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
-    if (s.grupo_id && Number(s.grupo_id) === 2) return false;
+    if ((s.grupo_id && Number(s.grupo_id) === 2) || (s.grupo_nombre && String(s.grupo_nombre).toUpperCase() === 'GALPÓN')) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
     return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Departamento', bold: true, sortable: true, editable: true },
     { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false }
   ];

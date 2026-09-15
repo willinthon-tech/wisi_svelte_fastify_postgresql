@@ -101,8 +101,8 @@
   }
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
-    { key: 'nombre', label: 'Estatus Legal', bold: true, sortable: true, editable: true }
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'nombre', label: 'Nombre Legal', bold: true, sortable: true, editable: true }
   ];
 
   $: createFields = [

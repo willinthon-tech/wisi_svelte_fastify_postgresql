@@ -24,18 +24,18 @@
   // Assigned sala IDs for the logged-in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id || 1;
     if (user && Array.isArray(user.salas) && user.salas.length > 0)
-      return user.salas.map((s) => (typeof s === "object" ? String(s.id) : String(s))).filter(Boolean);
+      return user.salas.map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s))).filter(Boolean);
     const masterMap = $masterUserSalasStore;
     if (masterMap && typeof masterMap === "object" && !Array.isArray(masterMap)) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList))
-        return userList.map((s) => (typeof s === "object" ? String(s.id) : String(s))).filter(Boolean);
+        return userList.map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s))).filter(Boolean);
     }
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0)
-      return authSalas.map((s) => (typeof s === "object" ? String(s.id) : String(s))).filter(Boolean);
+      return authSalas.map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s))).filter(Boolean);
     return [];
   })();
 

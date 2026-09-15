@@ -31,53 +31,63 @@
   }
 
   // Permisología dinámica en tiempo real según el usuario activo y permiso 'VER'
-  $: activeUserId = $currentUserStore?.id ?? null;
-  $: activeUserPermsMap = (activeUserId && $userModulePermissionsStore) ? ($userModulePermissionsStore[activeUserId] || {}) : {};
+  $: activeUserId = $currentUserStore?.uuid || $currentUserStore?.id || null;
+  $: activeUserPermsMap = (activeUserId && $userModulePermissionsStore)
+    ? ($userModulePermissionsStore[activeUserId] || $userModulePermissionsStore[String(activeUserId)] || ($currentUserStore?.id ? $userModulePermissionsStore[$currentUserStore.id] : null) || {})
+    : {};
 
   $: filteredNavPages = (() => {
     // Agrupar páginas por nombre normalizado para consolidar secciones duplicadas (ej: CONF.M: CECOM)
     const pageMap = new Map();
     for (const page of $masterPaginasStore) {
       const normName = (page.nombre || '').trim().toUpperCase();
+      const pId = String(page.uuid || page.id);
       if (!pageMap.has(normName)) {
         pageMap.set(normName, {
-          id: page.id,
+          id: pId,
+          uuid: page.uuid || page.id,
           nombre: page.nombre,
-          pageIds: [page.id]
+          pageIds: [pId, String(page.id || '')].filter(Boolean)
         });
       } else {
-        pageMap.get(normName).pageIds.push(page.id);
+        pageMap.get(normName).pageIds.push(pId);
+        if (page.id) pageMap.get(normName).pageIds.push(String(page.id));
       }
     }
 
     const pages = [];
     for (const group of pageMap.values()) {
       const pageModulos = $masterModulosStore
-        .filter(m => group.pageIds.includes(m.page_id))
-        .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || a.id - b.id);
+        .filter(m => group.pageIds.includes(String(m.page_uuid || m.page_id)))
+        .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.uuid || a.id || '').localeCompare(String(b.uuid || b.id || '')));
 
       const visibleModulos = pageModulos.filter(m => {
-        const perms = activeUserPermsMap[m.id] || [];
+        const mKey = m.uuid || m.id;
+        const perms = activeUserPermsMap[mKey] || (m.id ? activeUserPermsMap[m.id] : null) || [];
         return perms.includes('VER');
       });
 
       // Deduplicar estrictamente por ruta única dentro de la sección
       const seenRoutes = new Set();
-      const uniqueModulos = visibleModulos.filter(m => {
-        const key = (m.ruta || m.nombre || '').toLowerCase().trim();
-        if (seenRoutes.has(key)) return false;
-        seenRoutes.add(key);
-        return true;
-      });
+      const uniqueModulos = [];
+      for (const m of visibleModulos) {
+        const cleanRoute = (m.ruta || '').trim();
+        if (cleanRoute && !seenRoutes.has(cleanRoute)) {
+          seenRoutes.add(cleanRoute);
+          uniqueModulos.push(m);
+        }
+      }
 
       if (uniqueModulos.length > 0) {
         pages.push({
           id: group.id,
+          uuid: group.uuid,
           nombre: group.nombre,
           modulos: uniqueModulos
         });
       }
     }
+
     return pages;
   })();
 </script>

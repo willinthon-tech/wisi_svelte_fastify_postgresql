@@ -136,17 +136,17 @@
   import { initPushNotifications } from "./services/push.service.js";
 
   // Registrar Notificaciones Push nativas cuando el usuario está autenticado en Android
-  $: if ($isAuthenticatedStore && $currentUserStore?.id) {
-    initPushNotifications($currentUserStore.id);
+  $: if ($isAuthenticatedStore && ($currentUserStore?.uuid || $currentUserStore?.id)) {
+    initPushNotifications($currentUserStore.uuid || $currentUserStore.id);
   }
 
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || '';
+    const userId = user?.uuid || user?.id || '';
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? String(s.id || s.uuid) : String(s)))
+        .map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s)))
         .filter(Boolean);
     }
 
@@ -156,10 +156,10 @@
       typeof masterMap === "object" &&
       !Array.isArray(masterMap)
     ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? String(s.id || s.uuid) : String(s)))
+          .map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s)))
           .filter(Boolean);
       }
     }
@@ -167,7 +167,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? String(s.id || s.uuid) : String(s)))
+        .map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s)))
         .filter(Boolean);
     }
 

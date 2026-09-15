@@ -102,7 +102,7 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Juego', bold: true, sortable: true, editable: true }
   ];
 
@@ -116,7 +116,7 @@
       const created = await masterJuegosActions.add(draft);
       triggerToast('Juego creado exitosamente', 'success');
       if (created) {
-        items = [created, ...items.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
         totalCount++;
       }
       loadServerData().catch(() => {});
@@ -127,10 +127,11 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterJuegosActions.update(id, draft);
+      await masterJuegosActions.update(targetUuid, draft);
       triggerToast('Juego actualizado exitosamente', 'success');
-      items = items.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar juego: ${err.message}`, 'error');

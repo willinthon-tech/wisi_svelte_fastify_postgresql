@@ -188,7 +188,7 @@
   $: globalJuegosStore = $masterJuegosStore || [];
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: true },
     { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false },
     { key: 'juego_nombre', keyId: 'juego_uuid', label: 'Juego Asignado', sortable: true, editable: false }

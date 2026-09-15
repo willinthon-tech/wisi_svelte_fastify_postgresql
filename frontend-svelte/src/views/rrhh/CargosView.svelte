@@ -21,10 +21,11 @@
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id) ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: currentUserId = $currentUserStore?.uuid || $currentUserStore?.id;
+  $: currentUserSalas = currentUserId ? (userSalasMap[currentUserId] || userSalasMap[String(currentUserId)] || (userSalasMap[$currentUserStore.id] || [])) : [];
   $: assignedSalaIds = ((currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
+    ? currentUserSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).filter(Boolean).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -191,7 +192,7 @@
   });
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Cargo', bold: true, sortable: true, editable: true },
     { key: 'area_nombre', keyId: 'area_uuid', label: 'Área Asignada', sortable: true, editable: true, options: filteredAreasStore },
     { key: 'departamento_nombre', label: 'Departamento Asignado', sortable: true, editable: false },
@@ -204,10 +205,11 @@
   ];
 
   async function handleCreate(event) {
-    const draft = { ...event.detail };
-    if (draft.area_uuid && !draft.area_id) draft.area_id = draft.area_uuid;
+    const draft = event.detail;
+    const payload = { ...draft };
+    if (payload.area_uuid && !payload.area_id) payload.area_id = payload.area_uuid;
     try {
-      const created = await masterCargosActions.add(draft);
+      const created = await masterCargosActions.add(payload);
       triggerToast('Cargo creado exitosamente', 'success');
       if (created) {
         items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];

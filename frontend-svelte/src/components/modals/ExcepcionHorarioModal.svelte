@@ -63,7 +63,7 @@
   let currentFetchId = 0;
 
   $: if (show && dia) {
-    const currentEmpId = empleado?.id;
+    const currentEmpId = empleado?.uuid || empleado?.id || empleado?.cedula;
     const currentFechaStr = dia?.fechaStr;
     if (currentEmpId !== lastLoadedEmpId || currentFechaStr !== lastLoadedFechaStr) {
       lastLoadedEmpId = currentEmpId;
@@ -85,7 +85,11 @@
   $: isFirstDayOfEmp = currentDayIndex <= 0;
   $: isLastDayOfEmp = currentDayIndex >= totalDays - 1;
 
-  $: currentEmpIndex = (empleadosList || []).findIndex(e => e.id === empleado?.id);
+  $: currentEmpIndex = (empleadosList || []).findIndex(e =>
+    (e.uuid && empleado?.uuid && e.uuid === empleado.uuid) ||
+    (e.id && empleado?.id && e.id === empleado.id) ||
+    (e.cedula && empleado?.cedula && e.cedula === empleado.cedula)
+  );
   $: totalEmps = (empleadosList || []).length;
   $: canPrevEmp = currentEmpIndex > 0;
   $: canNextEmp = currentEmpIndex >= 0 && currentEmpIndex < totalEmps - 1;
@@ -206,16 +210,18 @@
     // 1. Mapeo de IDs de horarios directamente asignados al empleado
     const assignedMap = new Map();
     (empleado?.horarios_asignados || []).forEach(h => {
-      if (h && h.id) assignedMap.set(String(h.id), h);
+      const key = h?.uuid || h?.id;
+      if (key) assignedMap.set(String(key), h);
     });
     (assignedPlantillasEmp || []).forEach(h => {
-      if (h && h.id) assignedMap.set(String(h.id), h);
+      const key = h?.uuid || h?.id;
+      if (key) assignedMap.set(String(key), h);
     });
 
     // 2. Horarios asignados al empleado en su sala
     if (assignedMap.size > 0) {
-      const foundInSala = (plantillasSala || []).filter(p => assignedMap.has(String(p.id)));
-      const foundIds = new Set(foundInSala.map(p => String(p.id)));
+      const foundInSala = (plantillasSala || []).filter(p => assignedMap.has(String(p.uuid || p.id)));
+      const foundIds = new Set(foundInSala.map(p => String(p.uuid || p.id)));
       const missingFromSala = [];
       assignedMap.forEach((h, id) => {
         if (!foundIds.has(id)) {
@@ -229,31 +235,32 @@
 
     // Pre-selección del valor según el estado actual del día
     const currentCode = dia?.shift?.codigo || '';
-    const rawId = dia?.shift?.id;
+    const rawId = dia?.shift?.uuid || dia?.shift?.id;
     const shiftTipo = dia?.shift?.tipo; // 'excepcion' | 'horario' | 'plantilla'
     const isExcepcion = Boolean(dia && (dia.isExcepcion || dia.excepcionId));
 
     if (isExcepcion) {
       // 1. Prioridad: Verificar si es una Excepción de Catálogo (Permiso, Reposo, Vacaciones, Falta, Feriado, o Día Libre)
       let excMatch = null;
-      if (dia.excepcion_tipo_id) {
-        excMatch = (excepcionesList || []).find(e => String(e.id) === String(dia.excepcion_tipo_id));
+      if (dia.excepcion_tipo_id || dia.excepcion_tipo_uuid) {
+        const targetExcId = String(dia.excepcion_tipo_uuid || dia.excepcion_tipo_id);
+        excMatch = (excepcionesList || []).find(e => String(e.uuid || e.id) === targetExcId);
       }
       if (!excMatch && shiftTipo === 'excepcion' && rawId) {
-        excMatch = (excepcionesList || []).find(e => String(e.id) === String(rawId));
+        excMatch = (excepcionesList || []).find(e => String(e.uuid || e.id) === String(rawId));
       }
       if (!excMatch && currentCode && currentCode !== 'EX') {
         excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
       }
 
       if (excMatch) {
-        selectedValue = `EXCEPCION_${excMatch.id}`;
+        selectedValue = `EXCEPCION_${excMatch.uuid || excMatch.id}`;
         initialSelectedValue = selectedValue;
         return;
       }
 
       // 2. Prioridad: Verificar si es un Horario Asignado como Excepción
-      const targetHorarioId = dia.horario_id || (shiftTipo !== 'excepcion' && rawId && !isNaN(Number(rawId)) && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L' ? Number(rawId) : null);
+      const targetHorarioId = dia.horario_uuid || dia.horario_id || (shiftTipo !== 'excepcion' && rawId && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L' ? rawId : null);
       if (targetHorarioId) {
         selectedValue = `PLANTILLA_${targetHorarioId}`;
         initialSelectedValue = selectedValue;
@@ -263,23 +270,23 @@
       // 3. Prioridad: Día Libre por excepción
       if (dia.es_libre || currentCode === 'L') {
         const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
-        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+        selectedValue = lExc ? `EXCEPCION_${lExc.uuid || lExc.id}` : 'BASE_L';
         initialSelectedValue = selectedValue;
         return;
       }
     }
 
     // Si NO es excepción (comportamiento normal del día)
-    const isRealHorarioId = rawId && !isNaN(Number(rawId)) && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L';
+    const isRealHorarioId = rawId && String(rawId) !== 'SYS-U' && String(rawId) !== 'SYS-L';
     if (isRealHorarioId) {
       selectedValue = `PLANTILLA_${rawId}`;
     } else if (currentCode === 'L' || dia?.resultadoStr === 'LIBRE') {
       const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
-      selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+      selectedValue = lExc ? `EXCEPCION_${lExc.uuid || lExc.id}` : 'BASE_L';
     } else if (currentCode === 'U') {
       // Si el empleado tiene horarios asignados, pre-seleccionar el correspondiente
       if (horariosEmpleado.length === 1) {
-        selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
+        selectedValue = `PLANTILLA_${horariosEmpleado[0].uuid || horariosEmpleado[0].id}`;
       } else if (horariosEmpleado.length > 1 && dia?.entradaStr) {
         const entMins = toMinutes(dia.entradaStr);
         let best = horariosEmpleado[0];
@@ -295,17 +302,17 @@
             }
           }
         }
-        selectedValue = `PLANTILLA_${best.id}`;
+        selectedValue = `PLANTILLA_${best.uuid || best.id}`;
       } else {
         const uExc = (excepcionesList || []).find(e => e.codigo === 'U');
-        selectedValue = uExc ? `EXCEPCION_${uExc.id}` : 'BASE_U';
+        selectedValue = uExc ? `EXCEPCION_${uExc.uuid || uExc.id}` : 'BASE_U';
       }
     } else {
       if (horariosEmpleado.length === 1) {
-        selectedValue = `PLANTILLA_${horariosEmpleado[0].id}`;
+        selectedValue = `PLANTILLA_${horariosEmpleado[0].uuid || horariosEmpleado[0].id}`;
       } else {
         const lExc = (excepcionesList || []).find(e => e.codigo === 'L');
-        selectedValue = lExc ? `EXCEPCION_${lExc.id}` : 'BASE_L';
+        selectedValue = lExc ? `EXCEPCION_${lExc.uuid || lExc.id}` : 'BASE_L';
       }
     }
     initialSelectedValue = selectedValue;
@@ -320,37 +327,41 @@
 
   async function fetchMarcajesRapidos() {
     if (!empleado || !dia) return;
-    const thisFetchId = ++currentFetchId;
+    const empKey = empleado?.uuid || empleado?.id || empleado?.cedula;
+    const fetchId = ++currentFetchId;
     marcajesLoading = true;
     try {
-      const res = await fetch(`/api/reports/marcajes-rapidos?empleado_id=${empleado.id}&fecha=${dia.fechaStr}`);
-      const json = await res.json();
-      if (thisFetchId !== currentFetchId) return;
-      if (json && json.success) {
-        marcajesContext = json.marcajesContext || [];
-        assignedPlantillasEmp = json.assignedPlantillas || [];
-        recalculateLocalEntryExit();
+      const res = await fetch(`/api/reports/marcajes-rapidos?empleado_id=${empKey}&fecha=${dia.fechaStr}`);
+      if (fetchId !== currentFetchId) return;
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && Array.isArray(json.data)) {
+          marcajesContext = json.data;
+          recalculateLocalEntryExit();
+        }
       }
     } catch (err) {
-      if (thisFetchId === currentFetchId) {
-        console.error("Error fetching marcajes rapidos:", err);
+      if (fetchId === currentFetchId) {
+        console.error("Error fetching context marcajes:", err);
       }
     } finally {
-      if (thisFetchId === currentFetchId) {
+      if (fetchId === currentFetchId) {
         marcajesLoading = false;
       }
     }
   }
 
-  async function handleLocalPunchChange(punch, newType) {
-    if (!punch || !punch.id) return;
+  async function handlePunchStatusChange(punch, newType) {
+    const punchKey = punch?.uuid || punch?.id;
+    if (!punch || !punchKey) return;
     const targetStatus = newType === 'E' ? 'checkIn' : (newType === 'S' ? 'checkOut' : 'undefined');
 
-    // 1. Actualización inmediata y reactiva del contexto local
+    // 1. Actualización optimista local
     marcajesContext = marcajesContext.map(ctx => ({
       ...ctx,
       punches: (ctx.punches || []).map(p => {
-        if (p.id === punch.id) {
+        const pKey = p?.uuid || p?.id;
+        if (pKey === punchKey) {
           return {
             ...p,
             type: newType,
@@ -369,7 +380,7 @@
     // 2. Guardado inmediato en segundo plano
     showStatus('Guardando marcaje...', 'saving', 0);
     try {
-      const res = await fetch(`/api/reports/attlogs/${punch.id}/status`, {
+      const res = await fetch(`/api/reports/attlogs/${punchKey}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: targetStatus })
@@ -379,7 +390,7 @@
         throw new Error(json?.error || 'Error al actualizar marcaje');
       }
       showStatus('✓ Marcaje guardado', 'saved', 1500);
-      dispatch('punchUpdated', { punchId: punch.id, targetStatus });
+      dispatch('punchUpdated', { punchId: punchKey, targetStatus });
     } catch (err) {
       console.error("Error updating punch status:", err);
       showStatus('Error al guardar marcaje', 'error', 2500);
@@ -414,10 +425,11 @@
 
       if (val.startsWith('EXCEPCION_')) {
         excepcionId = val.replace('EXCEPCION_', '');
-        const excObj = (excepcionesList || []).find(e => String(e.id) === String(excepcionId));
+        const excObj = (excepcionesList || []).find(e => String(e.uuid || e.id) === String(excepcionId));
         isLibre = excObj ? (excObj.codigo === 'L' || (excObj.descripcion && excObj.descripcion.toLowerCase().includes('libre'))) : false;
         selectedShiftObj = excObj ? {
-          id: excObj.id,
+          id: excObj.uuid || excObj.id,
+          uuid: excObj.uuid || excObj.id,
           codigo: excObj.codigo,
           nombre: excObj.descripcion,
           color: excObj.color,
@@ -425,15 +437,16 @@
         } : null;
       } else if (val.startsWith('PLANTILLA_')) {
         plantillaId = val.replace('PLANTILLA_', '');
-        const pObj = [...(plantillasSala || []), ...(horariosEmpleado || [])].find(p => String(p.id) === String(plantillaId));
+        const pObj = [...(plantillasSala || []), ...(horariosEmpleado || [])].find(p => String(p.uuid || p.id) === String(plantillaId));
         isLibre = pObj ? (pObj.codigo === 'L' || pObj.nombre?.toUpperCase() === 'LIBRE') : false;
-        selectedShiftObj = pObj ? { ...pObj, tipo: 'horario', es_libre: isLibre } : null;
+        selectedShiftObj = pObj ? { ...pObj, id: pObj.uuid || pObj.id, uuid: pObj.uuid || pObj.id, tipo: 'horario', es_libre: isLibre } : null;
       } else if (val === 'BASE_L') {
         const excObj = (excepcionesList || []).find(e => e.codigo === 'L');
-        if (excObj) excepcionId = excObj.id;
+        if (excObj) excepcionId = excObj.uuid || excObj.id;
         isLibre = true;
         selectedShiftObj = {
           id: excepcionId,
+          uuid: excepcionId,
           codigo: 'L',
           nombre: 'Día Libre',
           color: '#D9D9D9',
@@ -448,17 +461,23 @@
         dia.shift = selectedShiftObj;
       }
       dia.excepcion_tipo_id = excepcionId;
+      dia.excepcion_tipo_uuid = excepcionId;
       dia.horario_id = plantillaId;
+      dia.horario_uuid = plantillaId;
       dia.es_libre = isLibre;
       initialSelectedValue = val;
       recalculateLocalEntryExit();
 
+      const empId = empleado.uuid || empleado.id;
       const payload = {
-        empleado_id: empleado.id,
+        empleado_id: empId,
+        empleado_uuid: empId,
         fecha: dia.fechaStr,
         horario_id: plantillaId,
+        horario_uuid: plantillaId,
         plantilla_horario_id: plantillaId,
         excepcion_id: excepcionId,
+        excepcion_uuid: excepcionId,
         es_libre: isLibre
       };
 
@@ -473,10 +492,10 @@
         throw new Error(json?.error || 'Error al guardar la excepción');
       }
 
-      if (json.data && json.data.id) {
-        dia.excepcionId = json.data.id;
-        dia.excepcion_tipo_id = json.data.excepcion_id || excepcionId;
-        dia.horario_id = json.data.horario_id || plantillaId;
+      if (json.data && (json.data.uuid || json.data.id)) {
+        dia.excepcionId = json.data.uuid || json.data.id;
+        dia.excepcion_tipo_id = json.data.excepcion_uuid || json.data.excepcion_id || excepcionId;
+        dia.horario_id = json.data.horario_uuid || json.data.horario_id || plantillaId;
         dia.es_libre = json.data.es_libre !== undefined ? json.data.es_libre : isLibre;
       }
 
@@ -522,7 +541,7 @@
         }
         if (selectedValue && selectedValue.startsWith('PLANTILLA_')) {
           const pId = selectedValue.replace('PLANTILLA_', '');
-          const pObj = (plantillasSala || []).find(p => String(p.id) === String(pId));
+          const pObj = [...(plantillasSala || []), ...(horariosEmpleado || [])].find(p => String(p.uuid || p.id) === String(pId));
           if (pObj && !pObj.hora_entrada && !pObj.hora_salida) {
             continue;
           }
@@ -533,7 +552,7 @@
       let targetPlantillas = [];
       if (ctx.fechaStr === dia?.fechaStr && selectedValue && selectedValue.startsWith('PLANTILLA_')) {
         const pId = selectedValue.replace('PLANTILLA_', '');
-        const pObj = (plantillasSala || []).find(p => String(p.id) === String(pId));
+        const pObj = [...(plantillasSala || []), ...(horariosEmpleado || [])].find(p => String(p.uuid || p.id) === String(pId));
         if (pObj && pObj.hora_entrada) {
           targetPlantillas = [pObj];
         }
@@ -822,12 +841,12 @@
               <optgroup label="📋 Excepciones de Asistencia (Configuración)">
                 {#each excepcionesList as exc}
                   {#if exc.codigo === 'U' || exc.tipo === 'No Asignable'}
-                    <option value="EXCEPCION_{exc.id}" disabled style="font-size: 10.5px;">
-                      [{exc.codigo}] {exc.descripcion} (Asignado automáticamente por el sistema)
+                    <option value="EXCEPCION_{exc.uuid || exc.id}" disabled style="font-size: 10.5px;">
+                      — {exc.descripcion} ({exc.codigo})
                     </option>
                   {:else}
-                    <option value="EXCEPCION_{exc.id}">
-                      [{exc.codigo}] {exc.descripcion}
+                    <option value="EXCEPCION_{exc.uuid || exc.id}">
+                      {exc.descripcion} ({exc.codigo})
                     </option>
                   {/if}
                 {/each}
@@ -839,12 +858,12 @@
               </optgroup>
             {/if}
 
-            <!-- Optgroup 2: Horarios Asignados al Empleado (Turnos de la Sala) -->
-            {#if horariosEmpleado.length > 0}
-              <optgroup label="⏰ Horarios Asignados al Empleado">
-                {#each horariosEmpleado as p}
-                  <option value="PLANTILLA_{p.id}">
-                    [{p.codigo || 'H'}] {p.nombre} {formatHours(p)}
+            <!-- 3. Grupo: Plantillas de Horarios Asignados / Sala -->
+            {#if horariosEmpleado.length > 0 || plantillasSala.length > 0}
+              <optgroup label="📋 Horarios Asignados / Disponibles">
+                {#each (horariosEmpleado.length > 0 ? horariosEmpleado : plantillasSala) as p}
+                  <option value="PLANTILLA_{p.uuid || p.id}">
+                    {p.nombre} {p.codigo ? `(${p.codigo})` : ''} {formatHours(p)}
                   </option>
                 {/each}
               </optgroup>

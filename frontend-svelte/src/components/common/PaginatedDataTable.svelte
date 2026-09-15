@@ -825,7 +825,7 @@
 
   // Precarga en segundo plano de las fotos visibles en la página actual para respuesta instantánea (0ms)
   $: if (paginatedItems && paginatedItems.length > 0 && typeof window !== 'undefined') {
-    paginatedItems.forEach(item => {
+    paginatedItems.slice(0, 15).forEach(item => {
       const url = getPhotoUrl(item, { thumb: true });
       if (url) {
         const img = new Image();
@@ -1309,6 +1309,7 @@
                         src={getPhotoUrl(item)} 
                         alt="Foto de {toTitleCase(item.nombre) || 'Registro'}"
                         className="employee-thumb"
+                        style="width: 26px; height: 26px; border-radius: 6px; object-fit: cover; border: 1px solid #3b82f6; background: #f1f5f9; display: block;"
                         version={item.updated_at}
                       />
                       <div class="fallback-avatar-icon" style="display: none;">
@@ -2222,13 +2223,15 @@
     justify-content: center;
   }
 
-  .employee-thumb {
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
-    object-fit: cover;
-    border: 1px solid #3b82f6;
-    background: #f1f5f9;
+  .employee-thumb,
+  :global(.employee-thumb) {
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 6px !important;
+    object-fit: cover !important;
+    border: 1px solid #3b82f6 !important;
+    background: #f1f5f9 !important;
+    display: block !important;
   }
 
   .fallback-avatar-icon {

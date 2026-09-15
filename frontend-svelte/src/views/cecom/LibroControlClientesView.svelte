@@ -329,7 +329,7 @@
     ]);
   });
 
-  $: if (libroId || targetSalaId) {
+  $: if (libroId || targetSalaUuid) {
     loadRecords();
     loadDropRecords();
     loadSugerenciasRemotas('');

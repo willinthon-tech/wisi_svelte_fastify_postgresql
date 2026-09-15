@@ -25,10 +25,11 @@
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
+  $: currentUid = $currentUserStore?.uuid || $currentUserStore?.id;
+  $: currentUserSalas = currentUid ? (userSalasMap[currentUid] || userSalasMap[String(currentUid)] || ($currentUserStore?.id ? userSalasMap[$currentUserStore.id] : null) || []) : [];
   $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? s.id : s) : [])).map(String);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -171,27 +172,28 @@
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.includes(String(s.id));
+    return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Llave', bold: true, sortable: true, editable: true },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala Asignada', sortable: true, editable: false }
+    { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false }
   ];
 
   $: createFields = [
     { key: 'nombre', label: 'Nombre de la Llave', type: 'text', placeholder: 'Ej. Llave 01', required: true },
-    { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true }
+    { key: 'sala_uuid', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true }
   ];
 
   async function handleCreate(event) {
-    const draft = event.detail;
+    const draft = { ...event.detail };
+    if (draft.sala_uuid && !draft.sala_id) draft.sala_id = draft.sala_uuid;
     try {
       const created = await masterLlavesActions.add(draft);
       triggerToast('Llave creada exitosamente', 'success');
       if (created) {
-        items = [created, ...items.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
         totalCount++;
       }
       loadServerData().catch(() => {});
@@ -202,10 +204,13 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
+    const payload = { ...draft };
+    if (payload.sala_uuid && !payload.sala_id) payload.sala_id = payload.sala_uuid;
     try {
-      await masterLlavesActions.update(id, draft);
+      await masterLlavesActions.update(targetUuid, payload);
       triggerToast('Llave actualizada exitosamente', 'success');
-      items = items.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar llave: ${err.message}`, 'error');
@@ -214,9 +219,9 @@
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
-    const targetId = id || item?.id || item?.uuid;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterLlavesActions.delete(targetId);
+      const res = await masterLlavesActions.delete(targetUuid);
       if (res && res.blocked) {
         if (onResult) {
           onResult(res);
@@ -225,7 +230,7 @@
         }
       } else {
         triggerToast('Llave desincorporada exitosamente', 'success');
-        items = items.filter(x => String(x.id) !== String(targetId) && String(x.uuid) !== String(targetId));
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
         totalCount = Math.max(0, totalCount - 1);
         if (onResult) onResult({ success: true });
         loadServerData().catch(() => {});

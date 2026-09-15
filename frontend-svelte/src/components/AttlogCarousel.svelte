@@ -62,6 +62,7 @@
     const empFoto =
       record.empleado_foto ||
       record.foto ||
+      (record.empleado_uuid ? `/empleados/${record.empleado_uuid}.jpg` : null) ||
       (record.empleado_id ? `/empleados/${record.empleado_id}.jpg` : null);
     if (!empFoto) return null;
     return toBackendUrl(empFoto, { thumb: true });
@@ -70,11 +71,11 @@
   // Extract assigned sala IDs strictly for the logged in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id || 1;
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? String(s.id) : String(s)))
+        .map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s)))
         .filter(Boolean);
     }
 
@@ -84,10 +85,10 @@
       typeof masterMap === "object" &&
       !Array.isArray(masterMap)
     ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? String(s.id) : String(s)))
+          .map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s)))
           .filter(Boolean);
       }
     }
@@ -95,7 +96,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? String(s.id) : String(s)))
+        .map((s) => (typeof s === "object" ? String(s.uuid || s.id) : String(s)))
         .filter(Boolean);
     }
 
@@ -104,7 +105,8 @@
 
   $: assignedDispositivos = $masterDispositivosStore.filter(
     (d) =>
-      assignedSalaIds.length > 0 && assignedSalaIds.includes(String(d.sala_id)),
+      assignedSalaIds.length > 0 &&
+      (assignedSalaIds.includes(String(d.sala_uuid)) || assignedSalaIds.includes(String(d.sala_id))),
   );
   $: dispositivosCount = assignedDispositivos.length;
 

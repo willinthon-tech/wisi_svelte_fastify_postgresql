@@ -5,7 +5,8 @@
   import { toEmployeePhotoUrl } from '../../config/api.config.js';
 
   export let isOpen = false;
-  export let assignedSalaIds = [];
+  export let assignedSalaUuids = [];
+  export let assignedSalaIds = assignedSalaUuids;
 
   const dispatch = createEventDispatcher();
 
@@ -13,13 +14,14 @@
   $: salasTipo1 = ($masterSalasStore || []).filter(s => {
     const isTipo1 = Number(s.grupo_id) === 1 || !s.grupo_id;
     if (!isTipo1) return false;
-    if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.includes(s.id);
+    const allowed = assignedSalaUuids && assignedSalaUuids.length > 0 ? assignedSalaUuids : assignedSalaIds;
+    if (!allowed || allowed.length === 0) return true;
+    return allowed.includes(s.uuid) || allowed.includes(s.id);
   });
 
   let selectedSalaId = null;
-  $: if (salasTipo1.length > 0 && (!selectedSalaId || !salasTipo1.some(s => s.id === selectedSalaId))) {
-    selectedSalaId = salasTipo1[0].id;
+  $: if (salasTipo1.length > 0 && (!selectedSalaId || !salasTipo1.some(s => (s.uuid || s.id) === selectedSalaId))) {
+    selectedSalaId = salasTipo1[0].uuid || salasTipo1[0].id;
   }
 
   let isAuditing = false;
@@ -136,7 +138,7 @@
     if (selectedSyncIds.size === list.length && list.length > 0) {
       selectedSyncIds = new Set();
     } else {
-      selectedSyncIds = new Set(list.map(e => e.id));
+      selectedSyncIds = new Set(list.map(e => e.uuid || e.id));
     }
   }
 
@@ -156,7 +158,7 @@
     if (selectedFaltanIds.size === list.length && list.length > 0) {
       selectedFaltanIds = new Set();
     } else {
-      selectedFaltanIds = new Set(list.map(e => e.id));
+      selectedFaltanIds = new Set(list.map(e => e.uuid || e.id));
     }
   }
 
@@ -512,7 +514,7 @@
                         <button 
                           type="button" 
                           class="sync-btn-update-all"
-                          on:click={() => handleUpdateEmployees(currentDevice.sincronizados.map(e => e.id))}
+                          on:click={() => handleUpdateEmployees(currentDevice.sincronizados.map(e => e.uuid || e.id))}
                           disabled={isExecutingAction}
                           title="Actualiza en lote a todos con el nombre y foto más reciente"
                         >
@@ -557,19 +559,20 @@
                             </tr>
                           {:else}
                             {#each filteredSincronizados as emp}
-                              {@const isSelected = selectedSyncIds.has(emp.id)}
+                              {@const empKey = emp.uuid || emp.id}
+                              {@const isSelected = selectedSyncIds.has(empKey)}
                               <tr class={isSelected ? 'row-selected-sync' : ''}>
                                 <td style="text-align: center;">
                                   <input 
                                     type="checkbox" 
                                     checked={isSelected}
-                                    on:change={() => toggleSelectSync(emp.id)}
+                                    on:change={() => toggleSelectSync(empKey)}
                                     disabled={isExecutingAction}
                                   />
                                 </td>
                                 <td style="text-align: center;">
                                   <img 
-                                    src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
+                                    src={toEmployeePhotoUrl(emp.foto || `/empleados/${empKey}.jpg`, empKey)} 
                                     alt={emp.nombre}
                                     class="sync-emp-avatar" 
                                     on:error={(e) => { e.currentTarget.src = '/favicon.png'; }}
@@ -598,7 +601,7 @@
                                   <button
                                     type="button"
                                     class="sync-btn-update-single"
-                                    on:click={() => handleUpdateEmployees([emp.id])}
+                                    on:click={() => handleUpdateEmployees([emp.uuid || emp.id])}
                                     disabled={isExecutingAction}
                                     title="Actualizar nombre, foto y tarjeta en el biométrico y panel"
                                   >
@@ -679,7 +682,7 @@
                         <button 
                           type="button" 
                           class="sync-btn-add-all"
-                          on:click={() => handleAddEmployees(currentDevice.faltan.map(e => e.id))}
+                          on:click={() => handleAddEmployees(currentDevice.faltan.map(e => e.uuid || e.id))}
                           disabled={isExecutingAction}
                         >
                           ➕ Agregar Todos ({currentDevice.faltan.length})
@@ -722,19 +725,20 @@
                             </tr>
                           {:else}
                             {#each filteredFaltan as emp}
-                              {@const isSelected = selectedFaltanIds.has(emp.id)}
+                              {@const empKey = emp.uuid || emp.id}
+                              {@const isSelected = selectedFaltanIds.has(empKey)}
                               <tr class={isSelected ? 'row-selected-add' : ''}>
                                 <td style="text-align: center;">
                                   <input 
                                     type="checkbox" 
                                     checked={isSelected}
-                                    on:change={() => toggleSelectFaltan(emp.id)}
+                                    on:change={() => toggleSelectFaltan(empKey)}
                                     disabled={isExecutingAction}
                                   />
                                 </td>
                                 <td style="text-align: center;">
                                   <img 
-                                    src={toEmployeePhotoUrl(emp.foto || `/empleados/${emp.id}.jpg`, emp.id)} 
+                                    src={toEmployeePhotoUrl(emp.foto || `/empleados/${empKey}.jpg`, empKey)} 
                                     alt={emp.nombre}
                                     class="sync-emp-avatar" 
                                     on:error={(e) => { e.currentTarget.src = '/favicon.png'; }}
@@ -748,7 +752,7 @@
                                   <button 
                                     type="button" 
                                     class="sync-btn-add-single"
-                                    on:click={() => handleAddEmployees([emp.id])}
+                                    on:click={() => handleAddEmployees([empKey])}
                                     disabled={isExecutingAction}
                                   >
                                     ➕ Agregar

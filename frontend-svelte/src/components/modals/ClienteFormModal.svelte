@@ -47,10 +47,13 @@
   // Reactivity: Filtered Salas strictly restricted to user's assigned salas
   $: availableSalas = (function() {
     const all = $masterSalasStore || [];
-    let filtered = all.filter(s => !(s.grupo_id && Number(s.grupo_id) === 2));
+    let filtered = all.filter(s => !(s.grupo_id && Number(s.grupo_id) === 2) && !(s.grupo_nombre && String(s.grupo_nombre).toUpperCase() === 'GALPÓN'));
     if (assignedSalaIds && assignedSalaIds.length > 0) {
       const assignedSet = new Set(assignedSalaIds.map(String));
-      filtered = filtered.filter(s => assignedSet.has(String(s.uuid || s.id)));
+      const scoped = filtered.filter(s => assignedSet.has(String(s.uuid || s.id)));
+      if (scoped.length > 0) {
+        filtered = scoped;
+      }
     }
     // Si estamos editando y la sala del cliente no está en la lista filtrada, mantenerla para no mostrar blanco
     const targetSalaUuid = item ? (item.sala_uuid || item.sala_id) : null;

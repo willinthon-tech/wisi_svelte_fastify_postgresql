@@ -22,7 +22,7 @@
     rawEmployees.forEach(e => {
       const sId = String(e.sala_uuid || e.sala_id || '');
       if (sId && !map.has(sId)) {
-        const found = (salas || []).find(s => String(s.id) === sId);
+        const found = (salas || []).find(s => String(s.uuid || s.id) === sId);
         const name = found ? (found.nombre_comercial || found.nombre) : (e.sala_nombre || `Sala #${sId.slice(0, 8)}`);
         map.set(sId, { id: sId, nombre: name, count: 0 });
       }
@@ -100,7 +100,7 @@
       }
 
       if (res.ok && json && json.success) {
-        const corteId = json.data?.id;
+        const corteId = json.data?.uuid || json.data?.id;
         if (!guardarVisible) {
           // Copiar enlace al portapapeles con el dominio web público oficial
           const shareUrl = getPublicWebUrl(`/#/reportes/rrhh/corte/${corteId}`);
@@ -193,8 +193,8 @@
             <div class="salas-chips-wrap">
               {#if salasDetectadas.length > 0}
                 {#each salasDetectadas as s}
-                  <span class="sala-chip" title="Sala ID #{s.id}">
-                    <strong class="sala-chip-id">#{s.id}</strong> {s.nombre} <span class="sala-chip-count">({s.count} emp.)</span>
+                  <span class="sala-chip" title="Sala #{s.id}">
+                    <strong class="sala-chip-id">#{s.id.length > 10 ? s.id.slice(0, 8) : s.id}</strong> {s.nombre} <span class="sala-chip-count">({s.count} emp.)</span>
                   </span>
                 {/each}
               {:else}

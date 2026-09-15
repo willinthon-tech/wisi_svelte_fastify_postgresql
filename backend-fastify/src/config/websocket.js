@@ -160,25 +160,30 @@ attlogEvents.on('new_attlog', (data) => {
     const notificationBody = bodyLines.join('\n');
 
     let photoUrl = null;
-    if (data.id) {
-      photoUrl = `https://willinthon.wisi.space/api/attlogs/${data.id}.jpg`;
+    const attlogKey = data.uuid || data.id;
+    const empleadoKey = data.empleado_uuid || data.empleado_id;
+    const salaKey = data.sala_uuid || data.sala_id;
+
+    if (attlogKey) {
+      photoUrl = `https://willinthon.wisi.space/api/attlogs/${attlogKey}.jpg`;
     } else if (data.empleado_foto) {
       photoUrl = data.empleado_foto.startsWith('http') ? data.empleado_foto : `https://willinthon.wisi.space${data.empleado_foto.startsWith('/') ? '' : '/'}${data.empleado_foto}`;
     } else if (data.foto) {
       photoUrl = data.foto.startsWith('http') ? data.foto : `https://willinthon.wisi.space${data.foto.startsWith('/') ? '' : '/'}${data.foto}`;
-    } else if (data.empleado_id) {
-      photoUrl = `https://willinthon.wisi.space/api/empleados/${data.empleado_id}.jpg`;
+    } else if (empleadoKey) {
+      photoUrl = `https://willinthon.wisi.space/api/empleados/${empleadoKey}.jpg`;
     }
 
     sendPushNotificationForAttlog({
-      salaId: data.sala_id,
+      salaId: salaKey,
       title,
       body: notificationBody,
       imageUrl: photoUrl,
       data: {
-        attlog_id: String(data.id || ''),
-        empleado_id: String(data.empleado_id || ''),
-        sala_id: String(data.sala_id || ''),
+        attlog_id: String(attlogKey || ''),
+        empleado_id: String(empleadoKey || ''),
+        sala_id: String(salaKey || ''),
+        sala_uuid: String(salaKey || ''),
         tipo: statusLabel,
         cargo: String(cargoName),
         sala: String(salaName),

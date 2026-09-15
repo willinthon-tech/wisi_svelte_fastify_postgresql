@@ -22,10 +22,11 @@ export async function getUserSalasModel(userId) {
   const uIdStr = String(userId).trim();
 
   return await sql`
-    SELECT s.*, s.uuid AS id FROM salas s
+    SELECT s.*, s.uuid AS id, s.uuid AS sala_uuid, s.uuid AS sala_id, gs.nombre AS grupo_nombre FROM salas s
     INNER JOIN user_salas us ON s.uuid = us.sala_uuid
+    LEFT JOIN grupo_salas gs ON s.grupo_uuid = gs.uuid
     WHERE us.user_uuid::text = ${uIdStr}
-    AND (s.grupo_uuid IS NULL)
+    AND (gs.nombre IS NULL OR UPPER(gs.nombre) != 'GALPÓN')
     ORDER BY s.nombre ASC
   `;
 }

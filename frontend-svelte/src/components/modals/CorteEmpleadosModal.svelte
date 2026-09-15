@@ -26,7 +26,8 @@
       return;
     }
 
-    if (!corte?.id) {
+    const targetCorteId = corte?.uuid || corte?.id;
+    if (!targetCorteId) {
       empleados = [];
       return;
     }
@@ -34,7 +35,7 @@
     loading = true;
     error = null;
     try {
-      const res = await fetch(`/api/master/cortes/${corte.id}`);
+      const res = await fetch(`/api/master/cortes/${targetCorteId}`);
       const json = await res.json();
       if (json && json.success && json.data) {
         let corteData = json.data.data;
@@ -114,7 +115,7 @@
           <div>
             <div class="header-title-row">
               <h3 class="modal-title">
-                Empleados en Corte #{corte?.id || ''}
+                Empleados en Corte {#if corte?.id}#{corte.id}{:else if corte?.uuid}#{corte.uuid.slice(0, 8)}{/if}
               </h3>
               {#if corte?.sala_nombre}
                 <span class="sala-pill">

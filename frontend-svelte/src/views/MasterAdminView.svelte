@@ -229,27 +229,27 @@
     initializedDeviceMap = true;
     const initialMap = {};
     $masterDispositivosStore.forEach((d) => {
-      initialMap[d.id] = false;
+      initialMap[d.uuid || d.id] = false;
     });
     selectedAgentDeviceMap = initialMap;
   }
 
   $: allGlobalChecked =
     $masterDispositivosStore.length > 0 &&
-    $masterDispositivosStore.every((d) => !!selectedAgentDeviceMap[d.id]);
+    $masterDispositivosStore.every((d) => !!selectedAgentDeviceMap[d.uuid || d.id]);
 
   function getDevicesForSala(salaId) {
     return $masterDispositivosStore.filter(
-      (d) => String(d.sala_id) === String(salaId),
+      (d) => String(d.sala_uuid || d.sala_id) === String(salaId),
     );
   }
 
   function isSalaFullyChecked(salaId, map, devicesStore) {
     const devicesInSala = devicesStore.filter(
-      (d) => String(d.sala_id) === String(salaId),
+      (d) => String(d.sala_uuid || d.sala_id) === String(salaId),
     );
     if (devicesInSala.length === 0) return false;
-    return devicesInSala.every((d) => !!map[d.id]);
+    return devicesInSala.every((d) => !!map[d.uuid || d.id]);
   }
 
   function toggleSalaAllDevices(salaId) {
@@ -264,7 +264,7 @@
 
     const newMap = { ...selectedAgentDeviceMap };
     devicesInSala.forEach((d) => {
-      newMap[d.id] = targetState;
+      newMap[d.uuid || d.id] = targetState;
     });
     selectedAgentDeviceMap = newMap;
   }
@@ -273,14 +273,14 @@
     const targetState = !allGlobalChecked;
     const newMap = {};
     $masterDispositivosStore.forEach((d) => {
-      newMap[d.id] = targetState;
+      newMap[d.uuid || d.id] = targetState;
     });
     selectedAgentDeviceMap = newMap;
   }
 
   async function handleGenerateAgentZip() {
     const configuredDevices = $masterDispositivosStore.filter(
-      (d) => !!selectedAgentDeviceMap[d.id],
+      (d) => !!selectedAgentDeviceMap[d.uuid || d.id],
     );
 
     if (configuredDevices.length === 0) {
@@ -292,10 +292,10 @@
     }
 
     const salaIdsInvolved = Array.from(
-      new Set(configuredDevices.map((d) => d.sala_id)),
+      new Set(configuredDevices.map((d) => d.sala_uuid || d.sala_id)),
     );
     const salasInvolved = $masterSalasStore.filter((s) =>
-      salaIdsInvolved.includes(s.id),
+      salaIdsInvolved.includes(s.uuid || s.id),
     );
 
     const salaNamesLabel =
@@ -395,16 +395,21 @@ exit
             cloud_url: agentCloudUrl,
           },
           salas_configuradas: salasInvolved.map((s) => ({
-            id: s.id,
+            uuid: s.uuid || s.id,
+            id: s.uuid || s.id,
             nombre: s.nombre,
           })),
           dispositivos: configuredDevices.map((d) => {
-            const salaObj = $masterSalasStore.find((s) => s.id === d.sala_id);
+            const salaObj = $masterSalasStore.find(
+              (s) => String(s.uuid || s.id) === String(d.sala_uuid || d.sala_id),
+            );
             return {
-              id: d.id,
+              uuid: d.uuid || d.id,
+              id: d.uuid || d.id,
               nombre: d.nombre,
-              sala_id: d.sala_id,
-              sala_nombre: salaObj ? salaObj.nombre : `Sala #${d.sala_id}`,
+              sala_uuid: d.sala_uuid || d.sala_id,
+              sala_id: d.sala_uuid || d.sala_id,
+              sala_nombre: salaObj ? salaObj.nombre : `Sala #${d.sala_uuid || d.sala_id}`,
               ip_local: d.ip_local,
               ip_remota: d.ip_remota,
               ip_panel: d.ip_panel,
@@ -681,9 +686,11 @@ async function handleHikvisionPushEvent(req, res) {
     };
 
     const payload = {
-      dispositivo_id: matchedDev ? matchedDev.id : 1,
+      dispositivo_uuid: matchedDev ? (matchedDev.uuid || matchedDev.id) : null,
+      dispositivo_id: matchedDev ? (matchedDev.uuid || matchedDev.id) : 1,
       dispositivo_nombre: matchedDev ? matchedDev.nombre : 'Biométrico Push',
-      sala_id: matchedDev ? matchedDev.sala_id : 1,
+      sala_uuid: matchedDev ? (matchedDev.sala_uuid || matchedDev.sala_id) : null,
+      sala_id: matchedDev ? (matchedDev.sala_uuid || matchedDev.sala_id) : 1,
       sala_nombre: matchedDev ? matchedDev.sala_nombre : 'Sala Local',
       timestamp: new Date().toISOString(),
       attlogs: [attlogRecord]
@@ -692,7 +699,7 @@ async function handleHikvisionPushEvent(req, res) {
     const syncCloudEndpoint = (CLOUD_URL || 'http://localhost:3030').replace(new RegExp('/+$'), '') + '/api/attlogs/sync';
 
     axios.post(syncCloudEndpoint, payload).catch(err => {
-      console.error('[AGENTE] ❌ Error enviando marcaje push:', err.message);
+      console.error('[AGENTE] Error enviando marcaje push:', err.message);
     });
 
     return res.status(200).json({ status: "OK", statusCode: 1, statusString: "OK" });
@@ -1088,8 +1095,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     if (!isapiSelectedDevice) return;
     isapiSubmitting = true;
     try {
+      const targetDevUuid = isapiSelectedDevice.uuid || isapiSelectedDevice.id;
       const res = await fetch(
-        `/api/master/dispositivos/${isapiSelectedDevice.id}/isapi-http-listening`,
+        `/api/master/dispositivos/${targetDevUuid}/isapi-http-listening`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1211,28 +1219,28 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
   // User Sala Assignment Toggle
   function isSalaAssigned(userId, salaId) {
-    const userSalas = $userSalasStore[userId] || [];
-    return userSalas.includes(salaId);
+    const userSalas = $userSalasStore[userId] || $userSalasStore[String(userId)] || [];
+    return userSalas.map(String).includes(String(salaId));
   }
 
   function toggleSalaAssignment(userId, salaId) {
     userSalasStore.update((map) => {
-      const current = map[userId] || [];
-      const updated = current.includes(salaId)
-        ? current.filter((id) => id !== salaId)
+      const current = map[userId] || map[String(userId)] || [];
+      const updated = current.map(String).includes(String(salaId))
+        ? current.filter((id) => String(id) !== String(salaId))
         : [...current, salaId];
       saveUserSalasToBackend(userId, updated);
-      return { ...map, [userId]: updated };
+      return { ...map, [userId]: updated, [String(userId)]: updated };
     });
   }
 
   // User Module Permission Toggles (Declaración Reactiva $: userPermsMap para forzar re-render instantáneo en Svelte)
   const allActions = ["VER", "AGREGAR", "EDITAR", "ELIMINAR"];
 
-  $: userPermsMap = $userModulePermissionsStore[selectedUserId] || {};
+  $: userPermsMap = $userModulePermissionsStore[selectedUserId] || $userModulePermissionsStore[String(selectedUserId)] || {};
 
   function getUserModulePerms(permsMap, moduleId) {
-    return permsMap[moduleId] || [];
+    return permsMap[moduleId] || permsMap[String(moduleId)] || [];
   }
 
   function isPermChecked(permsMap, moduleId, perm) {
@@ -1245,8 +1253,8 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
   function togglePermission(userId, moduleId, perm) {
     userModulePermissionsStore.update((map) => {
-      const userPerms = { ...(map[userId] || {}) };
-      const currentModPerms = (userPerms[moduleId] || []).map(p => p === 'BORRAR' ? 'ELIMINAR' : p);
+      const userPerms = { ...(map[userId] || map[String(userId)] || {}) };
+      const currentModPerms = (getUserModulePerms(userPerms, moduleId)).map(p => p === 'BORRAR' ? 'ELIMINAR' : p);
       let updatedModPerms;
 
       if (perm === "VER") {
@@ -1266,12 +1274,14 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       const updatedUserMap = {
         ...userPerms,
         [moduleId]: updatedModPerms,
+        [String(moduleId)]: updatedModPerms,
       };
       saveUserPermissionsToBackend(userId, updatedUserMap);
 
       return {
         ...map,
         [userId]: updatedUserMap,
+        [String(userId)]: updatedUserMap,
       };
     });
   }
@@ -1284,27 +1294,30 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   function toggleSelectAllPerms(userId, moduleId) {
     const isAll = areAllPermsChecked(userPermsMap, moduleId);
     userModulePermissionsStore.update((map) => {
-      const userPerms = { ...(map[userId] || {}) };
+      const userPerms = { ...(map[userId] || map[String(userId)] || {}) };
+      const updatedPerms = isAll ? [] : [...allActions];
       const updatedUserMap = {
         ...userPerms,
-        [moduleId]: isAll ? [] : [...allActions],
+        [moduleId]: updatedPerms,
+        [String(moduleId)]: updatedPerms,
       };
       saveUserPermissionsToBackend(userId, updatedUserMap);
       return {
         ...map,
         [userId]: updatedUserMap,
+        [String(userId)]: updatedUserMap,
       };
     });
   }
 
   function getModulosForPage(pageId) {
-    return $masterModulosStore.filter((m) => m.page_id === pageId);
+    return $masterModulosStore.filter((m) => String(m.page_uuid || m.page_id) === String(pageId));
   }
 
   function areAllPagePermsChecked(permsMap, pageId) {
     const pageModulos = getModulosForPage(pageId);
     if (pageModulos.length === 0) return false;
-    return pageModulos.every((m) => areAllPermsChecked(permsMap, m.id));
+    return pageModulos.every((m) => areAllPermsChecked(permsMap, m.uuid || m.id));
   }
 
   function toggleSelectAllPagePerms(userId, pageId) {
@@ -1312,19 +1325,22 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     const isAllPage = areAllPagePermsChecked(userPermsMap, pageId);
 
     userModulePermissionsStore.update((map) => {
-      const userPerms = { ...(map[userId] || {}) };
+      const userPerms = { ...(map[userId] || map[String(userId)] || {}) };
       pageModulos.forEach((m) => {
-        userPerms[m.id] = isAllPage ? [] : [...allActions];
+        const mKey = m.uuid || m.id;
+        const val = isAllPage ? [] : [...allActions];
+        userPerms[mKey] = val;
+        if (m.id) userPerms[m.id] = val;
       });
       saveUserPermissionsToBackend(userId, userPerms);
-      return { ...map, [userId]: userPerms };
+      return { ...map, [userId]: userPerms, [String(userId)]: userPerms };
     });
   }
 
   function areAllPageSoloVerChecked(permsMap, pageId) {
     const pageModulos = getModulosForPage(pageId);
     if (pageModulos.length === 0) return false;
-    return pageModulos.every((m) => isPermChecked(permsMap, m.id, "VER"));
+    return pageModulos.every((m) => isPermChecked(permsMap, m.uuid || m.id, "VER"));
   }
 
   function toggleSelectSoloVerPagePerms(userId, pageId) {
@@ -1332,17 +1348,21 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     const isAllSoloVer = areAllPageSoloVerChecked(userPermsMap, pageId);
 
     userModulePermissionsStore.update((map) => {
-      const userPerms = { ...(map[userId] || {}) };
+      const userPerms = { ...(map[userId] || map[String(userId)] || {}) };
       pageModulos.forEach((m) => {
+        const mKey = m.uuid || m.id;
         if (isAllSoloVer) {
-          userPerms[m.id] = [];
+          userPerms[mKey] = [];
+          if (m.id) userPerms[m.id] = [];
         } else {
-          const current = userPerms[m.id] || [];
-          userPerms[m.id] = current.includes("VER") ? current : ["VER"];
+          const current = userPerms[mKey] || userPerms[m.id] || [];
+          const val = current.includes("VER") ? current : ["VER"];
+          userPerms[mKey] = val;
+          if (m.id) userPerms[m.id] = val;
         }
       });
       saveUserPermissionsToBackend(userId, userPerms);
-      return { ...map, [userId]: userPerms };
+      return { ...map, [userId]: userPerms, [String(userId)]: userPerms };
     });
   }
 
@@ -1683,7 +1703,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 style="padding: 8px 14px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; cursor: pointer; min-width: 280px; outline: none; margin-top: 4px; display: block;"
               >
                 {#each $masterUsuariosStore as u}
-                  <option value={u.id}
+                  <option value={u.uuid || u.id}
                     >{u.nombre_apellido} (@{u.usuario})</option
                   >
                 {/each}
@@ -1701,15 +1721,15 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           style="margin: 0 0 14px 0; font-size: 15px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px;"
         >
           Asignar Salas a {(
-            $masterUsuariosStore.find((u) => u.id === selectedUserId) || {}
+            $masterUsuariosStore.find((u) => String(u.uuid || u.id) === String(selectedUserId)) || {}
           ).nombre_apellido}
         </h3>
 
         <div
           style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;"
         >
-          {#each $masterSalasStore as sala (sala.id)}
-            {@const assigned = isSalaAssigned(selectedUserId, sala.id)}
+          {#each $masterSalasStore as sala (sala.uuid || sala.id)}
+            {@const assigned = isSalaAssigned(selectedUserId, sala.uuid || sala.id)}
             <label
               style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #ffffff; border: 1px solid {assigned
                 ? '#16a34a'
@@ -1720,7 +1740,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
               <input
                 type="checkbox"
                 checked={assigned}
-                on:change={() => toggleSalaAssignment(selectedUserId, sala.id)}
+                on:change={() => toggleSalaAssignment(selectedUserId, sala.uuid || sala.id)}
                 style="width: 17px; height: 17px; accent-color: #16a34a; cursor: pointer;"
               />
               <span
@@ -1746,15 +1766,16 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         </h3>
 
         <div style="display: flex; flex-direction: column; gap: 16px;">
-          {#each $masterPaginasStore as pagina (pagina.id)}
-            {@const modulosPage = getModulosForPage(pagina.id)}
+          {#each $masterPaginasStore as pagina (pagina.uuid || pagina.id)}
+            {@const pageKey = pagina.uuid || pagina.id}
+            {@const modulosPage = getModulosForPage(pageKey)}
             {@const allPageChecked = areAllPagePermsChecked(
               userPermsMap,
-              pagina.id,
+              pageKey,
             )}
             {@const allPageSoloVerChecked = areAllPageSoloVerChecked(
               userPermsMap,
-              pagina.id,
+              pageKey,
             )}
 
             <div
@@ -1784,7 +1805,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       type="checkbox"
                       checked={allPageSoloVerChecked}
                       on:change={() =>
-                        toggleSelectSoloVerPagePerms(selectedUserId, pagina.id)}
+                        toggleSelectSoloVerPagePerms(selectedUserId, pageKey)}
                       style="width: 15px; height: 15px; accent-color: #16a34a; cursor: pointer;"
                     />
                     Seleccionar solo VER ({pagina.nombre})
@@ -1800,7 +1821,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       type="checkbox"
                       checked={allPageChecked}
                       on:change={() =>
-                        toggleSelectAllPagePerms(selectedUserId, pagina.id)}
+                        toggleSelectAllPagePerms(selectedUserId, pageKey)}
                       style="width: 15px; height: 15px; accent-color: #2563eb; cursor: pointer;"
                     />
                     Seleccionar todo ({pagina.nombre})
@@ -1812,15 +1833,16 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
               <div
                 style="padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; background: #f8fafc;"
               >
-                {#each modulosPage as modulo (modulo.id)}
+                {#each modulosPage as modulo (modulo.uuid || modulo.id)}
+                  {@const modKey = modulo.uuid || modulo.id}
                   {@const hasVer = isPermChecked(
                     userPermsMap,
-                    modulo.id,
+                    modKey,
                     "VER",
                   )}
                   {@const allChecked = areAllPermsChecked(
                     userPermsMap,
-                    modulo.id,
+                    modKey,
                   )}
 
                   <div
@@ -1853,7 +1875,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                           type="checkbox"
                           checked={hasVer}
                           on:change={() =>
-                            togglePermission(selectedUserId, modulo.id, "VER")}
+                            togglePermission(selectedUserId, modKey, "VER")}
                           style="width: 15px; height: 15px; accent-color: #2563eb; cursor: pointer;"
                         />
                         VER
@@ -1863,13 +1885,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       <label
                         style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: {isPermChecked(
                           userPermsMap,
-                          modulo.id,
+                          modKey,
                           'AGREGAR',
                         )
                           ? '#f0fdf4'
                           : '#f8fafc'}; border: 1px solid {isPermChecked(
                           userPermsMap,
-                          modulo.id,
+                          modKey,
                           'AGREGAR',
                         )
                           ? '#bbf7d0'
@@ -1887,13 +1909,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                           disabled={!hasVer}
                           checked={isPermChecked(
                             userPermsMap,
-                            modulo.id,
+                            modKey,
                             "AGREGAR",
                           )}
                           on:change={() =>
                             togglePermission(
                               selectedUserId,
-                              modulo.id,
+                              modKey,
                               "AGREGAR",
                             )}
                           style="width: 15px; height: 15px; accent-color: #2563eb; cursor: {hasVer
@@ -1907,13 +1929,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       <label
                         style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: {isPermChecked(
                           userPermsMap,
-                          modulo.id,
+                          modKey,
                           'EDITAR',
                         )
                           ? '#f0fdf4'
                           : '#f8fafc'}; border: 1px solid {isPermChecked(
                           userPermsMap,
-                          modulo.id,
+                          modKey,
                           'EDITAR',
                         )
                           ? '#bbf7d0'
@@ -1931,13 +1953,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                           disabled={!hasVer}
                           checked={isPermChecked(
                             userPermsMap,
-                            modulo.id,
+                            modKey,
                             "EDITAR",
                           )}
                           on:change={() =>
                             togglePermission(
                               selectedUserId,
-                              modulo.id,
+                              modKey,
                               "EDITAR",
                             )}
                           style="width: 15px; height: 15px; accent-color: #2563eb; cursor: {hasVer
@@ -1951,13 +1973,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       <label
                         style="display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: {isPermChecked(
                           userPermsMap,
-                          modulo.id,
+                          modKey,
                           'ELIMINAR',
                         )
                           ? '#f0fdf4'
                           : '#f8fafc'}; border: 1px solid {isPermChecked(
                           userPermsMap,
-                          modulo.id,
+                          modKey,
                           'ELIMINAR',
                         )
                           ? '#bbf7d0'
@@ -1975,13 +1997,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                           disabled={!hasVer}
                           checked={isPermChecked(
                             userPermsMap,
-                            modulo.id,
+                            modKey,
                             "ELIMINAR",
                           )}
                           on:change={() =>
                             togglePermission(
                               selectedUserId,
-                              modulo.id,
+                              modKey,
                               "ELIMINAR",
                             )}
                           style="width: 15px; height: 15px; accent-color: #2563eb; cursor: {hasVer
@@ -2001,7 +2023,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                           type="checkbox"
                           checked={allChecked}
                           on:change={() =>
-                            toggleSelectAllPerms(selectedUserId, modulo.id)}
+                            toggleSelectAllPerms(selectedUserId, modKey)}
                           style="width: 15px; height: 15px; accent-color: #0284c7; cursor: pointer;"
                         />
                         Seleccionar todos
@@ -2021,7 +2043,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       >
         <div style="font-size: 13px; color: #64748b; font-weight: 600;">
           Configurando para: <span style="color: #2563eb; font-weight: 800;"
-            >{($masterUsuariosStore.find((u) => u.id === selectedUserId) || {})
+            >{($masterUsuariosStore.find((u) => String(u.uuid || u.id) === String(selectedUserId)) || {})
               .nombre_apellido}</span
           >
         </div>

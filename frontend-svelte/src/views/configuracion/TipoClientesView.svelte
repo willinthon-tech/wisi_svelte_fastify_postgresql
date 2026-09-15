@@ -101,7 +101,7 @@
   }
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Tipo de Cliente', bold: true, sortable: true, editable: true }
   ];
 

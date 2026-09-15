@@ -151,7 +151,7 @@
   }
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Modelo', bold: true, sortable: true, editable: true },
     { 
       key: 'marca_nombre', 

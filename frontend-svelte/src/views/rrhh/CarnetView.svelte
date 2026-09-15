@@ -9,11 +9,11 @@
   // Extraer las salas asignadas estrictamente para el usuario logueado
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id || 1;
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -24,10 +24,10 @@
       typeof masterMap === "object" &&
       !Array.isArray(masterMap)
     ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : s))
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
           .filter(Boolean)
           .map(String);
       }
@@ -36,7 +36,7 @@
     const authList = $authUserSalasStore;
     if (Array.isArray(authList) && authList.length > 0) {
       return authList
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -50,14 +50,18 @@
     const allSalas = ($masterSalasStore || []).filter(s => !s.grupo_id || Number(s.grupo_id) !== 2);
     let filtered = allSalas;
     if (assignedSalaIds.length > 0) {
-      filtered = allSalas.filter((s) => assignedSalaIds.includes(String(s.id)));
+      filtered = allSalas.filter((s) => assignedSalaIds.includes(String(s.uuid || s.id)));
     }
-    salasOptions = filtered.map((s) => ({
-      id: s.id,
-      key: s.id,
-      value: s.id,
-      label: s.nombre || s.nombre_comercial || `Sala #${s.id}`
-    }));
+    salasOptions = filtered.map((s) => {
+      const sKey = s.uuid || s.id;
+      return {
+        id: sKey,
+        uuid: sKey,
+        key: sKey,
+        value: sKey,
+        label: s.nombre || s.nombre_comercial || `Sala #${String(sKey).slice(0, 8)}`
+      };
+    });
   }
 
   // Filtros y Estados
@@ -240,10 +244,12 @@
   // Resolver datos enriquecidos de la sala del empleado
   function getSalaInfo(emp) {
     if (!emp) return {};
-    const fromMap = salasMap[emp.sala_id] || salasMap[emp.sala_uuid] || {};
+    const salaKey = emp.sala_uuid || emp.sala_id;
+    const fromMap = salasMap[salaKey] || salasMap[emp.sala_uuid] || salasMap[emp.sala_id] || {};
     const hasLogo = Boolean(fromMap.logo_url || fromMap.has_logo || fromMap.logo || fromMap.logo_blob);
     return {
-      id: emp.sala_id,
+      uuid: salaKey,
+      id: salaKey,
       nombre: fromMap.nombre || emp.sala_nombre || "CASINO",
       nombre_comercial: fromMap.nombre_comercial || emp.sala_nombre_comercial || emp.sala_nombre || "Casino",
       rif: fromMap.rif || emp.sala_rif || "J-30606591-6",
@@ -251,7 +257,7 @@
       correo: fromMap.correo || emp.sala_correo || "rrhh@casino.com",
       telefono: fromMap.telefono || emp.sala_telefono || "0424-968.86.12",
       has_logo: hasLogo,
-      logo_url: fromMap.logo_url || (hasLogo ? toBackendUrl(`/api/salas/${emp.sala_id}.png`) : null)
+      logo_url: fromMap.logo_url || (hasLogo ? toBackendUrl(`/api/salas/${salaKey}.png`) : null)
     };
   }
 

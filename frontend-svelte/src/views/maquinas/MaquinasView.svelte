@@ -328,7 +328,7 @@
 
   // Column definitions for PaginatedDataTable
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'NOMBRE DE MÁQUINA', bold: true, sortable: true, editable: true },
     { key: 'serial', label: 'SERIAL', bold: true, sortable: true, editable: true },
     { key: 'puestos', label: 'PUESTOS', type: 'number', sortable: true, editable: true },

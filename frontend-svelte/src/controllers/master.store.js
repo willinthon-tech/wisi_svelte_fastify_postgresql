@@ -138,8 +138,11 @@ export function calculateUserModuleActions(route, user, permsMapAll, modulos = [
     return { canView: true, canAdd: true, canEdit: true, canDelete: true, isModule: false };
   }
 
-  const userId = user?.id ?? null;
-  const userPerms = (userId && permsMapAll && permsMapAll[userId]) ? (permsMapAll[userId][mod.id] || []) : [];
+  const userUuid = user?.uuid || user?.id || null;
+  const modUuid = mod.uuid || mod.id;
+  const userPerms = (userUuid && permsMapAll && (permsMapAll[userUuid] || (user?.id && permsMapAll[user.id]))) 
+    ? (permsMapAll[userUuid]?.[modUuid] || permsMapAll[userUuid]?.[mod.id] || (user?.id && permsMapAll[user.id]?.[modUuid]) || []) 
+    : [];
 
   return {
     canView: userPerms.includes('VER'),
@@ -147,7 +150,8 @@ export function calculateUserModuleActions(route, user, permsMapAll, modulos = [
     canEdit: userPerms.includes('EDITAR'),
     canDelete: userPerms.includes('ELIMINAR') || userPerms.includes('BORRAR'),
     isModule: true,
-    moduleId: mod.id,
+    moduleUuid: modUuid,
+    moduleId: modUuid,
     moduleNombre: mod.nombre
   };
 }
@@ -206,29 +210,39 @@ export const currentRoutePermissionsStore = derived(
   }
 );
 
-export function getActiveUserAssignedSalaIds() {
+export function getActiveUserAssignedSalaUuids() {
   const userMap = get(userSalasStore) || {};
   const user = get(currentUserStore);
-  const currentUserSalas = user?.id ? (userMap[user.id] || []) : [];
+  const uid = user?.uuid || user?.id;
+  const currentUserSalas = uid ? (userMap[uid] || userMap[String(uid)] || (user?.id ? userMap[user.id] : null) || []) : [];
   if (currentUserSalas && currentUserSalas.length > 0) {
-    return currentUserSalas.map(s => String(typeof s === 'object' ? s.id : s));
+    return currentUserSalas.map(s => String(typeof s === 'object' ? (s.uuid || s.id) : s));
   }
   const authSalas = get(authUserSalasStore) || [];
   if (authSalas && authSalas.length > 0) {
-    return authSalas.map(s => String(typeof s === 'object' ? s.id : s));
+    return authSalas.map(s => String(typeof s === 'object' ? (s.uuid || s.id) : s));
   }
   return [];
 }
 
-export function filterOptionsByActiveSalas(items = [], salaIdKey = 'sala_id') {
-  const assignedIds = getActiveUserAssignedSalaIds().map(String);
+export const getActiveUserAssignedSalaIds = getActiveUserAssignedSalaUuids;
+
+export function filterOptionsByActiveSalas(items = [], salaKey = 'sala_uuid') {
+  const assignedUuids = getActiveUserAssignedSalaUuids().map(String);
   return items.filter(item => {
     if (!item) return false;
+    if (item.grupo_uuid && Number(item.grupo_uuid) === 2) return false;
     if (item.grupo_id && Number(item.grupo_id) === 2) return false;
-    if (!assignedIds || assignedIds.length === 0) return true;
-    if (salaIdKey === 'id' && item.id) return assignedIds.includes(String(item.id));
-    if (item[salaIdKey]) return assignedIds.includes(String(item[salaIdKey]));
-    if (item.sala_id) return assignedIds.includes(String(item.sala_id));
+    if (!assignedUuids || assignedUuids.length === 0) return true;
+    if (item[salaKey]) return assignedUuids.includes(String(item[salaKey]));
+    if (item.sala_uuid) return assignedUuids.includes(String(item.sala_uuid));
+    if (item.sala_id) return assignedUuids.includes(String(item.sala_id));
+    if (item.uuid && (salaKey === 'uuid' || salaKey === 'id' || salaKey === 'sala_uuid' || salaKey === 'sala_id')) {
+      return assignedUuids.includes(String(item.uuid));
+    }
+    if (item.id && (salaKey === 'uuid' || salaKey === 'id' || salaKey === 'sala_uuid' || salaKey === 'sala_id')) {
+      return assignedUuids.includes(String(item.id));
+    }
     return true;
   });
 }
@@ -410,23 +424,23 @@ export async function syncMasterStoresDelta() {
         upsertLocalItem(localStoreKey, item).catch(() => {});
       }
       for (const del of deleted) {
-        deleteLocalItem(localStoreKey, del.id || del.uuid).catch(() => {});
+        deleteLocalItem(localStoreKey, del.uuid || del.id).catch(() => {});
       }
 
       if (store) {
         store.update(currentItems => {
           let items = Array.isArray(currentItems) ? [...currentItems] : [];
-          const deletedIds = new Set(deleted.map(d => String(d.id || d.uuid)));
+          const deletedUuids = new Set(deleted.map(d => String(d.uuid || d.id)));
 
           // 1. Descartar eliminados (Soft delete o borrado)
-          if (deletedIds.size > 0) {
-            items = items.filter(it => !deletedIds.has(String(it.id || it.uuid)));
+          if (deletedUuids.size > 0) {
+            items = items.filter(it => !deletedUuids.has(String(it.uuid || it.id)));
           }
 
           // 2. Upsert (actualizar registro modificado o insertar si es nuevo)
           for (const up of upserted) {
-            const upId = String(up.id || up.uuid);
-            const idx = items.findIndex(it => String(it.id || it.uuid) === upId);
+            const upUuid = String(up.uuid || up.id);
+            const idx = items.findIndex(it => String(it.uuid || it.id) === upUuid);
             if (idx >= 0) {
               items[idx] = { ...items[idx], ...up };
             } else {

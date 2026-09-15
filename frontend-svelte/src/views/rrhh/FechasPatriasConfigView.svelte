@@ -134,7 +134,7 @@
   }));
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'fecha_formateada', label: 'Fecha Conmemorativa', sortable: false, editable: false },
     { key: 'descripcion', label: 'Descripción / Evento Patrio', bold: true, sortable: true, editable: true }
   ];
@@ -165,7 +165,7 @@
       const created = await masterFechasPatriasActions.add(draft);
       triggerToast('Fecha patria registrada exitosamente', 'success');
       if (created) {
-        rawItems = [created, ...rawItems.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        rawItems = [created, ...rawItems.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
         totalCount++;
       }
       loadServerData().catch(() => {});
@@ -176,10 +176,11 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterFechasPatriasActions.update(id, draft);
+      await masterFechasPatriasActions.update(targetUuid, draft);
       triggerToast('Fecha patria actualizada exitosamente', 'success');
-      rawItems = rawItems.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      rawItems = rawItems.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar fecha patria: ${err.message}`, 'error');
@@ -188,14 +189,14 @@
 
   async function handleDelete(event) {
     const { id, onResult } = event.detail;
-    const targetId = id;
+    const targetUuid = id;
     try {
-      const res = await masterFechasPatriasActions.delete(targetId);
+      const res = await masterFechasPatriasActions.delete(targetUuid);
       if (res && res.blocked) {
         onResult(res);
       } else {
         triggerToast('Fecha patria eliminada exitosamente', 'success');
-        rawItems = rawItems.filter(x => String(x.id) !== String(targetId) && String(x.uuid) !== String(targetId));
+        rawItems = rawItems.filter(x => String(x.uuid || x.id) !== String(targetUuid));
         totalCount = Math.max(0, totalCount - 1);
         if (onResult) onResult({ success: true });
         loadServerData().catch(() => {});

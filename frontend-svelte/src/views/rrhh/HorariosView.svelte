@@ -145,7 +145,7 @@
   }
 
   $: columns = [
-    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'codigo', label: 'Código', bold: true, sortable: true, editable: true },
     { key: 'nombre', label: 'Descripción / Nombre', bold: true, sortable: true, editable: true },
     { key: 'horas_trabajo', label: 'Horas de Trabajo', type: 'horario_badge', sortable: true, editable: true },

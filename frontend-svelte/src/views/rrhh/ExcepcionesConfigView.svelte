@@ -107,7 +107,7 @@
   ];
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'codigo', label: 'Código', bold: true, sortable: true, editable: true },
     { key: 'descripcion', label: 'Descripción', sortable: true, editable: true },
     { key: 'color', label: 'COLOR DE IDENTIFICACIÓN', type: 'color', sortable: true, editable: true },
@@ -134,7 +134,7 @@
       const created = await masterExcepcionesActions.add(draft);
       triggerToast('Excepción creada exitosamente', 'success');
       if (created) {
-        items = [created, ...items.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
         totalCount++;
       }
       loadServerData().catch(() => {});
@@ -145,10 +145,11 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterExcepcionesActions.update(id, draft);
+      await masterExcepcionesActions.update(targetUuid, draft);
       triggerToast('Excepción actualizada exitosamente', 'success');
-      items = items.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(err.message?.startsWith('El código') ? err.message : `Error al actualizar excepción: ${err.message}`, 'error');
@@ -157,14 +158,14 @@
 
   async function handleDelete(event) {
     const { id, onResult } = event.detail;
-    const targetId = id;
+    const targetUuid = id;
     try {
-      const res = await masterExcepcionesActions.delete(targetId);
+      const res = await masterExcepcionesActions.delete(targetUuid);
       if (res && res.blocked) {
         onResult(res);
       } else {
         triggerToast('Excepción eliminada exitosamente', 'success');
-        items = items.filter(x => String(x.id) !== String(targetId) && String(x.uuid) !== String(targetId));
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
         totalCount = Math.max(0, totalCount - 1);
         if (onResult) onResult({ success: true });
         loadServerData().catch(() => {});

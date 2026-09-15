@@ -145,7 +145,7 @@ export async function loginUserStore(usuario, password) {
       const isPasswordMatch = matchedUser.password === cleanInputPass || matchedUser.password.startsWith('$2a$');
       if (isPasswordMatch) {
         const userObj = {
-          id: matchedUser.id,
+          uuid: matchedUser.uuid || matchedUser.id,
           nombre_apellido: matchedUser.nombre_apellido,
           usuario: matchedUser.usuario
         };
@@ -155,7 +155,7 @@ export async function loginUserStore(usuario, password) {
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem('wisi_auth', 'true');
           localStorage.setItem('wisi_user', JSON.stringify(userObj));
-          localStorage.setItem('wisi_token', `token_wisi_${userObj.id}_${Date.now()}`);
+          localStorage.setItem('wisi_token', `token_wisi_${userObj.uuid}_${Date.now()}`);
         }
         return { success: true, user: userObj };
       }

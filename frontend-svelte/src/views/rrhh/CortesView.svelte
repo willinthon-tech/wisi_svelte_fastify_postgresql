@@ -47,13 +47,13 @@
   // Extract assigned sala IDs strictly for the logged-in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id;
+    const userId = user?.uuid || user?.id;
     if (!userId) return [];
 
     // 1. Direct user.salas array
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -61,10 +61,10 @@
     // 2. Master user salas map (userId -> [sala_ids])
     const masterMap = $masterUserSalasStore;
     if (masterMap && typeof masterMap === "object" && !Array.isArray(masterMap)) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
       if (Array.isArray(userList) && userList.length > 0) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : s))
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
           .filter(Boolean)
           .map(String);
       }
@@ -74,7 +74,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : s))
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean)
         .map(String);
     }
@@ -238,7 +238,7 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'fecha_rango', label: 'Período Evaluado', sortable: true, editable: false },
     { key: 'salas_ids', label: 'Salas', type: 'corte_salas', sortable: false, editable: false },
     { key: 'total_empleados', label: 'Empleados', type: 'corte_empleados_badge', sortable: true, editable: false },
@@ -248,14 +248,16 @@
   function handleVerCalculos(event) {
     const corte = event.detail;
     selectedCorteStore.set(corte);
+    const corteUuid = corte.uuid || corte.id;
     // Navegar a la subruta de cálculos
-    navigateToRoute(`rrhh/cortes/calculos?id=${corte.id}`);
+    navigateToRoute(`rrhh/cortes/calculos?uuid=${corteUuid}&id=${corteUuid}`);
   }
 
   async function handleCompartirCorte(event) {
     const corte = event.detail;
-    if (!corte || !corte.id) return;
-    const shareUrl = getPublicWebUrl(`/#/reportes/rrhh/corte/${corte.id}`);
+    const corteUuid = corte?.uuid || corte?.id;
+    if (!corte || !corteUuid) return;
+    const shareUrl = getPublicWebUrl(`/#/reportes/rrhh/corte/${corteUuid}`);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
@@ -275,13 +277,14 @@
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await fetch(`/api/master/cortes/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/master/cortes/${targetUuid}`, { method: 'DELETE' });
       const json = await res.json();
       if (json && json.success) {
         triggerToast('Corte histórico eliminado exitosamente', 'success');
-        items = items.filter(x => String(x.id) !== String(id));
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
         totalCount = Math.max(0, totalCount - 1);
         onResult({ success: true });
         loadServerData().catch(() => {});

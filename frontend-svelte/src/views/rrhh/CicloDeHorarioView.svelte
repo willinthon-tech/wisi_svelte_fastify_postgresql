@@ -20,10 +20,11 @@
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
+  $: currentUid = $currentUserStore?.uuid || $currentUserStore?.id;
+  $: currentUserSalas = currentUid ? (userSalasMap[currentUid] || userSalasMap[String(currentUid)] || ($currentUserStore?.id ? userSalasMap[$currentUserStore.id] : null) || []) : [];
   $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? s.id : s) : [])).map(String);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -169,7 +170,7 @@
 
   // Table Columns
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'departamento_nombre', label: 'DEPARTAMENTO', bold: true, sortable: true, editable: false },
     { key: 'sala_nombre', label: 'SALA', sortable: true, editable: false },
     { key: 'horarios_asignados', label: 'HORARIOS CONFIGURADOS', type: 'departamento_horarios_asignados', sortable: false, editable: false },

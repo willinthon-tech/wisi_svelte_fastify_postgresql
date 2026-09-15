@@ -24,10 +24,11 @@
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
+  $: currentUid = $currentUserStore?.uuid || $currentUserStore?.id;
+  $: currentUserSalas = currentUid ? (userSalasMap[currentUid] || userSalasMap[String(currentUid)] || ($currentUserStore?.id ? userSalasMap[$currentUserStore.id] : null) || []) : [];
   $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? s.id : s) : [])).map(String);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -178,7 +179,7 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: false },
     { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false },
     { key: 'juego_nombre', label: 'Juego Asignado', sortable: true, editable: false }
