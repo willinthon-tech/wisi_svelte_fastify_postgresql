@@ -35,7 +35,7 @@
     }
     if (Array.isArray(rawEmps)) {
       rawEmps.forEach(e => {
-        const sId = Number(e.sala_id);
+        const sId = String(e.sala_uuid || e.sala_id || '');
         if (sId) {
           empCounts.set(sId, (empCounts.get(sId) || 0) + 1);
         }
@@ -43,11 +43,11 @@
     }
 
     return ids.map((id, idx) => {
-      const numId = Number(id);
-      const name = nombres[idx] || `Sala #${numId}`;
-      const count = empCounts.get(numId) || 0;
+      const strId = String(id);
+      const name = nombres[idx] || `Sala #${strId.slice(0, 8)}`;
+      const count = empCounts.get(strId) || 0;
       return {
-        id: numId,
+        id: strId,
         nombre: name,
         empleadosCount: count
       };

@@ -13,8 +13,9 @@
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     const masterMap = $masterUserSalasStore;
@@ -26,16 +27,18 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
-          .filter(Boolean);
+          .map((s) => (typeof s === "object" ? s.id : s))
+          .filter(Boolean)
+          .map(String);
       }
     }
 
     const authList = $authUserSalasStore;
     if (Array.isArray(authList) && authList.length > 0) {
       return authList
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     return [];
@@ -47,7 +50,7 @@
     const allSalas = ($masterSalasStore || []).filter(s => !s.grupo_id || Number(s.grupo_id) !== 2);
     let filtered = allSalas;
     if (assignedSalaIds.length > 0) {
-      filtered = allSalas.filter((s) => assignedSalaIds.includes(Number(s.id)));
+      filtered = allSalas.filter((s) => assignedSalaIds.includes(String(s.id)));
     }
     salasOptions = filtered.map((s) => ({
       id: s.id,
@@ -237,9 +240,8 @@
   // Resolver datos enriquecidos de la sala del empleado
   function getSalaInfo(emp) {
     if (!emp) return {};
-    const fromMap = salasMap[emp.sala_id] || {};
-    const salasConLogo = [1, 2, 6, 7];
-    const hasLogo = salasConLogo.includes(Number(emp.sala_id));
+    const fromMap = salasMap[emp.sala_id] || salasMap[emp.sala_uuid] || {};
+    const hasLogo = Boolean(fromMap.logo_url || fromMap.has_logo || fromMap.logo || fromMap.logo_blob);
     return {
       id: emp.sala_id,
       nombre: fromMap.nombre || emp.sala_nombre || "CASINO",
@@ -249,7 +251,7 @@
       correo: fromMap.correo || emp.sala_correo || "rrhh@casino.com",
       telefono: fromMap.telefono || emp.sala_telefono || "0424-968.86.12",
       has_logo: hasLogo,
-      logo_url: hasLogo ? toBackendUrl(`/api/salas/${emp.sala_id}.png`) : null
+      logo_url: fromMap.logo_url || (hasLogo ? toBackendUrl(`/api/salas/${emp.sala_id}.png`) : null)
     };
   }
 

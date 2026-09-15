@@ -52,25 +52,25 @@
   $: paginatedItems = pageSize >= 999999 ? sortedItems : sortedItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   $: startRecord = sortedItems.length === 0 ? 0 : (currentPage - 1) * (pageSize >= 999999 ? sortedItems.length : pageSize) + 1;
   $: endRecord = pageSize >= 999999 ? sortedItems.length : Math.min(currentPage * pageSize, sortedItems.length);
-  $: allSelected = paginatedItems.length > 0 && paginatedItems.every(i => selectedIds.has(i.id));
+  $: allSelected = paginatedItems.length > 0 && paginatedItems.every(i => selectedIds.has(i.uuid || i.id));
 
   $: totalFilters = searchQuery.trim() ? 1 : 0;
   $: activeFilterName = searchQuery.trim() ? `"${searchQuery.trim()}"` : 'Ninguno';
 
   function toggleSelectAll() {
     if (allSelected) {
-      paginatedItems.forEach(i => selectedIds.delete(i.id));
+      paginatedItems.forEach(i => selectedIds.delete(i.uuid || i.id));
     } else {
-      paginatedItems.forEach(i => selectedIds.add(i.id));
+      paginatedItems.forEach(i => selectedIds.add(i.uuid || i.id));
     }
     selectedIds = new Set(selectedIds);
   }
 
-  function toggleSelectOne(id) {
-    if (selectedIds.has(id)) {
-      selectedIds.delete(id);
+  function toggleSelectOne(targetUuid) {
+    if (selectedIds.has(targetUuid)) {
+      selectedIds.delete(targetUuid);
     } else {
-      selectedIds.add(id);
+      selectedIds.add(targetUuid);
     }
     selectedIds = new Set(selectedIds);
   }
@@ -81,12 +81,12 @@
   }
 
   function handleBatchDelete() {
-    dispatch('delete', { id: Array.from(selectedIds)[0], title: `${selectedIds.size} elementos seleccionados` });
+    dispatch('delete', { uuid: Array.from(selectedIds)[0], id: Array.from(selectedIds)[0], title: `${selectedIds.size} elementos seleccionados` });
     selectedIds = new Set();
   }
 
   function startInlineEdit(item) {
-    editingInlineId = item.id;
+    editingInlineId = item.uuid || item.id;
     inlineDraft = { ...item };
   }
 
@@ -95,7 +95,7 @@
     inlineDraft = {};
   }
 
-  function saveInlineEdit(id) {
+  function saveInlineEdit(targetUuid) {
     dispatch('saveInline', inlineDraft);
     editingInlineId = null;
     inlineDraft = {};
@@ -165,20 +165,21 @@
       </thead>
 
       <tbody>
-        {#each paginatedItems as item (item.id)}
-          {@const isEditingThisRow = editingInlineId === item.id}
-          <tr style="border-bottom: 1px solid #f1f5f9; background: {selectedIds.has(item.id) ? '#eff6ff' : isEditingThisRow ? '#f0f9ff' : '#ffffff'}; transition: background 0.15s ease;">
+        {#each paginatedItems as item (item.uuid || item.id)}
+          {@const itemKey = item.uuid || item.id}
+          {@const isEditingThisRow = editingInlineId === itemKey}
+          <tr style="border-bottom: 1px solid #f1f5f9; background: {selectedIds.has(itemKey) ? '#eff6ff' : isEditingThisRow ? '#f0f9ff' : '#ffffff'}; transition: background 0.15s ease;">
             <td style="text-align: center; padding: 6px 14px;">
               <input 
                 type="checkbox"
-                checked={selectedIds.has(item.id)}
-                on:change={() => toggleSelectOne(item.id)}
+                checked={selectedIds.has(itemKey)}
+                on:change={() => toggleSelectOne(itemKey)}
                 style="cursor: pointer; width: 15px; height: 15px; accent-color: #2563eb;"
               />
             </td>
 
             <td style="padding: 6px 14px; font-family: monospace; color: #334155; font-weight: 400;">
-              #{item.id}
+              #{item.uuid ? item.uuid.slice(0, 8) : item.id}
             </td>
 
             <!-- Título -->
@@ -203,7 +204,7 @@
               {#if isEditingThisRow}
                 <input 
                   type="text" 
-                  bind:value={inlineDraft.description}
+                  bind:value={inlineDraft.description} 
                   class="form-input" 
                   style="font-size: 13px; color: #334155; padding: 4px 8px; width: 100%; min-width: 220px;"
                   placeholder="Descripción"
@@ -258,7 +259,7 @@
                 </select>
               {:else}
                 <button 
-                  on:click={() => dispatch('toggle', item.id)}
+                  on:click={() => dispatch('toggle', itemKey)}
                   type="button"
                   style="background: none; border: none; padding: 0; margin: 0; color: #334155; font-size: 13px; font-weight: 400; cursor: pointer; text-decoration: none;">
                   {item.completed ? 'Completado' : 'Pendiente'}
@@ -271,7 +272,7 @@
               <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
                 {#if isEditingThisRow}
                   <button 
-                    on:click={() => saveInlineEdit(item.id)}
+                    on:click={() => saveInlineEdit(itemKey)}
                     type="button"
                     class="btn-flow-sec" 
                     style="padding: 4px 7px; font-size: 12px; border-color: #a7f3d0;"

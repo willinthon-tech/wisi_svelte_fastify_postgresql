@@ -10,6 +10,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import { masterLegalActions, masterLegalStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   let initial = {};
@@ -43,6 +44,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('legal');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allLegal) && allLegal.length > 0) {
+        items = allLegal;
+        totalCount = allLegal.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano desde backend
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -67,10 +81,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('legal', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar registros legales del servidor', 'error');
+      console.warn('Fallback local IndexedDB para legal:', err);
+      const local = await getLocalItems('legal');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterLegalStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -80,49 +101,62 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
-    { key: 'nombre', label: 'Denominación / Registro Legal', bold: true, sortable: true, editable: true }
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
+    { key: 'nombre', label: 'Estatus Legal', bold: true, sortable: true, editable: true }
   ];
 
   $: createFields = [
-    { key: 'nombre', label: 'Denominación / Registro Legal', type: 'text', placeholder: 'Ej. Autorizada CNC, En Trámite, Certificada...', required: true }
+    { key: 'nombre', label: 'Estatus Legal', type: 'text', placeholder: 'Ej. Legal, En Trámite, No Legal...', required: true }
   ];
 
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterLegalActions.add(draft);
-      triggerToast('Registro legal creado exitosamente', 'success');
-      await loadServerData();
+      const created = await masterLegalActions.add(draft);
+      triggerToast('Estatus legal creado exitosamente', 'success');
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
-      triggerToast(`Error al crear registro legal: ${err.message}`, 'error');
+      triggerToast(`Error al crear estatus legal: ${err.message}`, 'error');
     }
   }
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterLegalActions.update(id, draft);
-      triggerToast('Registro legal actualizado exitosamente', 'success');
-      await loadServerData();
+      await masterLegalActions.update(targetUuid, draft);
+      triggerToast('Estatus legal actualizado exitosamente', 'success');
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
-      triggerToast(`Error al actualizar registro legal: ${err.message}`, 'error');
+      triggerToast(`Error al actualizar estatus legal: ${err.message}`, 'error');
     }
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterLegalActions.delete(id);
+      const res = await masterLegalActions.delete(targetUuid);
       if (res && res.blocked) {
-        onResult(res);
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar porque tiene máquinas vinculadas.', 'warning');
+        }
       } else {
-        triggerToast('Registro legal eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        triggerToast(`Estatus legal eliminado exitosamente`, 'success');
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
-      triggerToast(`Error al eliminar registro legal: ${err.message}`, 'error');
+      triggerToast(`Error al eliminar estatus legal: ${err.message}`, 'error');
     }
   }
 

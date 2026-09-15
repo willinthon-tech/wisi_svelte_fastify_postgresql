@@ -21,10 +21,12 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   // Computed assigned sala IDs for the active user
   $: assignedSalaIds = (() => {
     const user = $currentUserStore;
-    const userId = user?.id;
+    const userId = user?.uuid || user?.id;
     if (!userId) return [];
 
     const masterMap = $masterUserSalasStore;
@@ -36,16 +38,18 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
-          .filter(Boolean);
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
+          .filter(Boolean)
+          .map(String);
       }
     }
 
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     return [];
@@ -125,6 +129,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('empleados');
+      if (Array.isArray(local) && local.length > 0) {
+        const inactive = local.filter(e => e.activo === false || e.activo === 0 || e.activo === '0');
+        if (inactive.length > 0) {
+          items = inactive;
+          totalCount = inactive.length;
+        }
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -203,8 +220,14 @@
         pageSize = json.limit || 10;
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar desincorporados del servidor', 'error');
+      console.warn('Fallback local IndexedDB para desincorporados:', err);
+      const local = await getLocalItems('empleados');
+      const inactive = (Array.isArray(local) ? local : []).filter(e => e.activo === false || e.activo === 0 || e.activo === '0');
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? inactive.filter(x => (x.nombre || '').toLowerCase().includes(q) || (x.cedula || '').toLowerCase().includes(q)) : inactive;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     } finally {
       loading = false;
     }
@@ -222,26 +245,31 @@
 
   $: filteredCargosStore = ($masterCargosStore || []).filter(c => {
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return !c.sala_id || assignedSalaIds.map(Number).includes(Number(c.sala_id));
+    const cSala = c.sala_uuid || c.sala_id;
+    return !cSala || assignedSalaIds.includes(String(cSala));
   });
 
   $: columns = [
     { key: 'foto', label: 'Foto', type: 'photo', sortable: false, editable: false },
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Empleado', bold: true, sortable: true, editable: true },
     { key: 'cedula', label: 'Cédula', sortable: true, editable: true },
     { key: 'fecha_nacimiento', label: 'Fecha de Nacimiento', type: 'fecha_nacimiento', sortable: true, editable: true },
     { key: 'fecha_ingreso', label: 'Fecha de Ingreso', type: 'fecha_ingreso', sortable: true, editable: true },
-    { key: 'cargo_nombre', keyId: 'cargo_id', label: 'Cargo', sortable: true, editable: true, options: filteredCargosStore },
+    { key: 'cargo_nombre', keyId: 'cargo_uuid', label: 'Cargo', sortable: true, editable: true, options: filteredCargosStore },
     { key: 'sala_nombre', label: 'Sala', sortable: true, editable: false }
   ];
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
+    const payload = { ...draft };
+    if (payload.cargo_uuid && !payload.cargo_id) payload.cargo_id = payload.cargo_uuid;
     try {
-      await masterEmpleadosActions.update(id, draft);
+      await masterEmpleadosActions.update(targetUuid, payload);
       triggerToast('Empleado actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar empleado: ${err.message}`, 'error');
     }
@@ -250,18 +278,22 @@
   async function handleReincorporate(event) {
     const detail = event.detail || {};
     const item = detail.item || (detail.id ? detail : {});
-    const targetId = detail.id || item.id;
+    const targetUuid = detail.uuid || item.uuid || detail.id || item.id;
+    const cargoUuid = detail.cargo_uuid || detail.cargo_id;
     const empName = item.nombre || 'seleccionado';
 
     try {
-      await masterEmpleadosActions.update(targetId, {
-        cargo_id: detail.cargo_id ? Number(detail.cargo_id) : undefined,
+      await masterEmpleadosActions.update(targetUuid, {
+        cargo_uuid: cargoUuid ? String(cargoUuid) : undefined,
+        cargo_id: cargoUuid ? String(cargoUuid) : undefined,
         fecha_ingreso: detail.fecha_ingreso || undefined,
         activo: true,
         motivo_desincorporacion: null
       });
       triggerToast(`Empleado "${empName}" reincorporado exitosamente`, 'success');
-      await loadServerData();
+      items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+      totalCount = Math.max(0, totalCount - 1);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al reincorporar empleado: ${err.message}`, 'error');
     }
@@ -279,7 +311,9 @@
       }
     }
     triggerToast(`${count} empleados reincorporados masivamente`, 'success');
-    await loadServerData();
+    items = items.filter(x => !ids.some(id => String(id) === String(x.id) || String(id) === String(x.uuid)));
+    totalCount = Math.max(0, totalCount - count);
+    loadServerData().catch(() => {});
   }
 </script>
 

@@ -12,6 +12,8 @@
   import { masterFechasPatriasActions, masterFechasPatriasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   let initial = {};
   const unsubInit = persistentFechasPatriasFilters.subscribe((val) => {
     initial = val || {};
@@ -55,6 +57,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('fechas_patrias');
+      if (Array.isArray(local) && local.length > 0) {
+        rawItems = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allFechas) && allFechas.length > 0) {
+        rawItems = allFechas;
+        totalCount = allFechas.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -79,10 +94,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('fechas_patrias', rawItems).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar fechas patrias del servidor', 'error');
+      console.warn('Fallback local IndexedDB para fechas patrias:', err);
+      const local = await getLocalItems('fechas_patrias');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterFechasPatriasStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.descripcion || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      rawItems = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -140,9 +162,13 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterFechasPatriasActions.add(draft);
+      const created = await masterFechasPatriasActions.add(draft);
       triggerToast('Fecha patria registrada exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        rawItems = [created, ...rawItems.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al registrar fecha patria: ${err.message}`, 'error');
     }
@@ -153,7 +179,8 @@
     try {
       await masterFechasPatriasActions.update(id, draft);
       triggerToast('Fecha patria actualizada exitosamente', 'success');
-      await loadServerData();
+      rawItems = rawItems.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar fecha patria: ${err.message}`, 'error');
     }
@@ -161,14 +188,17 @@
 
   async function handleDelete(event) {
     const { id, onResult } = event.detail;
+    const targetId = id;
     try {
-      const res = await masterFechasPatriasActions.delete(id);
+      const res = await masterFechasPatriasActions.delete(targetId);
       if (res && res.blocked) {
         onResult(res);
       } else {
         triggerToast('Fecha patria eliminada exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        rawItems = rawItems.filter(x => String(x.id) !== String(targetId) && String(x.uuid) !== String(targetId));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar fecha patria: ${err.message}`, 'error');

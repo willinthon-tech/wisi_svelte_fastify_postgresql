@@ -546,27 +546,27 @@ export async function getMarcajePersonalReportModel(params = {}) {
   }
 
   const userSalaIds = params.user_sala_ids
-    ? String(params.user_sala_ids).split(',').map(Number).filter(Boolean)
+    ? String(params.user_sala_ids).split(',').map(s => s.trim()).filter(Boolean)
     : [];
 
   const salaIds = params.sala_ids
-    ? String(params.sala_ids).split(',').map(Number).filter(Boolean)
-    : (params.sala_id ? [Number(params.sala_id)].filter(Boolean) : []);
+    ? String(params.sala_ids).split(',').map(s => s.trim()).filter(Boolean)
+    : (params.sala_id ? [String(params.sala_id).trim()].filter(Boolean) : []);
 
   let dispositivoIds = null;
   if (params.dispositivo_ids && String(params.dispositivo_ids).trim().length > 0) {
-    const parsedDisp = String(params.dispositivo_ids).split(',').map(n => Number(n.trim())).filter(n => !isNaN(n));
+    const parsedDisp = String(params.dispositivo_ids).split(',').map(n => n.trim()).filter(Boolean);
     if (parsedDisp.length > 0) dispositivoIds = parsedDisp;
   }
   const departamentoIds = params.departamento_ids
-    ? String(params.departamento_ids).split(',').map(Number).filter(Boolean)
-    : (params.departamento_id ? [Number(params.departamento_id)].filter(Boolean) : []);
+    ? String(params.departamento_ids).split(',').map(s => s.trim()).filter(Boolean)
+    : (params.departamento_id ? [String(params.departamento_id).trim()].filter(Boolean) : []);
   const areaIds = params.area_ids
-    ? String(params.area_ids).split(',').map(Number).filter(Boolean)
-    : (params.area_id ? [Number(params.area_id)].filter(Boolean) : []);
+    ? String(params.area_ids).split(',').map(s => s.trim()).filter(Boolean)
+    : (params.area_id ? [String(params.area_id).trim()].filter(Boolean) : []);
   const cargoIds = params.cargo_ids
-    ? String(params.cargo_ids).split(',').map(Number).filter(Boolean)
-    : (params.cargo_id ? [Number(params.cargo_id)].filter(Boolean) : []);
+    ? String(params.cargo_ids).split(',').map(s => s.trim()).filter(Boolean)
+    : (params.cargo_id ? [String(params.cargo_id).trim()].filter(Boolean) : []);
   const sexoList = params.sexo
     ? String(params.sexo).split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
     : [];

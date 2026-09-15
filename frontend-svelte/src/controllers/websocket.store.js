@@ -73,11 +73,11 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
             // Timeout de seguridad: si no responde PONG en 6s, forzar reconexión
             if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
             pongTimeoutTimer = setTimeout(() => {
-              console.warn('⚠️ [WebSocket] Pong timeout recibido. Forzando reconexión...');
+              console.warn('[WebSocket] Pong timeout recibido. Forzando reconexión...');
               try { socket.close(); } catch (e) {}
             }, 6000);
           } catch (e) {
-            console.warn('⚠️ [WebSocket] Error enviando ping:', e);
+            console.warn('[WebSocket] Error enviando ping:', e);
             try { socket.close(); } catch (err) {}
           }
         }
@@ -134,7 +134,7 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
     };
 
     socket.onerror = (err) => {
-      console.warn('⚠️ [WebSocket] Error de socket:', err);
+      console.warn('[WebSocket] Error de socket:', err);
       isWsConnectedStore.set(false);
       try { socket?.close(); } catch (e) {}
     };
@@ -170,7 +170,7 @@ function attachLifecycleListeners() {
 
   const handleWakeUp = () => {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      console.log('🔄 [WebSocket] Reactivando conexión por evento de ciclo de vida...');
+      console.log('[WebSocket] Reactivando conexión por evento de ciclo de vida...');
       initWebSocketConnection(currentCallback);
     }
   };

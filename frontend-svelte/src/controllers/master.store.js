@@ -172,24 +172,24 @@ export function getActiveUserAssignedSalaIds() {
   const user = get(currentUserStore);
   const currentUserSalas = user?.id ? (userMap[user.id] || []) : [];
   if (currentUserSalas && currentUserSalas.length > 0) {
-    return currentUserSalas;
+    return currentUserSalas.map(s => String(typeof s === 'object' ? s.id : s));
   }
   const authSalas = get(authUserSalasStore) || [];
   if (authSalas && authSalas.length > 0) {
-    return authSalas.map(s => typeof s === 'object' ? s.id : s);
+    return authSalas.map(s => String(typeof s === 'object' ? s.id : s));
   }
   return [];
 }
 
 export function filterOptionsByActiveSalas(items = [], salaIdKey = 'sala_id') {
-  const assignedIds = getActiveUserAssignedSalaIds();
+  const assignedIds = getActiveUserAssignedSalaIds().map(String);
   return items.filter(item => {
     if (!item) return false;
     if (item.grupo_id && Number(item.grupo_id) === 2) return false;
     if (!assignedIds || assignedIds.length === 0) return true;
-    if (salaIdKey === 'id' && item.id) return assignedIds.includes(item.id);
-    if (item[salaIdKey]) return assignedIds.includes(item[salaIdKey]);
-    if (item.sala_id) return assignedIds.includes(item.sala_id);
+    if (salaIdKey === 'id' && item.id) return assignedIds.includes(String(item.id));
+    if (item[salaIdKey]) return assignedIds.includes(String(item[salaIdKey]));
+    if (item.sala_id) return assignedIds.includes(String(item.sala_id));
     return true;
   });
 }
@@ -416,17 +416,17 @@ export async function syncMasterStoresDelta() {
       if (store) {
         store.update(currentItems => {
           let items = Array.isArray(currentItems) ? [...currentItems] : [];
-          const deletedIds = new Set(deleted.map(d => Number(d.id)));
+          const deletedIds = new Set(deleted.map(d => String(d.id || d.uuid)));
 
           // 1. Descartar eliminados (Soft delete o borrado)
           if (deletedIds.size > 0) {
-            items = items.filter(it => !deletedIds.has(Number(it.id)));
+            items = items.filter(it => !deletedIds.has(String(it.id || it.uuid)));
           }
 
           // 2. Upsert (actualizar registro modificado o insertar si es nuevo)
           for (const up of upserted) {
-            const upId = Number(up.id);
-            const idx = items.findIndex(it => Number(it.id) === upId);
+            const upId = String(up.id || up.uuid);
+            const idx = items.findIndex(it => String(it.id || it.uuid) === upId);
             if (idx >= 0) {
               items[idx] = { ...items[idx], ...up };
             } else {
@@ -515,9 +515,10 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
         return localSaved || createdItem;
       }
     },
-    update: async (id, draft) => {
+    update: async (targetUuidOrId, draft) => {
+      const targetUuid = typeof targetUuidOrId === 'object' ? (targetUuidOrId.uuid || targetUuidOrId.id) : targetUuidOrId;
       try {
-        const res = await fetch(`/api/master/${entityName}/${id}`, {
+        const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...draft })
@@ -526,28 +527,29 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
         if (!res.ok || (json && json.success === false)) {
           throw new Error(json.error || `Error al actualizar en ${entityName}`);
         }
-        await upsertLocalItem(localStoreName, json.data || { id, ...draft });
+        await upsertLocalItem(localStoreName, json.data || { uuid: targetUuid, ...draft });
         await loadMasterStoresFromBackend();
         return json.data;
       } catch (err) {
         console.warn(`[LocalDb] Operando offline para actualizar en ${entityName}: guardando en IndexedDB y encolando outbox.`);
-        const updatedItem = { id, ...draft, updated_at: new Date().toISOString() };
+        const updatedItem = { uuid: targetUuid, id: targetUuid, ...draft, updated_at: new Date().toISOString() };
         await upsertLocalItem(localStoreName, updatedItem);
-        store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(id) || String(it.id) === String(id)) ? { ...it, ...draft } : it) : []));
+        store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(targetUuid)) ? { ...it, ...draft } : it) : []));
         await queueOutboxAction({
           entity: localStoreName,
           action: 'update',
-          endpoint: `/api/master/${entityName}/${id}`,
+          endpoint: `/api/master/${entityName}/${targetUuid}`,
           method: 'PUT',
           payload: draft,
-          targetId: id
+          targetId: targetUuid
         });
         return updatedItem;
       }
     },
-    delete: async (id) => {
+    delete: async (targetUuidOrId) => {
+      const targetUuid = typeof targetUuidOrId === 'object' ? (targetUuidOrId.uuid || targetUuidOrId.id) : targetUuidOrId;
       try {
-        const res = await fetch(`/api/master/${entityName}/${id}`, {
+        const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
           method: 'DELETE'
         });
         const json = await res.json();
@@ -557,19 +559,19 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
         if (!res.ok || (json && json.success === false)) {
           throw new Error(json.error || `Error al eliminar en ${entityName}`);
         }
-        await deleteLocalItem(localStoreName, id);
+        await deleteLocalItem(localStoreName, targetUuid);
         await loadMasterStoresFromBackend();
         return json;
       } catch (err) {
         console.warn(`[LocalDb] Operando offline para eliminar en ${entityName}: eliminando de IndexedDB y encolando outbox.`);
-        await deleteLocalItem(localStoreName, id);
-        store.update(list => (Array.isArray(list) ? list.filter(it => String(it.uuid || it.id) !== String(id) && String(it.id) !== String(id)) : []));
+        await deleteLocalItem(localStoreName, targetUuid);
+        store.update(list => (Array.isArray(list) ? list.filter(it => String(it.uuid || it.id) !== String(targetUuid)) : []));
         await queueOutboxAction({
           entity: localStoreName,
           action: 'delete',
-          endpoint: `/api/master/${entityName}/${id}`,
+          endpoint: `/api/master/${entityName}/${targetUuid}`,
           method: 'DELETE',
-          targetId: id
+          targetId: targetUuid
         });
         return { success: true, offline: true };
       }

@@ -97,15 +97,15 @@
     return [];
   })();
 
-  $: assignedSalaIds = assignedSalas.map((s) => (typeof s === 'object' ? Number(s.id) : Number(s))).filter(Boolean);
+  $: assignedSalaIds = assignedSalas.map((s) => (typeof s === 'object' ? String(s.id) : String(s))).filter(Boolean);
 
   // Match full details of assigned salas against masterSalasStore
   $: detailedSalas = (function () {
     const allSalas = $masterSalasStore || [];
     if (assignedSalaIds.length === 0) return assignedSalas;
     return assignedSalaIds.map((id) => {
-      const found = allSalas.find((s) => Number(s.id) === id);
-      const fallback = assignedSalas.find((s) => typeof s === 'object' && Number(s.id) === id);
+      const found = allSalas.find((s) => String(s.id) === String(id));
+      const fallback = assignedSalas.find((s) => typeof s === 'object' && String(s.id) === String(id));
       return found || fallback || { id, nombre: `Sala #${id}` };
     });
   })();
@@ -114,14 +114,14 @@
   $: assignedDepartamentos = (function () {
     const allDeps = $masterDepartamentosStore || [];
     if (assignedSalaIds.length === 0) return [];
-    return allDeps.filter((d) => assignedSalaIds.includes(Number(d.sala_id)));
+    return allDeps.filter((d) => assignedSalaIds.includes(String(d.sala_id)));
   })();
 
   // Filter dispositivos biometricos to assigned salas
   $: assignedDispositivos = (function () {
     const allDevs = $masterDispositivosStore || [];
     if (assignedSalaIds.length === 0) return [];
-    return allDevs.filter((dev) => assignedSalaIds.includes(Number(dev.sala_id)));
+    return allDevs.filter((dev) => assignedSalaIds.includes(String(dev.sala_id)));
   })();
 
   // Modules and permissions from navMenuStore
@@ -164,13 +164,13 @@
           id: d.id,
           nombre: d.nombre,
           sala_id: d.sala_id,
-          sala_nombre: detailedSalas.find(s => Number(s.id) === Number(d.sala_id))?.nombre || `Sala #${d.sala_id}`
+          sala_nombre: detailedSalas.find(s => String(s.id) === String(d.sala_id))?.nombre || `Sala #${d.sala_id}`
         })),
         dispositivos_biometricos: assignedDispositivos.map((dev) => ({
           id: dev.id,
           nombre: dev.nombre,
           sala_id: dev.sala_id,
-          sala_nombre: detailedSalas.find(s => Number(s.id) === Number(dev.sala_id))?.nombre || `Sala #${dev.sala_id}`
+          sala_nombre: detailedSalas.find(s => String(s.id) === String(dev.sala_id))?.nombre || `Sala #${dev.sala_id}`
         })),
         modulos_y_permisos: userPages.map((p) => ({
           categoria: p.nombre,
@@ -485,11 +485,11 @@
         {:else}
           <div style="display: flex; flex-direction: column; gap: 12px;">
             {#each detailedSalas as sala}
-              {@const depsInSala = assignedDepartamentos.filter(d => Number(d.sala_id) === Number(sala.id))}
+              {@const depsInSala = assignedDepartamentos.filter(d => String(d.sala_id) === String(sala.id))}
               <div style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; background: #f8fafc;">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
                   <div style="display: flex; align-items: center; gap: 6px;">
-                    <span style="font-size: 13.5px; font-weight: 800; color: #0f172a;">📍 Sala: {sala.nombre}</span>
+                    <span style="font-size: 13.5px; font-weight: 800; color: #0f172a;">Sala: {sala.nombre}</span>
                     <span style="background: #2563eb; color: #ffffff; padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 800;">
                       ID: #{sala.id}
                     </span>
@@ -505,7 +505,7 @@
                   <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                     {#each depsInSala as dep}
                       <div style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 700; color: #1e293b; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
-                        <span style="color: #10b981;">🏢</span>
+                        <span class="material-icons" style="font-size: 15px; color: #10b981;">business</span>
                         <span>{dep.nombre}</span>
                       </div>
                     {/each}
@@ -549,14 +549,14 @@
                       #{dev.id}
                     </td>
                     <td style="padding: 10px 12px; font-weight: 700; color: #0f172a;">
-                      📟 {dev.nombre}
+                      {dev.nombre}
                     </td>
                     <td style="padding: 10px 12px; color: #334155; font-weight: 600;">
-                      📍 {detailedSalas.find(s => Number(s.id) === Number(dev.sala_id))?.nombre || `Sala #${dev.sala_id}`}
+                      {detailedSalas.find(s => String(s.id) === String(dev.sala_id))?.nombre || `Sala #${dev.sala_id}`}
                     </td>
                     <td style="padding: 10px 12px; text-align: center;">
                       <span style="background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700;">
-                        🟢 Activo
+                        Activo
                       </span>
                     </td>
                   </tr>

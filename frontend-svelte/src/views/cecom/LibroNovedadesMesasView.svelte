@@ -69,20 +69,22 @@
 
   // Usuario y salas asignadas
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+  $: currentUserSalas = $currentUserStore?.uuid || $currentUserStore?.id ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: assignedSalaUuids = (currentUserSalas.length > 0)
+    ? currentUserSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.uuid || s.id) : []);
 
   // Lista de mesas activas para la sala del libro
   $: availableMesas = (() => {
     const list = (serverMesas && serverMesas.length > 0) ? serverMesas : ($masterMesasStore || []);
+    const targetSala = libro?.sala_uuid || libro?.sala_id;
     return list.filter(m => {
       if ((m.active ?? 1) === 0) return false;
-      if (libro?.sala_id && Number(m.sala_id) !== Number(libro.sala_id)) return false;
-      if (assignedSalaIds && assignedSalaIds.length > 0) {
-        const userSalaNums = assignedSalaIds.map(Number);
-        if (!userSalaNums.includes(Number(m.sala_id))) return false;
+      const mSala = m.sala_uuid || m.sala_id;
+      if (targetSala && String(mSala) !== String(targetSala)) return false;
+      if (assignedSalaUuids && assignedSalaUuids.length > 0) {
+        const userSalaSet = new Set(assignedSalaUuids.map(String));
+        if (!userSalaSet.has(String(mSala))) return false;
       }
       return true;
     }).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }));
@@ -95,7 +97,7 @@
     return availableMesas.filter(m => {
       const nom = (m.nombre || '').toLowerCase();
       const juego = (m.juego_nombre || '').toLowerCase();
-      const r = rowsData[m.id];
+      const r = rowsData[m.uuid || m.id];
       const pit = (r?.pitboss || '').toLowerCase();
       const ca = (r?.croupier_apertura || '').toLowerCase();
       const cc = (r?.croupier_cierre || '').toLowerCase();
@@ -104,17 +106,17 @@
     });
   })();
 
-  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
+  $: targetSalaId = (libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
   $: targetSalaUuid = libro?.sala_uuid || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_uuid || null;
 
   // Lista de empleados disponibles para sugerencias y autocompletado (filtrados por la sala del libro)
   $: listaEmpleados = ($masterEmpleadosStore || [])
     .filter(e => {
       // Filtrar estrictamente por la sala asociada al libro
-      if (targetSalaUuid && e.sala_uuid) {
-        if (e.sala_uuid !== targetSalaUuid) return false;
+      if (targetSalaUuid && (e.sala_uuid || e.sala_id)) {
+        if (String(e.sala_uuid || e.sala_id) !== String(targetSalaUuid)) return false;
       } else if (targetSalaId) {
-        if (Number(e.sala_id) !== targetSalaId) return false;
+        if (String(e.sala_id) !== String(targetSalaId)) return false;
       }
       if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
       return true;
@@ -122,10 +124,11 @@
     .map(e => {
       const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || '';
       return {
-        id: e.id,
+        uuid: e.uuid || e.id,
+        id: e.uuid || e.id,
         nombre: nom,
         cargo_nombre: (e.cargo_nombre || '').trim(),
-        sala_id: e.sala_id
+        sala_uuid: e.sala_uuid || e.sala_id
       };
     })
     .filter(e => Boolean(e.nombre))
@@ -163,9 +166,9 @@
   // Encabezado superior: Nombre de Sala - Fecha
   $: tableHeaderTitle = (() => {
     const salaName = libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
+      ($masterSalasStore || []).find(s => String(s.id) === String(libro?.sala_id))?.nombre ||
       libro?.sala_nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
+      ($masterSalasStore || []).find(s => String(s.id) === String(libro?.sala_id))?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();
@@ -174,7 +177,7 @@
   $: recordsMap = (() => {
     const map = new Map();
     for (const r of novedadesRecords) {
-      map.set(Number(r.mesa_id), r);
+      map.set(String(r.mesa_id || r.mesa_uuid), r);
     }
     return map;
   })();
@@ -277,13 +280,14 @@
   function syncRowsData(records) {
     const map = new Map();
     for (const r of (records || [])) {
-      map.set(Number(r.mesa_id), r);
+      const k = String(r.mesa_uuid || r.mesa_id);
+      map.set(k, r);
     }
 
     const updated = { ...rowsData };
     for (const m of availableMesas) {
-      const mid = Number(m.id);
-      const rec = map.get(mid);
+      const mid = String(m.uuid || m.id);
+      const rec = map.get(mid) || (m.id ? map.get(String(m.id)) : null);
       
       if (!updated[mid] || (!savingMesaIds.has(mid) && (!activeSug || activeSug.mesaId !== mid))) {
         updated[mid] = {
@@ -300,9 +304,10 @@
   }
 
   function getRow(mesaId) {
-    if (!rowsData[mesaId]) {
-      const existing = recordsMap.get(Number(mesaId));
-      rowsData[mesaId] = {
+    const mIdStr = String(mesaId);
+    if (!rowsData[mIdStr]) {
+      const existing = recordsMap.get(mIdStr) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === mIdStr);
+      rowsData[mIdStr] = {
         hora_apertura: existing?.hora_apertura || '',
         hora_cierre: existing?.hora_cierre || '',
         pitboss: existing?.pitboss || '',
@@ -311,7 +316,7 @@
         observacion: existing?.observacion || ''
       };
     }
-    return rowsData[mesaId];
+    return rowsData[mIdStr];
   }
 
   function updateField(mesaId, field, val) {
@@ -337,7 +342,7 @@
     const row = rowsData[mesaId];
     if (!row) return;
 
-    const existing = recordsMap.get(Number(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
+    const existing = recordsMap.get(String(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
     if (existing && !canEdit) {
       return;
     }
@@ -354,16 +359,17 @@
       return;
     }
 
-    const mesaObj = availableMesas.find(m => String(m.id) === String(mesaId) || String(m.uuid) === String(mesaId));
+    const mesaObj = availableMesas.find(m => String(m.uuid || m.id) === String(mesaId) || String(m.id) === String(mesaId));
+    const mesaUuid = mesaObj?.uuid || (String(mesaId).length > 20 ? mesaId : null);
     const itemUuid = existing?.uuid || crypto.randomUUID();
 
-    savingMesaIds.add(Number(mesaId));
+    savingMesaIds.add(String(mesaId));
     savingMesaIds = new Set(savingMesaIds);
 
     const payload = {
       uuid: itemUuid,
-      mesa_id: Number(mesaId),
-      mesa_uuid: mesaObj?.uuid || null,
+      mesa_uuid: mesaUuid,
+      mesa_id: mesaUuid || String(mesaId),
       hora_apertura: row.hora_apertura || '',
       hora_cierre: row.hora_cierre || '',
       pitboss: row.pitboss || '',
@@ -381,8 +387,8 @@
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        const savedRecord = json.data || { ...payload, id: existing?.id || `local_${Date.now()}` };
-        const idx = novedadesRecords.findIndex(r => String(r.mesa_id) === String(mesaId) || String(r.mesa_uuid) === String(mesaId));
+        const savedRecord = json.data || { ...payload, uuid: itemUuid };
+        const idx = novedadesRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
         if (idx >= 0) {
           novedadesRecords[idx] = savedRecord;
         } else {
@@ -390,10 +396,10 @@
         }
         await upsertLocalItem('libro_novedades_mesas', savedRecord);
 
-        savedSuccessMesaIds.add(Number(mesaId));
+        savedSuccessMesaIds.add(String(mesaId));
         savedSuccessMesaIds = new Set(savedSuccessMesaIds);
         setTimeout(() => {
-          savedSuccessMesaIds.delete(Number(mesaId));
+          savedSuccessMesaIds.delete(String(mesaId));
           savedSuccessMesaIds = new Set(savedSuccessMesaIds);
         }, 2200);
       } else {
@@ -402,16 +408,14 @@
     } catch (err) {
       console.warn('[LocalDb] Modo Offline: guardando fila de mesa en IndexedDB y encolando outbox:', err);
       const offlineRecord = {
-        id: existing?.id || `temp_${Date.now()}`,
         uuid: itemUuid,
-        libro_id: lId,
-        libro_uuid: libro?.uuid || null,
+        libro_uuid: lId,
         mesa_nombre: mesaObj?.nombre || `Mesa #${mesaId}`,
         ...payload,
         updated_at: new Date().toISOString()
       };
 
-      const idx = novedadesRecords.findIndex(r => String(r.mesa_id) === String(mesaId) || String(r.mesa_uuid) === String(mesaId));
+      const idx = novedadesRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
       if (idx >= 0) {
         novedadesRecords[idx] = offlineRecord;
       } else {
@@ -427,14 +431,14 @@
         uuid: itemUuid
       });
 
-      savedSuccessMesaIds.add(Number(mesaId));
+      savedSuccessMesaIds.add(String(mesaId));
       savedSuccessMesaIds = new Set(savedSuccessMesaIds);
       setTimeout(() => {
-        savedSuccessMesaIds.delete(Number(mesaId));
+        savedSuccessMesaIds.delete(String(mesaId));
         savedSuccessMesaIds = new Set(savedSuccessMesaIds);
       }, 2200);
     } finally {
-      savingMesaIds.delete(Number(mesaId));
+      savingMesaIds.delete(String(mesaId));
       savingMesaIds = new Set(savingMesaIds);
     }
   }
@@ -448,7 +452,7 @@
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !mesaId) return;
 
-    const existing = recordsMap.get(Number(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId) || String(r.mesa_id) === String(mesaId));
+    const existing = recordsMap.get(String(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId) || String(r.mesa_id) === String(mesaId));
     if (!existing) {
       updateField(mesaId, 'hora_apertura', '');
       updateField(mesaId, 'hora_cierre', '');
@@ -541,7 +545,7 @@
         const mid = mesa.id;
         const cur = getRow(mid);
         const payload = {
-          mesa_id: Number(mid),
+          mesa_id: String(mid),
           hora_apertura: batchHoraApertura.trim() ? batchHoraApertura.trim() : (cur.hora_apertura || ''),
           hora_cierre: batchHoraCierre.trim() ? batchHoraCierre.trim() : (cur.hora_cierre || ''),
           pitboss: batchPitboss.trim() ? batchPitboss.trim() : (cur.pitboss || ''),
@@ -617,7 +621,7 @@
     isSavingModal = true;
     try {
       const payload = {
-        mesa_id: Number(editingMesaId),
+        mesa_id: String(editingMesaId),
         hora_apertura: modalHoraApertura.trim(),
         hora_cierre: modalHoraCierre.trim(),
         pitboss: modalPitboss.trim(),
@@ -640,7 +644,7 @@
         updateField(editingMesaId, 'observacion', payload.observacion);
 
         const savedRecord = json.data;
-        const idx = novedadesRecords.findIndex(r => Number(r.mesa_id) === Number(editingMesaId));
+        const idx = novedadesRecords.findIndex(r => String(r.mesa_id) === String(editingMesaId));
         if (idx >= 0) {
           novedadesRecords[idx] = savedRecord;
         } else {
@@ -966,10 +970,11 @@
               </td>
             </tr>
           {:else}
-            {#each filteredMesas as mesa (mesa.id)}
-              {@const row = getRow(mesa.id)}
+            {#each filteredMesas as mesa (mesa.uuid || mesa.id)}
+              {@const mesaKey = mesa.uuid || mesa.id}
+              {@const row = getRow(mesaKey)}
               {@const hasData = Boolean(row.hora_apertura || row.hora_cierre || row.pitboss || row.croupier_apertura || row.croupier_cierre || row.observacion)}
-              {@const isSavingThis = savingMesaIds.has(Number(mesa.id))}
+              {@const isSavingThis = savingMesaIds.has(String(mesaKey))}
               <tr class="novedad-row {hasData ? 'row-has-data' : 'row-empty'}">
                 
                 <!-- MESA (Solo Nombre y Juego) -->
@@ -987,18 +992,18 @@
                   <div class="cell-autocomplete-container">
                     <input 
                       type="text" 
-                      class="inline-text-input {activeSug?.mesaId === mesa.id && activeSug?.field === 'croupier_apertura' ? 'input-active' : ''}" 
+                      class="inline-text-input {activeSug?.mesaId === mesaKey && activeSug?.field === 'croupier_apertura' ? 'input-active' : ''}" 
                       placeholder="Escriba Croupier Apertura..." 
                       value={row.croupier_apertura}
                       disabled={!canEdit && !canAdd}
-                      on:focus={() => handleFocusAutocomplete(mesa.id, 'croupier_apertura')}
-                      on:input={(e) => handleInputAutocomplete(mesa.id, 'croupier_apertura', e.target.value)}
-                      on:keydown={(e) => handleKeyDownAutocomplete(e, mesa.id, 'croupier_apertura')}
-                      on:blur={() => handleBlurAutocomplete(mesa.id, 'croupier_apertura')}
+                      on:focus={() => handleFocusAutocomplete(mesaKey, 'croupier_apertura')}
+                      on:input={(e) => handleInputAutocomplete(mesaKey, 'croupier_apertura', e.target.value)}
+                      on:keydown={(e) => handleKeyDownAutocomplete(e, mesaKey, 'croupier_apertura')}
+                      on:blur={() => handleBlurAutocomplete(mesaKey, 'croupier_apertura')}
                       autocomplete="off"
                     />
 
-                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_apertura' && filteredCroupierSuggestions.length > 0}
+                    {#if activeSug && activeSug.mesaId === mesaKey && activeSug.field === 'croupier_apertura' && filteredCroupierSuggestions.length > 0}
                       <div class="inline-dropdown">
                         <div class="inline-dropdown-header">
                           <span>Sugerencias (<b>Tab ⇥</b> o clic):</span>
@@ -1008,7 +1013,7 @@
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <li 
                               class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
-                              on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_apertura', sug)}
+                              on:mousedown|preventDefault={() => selectSuggestion(mesaKey, 'croupier_apertura', sug)}
                             >
                               <div class="sug-info">
                                 <span class="sug-name">{sug.nombre}</span>
@@ -1030,18 +1035,18 @@
                   <div class="cell-autocomplete-container">
                     <input 
                       type="text" 
-                      class="inline-text-input {activeSug?.mesaId === mesa.id && activeSug?.field === 'croupier_cierre' ? 'input-active' : ''}" 
+                      class="inline-text-input {activeSug?.mesaId === mesaKey && activeSug?.field === 'croupier_cierre' ? 'input-active' : ''}" 
                       placeholder="Escriba Croupier Cierre..." 
                       value={row.croupier_cierre}
                       disabled={!canEdit && !canAdd}
-                      on:focus={() => handleFocusAutocomplete(mesa.id, 'croupier_cierre')}
-                      on:input={(e) => handleInputAutocomplete(mesa.id, 'croupier_cierre', e.target.value)}
-                      on:keydown={(e) => handleKeyDownAutocomplete(e, mesa.id, 'croupier_cierre')}
-                      on:blur={() => handleBlurAutocomplete(mesa.id, 'croupier_cierre')}
+                      on:focus={() => handleFocusAutocomplete(mesaKey, 'croupier_cierre')}
+                      on:input={(e) => handleInputAutocomplete(mesaKey, 'croupier_cierre', e.target.value)}
+                      on:keydown={(e) => handleKeyDownAutocomplete(e, mesaKey, 'croupier_cierre')}
+                      on:blur={() => handleBlurAutocomplete(mesaKey, 'croupier_cierre')}
                       autocomplete="off"
                     />
 
-                    {#if activeSug && activeSug.mesaId === mesa.id && activeSug.field === 'croupier_cierre' && filteredCroupierSuggestions.length > 0}
+                    {#if activeSug && activeSug.mesaId === mesaKey && activeSug.field === 'croupier_cierre' && filteredCroupierSuggestions.length > 0}
                       <div class="inline-dropdown">
                         <div class="inline-dropdown-header">
                           <span>Sugerencias (<b>Tab ⇥</b> o clic):</span>
@@ -1051,7 +1056,7 @@
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <li 
                               class="inline-dropdown-item {idx === activeSugIndex ? 'selected' : ''}"
-                              on:mousedown|preventDefault={() => selectSuggestion(mesa.id, 'croupier_cierre', sug)}
+                              on:mousedown|preventDefault={() => selectSuggestion(mesaKey, 'croupier_cierre', sug)}
                             >
                               <div class="sug-info">
                                 <span class="sug-name">{sug.nombre}</span>
@@ -1083,18 +1088,18 @@
                         <button 
                           type="button" 
                           class="btn-inline-edit" 
-                          on:click={() => abrirModalEditar(mesa.id)}
+                          on:click={() => abrirModalEditar(mesaKey)}
                           title="Editar individualmente hora apertura/cierre, pitboss y observación"
                         >
                           Editar
                         </button>
                       {/if}
 
-                      {#if canDelete && (hasData || recordsMap.has(Number(mesa.id)))}
+                      {#if canDelete && (hasData || recordsMap.has(String(mesaKey)))}
                         <button 
                           type="button" 
                           class="btn-inline-delete" 
-                          on:click={() => handleEliminar(mesa.id)}
+                          on:click={() => handleEliminar(mesaKey)}
                           title="Eliminar o limpiar novedad de esta mesa"
                         >
                           Eliminar

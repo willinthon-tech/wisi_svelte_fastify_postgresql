@@ -38,14 +38,16 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   // Extract assigned sala IDs strictly for the logged-in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.uuid || user?.id || 1;
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .map((s) => String(typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean);
     }
 
@@ -58,7 +60,7 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
+          .map((s) => String(typeof s === "object" ? (s.uuid || s.id) : s))
           .filter(Boolean);
       }
     }
@@ -66,7 +68,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .map((s) => String(typeof s === "object" ? (s.uuid || s.id) : s))
         .filter(Boolean);
     }
 
@@ -78,7 +80,6 @@
   const unsubInit = persistentEmpleadosFilters.subscribe((val) => {
     initial = val || {};
   });
-  unsubInit();
 
   // Smart Multiselect Filters State
   let selectedSalas = initial.selectedSalas || [];
@@ -150,6 +151,19 @@
   let isMounted = false;
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('empleados');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local.filter(e => e.activo !== false);
+        totalCount = items.length;
+      } else if (Array.isArray($masterEmpleadosStore) && $masterEmpleadosStore.length > 0) {
+        items = $masterEmpleadosStore.filter(e => e.activo !== false);
+        totalCount = items.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -242,10 +256,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('empleados', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar empleados del servidor', 'error');
+      console.warn('Fallback local IndexedDB para empleados:', err);
+      const local = await getLocalItems('empleados');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterEmpleadosStore || []);
+      const activeSource = source.filter(x => x.activo !== false);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? activeSource.filter(x => (x.nombre || '').toLowerCase().includes(q) || (x.cedula || '').includes(q)) : activeSource;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     } finally {
       loading = false;
     }
@@ -263,13 +285,14 @@
 
   $: filteredCargosStore = ($masterCargosStore || []).filter(c => {
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return !c.sala_id || assignedSalaIds.includes(c.sala_id);
+    const cSala = c.sala_uuid || c.sala_id;
+    return !cSala || assignedSalaIds.includes(String(cSala));
   });
 
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.includes(s.id);
+    return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
   $: createFields = [
@@ -278,18 +301,18 @@
     { key: 'sexo', label: 'Sexo', type: 'select', options: ['Masculino', 'Femenino'], required: true },
     { key: 'fecha_nacimiento', label: 'Fecha de Nacimiento', type: 'date', required: false },
     { key: 'fecha_ingreso', label: 'Fecha de Ingreso', type: 'date', required: true },
-    { key: 'cargo_id', label: 'Cargo', type: 'select', options: filteredCargosStore, required: true },
-    { key: 'sala_id', label: 'Sala', type: 'select', options: filteredSalasStore, required: true }
+    { key: 'cargo_uuid', label: 'Cargo', type: 'select', options: filteredCargosStore, required: true },
+    { key: 'sala_uuid', label: 'Sala', type: 'select', options: filteredSalasStore, required: true }
   ];
 
   $: columns = [
     { key: 'foto', label: 'Foto', type: 'photo', sortable: false, editable: false },
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Empleado', bold: true, sortable: true, editable: true },
     { key: 'cedula', label: 'Cédula', sortable: true, editable: true },
     { key: 'fecha_nacimiento', label: 'Fecha de Nacimiento', type: 'fecha_nacimiento', sortable: true, editable: true },
     { key: 'fecha_ingreso', label: 'Fecha de Ingreso', type: 'fecha_ingreso', sortable: true, editable: true },
-    { key: 'cargo_nombre', keyId: 'cargo_id', label: 'Cargo', sortable: true, editable: true, options: filteredCargosStore },
+    { key: 'cargo_nombre', keyId: 'cargo_uuid', label: 'Cargo', sortable: true, editable: true, options: filteredCargosStore },
     { key: 'sala_nombre', label: 'Sala', sortable: true, editable: false }
   ];
 
@@ -309,44 +332,31 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      const res = await fetch('/api/master/empleados', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Empleado creado exitosamente', 'success');
-        isFormModalOpen = false;
-        formModalItem = null;
-        await loadMasterStoresFromBackend();
-        await loadServerData();
-      } else {
-        throw new Error(json.error || 'Error al crear empleado');
+      const created = await masterEmpleadosActions.add(draft);
+      triggerToast('Empleado creado exitosamente', 'success');
+      isFormModalOpen = false;
+      formModalItem = null;
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
       }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear empleado: ${err.message}`, 'error');
     }
   }
 
   async function handleSaveInline(event) {
-    const { id, draft } = event.detail;
+    const detail = event.detail || {};
+    const targetUuid = detail.uuid || detail.id;
+    const draft = detail.draft || detail;
     try {
-      const res = await fetch(`/api/master/empleados/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Empleado actualizado exitosamente', 'success');
-        isFormModalOpen = false;
-        formModalItem = null;
-        await loadMasterStoresFromBackend();
-        await loadServerData();
-      } else {
-        throw new Error(json.error || 'Error al actualizar empleado');
-      }
+      await masterEmpleadosActions.update(targetUuid, draft);
+      triggerToast('Empleado actualizado exitosamente', 'success');
+      isFormModalOpen = false;
+      formModalItem = null;
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar empleado: ${err.message}`, 'error');
     }
@@ -354,14 +364,17 @@
 
   async function handleDesincorporate(event) {
     const item = event.detail;
+    const targetUuid = item.uuid || item.id;
     try {
-      await masterEmpleadosActions.update(item.id, {
+      await masterEmpleadosActions.update(targetUuid, {
         ...item,
         activo: false,
         motivo_desincorporacion: item.motivo_desincorporacion || 'Sin motivo especificado'
       });
       triggerToast(`Empleado ${toTitleCase(item.nombre)} desincorporado exitosamente`, 'success');
-      await loadServerData();
+      items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+      totalCount = Math.max(0, totalCount - 1);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al desincorporar empleado: ${err.message}`, 'error');
     }

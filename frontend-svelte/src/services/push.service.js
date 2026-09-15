@@ -65,9 +65,9 @@ export async function initPushNotifications(userId, onNotificationReceived) {
             fecha: new Date().toISOString()
           })
         });
-        console.log('✅ [Push] Token FCM sincronizado exitosamente con user_id:', uId);
+        console.log('[Push] Token FCM sincronizado exitosamente con user_id:', uId);
       } catch (err) {
-        console.warn('⚠️ [Push] Error enviando FCM Token al servidor:', err);
+        console.warn('[Push] Error enviando FCM Token al servidor:', err);
       }
     }
 
@@ -83,35 +83,35 @@ export async function initPushNotifications(userId, onNotificationReceived) {
     await PushNotifications.removeAllListeners();
 
     PushNotifications.addListener('registration', async (token) => {
-      console.log('✅ [Push] FCM Token Registrado:', token?.value);
+      console.log('[Push] FCM Token Registrado:', token?.value);
       if (token?.value) {
         await syncTokenWithBackend(token.value, userId);
       }
     });
 
     PushNotifications.addListener('registrationError', (err) => {
-      console.error('❌ [Push] Error en registro de Push Notifications:', err);
+      console.error('[Push] Error en registro de Push Notifications:', err);
     });
 
     // Notificación recibida en primer plano
     PushNotifications.addListener('pushNotificationReceived', async (notification) => {
-      console.log('🔔 [Push] Notificación push recibida en primer plano:', notification);
+      console.log('[Push] Notificación push recibida en primer plano:', notification);
       try {
         const data = notification?.data || {};
         if (data.attlog_id || data.id || data.nombre) {
           // Filtrar en primer plano: solo procesar si el usuario está autenticado y tiene asignada esta sala
-          const notifSalaId = data.sala_id ? Number(data.sala_id) : null;
+          const notifSalaId = data.sala_id ? String(data.sala_id) : null;
           let assignedIds = [];
           try {
             const rawSalas = localStorage.getItem('wisi_salas');
             const parsed = rawSalas ? JSON.parse(rawSalas) : [];
             assignedIds = Array.isArray(parsed)
-              ? parsed.map(s => typeof s === 'object' ? s.id : Number(s)).filter(Boolean)
+              ? parsed.map(s => typeof s === 'object' ? String(s.id) : String(s)).filter(Boolean)
               : [];
           } catch (e) {}
 
           if (!notifSalaId || assignedIds.length === 0 || !assignedIds.includes(notifSalaId)) {
-            console.log('🔇 [Push] Notificación en primer plano descartada: sala no asignada al usuario actual.');
+            console.log('[Push] Notificación en primer plano descartada: sala no asignada al usuario actual.');
             return;
           }
 
@@ -148,7 +148,7 @@ export async function initPushNotifications(userId, onNotificationReceived) {
 
     // Notificación tocada / abierta por el usuario en Android
     PushNotifications.addListener('pushNotificationActionPerformed', (notificationAction) => {
-      console.log('👆 [Push] Acción sobre notificación:', notificationAction);
+      console.log('[Push] Acción sobre notificación:', notificationAction);
       const data = notificationAction.notification?.data || {};
       const attlogId = data.attlog_id || data.id;
       if (attlogId) {
@@ -160,7 +160,7 @@ export async function initPushNotifications(userId, onNotificationReceived) {
     await PushNotifications.register();
 
   } catch (error) {
-    console.warn('⚠️ [Push] No se pudo inicializar Push Notifications en este dispositivo:', error);
+    console.warn('[Push] No se pudo inicializar Push Notifications en este dispositivo:', error);
   }
 }
 

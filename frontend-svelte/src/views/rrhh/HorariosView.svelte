@@ -10,6 +10,8 @@
 <script>
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
+  import { masterHorariosActions, masterHorariosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   // Initialize from persistent store so filters survive page and route transitions
@@ -31,6 +33,7 @@
   $: hasActiveFilters = Boolean((searchQuery || "").trim());
 
   let items = [];
+  $: allHorarios = $masterHorariosStore || [];
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
@@ -57,10 +60,15 @@
         const json = await res.json();
         if (json && json.success) {
           globalExcepciones = json.data || [];
+          saveLocalItems('excepciones', globalExcepciones).catch(() => {});
         }
       }
     } catch (e) {
       console.warn("Error fetching excepciones in HorariosView:", e);
+      const local = await getLocalItems('excepciones');
+      if (Array.isArray(local) && local.length > 0) {
+        globalExcepciones = local;
+      }
     }
   }
 
@@ -73,7 +81,27 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const [localHor, localExc] = await Promise.all([
+        getLocalItems('horarios'),
+        getLocalItems('excepciones')
+      ]);
+      if (Array.isArray(localHor) && localHor.length > 0) {
+        items = localHor;
+        totalCount = localHor.length;
+      } else if (Array.isArray(allHorarios) && allHorarios.length > 0) {
+        items = allHorarios;
+        totalCount = allHorarios.length;
+      }
+      if (Array.isArray(localExc) && localExc.length > 0) {
+        globalExcepciones = localExc;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
+      loadMasterStoresFromBackend(),
       loadExcepciones(),
       loadServerData(currentParams)
     ]);
@@ -97,10 +125,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('horarios', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar horarios del servidor', 'error');
+      console.warn('Fallback local IndexedDB para horarios:', err);
+      const local = await getLocalItems('horarios');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterHorariosStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.codigo || '').toLowerCase().includes(q) || (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -110,7 +145,7 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'N°', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'codigo', label: 'Código', bold: true, sortable: true, editable: true },
     { key: 'nombre', label: 'Descripción / Nombre', bold: true, sortable: true, editable: true },
     { key: 'horas_trabajo', label: 'Horas de Trabajo', type: 'horario_badge', sortable: true, editable: true },
@@ -136,18 +171,13 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      const res = await fetch('/api/master/horarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Horario creado exitosamente', 'success');
-        await loadServerData();
-      } else {
-        throw new Error(json.error || 'Error al guardar horario');
+      const created = await masterHorariosActions.add(draft);
+      triggerToast('Horario creado exitosamente', 'success');
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
       }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(err.message?.startsWith('El código') ? err.message : `Error al crear: ${err.message}`, 'error');
     }
@@ -155,37 +185,34 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      const res = await fetch(`/api/master/horarios/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Horario actualizado exitosamente', 'success');
-        await loadServerData();
-      } else {
-        throw new Error(json.error || 'Error al actualizar horario');
-      }
+      await masterHorariosActions.update(targetUuid, draft);
+      triggerToast('Horario actualizado exitosamente', 'success');
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(err.message?.startsWith('El código') ? err.message : `Error al actualizar: ${err.message}`, 'error');
     }
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await fetch(`/api/master/horarios/${id}`, {
-        method: 'DELETE'
-      });
-      const json = await res.json();
-      if (json && json.blocked) {
-        onResult(json);
+      const res = await masterHorariosActions.delete(targetUuid);
+      if (res && res.blocked) {
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar porque tiene dependencias vinculadas.', 'warning');
+        }
       } else {
         triggerToast('Horario eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar: ${err.message}`, 'error');
@@ -200,22 +227,21 @@
 
     for (const id of ids) {
       try {
-        const res = await fetch(`/api/master/horarios/${id}`, { method: 'DELETE' });
-        const json = await res.json();
-        if (json && json.blocked) {
+        const res = await masterHorariosActions.delete(id);
+        if (res && res.blocked) {
           blocked.push({
             id,
-            name: json.entityName || `ID: ${id}`,
-            reason: json.message || 'Tiene elementos o empleados asociados en la base de datos',
-            dependencies: json.dependencies || []
+            name: res.entityName || `ID: ${id}`,
+            reason: res.message || 'Tiene elementos o empleados asociados en la base de datos',
+            dependencies: res.dependencies || []
           });
-        } else if (res.ok && (json.success || json.id)) {
+        } else if (res && (res.success || res.id)) {
           deleted.push({ id });
         } else {
           blocked.push({
             id,
             name: `ID: ${id}`,
-            reason: json?.error || 'No se pudo eliminar por restricciones de datos',
+            reason: res?.error || 'No se pudo eliminar por restricciones de datos',
             dependencies: []
           });
         }
@@ -241,7 +267,7 @@
 {#if globalExcepciones && globalExcepciones.length > 0}
   <div class="excepciones-banner-card">
     <div class="excepciones-banner-header">
-      <span class="excepciones-pin">📌</span>
+      <span class="excepciones-pin" style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: #e0e7ff; color: #4338ca; font-size: 11px; font-weight: 900;">EXP</span>
       <strong class="excepciones-title">Excepciones Base del Sistema:</strong>
       <span class="excepciones-subtitle">
         Se cuenta con {globalExcepciones.length} excepciones predeterminadas de horario y asistencia (códigos reservados globales):

@@ -340,7 +340,7 @@
               activePhotoUrl = b;
               isCurrentPhotoLoaded = true;
               isCurrentPhotoError = false;
-              const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
+              const key = (item.uuid || item.id) ? `rec_${item.uuid || item.id}` : `ced_${item.cedula || item.employee_no}`;
               resolvedPhotoUrlCache.set(key, b);
             }
           }
@@ -361,7 +361,7 @@
     } else if (url.startsWith('blob:') || isPhotoLoaded(url)) {
       isCurrentPhotoLoaded = true;
       isCurrentPhotoError = false;
-      const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
+      const key = (item.uuid || item.id) ? `rec_${item.uuid || item.id}` : `ced_${item.cedula || item.employee_no}`;
       resolvedPhotoUrlCache.set(key, url);
     } else {
       isCurrentPhotoLoaded = false;
@@ -373,7 +373,7 @@
           activePhotoUrl = finalUrl;
           isCurrentPhotoLoaded = true;
           isCurrentPhotoError = false;
-          const key = item.id ? `rec_${item.id}` : `ced_${item.cedula || item.employee_no}`;
+          const key = (item.uuid || item.id) ? `rec_${item.uuid || item.id}` : `ced_${item.cedula || item.employee_no}`;
           resolvedPhotoUrlCache.set(key, finalUrl);
         } else {
           handlePhotoErrorFallback(item, url, reqId);
@@ -547,12 +547,12 @@
       let dialogTitle = "";
 
       if (mode === 'cliente') {
-        const clientName = (item?.nombre || `cliente_${item?.id || '1'}`)
+        const clientName = (item?.nombre || `cliente_${item?.uuid || item?.id || '1'}`)
           .toString()
           .trim()
           .replace(/[\s:]+/g, "_")
           .replace(/[^a-zA-Z0-9_-]/g, "");
-        const clientId = item?.id ? `_${item.id}` : "";
+        const clientId = item?.uuid ? `_${item.uuid.slice(0, 8)}` : (item?.id ? `_${item.id}` : "");
         fileName = `Ficha_Cliente_${clientName}${clientId}.png`;
         dialogTitle = `Guardar Ficha de Cliente ${item?.nombre || ''}`;
       } else {
@@ -596,12 +596,12 @@
       let dialogTitle = "";
 
       if (mode === 'cliente') {
-        const clientName = (item?.nombre || `cliente_${item?.id || '1'}`)
+        const clientName = (item?.nombre || `cliente_${item?.uuid || item?.id || '1'}`)
           .toString()
           .trim()
           .replace(/[\s:]+/g, "_")
           .replace(/[^a-zA-Z0-9_-]/g, "");
-        const clientId = item?.id ? `_${item.id}` : "";
+        const clientId = item?.uuid ? `_${item.uuid.slice(0, 8)}` : (item?.id ? `_${item.id}` : "");
         const ext = blob.type.includes("png") ? "png" : "jpg";
         fileName = `Foto_Cliente_${clientName}${clientId}.${ext}`;
         dialogTitle = `Guardar Fotografía de Cliente ${item?.nombre || ''}`;
@@ -656,7 +656,7 @@
             <div class="header-left">
               <div class="header-title-row">
                 <span class="employee-name" title={toTitleCase(item.nombre) || (mode === 'cliente' ? "Cliente" : "Empleado")}>
-                  {toTitleCase(item.nombre) || (mode === 'cliente' ? `Cliente #${item.id}` : `Empleado ${(item.employee_no || "").replace(/^#/, "")}`)}
+                  {toTitleCase(item.nombre) || (mode === 'cliente' ? `Cliente #${item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)}` : `Empleado ${(item.employee_no || "").replace(/^#/, "")}`)}
                 </span>
               </div>
               {#if mode === 'cliente'}
@@ -681,13 +681,13 @@
                     {/if}
                   </span>
                   <div class="index-badge-group">
-                    {#if item && (item.id || item.attlog_id)}
+                    {#if item && (item.uuid || item.id || item.attlog_id)}
                       <span class="attlog-id-badge" title={mode === 'cliente' ? 'ID del cliente' : 'ID del registro'}>
-                        ID: #{item.id || item.attlog_id}
+                        ID: #{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : (item.id || item.attlog_id))}
                       </span>
-                    {:else if item && item.empleado_id}
+                    {:else if item && (item.empleado_uuid || item.empleado_id)}
                       <span class="attlog-id-badge" title="ID del empleado">
-                        ID: #{item.empleado_id}
+                        ID: #{item.empleado_uuid ? item.empleado_uuid.slice(0, 8) : item.empleado_id}
                       </span>
                     {/if}
                     <span class="index-badge">
@@ -699,10 +699,10 @@
                     </span>
                   </div>
                 </div>
-              {:else if item && (item.id || item.attlog_id)}
+              {:else if item && (item.uuid || item.id || item.attlog_id)}
                 <div class="header-right-meta">
                   <span class="attlog-id-badge" title={mode === 'cliente' ? 'ID del cliente' : 'ID del registro'}>
-                    ID: #{item.id || item.attlog_id}
+                    ID: #{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : (item.id || item.attlog_id))}
                   </span>
                 </div>
               {/if}

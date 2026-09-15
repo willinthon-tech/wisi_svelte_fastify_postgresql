@@ -10,15 +10,15 @@
 
   const dispatch = createEventDispatcher();
 
-  $: isEdit = Boolean(item && item.id);
+  $: isEdit = Boolean(item && (item.uuid || item.id));
   $: modalTitle = isEdit ? 'Editar Cliente' : 'Crear Nuevo Cliente';
   $: submitBtnLabel = isEdit ? 'Actualizar Cliente' : 'Guardar Cliente';
 
   // Form fields
-  let id = null;
+  let uuid = null;
   let nombre = '';
-  let tipoClienteId = '';
-  let salaId = '';
+  let tipoClienteUuid = '';
+  let salaUuid = '';
   let descripcion = '';
   let fotoUrl = '';
   let fotoBase64 = '';
@@ -49,15 +49,17 @@
     const all = $masterSalasStore || [];
     let filtered = all.filter(s => !(s.grupo_id && Number(s.grupo_id) === 2));
     if (assignedSalaIds && assignedSalaIds.length > 0) {
-      filtered = filtered.filter(s => assignedSalaIds.map(Number).includes(Number(s.id)));
+      const assignedSet = new Set(assignedSalaIds.map(String));
+      filtered = filtered.filter(s => assignedSet.has(String(s.uuid || s.id)));
     }
     // Si estamos editando y la sala del cliente no está en la lista filtrada, mantenerla para no mostrar blanco
-    if (item && item.sala_id && !filtered.some(s => Number(s.id) === Number(item.sala_id))) {
-      const currentSala = all.find(s => Number(s.id) === Number(item.sala_id));
+    const targetSalaUuid = item ? (item.sala_uuid || item.sala_id) : null;
+    if (targetSalaUuid && !filtered.some(s => String(s.uuid || s.id) === String(targetSalaUuid))) {
+      const currentSala = all.find(s => String(s.uuid || s.id) === String(targetSalaUuid));
       if (currentSala) {
         filtered = [currentSala, ...filtered];
       } else if (item.sala_nombre) {
-        filtered = [{ id: Number(item.sala_id), nombre: item.sala_nombre }, ...filtered];
+        filtered = [{ uuid: String(targetSalaUuid), id: String(targetSalaUuid), nombre: item.sala_nombre }, ...filtered];
       }
     }
     return filtered;
@@ -65,7 +67,8 @@
 
   // Available Tipos de Cliente
   $: tipoClientesOptions = ($masterTipoClientesStore || []).map(t => ({
-    id: Number(t.id),
+    uuid: t.uuid || t.id,
+    id: t.uuid || t.id,
     nombre: t.nombre
   }));
 
@@ -79,11 +82,11 @@
     fotoBase64 = '';
     removeFoto = false;
 
-    if (item && item.id) {
-      id = item.id;
+    if (item && (item.uuid || item.id)) {
+      uuid = item.uuid || item.id;
       nombre = item.nombre || '';
-      tipoClienteId = item.tipo_cliente_id ? Number(item.tipo_cliente_id) : '';
-      salaId = item.sala_id ? Number(item.sala_id) : '';
+      tipoClienteUuid = (item.tipo_cliente_uuid || item.tipo_cliente_id) ? String(item.tipo_cliente_uuid || item.tipo_cliente_id) : '';
+      salaUuid = (item.sala_uuid || item.sala_id) ? String(item.sala_uuid || item.sala_id) : '';
       descripcion = item.descripcion || '';
       if (item.foto) {
         fotoUrl = toBackendUrl(item.foto, { preview: true });
@@ -91,10 +94,10 @@
         fotoUrl = '';
       }
     } else {
-      id = null;
+      uuid = null;
       nombre = '';
-      tipoClienteId = '';
-      salaId = availableSalas.length === 1 ? availableSalas[0].id : '';
+      tipoClienteUuid = '';
+      salaUuid = availableSalas.length === 1 ? String(availableSalas[0].uuid || availableSalas[0].id) : '';
       descripcion = '';
       fotoUrl = '';
     }
@@ -300,11 +303,11 @@
       triggerToast('Debe ingresar el nombre del cliente', 'warning');
       return;
     }
-    if (!tipoClienteId) {
+    if (!tipoClienteUuid) {
       triggerToast('Debe seleccionar el tipo de cliente', 'warning');
       return;
     }
-    if (!salaId) {
+    if (!salaUuid) {
       triggerToast('Debe seleccionar la sala asignada', 'warning');
       return;
     }
@@ -312,8 +315,10 @@
     isSubmitting = true;
     const payload = {
       nombre: nombre.trim().toUpperCase(),
-      tipo_cliente_id: Number(tipoClienteId),
-      sala_id: Number(salaId),
+      tipo_cliente_uuid: String(tipoClienteUuid),
+      tipo_cliente_id: String(tipoClienteUuid),
+      sala_uuid: String(salaUuid),
+      sala_id: String(salaUuid),
       descripcion: descripcion.trim() || null
     };
 
@@ -326,7 +331,8 @@
     try {
       if (isEdit) {
         dispatch('update', {
-          id,
+          uuid,
+          id: uuid,
           draft: payload,
           onDone: (err) => {
             isSubmitting = false;
@@ -405,12 +411,12 @@
                   }}
                 />
                 <div class="avatar-fallback-cam" style="display: none;">
-                  <span class="cam-icon">📷</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cam-icon"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
                   <span class="avatar-text">Haz clic para agregar foto</span>
                 </div>
               {:else}
                 <div class="avatar-placeholder">
-                  <span class="cam-icon">📷</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cam-icon"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
                   <span class="avatar-text">Haz clic para agregar foto</span>
                   <span class="avatar-subtext">(Opcional)</span>
                 </div>
@@ -447,10 +453,10 @@
         <div class="form-group">
           <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="form-label">Tipo de Cliente *</label>
-          <select bind:value={tipoClienteId} class="form-select" required>
+          <select bind:value={tipoClienteUuid} class="form-select" required>
             <option value="">Seleccione un tipo de cliente...</option>
-            {#each tipoClientesOptions as tipo}
-              <option value={tipo.id}>{tipo.nombre}</option>
+            {#each tipoClientesOptions as tipo (tipo.uuid || tipo.id)}
+              <option value={tipo.uuid || tipo.id}>{tipo.nombre}</option>
             {/each}
           </select>
         </div>
@@ -459,10 +465,10 @@
         <div class="form-group">
           <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="form-label">Sala *</label>
-          <select bind:value={salaId} class="form-select" required>
+          <select bind:value={salaUuid} class="form-select" required>
             <option value="">Seleccione una sala...</option>
-            {#each availableSalas as s}
-              <option value={s.id}>{s.nombre}</option>
+            {#each availableSalas as s (s.uuid || s.id)}
+              <option value={s.uuid || s.id}>{s.nombre}</option>
             {/each}
           </select>
           {#if availableSalas.length === 0}

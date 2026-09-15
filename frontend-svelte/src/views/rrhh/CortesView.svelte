@@ -26,6 +26,8 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { getPublicWebUrl } from '../../config/api.config.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   let showEmpleadosModal = false;
   let selectedCorteParaEmpleados = null;
 
@@ -51,8 +53,9 @@
     // 1. Direct user.salas array
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     // 2. Master user salas map (userId -> [sala_ids])
@@ -61,8 +64,9 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList) && userList.length > 0) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
-          .filter(Boolean);
+          .map((s) => (typeof s === "object" ? s.id : s))
+          .filter(Boolean)
+          .map(String);
       }
     }
 
@@ -70,8 +74,9 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     return [];
@@ -121,6 +126,16 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('cortes');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await loadMasterStoresFromBackend();
     await Promise.all([
       fetchFilterOptions(),
@@ -130,7 +145,7 @@
 
   // Reactive reload when assigned rooms are resolved/changed
   let lastAssignedSalasKey = null;
-  $: assignedSalasKey = (assignedSalaIds || []).slice().sort((a, b) => a - b).join(",");
+  $: assignedSalasKey = (assignedSalaIds || []).slice().sort().join(",");
   $: if (assignedSalasKey !== lastAssignedSalasKey) {
     lastAssignedSalasKey = assignedSalasKey;
     loadServerData({ page: 1 });
@@ -150,8 +165,6 @@
       const q = new URLSearchParams();
       if (assignedSalaIds.length > 0) {
         q.set("user_sala_ids", assignedSalaIds.join(","));
-      } else {
-        q.set("user_sala_ids", "-1");
       }
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
@@ -180,8 +193,6 @@
       });
       if (assignedSalaIds && assignedSalaIds.length > 0) {
         q.set('user_sala_ids', assignedSalaIds.join(','));
-      } else {
-        q.set('user_sala_ids', '-1');
       }
       if (selectedSalas.length > 0) {
         q.set('sala_ids', selectedSalas.join(','));
@@ -199,10 +210,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('cortes', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar cortes históricos del servidor', 'error');
+      console.warn('Fallback local IndexedDB para cortes:', err);
+      const local = await getLocalItems('cortes');
+      const source = (Array.isArray(local) && local.length > 0) ? local : [];
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.fecha_rango || '').toLowerCase().includes(q) || (x.salas_nombres || []).some(sn => sn.toLowerCase().includes(q))) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -263,8 +281,10 @@
       const json = await res.json();
       if (json && json.success) {
         triggerToast('Corte histórico eliminado exitosamente', 'success');
+        items = items.filter(x => String(x.id) !== String(id));
+        totalCount = Math.max(0, totalCount - 1);
         onResult({ success: true });
-        await loadServerData();
+        loadServerData().catch(() => {});
       } else {
         triggerToast(json?.error || 'Error al eliminar el corte', 'error');
       }

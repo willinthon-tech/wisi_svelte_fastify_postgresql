@@ -10,12 +10,12 @@
 
   const dispatch = createEventDispatcher();
 
-  $: isEdit = Boolean(item && item.id);
+  $: isEdit = Boolean(item && (item.uuid || item.id));
   $: modalTitle = isEdit ? 'Editar Empleado' : 'Crear Nuevo Empleado';
   $: submitBtnLabel = isEdit ? 'Actualizar Empleado' : 'Guardar Empleado';
 
   // Form fields
-  let id = null;
+  let uuid = null;
   let fotoUrl = '';
   let fotoBase64 = '';
   let cedulaPrefix = 'V';
@@ -25,8 +25,8 @@
   let fechaIngreso = new Date().toISOString().split('T')[0];
   let fechaNacimiento = '';
   let sexo = 'Masculino';
-  let cargoId = '';
-  let selectedDispositivoIds = new Set();
+  let cargoUuid = '';
+  let selectedDispositivoUuids = new Set();
 
   // Validation & Loading States
   let checkingCedula = false;
@@ -58,21 +58,25 @@
     const list = $masterCargosStore || [];
     let filtered = list;
     if (assignedSalaIds && assignedSalaIds.length > 0) {
-      filtered = list.filter(c => !c.sala_id || assignedSalaIds.map(Number).includes(Number(c.sala_id)));
+      const assignedSet = new Set(assignedSalaIds.map(String));
+      filtered = list.filter(c => !(c.sala_uuid || c.sala_id) || assignedSet.has(String(c.sala_uuid || c.sala_id)));
     }
     // Si estamos editando y el cargo del empleado no está en la lista filtrada, ¡lo agregamos para que NUNCA aparezca en blanco!
-    if (item && item.cargo_id && !filtered.some(c => Number(c.id) === Number(item.cargo_id))) {
-      const currentCargo = list.find(c => Number(c.id) === Number(item.cargo_id));
+    const currentCargoUuid = item ? (item.cargo_uuid || item.cargo_id) : null;
+    if (currentCargoUuid && !filtered.some(c => String(c.uuid || c.id) === String(currentCargoUuid))) {
+      const currentCargo = list.find(c => String(c.uuid || c.id) === String(currentCargoUuid));
       if (currentCargo) {
         filtered = [currentCargo, ...filtered];
       } else if (item.cargo_nombre) {
         filtered = [{ 
-          id: Number(item.cargo_id), 
+          uuid: String(currentCargoUuid), 
+          id: String(currentCargoUuid), 
           nombre: item.cargo_nombre, 
           sala_nombre: item.sala_nombre || 'General',
           departamento_nombre: item.departamento_nombre || '',
           area_nombre: item.area_nombre || '',
-          sala_id: item.sala_id || null
+          sala_uuid: item.sala_uuid || item.sala_id || null,
+          sala_id: item.sala_uuid || item.sala_id || null
         }, ...filtered];
       }
     }
@@ -95,59 +99,59 @@
     return groups;
   })();
 
-  // Find selected cargo object and its exact sala_id
+  // Find selected cargo object and its exact sala_uuid
   $: selectedCargoObj = (function() {
-    if (!cargoId) return null;
-    const found = ($masterCargosStore || []).find(c => Number(c.id) === Number(cargoId));
+    if (!cargoUuid) return null;
+    const found = ($masterCargosStore || []).find(c => String(c.uuid || c.id) === String(cargoUuid));
     if (found) return found;
-    if (item && Number(item.cargo_id) === Number(cargoId)) return item;
+    if (item && String(item.cargo_uuid || item.cargo_id) === String(cargoUuid)) return item;
     return null;
   })();
 
-  // Target sala_id strictly from the selected cargo (with multiple fallbacks)
-  $: targetSalaId = (function() {
-    if (selectedCargoObj && selectedCargoObj.sala_id !== undefined && selectedCargoObj.sala_id !== null) {
-      return Number(selectedCargoObj.sala_id);
+  // Target sala_uuid strictly from the selected cargo (with multiple fallbacks)
+  $: targetSalaUuid = (function() {
+    if (selectedCargoObj && (selectedCargoObj.sala_uuid || selectedCargoObj.sala_id)) {
+      return String(selectedCargoObj.sala_uuid || selectedCargoObj.sala_id);
     }
-    if (item && item.sala_id !== undefined && item.sala_id !== null) {
-      return Number(item.sala_id);
+    if (item && (item.sala_uuid || item.sala_id)) {
+      return String(item.sala_uuid || item.sala_id);
     }
     const sName = selectedCargoObj?.sala_nombre || item?.sala_nombre;
     if (sName) {
       const match = ($masterSalasStore || []).find(s => 
         String(s.nombre).trim().toLowerCase() === String(sName).trim().toLowerCase()
       );
-      if (match) return Number(match.id);
+      if (match) return String(match.uuid || match.id);
     }
-    if (cargoId) {
-      const cMatch = ($masterCargosStore || []).find(c => Number(c.id) === Number(cargoId));
-      if (cMatch && cMatch.sala_id) return Number(cMatch.sala_id);
+    if (cargoUuid) {
+      const cMatch = ($masterCargosStore || []).find(c => String(c.uuid || c.id) === String(cargoUuid));
+      if (cMatch && (cMatch.sala_uuid || cMatch.sala_id)) return String(cMatch.sala_uuid || cMatch.sala_id);
     }
     return null;
   })();
 
   $: targetSalaNombre = selectedCargoObj ? (selectedCargoObj.sala_nombre || (item ? item.sala_nombre : '')) : (item ? item.sala_nombre || '' : '');
 
-  let lastTargetSalaId = null;
-  $: if (targetSalaId !== lastTargetSalaId) {
-    if (lastTargetSalaId !== null && targetSalaId !== null) {
-      const validDevIds = new Set(
+  let lastTargetSalaUuid = null;
+  $: if (targetSalaUuid !== lastTargetSalaUuid) {
+    if (lastTargetSalaUuid !== null && targetSalaUuid !== null) {
+      const validDevUuids = new Set(
         ($masterDispositivosStore || [])
-          .filter(d => Number(d.sala_id) === Number(targetSalaId))
-          .map(d => Number(d.id))
+          .filter(d => String(d.sala_uuid || d.sala_id) === String(targetSalaUuid))
+          .map(d => String(d.uuid || d.id))
       );
-      selectedDispositivoIds = new Set([...selectedDispositivoIds].filter(devId => validDevIds.has(devId)));
+      selectedDispositivoUuids = new Set([...selectedDispositivoUuids].filter(devUuid => validDevUuids.has(String(devUuid))));
     }
-    lastTargetSalaId = targetSalaId;
+    lastTargetSalaUuid = targetSalaUuid;
   }
 
   // Devices strictly filtered by the selected cargo's sala
   $: availableDispositivosGrouped = (function() {
-    if (!targetSalaId) return {};
+    if (!targetSalaUuid) return {};
 
     const list = $masterDispositivosStore || [];
     // Strict filter: only devices belonging to this cargo's sala
-    const relevantDevices = list.filter(d => Number(d.sala_id) === Number(targetSalaId));
+    const relevantDevices = list.filter(d => String(d.sala_uuid || d.sala_id) === String(targetSalaUuid));
 
     if (relevantDevices.length === 0) return {};
 
@@ -177,9 +181,10 @@
       loadMasterStoresFromBackend();
     }
 
-    if (item && item.id) {
-      id = item.id;
-      fotoUrl = item.foto ? toBackendUrl(item.foto, { preview: true }) : (item.id ? toBackendUrl(`/empleados/${item.id}.jpg`, { preview: true }) : '');
+    if (item && (item.uuid || item.id)) {
+      uuid = item.uuid || item.id;
+      const targetUuid = item.uuid || item.id;
+      fotoUrl = item.foto ? toBackendUrl(item.foto, { preview: true }) : toBackendUrl(`/empleados/${targetUuid}.jpg`, { preview: true });
       nombre = item.nombre || '';
       
       const rawCed = String(item.cedula || '').trim().toUpperCase();
@@ -197,26 +202,26 @@
       fechaIngreso = formatDateForInput(item.fecha_ingreso) || new Date().toISOString().split('T')[0];
       fechaNacimiento = formatDateForInput(item.fecha_nacimiento) || '';
       sexo = item.sexo || 'Masculino';
-      cargoId = item.cargo_id ? Number(item.cargo_id) : '';
+      cargoUuid = (item.cargo_uuid || item.cargo_id) ? String(item.cargo_uuid || item.cargo_id) : '';
 
       // Load assigned devices from backend
       try {
-        const res = await fetch(toBackendUrl(`/api/master/empleados/${item.id}/dispositivos`));
+        const res = await fetch(toBackendUrl(`/api/master/empleados/${targetUuid}/dispositivos`));
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data)) {
-            selectedDispositivoIds = new Set(json.data.map(Number));
+            selectedDispositivoUuids = new Set(json.data.map(d => String(typeof d === 'object' ? (d.uuid || d.id) : d)));
           } else {
-            selectedDispositivoIds = new Set();
+            selectedDispositivoUuids = new Set();
           }
         }
       } catch (e) {
         console.warn('Error fetching employee devices:', e);
-        selectedDispositivoIds = new Set();
+        selectedDispositivoUuids = new Set();
       }
     } else {
       // New employee defaults
-      id = null;
+      uuid = null;
       fotoUrl = '';
       cedulaPrefix = 'V';
       cedulaNumber = '';
@@ -224,8 +229,8 @@
       fechaIngreso = new Date().toISOString().split('T')[0];
       fechaNacimiento = '';
       sexo = 'Masculino';
-      cargoId = '';
-      selectedDispositivoIds = new Set();
+      cargoUuid = '';
+      selectedDispositivoUuids = new Set();
     }
   }
 
@@ -284,14 +289,14 @@
     }
   }
 
-  function toggleDispositivo(devId) {
-    const num = Number(devId);
-    if (selectedDispositivoIds.has(num)) {
-      selectedDispositivoIds.delete(num);
+  function toggleDispositivo(devUuid) {
+    const val = String(devUuid);
+    if (selectedDispositivoUuids.has(val)) {
+      selectedDispositivoUuids.delete(val);
     } else {
-      selectedDispositivoIds.add(num);
+      selectedDispositivoUuids.add(val);
     }
-    selectedDispositivoIds = new Set(selectedDispositivoIds);
+    selectedDispositivoUuids = new Set(selectedDispositivoUuids);
   }
 
   // --- Photo Cropper Management ---
@@ -494,7 +499,7 @@
       triggerToast('Debe ingresar el nombre del empleado', 'warning');
       return;
     }
-    if (!cargoId) {
+    if (!cargoUuid) {
       triggerToast('Debe seleccionar el cargo del empleado', 'warning');
       return;
     }
@@ -508,8 +513,10 @@
       fecha_ingreso: fechaIngreso || null,
       fecha_nacimiento: fechaNacimiento || null,
       sexo,
-      cargo_id: Number(cargoId),
-      dispositivo_ids: Array.from(selectedDispositivoIds)
+      cargo_uuid: cargoUuid ? String(cargoUuid) : null,
+      cargo_id: cargoUuid ? String(cargoUuid) : null,
+      dispositivo_uuids: Array.from(selectedDispositivoUuids).map(String),
+      dispositivo_ids: Array.from(selectedDispositivoUuids).map(String)
     };
 
     if (fotoBase64) {
@@ -518,7 +525,7 @@
 
     try {
       if (isEdit) {
-        dispatch('update', { id, draft: payload });
+        dispatch('update', { uuid, id: uuid, draft: payload });
       } else {
         dispatch('create', payload);
       }
@@ -725,12 +732,12 @@
         <div class="form-group">
           <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="form-label">Cargo:</label>
-          <select bind:value={cargoId} class="form-select" required>
+          <select bind:value={cargoUuid} class="form-select" required>
             <option value="">Seleccione un cargo...</option>
             {#each Object.entries(groupedCargos) as [groupLabel, cargosInGroup]}
               <optgroup label={groupLabel}>
-                {#each cargosInGroup as c}
-                  <option value={Number(c.id)}>
+                {#each cargosInGroup as c (c.uuid || c.id)}
+                  <option value={String(c.uuid || c.id)}>
                     {c.nombre}
                   </option>
                 {/each}
@@ -745,7 +752,7 @@
           <label class="form-label">Dispositivos:</label>
           
           <div class="devices-box">
-            {#if !cargoId && selectedDispositivoIds.size === 0}
+            {#if !cargoUuid && selectedDispositivoUuids.size === 0}
               <div class="devices-empty-placeholder">
                 Primero selecciona un cargo para ver los dispositivos disponibles
               </div>
@@ -758,19 +765,19 @@
                 {#each Object.entries(availableDispositivosGrouped) as [salaNombre, devs]}
                   <div class="sala-devices-block">
                     <div class="sala-devices-header">
-                      <span class="sala-badge-tag">📍 Sala: {salaNombre}</span>
+                      <span class="sala-badge-tag">Sala: {salaNombre}</span>
                     </div>
                     <div class="sala-devices-items">
-                      {#each devs as dev}
+                      {#each devs as dev (dev.uuid || dev.id)}
                         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
                         <div 
                           class="device-item" 
                           title="Dispositivo: {dev.nombre} (Sala: {salaNombre})"
-                          on:click={() => toggleDispositivo(dev.id)}>
+                          on:click={() => toggleDispositivo(dev.uuid || dev.id)}>
                           <input 
                             type="checkbox" 
-                            checked={selectedDispositivoIds.has(Number(dev.id))} 
-                            on:change={() => toggleDispositivo(dev.id)}
+                            checked={selectedDispositivoUuids.has(String(dev.uuid || dev.id))} 
+                            on:change={() => toggleDispositivo(dev.uuid || dev.id)}
                             class="device-checkbox" 
                           />
                           <span class="device-name">
@@ -786,7 +793,7 @@
           </div>
           
           <span class="help-text">
-            {#if !cargoId && selectedDispositivoIds.size === 0}
+            {#if !cargoUuid && selectedDispositivoUuids.size === 0}
               Selecciona un cargo primero
             {:else}
               Opcional: Selecciona uno o varios dispositivos de la sala

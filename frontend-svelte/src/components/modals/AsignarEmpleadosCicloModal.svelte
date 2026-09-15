@@ -47,12 +47,12 @@
   // Bulk assign plantilla to ALL active employees in this department (EN MEMORIA)
   function handleBulkAssign(plantillaId) {
     if (!plantillaId) return;
-    const pObj = plantillasSala.find(p => Number(p.id) === Number(plantillaId));
+    const pObj = plantillasSala.find(p => String(p.id) === String(plantillaId));
     if (!pObj) return;
 
     empleados = empleados.map(e => {
       const current = Array.isArray(e.horarios) ? e.horarios : [];
-      const exists = current.some(h => Number(h.id) === Number(plantillaId));
+      const exists = current.some(h => String(h.id) === String(plantillaId));
       return {
         ...e,
         horarios: exists ? current : [...current, pObj]
@@ -70,15 +70,15 @@
   // Toggle single plantilla for specific employee (EN MEMORIA)
   function handleTogglePlantilla(empId, plantillaId) {
     if (!empId || !plantillaId) return;
-    const targetEmp = empleados.find(e => Number(e.empleado_id) === Number(empId));
+    const targetEmp = empleados.find(e => String(e.empleado_id || e.id) === String(empId));
     if (!targetEmp) return;
 
     const current = Array.isArray(targetEmp.horarios) ? targetEmp.horarios : [];
-    const hasIt = current.some(h => Number(h.id) === Number(plantillaId));
+    const hasIt = current.some(h => String(h.id) === String(plantillaId));
     if (hasIt) {
-      targetEmp.horarios = current.filter(h => Number(h.id) !== Number(plantillaId));
+      targetEmp.horarios = current.filter(h => String(h.id) !== String(plantillaId));
     } else {
-      const pObj = plantillasSala.find(p => Number(p.id) === Number(plantillaId));
+      const pObj = plantillasSala.find(p => String(p.id) === String(plantillaId));
       if (pObj) {
         targetEmp.horarios = [...current, pObj];
       }
@@ -93,8 +93,10 @@
     isSaving = true;
     try {
       const assignments = empleados.map(e => ({
-        empleado_id: Number(e.empleado_id),
-        plantilla_ids: (e.horarios || []).map(h => Number(h.id))
+        empleado_id: String(e.empleado_uuid || e.empleado_id || e.id),
+        empleado_uuid: String(e.empleado_uuid || e.empleado_id || e.id),
+        plantilla_ids: (e.horarios || []).map(h => String(h.uuid || h.id)),
+        plantilla_uuids: (e.horarios || []).map(h => String(h.uuid || h.id))
       }));
 
       const res = await fetch(`/api/master/departamentos-ciclos/${department.id}/empleados`, {
@@ -330,7 +332,7 @@
                             </div>
 
                             {#each horariosUnicamente as p}
-                              {@const isAssigned = emp.horarios && emp.horarios.some(h => Number(h.id) === Number(p.id))}
+                              {@const isAssigned = emp.horarios && emp.horarios.some(h => String(h.id) === String(p.id))}
                               <button
                                 type="button"
                                 on:click={() => {

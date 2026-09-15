@@ -25,7 +25,7 @@
   $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
   // Estado del formulario
-  let selectedLlavesIds = []; // Array de IDs seleccionados
+  let selectedLlavesUuids = []; // Array de UUIDs seleccionados
   let descripcion = '';
   let isSaving = false;
   let isMultiselectOpen = false;
@@ -38,7 +38,7 @@
   // Ordenados de manera segura por timestamp o identificador descendente
   $: sortedRecords = [...records].sort((a, b) => 
     (new Date(b.created_at || 0) - new Date(a.created_at || 0)) ||
-    (String(b.id || '').localeCompare(String(a.id || '')))
+    (String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')))
   );
 
   // Llaves cargadas del servidor o store
@@ -58,26 +58,28 @@
 
   // Usuario y salas asignadas
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+  $: currentUserSalas = $currentUserStore?.uuid || $currentUserStore?.id ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: assignedSalaUuids = (currentUserSalas.length > 0)
+    ? currentUserSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.uuid || s.id) : []);
 
   // Filtrado de llaves activas asociadas a la sala del libro
   $: availableLlaves = (() => {
     const list = (serverLlaves && serverLlaves.length > 0) ? serverLlaves : ($masterLlavesStore || []);
+    const targetSalaUuid = libro?.sala_uuid || libro?.sala_id;
     return list.filter(k => {
       if ((k.active ?? 1) === 0) return false;
 
-      // Si el libro tiene sala_id, debe coincidir con la sala del libro
-      if (libro?.sala_id && Number(k.sala_id) !== Number(libro.sala_id)) {
+      // Si el libro tiene sala_uuid, debe coincidir con la sala del libro
+      const kSalaUuid = k.sala_uuid || k.sala_id;
+      if (targetSalaUuid && String(kSalaUuid) !== String(targetSalaUuid)) {
         return false;
       }
 
       // Si el usuario logueado tiene salas asignadas, la llave debe pertenecer a esas salas
-      if (assignedSalaIds && assignedSalaIds.length > 0) {
-        const userSalaNums = assignedSalaIds.map(Number);
-        if (!userSalaNums.includes(Number(k.sala_id))) {
+      if (assignedSalaUuids && assignedSalaUuids.length > 0) {
+        const userSalaSet = new Set(assignedSalaUuids.map(String));
+        if (!userSalaSet.has(String(kSalaUuid))) {
           return false;
         }
       }
@@ -95,9 +97,9 @@
   // Encabezado oscuro de la tabla: Gan Casino PLC - 14/09/2026
   $: tableHeaderTitle = (() => {
     const salaName = libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
+      ($masterSalasStore || []).find(s => String(s.id) === String(libro?.sala_id))?.nombre ||
       libro?.sala_nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
+      ($masterSalasStore || []).find(s => String(s.id) === String(libro?.sala_id))?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();
@@ -193,29 +195,30 @@
     }
   }
 
-  function toggleLlaveSelection(llaveId) {
-    if (selectedLlavesIds.some(i => String(i) === String(llaveId))) {
-      selectedLlavesIds = selectedLlavesIds.filter(i => String(i) !== String(llaveId));
+  function toggleLlaveSelection(llaveUuid) {
+    const val = String(llaveUuid);
+    if (selectedLlavesUuids.some(i => String(i) === val)) {
+      selectedLlavesUuids = selectedLlavesUuids.filter(i => String(i) !== val);
     } else {
-      selectedLlavesIds = [...selectedLlavesIds, llaveId];
+      selectedLlavesUuids = [...selectedLlavesUuids, val];
     }
   }
 
   function toggleSelectAllLlaves() {
-    if (selectedLlavesIds.length === availableLlaves.length) {
-      selectedLlavesIds = [];
+    if (selectedLlavesUuids.length === availableLlaves.length) {
+      selectedLlavesUuids = [];
     } else {
-      selectedLlavesIds = availableLlaves.map(k => k.uuid || k.id);
+      selectedLlavesUuids = availableLlaves.map(k => k.uuid || k.id);
     }
   }
 
-  function removeLlaveTag(llaveId) {
-    selectedLlavesIds = selectedLlavesIds.filter(i => String(i) !== String(llaveId));
+  function removeLlaveTag(llaveUuid) {
+    selectedLlavesUuids = selectedLlavesUuids.filter(i => String(i) !== String(llaveUuid));
   }
 
-  function getLlaveName(id) {
-    const k = availableLlaves.find(item => String(item.uuid || item.id) === String(id) || String(item.id) === String(id));
-    return k?.nombre || `Llave #${id}`;
+  function getLlaveName(uuidOrId) {
+    const k = availableLlaves.find(item => String(item.uuid || item.id) === String(uuidOrId));
+    return k?.nombre || (uuidOrId && String(uuidOrId).length > 20 ? `Llave #${String(uuidOrId).slice(0, 8)}` : `Llave #${uuidOrId}`);
   }
 
   async function handleGuardar() {
@@ -229,7 +232,7 @@
       return;
     }
 
-    if (selectedLlavesIds.length === 0) {
+    if (selectedLlavesUuids.length === 0) {
       triggerToast('Seleccione al menos una llave para registrar el movimiento', 'warning');
       return;
     }
@@ -239,8 +242,8 @@
     const horaSalida = getCurrentTimeString();
     const payload = {
       uuid: itemUuid,
-      llaves_ids: selectedLlavesIds,
-      llaves_uuids: selectedLlavesIds.filter(x => typeof x === 'string' && x.length > 20),
+      llaves_uuids: selectedLlavesUuids,
+      llaves_ids: selectedLlavesUuids,
       descripcion: (descripcion || '').trim() || 'General',
       hora_salida: horaSalida
     };
@@ -255,11 +258,11 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Movimiento de llaves registrado exitosamente', 'success');
-        const savedData = json.data || { ...payload, id: `local_${Date.now()}` };
+        const savedData = json.data || { ...payload, uuid: itemUuid };
         await upsertLocalItem('libro_control_llaves', savedData);
 
         // Reset form
-        selectedLlavesIds = [];
+        selectedLlavesUuids = [];
         descripcion = '';
         isMultiselectOpen = false;
 
@@ -270,12 +273,11 @@
     } catch (err) {
       console.warn('[LocalDb] Modo Offline: guardando movimiento de llaves en base de datos local y encolando outbox:', err);
       const offlineRecord = {
-        id: `temp_${Date.now()}`,
         uuid: itemUuid,
-        libro_id: lId,
-        libro_uuid: libro?.uuid || null,
-        llaves_ids: selectedLlavesIds,
-        llaves_detalle: selectedLlavesIds.map(id => ({ id, nombre: getLlaveName(id) })),
+        libro_uuid: lId,
+        llaves_uuids: selectedLlavesUuids,
+        llaves_ids: selectedLlavesUuids,
+        llaves_detalle: selectedLlavesUuids.map(u => ({ uuid: u, id: u, nombre: getLlaveName(u) })),
         descripcion: (descripcion || '').trim() || 'General',
         hora_salida: horaSalida,
         hora_recepcion: null,
@@ -294,7 +296,7 @@
       });
 
       triggerToast('Modo Offline: Movimiento de llaves guardado localmente. Se sincronizará automáticamente al conectar.', 'info');
-      selectedLlavesIds = [];
+      selectedLlavesUuids = [];
       descripcion = '';
       isMultiselectOpen = false;
     } finally {
@@ -307,32 +309,32 @@
       triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
       return;
     }
-    const recordId = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
+    const recordUuid = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
     const lId = libro?.uuid || libroId || libro?.id;
-    if (!lId || !recordId) return;
+    if (!lId || !recordUuid) return;
 
     try {
-      const res = await fetch(`/api/master/libros/${lId}/control-llaves/${recordId}`, {
+      const res = await fetch(`/api/master/libros/${lId}/control-llaves/${recordUuid}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'info');
-        records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-        await deleteLocalItem('libro_control_llaves', recordId);
+        records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+        await deleteLocalItem('libro_control_llaves', recordUuid);
       } else {
         triggerToast(json?.error || 'Error al eliminar registro', 'error');
       }
     } catch (err) {
       console.warn('[LocalDb] Modo Offline para eliminación de control-llaves:', err);
-      records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-      await deleteLocalItem('libro_control_llaves', recordId);
+      records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+      await deleteLocalItem('libro_control_llaves', recordUuid);
       await queueOutboxAction({
         entity: 'libro_control_llaves',
         action: 'delete',
-        endpoint: `/api/master/libros/${lId}/control-llaves/${recordId}`,
+        endpoint: `/api/master/libros/${lId}/control-llaves/${recordUuid}`,
         method: 'DELETE',
-        targetId: recordId
+        targetId: recordUuid
       });
       triggerToast('Modo Offline: Registro de llaves eliminado localmente.', 'info');
     }
@@ -384,14 +386,14 @@
     if (!lId) return;
 
     isSavingHoras = true;
-    const targetId = editingRecord.uuid || editingRecord.id;
+    const targetUuid = editingRecord.uuid || editingRecord.id;
     const payload = {
       hora_salida: modalHoraSalida || getCurrentTimeString(),
       hora_recepcion: modalHoraRecepcion || null
     };
 
     try {
-      const res = await fetch(`/api/master/libros/${lId}/control-llaves/${targetId}/horas`, {
+      const res = await fetch(`/api/master/libros/${lId}/control-llaves/${targetUuid}/horas`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -414,15 +416,15 @@
         ...payload,
         updated_at: new Date().toISOString()
       };
-      records = records.map(r => String(r.uuid || r.id) === String(targetId) ? updatedOffline : r);
+      records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? updatedOffline : r);
       await upsertLocalItem('libro_control_llaves', updatedOffline);
       await queueOutboxAction({
         entity: 'libro_control_llaves',
         action: 'update',
-        endpoint: `/api/master/libros/${lId}/control-llaves/${targetId}/horas`,
+        endpoint: `/api/master/libros/${lId}/control-llaves/${targetUuid}/horas`,
         method: 'PUT',
         payload: updatedOffline,
-        targetId
+        targetId: targetUuid
       });
       triggerToast('Modo Offline: Horas guardadas localmente.', 'info');
       cerrarModalHoras();
@@ -447,7 +449,7 @@
       <!-- Multiselect de Llaves -->
       <div class="form-group" on:click|stopPropagation>
         <label class="form-label" for="llaves-multiselect-trigger">
-          Llaves ({selectedLlavesIds.length} seleccionadas):
+          Llaves ({selectedLlavesUuids.length} seleccionadas):
         </label>
         
         <div class="multiselect-container">
@@ -459,26 +461,26 @@
             role="button"
             tabindex="0"
           >
-            {#if selectedLlavesIds.length === 0}
+            {#if selectedLlavesUuids.length === 0}
               <span class="placeholder-text">Seleccione una o varias llaves...</span>
             {:else}
               <span class="selected-count-badge">
-                {selectedLlavesIds.length} {selectedLlavesIds.length === 1 ? 'llave seleccionada' : 'llaves seleccionadas'}
+                {selectedLlavesUuids.length} {selectedLlavesUuids.length === 1 ? 'llave seleccionada' : 'llaves seleccionadas'}
               </span>
             {/if}
             <span class="chevron-arrow">{isMultiselectOpen ? '▲' : '▼'}</span>
           </div>
 
           <!-- Selected Tags Preview -->
-          {#if selectedLlavesIds.length > 0}
+          {#if selectedLlavesUuids.length > 0}
             <div class="selected-tags-box">
-              {#each selectedLlavesIds as sId}
+              {#each selectedLlavesUuids as sUuid (sUuid)}
                 <span class="llave-chip">
-                  <span>{getLlaveName(sId)}</span>
+                  <span>{getLlaveName(sUuid)}</span>
                   <button 
                     type="button" 
                     class="chip-remove-btn" 
-                    on:click|stopPropagation={() => removeLlaveTag(sId)}
+                    on:click|stopPropagation={() => removeLlaveTag(sUuid)}
                     title="Quitar llave"
                   >×</button>
                 </span>
@@ -502,7 +504,7 @@
                   class="btn-toggle-all"
                   on:click|stopPropagation={toggleSelectAllLlaves}
                 >
-                  {selectedLlavesIds.length === availableLlaves.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
+                  {selectedLlavesUuids.length === availableLlaves.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
                 </button>
               </div>
 
@@ -510,13 +512,13 @@
                 {#if filteredAvailableLlaves.length === 0}
                   <div class="dropdown-empty">No se encontraron llaves activas</div>
                 {:else}
-                  {#each filteredAvailableLlaves as k}
-                    {@const isChecked = selectedLlavesIds.includes(Number(k.id))}
+                  {#each filteredAvailableLlaves as k (k.uuid || k.id)}
+                    {@const isChecked = selectedLlavesUuids.some(i => String(i) === String(k.uuid || k.id))}
                     <label class="dropdown-item-label" class:item-checked={isChecked}>
                       <input 
                         type="checkbox" 
                         checked={isChecked} 
-                        on:change={() => toggleLlaveSelection(k.id)}
+                        on:change={() => toggleLlaveSelection(k.uuid || k.id)}
                         class="dropdown-checkbox"
                       />
                       <span class="item-name">{k.nombre}</span>
@@ -657,7 +659,7 @@
                         <button 
                           type="button" 
                           class="btn-eliminar"
-                          on:click={() => handleEliminar(record.uuid || record.id)}
+                          on:click={() => handleEliminar(record.uuid)}
                           title="Eliminar este registro"
                         >
                           Eliminar
@@ -696,10 +698,10 @@
           <p class="empty-keys-txt">No se encontraron llaves detalladas.</p>
         {:else}
           <div class="modal-keys-grid">
-            {#each modalLlavesList as llave, i}
+            {#each modalLlavesList as llave, i (llave.uuid || llave.id || i)}
               <div class="modal-key-item">
                 <span class="key-item-number">{i + 1}</span>
-                <span class="key-item-name">{llave.nombre || `Llave #${llave.id || llave}`}</span>
+                <span class="key-item-name">{llave.nombre || (typeof llave === 'object' && llave.uuid ? `Llave #${llave.uuid.slice(0, 8)}` : `Llave #${llave}`)}</span>
               </div>
             {/each}
           </div>

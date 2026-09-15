@@ -24,7 +24,7 @@
   $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
   $: canModify = canAdd || canEdit;
 
-  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
+  $: targetSalaId = (libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
   $: targetSalaUuid = libro?.sala_uuid || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_uuid || null;
 
   // Estado del formulario
@@ -73,10 +73,9 @@
   // Encabezado superior: Roraima - 07/09/2026
   $: tableHeaderTitle = (() => {
     const matchedSala = ($masterSalasStore || []).find(s => 
-      (libro?.sala_uuid && s.uuid === libro.sala_uuid) || 
-      (libro?.sala_id && String(s.id) === String(libro.sala_id)) ||
-      (targetSalaUuid && s.uuid === targetSalaUuid) ||
-      (targetSalaId && String(s.id) === String(targetSalaId))
+      (libro?.sala_uuid && (s.uuid === libro.sala_uuid || s.id === libro.sala_uuid)) || 
+      (targetSalaUuid && (s.uuid === targetSalaUuid || s.id === targetSalaUuid)) ||
+      (libro?.sala_id && String(s.uuid || s.id) === String(libro.sala_id))
     );
     const salaName = libro?.sala_nombre || matchedSala?.nombre || libro?.sala_nombre_comercial || matchedSala?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
@@ -86,10 +85,10 @@
   // Sugerencias de empleados para operadores CECOM (filtrados por la sala del libro)
   $: listaEmpleados = ($masterEmpleadosStore || [])
     .filter(e => {
-      if (targetSalaUuid && e.sala_uuid) {
-        if (e.sala_uuid !== targetSalaUuid) return false;
+      if (targetSalaUuid && (e.sala_uuid || e.sala_id)) {
+        if (String(e.sala_uuid || e.sala_id) !== String(targetSalaUuid)) return false;
       } else if (targetSalaId) {
-        if (Number(e.sala_id) !== targetSalaId) return false;
+        if (String(e.sala_id || e.sala_uuid) !== String(targetSalaId)) return false;
       }
       if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
       return true;
@@ -97,10 +96,11 @@
     .map(e => {
       const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || '';
       return {
-        id: e.id,
+        uuid: e.uuid || e.id,
+        id: e.uuid || e.id,
         nombre: nom,
         cargo_nombre: (e.cargo_nombre || '').trim(),
-        sala_id: e.sala_id
+        sala_uuid: e.sala_uuid || e.sala_id
       };
     })
     .filter(e => Boolean(e.nombre))
@@ -372,8 +372,8 @@
       );
       if (Array.isArray(local) && local.length > 0) {
         const d = local[0];
-        recordId = d.id;
-        recordUuid = d.uuid || null;
+        recordUuid = d.uuid || d.id || null;
+        recordId = recordUuid;
         aperturaSalaInicio = d.apertura_sala_inicio || '';
         aperturaSalaFin = d.apertura_sala_fin || '';
         aperturaMaquinasInicio = d.apertura_maquinas_inicio || '';
@@ -400,8 +400,8 @@
         const json = await res.json();
         if (json && json.success && json.data) {
           const d = json.data;
-          recordId = d.id;
-          recordUuid = d.uuid || null;
+          recordUuid = d.uuid || d.id || null;
+          recordId = recordUuid;
           aperturaSalaInicio = d.apertura_sala_inicio || '';
           aperturaSalaFin = d.apertura_sala_fin || '';
 
@@ -475,8 +475,8 @@
     const itemUuid = recordUuid || crypto.randomUUID();
     const payload = {
       uuid: itemUuid,
+      libro_uuid: lId,
       libro_id: lId,
-      libro_uuid: libro?.uuid || null,
       apertura_sala_inicio: aperturaSalaInicio,
       apertura_sala_fin: aperturaSalaFin,
       apertura_maquinas_inicio: aperturaMaquinasInicio,
@@ -505,8 +505,8 @@
           triggerToast('Datos operativos guardados correctamente', 'success');
         }
         if (json.data) {
-          recordId = json.data.id;
-          recordUuid = json.data.uuid || itemUuid;
+          recordUuid = json.data.uuid || json.data.id || itemUuid;
+          recordId = recordUuid;
           lastUpdatedAt = json.data.updated_at || json.data.created_at;
           await upsertLocalItem('libro_datos', json.data);
         }

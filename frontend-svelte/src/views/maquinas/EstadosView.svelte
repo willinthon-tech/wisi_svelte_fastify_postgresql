@@ -10,6 +10,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import { masterEstadosActions, masterEstadosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   let initial = {};
@@ -43,6 +44,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('estados');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allEstados) && allEstados.length > 0) {
+        items = allEstados;
+        totalCount = allEstados.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano desde backend
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -67,10 +81,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('estados', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar estados del servidor', 'error');
+      console.warn('Fallback local IndexedDB para estados:', err);
+      const local = await getLocalItems('estados');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterEstadosStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -80,20 +101,24 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Estado', bold: true, sortable: true, editable: true }
   ];
 
   $: createFields = [
-    { key: 'nombre', label: 'Nombre del Estado', type: 'text', placeholder: 'Ej. Activa, En Mantenimiento, Apagada...', required: true }
+    { key: 'nombre', label: 'Nombre del Estado', type: 'text', placeholder: 'Ej. Operativa, En Taller, Desactivada...', required: true }
   ];
 
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterEstadosActions.add(draft);
+      const created = await masterEstadosActions.add(draft);
       triggerToast('Estado creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear estado: ${err.message}`, 'error');
     }
@@ -101,25 +126,34 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterEstadosActions.update(id, draft);
+      await masterEstadosActions.update(targetUuid, draft);
       triggerToast('Estado actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar estado: ${err.message}`, 'error');
     }
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterEstadosActions.delete(id);
+      const res = await masterEstadosActions.delete(targetUuid);
       if (res && res.blocked) {
-        onResult(res);
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar porque tiene máquinas vinculadas.', 'warning');
+        }
       } else {
-        triggerToast('Estado eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        triggerToast(`Estado eliminado exitosamente`, 'success');
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar estado: ${err.message}`, 'error');

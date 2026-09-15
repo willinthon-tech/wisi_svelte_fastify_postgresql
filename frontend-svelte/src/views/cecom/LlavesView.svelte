@@ -22,11 +22,13 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   $: userSalasMap = $masterUserSalasStore || {};
   $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
+  $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? s.id : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -75,6 +77,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('llaves');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allLlaves) && allLlaves.length > 0) {
+        items = allLlaves;
+        totalCount = allLlaves.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -133,10 +148,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('llaves', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar llaves del servidor', 'error');
+      console.warn('Fallback local IndexedDB para llaves:', err);
+      const local = await getLocalItems('llaves');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterLlavesStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -149,7 +171,7 @@
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.map(Number).includes(Number(s.id));
+    return assignedSalaIds.includes(String(s.id));
   });
 
   $: columns = [
@@ -166,9 +188,13 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterLlavesActions.add(draft);
+      const created = await masterLlavesActions.add(draft);
       triggerToast('Llave creada exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear llave: ${err.message}`, 'error');
     }
@@ -179,7 +205,8 @@
     try {
       await masterLlavesActions.update(id, draft);
       triggerToast('Llave actualizada exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar llave: ${err.message}`, 'error');
     }
@@ -187,14 +214,21 @@
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
+    const targetId = id || item?.id || item?.uuid;
     try {
-      const res = await masterLlavesActions.delete(id);
+      const res = await masterLlavesActions.delete(targetId);
       if (res && res.blocked) {
-        onResult(res);
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar la llave.', 'warning');
+        }
       } else {
         triggerToast('Llave desincorporada exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        items = items.filter(x => String(x.id) !== String(targetId) && String(x.uuid) !== String(targetId));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al desincorporar llave: ${err.message}`, 'error');

@@ -142,11 +142,11 @@
 
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
-    const userId = user?.id || 1;
+    const userId = user?.id || '';
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .map((s) => (typeof s === "object" ? String(s.id || s.uuid) : String(s)))
         .filter(Boolean);
     }
 
@@ -159,7 +159,7 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
+          .map((s) => (typeof s === "object" ? String(s.id || s.uuid) : String(s)))
           .filter(Boolean);
       }
     }
@@ -167,7 +167,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .map((s) => (typeof s === "object" ? String(s.id || s.uuid) : String(s)))
         .filter(Boolean);
     }
 
@@ -567,8 +567,8 @@
 
       // --- Filtro estricto de sala: solo mostrar si el usuario tiene asignada la sala del marcaje ---
       if (!assignedSalaIds || assignedSalaIds.length === 0) return;
-      const recSalaId = Number(rec.sala_id);
-      if (!recSalaId || !assignedSalaIds.includes(recSalaId)) return;
+      const recSalaId = String(rec.sala_id || rec.sala_uuid || '');
+      if (!recSalaId || !assignedSalaIds.some(id => String(id) === recSalaId)) return;
 
       const backendUrl = getCloudBaseUrl();
       const base = backendUrl.endsWith('/api') ? backendUrl : `${backendUrl}/api`;

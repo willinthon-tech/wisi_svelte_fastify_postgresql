@@ -23,12 +23,13 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { getPublicWebUrl } from '../../config/api.config.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
+  $: currentUserSalas = $currentUserStore?.uuid ? (userSalasMap[$currentUserStore.uuid] || []) : [];
   $: assignedSalaIds = (currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+    ? currentUserSalas.map(String)
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => String(typeof s === 'object' ? s.uuid : s)) : []);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -77,6 +78,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('libros');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allLibros) && allLibros.length > 0) {
+        items = allLibros;
+        totalCount = allLibros.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -134,10 +148,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('libros', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar libros del servidor', 'error');
+      console.warn('Fallback local IndexedDB para libros:', err);
+      const local = await getLocalItems('libros');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterLibrosStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.descripcion || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -150,26 +171,31 @@
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.map(Number).includes(Number(s.id));
+    return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'descripcion', label: 'Fecha', type: 'date', bold: true, sortable: true, editable: true },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala Asignada', sortable: true, editable: false }
+    { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false }
   ];
 
   $: createFields = [
     { key: 'descripcion', label: 'Fecha', type: 'date', required: true },
-    { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true }
+    { key: 'sala_uuid', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true }
   ];
 
   async function handleCreate(event) {
-    const draft = event.detail;
+    const draft = { ...event.detail };
+    if (draft.sala_uuid && !draft.sala_id) draft.sala_id = draft.sala_uuid;
     try {
-      await masterLibrosActions.add(draft);
+      const created = await masterLibrosActions.add(draft);
       triggerToast('Libro creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear libro: ${err.message}`, 'error');
     }
@@ -177,10 +203,14 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
+    const payload = { ...draft };
+    if (payload.sala_uuid && !payload.sala_id) payload.sala_id = payload.sala_uuid;
     try {
-      await masterLibrosActions.update(id, draft);
+      await masterLibrosActions.update(targetUuid, payload);
       triggerToast('Libro actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar libro: ${err.message}`, 'error');
     }
@@ -188,14 +218,21 @@
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterLibrosActions.delete(id);
+      const res = await masterLibrosActions.delete(targetUuid);
       if (res && res.blocked) {
-        onResult(res);
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar el libro.', 'warning');
+        }
       } else {
         triggerToast('Libro eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar libro: ${err.message}`, 'error');
@@ -220,6 +257,8 @@
           });
         } else if (res && (res.success || res.id)) {
           deleted.push({ id });
+          items = items.filter(x => String(x.id) !== String(id) && String(x.uuid) !== String(id));
+          totalCount = Math.max(0, totalCount - 1);
         } else {
           blocked.push({
             id,
@@ -233,7 +272,7 @@
       }
     }
 
-    await loadServerData();
+    loadServerData().catch(() => {});
 
     if (onResult) {
       onResult({
@@ -248,15 +287,17 @@
 
   function handleTrabajarLibro(event) {
     const item = event.detail;
-    if (item && item.id) {
-      navigateToRoute(`cecom/libro/${item.id}`);
+    const targetUuid = item?.uuid || item?.id;
+    if (targetUuid) {
+      navigateToRoute(`cecom/libro/${targetUuid}`);
     }
   }
 
   async function handleCompartirLibro(event) {
     const item = event.detail;
-    if (!item || !item.id) return;
-    const shareUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${item.id}`);
+    const targetUuid = item?.uuid || item?.id;
+    if (!item || !targetUuid) return;
+    const shareUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${targetUuid}`);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
@@ -268,7 +309,7 @@
         document.execCommand('copy');
         document.body.removeChild(input);
       }
-      triggerToast(`Enlace del reporte de libro #${item.id} copiado al portapapeles`, 'success');
+      triggerToast(`Enlace del reporte de libro #${item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)} copiado al portapapeles`, 'success');
     } catch (e) {
       prompt('Copia el siguiente enlace del reporte:', shareUrl);
     }

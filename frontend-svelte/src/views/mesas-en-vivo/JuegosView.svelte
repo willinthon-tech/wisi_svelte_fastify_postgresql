@@ -11,9 +11,9 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import { masterJuegosActions, masterJuegosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
-  // Initialize from persistent store so search query survives page and route transitions
   let initial = {};
   const unsubInit = persistentJuegosFilters.subscribe((val) => {
     initial = val || {};
@@ -22,7 +22,6 @@
 
   let searchQuery = initial.searchQuery || "";
 
-  // Sync back to persistent store whenever search query changes
   $: {
     persistentJuegosFilters.set({
       searchQuery
@@ -46,6 +45,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('juegos');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allJuegos) && allJuegos.length > 0) {
+        items = allJuegos;
+        totalCount = allJuegos.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano desde backend
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -70,10 +82,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('juegos', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar juegos del servidor', 'error');
+      console.warn('Fallback local IndexedDB para juegos de mesas:', err);
+      const local = await getLocalItems('juegos');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterJuegosStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -94,9 +113,13 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterJuegosActions.add(draft);
+      const created = await masterJuegosActions.add(draft);
       triggerToast('Juego creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear juego: ${err.message}`, 'error');
     }
@@ -107,22 +130,30 @@
     try {
       await masterJuegosActions.update(id, draft);
       triggerToast('Juego actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar juego: ${err.message}`, 'error');
     }
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetId = id || item?.id || item?.uuid;
     try {
-      const res = await masterJuegosActions.delete(id);
+      const res = await masterJuegosActions.delete(targetId);
       if (res && res.blocked) {
-        onResult(res);
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar porque tiene mesas vinculadas.', 'warning');
+        }
       } else {
-        triggerToast('Juego eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        triggerToast(`Juego eliminado exitosamente`, 'success');
+        items = items.filter(x => String(x.id) !== String(targetId) && String(x.uuid) !== String(targetId));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar juego: ${err.message}`, 'error');

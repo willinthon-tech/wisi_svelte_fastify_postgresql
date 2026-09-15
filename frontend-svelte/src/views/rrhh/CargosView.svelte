@@ -17,13 +17,14 @@
   import { masterCargosActions, masterCargosStore, masterAreasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
+  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id) ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -82,8 +83,22 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('cargos');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allCargos) && allCargos.length > 0) {
+        items = allCargos;
+        totalCount = allCargos.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
+      fetchFilterOptions(),
       loadServerData(currentParams)
     ]);
   });
@@ -147,10 +162,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('cargos', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar cargos del servidor', 'error');
+      console.warn('Fallback local IndexedDB para cargos:', err);
+      const local = await getLocalItems('cargos');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterCargosStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -164,28 +186,34 @@
 
   $: filteredAreasStore = ($masterAreasStore || []).filter(a => {
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return !a.sala_id || assignedSalaIds.includes(a.sala_id);
+    const aSala = a.sala_uuid || a.sala_id;
+    return !aSala || assignedSalaIds.includes(String(aSala));
   });
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Cargo', bold: true, sortable: true, editable: true },
-    { key: 'area_nombre', keyId: 'area_id', label: 'Área Asignada', sortable: true, editable: true, options: filteredAreasStore },
+    { key: 'area_nombre', keyId: 'area_uuid', label: 'Área Asignada', sortable: true, editable: true, options: filteredAreasStore },
     { key: 'departamento_nombre', label: 'Departamento Asignado', sortable: true, editable: false },
     { key: 'sala_nombre', label: 'Sala Asignada', sortable: true, editable: false }
   ];
 
   $: createFields = [
     { key: 'nombre', label: 'Nombre del Cargo', type: 'text', placeholder: 'Ej. Analista de Selección', required: true },
-    { key: 'area_id', label: 'Área Asignada', type: 'select', options: filteredAreasStore, required: true }
+    { key: 'area_uuid', label: 'Área Asignada', type: 'select', options: filteredAreasStore, required: true }
   ];
 
   async function handleCreate(event) {
-    const draft = event.detail;
+    const draft = { ...event.detail };
+    if (draft.area_uuid && !draft.area_id) draft.area_id = draft.area_uuid;
     try {
-      await masterCargosActions.add(draft);
+      const created = await masterCargosActions.add(draft);
       triggerToast('Cargo creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear cargo: ${err.message}`, 'error');
     }
@@ -193,10 +221,14 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const payload = { ...draft };
+    if (payload.area_uuid && !payload.area_id) payload.area_id = payload.area_uuid;
+    const targetUuid = id;
     try {
-      await masterCargosActions.update(id, draft);
+      await masterCargosActions.update(targetUuid, payload);
       triggerToast('Cargo actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar cargo: ${err.message}`, 'error');
     }
@@ -204,14 +236,21 @@
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterCargosActions.delete(id);
+      const res = await masterCargosActions.delete(targetUuid);
       if (res && res.blocked) {
-        onResult(res);
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar porque tiene elementos asociados.', 'warning');
+        }
       } else {
         triggerToast('Cargo eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar cargo: ${err.message}`, 'error');

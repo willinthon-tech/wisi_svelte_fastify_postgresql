@@ -74,7 +74,7 @@
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .map((s) => (typeof s === "object" ? String(s.id) : String(s)))
         .filter(Boolean);
     }
 
@@ -87,7 +87,7 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
+          .map((s) => (typeof s === "object" ? String(s.id) : String(s)))
           .filter(Boolean);
       }
     }
@@ -95,7 +95,7 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
+        .map((s) => (typeof s === "object" ? String(s.id) : String(s)))
         .filter(Boolean);
     }
 
@@ -104,7 +104,7 @@
 
   $: assignedDispositivos = $masterDispositivosStore.filter(
     (d) =>
-      assignedSalaIds.length > 0 && assignedSalaIds.includes(Number(d.sala_id)),
+      assignedSalaIds.length > 0 && assignedSalaIds.includes(String(d.sala_id)),
   );
   $: dispositivosCount = assignedDispositivos.length;
 
@@ -555,11 +555,11 @@
     unsubscribeWs = latestAttlogEventStore.subscribe((newRecord) => {
       if (!newRecord) return;
 
-      const recSalaId = Number(newRecord.sala_id || newRecord.dispositivo_sala_id);
+      const recSalaId = newRecord.sala_id || newRecord.dispositivo_sala_id;
       if (
         recSalaId &&
         assignedSalaIds.length > 0 &&
-        !assignedSalaIds.includes(recSalaId)
+        !assignedSalaIds.includes(String(recSalaId))
       )
         return;
 
@@ -576,7 +576,7 @@
           const tA = new Date(a.event_time).getTime() || 0;
           const tB = new Date(b.event_time).getTime() || 0;
           if (tA !== tB) return tB - tA;
-          return Number(b.id || 0) - Number(a.id || 0);
+          return String(b.id || '').localeCompare(String(a.id || ''));
         });
         latestAttlogs = combined.slice(0, pageSize);
         if (latestAttlogs.length > 0) {
@@ -599,7 +599,7 @@
             const tA = new Date(a.event_time).getTime() || 0;
             const tB = new Date(b.event_time).getTime() || 0;
             if (tA !== tB) return tB - tA;
-            return Number(b.id || 0) - Number(a.id || 0);
+            return String(b.id || '').localeCompare(String(a.id || ''));
           });
 
           // Caso A: El usuario está parado en el último registro en vivo (página 0, índice 0)

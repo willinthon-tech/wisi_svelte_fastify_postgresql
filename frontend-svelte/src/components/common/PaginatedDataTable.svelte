@@ -234,7 +234,7 @@
     }
     dispatch('reincorporate', {
       id: itemToReincorporar.id,
-      cargo_id: Number(reincorporarCargoId),
+      cargo_id: reincorporarCargoId,
       fecha_ingreso: reincorporarFecha,
       item: itemToReincorporar
     });
@@ -252,14 +252,14 @@
     if (!item) return rawOptions;
 
     // Priority 1: Filter by departamento_id / departamento_nombre if row has departamento context (e.g. Cargos editing Area)
-    const targetDeptId = item.departamento_id ? Number(item.departamento_id) : null;
+    const targetDeptId = item.departamento_id ? String(item.departamento_id) : null;
     const targetDeptNombre = item.departamento_nombre ? String(item.departamento_nombre).trim().toLowerCase() : null;
 
     if (targetDeptId || targetDeptNombre) {
       const filteredDept = rawOptions.filter(opt => {
         if (!opt) return false;
         if (targetDeptId && opt.departamento_id) {
-          return Number(opt.departamento_id) === targetDeptId;
+          return String(opt.departamento_id) === targetDeptId;
         }
         if (targetDeptNombre && opt.departamento_nombre) {
           return String(opt.departamento_nombre).trim().toLowerCase() === targetDeptNombre;
@@ -270,14 +270,14 @@
     }
 
     // Priority 2: Filter by sala_id / sala_nombre if row has sala context (e.g. Areas editing Departamento, but NOT when selecting Sala or Modelo directly)
-    const targetSalaId = item.sala_id ? Number(item.sala_id) : null;
+    const targetSalaId = item.sala_id ? String(item.sala_id) : null;
     const targetSalaNombre = item.sala_nombre ? String(item.sala_nombre).trim().toLowerCase() : null;
 
     if (col.keyId !== 'sala_id' && col.key !== 'sala_nombre' && col.keyId !== 'modelo_id' && col.key !== 'modelo_nombre' && (targetSalaId || targetSalaNombre)) {
       const filteredSala = rawOptions.filter(opt => {
         if (!opt) return false;
         if (targetSalaId && opt.sala_id) {
-          return Number(opt.sala_id) === targetSalaId;
+          return String(opt.sala_id) === targetSalaId;
         }
         if (targetSalaNombre && opt.sala_nombre) {
           return String(opt.sala_nombre).trim().toLowerCase() === targetSalaNombre;
@@ -460,17 +460,17 @@
       const scopeField = uniqueCodeByField || (entityType === 'horario' ? 'sala_id' : null);
       if (scopeField) {
         const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
-        const currentItem = nameList.find(x => Number(x.id) === Number(editingInlineId));
+        const currentItem = nameList.find(x => String(x.uuid || x.id) === String(editingInlineId));
         const targetScopeVal = inlineDraft[scopeField] !== undefined && inlineDraft[scopeField] !== null && inlineDraft[scopeField] !== ''
           ? inlineDraft[scopeField]
-          : (currentItem?.[scopeField] !== undefined ? currentItem[scopeField] : currentItem?.sala_id);
+          : (currentItem?.[scopeField] !== undefined ? currentItem[scopeField] : (currentItem?.sala_uuid || currentItem?.sala_id));
 
         if (targetScopeVal !== undefined && targetScopeVal !== null && targetScopeVal !== '') {
           const match = nameList.find(item => {
-            if (Number(item.id) === Number(editingInlineId)) return false;
+            if (String(item.uuid || item.id) === String(editingInlineId)) return false;
             const itemCode = (item.codigo || '').trim().toUpperCase();
             if (itemCode !== code) return false;
-            const itemScopeVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : item.sala_id;
+            const itemScopeVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : (item.sala_uuid || item.sala_id);
             return String(itemScopeVal) === String(targetScopeVal);
           });
           if (match) {
@@ -488,16 +488,16 @@
     if (!clean || clean === 'n/a') return '';
     const nameList = (existingItems && existingItems.length > 0 ? existingItems : items) || [];
     const scopeField = uniqueByField || (entityType === 'mesa' ? 'sala_id' : null);
-    const currentItem = nameList.find(x => Number(x.id) === Number(editingInlineId));
+    const currentItem = nameList.find(x => String(x.uuid || x.id) === String(editingInlineId));
     const targetScopeVal = scopeField ? (inlineDraft[scopeField] !== undefined ? inlineDraft[scopeField] : currentItem?.[scopeField]) : null;
 
     const isDup = nameList.some(item => {
-      if (Number(item.id) === Number(editingInlineId)) return false;
+      if (String(item.uuid || item.id) === String(editingInlineId)) return false;
       const matchName = (item.nombre || '').trim().toLowerCase() === clean;
       if (!matchName) return false;
       if (scopeField) {
         if (targetScopeVal !== undefined && targetScopeVal !== null && targetScopeVal !== '') {
-          const itemVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : item.sala_id;
+          const itemVal = item[scopeField] !== undefined && item[scopeField] !== null ? item[scopeField] : (item.sala_uuid || item.sala_id);
           return String(itemVal) === String(targetScopeVal);
         }
         return false;
@@ -810,9 +810,10 @@
     if (item.foto && typeof item.foto === 'string' && item.foto.trim().length > 0) {
       rawPath = item.foto;
     } else if (entityType === 'cliente') {
-      rawPath = item.id ? `/clientes/${item.id}.jpg` : '';
+      const cId = item.uuid || item.id;
+      rawPath = cId ? `/clientes/${cId}.jpg` : '';
     } else {
-      const empId = item.empleado_id || item.id;
+      const empId = item.empleado_uuid || item.uuid || item.empleado_id || item.id;
       rawPath = empId ? `/empleados/${empId}.jpg` : '';
     }
     if (!rawPath) return '';
@@ -983,7 +984,7 @@
   // Inline Editing Methods
   function startInlineEdit(item) {
     if (!canEdit) return;
-    editingInlineId = item.id;
+    editingInlineId = item.uuid || item.id;
     const draft = {
       ...item,
       fecha_nacimiento: formatDateForInput(item.fecha_nacimiento),
@@ -1053,8 +1054,10 @@
 
   async function handleConfirmDelete(event) {
     const id = event.detail;
+    const targetUuid = itemToDelete?.uuid || id;
     dispatch('delete', {
-      id,
+      id: targetUuid,
+      uuid: targetUuid,
       item: itemToDelete,
       onResult: (res) => {
         if (res && res.blocked) {
@@ -1110,7 +1113,7 @@
   }
 
   function openPhotoModal(item) {
-    const idx = paginatedItems.findIndex(i => String(i.id) === String(item.id));
+    const idx = paginatedItems.findIndex(i => String(i.uuid || i.id) === String(item.uuid || item.id));
     const effectiveIdx = idx !== -1 ? idx : 0;
     const isDesinc = entityType === 'desincorporado' || Boolean(actions?.reincorporate);
     const targetMode = entityType === 'cliente' ? 'cliente' : (isDesinc ? 'desincorporado' : 'empleado');
@@ -1256,9 +1259,10 @@
             </td>
           </tr>
         {:else}
-          {#each paginatedItems as item (item.id)}
-            {@const isEditingThisRow = editingInlineId === item.id}
-            <tr class="{isEditingThisRow ? 'editing-row' : ''} {selectedIds.has(item.id) ? 'selected-row' : ''} {item.is_system ? 'system-base-row' : ''}">
+          {#each paginatedItems as item (item.uuid || item.id)}
+            {@const itemKey = item.uuid || item.id}
+            {@const isEditingThisRow = editingInlineId === itemKey}
+            <tr class="{isEditingThisRow ? 'editing-row' : ''} {selectedIds.has(itemKey) ? 'selected-row' : ''} {item.is_system ? 'system-base-row' : ''}">
               <!-- Batch Checkbox Column -->
               {#if showCheckbox && canDelete}
               <td style="text-align: center; width: 40px; padding: 4px 10px;">
@@ -1272,8 +1276,8 @@
                 {:else}
                   <input 
                     type="checkbox"
-                    checked={selectedIds.has(item.id)}
-                    on:change={() => toggleSelectOne(item.id)}
+                    checked={selectedIds.has(itemKey)}
+                    on:change={() => toggleSelectOne(itemKey)}
                     style="cursor: pointer; width: 14px; height: 14px; accent-color: #2563eb;"
                   />
                 {/if}
@@ -1317,7 +1321,7 @@
                     {#if item.is_system}
                       <span class="id-badge" style="background: #e2e8f0; color: #334155; border-color: #cbd5e1; font-weight: 900; letter-spacing: 0.5px;">BASE</span>
                     {:else}
-                      <span class="id-badge">#{item.id}</span>
+                      <span class="id-badge">#{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)}</span>
                     {/if}
 
                   {:else if isEditingThisRow && col.editable !== false}
@@ -1757,7 +1761,7 @@
                       title="Guardar Cambios"
                       disabled={!!inlineDuplicateError}
                       style="{inlineDuplicateError ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
-                      on:click={() => saveInlineEdit(item.id)}>
+                      on:click={() => saveInlineEdit(item.uuid || item.id)}>
                       Guardar
                     </button>
                     <button 

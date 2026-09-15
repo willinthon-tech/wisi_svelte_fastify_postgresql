@@ -50,7 +50,7 @@
           </div>
           <div class="stat-card stat-blocked">
             <div class="stat-number">{blocked.length + errors.length}</div>
-            <div class="stat-label">⚠️ No Eliminados (Protegidos)</div>
+            <div class="stat-label">No Eliminados (Protegidos)</div>
           </div>
         </div>
 
@@ -64,12 +64,12 @@
             {#each blocked as item}
               <div class="blocked-item-card">
                 <div class="blocked-item-header">
-                  <span class="blocked-item-name">{item.name || `ID: ${item.id}`}</span>
+                  <span class="blocked-item-name">{item.name || `ID: ${item.uuid ? item.uuid.slice(0, 8) : item.id}`}</span>
                   <span class="blocked-badge">No eliminado</span>
                 </div>
                 
                 <div class="blocked-item-reason">
-                  <span>⚠️</span> {item.reason || 'Este registro tiene elementos o relaciones asociadas que impiden su eliminación.'}
+                  {item.reason || 'Este registro tiene elementos o relaciones asociadas que impiden su eliminación.'}
                 </div>
 
                 {#if item.dependencies && item.dependencies.length > 0}

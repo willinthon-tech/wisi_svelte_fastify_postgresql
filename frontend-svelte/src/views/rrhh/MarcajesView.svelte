@@ -141,6 +141,8 @@
     return toBackendUrl(empFoto, { thumb: true });
   }
 
+  import { getLocalItems, saveLocalItems } from "../../services/localDb.service.js";
+
   // Extract assigned sala IDs strictly for the logged in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
@@ -149,8 +151,9 @@
     // 1. If user object has specific salas assigned directly from backend API session:
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     // 2. Check masterUserSalasStore dictionary (userId -> array of sala IDs):
@@ -163,8 +166,9 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
-          .filter(Boolean);
+          .map((s) => (typeof s === "object" ? s.id : s))
+          .filter(Boolean)
+          .map(String);
       }
     }
 
@@ -172,12 +176,26 @@
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     return [];
   })();
+
+  onMount(async () => {
+    // 0ms instant display from IndexedDB
+    try {
+      const local = await getLocalItems('attlogs');
+      if (Array.isArray(local) && local.length > 0) {
+        attlogs = local;
+        totalCount = local.length;
+        isLoading = false;
+        isInitialLoad = false;
+      }
+    } catch (e) {}
+  });
 
   $: selectedPhotoModal =
     selectedModalIndex !== null && attlogs[selectedModalIndex]
@@ -192,7 +210,8 @@
   // Precarga automática en segundo plano de las fotos de los 10 marcajes visibles en pantalla
   $: if (attlogs && attlogs.length > 0 && typeof window !== "undefined") {
     attlogs.forEach((att) => {
-      const url = (att?.id || att?.attlog_id) ? getPhotoUrl(att?.id || att?.attlog_id) : getFallbackProfilePhoto(att);
+      const itemKey = att?.uuid || att?.id || att?.attlog_id;
+      const url = itemKey ? getPhotoUrl(itemKey) : getFallbackProfilePhoto(att);
       if (url) {
         const img = new Image();
         img.src = url;
@@ -323,8 +342,6 @@
 
       if (salas && Array.isArray(salas) && salas.length > 0) {
         q.set("user_sala_ids", salas.join(","));
-      } else {
-        q.set("user_sala_ids", "-1");
       }
 
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
@@ -344,17 +361,28 @@
         if (json.success && Array.isArray(json.data)) {
           const seen = new Set();
           attlogs = json.data.filter(item => {
-            if (!item || item.id === undefined || item.id === null) return false;
-            if (seen.has(item.id)) return false;
-            seen.add(item.id);
+            const key = item?.uuid || item?.id;
+            if (!key) return false;
+            if (seen.has(key)) return false;
+            seen.add(key);
             return true;
           });
           totalCount = json.total || 0;
           attlogsPageCache.set(pageCacheKey, { data: attlogs, total: totalCount });
+          if (page === 1) {
+            saveLocalItems('attlogs', attlogs).catch(() => {});
+          }
         }
       }
     } catch (e) {
-      console.warn("Error fetching attlogs from backend:", e);
+      console.warn("Fallback local IndexedDB para attlogs:", e);
+      try {
+        const local = await getLocalItems('attlogs');
+        if (Array.isArray(local) && local.length > 0) {
+          attlogs = local;
+          totalCount = local.length;
+        }
+      } catch (err) {}
     } finally {
       isLoading = false;
       isInitialLoad = false;
@@ -561,9 +589,10 @@
   }
 
   async function downloadPhoto(record) {
-    if (!record || !record.id) return;
+    const photoKey = record?.uuid || record?.id;
+    if (!record || !photoKey) return;
     try {
-      const url = getPhotoUrl(record.id);
+      const url = getPhotoUrl(photoKey);
       const res = await fetch(url);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -587,7 +616,7 @@
       URL.revokeObjectURL(blobUrl);
     } catch (e) {
       console.warn("Error downloading photo:", e);
-      window.open(getPhotoUrl(record.id), "_blank");
+      window.open(getPhotoUrl(photoKey), "_blank");
     }
   }
 
@@ -841,7 +870,7 @@
       if (
         assignedSalaIds.length > 0 &&
         attSalaId &&
-        !assignedSalaIds.includes(Number(attSalaId))
+        !assignedSalaIds.includes(String(attSalaId))
       ) {
         return;
       }
@@ -1107,7 +1136,7 @@
               </td>
             </tr>
           {:else}
-            {#each attlogs as item, idx (`${item.id}_${idx}`)}
+            {#each attlogs as item, idx (`${item.uuid || item.id}_${idx}`)}
               {@const vMode = formatVerifyMode(item.currentverifymode)}
               <tr
                 style="border-bottom: 1px solid #f1f5f9; background: #ffffff; transition: background 0.15s ease;"
@@ -1121,7 +1150,7 @@
                     title="Ampliar fotografía"
                   >
                     <CachedImage
-                      src={getPhotoUrl(item.id)}
+                      src={getPhotoUrl(item.uuid || item.id)}
                       alt="Miniatura marcaje"
                       isImmutable={true}
                       style="width: 26px; height: 26px; border-radius: 6px; object-fit: cover; border: 1px solid #3b82f6; background: #f1f5f9;"
@@ -1140,7 +1169,7 @@
                 <td
                   style="padding: 4px 14px; font-family: monospace; color: #334155; font-weight: 700;"
                 >
-                  #{item.id}
+                  #{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)}
                 </td>
                 <td
                   style="padding: 4px 14px; font-family: monospace; color: #334155; font-weight: 700;"

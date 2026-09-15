@@ -26,8 +26,9 @@
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     const masterMap = $masterUserSalasStore;
@@ -39,16 +40,18 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
-          .filter(Boolean);
+          .map((s) => (typeof s === "object" ? s.id : s))
+          .filter(Boolean)
+          .map(String);
       }
     }
 
     const authList = $authUserSalasStore;
     if (Array.isArray(authList) && authList.length > 0) {
       return authList
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     return [];
@@ -110,11 +113,11 @@
   $: serverList = (function() {
     let list = [...rawServerItems];
     if (selectedSalas.length > 0) {
-      const set = new Set(selectedSalas.map(Number));
-      list = list.filter(item => set.has(Number(item.sala_id)));
+      const set = new Set(selectedSalas.map(String));
+      list = list.filter(item => set.has(String(item.sala_id)));
     } else if (assignedSalaIds && assignedSalaIds.length > 0) {
-      const set = new Set(assignedSalaIds.map(Number));
-      list = list.filter(item => !item.sala_id || set.has(Number(item.sala_id)));
+      const set = new Set(assignedSalaIds.map(String));
+      list = list.filter(item => !item.sala_id || set.has(String(item.sala_id)));
     }
     return list;
   })();
@@ -389,7 +392,7 @@
   $: calSalasOptions = ($masterSalasStore || [])
     .filter(s => {
       if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-      return assignedSalaIds.map(Number).includes(Number(s.id));
+      return assignedSalaIds.includes(String(s.id));
     })
     .map(s => ({
       id: s.id,
@@ -531,11 +534,11 @@
 
     let emps = rawCumpleanos.filter(c => !c.mes || activeMonthsSet.has(Number(c.mes)));
     if (calSelectedSalas.length > 0) {
-      const salaSet = new Set(calSelectedSalas.map(Number));
-      emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
+      const salaSet = new Set(calSelectedSalas.map(String));
+      emps = emps.filter(c => salaSet.has(String(c.sala_id)));
     } else if (assignedSalaIds && assignedSalaIds.length > 0) {
-      const allowedSet = new Set(assignedSalaIds.map(Number));
-      emps = emps.filter(c => allowedSet.has(Number(c.sala_id)));
+      const allowedSet = new Set(assignedSalaIds.map(String));
+      emps = emps.filter(c => allowedSet.has(String(c.sala_id)));
     }
     emps.sort((a, b) => Number(a.dia) - Number(b.dia) || a.nombre.localeCompare(b.nombre));
 
@@ -583,11 +586,11 @@
 
     let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)));
     if (calSelectedSalas.length > 0) {
-      const salaSet = new Set(calSelectedSalas.map(Number));
-      serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
+      const salaSet = new Set(calSelectedSalas.map(String));
+      serverHols = serverHols.filter(rf => salaSet.has(String(rf.sala_id)));
     } else if (assignedSalaIds && assignedSalaIds.length > 0) {
-      const allowedSet = new Set(assignedSalaIds.map(Number));
-      serverHols = serverHols.filter(rf => allowedSet.has(Number(rf.sala_id)));
+      const allowedSet = new Set(assignedSalaIds.map(String));
+      serverHols = serverHols.filter(rf => allowedSet.has(String(rf.sala_id)));
     }
     for (const sh of serverHols) {
       list.push({
@@ -659,11 +662,11 @@
           return true;
         });
         if (calSelectedSalas.length > 0) {
-          const salaSet = new Set(calSelectedSalas.map(Number));
-          emps = emps.filter(c => salaSet.has(Number(c.sala_id)));
+          const salaSet = new Set(calSelectedSalas.map(String));
+          emps = emps.filter(c => salaSet.has(String(c.sala_id)));
         } else if (assignedSalaIds && assignedSalaIds.length > 0) {
-          const allowedSet = new Set(assignedSalaIds.map(Number));
-          emps = emps.filter(c => allowedSet.has(Number(c.sala_id)));
+          const allowedSet = new Set(assignedSalaIds.map(String));
+          emps = emps.filter(c => allowedSet.has(String(c.sala_id)));
         }
         for (const emp of emps) {
           const age = emp.anio_nacimiento ? (calCurrentYear - emp.anio_nacimiento) : null;
@@ -696,11 +699,11 @@
         // Fechas de Salas en DB (filtrando por salas asignadas al usuario)
         let serverHols = rawServerItems.filter(rf => activeMonthsSet.has(Number(rf.mes)) && Number(rf.dia) === d);
         if (calSelectedSalas.length > 0) {
-          const salaSet = new Set(calSelectedSalas.map(Number));
-          serverHols = serverHols.filter(rf => salaSet.has(Number(rf.sala_id)));
+          const salaSet = new Set(calSelectedSalas.map(String));
+          serverHols = serverHols.filter(rf => salaSet.has(String(rf.sala_id)));
         } else if (assignedSalaIds && assignedSalaIds.length > 0) {
-          const allowedSet = new Set(assignedSalaIds.map(Number));
-          serverHols = serverHols.filter(rf => allowedSet.has(Number(rf.sala_id)));
+          const allowedSet = new Set(assignedSalaIds.map(String));
+          serverHols = serverHols.filter(rf => allowedSet.has(String(rf.sala_id)));
         }
         for (const sh of serverHols) {
           feriadoEvents.push({

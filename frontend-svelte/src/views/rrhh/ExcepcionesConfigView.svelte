@@ -12,6 +12,8 @@
   import { masterExcepcionesActions, masterExcepcionesStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   let initial = {};
   const unsubInit = persistentExcepcionesFilters.subscribe((val) => {
     initial = val || {};
@@ -43,6 +45,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('excepciones');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allExcepciones) && allExcepciones.length > 0) {
+        items = allExcepciones;
+        totalCount = allExcepciones.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -67,10 +82,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('excepciones', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar tipos de excepciones del servidor', 'error');
+      console.warn('Fallback local IndexedDB para excepciones:', err);
+      const local = await getLocalItems('excepciones');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterExcepcionesStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.codigo || '').toLowerCase().includes(q) || (x.descripcion || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -109,9 +131,13 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterExcepcionesActions.add(draft);
+      const created = await masterExcepcionesActions.add(draft);
       triggerToast('Excepción creada exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.id || x.uuid) !== String(created.id || created.uuid))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(err.message?.startsWith('El código') ? err.message : `Error al crear excepción: ${err.message}`, 'error');
     }
@@ -122,7 +148,8 @@
     try {
       await masterExcepcionesActions.update(id, draft);
       triggerToast('Excepción actualizada exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.id) === String(id) || String(x.uuid) === String(id)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(err.message?.startsWith('El código') ? err.message : `Error al actualizar excepción: ${err.message}`, 'error');
     }
@@ -130,14 +157,17 @@
 
   async function handleDelete(event) {
     const { id, onResult } = event.detail;
+    const targetId = id;
     try {
-      const res = await masterExcepcionesActions.delete(id);
+      const res = await masterExcepcionesActions.delete(targetId);
       if (res && res.blocked) {
         onResult(res);
       } else {
         triggerToast('Excepción eliminada exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        items = items.filter(x => String(x.id) !== String(targetId) && String(x.uuid) !== String(targetId));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar excepción: ${err.message}`, 'error');

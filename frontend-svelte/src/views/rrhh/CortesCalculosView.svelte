@@ -26,6 +26,8 @@
   // Cálculos procesados de los empleados
   let processedEmployees = [];
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   onMount(async () => {
     // 1. Obtener ID de prop, del store o de la URL hash / pathname
     let id = corteId;
@@ -38,17 +40,17 @@
 
     if (!id && typeof window !== 'undefined') {
       const hash = window.location.hash || '';
-      const matchHashPublic = hash.match(/reportes\/rrhh\/corte\/(\d+)/i);
+      const matchHashPublic = hash.match(/reportes\/rrhh\/corte\/([a-zA-Z0-9_-]+)/i);
       if (matchHashPublic) id = matchHashPublic[1];
 
       if (!id) {
-        const matchHashId = hash.match(/[?&]id=(\d+)/);
+        const matchHashId = hash.match(/[?&]id=([a-zA-Z0-9_-]+)/);
         if (matchHashId) id = matchHashId[1];
       }
 
       if (!id) {
         const path = window.location.pathname || '';
-        const matchPath = path.match(/reportes\/rrhh\/corte\/(\d+)/i);
+        const matchPath = path.match(/reportes\/rrhh\/corte\/([a-zA-Z0-9_-]+)/i);
         if (matchPath) id = matchPath[1];
       }
     }
@@ -67,6 +69,16 @@
   async function loadCorteData(id) {
     isLoading = true;
     try {
+      // 1. Carga instantánea desde caché local si existe
+      try {
+        const local = await getLocalItems('cortes_detalle_' + id);
+        if (local && (Array.isArray(local) ? local.length > 0 : local.id)) {
+          corte = Array.isArray(local) ? local[0] : local;
+          computeCalculos(corte);
+          isLoading = false;
+        }
+      } catch (e) {}
+
       // Cargar feriados del calendario y fechas patrias globales
       try {
         const [resFer, resPatrias] = await Promise.all([
@@ -90,12 +102,15 @@
       if (json && json.success && json.data) {
         corte = json.data;
         computeCalculos(corte);
-      } else {
+        saveLocalItems('cortes_detalle_' + id, [corte]).catch(() => {});
+      } else if (!corte) {
         triggerToast(json?.error || 'No se encontró el corte solicitado', 'error');
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error de conexión al cargar corte histórico', 'error');
+      console.warn('Error de red al cargar corte histórico:', err);
+      if (!corte) {
+        triggerToast('Operando offline: no se encontró corte en caché local', 'warning');
+      }
     } finally {
       isLoading = false;
     }
@@ -115,13 +130,13 @@
     }
 
     // 2. Feriados de sala en base de datos (no aplica cumpleaños)
-    const empSalaId = emp && emp.sala_id ? Number(emp.sala_id) : (corte && corte.sala_id ? Number(corte.sala_id) : null);
+    const empSalaId = emp && emp.sala_id ? String(emp.sala_id) : (corte && corte.sala_id ? String(corte.sala_id) : null);
     return allCalendarFeriados.some(f => {
       if (Number(f.mes) !== mes || Number(f.dia) !== dia) return false;
       const fTipo = String(f.tipo || f.tipo_evento || '').toUpperCase();
       if (fTipo === 'CUMPLEANOS' || fTipo === 'CUMPLEAÑOS' || f.empleado_id) return false;
       if (!f.sala_id) return true; // Feriado global de todas las salas
-      if (empSalaId && Number(f.sala_id) === empSalaId) return true; // Feriado de la sala del empleado
+      if (empSalaId && String(f.sala_id) === empSalaId) return true; // Feriado de la sala del empleado
       return false;
     });
   }

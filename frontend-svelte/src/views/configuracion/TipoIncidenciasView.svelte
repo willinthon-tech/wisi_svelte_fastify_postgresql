@@ -10,6 +10,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import { masterTipoIncidenciasActions, masterTipoIncidenciasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   let initial = {};
@@ -43,6 +44,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('tipo_incidencias');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allTipoIncidencias) && allTipoIncidencias.length > 0) {
+        items = allTipoIncidencias;
+        totalCount = allTipoIncidencias.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano desde backend
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -67,10 +81,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('tipo_incidencias', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar tipos de incidencia del servidor', 'error');
+      console.warn('Fallback local IndexedDB para tipo de incidencias:', err);
+      const local = await getLocalItems('tipo_incidencias');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterTipoIncidenciasStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -80,7 +101,7 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Tipo de Incidencia', bold: true, sortable: true, editable: true }
   ];
 
@@ -91,9 +112,13 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterTipoIncidenciasActions.add(draft);
+      const created = await masterTipoIncidenciasActions.add(draft);
       triggerToast('Tipo de incidencia creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear tipo de incidencia: ${err.message}`, 'error');
     }
@@ -101,10 +126,12 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterTipoIncidenciasActions.update(id, draft);
+      await masterTipoIncidenciasActions.update(targetUuid, draft);
       triggerToast('Tipo de incidencia actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar tipo de incidencia: ${err.message}`, 'error');
     }
@@ -112,8 +139,9 @@
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterTipoIncidenciasActions.delete(id || item?.id);
+      const res = await masterTipoIncidenciasActions.delete(targetUuid);
       if (res && res.blocked) {
         if (onResult) {
           onResult(res);
@@ -122,8 +150,10 @@
         }
       } else {
         triggerToast(`Tipo de incidencia eliminado exitosamente`, 'success');
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
         if (onResult) onResult({ success: true });
-        await loadServerData();
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar tipo de incidencia: ${err.message}`, 'error');

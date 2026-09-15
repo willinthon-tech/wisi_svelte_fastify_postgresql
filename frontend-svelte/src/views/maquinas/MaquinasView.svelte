@@ -27,13 +27,14 @@
   import { masterSalasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
+  import { getLocalItems, saveLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
+  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id) ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
 
   // Initialize from persistent store
   let initial = {};
@@ -148,6 +149,16 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('maquinas');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchFilterOptions(),
@@ -250,10 +261,22 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('maquinas', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar máquinas del servidor', 'error');
+      console.warn('Fallback local IndexedDB para máquinas:', err);
+      const local = await getLocalItems('maquinas');
+      const source = (Array.isArray(local) && local.length > 0) ? local : [];
+      let filtered = source;
+      if (searchNombre.trim()) {
+        filtered = filtered.filter(x => (x.nombre || '').toLowerCase().includes(searchNombre.trim().toLowerCase()));
+      }
+      if (searchSerial.trim()) {
+        filtered = filtered.filter(x => (x.serial || '').toLowerCase().includes(searchSerial.trim().toLowerCase()));
+      }
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -281,11 +304,12 @@
 
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.map(Number).includes(Number(s.id));
+    return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
   $: userSalasForCreate = (filteredSalasStore || []).map(s => ({
-    id: s.id,
+    uuid: s.uuid,
+    id: s.uuid || s.id,
     nombre: s.nombre,
     subgroup_label: (s.grupo_id === 2 ? 'GALPÓN' : 'SALA')
   }));
@@ -294,30 +318,31 @@
     ? filterOptions.modelos
     : []
   ).map(m => ({
-    id: m.id,
+    uuid: m.uuid,
+    id: m.uuid || m.id,
     nombre: m.nombre,
     subgroup_label: String(m.subgroup_label || m.marca_nombre || 'GENERAL').toUpperCase()
   }));
 
-  $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : (userSalasForCreate[0]?.id || 1);
+  $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : (userSalasForCreate[0]?.uuid || userSalasForCreate[0]?.id || 1);
 
   // Column definitions for PaginatedDataTable
   $: columns = [
-    { key: 'id', label: 'N°', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'NOMBRE DE MÁQUINA', bold: true, sortable: true, editable: true },
     { key: 'serial', label: 'SERIAL', bold: true, sortable: true, editable: true },
     { key: 'puestos', label: 'PUESTOS', type: 'number', sortable: true, editable: true },
     { key: 'grupo_sala_nombre', label: 'GRUPO', sortable: true, editable: false },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'SALA', sortable: true, editable: true, type: 'select', options: userSalasForCreate },
+    { key: 'sala_nombre', keyId: 'sala_uuid', label: 'SALA', sortable: true, editable: true, type: 'select', options: userSalasForCreate },
     { key: 'marca_nombre', label: 'MARCA', sortable: true, editable: false },
-    { key: 'modelo_nombre', keyId: 'modelo_id', label: 'MODELO', sortable: true, editable: true, type: 'select', options: modelosForCreate },
-    { key: 'juego_nombre', keyId: 'juego_id', label: 'JUEGO', sortable: true, editable: true, type: 'select', options: filterOptions.juegos || [] },
-    { key: 'estado_nombre', keyId: 'estado_id', label: 'ESTADO', sortable: true, editable: true, type: 'select', options: filterOptions.estados || [] },
-    { key: 'sociedad_nombre', keyId: 'sociedad_id', label: 'SOCIEDAD', sortable: true, editable: true, type: 'select', options: filterOptions.sociedades || [] },
-    { key: 'valor_nombre', keyId: 'valor_id', label: 'VALOR', sortable: true, editable: true, type: 'select', options: filterOptions.valores || [] },
-    { key: 'tipo_nombre', keyId: 'tipo_id', label: 'TIPO', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
-    { key: 'modo_nombre', keyId: 'modo_id', label: 'MODO', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
-    { key: 'legal_nombre', keyId: 'legal_id', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] }
+    { key: 'modelo_nombre', keyId: 'modelo_uuid', label: 'MODELO', sortable: true, editable: true, type: 'select', options: modelosForCreate },
+    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'JUEGO', sortable: true, editable: true, type: 'select', options: filterOptions.juegos || [] },
+    { key: 'estado_nombre', keyId: 'estado_uuid', label: 'ESTADO', sortable: true, editable: true, type: 'select', options: filterOptions.estados || [] },
+    { key: 'sociedad_nombre', keyId: 'sociedad_uuid', label: 'SOCIEDAD', sortable: true, editable: true, type: 'select', options: filterOptions.sociedades || [] },
+    { key: 'valor_nombre', keyId: 'valor_uuid', label: 'VALOR', sortable: true, editable: true, type: 'select', options: filterOptions.valores || [] },
+    { key: 'tipo_nombre', keyId: 'tipo_uuid', label: 'TIPO', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
+    { key: 'modo_nombre', keyId: 'modo_uuid', label: 'MODO', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
+    { key: 'legal_nombre', keyId: 'legal_uuid', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] }
   ];
 
   // Create modal form fields: nombre and serial are at the BOTTOM in col-6 format
@@ -326,35 +351,35 @@
       type: 'row',
       fields: [
         { key: 'puestos', label: 'Puestos', type: 'number', placeholder: '1', defaultValue: 1, min: 1, required: true },
-        { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: userSalasForCreate, required: true, defaultValue: defaultSalaId }
+        { key: 'sala_uuid', label: 'Sala Asignada', type: 'select', options: userSalasForCreate, required: true, defaultValue: defaultSalaId }
       ]
     },
     {
       type: 'row',
       fields: [
-        { key: 'juego_id', label: 'Juego', type: 'select', options: filterOptions.juegos || [], required: false },
-        { key: 'estado_id', label: 'Estado', type: 'select', options: filterOptions.estados || [], required: false }
+        { key: 'juego_uuid', label: 'Juego', type: 'select', options: filterOptions.juegos || [], required: false },
+        { key: 'estado_uuid', label: 'Estado', type: 'select', options: filterOptions.estados || [], required: false }
       ]
     },
     {
       type: 'row',
       fields: [
-        { key: 'sociedad_id', label: 'Sociedad', type: 'select', options: filterOptions.sociedades || [], required: false },
-        { key: 'valor_id', label: 'Valor', type: 'select', options: filterOptions.valores || [], required: false }
+        { key: 'sociedad_uuid', label: 'Sociedad', type: 'select', options: filterOptions.sociedades || [], required: false },
+        { key: 'valor_uuid', label: 'Valor', type: 'select', options: filterOptions.valores || [], required: false }
       ]
     },
     {
       type: 'row',
       fields: [
-        { key: 'modelo_id', label: 'Modelo', type: 'select', options: modelosForCreate, required: false },
-        { key: 'tipo_id', label: 'Tipo', type: 'select', options: filterOptions.tipos || [], required: false }
+        { key: 'modelo_uuid', label: 'Modelo', type: 'select', options: modelosForCreate, required: false },
+        { key: 'tipo_uuid', label: 'Tipo', type: 'select', options: filterOptions.tipos || [], required: false }
       ]
     },
     {
       type: 'row',
       fields: [
-        { key: 'modo_id', label: 'Modo', type: 'select', options: filterOptions.modos || [], required: false },
-        { key: 'legal_id', label: 'Legal', type: 'select', options: filterOptions.legales || [], required: false }
+        { key: 'modo_uuid', label: 'Modo', type: 'select', options: filterOptions.modos || [], required: false },
+        { key: 'legal_uuid', label: 'Legal', type: 'select', options: filterOptions.legales || [], required: false }
       ]
     },
     {
@@ -367,7 +392,14 @@
   ];
 
   async function handleCreate(event) {
-    const draft = event.detail;
+    let draft = { ...event.detail };
+    if (!draft.uuid && typeof crypto !== 'undefined' && crypto.randomUUID) {
+      draft.uuid = crypto.randomUUID();
+    }
+    const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal'];
+    fkMap.forEach(f => {
+      if (draft[`${f}_uuid`] && !draft[`${f}_id`]) draft[`${f}_id`] = draft[`${f}_uuid`];
+    });
     try {
       const res = await fetch('/api/master/maquinas', {
         method: 'POST',
@@ -377,56 +409,106 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Máquina registrada exitosamente', 'success');
-        await loadServerData({ page: 1 });
+        const created = json.data || draft;
+        await upsertLocalItem('maquinas', created);
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+        loadServerData({ page: 1 }).catch(() => {});
       } else {
         throw new Error(json.error || 'Error al guardar máquina');
       }
     } catch (err) {
-      triggerToast(`Error al crear: ${err.message}`, 'error');
+      console.warn('Operando offline para máquina: guardando localmente y encolando outbox.');
+      const localItem = { uuid: draft.uuid, id: draft.uuid, ...draft, created_at: new Date().toISOString() };
+      await upsertLocalItem('maquinas', localItem);
+      await queueOutboxAction({
+        entity: 'maquinas',
+        action: 'create',
+        endpoint: '/api/master/maquinas',
+        method: 'POST',
+        payload: draft,
+        uuid: draft.uuid
+      });
+      items = [localItem, ...items];
+      totalCount++;
+      triggerToast('Máquina registrada en modo offline', 'info');
     }
   }
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
+    const payload = { ...draft };
+    const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal'];
+    fkMap.forEach(f => {
+      if (payload[`${f}_uuid`] && !payload[`${f}_id`]) payload[`${f}_id`] = payload[`${f}_uuid`];
+    });
     try {
-      const res = await fetch(`/api/master/maquinas/${id}`, {
+      const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
+        body: JSON.stringify(payload)
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Máquina actualizada exitosamente', 'success');
-        await loadServerData();
+        await upsertLocalItem('maquinas', json.data || { uuid: targetUuid, id: targetUuid, ...payload });
+        items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+        loadServerData().catch(() => {});
       } else {
         throw new Error(json.error || 'Error al actualizar máquina');
       }
     } catch (err) {
-      triggerToast(`Error al actualizar: ${err.message}`, 'error');
-      await loadServerData();
+      console.warn('Operando offline para actualizar máquina: guardando localmente y encolando outbox.');
+      const updated = { uuid: targetUuid, id: targetUuid, ...payload, updated_at: new Date().toISOString() };
+      await upsertLocalItem('maquinas', updated);
+      await queueOutboxAction({
+        entity: 'maquinas',
+        action: 'update',
+        endpoint: `/api/master/maquinas/${targetUuid}`,
+        method: 'PUT',
+        payload,
+        targetId: targetUuid
+      });
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      triggerToast('Actualización guardada en modo offline', 'info');
     }
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await fetch(`/api/master/maquinas/${id}`, {
+      const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
         method: 'DELETE'
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         triggerToast('Máquina eliminada exitosamente', 'success');
+        await deleteLocalItem('maquinas', targetUuid);
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
         if (onResult) onResult({ success: true });
-        await loadServerData();
+        loadServerData().catch(() => {});
       } else if (json && json.blocked) {
         if (onResult) onResult(json);
       } else {
-        triggerToast(json.message || json.error || 'No se pudo eliminar la máquina', 'error');
-        if (onResult) onResult({ error: true, message: json.message || json.error });
+        throw new Error(json.message || json.error || 'No se pudo eliminar la máquina');
       }
     } catch (err) {
-      triggerToast(`Error al eliminar: ${err.message}`, 'error');
-      if (onResult) onResult({ error: true });
+      console.warn('Operando offline para eliminar máquina: encolando outbox.');
+      await deleteLocalItem('maquinas', targetUuid);
+      await queueOutboxAction({
+        entity: 'maquinas',
+        action: 'delete',
+        endpoint: `/api/master/maquinas/${targetUuid}`,
+        method: 'DELETE',
+        targetId: targetUuid
+      });
+      items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+      totalCount = Math.max(0, totalCount - 1);
+      triggerToast('Eliminación guardada en modo offline', 'info');
+      if (onResult) onResult({ success: true });
     }
   }
 

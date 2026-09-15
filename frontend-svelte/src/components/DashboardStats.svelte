@@ -26,16 +26,16 @@
     const user = $currentUserStore;
     const userId = user?.id || 1;
     if (user && Array.isArray(user.salas) && user.salas.length > 0)
-      return user.salas.map((s) => (typeof s === "object" ? s.id : Number(s))).filter(Boolean);
+      return user.salas.map((s) => (typeof s === "object" ? String(s.id) : String(s))).filter(Boolean);
     const masterMap = $masterUserSalasStore;
     if (masterMap && typeof masterMap === "object" && !Array.isArray(masterMap)) {
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList))
-        return userList.map((s) => (typeof s === "object" ? s.id : Number(s))).filter(Boolean);
+        return userList.map((s) => (typeof s === "object" ? String(s.id) : String(s))).filter(Boolean);
     }
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0)
-      return authSalas.map((s) => (typeof s === "object" ? s.id : Number(s))).filter(Boolean);
+      return authSalas.map((s) => (typeof s === "object" ? String(s.id) : String(s))).filter(Boolean);
     return [];
   })();
 
@@ -202,8 +202,8 @@
         if (json && json.success && Array.isArray(json.data)) {
           let list = json.data;
           if (assignedSalaIds.length > 0) {
-            const allowed = new Set(assignedSalaIds.map(Number));
-            list = list.filter((c) => allowed.has(Number(c.sala_id)));
+            const allowed = new Set(assignedSalaIds.map(String));
+            list = list.filter((c) => allowed.has(String(c.sala_id)));
           }
           monthBirthdays = list.map((c) => ({
             ...c,
@@ -679,12 +679,12 @@
     // Suscripción al WebSocket para cualquier nuevo marcaje en vivo
     unsubscribeAttlog = latestAttlogEventStore.subscribe((rec) => {
       if (!rec) return;
-      const recSalaId = Number(rec.sala_id || rec.dispositivo_sala_id);
-      if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(recSalaId)) return;
+      const recSalaId = rec.sala_id || rec.dispositivo_sala_id;
+      if (recSalaId && assignedSalaIds.length > 0 && !assignedSalaIds.includes(String(recSalaId))) return;
       const timeRec = new Date(rec.event_time).getTime() || 0;
       const timeCur = latestRecord ? (new Date(latestRecord.event_time).getTime() || 0) : 0;
-      if (!latestRecord || timeRec > timeCur || (timeRec === timeCur && Number(rec.id || 0) >= Number(latestRecord.id || 0))) {
-        if (lastSeenRecordId !== null && Number(lastSeenRecordId) !== Number(rec.id)) {
+      if (!latestRecord || timeRec > timeCur || (timeRec === timeCur && String(rec.id || 0) >= String(latestRecord.id || 0))) {
+        if (lastSeenRecordId !== null && String(lastSeenRecordId) !== String(rec.id)) {
           triggerFlashRecord();
           fetchAttlogsStats();
         }

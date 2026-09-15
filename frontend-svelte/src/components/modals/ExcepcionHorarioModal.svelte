@@ -206,16 +206,16 @@
     // 1. Mapeo de IDs de horarios directamente asignados al empleado
     const assignedMap = new Map();
     (empleado?.horarios_asignados || []).forEach(h => {
-      if (h && h.id) assignedMap.set(Number(h.id), h);
+      if (h && h.id) assignedMap.set(String(h.id), h);
     });
     (assignedPlantillasEmp || []).forEach(h => {
-      if (h && h.id) assignedMap.set(Number(h.id), h);
+      if (h && h.id) assignedMap.set(String(h.id), h);
     });
 
     // 2. Horarios asignados al empleado en su sala
     if (assignedMap.size > 0) {
-      const foundInSala = (plantillasSala || []).filter(p => assignedMap.has(Number(p.id)));
-      const foundIds = new Set(foundInSala.map(p => Number(p.id)));
+      const foundInSala = (plantillasSala || []).filter(p => assignedMap.has(String(p.id)));
+      const foundIds = new Set(foundInSala.map(p => String(p.id)));
       const missingFromSala = [];
       assignedMap.forEach((h, id) => {
         if (!foundIds.has(id)) {
@@ -237,10 +237,10 @@
       // 1. Prioridad: Verificar si es una Excepción de Catálogo (Permiso, Reposo, Vacaciones, Falta, Feriado, o Día Libre)
       let excMatch = null;
       if (dia.excepcion_tipo_id) {
-        excMatch = (excepcionesList || []).find(e => Number(e.id) === Number(dia.excepcion_tipo_id));
+        excMatch = (excepcionesList || []).find(e => String(e.id) === String(dia.excepcion_tipo_id));
       }
       if (!excMatch && shiftTipo === 'excepcion' && rawId) {
-        excMatch = (excepcionesList || []).find(e => Number(e.id) === Number(rawId));
+        excMatch = (excepcionesList || []).find(e => String(e.id) === String(rawId));
       }
       if (!excMatch && currentCode && currentCode !== 'EX') {
         excMatch = (excepcionesList || []).find(e => e.codigo === currentCode);
@@ -413,8 +413,8 @@
       let selectedShiftObj = null;
 
       if (val.startsWith('EXCEPCION_')) {
-        excepcionId = Number(val.replace('EXCEPCION_', ''));
-        const excObj = (excepcionesList || []).find(e => Number(e.id) === Number(excepcionId));
+        excepcionId = val.replace('EXCEPCION_', '');
+        const excObj = (excepcionesList || []).find(e => String(e.id) === String(excepcionId));
         isLibre = excObj ? (excObj.codigo === 'L' || (excObj.descripcion && excObj.descripcion.toLowerCase().includes('libre'))) : false;
         selectedShiftObj = excObj ? {
           id: excObj.id,
@@ -424,8 +424,8 @@
           es_libre: isLibre
         } : null;
       } else if (val.startsWith('PLANTILLA_')) {
-        plantillaId = Number(val.replace('PLANTILLA_', ''));
-        const pObj = [...(plantillasSala || []), ...(horariosEmpleado || [])].find(p => Number(p.id) === Number(plantillaId));
+        plantillaId = val.replace('PLANTILLA_', '');
+        const pObj = [...(plantillasSala || []), ...(horariosEmpleado || [])].find(p => String(p.id) === String(plantillaId));
         isLibre = pObj ? (pObj.codigo === 'L' || pObj.nombre?.toUpperCase() === 'LIBRE') : false;
         selectedShiftObj = pObj ? { ...pObj, tipo: 'horario', es_libre: isLibre } : null;
       } else if (val === 'BASE_L') {
@@ -521,8 +521,8 @@
           continue;
         }
         if (selectedValue && selectedValue.startsWith('PLANTILLA_')) {
-          const pId = Number(selectedValue.replace('PLANTILLA_', ''));
-          const pObj = (plantillasSala || []).find(p => Number(p.id) === pId);
+          const pId = selectedValue.replace('PLANTILLA_', '');
+          const pObj = (plantillasSala || []).find(p => String(p.id) === String(pId));
           if (pObj && !pObj.hora_entrada && !pObj.hora_salida) {
             continue;
           }
@@ -532,8 +532,8 @@
       // REGLA 2: Selección de Entrada (únicamente marcajes tipo 'E')
       let targetPlantillas = [];
       if (ctx.fechaStr === dia?.fechaStr && selectedValue && selectedValue.startsWith('PLANTILLA_')) {
-        const pId = Number(selectedValue.replace('PLANTILLA_', ''));
-        const pObj = (plantillasSala || []).find(p => Number(p.id) === pId);
+        const pId = selectedValue.replace('PLANTILLA_', '');
+        const pObj = (plantillasSala || []).find(p => String(p.id) === String(pId));
         if (pObj && pObj.hora_entrada) {
           targetPlantillas = [pObj];
         }

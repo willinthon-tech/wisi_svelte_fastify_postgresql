@@ -10,6 +10,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import { masterModosActions, masterModosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   let initial = {};
@@ -43,6 +44,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('modos');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allModos) && allModos.length > 0) {
+        items = allModos;
+        totalCount = allModos.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano desde backend
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -67,10 +81,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('modos', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar modos del servidor', 'error');
+      console.warn('Fallback local IndexedDB para modos:', err);
+      const local = await getLocalItems('modos');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterModosStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -80,20 +101,24 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Modo', bold: true, sortable: true, editable: true }
   ];
 
   $: createFields = [
-    { key: 'nombre', label: 'Nombre del Modo', type: 'text', placeholder: 'Ej. Standalone, Progresivo Mystery, Progresivo Linkeado...', required: true }
+    { key: 'nombre', label: 'Nombre del Modo', type: 'text', placeholder: 'Ej. Online, Standalone, Progresivo...', required: true }
   ];
 
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterModosActions.add(draft);
+      const created = await masterModosActions.add(draft);
       triggerToast('Modo creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear modo: ${err.message}`, 'error');
     }
@@ -101,25 +126,34 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterModosActions.update(id, draft);
+      await masterModosActions.update(targetUuid, draft);
       triggerToast('Modo actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar modo: ${err.message}`, 'error');
     }
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterModosActions.delete(id);
+      const res = await masterModosActions.delete(targetUuid);
       if (res && res.blocked) {
-        onResult(res);
+        if (onResult) {
+          onResult(res);
+        } else {
+          triggerToast(res.message || 'No se puede eliminar porque tiene máquinas vinculadas.', 'warning');
+        }
       } else {
-        triggerToast('Modo eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        triggerToast(`Modo eliminado exitosamente`, 'success');
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar modo: ${err.message}`, 'error');

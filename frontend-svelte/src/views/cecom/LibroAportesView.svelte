@@ -24,7 +24,7 @@
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
   $: canAdd = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canAdd) : true;
 
-  $: targetSalaId = Number(libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
+  $: targetSalaId = (libro?.sala_id || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_id) || null;
   $: targetSalaUuid = libro?.sala_uuid || ($masterLibrosStore || []).find(l => (libroId && (String(l.uuid) === String(libroId) || String(l.id) === String(libroId))))?.sala_uuid || null;
 
   // --- ESTADO DEL FORMULARIO ---
@@ -69,9 +69,9 @@
   // Encabezado superior oscuro (ej. "Roraima - 10/09/2026")
   $: tableHeaderTitle = (() => {
     const salaName = libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
+      ($masterSalasStore || []).find(s => String(s.id) === String(libro?.sala_id))?.nombre ||
       libro?.sala_nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
+      ($masterSalasStore || []).find(s => String(s.id) === String(libro?.sala_id))?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();
@@ -111,7 +111,7 @@
   $: listaRangos = (() => {
     const storeRangos = $masterRangosStore || [];
     const list = storeRangos.length > 0 ? storeRangos : serverRangos;
-    return [...list].sort((a, b) => Number(a.id) - Number(b.id));
+    return [...list].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }));
   })();
 
   // Coincidencias de búsqueda de Rangos (idéntico a empleados)
@@ -128,8 +128,8 @@
   $: listaEmpleados = ($masterEmpleadosStore || [])
     .filter(e => {
       if (targetSalaUuid && e.sala_uuid) {
-        if (e.sala_uuid !== targetSalaUuid) return false;
-      } else if (targetSalaId && e.sala_id && Number(e.sala_id) !== targetSalaId) {
+        if (String(e.sala_uuid) !== String(targetSalaUuid)) return false;
+      } else if (targetSalaId && e.sala_id && String(e.sala_id) !== String(targetSalaId)) {
         return false;
       }
       if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) {
@@ -138,16 +138,16 @@
       return true;
     })
     .map(e => {
-      const fullName = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || `Empleado #${e.id}`;
+      const fullName = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || (e.uuid ? `Empleado #${e.uuid.slice(0, 8)}` : `Empleado #${e.id}`);
       return {
-        id: e.id,
-        uuid: e.uuid || null,
+        uuid: e.uuid || e.id,
+        id: e.uuid || e.id,
         nombre: fullName,
         cedula: e.cedula || '',
         cargo_nombre: (e.cargo_nombre || '').trim() || 'General',
         departamento_nombre: (e.departamento_nombre || '').trim(),
         foto: e.foto || null,
-        sala_id: e.sala_id
+        sala_uuid: e.sala_uuid || e.sala_id
       };
     })
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -164,8 +164,8 @@
     }).slice(0, 10);
   })();
 
-  // Registros ordenados por el más reciente primero (ID DESC)
-  $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
+  // Registros ordenados por el más reciente primero (UUID / ID DESC)
+  $: sortedRecords = [...records].sort((a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime() || String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')));
 
   // --- CÁLCULOS ESTADÍSTICOS Y TOTALES ---
   $: aportesList = records.filter(r => (r.tipo || 'Aporte') === 'Aporte');
@@ -184,17 +184,18 @@
   $: resumenRangos = (() => {
     const map = new Map();
     for (const r of records) {
-      const rId = r.rango_id || 0;
-      const rName = r.rango_nombre || `Rango #${rId}`;
-      if (!map.has(rId)) {
-        map.set(rId, {
-          rango_id: rId,
+      const rKey = r.rango_uuid || r.rango_id || 0;
+      const rName = r.rango_nombre || (r.rango_uuid ? `Rango #${r.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
+      if (!map.has(rKey)) {
+        map.set(rKey, {
+          rango_uuid: r.rango_uuid || rKey,
+          rango_id: rKey,
           rango_nombre: rName,
           cantidad: 0,
           total_monto: 0
         });
       }
-      const entry = map.get(rId);
+      const entry = map.get(rKey);
       entry.cantidad += 1;
       const val = Number(r.monto) || 0;
       if (r.tipo === 'Devolución') {
@@ -217,11 +218,12 @@
   $: resumenEmpleados = (() => {
     const map = new Map();
     for (const r of records) {
-      const eId = r.empleado_id || 0;
-      if (!map.has(eId)) {
-        map.set(eId, {
-          empleado_id: eId,
-          empleado_nombre: r.empleado_nombre || `Empleado #${eId}`,
+      const eKey = r.empleado_uuid || r.empleado_id || 0;
+      if (!map.has(eKey)) {
+        map.set(eKey, {
+          empleado_uuid: r.empleado_uuid || eKey,
+          empleado_id: eKey,
+          empleado_nombre: r.empleado_nombre || (r.empleado_uuid ? `Empleado #${r.empleado_uuid.slice(0, 8)}` : `Empleado #${eKey}`),
           empleado_cedula: r.empleado_cedula || '',
           cargo_nombre: r.cargo_nombre || 'General',
           cantidad: 0,
@@ -229,7 +231,7 @@
           rangos_usados: new Set()
         });
       }
-      const entry = map.get(eId);
+      const entry = map.get(eKey);
       entry.cantidad += 1;
       const val = Number(r.monto) || 0;
       if (r.tipo === 'Devolución') {
@@ -507,12 +509,14 @@
 
     isSaving = true;
     const itemUuid = crypto.randomUUID();
+    const empUuid = selectedEmpleado?.uuid || selectedEmpleado?.id || empId;
+    const rUuid = selectedRango?.uuid || selectedRango?.id || rId;
     const payload = {
       uuid: itemUuid,
-      empleado_id: selectedEmpleado?.id || empId,
-      empleado_uuid: selectedEmpleado?.uuid || null,
-      rango_id: selectedRango?.id || rId,
-      rango_uuid: selectedRango?.uuid || null,
+      empleado_uuid: empUuid,
+      empleado_id: empUuid,
+      rango_uuid: rUuid,
+      rango_id: rUuid,
       monto: numMonto,
       tipo: tipo || 'Aporte'
     };
@@ -527,7 +531,7 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast(`${tipo === 'Devolución' ? 'Devolución' : 'Aporte'} guardado correctamente`, 'success');
-        const savedData = json.data || { ...payload, id: `local_${Date.now()}` };
+        const savedData = json.data || { ...payload, uuid: itemUuid };
         await upsertLocalItem('libro_aportes', savedData);
         
         // Limpiar formulario
@@ -551,17 +555,15 @@
     } catch (err) {
       console.warn('[LocalDb] Modo Offline: guardando aporte en base de datos local y encolando outbox:', err);
       const offlineRecord = {
-        id: `temp_${Date.now()}`,
         uuid: itemUuid,
-        libro_id: lId,
-        libro_uuid: libro?.uuid || null,
-        empleado_id: selectedEmpleado?.id || empId,
-        empleado_uuid: selectedEmpleado?.uuid || null,
+        libro_uuid: lId,
+        empleado_uuid: empUuid,
+        empleado_id: empUuid,
         empleado_nombre: selectedEmpleado?.nombre || '',
         empleado_cedula: selectedEmpleado?.cedula || '',
         cargo_nombre: selectedEmpleado?.cargo_nombre || '',
-        rango_id: selectedRango?.id || rId,
-        rango_uuid: selectedRango?.uuid || null,
+        rango_uuid: rUuid,
+        rango_id: rUuid,
         rango_nombre: selectedRango?.nombre || '',
         monto: numMonto,
         tipo: tipo || 'Aporte',
@@ -606,29 +608,29 @@
     }
 
     const lId = libro?.uuid || libroId || libro?.id;
-    const recordId = record.uuid || record.id;
+    const recordUuid = record.uuid || record.id;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${recordId}`, {
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${recordUuid}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'success');
-        records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-        await deleteLocalItem('libro_aportes', recordId);
+        records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+        await deleteLocalItem('libro_aportes', recordUuid);
       } else {
         triggerToast(json?.error || 'Error al eliminar', 'error');
       }
     } catch (err) {
       console.warn('[LocalDb] Modo Offline para eliminación de aporte:', err);
-      records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-      await deleteLocalItem('libro_aportes', recordId);
+      records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+      await deleteLocalItem('libro_aportes', recordUuid);
       await queueOutboxAction({
         entity: 'libro_aportes',
         action: 'delete',
-        endpoint: `/api/master/libros/${lId}/aportes-maquinas/${recordId}`,
+        endpoint: `/api/master/libros/${lId}/aportes-maquinas/${recordUuid}`,
         method: 'DELETE',
-        targetId: recordId
+        targetId: recordUuid
       });
       triggerToast('Modo Offline: Registro eliminado localmente.', 'info');
     }
@@ -641,8 +643,8 @@
     }
     editingRecord = record;
     modalTipo = record.tipo || 'Aporte';
-    modalEmpleadoId = record.empleado_id;
-    modalRangoId = String(record.rango_id);
+    modalEmpleadoId = record.empleado_uuid || record.empleado_id;
+    modalRangoId = String(record.rango_uuid || record.rango_id);
     modalMonto = String(record.monto);
     showModalEditar = true;
   }
@@ -670,9 +672,11 @@
       return;
     }
 
-    const recordId = editingRecord.uuid || editingRecord.id;
+    const targetUuid = editingRecord.uuid || editingRecord.id;
     const payload = {
+      empleado_uuid: modalEmpleadoId,
       empleado_id: modalEmpleadoId,
+      rango_uuid: modalRangoId,
       rango_id: modalRangoId,
       monto: numMonto,
       tipo: modalTipo || 'Aporte'
@@ -680,7 +684,7 @@
 
     isSavingModal = true;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${recordId}`, {
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${targetUuid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -703,15 +707,15 @@
         ...payload,
         updated_at: new Date().toISOString()
       };
-      records = records.map(r => String(r.uuid || r.id) === String(recordId) ? updatedOffline : r);
+      records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? updatedOffline : r);
       await upsertLocalItem('libro_aportes', updatedOffline);
       await queueOutboxAction({
         entity: 'libro_aportes',
         action: 'update',
-        endpoint: `/api/master/libros/${lId}/aportes-maquinas/${recordId}`,
+        endpoint: `/api/master/libros/${lId}/aportes-maquinas/${targetUuid}`,
         method: 'PUT',
         payload: updatedOffline,
-        targetId: recordId
+        targetId: targetUuid
       });
       triggerToast('Modo Offline: Registro editado localmente.', 'info');
       cerrarModalEditar();
@@ -1039,7 +1043,7 @@
                   </td>
                 </tr>
               {:else}
-                {#each sortedRecords as record, idx (record.id)}
+                {#each sortedRecords as record, idx (record.uuid || record.id)}
                   <tr class="cliente-row">
                     <td class="td-center td-num">{idx + 1}</td>
                     <td class="td-center td-tipo-col">
@@ -1055,7 +1059,7 @@
                       </div>
                     </td>
                     <td class="td-center td-tipo">
-                      <span class="badge-tipo badge-pago">{record.rango_nombre || `Rango #${record.rango_id}`}</span>
+                      <span class="badge-tipo badge-pago">{record.rango_nombre || (record.rango_uuid ? `Rango #${record.rango_uuid.slice(0, 8)}` : `Rango #${record.rango_id}`)}</span>
                     </td>
                     <td class="td-right td-monto">
                       <span class="monto-value {record.tipo === 'Devolución' ? 'monto-devolucion' : ''}">
@@ -1227,7 +1231,7 @@
   <div class="modal-backdrop-fixed">
     <div class="modal-dialog-box" role="dialog" aria-modal="true" aria-labelledby="modal-editar-title">
       <div class="modal-header">
-        <h4 id="modal-editar-title" class="modal-title">Editar Aporte #{editingRecord.id}</h4>
+        <h4 id="modal-editar-title" class="modal-title">Editar Aporte #{editingRecord.codigo || (editingRecord.uuid ? editingRecord.uuid.slice(0, 8) : editingRecord.id)}</h4>
         <button type="button" class="btn-close-modal" on:click={cerrarModalEditar} aria-label="Cerrar">
           &times;
         </button>
@@ -1280,7 +1284,7 @@
             <label for="modal-select-emp" class="modal-field-label">Empleado: *</label>
             <select id="modal-select-emp" class="form-input" bind:value={modalEmpleadoId} required>
               {#each listaEmpleados as e}
-                <option value={e.id}>{e.nombre} ({e.cargo_nombre})</option>
+                <option value={e.uuid || e.id}>{e.nombre} ({e.cargo_nombre})</option>
               {/each}
             </select>
           </div>
@@ -1290,7 +1294,7 @@
             <label for="modal-select-rg" class="modal-field-label">Rango: *</label>
             <select id="modal-select-rg" class="form-input" bind:value={modalRangoId} required>
               {#each listaRangos as r}
-                <option value={String(r.id)}>{r.nombre}</option>
+                <option value={String(r.uuid || r.id)}>{r.nombre}</option>
               {/each}
             </select>
           </div>

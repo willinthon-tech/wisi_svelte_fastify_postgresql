@@ -123,8 +123,9 @@
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     const masterMap = $masterUserSalasStore;
@@ -136,16 +137,18 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
-          .filter(Boolean);
+          .map((s) => (typeof s === "object" ? s.id : s))
+          .filter(Boolean)
+          .map(String);
       }
     }
 
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     return [];
@@ -160,13 +163,13 @@
 
   async function loadPlantillasSala(salaId) {
     if (!salaId) return;
-    if (currentLoadedSalaId === Number(salaId) && plantillasSalaExcepcion.length > 0) return;
+    if (String(currentLoadedSalaId) === String(salaId) && plantillasSalaExcepcion.length > 0) return;
     try {
       const res = await fetch(`/api/master/horarios?sala_ids=${salaId}&limit=1000`);
       const json = await res.json();
       if (json && json.success) {
         plantillasSalaExcepcion = json.data || [];
-        currentLoadedSalaId = Number(salaId);
+        currentLoadedSalaId = String(salaId);
       }
     } catch (e) {
       console.error(e);
@@ -367,14 +370,14 @@
 
     // 1. Restricción estricta por salas asignadas al usuario logueado
     if (assignedSalaIds && assignedSalaIds.length > 0) {
-      const allowedSet = new Set(assignedSalaIds.map(Number));
-      list = list.filter((e) => allowedSet.has(Number(e.sala_id)));
+      const allowedSet = new Set(assignedSalaIds.map(String));
+      list = list.filter((e) => allowedSet.has(String(e.sala_id)));
     }
 
     // 2. Filtro por salas seleccionadas en el multi-select
     if (selectedSalas && selectedSalas.length > 0) {
-      const setSalas = new Set(selectedSalas.map(Number));
-      list = list.filter((e) => setSalas.has(Number(e.sala_id)));
+      const setSalas = new Set(selectedSalas.map(String));
+      list = list.filter((e) => setSalas.has(String(e.sala_id)));
     }
 
     const q = (searchQuery || "").toLowerCase().trim();
@@ -460,14 +463,14 @@
   $: availableSalas = (function () {
     const raw = filterOptions.salas || [];
     if (!assignedSalaIds || assignedSalaIds.length === 0) return raw;
-    return raw.filter((s) => assignedSalaIds.map(Number).includes(Number(s.id)));
+    return raw.filter((s) => assignedSalaIds.includes(String(s.id)));
   })();
 
   // Dispositivos strictly filtered by user permissions and selected salas
   $: preparedDispositivos = (function () {
     let list = dispositivos || [];
     if (assignedSalaIds && assignedSalaIds.length > 0) {
-      list = list.filter((d) => assignedSalaIds.map(Number).includes(Number(d.sala_id)));
+      list = list.filter((d) => assignedSalaIds.includes(String(d.sala_id)));
     }
     return list.map((d) => ({
       id: d.id,

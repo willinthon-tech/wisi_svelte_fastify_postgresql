@@ -16,10 +16,10 @@
 
   // Sincronizar lista local cuando se abre el modal o cambian los modulos/página
   $: if (show && pagina && modulos) {
-    const pageId = Number(pagina.id);
+    const pageUuid = String(pagina.uuid || pagina.id);
     const filtered = modulos
-      .filter(m => Number(m.page_id) === pageId)
-      .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || a.id - b.id);
+      .filter(m => String(m.page_uuid || m.pagina_uuid || m.page_id || m.pagina_id) === pageUuid)
+      .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.uuid || a.id || '').localeCompare(String(b.uuid || b.id || '')));
     
     // Clonar para manipulación local
     items = filtered.map((m, idx) => ({ ...m, local_order: idx + 1 }));
@@ -90,7 +90,8 @@
 
     try {
       const payload = items.map((m, idx) => ({
-        id: m.id,
+        uuid: m.uuid || m.id,
+        id: m.uuid || m.id,
         orden: idx + 1
       }));
 
@@ -99,7 +100,6 @@
       dispatch('saved');
       close();
     } catch (err) {
-      console.error(err);
       triggerToast(`Error al guardar el orden: ${err.message}`, 'error');
     } finally {
       isSaving = false;
@@ -107,26 +107,18 @@
   }
 
   function close() {
-    show = false;
-    draggedIndex = null;
-    dragOverIndex = null;
     dispatch('close');
   }
 </script>
 
 {#if show && pagina}
-  <div 
-    class="modal-backdrop"
-    on:click|self={close}
-    role="presentation"
-  >
+  <div class="modal-backdrop" on:click|self={close}>
     <div class="modal-card">
       <!-- Modal Header -->
       <div class="modal-header">
         <div class="header-titles">
-          <div class="header-badge">
-            <span class="badge-icon">↕️</span>
-            <span>ORGANIZACIÓN DE MÓDULOS</span>
+          <div class="badge-tag">
+            <span>Configuración de Estructura</span>
           </div>
           <h3 class="header-main-title">
             Ordenar Módulos de <span class="page-highlight">"{pagina.nombre}"</span>
@@ -149,12 +141,11 @@
       <div class="modal-body">
         {#if items.length === 0}
           <div class="empty-state">
-            <span>ℹ️</span>
             <p>Esta página no tiene módulos asignados actualmente.</p>
           </div>
         {:else}
           <div class="dnd-list">
-            {#each items as item, index (item.id)}
+            {#each items as item, index (item.uuid || item.id)}
               <div
                 class="dnd-item {draggedIndex === index ? 'is-dragging' : ''} {dragOverIndex === index ? 'is-drag-over' : ''}"
                 draggable="true"

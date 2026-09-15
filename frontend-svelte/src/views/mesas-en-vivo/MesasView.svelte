@@ -22,13 +22,14 @@
   } from '../../controllers/master.store.js';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
+  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id) ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? (s.uuid || s.id) : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -82,6 +83,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('mesas');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allMesas) && allMesas.length > 0) {
+        items = allMesas;
+        totalCount = allMesas.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano desde backend
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -144,10 +158,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('mesas', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar mesas del servidor', 'error');
+      console.warn('Fallback local IndexedDB para mesas:', err);
+      const local = await getLocalItems('mesas');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterMesasStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -161,30 +182,36 @@
   $: filteredSalasStore = ($masterSalasStore || []).filter(s => {
     if (s.grupo_id && Number(s.grupo_id) === 2) return false;
     if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    return assignedSalaIds.map(Number).includes(Number(s.id));
+    return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
   $: globalJuegosStore = $masterJuegosStore || [];
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: true },
-    { key: 'sala_nombre', keyId: 'sala_id', label: 'Sala Asignada', sortable: true, editable: false },
-    { key: 'juego_nombre', keyId: 'juego_id', label: 'Juego Asignado', sortable: true, editable: false }
+    { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false },
+    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'Juego Asignado', sortable: true, editable: false }
   ];
 
   $: createFields = [
     { key: 'nombre', label: 'Nombre de la Mesa', type: 'text', placeholder: 'Ej. Mesa 01', required: true },
-    { key: 'sala_id', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true },
-    { key: 'juego_id', label: 'Juego Asignado', type: 'select', options: globalJuegosStore, required: true }
+    { key: 'sala_uuid', label: 'Sala Asignada', type: 'select', options: filteredSalasStore, required: true },
+    { key: 'juego_uuid', label: 'Juego Asignado', type: 'select', options: globalJuegosStore, required: true }
   ];
 
   async function handleCreate(event) {
-    const draft = event.detail;
+    const draft = { ...event.detail };
+    if (draft.sala_uuid && !draft.sala_id) draft.sala_id = draft.sala_uuid;
+    if (draft.juego_uuid && !draft.juego_id) draft.juego_id = draft.juego_uuid;
     try {
-      await masterMesasActions.add(draft);
+      const created = await masterMesasActions.add(draft);
       triggerToast('Mesa creada exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear mesa: ${err.message}`, 'error');
     }
@@ -192,10 +219,15 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const payload = { ...draft };
+    if (payload.sala_uuid && !payload.sala_id) payload.sala_id = payload.sala_uuid;
+    if (payload.juego_uuid && !payload.juego_id) payload.juego_id = payload.juego_uuid;
+    const targetUuid = id;
     try {
-      await masterMesasActions.update(id, draft);
+      await masterMesasActions.update(targetUuid, payload);
       triggerToast('Mesa actualizada exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar mesa: ${err.message}`, 'error');
     }
@@ -203,14 +235,17 @@
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterMesasActions.delete(id);
+      const res = await masterMesasActions.delete(targetUuid);
       if (res && res.blocked) {
         onResult(res);
       } else {
         triggerToast('Mesa desincorporada exitosamente', 'success');
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
         onResult({ success: true });
-        await loadServerData();
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al desincorporar mesa: ${err.message}`, 'error');
@@ -274,7 +309,7 @@
   bind:searchQuery
   searchPlaceholder="Buscar mesas por nombre, sala, juego o ID..."
   entityType="mesa"
-  uniqueByField="sala_id"
+  uniqueByField="sala_uuid"
   actions={{ 
     edit: true, 
     delete: true, 

@@ -17,11 +17,13 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   $: userSalasMap = $masterUserSalasStore || {};
   $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
+  $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? s.id : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -77,6 +79,17 @@
   onMount(async () => {
     isMounted = true;
     lastFetchedSalaIds = assignedSalaIds.join(',');
+
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('ciclos');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchFilterOptions(),
@@ -134,10 +147,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('ciclos', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar departamentos', 'error');
+      console.warn('Fallback local IndexedDB para ciclos:', err);
+      const local = await getLocalItems('ciclos');
+      const source = (Array.isArray(local) && local.length > 0) ? local : [];
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.departamento_nombre || '').toLowerCase().includes(q) || (x.sala_nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 

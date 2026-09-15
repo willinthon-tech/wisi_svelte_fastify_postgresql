@@ -21,11 +21,13 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   $: userSalasMap = $masterUserSalasStore || {};
   $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
+  $: assignedSalaIds = ((currentUserSalas.length > 0)
     ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => typeof s === 'object' ? s.id : s) : [])).map(String);
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -74,6 +76,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('llaves_borradas');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allLlavesBorradas) && allLlavesBorradas.length > 0) {
+        items = allLlavesBorradas;
+        totalCount = allLlavesBorradas.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -132,10 +147,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('llaves_borradas', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar llaves borradas del servidor', 'error');
+      console.warn('Fallback local IndexedDB para llaves borradas:', err);
+      const local = await getLocalItems('llaves_borradas');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterLlavesStore || []).filter(m => (m.active ?? 1) === 0);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -153,10 +175,13 @@
 
   async function handleRestore(event) {
     const item = event.detail;
+    const targetUuid = item?.uuid || item?.id;
     try {
-      await masterLlavesActions.restore(item.id);
+      await masterLlavesActions.restore(targetUuid);
       triggerToast(`Llave "${item.nombre}" restaurada exitosamente`, 'success');
-      await loadServerData();
+      items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+      totalCount = Math.max(0, totalCount - 1);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al restaurar llave: ${err.message}`, 'error');
     }
@@ -174,7 +199,9 @@
       }
     }
     triggerToast(`${count} llaves restauradas exitosamente`, 'success');
-    await loadServerData();
+    items = items.filter(x => !ids.some(id => String(id) === String(x.id) || String(id) === String(x.uuid)));
+    totalCount = Math.max(0, totalCount - count);
+    loadServerData().catch(() => {});
   }
 </script>
 

@@ -10,6 +10,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import { masterTipoClientesActions, masterTipoClientesStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   let initial = {};
@@ -43,6 +44,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('tipo_clientes');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allTipoClientes) && allTipoClientes.length > 0) {
+        items = allTipoClientes;
+        totalCount = allTipoClientes.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano desde backend
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -67,10 +81,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('tipo_clientes', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar tipos de clientes del servidor', 'error');
+      console.warn('Fallback local IndexedDB para tipo de clientes:', err);
+      const local = await getLocalItems('tipo_clientes');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterTipoClientesStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -80,7 +101,7 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Tipo de Cliente', bold: true, sortable: true, editable: true }
   ];
 
@@ -91,9 +112,13 @@
   async function handleCreate(event) {
     const draft = event.detail;
     try {
-      await masterTipoClientesActions.add(draft);
+      const created = await masterTipoClientesActions.add(draft);
       triggerToast('Tipo de cliente creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear tipo de cliente: ${err.message}`, 'error');
     }
@@ -101,10 +126,12 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
     try {
-      await masterTipoClientesActions.update(id, draft);
+      await masterTipoClientesActions.update(targetUuid, draft);
       triggerToast('Tipo de cliente actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar tipo de cliente: ${err.message}`, 'error');
     }
@@ -112,8 +139,9 @@
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterTipoClientesActions.delete(id || item?.id);
+      const res = await masterTipoClientesActions.delete(targetUuid);
       if (res && res.blocked) {
         if (onResult) {
           onResult(res);
@@ -122,8 +150,10 @@
         }
       } else {
         triggerToast(`Tipo de cliente eliminado exitosamente`, 'success');
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
         if (onResult) onResult({ success: true });
-        await loadServerData();
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar tipo de cliente: ${err.message}`, 'error');

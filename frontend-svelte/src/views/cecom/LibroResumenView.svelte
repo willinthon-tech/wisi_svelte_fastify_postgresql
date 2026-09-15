@@ -268,11 +268,11 @@
 
   // Libro representativo activo (garantizando concordancia de sala y fecha con el libro actual)
   $: activeLibro = (() => {
-    const target = Number(libroId || libro?.id);
-    if (libro && (!target || Number(libro.id) === target)) {
+    const target = libroId || libro?.uuid || libro?.id;
+    if (libro && (!target || String(libro.uuid) === String(target) || String(libro.id) === String(target))) {
       return { ...(resumenData.libro || {}), ...libro };
     }
-    if (resumenData.libro && (!target || Number(resumenData.libro.id) === target)) {
+    if (resumenData.libro && (!target || String(resumenData.libro.uuid) === String(target) || String(resumenData.libro.id) === String(target))) {
       return resumenData.libro;
     }
     return libro || resumenData.libro;
@@ -283,9 +283,9 @@
     const l = activeLibro;
     if (l?.sala_nombre) return l.sala_nombre;
     if (l?.sala_nombre_comercial) return l.sala_nombre_comercial;
-    if (l?.sala_id) {
+    if (l?.sala_uuid || l?.sala_id) {
       const s = ($masterSalasStore || []).find(
-        (sala) => Number(sala.id) === Number(l.sala_id),
+        (sala) => (l.sala_uuid && (sala.uuid === l.sala_uuid || sala.id === l.sala_uuid)) || (l.sala_id && String(sala.uuid || sala.id) === String(l.sala_id)),
       );
       if (s) return s.nombre_comercial || s.nombre;
     }
@@ -348,10 +348,14 @@
     };
   }
 
-  // Ordenar por ID de la tabla (el más reciente/último registrado primero / ID descendente)
-  // Se ordena estrictamente por ID para turnos que cruzan la medianoche (noche a madrugada siguiente)
+  // Ordenar por fecha / ID de la tabla (el más reciente/último registrado primero)
   function sortByMasReciente(list) {
-    return [...(list || [])].sort((a, b) => Number(b.id) - Number(a.id));
+    return [...(list || [])].sort((a, b) => {
+      const timeA = new Date(a.created_at || a.fecha || 0).getTime();
+      const timeB = new Date(b.created_at || b.fecha || 0).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return String(b.uuid || b.id || "").localeCompare(String(a.uuid || a.id || ""));
+    });
   }
 
   $: sortedControlClientes = sortByMasReciente(resumenData.control_clientes);
@@ -379,19 +383,20 @@
 
     // Crear categorías a partir de los tipos configurados
     const categories = availableTiposIncidencia.map(t => ({
-      id: t.id,
+      uuid: t.uuid || t.id,
+      id: t.uuid || t.id,
       nombre: t.nombre,
       items: []
     }));
 
     for (const inc of list) {
-      const incId = inc.tipo_incidencia_id != null ? Number(inc.tipo_incidencia_id) : null;
+      const incUuid = (inc.tipo_incidencia_uuid || inc.tipo_incidencia_id) != null ? String(inc.tipo_incidencia_uuid || inc.tipo_incidencia_id) : null;
       const incTipoNorm = normalizeText(inc.tipo || inc.tipo_incidencia_nombre);
       const descNorm = (inc.descripcion || "").toLowerCase();
 
-      // 1. Coincidencia directa por ID o por Nombre del Tipo
+      // 1. Coincidencia directa por UUID o por Nombre del Tipo
       let matchedCat = categories.find(c => 
-        (incId && Number(c.id) === incId) ||
+        (incUuid && String(c.uuid || c.id) === incUuid) ||
         (normalizeText(c.nombre) === incTipoNorm)
       );
 
@@ -632,11 +637,12 @@
     const list = sortedAportes;
     const map = {};
     for (const a of list) {
-      const rId = a.rango_id || 0;
-      const rNom = a.rango_nombre || `Rango #${rId}`;
-      if (!map[rId]) {
-        map[rId] = {
-          rango_id: rId,
+      const rKey = a.rango_uuid || a.rango_id || 0;
+      const rNom = a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
+      if (!map[rKey]) {
+        map[rKey] = {
+          rango_uuid: a.rango_uuid || rKey,
+          rango_id: rKey,
           rango_nombre: rNom,
           cantidad: 0,
           cantAportes: 0,
@@ -647,18 +653,18 @@
           monto: 0
         };
       }
-      map[rId].cantidad++;
+      map[rKey].cantidad++;
       const val = parseFloat(a.monto) || 0;
       if ((a.tipo || 'Aporte') === 'Devolución') {
-        map[rId].cantDevoluciones++;
-        map[rId].montoDevoluciones += val;
-        map[rId].neto -= val;
-        map[rId].monto -= val;
+        map[rKey].cantDevoluciones++;
+        map[rKey].montoDevoluciones += val;
+        map[rKey].neto -= val;
+        map[rKey].monto -= val;
       } else {
-        map[rId].cantAportes++;
-        map[rId].montoAportes += val;
-        map[rId].neto += val;
-        map[rId].monto += val;
+        map[rKey].cantAportes++;
+        map[rKey].montoAportes += val;
+        map[rKey].neto += val;
+        map[rKey].monto += val;
       }
     }
     const grandTotal = aportesTotales.totalAportes || 1;
@@ -676,12 +682,13 @@
     const list = sortedAportes;
     const map = {};
     for (const a of list) {
-      const empId = a.empleado_id || 0;
-      const empNom = a.empleado_nombre || 'Empleado';
+      const empKey = a.empleado_uuid || a.empleado_id || 0;
+      const empNom = a.empleado_nombre || (a.empleado_uuid ? `Empleado #${a.empleado_uuid.slice(0, 8)}` : 'Empleado');
       const cargoNom = a.cargo_nombre || '—';
-      if (!map[empId]) {
-        map[empId] = {
-          empleado_id: empId,
+      if (!map[empKey]) {
+        map[empKey] = {
+          empleado_uuid: a.empleado_uuid || empKey,
+          empleado_id: empKey,
           empleado_nombre: empNom,
           cargo_nombre: cargoNom,
           cantidad: 0,
@@ -693,18 +700,18 @@
           monto: 0
         };
       }
-      map[empId].cantidad++;
+      map[empKey].cantidad++;
       const val = parseFloat(a.monto) || 0;
       if ((a.tipo || 'Aporte') === 'Devolución') {
-        map[empId].cantDevoluciones++;
-        map[empId].montoDevoluciones += val;
-        map[empId].neto -= val;
-        map[empId].monto -= val;
+        map[empKey].cantDevoluciones++;
+        map[empKey].montoDevoluciones += val;
+        map[empKey].neto -= val;
+        map[empKey].monto -= val;
       } else {
-        map[empId].cantAportes++;
-        map[empId].montoAportes += val;
-        map[empId].neto += val;
-        map[empId].monto += val;
+        map[empKey].cantAportes++;
+        map[empKey].montoAportes += val;
+        map[empKey].neto += val;
+        map[empKey].monto += val;
       }
     }
     const grandTotal = aportesTotales.totalAportes || 1;
@@ -1250,7 +1257,7 @@
                 {#each resumenData.drop_mesas as d}
                   <tr>
                     <td class="cell-mesa-bold"
-                      >{d.mesa_nombre || `Mesa #${d.mesa_id}`}</td
+                      >{d.mesa_nombre || (d.mesa_uuid ? `Mesa #${d.mesa_uuid.slice(0, 8)}` : `Mesa #${d.mesa_id}`)}</td
                     >
                     <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
                     <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
@@ -1322,7 +1329,7 @@
                     <tr>
                       <td class="cell-center">{nov.hora_apertura || "—"}</td>
                       <td class="cell-mesa-name"
-                        >{nov.mesa_nombre || `Mesa #${nov.mesa_id}`}</td
+                        >{nov.mesa_nombre || (nov.mesa_uuid ? `Mesa #${nov.mesa_uuid.slice(0, 8)}` : `Mesa #${nov.mesa_id}`)}</td
                       >
                       <td class="cell-left">{nov.pitboss || "—"}</td>
                       <td class="cell-left">{nov.croupier_apertura || "—"}</td>
@@ -1354,7 +1361,7 @@
         </div>
 
         <div class="incidencias-bloque-tres">
-          {#each incidenciasPorTipo as cat (cat.id)}
+          {#each incidenciasPorTipo as cat (cat.uuid || cat.id)}
             <div class="incidencia-subbloque">
               <div class="incidencia-subbloque-header">
                 <h3 class="incidencia-subbloque-title">
@@ -1743,7 +1750,7 @@
                     <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
                     <td class="cell-center">
                       <span class="tag-tipo tag-rango">
-                        {a.rango_nombre || `Rango #${a.rango_id}`}
+                        {a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${a.rango_id}`)}
                       </span>
                     </td>
                     <td class="cell-total-money font-bold {isAporte ? '' : 'text-danger-money'}">

@@ -240,13 +240,13 @@
 
   function getDevicesForSala(salaId) {
     return $masterDispositivosStore.filter(
-      (d) => Number(d.sala_id) === Number(salaId),
+      (d) => String(d.sala_id) === String(salaId),
     );
   }
 
   function isSalaFullyChecked(salaId, map, devicesStore) {
     const devicesInSala = devicesStore.filter(
-      (d) => Number(d.sala_id) === Number(salaId),
+      (d) => String(d.sala_id) === String(salaId),
     );
     if (devicesInSala.length === 0) return false;
     return devicesInSala.every((d) => !!map[d.id]);
@@ -786,17 +786,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   }
 
   function getGrupoNombre(grupoId) {
-    const g = gruposSalas.find((x) => x.id === Number(grupoId));
-    return g ? g.nombre : Number(grupoId) === 2 ? "GALPÓN" : "SALA";
+    const g = gruposSalas.find((x) => String(x.id) === String(grupoId));
+    return g ? g.nombre : String(grupoId) === "2" ? "GALPÓN" : "SALA";
   }
 
   function getPaginaNombre(pageId) {
-    const p = $masterPaginasStore.find((x) => x.id === Number(pageId));
+    const p = $masterPaginasStore.find((x) => String(x.id) === String(pageId));
     return p ? p.nombre : `Página #${pageId}`;
   }
 
   function getSalaNombre(salaId) {
-    const s = $masterSalasStore.find((x) => x.id === Number(salaId));
+    const s = $masterSalasStore.find((x) => String(x.id) === String(salaId));
     return s ? s.nombre : `Sala #${salaId}`;
   }
 
@@ -978,11 +978,12 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
   async function handleInjectPushConfig(device) {
     if (!device) return;
-    injectingDeviceId = device.id;
+    const deviceUuid = device.uuid || device.id;
+    injectingDeviceId = deviceUuid;
     try {
       const serverUrl = getPublicWebUrl();
       const res = await fetch(
-        `/api/master/dispositivos/${device.id}/inject-push-config`,
+        `/api/master/dispositivos/${deviceUuid}/inject-push-config`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1024,7 +1025,8 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
   async function executeDirectIsapiInjection(device) {
     if (!device || injectingDeviceId) return;
-    injectingDeviceId = device.id;
+    const deviceUuid = device.uuid || device.id;
+    injectingDeviceId = deviceUuid;
     triggerToast(
       `⏳ Inyectando HTTP Listening en '${device.nombre}'...`,
       "info",
@@ -1039,7 +1041,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       };
 
       const res = await fetch(
-        `/api/master/dispositivos/${device.id}/isapi-http-listening`,
+        `/api/master/dispositivos/${deviceUuid}/isapi-http-listening`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1117,7 +1119,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   }
 
   function startInlineEdit(item) {
-    editingInlineId = item.id;
+    editingInlineId = item.uuid || item.id;
     inlineDraft = { ...item };
   }
 
@@ -2579,8 +2581,8 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 </td>
               </tr>
             {:else}
-              {#each filteredItems as item (item.id)}
-              {@const isEditing = editingInlineId === item.id}
+              {#each filteredItems as item (item.uuid || item.id)}
+              {@const isEditing = String(editingInlineId) === String(item.uuid || item.id)}
               <tr
                 style="border-bottom: 1px solid #f1f5f9; background: {isEditing
                   ? '#f0f9ff'
@@ -2588,7 +2590,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
               >
                 <td
                   style="padding: 8px 14px; font-family: monospace; color: #334155; font-weight: 600;"
-                  >#{item.id}</td
+                  >#{item.codigo || (item.uuid ? item.uuid.slice(0, 8) : item.id)}</td
                 >
 
                 {#if activeTab === "salas"}
@@ -2673,10 +2675,10 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       }}
                       title="Definir el orden de los módulos de esta página"
                     >
-                      <span style="font-size: 13px;">↕️</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
                       <span
                         >Ordenar Módulos ({($masterModulosStore || []).filter(
-                          (m) => Number(m.page_id) === Number(item.id),
+                          (m) => String(m.page_uuid || m.page_id) === String(item.uuid || item.id),
                         ).length})</span
                       >
                     </button>
@@ -2834,7 +2836,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 >
                   {#if isEditing}
                     <button
-                      on:click={() => saveInlineEdit(item.id)}
+                      on:click={() => saveInlineEdit(item.uuid || item.id)}
                       type="button"
                       class="btn-flow-sec"
                       style="padding: 4px 8px; font-size: 12px;"
@@ -2864,10 +2866,10 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         type="button"
                         class="btn-flow-sec"
                         style="padding: 4px 8px; font-size: 12px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 700; gap: 4px;"
-                        disabled={injectingDeviceId === item.id}
+                        disabled={String(injectingDeviceId) === String(item.uuid || item.id)}
                         title="Inyectar parámetros guardados en Configuración directamente al biométrico"
                       >
-                        {#if injectingDeviceId === item.id}
+                        {#if String(injectingDeviceId) === String(item.uuid || item.id)}
                           ⏳ Inyectando...
                         {:else}
                           ⚡ HTTP Listener

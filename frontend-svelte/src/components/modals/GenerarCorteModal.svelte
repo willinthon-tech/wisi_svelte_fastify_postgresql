@@ -20,10 +20,10 @@
   $: salasDetectadas = (() => {
     const map = new Map();
     rawEmployees.forEach(e => {
-      const sId = Number(e.sala_id);
+      const sId = String(e.sala_uuid || e.sala_id || '');
       if (sId && !map.has(sId)) {
-        const found = (salas || []).find(s => Number(s.id) === sId);
-        const name = found ? (found.nombre_comercial || found.nombre) : (e.sala_nombre || `Sala #${sId}`);
+        const found = (salas || []).find(s => String(s.id) === sId);
+        const name = found ? (found.nombre_comercial || found.nombre) : (e.sala_nombre || `Sala #${sId.slice(0, 8)}`);
         map.set(sId, { id: sId, nombre: name, count: 0 });
       }
       if (sId && map.has(sId)) {

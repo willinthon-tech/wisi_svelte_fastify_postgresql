@@ -25,11 +25,11 @@
   $: availableTiposIncidencia = $masterTipoIncidenciasStore || [];
 
   // Estado del formulario
-  let tipoIncidenciaId = null;
-  $: if (availableTiposIncidencia && availableTiposIncidencia.length > 0 && (!tipoIncidenciaId || !availableTiposIncidencia.some(t => Number(t.id) === Number(tipoIncidenciaId)))) {
-    tipoIncidenciaId = availableTiposIncidencia[0].id;
+  let tipoIncidenciaUuid = null;
+  $: if (availableTiposIncidencia && availableTiposIncidencia.length > 0 && (!tipoIncidenciaUuid || !availableTiposIncidencia.some(t => String(t.uuid || t.id) === String(tipoIncidenciaUuid)))) {
+    tipoIncidenciaUuid = availableTiposIncidencia[0].uuid || availableTiposIncidencia[0].id;
   }
-  $: tipo = availableTiposIncidencia.find(t => Number(t.id) === Number(tipoIncidenciaId))?.nombre || '';
+  $: tipo = availableTiposIncidencia.find(t => String(t.uuid || t.id) === String(tipoIncidenciaUuid))?.nombre || '';
   let descripcion = '';
   let isSaving = false;
 
@@ -52,18 +52,18 @@
   $: countsByTipo = (() => {
     const counts = {};
     for (const t of availableTiposIncidencia) {
-      const tId = Number(t.id);
+      const tUuid = String(t.uuid || t.id);
       const tNorm = normalizeText(t.nombre);
       const count = records.filter(r => {
-        const rId = r.tipo_incidencia_id != null ? Number(r.tipo_incidencia_id) : null;
-        if (rId && rId === tId) return true;
+        const rUuid = (r.tipo_incidencia_uuid || r.tipo_incidencia_id) != null ? String(r.tipo_incidencia_uuid || r.tipo_incidencia_id) : null;
+        if (rUuid && rUuid === tUuid) return true;
         const rTipoNorm = normalizeText(r.tipo);
         if (rTipoNorm && rTipoNorm === tNorm) return true;
         const rNomNorm = normalizeText(r.tipo_incidencia_nombre);
         if (rNomNorm && rNomNorm === tNorm) return true;
         return false;
       }).length;
-      counts[t.id] = count;
+      counts[t.uuid || t.id] = count;
       counts[t.nombre] = count;
     }
     return counts;
@@ -92,7 +92,7 @@
   // Lista ordenada de manera segura por fecha/hora o identificador descendente
   $: sortedRecords = [...records].sort((a, b) => 
     (new Date(b.created_at || 0) - new Date(a.created_at || 0)) ||
-    (String(b.id || '').localeCompare(String(a.id || '')))
+    (String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')))
   );
 
   // Filtrado según la pestaña activa
@@ -100,11 +100,11 @@
     if (activeTab === 'all') return sortedRecords;
     const activeNorm = normalizeText(activeTab);
     const matchTipo = availableTiposIncidencia.find(t => normalizeText(t.nombre) === activeNorm);
-    const matchId = matchTipo ? Number(matchTipo.id) : null;
+    const matchUuid = matchTipo ? String(matchTipo.uuid || matchTipo.id) : null;
 
     return sortedRecords.filter(r => {
-      const rId = r.tipo_incidencia_id != null ? Number(r.tipo_incidencia_id) : null;
-      if (matchId && rId && rId === matchId) return true;
+      const rUuid = (r.tipo_incidencia_uuid || r.tipo_incidencia_id) != null ? String(r.tipo_incidencia_uuid || r.tipo_incidencia_id) : null;
+      if (matchUuid && rUuid && rUuid === matchUuid) return true;
       if (normalizeText(r.tipo) === activeNorm) return true;
       if (normalizeText(r.tipo_incidencia_nombre) === activeNorm) return true;
       return false;
@@ -122,10 +122,11 @@
 
   // Encabezado oscuro de la tabla con nombre de sala (no comercial) y fecha
   $: tableHeaderTitle = (() => {
-    const salaName = libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
-      libro?.sala_nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
+    const matchedSala = ($masterSalasStore || []).find(s => 
+      (libro?.sala_uuid && (s.uuid === libro.sala_uuid || s.id === libro.sala_uuid)) || 
+      (libro?.sala_id && String(s.uuid || s.id) === String(libro.sala_id))
+    );
+    const salaName = libro?.sala_nombre || matchedSala?.nombre || libro?.sala_nombre_comercial || matchedSala?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();
@@ -354,9 +355,8 @@
     isSaving = true;
     try {
       const horaActual = getCurrentTimeString();
-      const matchedTipo = availableTiposIncidencia.find(t => String(t.id) === String(tipoIncidenciaId) || String(t.uuid) === String(tipoIncidenciaId));
-      const tipoId = matchedTipo?.id || 1;
-      const tipoUuid = matchedTipo?.uuid || null;
+      const matchedTipo = availableTiposIncidencia.find(t => String(t.uuid || t.id) === String(tipoIncidenciaUuid));
+      const tipoUuid = matchedTipo?.uuid || matchedTipo?.id || null;
       const tipoStr = matchedTipo?.nombre || tipo || 'General';
 
       let guardados = 0;
@@ -378,7 +378,6 @@
         const payload = {
           uuid: itemUuid,
           descripcion: blockDesc,
-          tipo_incidencia_id: tipoId,
           tipo_incidencia_uuid: tipoUuid,
           tipo: tipoStr,
           hora: horaRegistro
@@ -394,7 +393,7 @@
           const json = await res.json();
           if (res.ok && json && json.success) {
             guardados++;
-            const savedData = json.data || { ...payload, id: `local_${Date.now()}` };
+            const savedData = json.data || { ...payload, uuid: itemUuid };
             await upsertLocalItem('libro_incidencias_generales', savedData);
           } else {
             throw new Error(json?.error || `Error al guardar "${block.rawTitle || 'incidencia'}"`);
@@ -402,11 +401,8 @@
         } catch (postErr) {
           console.warn('[LocalDb] Modo Offline para incidencia individual:', postErr);
           const offlineRecord = {
-            id: `temp_${Date.now()}_${Math.random()}`,
             uuid: itemUuid,
-            libro_id: lId,
-            libro_uuid: libro?.uuid || null,
-            tipo_incidencia_id: tipoId,
+            libro_uuid: lId,
             tipo_incidencia_uuid: tipoUuid,
             tipo: tipoStr,
             tipo_incidencia_nombre: tipoStr,
@@ -450,38 +446,40 @@
       triggerToast('No tienes permiso para eliminar registros en este módulo', 'warning');
       return;
     }
-    const recordId = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
+    const recordUuid = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
     const lId = libro?.uuid || libroId || libro?.id;
-    if (!lId || !recordId) return;
+    if (!lId || !recordUuid) return;
 
     try {
-      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${recordId}`, {
+      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${recordUuid}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Incidencia eliminada correctamente', 'info');
-        records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-        await deleteLocalItem('libro_incidencias_generales', recordId);
+        records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+        await deleteLocalItem('libro_incidencias_generales', recordUuid);
       } else {
         triggerToast(json?.error || 'Error al eliminar incidencia', 'error');
       }
     } catch (err) {
       console.warn('[LocalDb] Modo Offline para eliminación de incidencia:', err);
-      records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-      await deleteLocalItem('libro_incidencias_generales', recordId);
+      records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+      await deleteLocalItem('libro_incidencias_generales', recordUuid);
       await queueOutboxAction({
         entity: 'libro_incidencias_generales',
         action: 'delete',
-        endpoint: `/api/master/libros/${lId}/incidencias-generales/${recordId}`,
+        endpoint: `/api/master/libros/${lId}/incidencias-generales/${recordUuid}`,
         method: 'DELETE',
-        targetId: recordId
+        targetId: recordUuid
       });
       triggerToast('Modo Offline: Incidencia eliminada localmente.', 'info');
     }
   }
 
   // Modal para editar Tipo, Contenido y Hora
+  let modalTipoIncidenciaUuid = null;
+
   function abrirModalEditar(record) {
     if (!canEdit) {
       triggerToast('No tienes permiso para editar registros en este módulo', 'warning');
@@ -490,10 +488,10 @@
     editingRecord = record;
     const rTipoNorm = normalizeText(record.tipo || record.tipo_incidencia_nombre);
     const match = availableTiposIncidencia.find(t => 
-      (record.tipo_incidencia_id != null && Number(t.id) === Number(record.tipo_incidencia_id)) ||
+      ((record.tipo_incidencia_uuid || record.tipo_incidencia_id) != null && String(t.uuid || t.id) === String(record.tipo_incidencia_uuid || record.tipo_incidencia_id)) ||
       normalizeText(t.nombre) === rTipoNorm
     );
-    modalTipoIncidenciaId = match ? match.id : (record.tipo_incidencia_id || 1);
+    modalTipoIncidenciaUuid = match ? (match.uuid || match.id) : (record.tipo_incidencia_uuid || record.tipo_incidencia_id || availableTiposIncidencia[0]?.uuid || availableTiposIncidencia[0]?.id);
     modalTipo = match ? match.nombre : (record.tipo || 'General');
     modalDescripcion = record.descripcion || '';
     modalHora = record.hora || getCurrentTimeString();
@@ -530,16 +528,17 @@
     }
 
     isSavingModal = true;
-    const targetId = editingRecord.uuid || editingRecord.id;
+    const targetUuid = editingRecord.uuid || editingRecord.id;
     const payload = {
-      tipo_incidencia_id: modalTipoIncidenciaId,
+      tipo_incidencia_uuid: modalTipoIncidenciaUuid,
+      tipo_incidencia_id: modalTipoIncidenciaUuid,
       tipo: modalTipo || 'General',
       descripcion: cleanDesc,
       hora: modalHora
     };
 
     try {
-      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${targetId}`, {
+      const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${targetUuid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -562,15 +561,15 @@
         ...payload,
         updated_at: new Date().toISOString()
       };
-      records = records.map(r => String(r.uuid || r.id) === String(targetId) ? updatedOffline : r);
+      records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? updatedOffline : r);
       await upsertLocalItem('libro_incidencias_generales', updatedOffline);
       await queueOutboxAction({
         entity: 'libro_incidencias_generales',
         action: 'update',
-        endpoint: `/api/master/libros/${lId}/incidencias-generales/${targetId}`,
+        endpoint: `/api/master/libros/${lId}/incidencias-generales/${targetUuid}`,
         method: 'PUT',
         payload: updatedOffline,
-        targetId
+        targetId: targetUuid
       });
       triggerToast('Modo Offline: Incidencia actualizada localmente.', 'info');
       cerrarModalEditar();
@@ -593,15 +592,15 @@
       <div class="form-group">
         <label class="form-label">TIPO DE INCIDENCIA: *</label>
         <div class="radio-tipo-group">
-          {#each availableTiposIncidencia as tItem}
-            {@const isAct = Number(tipoIncidenciaId) === Number(tItem.id)}
+          {#each availableTiposIncidencia as tItem (tItem.uuid || tItem.id)}
+            {@const isAct = String(tipoIncidenciaUuid) === String(tItem.uuid || tItem.id)}
             {@const pillClass = getPillClass(tItem.nombre)}
             <label class="radio-tipo-pill {isAct ? pillClass : ''}">
               <input 
                 type="radio" 
                 name="tipo-incidencia" 
-                value={tItem.id} 
-                bind:group={tipoIncidenciaId} 
+                value={tItem.uuid || tItem.id} 
+                bind:group={tipoIncidenciaUuid} 
                 on:change={() => tipo = tItem.nombre}
               />
               <span class="pill-text">{tItem.nombre}</span>
@@ -704,13 +703,13 @@
         >
           <span>Detallado ({records.length})</span>
         </button>
-        {#each availableTiposIncidencia as tItem}
+        {#each availableTiposIncidencia as tItem (tItem.uuid || tItem.id)}
           <button 
             type="button" 
             class="tab-nav-btn {activeTab === tItem.nombre ? 'active' : ''}"
             on:click={() => activeTab = tItem.nombre}
           >
-            <span>{tItem.nombre} ({countsByTipo[tItem.id] || 0})</span>
+            <span>{tItem.nombre} ({countsByTipo[tItem.uuid || tItem.id] || 0})</span>
           </button>
         {/each}
       </div>
@@ -803,7 +802,7 @@
                         <button 
                           type="button" 
                           class="btn-eliminar"
-                          on:click={() => handleEliminar(record.uuid || record.id)}
+                          on:click={() => handleEliminar(record.uuid)}
                           title="Eliminar esta incidencia"
                         >
                           Eliminar
@@ -840,15 +839,15 @@
         <div class="modal-field-group">
           <label class="modal-field-label">Tipo de Incidencia: *</label>
           <div class="radio-tipo-group">
-            {#each availableTiposIncidencia as tItem}
-              {@const isAct = Number(modalTipoIncidenciaId) === Number(tItem.id)}
+            {#each availableTiposIncidencia as tItem (tItem.uuid || tItem.id)}
+              {@const isAct = String(modalTipoIncidenciaUuid) === String(tItem.uuid || tItem.id)}
               {@const pillClass = getPillClass(tItem.nombre)}
               <label class="radio-tipo-pill {isAct ? pillClass : ''}">
                 <input 
                   type="radio" 
                   name="modal-tipo-inc" 
-                  value={tItem.id} 
-                  bind:group={modalTipoIncidenciaId} 
+                  value={tItem.uuid || tItem.id} 
+                  bind:group={modalTipoIncidenciaUuid} 
                   on:change={() => modalTipo = tItem.nombre}
                 />
                 <span class="pill-text">{tItem.nombre}</span>

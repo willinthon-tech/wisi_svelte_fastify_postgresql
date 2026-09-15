@@ -45,26 +45,26 @@
 
   // Usuario y salas asignadas
   $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = $currentUserStore?.id ? (userSalasMap[$currentUserStore.id] || []) : [];
-  $: assignedSalaIds = (currentUserSalas.length > 0)
-    ? currentUserSalas
-    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.id) : []);
+  $: currentUserSalas = $currentUserStore?.uuid || $currentUserStore?.id ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
+  $: assignedSalaUuids = (currentUserSalas.length > 0)
+    ? currentUserSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
+    : ($authUserSalasStore && $authUserSalasStore.length > 0 ? $authUserSalasStore.map(s => s.uuid || s.id) : []);
 
   // Filtrado de mesas asociadas a la sala del usuario logueado y a la sala del libro
   $: availableMesas = (() => {
     const list = (serverMesas && serverMesas.length > 0) ? serverMesas : ($masterMesasStore || []);
+    const targetSala = libro?.sala_uuid || libro?.sala_id;
     return list.filter(m => {
       if ((m.active ?? 1) === 0) return false;
 
-      // Si el libro tiene sala_id, debe coincidir con la sala del libro
-      if (libro?.sala_id && Number(m.sala_id) !== Number(libro.sala_id)) {
+      const mSala = m.sala_uuid || m.sala_id;
+      if (targetSala && String(mSala) !== String(targetSala)) {
         return false;
       }
 
-      // Si el usuario logueado tiene salas asignadas, la mesa debe pertenecer a esas salas
-      if (assignedSalaIds && assignedSalaIds.length > 0) {
-        const userSalaNums = assignedSalaIds.map(Number);
-        if (!userSalaNums.includes(Number(m.sala_id))) {
+      if (assignedSalaUuids && assignedSalaUuids.length > 0) {
+        const userSalaSet = new Set(assignedSalaUuids.map(String));
+        if (!userSalaSet.has(String(mSala))) {
           return false;
         }
       }
@@ -75,19 +75,20 @@
 
   // Formato de opción de mesa: BJ 1 - Blackjacks
   function formatMesaOptionLabel(m) {
-    const juegoName = m.juego_nombre || ($masterJuegosStore || []).find(j => Number(j.id) === Number(m.juego_id))?.nombre || '';
+    const juegoName = m.juego_nombre || ($masterJuegosStore || []).find(j => String(j.uuid || j.id) === String(m.juego_uuid || m.juego_id))?.nombre || '';
     if (juegoName) {
       return `${m.nombre} - ${juegoName}`;
     }
-    return m.nombre || `Mesa #${m.id}`;
+    return m.nombre || (m.uuid ? `Mesa #${m.uuid.slice(0, 8)}` : `Mesa #${m.id}`);
   }
 
   // Encabezado oscuro de la tabla: Gan Casino PLC - 14/09/2026
   $: tableHeaderTitle = (() => {
-    const salaName = libro?.sala_nombre || 
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre ||
-      libro?.sala_nombre_comercial ||
-      ($masterSalasStore || []).find(s => Number(s.id) === Number(libro?.sala_id))?.nombre_comercial || 'Sala';
+    const matchedSala = ($masterSalasStore || []).find(s => 
+      (libro?.sala_uuid && (s.uuid === libro.sala_uuid || s.id === libro.sala_uuid)) || 
+      (libro?.sala_id && String(s.uuid || s.id) === String(libro.sala_id))
+    );
+    const salaName = libro?.sala_nombre || matchedSala?.nombre || libro?.sala_nombre_comercial || matchedSala?.nombre_comercial || 'Sala';
     const dateFormatted = formatDateDisplay(libro?.descripcion);
     return `${salaName} - ${dateFormatted}`;
   })();
@@ -256,14 +257,15 @@
       return;
     }
 
-    const mesaObj = availableMesas.find(m => String(m.id) === String(selectedMesaId) || String(m.uuid) === String(selectedMesaId));
+    const mesaObj = availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId) || String(m.id) === String(selectedMesaId));
+    const mesaUuid = mesaObj?.uuid || (String(selectedMesaId).length > 20 ? selectedMesaId : null);
     const itemUuid = crypto.randomUUID();
 
     isSaving = true;
     const payload = {
       uuid: itemUuid,
-      mesa_id: mesaObj?.id || Number(selectedMesaId),
-      mesa_uuid: mesaObj?.uuid || null,
+      mesa_uuid: mesaUuid,
+      mesa_id: mesaUuid || selectedMesaId,
       denominacion_100: Number(b100) || 0,
       denominacion_50: Number(b50) || 0,
       denominacion_20: Number(b20) || 0,
@@ -282,7 +284,7 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro de drop guardado exitosamente', 'success');
-        const savedRecord = json.data || { ...payload, id: `local_${Date.now()}` };
+        const savedRecord = json.data || { ...payload, uuid: itemUuid };
         await upsertLocalItem('libro_drop_mesas', savedRecord);
         selectedMesaId = '';
         limpiarCampos();
@@ -293,10 +295,10 @@
     } catch (err) {
       console.warn('[LocalDb] Modo Offline: guardando drop en base de datos local y encolando outbox:', err);
       const offlineRecord = {
-        id: `temp_${Date.now()}`,
         uuid: itemUuid,
-        libro_id: lId,
-        libro_uuid: libro?.uuid || null,
+        libro_uuid: lId,
+        mesa_uuid: mesaUuid,
+        mesa_id: mesaUuid || selectedMesaId,
         mesa_nombre: mesaObj?.nombre || `Mesa #${selectedMesaId}`,
         ...payload,
         created_at: new Date().toISOString()
@@ -322,20 +324,20 @@
   }
 
   async function handleEliminar(recordOrId) {
-    const recordId = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
+    const recordUuid = typeof recordOrId === 'object' ? (recordOrId.uuid || recordOrId.id) : recordOrId;
     const lId = libro?.uuid || libroId || libro?.id;
-    if (!lId || !recordId) return;
+    if (!lId || !recordUuid) return;
 
     try {
-      const res = await fetch(`/api/master/libros/${lId}/drop-mesas/${recordId}`, {
+      const res = await fetch(`/api/master/libros/${lId}/drop-mesas/${recordUuid}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'info');
-        dropRecords = dropRecords.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-        await deleteLocalItem('libro_drop_mesas', recordId);
-        if (selectedMesaId && !dropRecords.some(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) || String(r.mesa_id) === String(selectedMesaId))) {
+        dropRecords = dropRecords.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+        await deleteLocalItem('libro_drop_mesas', recordUuid);
+        if (selectedMesaId && !dropRecords.some(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId))) {
           limpiarCampos();
         }
       } else {
@@ -343,16 +345,16 @@
       }
     } catch (err) {
       console.warn('[LocalDb] Modo Offline para eliminación de drop:', err);
-      dropRecords = dropRecords.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
-      await deleteLocalItem('libro_drop_mesas', recordId);
+      dropRecords = dropRecords.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+      await deleteLocalItem('libro_drop_mesas', recordUuid);
       await queueOutboxAction({
         entity: 'libro_drop_mesas',
         action: 'delete',
-        endpoint: `/api/master/libros/${lId}/drop-mesas/${recordId}`,
+        endpoint: `/api/master/libros/${lId}/drop-mesas/${recordUuid}`,
         method: 'DELETE',
-        targetId: recordId
+        targetId: recordUuid
       });
-      if (selectedMesaId && !dropRecords.some(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) || String(r.mesa_id) === String(selectedMesaId))) {
+      if (selectedMesaId && !dropRecords.some(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId))) {
         limpiarCampos();
       }
       triggerToast('Modo Offline: Registro de drop eliminado localmente.', 'info');
@@ -381,7 +383,7 @@
         >
           <option value="">Seleccione una opción</option>
           {#each availableMesas as m}
-            <option value={m.id}>
+            <option value={m.uuid || m.id}>
               {formatMesaOptionLabel(m)}
             </option>
           {/each}
@@ -533,7 +535,7 @@
               </td>
             </tr>
           {:else}
-            {#each dropRecords as record, idx}
+            {#each dropRecords as record, idx (record.uuid || record.id || idx)}
               {@const rec100 = Number(record.denominacion_100 ?? record.b100 ?? 0) || 0}
               {@const rec50 = Number(record.denominacion_50 ?? record.b50 ?? 0) || 0}
               {@const rec20 = Number(record.denominacion_20 ?? record.b20 ?? 0) || 0}
@@ -541,14 +543,15 @@
               {@const rec5 = Number(record.denominacion_5 ?? record.b5 ?? 0) || 0}
               {@const rec1 = Number(record.denominacion_1 ?? record.b1 ?? 0) || 0}
               {@const recTotal = Number(record.total) || 0}
+              {@const mesaKey = record.mesa_uuid || record.mesa_id}
               <tr 
-                class="drop-row {Number(selectedMesaId) === Number(record.mesa_id) ? 'row-selected' : ''}"
-                on:click={() => seleccionarMesaDesdeTabla(record.mesa_id)}
+                class="drop-row {String(selectedMesaId) === String(mesaKey) ? 'row-selected' : ''}"
+                on:click={() => seleccionarMesaDesdeTabla(mesaKey)}
                 title="Haga clic para cargar y editar esta mesa"
                 style="cursor: pointer;"
               >
                 <td class="td-center td-num">{idx + 1}</td>
-                <td class="td-mesa">{record.mesa_nombre || `Mesa #${record.mesa_id}`}</td>
+                <td class="td-mesa">{record.mesa_nombre || (record.mesa_uuid ? `Mesa #${record.mesa_uuid.slice(0, 8)}` : `Mesa #${record.mesa_id}`)}</td>
                 <td class="td-center">{rec100}</td>
                 <td class="td-center">{rec50}</td>
                 <td class="td-center">{rec20}</td>
@@ -563,7 +566,7 @@
                         <button 
                           type="button" 
                           class="btn-editar-accion"
-                          on:click|stopPropagation={() => seleccionarMesaDesdeTabla(record.mesa_id)}
+                          on:click|stopPropagation={() => seleccionarMesaDesdeTabla(mesaKey)}
                           title="Cargar y editar esta mesa"
                         >
                           Editar

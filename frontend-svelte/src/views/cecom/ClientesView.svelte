@@ -35,6 +35,8 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
   // Extract assigned sala IDs strictly for the logged-in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
@@ -42,8 +44,9 @@
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
       return user.salas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     const masterMap = $masterUserSalasStore;
@@ -55,16 +58,18 @@
       const userList = masterMap[userId] || masterMap[String(userId)];
       if (Array.isArray(userList)) {
         return userList
-          .map((s) => (typeof s === "object" ? s.id : Number(s)))
-          .filter(Boolean);
+          .map((s) => (typeof s === "object" ? s.id : s))
+          .filter(Boolean)
+          .map(String);
       }
     }
 
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
       return authSalas
-        .map((s) => (typeof s === "object" ? s.id : Number(s)))
-        .filter(Boolean);
+        .map((s) => (typeof s === "object" ? s.id : s))
+        .filter(Boolean)
+        .map(String);
     }
 
     return [];
@@ -121,6 +126,19 @@
   let isMounted = false;
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('clientes');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray($masterClientesStore) && $masterClientesStore.length > 0) {
+        items = $masterClientesStore;
+        totalCount = $masterClientesStore.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -200,10 +218,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('clientes', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar clientes del servidor', 'error');
+      console.warn('Fallback local IndexedDB para clientes:', err);
+      const local = await getLocalItems('clientes');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterClientesStore || []);
+      const query = (currentParams.search || '').trim().toLowerCase();
+      const filtered = query ? source.filter(x => (x.nombre || '').toLowerCase().includes(query) || (x.descripcion || '').toLowerCase().includes(query)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     } finally {
       loading = false;
     }
@@ -241,11 +266,11 @@
 
   $: columns = [
     { key: 'foto', label: 'Foto', type: 'photo', sortable: false, editable: false },
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Cliente', bold: true, sortable: true, editable: false },
     { 
       key: 'tipo_cliente_nombre', 
-      keyId: 'tipo_cliente_id', 
+      keyId: 'tipo_cliente_uuid', 
       label: 'Tipo de Cliente', 
       sortable: true, 
       editable: false, 
@@ -253,7 +278,7 @@
     },
     { 
       key: 'sala_nombre', 
-      keyId: 'sala_id', 
+      keyId: 'sala_uuid', 
       label: 'Sala', 
       sortable: true, 
       editable: false, 
@@ -296,12 +321,13 @@
 
   async function handleSaveInline(event) {
     const detail = event.detail || {};
-    const { id, draft } = detail;
+    const targetUuid = detail.uuid || detail.id;
+    const { draft } = detail;
     const onDone = draft?.onDone || detail.onDone;
     const cleanDraft = { ...draft };
     delete cleanDraft.onDone;
     try {
-      const res = await fetch(`/api/master/clientes/${id}`, {
+      const res = await fetch(`/api/master/clientes/${targetUuid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cleanDraft)
@@ -324,9 +350,11 @@
   }
 
   async function handleDelete(event) {
-    const { id, item, onResult } = event.detail;
+    const detail = event.detail || {};
+    const { id, item, onResult } = detail;
+    const targetUuid = detail.uuid || id || item?.uuid || item?.id;
     try {
-      const res = await masterClientesActions.delete(id || item?.id);
+      const res = await masterClientesActions.delete(targetUuid);
       if (res && res.blocked) {
         if (onResult) {
           onResult(res);
@@ -335,8 +363,10 @@
         }
       } else {
         triggerToast(`Cliente eliminado exitosamente`, 'success');
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
         if (onResult) onResult({ success: true });
-        await loadServerData();
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar cliente: ${err.message}`, 'error');
@@ -414,7 +444,7 @@
     <SmartMultiSelect
       id="filter-clientes-salas"
       label="Salas"
-      options={(filterOptions.salas || []).filter(s => !assignedSalaIds || assignedSalaIds.length === 0 || assignedSalaIds.map(Number).includes(Number(s.id)))}
+      options={(filterOptions.salas || []).filter(s => !assignedSalaIds || assignedSalaIds.length === 0 || assignedSalaIds.includes(String(s.id)))}
       bind:selectedValues={selectedSalas}
       on:change={(e) => {
         selectedSalas = e.detail;

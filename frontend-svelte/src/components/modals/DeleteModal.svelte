@@ -10,11 +10,11 @@
 
   $: isDesincorporar = actionLabel === 'Desincorporar';
   $: displayName = item ? (item.nombre || item.title || item.nombre_comercial || item.usuario || item.name || 'Sin nombre') : '';
-  $: displayId = item ? item.id : '';
+  $: displayId = item ? (item.uuid ? item.uuid.slice(0, 8) : (item.id || '')) : '';
 
   function handleConfirm() {
-    if (item && item.id) {
-      dispatch('confirm', item.id);
+    if (item && (item.uuid || item.id)) {
+      dispatch('confirm', item.uuid || item.id);
     }
   }
 
@@ -34,7 +34,7 @@
       <!-- Modal Header -->
       <div class="modal-header">
         <div class="modal-title">
-          <span style="color: #d97706;">⚠️</span> {isDesincorporar ? 'Confirmar Desincorporación' : 'Confirmar Eliminación'}
+          {isDesincorporar ? 'Confirmar Desincorporación' : 'Confirmar Eliminación'}
         </div>
         <button type="button" class="close-btn" on:click={handleCancel}>✕</button>
       </div>

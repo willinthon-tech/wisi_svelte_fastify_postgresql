@@ -17,6 +17,7 @@
     masterMarcasStore, 
     loadMasterStoresFromBackend 
   } from '../../controllers/master.store.js';
+  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   let initial = {};
@@ -58,6 +59,19 @@
   };
 
   onMount(async () => {
+    // 1. Carga instantánea (0ms) desde IndexedDB local
+    try {
+      const local = await getLocalItems('modelos');
+      if (Array.isArray(local) && local.length > 0) {
+        items = local;
+        totalCount = local.length;
+      } else if (Array.isArray(allModelos) && allModelos.length > 0) {
+        items = allModelos;
+        totalCount = allModelos.length;
+      }
+    } catch (e) {}
+
+    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchFilterOptions(),
@@ -112,10 +126,17 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        saveLocalItems('modelos', items).catch(() => {});
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error al cargar modelos del servidor', 'error');
+      console.warn('Fallback local IndexedDB para modelos:', err);
+      const local = await getLocalItems('modelos');
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterModelosStore || []);
+      const q = (currentParams.search || '').trim().toLowerCase();
+      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      totalCount = filtered.length;
+      const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
+      items = filtered.slice(start, start + (currentParams.limit || 10));
     }
   }
 
@@ -130,7 +151,7 @@
   }
 
   $: columns = [
-    { key: 'id', label: 'ID', type: 'id', sortable: true, editable: false },
+    { key: 'uuid', label: 'UUID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre del Modelo', bold: true, sortable: true, editable: true },
     { 
       key: 'marca_nombre', 
@@ -138,7 +159,7 @@
       sortable: true, 
       editable: true, 
       options: allMarcas, 
-      keyId: 'marca_id' 
+      keyId: 'marca_uuid' 
     }
   ];
 
@@ -151,7 +172,7 @@
       required: true 
     },
     { 
-      key: 'marca_id', 
+      key: 'marca_uuid', 
       label: 'Marca', 
       type: 'select', 
       options: allMarcas, 
@@ -160,11 +181,16 @@
   ];
 
   async function handleCreate(event) {
-    const draft = event.detail;
+    const draft = { ...event.detail };
+    if (draft.marca_uuid && !draft.marca_id) draft.marca_id = draft.marca_uuid;
     try {
-      await masterModelosActions.add(draft);
+      const created = await masterModelosActions.add(draft);
       triggerToast('Modelo creado exitosamente', 'success');
-      await loadServerData();
+      if (created) {
+        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
+        totalCount++;
+      }
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al crear modelo: ${err.message}`, 'error');
     }
@@ -172,25 +198,32 @@
 
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
+    const targetUuid = id;
+    const payload = { ...draft };
+    if (payload.marca_uuid && !payload.marca_id) payload.marca_id = payload.marca_uuid;
     try {
-      await masterModelosActions.update(id, draft);
+      await masterModelosActions.update(targetUuid, payload);
       triggerToast('Modelo actualizado exitosamente', 'success');
-      await loadServerData();
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar modelo: ${err.message}`, 'error');
     }
   }
 
   async function handleDelete(event) {
-    const { id, onResult } = event.detail;
+    const { id, item, onResult } = event.detail;
+    const targetUuid = item?.uuid || id || item?.id;
     try {
-      const res = await masterModelosActions.delete(id);
+      const res = await masterModelosActions.delete(targetUuid);
       if (res && res.blocked) {
         onResult(res);
       } else {
         triggerToast('Modelo eliminado exitosamente', 'success');
-        onResult({ success: true });
-        await loadServerData();
+        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+        totalCount = Math.max(0, totalCount - 1);
+        if (onResult) onResult({ success: true });
+        loadServerData().catch(() => {});
       }
     } catch (err) {
       triggerToast(`Error al eliminar modelo: ${err.message}`, 'error');
