@@ -197,6 +197,42 @@ async function main() {
   `);
   console.log('✔ attlogs.empleado_uuid backfilled.');
 
+  // Caso especial columnas ARRAY UUID: libro_control_llaves.llaves_uuids y cortes.salas_uuids
+  await sql.unsafe(`
+    DO $$
+    BEGIN
+      -- libro_control_llaves
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'libro_control_llaves') THEN
+        ALTER TABLE libro_control_llaves ADD COLUMN IF NOT EXISTS llaves_uuids UUID[];
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'libro_control_llaves' AND column_name = 'llaves_ids') THEN
+          ALTER TABLE libro_control_llaves ALTER COLUMN llaves_ids DROP NOT NULL;
+          UPDATE libro_control_llaves cl
+          SET llaves_uuids = (
+            SELECT ARRAY_AGG(l.uuid) 
+            FROM llaves l 
+            WHERE l.id = ANY(cl.llaves_ids)
+          )
+          WHERE cl.llaves_ids IS NOT NULL AND cl.llaves_uuids IS NULL;
+        END IF;
+      END IF;
+
+      -- cortes
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'cortes') THEN
+        ALTER TABLE cortes ADD COLUMN IF NOT EXISTS salas_uuids UUID[];
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'cortes' AND column_name = 'salas_ids') THEN
+          UPDATE cortes c
+          SET salas_uuids = (
+            SELECT ARRAY_AGG(s.uuid) 
+            FROM salas s 
+            WHERE s.id = ANY(c.salas_ids)
+          )
+          WHERE c.salas_ids IS NOT NULL AND c.salas_uuids IS NULL;
+        END IF;
+      END IF;
+    END $$;
+  `);
+  console.log('✔ Columnas ARRAY UUID (libro_control_llaves.llaves_uuids, cortes.salas_uuids) configuradas.');
+
   console.log('\n--- PASO 3: Migrando Unique Constraints a UUID ---');
   // attlogs
   await sql.unsafe(`
