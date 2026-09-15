@@ -250,24 +250,38 @@ export function filterOptionsByActiveSalas(items = [], salaKey = 'sala_uuid') {
 // Load real-time master data from PostgreSQL backend in parallel using Promise.allSettled
 export async function loadMasterStoresFromBackend() {
   const fetchEntity = async (entityName, store, localStoreKey = entityName) => {
-    // 1. Cargar de inmediato desde IndexedDB local (0ms al abrir la app o modo offline)
-    try {
-      const localData = await getLocalItems(localStoreKey);
-      if (Array.isArray(localData) && localData.length > 0) {
-        store.set(localData);
+    let currentStoreVal = [];
+    store.subscribe(v => currentStoreVal = v)();
+
+    // 1. Cargar de inmediato desde IndexedDB local SOLO si el store en memoria está vacío
+    if (!currentStoreVal || currentStoreVal.length === 0) {
+      try {
+        const localData = await getLocalItems(localStoreKey);
+        if (Array.isArray(localData) && localData.length > 0) {
+          store.set(localData);
+          currentStoreVal = localData;
+        }
+      } catch (e) {
+        // Continuar si IndexedDB aún está cargando
       }
-    } catch (e) {
-      // Continuar si IndexedDB aún está cargando
     }
 
-    // 2. Si hay conexión a internet, refrescar desde el servidor y persistir en IndexedDB
+    // 2. Si hay conexión a internet, refrescar desde el servidor y persistir SOLO si hay cambios reales
     try {
       const res = await fetch(toBackendUrl(`/api/master/${entityName}?limit=all`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
-          store.set(json.data);
-          saveLocalItems(localStoreKey, json.data).catch(() => {});
+          // Evitar re-renders masivos si la lista no ha cambiado
+          const hasChanged = currentStoreVal.length === 0 || 
+            json.data.length !== currentStoreVal.length || 
+            (json.data[0]?.uuid && json.data[0]?.uuid !== currentStoreVal[0]?.uuid) ||
+            (json.data[0]?.updated_at && json.data[0]?.updated_at !== currentStoreVal[0]?.updated_at);
+
+          if (hasChanged) {
+            store.set(json.data);
+            saveLocalItems(localStoreKey, json.data).catch(() => {});
+          }
         }
       }
     } catch (err) {
@@ -281,7 +295,10 @@ export async function loadMasterStoresFromBackend() {
       if (resSalas.ok) {
         const json = await resSalas.json();
         if (json && json.success && json.data) {
-          userSalasStore.update(curr => ({ ...curr, ...json.data }));
+          userSalasStore.update(curr => {
+            const isDifferent = JSON.stringify(curr) !== JSON.stringify(json.data);
+            return isDifferent ? { ...curr, ...json.data } : curr;
+          });
         }
       }
     } catch (err) {
@@ -295,7 +312,10 @@ export async function loadMasterStoresFromBackend() {
       if (resPerms.ok) {
         const json = await resPerms.json();
         if (json && json.success && json.data) {
-          userModulePermissionsStore.update(curr => ({ ...curr, ...json.data }));
+          userModulePermissionsStore.update(curr => {
+            const isDifferent = JSON.stringify(curr) !== JSON.stringify(json.data);
+            return isDifferent ? { ...curr, ...json.data } : curr;
+          });
         }
       }
     } catch (err) {
