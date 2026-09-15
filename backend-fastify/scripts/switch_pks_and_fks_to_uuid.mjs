@@ -121,12 +121,16 @@ async function main() {
     { table: 'empleados_horarios', col: 'horario_uuid', parent: 'horarios', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'horario_id' },
     { table: 'empleados_excepciones_horarios', col: 'empleado_uuid', parent: 'empleados', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'empleado_id' },
     { table: 'empleados_excepciones_horarios', col: 'excepcion_uuid', parent: 'excepciones', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'excepcion_id' },
-    { table: 'empleados_excepciones_horarios', col: 'horario_uuid', parent: 'horarios', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'horario_id' },
-    { table: 'drop_mesas', col: 'libro_uuid', parent: 'libros', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'libro_id' },
-    { table: 'drop_mesas', col: 'mesa_uuid', parent: 'mesas', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'mesa_id' }
+    { table: 'empleados_excepciones_horarios', col: 'horario_uuid', parent: 'horarios', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'horario_id' }
   ];
 
+  const existingTableNames = new Set(allTables.map(t => t.table_name));
+
   for (const fk of newFkDefinitions) {
+    if (!existingTableNames.has(fk.table) || !existingTableNames.has(fk.parent)) {
+      continue;
+    }
+
     // 1. Agregar columna FK si no existe
     await sql.unsafe(`ALTER TABLE "${fk.table}" ADD COLUMN IF NOT EXISTS "${fk.col}" UUID;`);
 
@@ -335,6 +339,9 @@ async function main() {
 
   console.log('\n--- PASO 6: Creando nuevas Foreign Keys oficiales basadas 100% en UUID ---');
   for (const fk of newFkDefinitions) {
+    if (!existingTableNames.has(fk.table) || !existingTableNames.has(fk.parent)) {
+      continue;
+    }
     const fkName = `fk_${fk.table}_${fk.col}`;
     await sql.unsafe(`
       DO $$
