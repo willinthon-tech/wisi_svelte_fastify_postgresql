@@ -12,6 +12,13 @@
     loadMasterStoresFromBackend,
     currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
+  import {
+    getLocalItems,
+    saveLocalItems,
+    upsertLocalItem,
+    deleteLocalItem,
+    queueOutboxAction
+  } from '../../services/localDb.service.js';
 
   export let libro = null;
   export let libroId = null;
@@ -235,6 +242,21 @@
     if (!lId) return;
 
     isLoadingRecords = true;
+
+    // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_novedades_mesas', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+      );
+      if (Array.isArray(local) && local.length > 0) {
+        novedadesRecords = local;
+        syncRowsData(novedadesRecords);
+        isLoadingRecords = false;
+      }
+    } catch (e) {}
+
+    // 2. Consulta al backend si hay conexión para refrescar
     try {
       const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`);
       if (res.ok) {
@@ -242,10 +264,11 @@
         if (json && json.success) {
           novedadesRecords = json.data || [];
           syncRowsData(novedadesRecords);
+          saveLocalItems('libro_novedades_mesas', json.data).catch(() => {});
         }
       }
     } catch (err) {
-      console.error('Error al cargar novedades de mesas:', err);
+      console.warn('[LocalDb] Sin conexión al backend para novedades-mesas (usando datos locales):', err);
     } finally {
       isLoadingRecords = false;
     }
@@ -314,7 +337,7 @@
     const row = rowsData[mesaId];
     if (!row) return;
 
-    const existing = recordsMap.get(Number(mesaId));
+    const existing = recordsMap.get(Number(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
     if (existing && !canEdit) {
       return;
     }
@@ -331,20 +354,25 @@
       return;
     }
 
+    const mesaObj = availableMesas.find(m => String(m.id) === String(mesaId) || String(m.uuid) === String(mesaId));
+    const itemUuid = existing?.uuid || crypto.randomUUID();
+
     savingMesaIds.add(Number(mesaId));
     savingMesaIds = new Set(savingMesaIds);
 
-    try {
-      const payload = {
-        mesa_id: Number(mesaId),
-        hora_apertura: row.hora_apertura || '',
-        hora_cierre: row.hora_cierre || '',
-        pitboss: row.pitboss || '',
-        croupier_apertura: row.croupier_apertura || '',
-        croupier_cierre: row.croupier_cierre || '',
-        observacion: row.observacion || ''
-      };
+    const payload = {
+      uuid: itemUuid,
+      mesa_id: Number(mesaId),
+      mesa_uuid: mesaObj?.uuid || null,
+      hora_apertura: row.hora_apertura || '',
+      hora_cierre: row.hora_cierre || '',
+      pitboss: row.pitboss || '',
+      croupier_apertura: row.croupier_apertura || '',
+      croupier_cierre: row.croupier_cierre || '',
+      observacion: row.observacion || ''
+    };
 
+    try {
       const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -353,13 +381,14 @@
 
       const json = await res.json();
       if (res.ok && json && json.success) {
-        const savedRecord = json.data;
-        const idx = novedadesRecords.findIndex(r => Number(r.mesa_id) === Number(mesaId));
+        const savedRecord = json.data || { ...payload, id: existing?.id || `local_${Date.now()}` };
+        const idx = novedadesRecords.findIndex(r => String(r.mesa_id) === String(mesaId) || String(r.mesa_uuid) === String(mesaId));
         if (idx >= 0) {
           novedadesRecords[idx] = savedRecord;
         } else {
           novedadesRecords = [...novedadesRecords, savedRecord];
         }
+        await upsertLocalItem('libro_novedades_mesas', savedRecord);
 
         savedSuccessMesaIds.add(Number(mesaId));
         savedSuccessMesaIds = new Set(savedSuccessMesaIds);
@@ -371,7 +400,39 @@
         triggerToast(json?.error || 'Error al guardar cambios de mesa', 'error');
       }
     } catch (err) {
-      console.error('Error al guardar fila de mesa:', err);
+      console.warn('[LocalDb] Modo Offline: guardando fila de mesa en IndexedDB y encolando outbox:', err);
+      const offlineRecord = {
+        id: existing?.id || `temp_${Date.now()}`,
+        uuid: itemUuid,
+        libro_id: lId,
+        libro_uuid: libro?.uuid || null,
+        mesa_nombre: mesaObj?.nombre || `Mesa #${mesaId}`,
+        ...payload,
+        updated_at: new Date().toISOString()
+      };
+
+      const idx = novedadesRecords.findIndex(r => String(r.mesa_id) === String(mesaId) || String(r.mesa_uuid) === String(mesaId));
+      if (idx >= 0) {
+        novedadesRecords[idx] = offlineRecord;
+      } else {
+        novedadesRecords = [...novedadesRecords, offlineRecord];
+      }
+      await upsertLocalItem('libro_novedades_mesas', offlineRecord);
+      await queueOutboxAction({
+        entity: 'libro_novedades_mesas',
+        action: existing ? 'update' : 'create',
+        endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+        method: 'POST',
+        payload: offlineRecord,
+        uuid: itemUuid
+      });
+
+      savedSuccessMesaIds.add(Number(mesaId));
+      savedSuccessMesaIds = new Set(savedSuccessMesaIds);
+      setTimeout(() => {
+        savedSuccessMesaIds.delete(Number(mesaId));
+        savedSuccessMesaIds = new Set(savedSuccessMesaIds);
+      }, 2200);
     } finally {
       savingMesaIds.delete(Number(mesaId));
       savingMesaIds = new Set(savingMesaIds);
@@ -398,14 +459,16 @@
       return;
     }
 
+    const targetRecordId = existing.uuid || existing.id;
     try {
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${existing.uuid || existing.id}`, {
+      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${targetRecordId}`, {
         method: 'DELETE'
       });
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro de mesa eliminado', 'info');
-        novedadesRecords = novedadesRecords.filter(r => String(r.uuid || r.id) !== String(existing.uuid || existing.id) && String(r.id) !== String(existing.id));
+        novedadesRecords = novedadesRecords.filter(r => String(r.uuid || r.id) !== String(targetRecordId) && String(r.id) !== String(existing.id));
+        await deleteLocalItem('libro_novedades_mesas', targetRecordId);
         updateField(mesaId, 'hora_apertura', '');
         updateField(mesaId, 'hora_cierre', '');
         updateField(mesaId, 'pitboss', '');
@@ -416,7 +479,23 @@
         triggerToast(json?.error || 'Error al eliminar', 'error');
       }
     } catch (err) {
-      console.error('Error al eliminar novedad:', err);
+      console.warn('[LocalDb] Modo Offline para eliminación de novedad de mesa:', err);
+      novedadesRecords = novedadesRecords.filter(r => String(r.uuid || r.id) !== String(targetRecordId) && String(r.id) !== String(existing.id));
+      await deleteLocalItem('libro_novedades_mesas', targetRecordId);
+      await queueOutboxAction({
+        entity: 'libro_novedades_mesas',
+        action: 'delete',
+        endpoint: `/api/master/libros/${lId}/novedades-mesas/${targetRecordId}`,
+        method: 'DELETE',
+        targetId: targetRecordId
+      });
+      updateField(mesaId, 'hora_apertura', '');
+      updateField(mesaId, 'hora_cierre', '');
+      updateField(mesaId, 'pitboss', '');
+      updateField(mesaId, 'croupier_apertura', '');
+      updateField(mesaId, 'croupier_cierre', '');
+      updateField(mesaId, 'observacion', '');
+      triggerToast('Modo Offline: Registro de mesa eliminado localmente.', 'info');
     }
   }
 

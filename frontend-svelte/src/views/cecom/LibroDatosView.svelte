@@ -8,6 +8,13 @@
     loadMasterStoresFromBackend,
     currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
+  import {
+    getLocalItems,
+    saveLocalItems,
+    upsertLocalItem,
+    deleteLocalItem,
+    queueOutboxAction
+  } from '../../services/localDb.service.js';
 
   export let libro = null;
   export let libroId = null;
@@ -349,11 +356,44 @@
     loadDatos();
   }
 
+  let recordUuid = null;
+
   async function loadDatos() {
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
 
     isLoadingData = true;
+
+    // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_datos', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+      );
+      if (Array.isArray(local) && local.length > 0) {
+        const d = local[0];
+        recordId = d.id;
+        recordUuid = d.uuid || null;
+        aperturaSalaInicio = d.apertura_sala_inicio || '';
+        aperturaSalaFin = d.apertura_sala_fin || '';
+        aperturaMaquinasInicio = d.apertura_maquinas_inicio || '';
+        aperturaMaquinasFin = d.apertura_maquinas_fin || '';
+        aperturaBingoInicio = d.apertura_bingo_inicio || '';
+        aperturaBingoFin = d.apertura_bingo_fin || '';
+        retirosDropboxInicio = d.retiros_dropbox_inicio || '';
+        retirosDropboxFin = d.retiros_dropbox_fin || '';
+        conteoDropboxInicio = d.conteo_dropbox_inicio || '';
+        conteoDropboxFin = d.conteo_dropbox_fin || '';
+        operadorTurnoA = d.operador_turno_a || '';
+        operadorTurnoC = d.operador_turno_c || '';
+        operadoresTurnoAList = parseOperadores(operadorTurnoA);
+        operadoresTurnoCList = parseOperadores(operadorTurnoC);
+        lastUpdatedAt = d.updated_at || d.created_at || null;
+        isLoadingData = false;
+      }
+    } catch (e) {}
+
+    // 2. Consulta al backend si hay conexión para refrescar
     try {
       const res = await fetch(`/api/master/libros/${lId}/datos`);
       if (res.ok) {
@@ -361,6 +401,7 @@
         if (json && json.success && json.data) {
           const d = json.data;
           recordId = d.id;
+          recordUuid = d.uuid || null;
           aperturaSalaInicio = d.apertura_sala_inicio || '';
           aperturaSalaFin = d.apertura_sala_fin || '';
 
@@ -383,8 +424,10 @@
           operadoresTurnoCList = parseOperadores(operadorTurnoC);
 
           lastUpdatedAt = d.updated_at || d.created_at || null;
-        } else {
+          saveLocalItems('libro_datos', [d]).catch(() => {});
+        } else if (!recordId) {
           recordId = null;
+          recordUuid = null;
           aperturaSalaInicio = '';
           aperturaSalaFin = '';
           aperturaMaquinasInicio = '';
@@ -403,7 +446,7 @@
         }
       }
     } catch (err) {
-      console.error('Error al cargar datos operativos del libro:', err);
+      console.warn('[LocalDb] Sin conexión al backend para datos operativos (usando datos locales):', err);
     } finally {
       isLoadingData = false;
     }
@@ -429,22 +472,26 @@
 
     isSaving = true;
     saveStatus = 'saving';
-    try {
-      const payload = {
-        apertura_sala_inicio: aperturaSalaInicio,
-        apertura_sala_fin: aperturaSalaFin,
-        apertura_maquinas_inicio: aperturaMaquinasInicio,
-        apertura_maquinas_fin: aperturaMaquinasFin,
-        apertura_bingo_inicio: aperturaBingoInicio,
-        apertura_bingo_fin: aperturaBingoFin,
-        retiros_dropbox_inicio: retirosDropboxInicio,
-        retiros_dropbox_fin: retirosDropboxFin,
-        conteo_dropbox_inicio: conteoDropboxInicio,
-        conteo_dropbox_fin: conteoDropboxFin,
-        operador_turno_a: operadoresTurnoAList.join(', '),
-        operador_turno_c: operadoresTurnoCList.join(', ')
-      };
+    const itemUuid = recordUuid || crypto.randomUUID();
+    const payload = {
+      uuid: itemUuid,
+      libro_id: lId,
+      libro_uuid: libro?.uuid || null,
+      apertura_sala_inicio: aperturaSalaInicio,
+      apertura_sala_fin: aperturaSalaFin,
+      apertura_maquinas_inicio: aperturaMaquinasInicio,
+      apertura_maquinas_fin: aperturaMaquinasFin,
+      apertura_bingo_inicio: aperturaBingoInicio,
+      apertura_bingo_fin: aperturaBingoFin,
+      retiros_dropbox_inicio: retirosDropboxInicio,
+      retiros_dropbox_fin: retirosDropboxFin,
+      conteo_dropbox_inicio: conteoDropboxInicio,
+      conteo_dropbox_fin: conteoDropboxFin,
+      operador_turno_a: operadoresTurnoAList.join(', '),
+      operador_turno_c: operadoresTurnoCList.join(', ')
+    };
 
+    try {
       const res = await fetch(`/api/master/libros/${lId}/datos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -459,7 +506,9 @@
         }
         if (json.data) {
           recordId = json.data.id;
+          recordUuid = json.data.uuid || itemUuid;
           lastUpdatedAt = json.data.updated_at || json.data.created_at;
+          await upsertLocalItem('libro_datos', json.data);
         }
 
         if (saveStatusTimeout) clearTimeout(saveStatusTimeout);
@@ -473,11 +522,30 @@
         }
       }
     } catch (err) {
-      saveStatus = 'idle';
-      console.error('Error al guardar datos:', err);
+      console.warn('[LocalDb] Modo Offline: guardando datos operativos en IndexedDB y encolando outbox:', err);
+      saveStatus = 'saved';
+      const offlineRecord = {
+        id: recordId || `temp_${Date.now()}`,
+        ...payload,
+        updated_at: new Date().toISOString()
+      };
+      await upsertLocalItem('libro_datos', offlineRecord);
+      await queueOutboxAction({
+        entity: 'libro_datos',
+        action: recordId ? 'update' : 'create',
+        endpoint: `/api/master/libros/${lId}/datos`,
+        method: 'POST',
+        payload: offlineRecord,
+        uuid: itemUuid
+      });
+
       if (!silent) {
-        triggerToast(`Error de conexión: ${err.message}`, 'error');
+        triggerToast('Modo Offline: Datos operativos guardados localmente.', 'info');
       }
+      if (saveStatusTimeout) clearTimeout(saveStatusTimeout);
+      saveStatusTimeout = setTimeout(() => {
+        if (saveStatus === 'saved') saveStatus = 'idle';
+      }, 2500);
     } finally {
       isSaving = false;
     }

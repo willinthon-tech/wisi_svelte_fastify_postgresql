@@ -533,7 +533,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
         console.warn(`[LocalDb] Operando offline para actualizar en ${entityName}: guardando en IndexedDB y encolando outbox.`);
         const updatedItem = { id, ...draft, updated_at: new Date().toISOString() };
         await upsertLocalItem(localStoreName, updatedItem);
-        store.update(list => (Array.isArray(list) ? list.map(it => Number(it.id) === Number(id) ? { ...it, ...draft } : it) : []));
+        store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(id) || String(it.id) === String(id)) ? { ...it, ...draft } : it) : []));
         await queueOutboxAction({
           entity: localStoreName,
           action: 'update',
@@ -563,7 +563,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
       } catch (err) {
         console.warn(`[LocalDb] Operando offline para eliminar en ${entityName}: eliminando de IndexedDB y encolando outbox.`);
         await deleteLocalItem(localStoreName, id);
-        store.update(list => (Array.isArray(list) ? list.filter(it => Number(it.id) !== Number(id)) : []));
+        store.update(list => (Array.isArray(list) ? list.filter(it => String(it.uuid || it.id) !== String(id) && String(it.id) !== String(id)) : []));
         await queueOutboxAction({
           entity: localStoreName,
           action: 'delete',

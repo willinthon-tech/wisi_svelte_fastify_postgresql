@@ -12,6 +12,8 @@
   import LibroResumenView from './LibroResumenView.svelte';
   import LibroDatosView from './LibroDatosView.svelte';
 
+  import { getLocalItems, upsertLocalItem } from '../../services/localDb.service.js';
+
   export let libroId = null;
 
   let libro = null;
@@ -39,7 +41,7 @@
     if (!routeStr) return;
     const clean = String(routeStr).replace(/^#\/?/, '').replace(/^\//, '').trim();
     // Match pattern cecom/libro/:id(/:subvista)? o libro/:id(/:subvista)? o :id(/:subvista)?
-    const match = clean.match(/(?:cecom\/libro\/|libro\/|^)(\d+)(?:\/([a-z0-9-]+))?/i);
+    const match = clean.match(/(?:cecom\/libro\/|libro\/|^)([a-f0-9-]+|\d+)(?:\/([a-z0-9-]+))?/i);
     if (match) {
       const parsedId = match[1];
       const parsedSub = match[2];
@@ -80,17 +82,31 @@
   async function loadLibro(id) {
     isLoading = true;
     loadError = null;
+
+    // 1. Carga inmediata desde base de datos local (0ms)
+    try {
+      const local = await getLocalItems('libros', l => String(l.uuid) === String(id) || String(l.id) === String(id));
+      if (local && local.length > 0) {
+        libro = local[0];
+        isLoading = false;
+      }
+    } catch (e) {}
+
+    // 2. Consulta al backend si hay red
     try {
       const res = await fetch(`/api/master/libros/${id}`);
       const json = await res.json();
       if (res.ok && json && json.success && json.data) {
         libro = json.data;
-      } else {
+        upsertLocalItem('libros', json.data).catch(() => {});
+      } else if (!libro) {
         loadError = json?.error || 'Libro no encontrado en el servidor';
       }
     } catch (err) {
-      console.error('Error al cargar libro:', err);
-      loadError = 'Error de conexión al cargar los datos del libro';
+      console.warn('[LocalDb] Sin conexión para cargar libro (usando local si existe):', err);
+      if (!libro) {
+        loadError = 'Error de conexión al cargar los datos del libro';
+      }
     } finally {
       isLoading = false;
     }

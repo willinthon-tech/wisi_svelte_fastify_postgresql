@@ -9,6 +9,13 @@
     loadMasterStoresFromBackend,
     currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
+  import {
+    getLocalItems,
+    saveLocalItems,
+    upsertLocalItem,
+    deleteLocalItem,
+    queueOutboxAction
+  } from '../../services/localDb.service.js';
 
   export let libro = null;
   export let libroId = null;
@@ -28,9 +35,11 @@
   let records = [];
   let isLoadingRecords = true;
 
-  // Ordenados por ID de la tabla (el último registrado primero / ID descendente)
-  // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
-  $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
+  // Ordenados de manera segura por timestamp o identificador descendente
+  $: sortedRecords = [...records].sort((a, b) => 
+    (new Date(b.created_at || 0) - new Date(a.created_at || 0)) ||
+    (String(b.id || '').localeCompare(String(a.id || '')))
+  );
 
   // Llaves cargadas del servidor o store
   let serverLlaves = [];
@@ -154,27 +163,41 @@
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
+
+    // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_control_llaves', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+      );
+      if (Array.isArray(local) && local.length > 0) {
+        records = local;
+        isLoadingRecords = false;
+      }
+    } catch (e) {}
+
+    // 2. Consulta al backend si hay conexión para refrescar
     try {
       const res = await fetch(`/api/master/libros/${lId}/control-llaves`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success) {
           records = json.data || [];
+          saveLocalItems('libro_control_llaves', json.data).catch(() => {});
         }
       }
     } catch (err) {
-      console.error('Error al cargar control de llaves:', err);
+      console.warn('[LocalDb] Sin conexión al backend para control-llaves (usando datos locales):', err);
     } finally {
       isLoadingRecords = false;
     }
   }
 
   function toggleLlaveSelection(llaveId) {
-    const id = Number(llaveId);
-    if (selectedLlavesIds.includes(id)) {
-      selectedLlavesIds = selectedLlavesIds.filter(i => i !== id);
+    if (selectedLlavesIds.some(i => String(i) === String(llaveId))) {
+      selectedLlavesIds = selectedLlavesIds.filter(i => String(i) !== String(llaveId));
     } else {
-      selectedLlavesIds = [...selectedLlavesIds, id];
+      selectedLlavesIds = [...selectedLlavesIds, llaveId];
     }
   }
 
@@ -182,16 +205,16 @@
     if (selectedLlavesIds.length === availableLlaves.length) {
       selectedLlavesIds = [];
     } else {
-      selectedLlavesIds = availableLlaves.map(k => Number(k.id));
+      selectedLlavesIds = availableLlaves.map(k => k.uuid || k.id);
     }
   }
 
   function removeLlaveTag(llaveId) {
-    selectedLlavesIds = selectedLlavesIds.filter(i => i !== Number(llaveId));
+    selectedLlavesIds = selectedLlavesIds.filter(i => String(i) !== String(llaveId));
   }
 
   function getLlaveName(id) {
-    const k = availableLlaves.find(item => Number(item.id) === Number(id));
+    const k = availableLlaves.find(item => String(item.uuid || item.id) === String(id) || String(item.id) === String(id));
     return k?.nombre || `Llave #${id}`;
   }
 
@@ -212,13 +235,17 @@
     }
 
     isSaving = true;
-    try {
-      const payload = {
-        llaves_ids: selectedLlavesIds,
-        descripcion: (descripcion || '').trim() || 'General',
-        hora_salida: getCurrentTimeString()
-      };
+    const itemUuid = crypto.randomUUID();
+    const horaSalida = getCurrentTimeString();
+    const payload = {
+      uuid: itemUuid,
+      llaves_ids: selectedLlavesIds,
+      llaves_uuids: selectedLlavesIds.filter(x => typeof x === 'string' && x.length > 20),
+      descripcion: (descripcion || '').trim() || 'General',
+      hora_salida: horaSalida
+    };
 
+    try {
       const res = await fetch(`/api/master/libros/${lId}/control-llaves`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -228,6 +255,9 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Movimiento de llaves registrado exitosamente', 'success');
+        const savedData = json.data || { ...payload, id: `local_${Date.now()}` };
+        await upsertLocalItem('libro_control_llaves', savedData);
+
         // Reset form
         selectedLlavesIds = [];
         descripcion = '';
@@ -238,8 +268,35 @@
         triggerToast(json?.error || 'Error al guardar control de llaves', 'error');
       }
     } catch (err) {
-      console.error('Error al guardar movimiento de llaves:', err);
-      triggerToast(`Error de conexión: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline: guardando movimiento de llaves en base de datos local y encolando outbox:', err);
+      const offlineRecord = {
+        id: `temp_${Date.now()}`,
+        uuid: itemUuid,
+        libro_id: lId,
+        libro_uuid: libro?.uuid || null,
+        llaves_ids: selectedLlavesIds,
+        llaves_detalle: selectedLlavesIds.map(id => ({ id, nombre: getLlaveName(id) })),
+        descripcion: (descripcion || '').trim() || 'General',
+        hora_salida: horaSalida,
+        hora_recepcion: null,
+        created_at: new Date().toISOString()
+      };
+
+      records = [offlineRecord, ...records];
+      await upsertLocalItem('libro_control_llaves', offlineRecord);
+      await queueOutboxAction({
+        entity: 'libro_control_llaves',
+        action: 'create',
+        endpoint: `/api/master/libros/${lId}/control-llaves`,
+        method: 'POST',
+        payload: offlineRecord,
+        uuid: itemUuid
+      });
+
+      triggerToast('Modo Offline: Movimiento de llaves guardado localmente. Se sincronizará automáticamente al conectar.', 'info');
+      selectedLlavesIds = [];
+      descripcion = '';
+      isMultiselectOpen = false;
     } finally {
       isSaving = false;
     }
@@ -262,12 +319,22 @@
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'info');
         records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
+        await deleteLocalItem('libro_control_llaves', recordId);
       } else {
         triggerToast(json?.error || 'Error al eliminar registro', 'error');
       }
     } catch (err) {
-      console.error('Error al eliminar registro de llaves:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline para eliminación de control-llaves:', err);
+      records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
+      await deleteLocalItem('libro_control_llaves', recordId);
+      await queueOutboxAction({
+        entity: 'libro_control_llaves',
+        action: 'delete',
+        endpoint: `/api/master/libros/${lId}/control-llaves/${recordId}`,
+        method: 'DELETE',
+        targetId: recordId
+      });
+      triggerToast('Modo Offline: Registro de llaves eliminado localmente.', 'info');
     }
   }
 
@@ -317,13 +384,13 @@
     if (!lId) return;
 
     isSavingHoras = true;
-    try {
-      const payload = {
-        hora_salida: modalHoraSalida || getCurrentTimeString(),
-        hora_recepcion: modalHoraRecepcion || null
-      };
+    const targetId = editingRecord.uuid || editingRecord.id;
+    const payload = {
+      hora_salida: modalHoraSalida || getCurrentTimeString(),
+      hora_recepcion: modalHoraRecepcion || null
+    };
 
-      const targetId = editingRecord.uuid || editingRecord.id;
+    try {
       const res = await fetch(`/api/master/libros/${lId}/control-llaves/${targetId}/horas`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -333,14 +400,32 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Horas actualizadas correctamente', 'success');
+        const updatedData = json.data || { ...editingRecord, ...payload };
+        await upsertLocalItem('libro_control_llaves', updatedData);
         cerrarModalHoras();
         await loadRecords();
       } else {
         triggerToast(json?.error || 'Error al actualizar horas', 'error');
       }
     } catch (err) {
-      console.error('Error al actualizar horas:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline para actualización de horas de llaves:', err);
+      const updatedOffline = {
+        ...editingRecord,
+        ...payload,
+        updated_at: new Date().toISOString()
+      };
+      records = records.map(r => String(r.uuid || r.id) === String(targetId) ? updatedOffline : r);
+      await upsertLocalItem('libro_control_llaves', updatedOffline);
+      await queueOutboxAction({
+        entity: 'libro_control_llaves',
+        action: 'update',
+        endpoint: `/api/master/libros/${lId}/control-llaves/${targetId}/horas`,
+        method: 'PUT',
+        payload: updatedOffline,
+        targetId
+      });
+      triggerToast('Modo Offline: Horas guardadas localmente.', 'info');
+      cerrarModalHoras();
     } finally {
       isSavingHoras = false;
     }

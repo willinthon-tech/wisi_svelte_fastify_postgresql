@@ -12,6 +12,10 @@
     masterMetodosPagoStore,
     loadMasterStoresFromBackend,
   } from "../../controllers/master.store.js";
+  import {
+    getLocalItems,
+    upsertLocalItem
+  } from "../../services/localDb.service.js";
 
   export let isPublic = false;
   export let libro = null;
@@ -56,21 +60,21 @@
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
     if (!libroId && typeof window !== "undefined") {
       const hash = window.location.hash || "";
-      const matchHash = hash.match(/reportes\/cecom\/(?:libro|ibro)\/(\d+)/i);
+      const matchHash = hash.match(/reportes\/cecom\/(?:libro|ibro)\/([a-f0-9-]+|\d+)/i);
       if (matchHash) libroId = matchHash[1];
 
       if (!libroId) {
         const path = window.location.pathname || "";
-        const matchPath = path.match(/reportes\/cecom\/(?:libro|ibro)\/(\d+)/i);
+        const matchPath = path.match(/reportes\/cecom\/(?:libro|ibro)\/([a-f0-9-]+|\d+)/i);
         if (matchPath) libroId = matchPath[1];
       }
     }
 
     await loadMasterStoresFromBackend();
 
-    const targetId = libroId || libro?.id;
+    const targetId = libroId || libro?.uuid || libro?.id;
     if (targetId) {
-      if (Number(targetId) !== Number(lastLoadedId)) {
+      if (String(targetId) !== String(lastLoadedId)) {
         await loadFullResumen(targetId);
       }
     } else {
@@ -81,16 +85,44 @@
 
   let lastLoadedId = null;
 
-  $: currentTargetId = libroId || libro?.id;
-  $: if (currentTargetId && Number(currentTargetId) !== Number(lastLoadedId)) {
+  $: currentTargetId = libroId || libro?.uuid || libro?.id;
+  $: if (currentTargetId && String(currentTargetId) !== String(lastLoadedId)) {
     loadFullResumen(currentTargetId);
   }
 
   async function loadFullResumen(id) {
     if (!id) return;
-    lastLoadedId = Number(id);
+    lastLoadedId = String(id);
     isLoading = true;
     loadError = null;
+
+    // 1. Carga previa inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_reporte', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(id) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(id) || String(r.libro_id) === String(libro?.id))) ||
+        (String(r.id) === String(id) || String(r.uuid) === String(id))
+      );
+      if (Array.isArray(local) && local.length > 0) {
+        const item = local[0];
+        const payload = item.data || item;
+        reporteExists = true;
+        resumenData = {
+          libro: payload.libro || libro,
+          datos: payload.datos || null,
+          drop_mesas: payload.drop_mesas || [],
+          novedades_mesas: payload.novedades_mesas || [],
+          aportes: payload.aportes_maquinas || payload.aportes || [],
+          control_llaves: payload.control_llaves || [],
+          control_clientes: payload.control_clientes || [],
+          incidencias_generales: payload.incidencias_generales || [],
+        };
+        if (!libro && resumenData.libro) {
+          libro = resumenData.libro;
+        }
+        isLoading = false;
+      }
+    } catch (e) {}
 
     try {
       // Consume directamente del endpoint de la tabla libro_reporte
@@ -106,9 +138,9 @@
           const payload = json.data.data || json.data;
 
           const loadedLibro =
-            payload.libro && Number(payload.libro.id) === Number(id)
+            payload.libro && (String(payload.libro.uuid) === String(id) || String(payload.libro.id) === String(id))
               ? payload.libro
-              : libro && Number(libro.id) === Number(id)
+              : libro && (String(libro.uuid) === String(id) || String(libro.id) === String(id))
                 ? libro
                 : payload.libro || libro;
 
@@ -125,15 +157,20 @@
           if (!libro && resumenData.libro) {
             libro = resumenData.libro;
           }
+          upsertLocalItem('libro_reporte', json.data).catch(() => {});
           isLoading = false;
           return;
         }
       }
 
-      loadError = "No se pudo cargar la información del libro";
+      if (!reporteExists) {
+        loadError = "No se pudo cargar la información del libro";
+      }
     } catch (err) {
-      console.error("Error al cargar reporte consolidado de libro:", err);
-      loadError = "Error de conexión al cargar la información del libro";
+      console.warn("[LocalDb] Error o sin conexión al cargar reporte consolidado (usando local si existe):", err);
+      if (!reporteExists) {
+        loadError = "Error de conexión al cargar la información del libro";
+      }
     } finally {
       isLoading = false;
     }
@@ -141,7 +178,7 @@
 
   // Generar o actualizar instantánea en la tabla libro_reporte (Botón principal solicitado)
   async function handleGenerarOActualizarReporte() {
-    const id = libroId || libro?.id || activeLibro?.id || resumenData.libro?.id;
+    const id = libroId || libro?.uuid || libro?.id || activeLibro?.uuid || activeLibro?.id || resumenData.libro?.uuid || resumenData.libro?.id;
     if (!id) return;
     isSyncing = true;
     try {
@@ -162,9 +199,9 @@
         const payload = json.data?.data || json.data;
         if (payload) {
           const loadedLibro =
-            payload.libro && Number(payload.libro.id) === Number(id)
+            payload.libro && (String(payload.libro.uuid) === String(id) || String(payload.libro.id) === String(id))
               ? payload.libro
-              : libro && Number(libro.id) === Number(id)
+              : libro && (String(libro.uuid) === String(id) || String(libro.id) === String(id))
                 ? libro
                 : payload.libro || libro;
 
@@ -181,6 +218,7 @@
           if (!libro && resumenData.libro) {
             libro = resumenData.libro;
           }
+          upsertLocalItem('libro_reporte', json.data).catch(() => {});
         }
         triggerToast(
           wasExisting

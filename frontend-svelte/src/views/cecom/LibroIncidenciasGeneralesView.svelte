@@ -7,6 +7,13 @@
     loadMasterStoresFromBackend,
     currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
+  import {
+    getLocalItems,
+    saveLocalItems,
+    upsertLocalItem,
+    deleteLocalItem,
+    queueOutboxAction
+  } from '../../services/localDb.service.js';
 
   export let libro = null;
   export let libroId = null;
@@ -82,9 +89,11 @@
     return 'badge-custom';
   }
 
-  // Lista ordenada por ID de la tabla (la más última primero / ID descendente)
-  // Se ordena estrictamente por ID para evitar problemas con turnos nocturnos que cruzan la medianoche
-  $: sortedRecords = [...records].sort((a, b) => Number(b.id) - Number(a.id));
+  // Lista ordenada de manera segura por fecha/hora o identificador descendente
+  $: sortedRecords = [...records].sort((a, b) => 
+    (new Date(b.created_at || 0) - new Date(a.created_at || 0)) ||
+    (String(b.id || '').localeCompare(String(a.id || '')))
+  );
 
   // Filtrado según la pestaña activa
   $: filteredRecords = (() => {
@@ -288,16 +297,31 @@
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
+
+    // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_incidencias_generales', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+      );
+      if (Array.isArray(local) && local.length > 0) {
+        records = local;
+        isLoadingRecords = false;
+      }
+    } catch (e) {}
+
+    // 2. Consulta al backend si hay conexión para refrescar
     try {
       const res = await fetch(`/api/master/libros/${lId}/incidencias-generales`);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success) {
           records = json.data || [];
+          saveLocalItems('libro_incidencias_generales', json.data).catch(() => {});
         }
       }
     } catch (err) {
-      console.error('Error al cargar incidencias generales:', err);
+      console.warn('[LocalDb] Sin conexión al backend para incidencias generales (usando datos locales):', err);
     } finally {
       isLoadingRecords = false;
     }
@@ -330,12 +354,13 @@
     isSaving = true;
     try {
       const horaActual = getCurrentTimeString();
-      const tipoId = Number(tipoIncidenciaId) || 1;
-      const tipoStr = tipo || 'General';
+      const matchedTipo = availableTiposIncidencia.find(t => String(t.id) === String(tipoIncidenciaId) || String(t.uuid) === String(tipoIncidenciaId));
+      const tipoId = matchedTipo?.id || 1;
+      const tipoUuid = matchedTipo?.uuid || null;
+      const tipoStr = matchedTipo?.nombre || tipo || 'General';
 
       let guardados = 0;
       for (const block of blocks) {
-        // Reconstruir la descripción del registro individual: título + items con viñeta
         const lines = [];
         if (block.rawTitle) {
           lines.push(block.rawTitle);
@@ -346,34 +371,67 @@
         const blockDesc = lines.join('\n').trim();
         if (!blockDesc) continue;
 
-        // Si el título contiene una hora explícita (ej. 14:10 ...), respetarla; si no, usar la actual
         const horaMatch = block.rawTitle.match(/^(\d{1,2}:\d{2})/);
         const horaRegistro = horaMatch ? horaMatch[1] : horaActual;
+        const itemUuid = crypto.randomUUID();
 
         const payload = {
+          uuid: itemUuid,
           descripcion: blockDesc,
           tipo_incidencia_id: tipoId,
+          tipo_incidencia_uuid: tipoUuid,
           tipo: tipoStr,
           hora: horaRegistro
         };
 
-        const res = await fetch(`/api/master/libros/${lId}/incidencias-generales`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        try {
+          const res = await fetch(`/api/master/libros/${lId}/incidencias-generales`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
 
-        const json = await res.json();
-        if (res.ok && json && json.success) {
+          const json = await res.json();
+          if (res.ok && json && json.success) {
+            guardados++;
+            const savedData = json.data || { ...payload, id: `local_${Date.now()}` };
+            await upsertLocalItem('libro_incidencias_generales', savedData);
+          } else {
+            throw new Error(json?.error || `Error al guardar "${block.rawTitle || 'incidencia'}"`);
+          }
+        } catch (postErr) {
+          console.warn('[LocalDb] Modo Offline para incidencia individual:', postErr);
+          const offlineRecord = {
+            id: `temp_${Date.now()}_${Math.random()}`,
+            uuid: itemUuid,
+            libro_id: lId,
+            libro_uuid: libro?.uuid || null,
+            tipo_incidencia_id: tipoId,
+            tipo_incidencia_uuid: tipoUuid,
+            tipo: tipoStr,
+            tipo_incidencia_nombre: tipoStr,
+            descripcion: blockDesc,
+            hora: horaRegistro,
+            created_at: new Date().toISOString()
+          };
+
+          records = [offlineRecord, ...records];
+          await upsertLocalItem('libro_incidencias_generales', offlineRecord);
+          await queueOutboxAction({
+            entity: 'libro_incidencias_generales',
+            action: 'create',
+            endpoint: `/api/master/libros/${lId}/incidencias-generales`,
+            method: 'POST',
+            payload: offlineRecord,
+            uuid: itemUuid
+          });
           guardados++;
-        } else {
-          throw new Error(json?.error || `Error al guardar "${block.rawTitle || 'incidencia'}"`);
         }
       }
 
       if (guardados > 1) {
-        triggerToast(`${guardados} incidencias registradas exitosamente`, 'success');
-      } else {
+        triggerToast(`${guardados} incidencias registradas`, 'success');
+      } else if (guardados === 1) {
         triggerToast('Incidencia registrada exitosamente', 'success');
       }
 
@@ -404,12 +462,22 @@
       if (res.ok && json && json.success) {
         triggerToast('Incidencia eliminada correctamente', 'info');
         records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
+        await deleteLocalItem('libro_incidencias_generales', recordId);
       } else {
         triggerToast(json?.error || 'Error al eliminar incidencia', 'error');
       }
     } catch (err) {
-      console.error('Error al eliminar incidencia:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline para eliminación de incidencia:', err);
+      records = records.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
+      await deleteLocalItem('libro_incidencias_generales', recordId);
+      await queueOutboxAction({
+        entity: 'libro_incidencias_generales',
+        action: 'delete',
+        endpoint: `/api/master/libros/${lId}/incidencias-generales/${recordId}`,
+        method: 'DELETE',
+        targetId: recordId
+      });
+      triggerToast('Modo Offline: Incidencia eliminada localmente.', 'info');
     }
   }
 
@@ -462,30 +530,50 @@
     }
 
     isSavingModal = true;
+    const targetId = editingRecord.uuid || editingRecord.id;
+    const payload = {
+      tipo_incidencia_id: modalTipoIncidenciaId,
+      tipo: modalTipo || 'General',
+      descripcion: cleanDesc,
+      hora: modalHora
+    };
+
     try {
-      const targetId = editingRecord.uuid || editingRecord.id;
       const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipo_incidencia_id: modalTipoIncidenciaId,
-          tipo: modalTipo || 'General',
-          descripcion: cleanDesc,
-          hora: modalHora
-        })
+        body: JSON.stringify(payload)
       });
 
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Incidencia actualizada correctamente', 'success');
+        const updatedData = json.data || { ...editingRecord, ...payload };
+        await upsertLocalItem('libro_incidencias_generales', updatedData);
         cerrarModalEditar();
         await loadRecords();
       } else {
         triggerToast(json?.error || 'Error al actualizar', 'error');
       }
     } catch (err) {
-      console.error('Error al actualizar incidencia:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline para edición de incidencia:', err);
+      const updatedOffline = {
+        ...editingRecord,
+        ...payload,
+        updated_at: new Date().toISOString()
+      };
+      records = records.map(r => String(r.uuid || r.id) === String(targetId) ? updatedOffline : r);
+      await upsertLocalItem('libro_incidencias_generales', updatedOffline);
+      await queueOutboxAction({
+        entity: 'libro_incidencias_generales',
+        action: 'update',
+        endpoint: `/api/master/libros/${lId}/incidencias-generales/${targetId}`,
+        method: 'PUT',
+        payload: updatedOffline,
+        targetId
+      });
+      triggerToast('Modo Offline: Incidencia actualizada localmente.', 'info');
+      cerrarModalEditar();
     } finally {
       isSavingModal = false;
     }

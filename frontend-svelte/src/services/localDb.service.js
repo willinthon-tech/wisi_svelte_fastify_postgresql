@@ -5,7 +5,7 @@ export const pendingSyncCountStore = writable(0);
 export const isLocalDbReadyStore = writable(false);
 
 const DB_NAME = 'wisi_local_db_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const LOCAL_STORES = [
   'clientes',
@@ -42,6 +42,7 @@ export const LOCAL_STORES = [
   'libro_novedades_mesas',
   'libro_datos',
   'libro_drop_mesas',
+  'libro_reporte',
   'attlogs',
   'outbox_sync_queue'
 ];

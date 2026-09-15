@@ -10,6 +10,13 @@
     loadMasterStoresFromBackend,
     currentRoutePermissionsStore
   } from '../../controllers/master.store.js';
+  import {
+    getLocalItems,
+    saveLocalItems,
+    upsertLocalItem,
+    deleteLocalItem,
+    queueOutboxAction
+  } from '../../services/localDb.service.js';
 
   export let libro = null;
   export let libroId = null;
@@ -159,6 +166,23 @@
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
     isLoadingRecords = true;
+
+    // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
+    try {
+      const local = await getLocalItems('libro_drop_mesas', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+      );
+      if (Array.isArray(local) && local.length > 0) {
+        dropRecords = local;
+        if (selectedMesaId) {
+          handleMesaChange();
+        }
+        isLoadingRecords = false;
+      }
+    } catch (e) {}
+
+    // 2. Consulta al backend si hay conexión para refrescar
     try {
       const res = await fetch(`/api/master/libros/${lId}/drop-mesas`);
       if (res.ok) {
@@ -168,10 +192,11 @@
           if (selectedMesaId) {
             handleMesaChange();
           }
+          saveLocalItems('libro_drop_mesas', json.data).catch(() => {});
         }
       }
     } catch (err) {
-      console.error('Error al cargar drop de mesas:', err);
+      console.warn('[LocalDb] Sin conexión al backend para drop-mesas (usando datos locales):', err);
     } finally {
       isLoadingRecords = false;
     }
@@ -184,7 +209,7 @@
       return;
     }
 
-    const existing = dropRecords.find(r => Number(r.mesa_id) === Number(selectedMesaId));
+    const existing = dropRecords.find(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) || String(r.mesa_id) === String(selectedMesaId));
     if (existing) {
       const v100 = Number(existing.denominacion_100 ?? existing.b100 ?? 0);
       const v50 = Number(existing.denominacion_50 ?? existing.b50 ?? 0);
@@ -231,18 +256,23 @@
       return;
     }
 
-    isSaving = true;
-    try {
-      const payload = {
-        mesa_id: Number(selectedMesaId),
-        denominacion_100: Number(b100) || 0,
-        denominacion_50: Number(b50) || 0,
-        denominacion_20: Number(b20) || 0,
-        denominacion_10: Number(b10) || 0,
-        denominacion_5: Number(b5) || 0,
-        denominacion_1: Number(b1) || 0
-      };
+    const mesaObj = availableMesas.find(m => String(m.id) === String(selectedMesaId) || String(m.uuid) === String(selectedMesaId));
+    const itemUuid = crypto.randomUUID();
 
+    isSaving = true;
+    const payload = {
+      uuid: itemUuid,
+      mesa_id: mesaObj?.id || Number(selectedMesaId),
+      mesa_uuid: mesaObj?.uuid || null,
+      denominacion_100: Number(b100) || 0,
+      denominacion_50: Number(b50) || 0,
+      denominacion_20: Number(b20) || 0,
+      denominacion_10: Number(b10) || 0,
+      denominacion_5: Number(b5) || 0,
+      denominacion_1: Number(b1) || 0
+    };
+
+    try {
       const res = await fetch(`/api/master/libros/${lId}/drop-mesas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -252,17 +282,40 @@
       const json = await res.json();
       if (res.ok && json && json.success) {
         triggerToast('Registro de drop guardado exitosamente', 'success');
-        // Reset form
+        const savedRecord = json.data || { ...payload, id: `local_${Date.now()}` };
+        await upsertLocalItem('libro_drop_mesas', savedRecord);
         selectedMesaId = '';
         limpiarCampos();
-
         await loadDropRecords();
       } else {
         triggerToast(json?.error || 'Error al guardar registro de drop', 'error');
       }
     } catch (err) {
-      console.error('Error al guardar drop:', err);
-      triggerToast(`Error de conexión: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline: guardando drop en base de datos local y encolando outbox:', err);
+      const offlineRecord = {
+        id: `temp_${Date.now()}`,
+        uuid: itemUuid,
+        libro_id: lId,
+        libro_uuid: libro?.uuid || null,
+        mesa_nombre: mesaObj?.nombre || `Mesa #${selectedMesaId}`,
+        ...payload,
+        created_at: new Date().toISOString()
+      };
+
+      dropRecords = [offlineRecord, ...dropRecords.filter(r => String(r.mesa_uuid || r.mesa_id) !== String(selectedMesaId) && String(r.mesa_id) !== String(selectedMesaId))];
+      await upsertLocalItem('libro_drop_mesas', offlineRecord);
+      await queueOutboxAction({
+        entity: 'libro_drop_mesas',
+        action: 'create',
+        endpoint: `/api/master/libros/${lId}/drop-mesas`,
+        method: 'POST',
+        payload: offlineRecord,
+        uuid: itemUuid
+      });
+
+      triggerToast('Modo Offline: Drop guardado en base de datos local. Se sincronizará automáticamente al conectar.', 'info');
+      selectedMesaId = '';
+      limpiarCampos();
     } finally {
       isSaving = false;
     }
@@ -281,6 +334,7 @@
       if (res.ok && json && json.success) {
         triggerToast('Registro eliminado correctamente', 'info');
         dropRecords = dropRecords.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
+        await deleteLocalItem('libro_drop_mesas', recordId);
         if (selectedMesaId && !dropRecords.some(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) || String(r.mesa_id) === String(selectedMesaId))) {
           limpiarCampos();
         }
@@ -288,8 +342,20 @@
         triggerToast(json?.error || 'Error al eliminar registro', 'error');
       }
     } catch (err) {
-      console.error('Error al eliminar registro de drop:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
+      console.warn('[LocalDb] Modo Offline para eliminación de drop:', err);
+      dropRecords = dropRecords.filter(r => String(r.uuid || r.id) !== String(recordId) && String(r.id) !== String(recordId));
+      await deleteLocalItem('libro_drop_mesas', recordId);
+      await queueOutboxAction({
+        entity: 'libro_drop_mesas',
+        action: 'delete',
+        endpoint: `/api/master/libros/${lId}/drop-mesas/${recordId}`,
+        method: 'DELETE',
+        targetId: recordId
+      });
+      if (selectedMesaId && !dropRecords.some(r => String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) || String(r.mesa_id) === String(selectedMesaId))) {
+        limpiarCampos();
+      }
+      triggerToast('Modo Offline: Registro de drop eliminado localmente.', 'info');
     }
   }
 </script>
