@@ -520,93 +520,190 @@ export async function saveUserPermissionsToBackend(userId, permissionsMap) {
   }
 }
 
-// CRUD Actions Generator for 100% Real-Time PostgreSQL Sync with Local-First Outbox Support
+// CRUD Actions Generator for 100% Instant 0ms Local-First Execution with Real-Time PostgreSQL Sync & Outbox
 export function createMasterEntityActions(store, entityName, localStoreName = entityName) {
   return {
     add: async (item) => {
       let createdItem = { ...item };
-      if (!createdItem.uuid && typeof crypto !== 'undefined' && crypto.randomUUID) {
-        createdItem.uuid = crypto.randomUUID();
+      if (!createdItem.uuid) {
+        createdItem.uuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `local-${Date.now()}`;
       }
-      try {
-        const res = await fetch(`/api/master/${entityName}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(createdItem)
-        });
-        const json = await res.json();
-        if (!res.ok || (json && json.success === false)) {
-          throw new Error(json.error || `Error al crear en ${entityName}`);
+      if (!createdItem.id) {
+        createdItem.id = createdItem.uuid;
+      }
+      if (!createdItem.created_at) {
+        createdItem.created_at = new Date().toISOString();
+      }
+
+      // 1. Inmediatez absoluta (0ms): actualizar memoria reactiva Svelte al instante
+      store.update(list => [createdItem, ...(Array.isArray(list) ? list.filter(x => String(x.uuid || x.id) !== String(createdItem.uuid)) : [])]);
+
+      // 2. Persistencia local inmediata en IndexedDB (<5ms)
+      upsertLocalItem(localStoreName, createdItem).catch(e => console.warn(`[LocalDb] Error upserting ${localStoreName}:`, e));
+
+      // 3. Sincronización en segundo plano sin bloquear la UI
+      (async () => {
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        if (isOffline) {
+          await queueOutboxAction({
+            entity: localStoreName,
+            action: 'create',
+            endpoint: `/api/master/${entityName}`,
+            method: 'POST',
+            payload: createdItem,
+            uuid: createdItem.uuid
+          });
+          return;
         }
-        await upsertLocalItem(localStoreName, json.data || createdItem);
-        await loadMasterStoresFromBackend(true);
-        return json.data;
-      } catch (err) {
-        console.warn(`[LocalDb] Operando offline para crear en ${entityName}: guardando en IndexedDB y encolando outbox.`);
-        const localSaved = await upsertLocalItem(localStoreName, createdItem);
-        store.update(list => [createdItem, ...(Array.isArray(list) ? list : [])]);
-        await queueOutboxAction({
-          entity: localStoreName,
-          action: 'create',
-          endpoint: `/api/master/${entityName}`,
-          method: 'POST',
-          payload: createdItem,
-          uuid: createdItem.uuid
-        });
-        return localSaved || createdItem;
-      }
+
+        try {
+          const controller = new AbortController();
+          const tId = setTimeout(() => controller.abort(), 3500);
+          const res = await fetch(`/api/master/${entityName}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(createdItem),
+            signal: controller.signal
+          });
+          clearTimeout(tId);
+          const json = await res.json().catch(() => ({}));
+          if (res.ok && json && json.success !== false) {
+            const serverData = json.data || createdItem;
+            await upsertLocalItem(localStoreName, serverData);
+            store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(createdItem.uuid)) ? { ...it, ...serverData } : it) : []));
+          } else {
+            throw new Error(json?.error || `Error servidor al crear en ${entityName}`);
+          }
+        } catch (err) {
+          console.warn(`[LocalDb] Sincronización diferida para ${entityName} (encolando outbox):`, err.message);
+          await queueOutboxAction({
+            entity: localStoreName,
+            action: 'create',
+            endpoint: `/api/master/${entityName}`,
+            method: 'POST',
+            payload: createdItem,
+            uuid: createdItem.uuid
+          });
+        }
+      })();
+
+      // Retorno instantáneo (0ms)
+      return createdItem;
     },
     update: async (targetUuidOrId, draft) => {
       const targetUuid = typeof targetUuidOrId === 'object' ? (targetUuidOrId.uuid || targetUuidOrId.id) : targetUuidOrId;
-      try {
-        const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...draft })
-        });
-        const json = await res.json();
-        if (!res.ok || (json && json.success === false)) {
-          throw new Error(json.error || `Error al actualizar en ${entityName}`);
+      const updatedItem = { uuid: targetUuid, id: targetUuid, ...draft, updated_at: new Date().toISOString() };
+
+      // 1. Inmediatez absoluta (0ms): actualizar memoria reactiva Svelte al instante
+      store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(targetUuid)) ? { ...it, ...updatedItem } : it) : []));
+
+      // 2. Persistencia local inmediata en IndexedDB (<5ms)
+      upsertLocalItem(localStoreName, updatedItem).catch(e => console.warn(`[LocalDb] Error updating ${localStoreName}:`, e));
+
+      // 3. Sincronización en segundo plano sin bloquear la UI
+      (async () => {
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        if (isOffline) {
+          await queueOutboxAction({
+            entity: localStoreName,
+            action: 'update',
+            endpoint: `/api/master/${entityName}/${targetUuid}`,
+            method: 'PUT',
+            payload: draft,
+            targetId: targetUuid
+          });
+          return;
         }
-        await upsertLocalItem(localStoreName, json.data || { uuid: targetUuid, ...draft });
-        await loadMasterStoresFromBackend(true);
-        return json.data;
-      } catch (err) {
-        console.warn(`[LocalDb] Operando offline para actualizar en ${entityName}: guardando en IndexedDB y encolando outbox.`);
-        const updatedItem = { uuid: targetUuid, id: targetUuid, ...draft, updated_at: new Date().toISOString() };
-        await upsertLocalItem(localStoreName, updatedItem);
-        store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(targetUuid)) ? { ...it, ...draft } : it) : []));
-        await queueOutboxAction({
-          entity: localStoreName,
-          action: 'update',
-          endpoint: `/api/master/${entityName}/${targetUuid}`,
-          method: 'PUT',
-          payload: draft,
-          targetId: targetUuid
-        });
-        return updatedItem;
-      }
+
+        try {
+          const controller = new AbortController();
+          const tId = setTimeout(() => controller.abort(), 3500);
+          const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...draft }),
+            signal: controller.signal
+          });
+          clearTimeout(tId);
+          const json = await res.json().catch(() => ({}));
+          if (res.ok && json && json.success !== false) {
+            const serverData = json.data || updatedItem;
+            await upsertLocalItem(localStoreName, serverData);
+            store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(targetUuid)) ? { ...it, ...serverData } : it) : []));
+          } else {
+            throw new Error(json?.error || `Error servidor al actualizar en ${entityName}`);
+          }
+        } catch (err) {
+          console.warn(`[LocalDb] Sincronización diferida para ${entityName} (encolando outbox):`, err.message);
+          await queueOutboxAction({
+            entity: localStoreName,
+            action: 'update',
+            endpoint: `/api/master/${entityName}/${targetUuid}`,
+            method: 'PUT',
+            payload: draft,
+            targetId: targetUuid
+          });
+        }
+      })();
+
+      // Retorno instantáneo (0ms)
+      return updatedItem;
     },
     delete: async (targetUuidOrId) => {
       const targetUuid = typeof targetUuidOrId === 'object' ? (targetUuidOrId.uuid || targetUuidOrId.id) : targetUuidOrId;
+
+      // Obtener copia previa para rollback si el backend lo bloquea por integridad referencial
+      let previousItem = null;
       try {
-        const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
-          method: 'DELETE'
+        const currentList = get(store) || [];
+        previousItem = currentList.find(it => String(it.uuid || it.id) === String(targetUuid));
+      } catch (e) {}
+
+      // 1. Inmediatez absoluta (0ms): eliminar de memoria reactiva Svelte
+      store.update(list => (Array.isArray(list) ? list.filter(it => String(it.uuid || it.id) !== String(targetUuid)) : []));
+
+      // 2. Persistencia local inmediata en IndexedDB (<5ms)
+      deleteLocalItem(localStoreName, targetUuid).catch(e => console.warn(`[LocalDb] Error deleting ${localStoreName}:`, e));
+
+      // 3. Sincronización con backend (o Outbox si offline)
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: localStoreName,
+          action: 'delete',
+          endpoint: `/api/master/${entityName}/${targetUuid}`,
+          method: 'DELETE',
+          targetId: targetUuid
         });
-        const json = await res.json();
+        return { success: true, offline: true };
+      }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
+          method: 'DELETE',
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+
         if (json && json.blocked) {
+          // Rollback local si hay dependencias activas bloqueantes en PostgreSQL
+          if (previousItem) {
+            store.update(list => [previousItem, ...(Array.isArray(list) ? list : [])]);
+            upsertLocalItem(localStoreName, previousItem).catch(() => {});
+          }
           return json;
         }
+
         if (!res.ok || (json && json.success === false)) {
-          throw new Error(json.error || `Error al eliminar en ${entityName}`);
+          throw new Error(json?.error || `Error al eliminar en ${entityName}`);
         }
-        await deleteLocalItem(localStoreName, targetUuid);
-        await loadMasterStoresFromBackend(true);
-        return json;
+
+        return json || { success: true };
       } catch (err) {
-        console.warn(`[LocalDb] Operando offline para eliminar en ${entityName}: eliminando de IndexedDB y encolando outbox.`);
-        await deleteLocalItem(localStoreName, targetUuid);
-        store.update(list => (Array.isArray(list) ? list.filter(it => String(it.uuid || it.id) !== String(targetUuid)) : []));
+        console.warn(`[LocalDb] Fallo de red al eliminar en ${entityName}, encolando outbox:`, err.message);
         await queueOutboxAction({
           entity: localStoreName,
           action: 'delete',

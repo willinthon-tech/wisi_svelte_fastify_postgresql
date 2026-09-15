@@ -18,6 +18,7 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toEmployeePhotoUrl } from '../../config/api.config.js';
   import CachedImage from '../../components/common/CachedImage.svelte';
+  import { upsertLocalItem, deleteLocalItem, queueOutboxAction } from '../../services/localDb.service.js';
 
   // Extraer las salas asignadas estrictamente para el usuario logueado
   $: assignedSalaIds = (function () {
@@ -214,24 +215,61 @@
 
   async function handleCreate(e) {
     const data = e.detail;
-    try {
-      const res = await fetch('/api/master/calendario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        triggerToast('Fecha patria agregada exitosamente', 'success');
-        await loadServerData({ page: 1 });
-        await fetchFilterOptions();
-      } else {
-        triggerToast(json.error || 'Error al guardar fecha patria', 'error');
+    const newUuid = data.uuid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}`);
+    const newItem = { ...data, uuid: newUuid, id: newUuid, created_at: new Date().toISOString() };
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    rawServerItems = [newItem, ...rawServerItems];
+    triggerToast('Fecha patria agregada exitosamente', 'success');
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    upsertLocalItem('calendario', newItem).catch(() => {});
+
+    // 3. Sincronización en segundo plano con timeout y outbox
+    (async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'calendario',
+          action: 'create',
+          endpoint: '/api/master/calendario',
+          method: 'POST',
+          payload: data,
+          uuid: newUuid
+        });
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      triggerToast('Error de conexión al servidor', 'error');
-    }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch('/api/master/calendario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...data, uuid: newUuid }),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success) {
+          const created = json.data || newItem;
+          await upsertLocalItem('calendario', created);
+          rawServerItems = rawServerItems.map(x => String(x.uuid || x.id) === String(newUuid) ? created : x);
+        } else {
+          throw new Error(json?.error || 'Error al guardar fecha patria en servidor');
+        }
+      } catch (err) {
+        console.warn('[LocalDb] Encolando outbox para calendario:', err.message);
+        await queueOutboxAction({
+          entity: 'calendario',
+          action: 'create',
+          endpoint: '/api/master/calendario',
+          method: 'POST',
+          payload: data,
+          uuid: newUuid
+        });
+      }
+    })();
   }
 
   async function handleSaveInline(e) {
@@ -240,26 +278,62 @@
       triggerToast('Las fechas patrias base del sistema no pueden modificarse', 'warning');
       return;
     }
-    try {
+
+    const existing = rawServerItems.find(x => String(x.uuid || x.id) === String(id)) || {};
+    const updated = { ...existing, [field]: value, updated_at: new Date().toISOString() };
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    rawServerItems = rawServerItems.map(x => String(x.uuid || x.id) === String(id) ? updated : x);
+    triggerToast('Fecha patria actualizada', 'success');
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    upsertLocalItem('calendario', updated).catch(() => {});
+
+    // 3. Sincronización en segundo plano con timeout y outbox
+    (async () => {
       const payload = { [field]: value };
-      const res = await fetch(`/api/master/calendario/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        triggerToast('Fecha patria actualizada', 'success');
-        await loadServerData();
-      } else {
-        triggerToast(json.error || 'Error al actualizar fecha patria', 'error');
-        await loadServerData();
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'calendario',
+          action: 'update',
+          endpoint: `/api/master/calendario/${id}`,
+          method: 'PUT',
+          payload,
+          targetId: id
+        });
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      triggerToast('Error de conexión', 'error');
-      await loadServerData();
-    }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/calendario/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.success) {
+          const serverData = json.data || updated;
+          await upsertLocalItem('calendario', serverData);
+        } else {
+          throw new Error(json?.error || 'Error al actualizar en servidor');
+        }
+      } catch (err) {
+        console.warn('[LocalDb] Encolando outbox para actualizar calendario:', err.message);
+        await queueOutboxAction({
+          entity: 'calendario',
+          action: 'update',
+          endpoint: `/api/master/calendario/${id}`,
+          method: 'PUT',
+          payload,
+          targetId: id
+        });
+      }
+    })();
   }
 
   async function handleDelete(e) {
@@ -272,26 +346,54 @@
       return;
     }
 
-    try {
-      const res = await fetch(`/api/master/calendario/${id}`, {
-        method: 'DELETE'
+    const existing = rawServerItems.find(x => String(x.uuid || x.id) === String(id));
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    rawServerItems = rawServerItems.filter(x => String(x.uuid || x.id) !== String(id));
+    triggerToast('Fecha patria eliminada exitosamente', 'success');
+    if (onResult) onResult({ success: true });
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    deleteLocalItem('calendario', id).catch(() => {});
+
+    // 3. Sincronización en segundo plano con timeout y outbox
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      await queueOutboxAction({
+        entity: 'calendario',
+        action: 'delete',
+        endpoint: `/api/master/calendario/${id}`,
+        method: 'DELETE',
+        targetId: id
       });
+      return;
+    }
+
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`/api/master/calendario/${id}`, {
+        method: 'DELETE',
+        signal: controller.signal
+      });
+      clearTimeout(tId);
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json.success) {
-        triggerToast('Fecha patria eliminada exitosamente', 'success');
-        if (onResult) onResult({ success: true });
-        await loadServerData();
-        await fetchFilterOptions();
-      } else if (json && json.blocked) {
+      if (json && json.blocked) {
+        if (existing) {
+          rawServerItems = [existing, ...rawServerItems];
+          upsertLocalItem('calendario', existing).catch(() => {});
+        }
         if (onResult) onResult(json);
-      } else {
-        triggerToast(json.message || json.error || 'No se pudo eliminar la fecha patria', 'error');
-        if (onResult) onResult({ error: true, message: json.message || json.error });
       }
     } catch (err) {
-      console.error(err);
-      triggerToast('Error de conexión', 'error');
-      if (onResult) onResult({ error: true });
+      console.warn('[LocalDb] Error al eliminar fecha patria, encolando outbox:', err.message);
+      await queueOutboxAction({
+        entity: 'calendario',
+        action: 'delete',
+        endpoint: `/api/master/calendario/${id}`,
+        method: 'DELETE',
+        targetId: id
+      });
     }
   }
 

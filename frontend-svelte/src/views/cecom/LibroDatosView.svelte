@@ -391,11 +391,20 @@
         lastUpdatedAt = d.updated_at || d.created_at || null;
         isLoadingData = false;
       }
-    } catch (e) {}
+    } catch (e) {
+      // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
+    }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      isLoadingData = false;
+      return;
+    }
 
-    // 2. Consulta al backend si hay conexión para refrescar
+    // 2. Consulta al backend en segundo plano si hay conexión para refrescar
     try {
-      const res = await fetch(`/api/master/libros/${lId}/datos`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`/api/master/libros/${lId}/datos`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -452,9 +461,9 @@
     }
   }
 
-  async function handleGuardar(silent = false) {
-    if (!canModify) {
-      if (!silent) triggerToast('No tienes permiso para modificar datos operativos en este módulo', 'warning');
+  async function handleSaveDatos(silent = false) {
+    if (!canEdit && !canAdd) {
+      triggerToast('No tienes permiso para guardar datos en este módulo', 'warning');
       return;
     }
     const lId = libro?.uuid || libroId || libro?.id;
@@ -470,10 +479,12 @@
       addOperadorC(inputTempOperadorC.trim());
     }
 
-    isSaving = true;
-    saveStatus = 'saving';
     const itemUuid = recordUuid || crypto.randomUUID();
-    const payload = {
+    recordUuid = itemUuid;
+    recordId = itemUuid;
+    lastUpdatedAt = new Date().toISOString();
+
+    const localRecord = {
       uuid: itemUuid,
       libro_uuid: lId,
       libro_id: lId,
@@ -488,67 +499,75 @@
       conteo_dropbox_inicio: conteoDropboxInicio,
       conteo_dropbox_fin: conteoDropboxFin,
       operador_turno_a: operadoresTurnoAList.join(', '),
-      operador_turno_c: operadoresTurnoCList.join(', ')
+      operador_turno_c: operadoresTurnoCList.join(', '),
+      updated_at: lastUpdatedAt
     };
 
-    try {
-      const res = await fetch(`/api/master/libros/${lId}/datos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA Y ESTADO UI (0ms)
+    saveStatus = 'saved';
+    isSaving = false;
+    if (!silent) {
+      triggerToast('Datos operativos guardados correctamente', 'success');
+    }
+    if (saveStatusTimeout) clearTimeout(saveStatusTimeout);
+    saveStatusTimeout = setTimeout(() => {
+      if (saveStatus === 'saved') saveStatus = 'idle';
+    }, 2500);
 
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        saveStatus = 'saved';
-        if (!silent) {
-          triggerToast('Datos operativos guardados correctamente', 'success');
-        }
-        if (json.data) {
-          recordUuid = json.data.uuid || json.data.id || itemUuid;
-          recordId = recordUuid;
-          lastUpdatedAt = json.data.updated_at || json.data.created_at;
-          await upsertLocalItem('libro_datos', json.data);
-        }
+    // 2. Guardado en base de datos local IndexedDB (<5ms)
+    await upsertLocalItem('libro_datos', localRecord);
 
-        if (saveStatusTimeout) clearTimeout(saveStatusTimeout);
-        saveStatusTimeout = setTimeout(() => {
-          if (saveStatus === 'saved') saveStatus = 'idle';
-        }, 2500);
-      } else {
-        saveStatus = 'idle';
-        if (!silent) {
-          triggerToast(json?.error || 'Error al guardar los datos operativos', 'error');
-        }
-      }
-    } catch (err) {
-      console.warn('[LocalDb] Modo Offline: guardando datos operativos en IndexedDB y encolando outbox:', err);
-      saveStatus = 'saved';
-      const offlineRecord = {
-        id: recordId || `temp_${Date.now()}`,
-        ...payload,
-        updated_at: new Date().toISOString()
-      };
-      await upsertLocalItem('libro_datos', offlineRecord);
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    if (isOffline) {
+      // 3A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
       await queueOutboxAction({
         entity: 'libro_datos',
-        action: recordId ? 'update' : 'create',
+        action: 'create',
         endpoint: `/api/master/libros/${lId}/datos`,
         method: 'POST',
-        payload: offlineRecord,
+        payload: localRecord,
         uuid: itemUuid
       });
-
-      if (!silent) {
-        triggerToast('Modo Offline: Datos operativos guardados localmente.', 'info');
-      }
-      if (saveStatusTimeout) clearTimeout(saveStatusTimeout);
-      saveStatusTimeout = setTimeout(() => {
-        if (saveStatus === 'saved') saveStatus = 'idle';
-      }, 2500);
-    } finally {
-      isSaving = false;
+      return;
     }
+
+    // 3B. Modo Online: Sincronización en segundo plano con timeout
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/datos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(localRecord),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data) {
+            recordUuid = json.data.uuid || json.data.id || itemUuid;
+            recordId = recordUuid;
+            lastUpdatedAt = json.data.updated_at || json.data.created_at;
+            await upsertLocalItem('libro_datos', json.data);
+          }
+        } else {
+          throw new Error(`Server status ${res.status}`);
+        }
+      } catch (syncErr) {
+        console.warn('[LocalDb] Falló sync de datos con backend en vivo, asegurando en Outbox:', syncErr);
+        await queueOutboxAction({
+          entity: 'libro_datos',
+          action: 'create',
+          endpoint: `/api/master/libros/${lId}/datos`,
+          method: 'POST',
+          payload: localRecord,
+          uuid: itemUuid
+        });
+      }
+    })();
   }
 
   // Contar cuántas secciones están completadas

@@ -400,39 +400,64 @@
     fkMap.forEach(f => {
       if (draft[`${f}_uuid`] && !draft[`${f}_id`]) draft[`${f}_id`] = draft[`${f}_uuid`];
     });
-    try {
-      const res = await fetch('/api/master/maquinas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
-      });
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        triggerToast('Máquina registrada exitosamente', 'success');
-        const created = json.data || draft;
-        await upsertLocalItem('maquinas', created);
-        items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
-        totalCount++;
-        loadServerData({ page: 1 }).catch(() => {});
-      } else {
-        throw new Error(json.error || 'Error al guardar máquina');
+
+    // 0ms instant local-first execution
+    const newUuid = draft.uuid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}`);
+    const localItem = { ...draft, uuid: newUuid, id: newUuid, created_at: new Date().toISOString() };
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    items = [localItem, ...items.filter(x => String(x.uuid || x.id) !== String(localItem.uuid))];
+    totalCount++;
+    triggerToast('Máquina registrada exitosamente', 'success');
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    upsertLocalItem('maquinas', localItem).catch(() => {});
+
+    // 3. Sincronización en segundo plano sin bloquear la UI
+    (async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'maquinas',
+          action: 'create',
+          endpoint: '/api/master/maquinas',
+          method: 'POST',
+          payload: draft,
+          uuid: newUuid
+        });
+        return;
       }
-    } catch (err) {
-      console.warn('Operando offline para máquina: guardando localmente y encolando outbox.');
-      const localItem = { uuid: draft.uuid, id: draft.uuid, ...draft, created_at: new Date().toISOString() };
-      await upsertLocalItem('maquinas', localItem);
-      await queueOutboxAction({
-        entity: 'maquinas',
-        action: 'create',
-        endpoint: '/api/master/maquinas',
-        method: 'POST',
-        payload: draft,
-        uuid: draft.uuid
-      });
-      items = [localItem, ...items];
-      totalCount++;
-      triggerToast('Máquina registrada en modo offline', 'info');
-    }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch('/api/master/maquinas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...draft, uuid: newUuid }),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json && json.success) {
+          const created = json.data || localItem;
+          await upsertLocalItem('maquinas', created);
+          items = items.map(x => String(x.uuid || x.id) === String(newUuid) ? { ...x, ...created } : x);
+        } else {
+          throw new Error(json?.error || 'Error al guardar máquina en servidor');
+        }
+      } catch (err) {
+        console.warn('[LocalDb] Encolando outbox para máquina:', err.message);
+        await queueOutboxAction({
+          entity: 'maquinas',
+          action: 'create',
+          endpoint: '/api/master/maquinas',
+          method: 'POST',
+          payload: draft,
+          uuid: newUuid
+        });
+      }
+    })();
   }
 
   async function handleSaveInline(event) {
@@ -443,61 +468,81 @@
     fkMap.forEach(f => {
       if (payload[`${f}_uuid`] && !payload[`${f}_id`]) payload[`${f}_id`] = payload[`${f}_uuid`];
     });
-    try {
-      const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        triggerToast('Máquina actualizada exitosamente', 'success');
-        await upsertLocalItem('maquinas', json.data || { uuid: targetUuid, id: targetUuid, ...payload });
-        items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
-        loadServerData().catch(() => {});
-      } else {
-        throw new Error(json.error || 'Error al actualizar máquina');
+
+    const existing = items.find(x => String(x.uuid || x.id) === String(targetUuid)) || {};
+    const updated = { ...existing, ...payload, uuid: targetUuid, id: targetUuid, updated_at: new Date().toISOString() };
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? updated : x);
+    triggerToast('Máquina actualizada exitosamente', 'success');
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    upsertLocalItem('maquinas', updated).catch(() => {});
+
+    // 3. Sincronización en segundo plano
+    (async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'maquinas',
+          action: 'update',
+          endpoint: `/api/master/maquinas/${targetUuid}`,
+          method: 'PUT',
+          payload,
+          targetId: targetUuid
+        });
+        return;
       }
-    } catch (err) {
-      console.warn('Operando offline para actualizar máquina: guardando localmente y encolando outbox.');
-      const updated = { uuid: targetUuid, id: targetUuid, ...payload, updated_at: new Date().toISOString() };
-      await upsertLocalItem('maquinas', updated);
-      await queueOutboxAction({
-        entity: 'maquinas',
-        action: 'update',
-        endpoint: `/api/master/maquinas/${targetUuid}`,
-        method: 'PUT',
-        payload,
-        targetId: targetUuid
-      });
-      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
-      triggerToast('Actualización guardada en modo offline', 'info');
-    }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json && json.success) {
+          const serverData = json.data || updated;
+          await upsertLocalItem('maquinas', serverData);
+          items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...serverData } : x);
+        } else {
+          throw new Error(json?.error || 'Error al actualizar máquina en servidor');
+        }
+      } catch (err) {
+        console.warn('[LocalDb] Encolando outbox para actualizar máquina:', err.message);
+        await queueOutboxAction({
+          entity: 'maquinas',
+          action: 'update',
+          endpoint: `/api/master/maquinas/${targetUuid}`,
+          method: 'PUT',
+          payload,
+          targetId: targetUuid
+        });
+      }
+    })();
   }
 
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
     const targetUuid = item?.uuid || id || item?.id;
-    try {
-      const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
-        method: 'DELETE'
-      });
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.success) {
-        triggerToast('Máquina eliminada exitosamente', 'success');
-        await deleteLocalItem('maquinas', targetUuid);
-        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
-        totalCount = Math.max(0, totalCount - 1);
-        if (onResult) onResult({ success: true });
-        loadServerData().catch(() => {});
-      } else if (json && json.blocked) {
-        if (onResult) onResult(json);
-      } else {
-        throw new Error(json.message || json.error || 'No se pudo eliminar la máquina');
-      }
-    } catch (err) {
-      console.warn('Operando offline para eliminar máquina: encolando outbox.');
-      await deleteLocalItem('maquinas', targetUuid);
+    const existing = items.find(x => String(x.uuid || x.id) === String(targetUuid));
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+    totalCount = Math.max(0, totalCount - 1);
+    triggerToast('Máquina eliminada exitosamente', 'success');
+    if (onResult) onResult({ success: true });
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    deleteLocalItem('maquinas', targetUuid).catch(() => {});
+
+    // 3. Sincronización en segundo plano
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
       await queueOutboxAction({
         entity: 'maquinas',
         action: 'delete',
@@ -505,10 +550,38 @@
         method: 'DELETE',
         targetId: targetUuid
       });
-      items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
-      totalCount = Math.max(0, totalCount - 1);
-      triggerToast('Eliminación guardada en modo offline', 'info');
-      if (onResult) onResult({ success: true });
+      return;
+    }
+
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
+        method: 'DELETE',
+        signal: controller.signal
+      });
+      clearTimeout(tId);
+      const json = await res.json().catch(() => ({}));
+      if (json && json.blocked) {
+        // Rollback local si hay registros vinculados
+        if (existing) {
+          items = [existing, ...items];
+          totalCount++;
+          upsertLocalItem('maquinas', existing).catch(() => {});
+        }
+        if (onResult) onResult(json);
+      } else if (!res.ok || (json && json.success === false)) {
+        throw new Error(json?.message || json?.error || 'Error del servidor');
+      }
+    } catch (err) {
+      console.warn('[LocalDb] Error al eliminar máquina, encolando outbox:', err.message);
+      await queueOutboxAction({
+        entity: 'maquinas',
+        action: 'delete',
+        endpoint: `/api/master/maquinas/${targetUuid}`,
+        method: 'DELETE',
+        targetId: targetUuid
+      });
     }
   }
 

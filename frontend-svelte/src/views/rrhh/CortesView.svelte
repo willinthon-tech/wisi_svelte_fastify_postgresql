@@ -26,7 +26,12 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { getPublicWebUrl } from '../../config/api.config.js';
 
-  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+  import { 
+    getLocalItems, 
+    saveLocalItems, 
+    deleteLocalItem, 
+    queueOutboxAction 
+  } from '../../services/localDb.service.js';
 
   let showEmpleadosModal = false;
   let selectedCorteParaEmpleados = null;
@@ -279,57 +284,96 @@
   async function handleDelete(event) {
     const { id, item, onResult } = event.detail;
     const targetUuid = item?.uuid || id || item?.id;
+    const existing = items.find(x => String(x.uuid || x.id) !== String(targetUuid));
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
+    totalCount = Math.max(0, totalCount - 1);
+    triggerToast('Corte histórico eliminado exitosamente', 'success');
+    if (onResult) onResult({ success: true });
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    deleteLocalItem('cortes', targetUuid).catch(() => {});
+
+    // 3. Sincronización en segundo plano
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      await queueOutboxAction({
+        entity: 'cortes',
+        action: 'delete',
+        endpoint: `/api/master/cortes/${targetUuid}`,
+        method: 'DELETE',
+        targetId: targetUuid
+      });
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/master/cortes/${targetUuid}`, { method: 'DELETE' });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Corte histórico eliminado exitosamente', 'success');
-        items = items.filter(x => String(x.uuid || x.id) !== String(targetUuid));
-        totalCount = Math.max(0, totalCount - 1);
-        onResult({ success: true });
-        loadServerData().catch(() => {});
-      } else {
-        triggerToast(json?.error || 'Error al eliminar el corte', 'error');
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(`/api/master/cortes/${targetUuid}`, { method: 'DELETE', signal: controller.signal });
+      clearTimeout(tId);
+      const json = await res.json().catch(() => ({}));
+      if (json && json.blocked) {
+        if (existing) {
+          items = [existing, ...items];
+          totalCount++;
+        }
+        triggerToast(json.message || 'No se puede eliminar el corte', 'warning');
       }
     } catch (err) {
-      triggerToast(`Error al eliminar corte: ${err.message}`, 'error');
+      console.warn('[LocalDb] Error al eliminar corte, encolando outbox:', err.message);
+      await queueOutboxAction({
+        entity: 'cortes',
+        action: 'delete',
+        endpoint: `/api/master/cortes/${targetUuid}`,
+        method: 'DELETE',
+        targetId: targetUuid
+      });
     }
   }
 
   async function handleBatchDelete(event) {
     const { ids, onResult } = event.detail;
-    const deleted = [];
-    const blocked = [];
-    const errors = [];
+    const idsSet = new Set((ids || []).map(String));
 
-    for (const id of ids) {
-      try {
-        const res = await fetch(`/api/master/cortes/${id}`, { method: 'DELETE' });
-        const json = await res.json();
-        if (json && json.success) {
-          deleted.push({ id });
-        } else {
-          blocked.push({
-            id,
-            name: `Corte #${id}`,
-            reason: json?.error || 'Error al eliminar registro'
-          });
-        }
-      } catch (err) {
-        errors.push({ id, error: err.message });
-      }
-    }
-
-    await loadServerData();
-
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    items = items.filter(x => !idsSet.has(String(x.uuid || x.id)));
+    totalCount = Math.max(0, totalCount - ids.length);
+    triggerToast(`${ids.length} cortes eliminados exitosamente`, 'success');
     if (onResult) {
       onResult({
-        deleted,
-        blocked,
-        errors,
+        deleted: ids.map(id => ({ id })),
+        blocked: [],
+        errors: [],
         total: ids.length,
         entityType: 'corte'
       });
+    }
+
+    // 2. Eliminar localmente y sincronizar en segundo plano
+    for (const id of ids) {
+      deleteLocalItem('cortes', id).catch(() => {});
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        queueOutboxAction({
+          entity: 'cortes',
+          action: 'delete',
+          endpoint: `/api/master/cortes/${id}`,
+          method: 'DELETE',
+          targetId: id
+        }).catch(() => {});
+      } else {
+        fetch(`/api/master/cortes/${id}`, { method: 'DELETE' }).catch(() => {
+          queueOutboxAction({
+            entity: 'cortes',
+            action: 'delete',
+            endpoint: `/api/master/cortes/${id}`,
+            method: 'DELETE',
+            targetId: id
+          }).catch(() => {});
+        });
+      }
     }
   }
 </script>

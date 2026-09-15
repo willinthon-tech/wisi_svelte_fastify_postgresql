@@ -276,15 +276,29 @@
 
   async function fetchRangosServer() {
     try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const localRangos = await getLocalItems('rangos');
+        if (Array.isArray(localRangos) && localRangos.length > 0) {
+          serverRangos = localRangos;
+        }
+        return;
+      }
       const res = await fetch('/api/master/rangos?limit=all');
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
           serverRangos = json.data;
+          saveLocalItems('rangos', json.data).catch(() => {});
         }
       }
     } catch (e) {
       console.warn('Error fetching rangos:', e);
+      try {
+        const localRangos = await getLocalItems('rangos');
+        if (Array.isArray(localRangos) && localRangos.length > 0) {
+          serverRangos = localRangos;
+        }
+      } catch (err) {}
     }
   }
 
@@ -299,15 +313,23 @@
         (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
         (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
       );
-      if (Array.isArray(local) && local.length > 0) {
+      if (Array.isArray(local)) {
         records = local;
-        isLoadingRecords = false;
       }
     } catch (e) {}
 
-    // 2. Consulta al backend si hay conexión para refrescar
+    // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      isLoadingRecords = false;
+      return;
+    }
+
+    // 2. Consulta al backend en segundo plano si hay conexión para refrescar
     try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success) {
@@ -507,94 +529,96 @@
       return;
     }
 
-    isSaving = true;
-    const itemUuid = crypto.randomUUID();
     const empUuid = selectedEmpleado?.uuid || selectedEmpleado?.id || empId;
     const rUuid = selectedRango?.uuid || selectedRango?.id || rId;
-    const payload = {
+    const itemUuid = crypto.randomUUID();
+
+    const newRecord = {
       uuid: itemUuid,
+      libro_uuid: lId,
       empleado_uuid: empUuid,
       empleado_id: empUuid,
+      empleado_nombre: selectedEmpleado?.nombre || '',
+      empleado_cedula: selectedEmpleado?.cedula || '',
+      cargo_nombre: selectedEmpleado?.cargo_nombre || '',
       rango_uuid: rUuid,
       rango_id: rUuid,
+      rango_nombre: selectedRango?.nombre || '',
       monto: numMonto,
-      tipo: tipo || 'Aporte'
+      tipo: tipo || 'Aporte',
+      created_at: new Date().toISOString()
     };
 
-    try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA (0ms) -> UI reactiva inmediata
+    records = [newRecord, ...records];
 
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        triggerToast(`${tipo === 'Devolución' ? 'Devolución' : 'Aporte'} guardado correctamente`, 'success');
-        const savedData = json.data || { ...payload, uuid: itemUuid };
-        await upsertLocalItem('libro_aportes', savedData);
-        
-        // Limpiar formulario
-        selectedEmpleado = null;
-        empleadoSearchQuery = '';
-        selectedRango = null;
-        selectedRangoId = '';
-        rangoSearchQuery = '';
-        monto = '';
-        tipo = 'Aporte';
-        
-        await loadRecords();
+    // 2. Limpieza inmediata del formulario y refocus
+    selectedEmpleado = null;
+    empleadoSearchQuery = '';
+    selectedRango = null;
+    selectedRangoId = '';
+    rangoSearchQuery = '';
+    monto = '';
+    tipo = 'Aporte';
+    isSaving = false;
+    tick().then(() => {
+      if (empleadoInputEl) empleadoInputEl.focus();
+    });
 
-        // Refocus de inmediato en el empleado para continuar cargando
-        tick().then(() => {
-          if (empleadoInputEl) empleadoInputEl.focus();
-        });
-      } else {
-        triggerToast(json?.error || 'Error al registrar operación', 'error');
-      }
-    } catch (err) {
-      console.warn('[LocalDb] Modo Offline: guardando aporte en base de datos local y encolando outbox:', err);
-      const offlineRecord = {
-        uuid: itemUuid,
-        libro_uuid: lId,
-        empleado_uuid: empUuid,
-        empleado_id: empUuid,
-        empleado_nombre: selectedEmpleado?.nombre || '',
-        empleado_cedula: selectedEmpleado?.cedula || '',
-        cargo_nombre: selectedEmpleado?.cargo_nombre || '',
-        rango_uuid: rUuid,
-        rango_id: rUuid,
-        rango_nombre: selectedRango?.nombre || '',
-        monto: numMonto,
-        tipo: tipo || 'Aporte',
-        created_at: new Date().toISOString()
-      };
+    // 3. Guardado en base de datos local IndexedDB (<5ms)
+    await upsertLocalItem('libro_aportes', newRecord);
 
-      records = [offlineRecord, ...records];
-      await upsertLocalItem('libro_aportes', offlineRecord);
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    if (isOffline) {
+      // 4A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
       await queueOutboxAction({
         entity: 'libro_aportes',
         action: 'create',
         endpoint: `/api/master/libros/${lId}/aportes-maquinas`,
         method: 'POST',
-        payload: offlineRecord,
+        payload: newRecord,
         uuid: itemUuid
       });
-
-      triggerToast('Modo Offline: Aporte guardado en base de datos local. Se sincronizará automáticamente al conectar.', 'info');
-      selectedEmpleado = null;
-      empleadoSearchQuery = '';
-      selectedRango = null;
-      selectedRangoId = '';
-      rangoSearchQuery = '';
-      monto = '';
-      tipo = 'Aporte';
-      tick().then(() => {
-        if (empleadoInputEl) empleadoInputEl.focus();
-      });
-    } finally {
-      isSaving = false;
+      triggerToast('Modo Offline: Aporte guardado en base de datos local.', 'info');
+      return;
     }
+
+    // 4B. Modo Online: Notificación de éxito y sincronización en segundo plano con timeout
+    triggerToast(`${newRecord.tipo === 'Devolución' ? 'Devolución' : 'Aporte'} guardado correctamente`, 'success');
+
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newRecord),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data) {
+            await upsertLocalItem('libro_aportes', json.data);
+          }
+        } else {
+          throw new Error(`Server status ${res.status}`);
+        }
+      } catch (syncErr) {
+        console.warn('[LocalDb] Falló sync con backend en vivo, asegurando en Outbox:', syncErr);
+        await queueOutboxAction({
+          entity: 'libro_aportes',
+          action: 'create',
+          endpoint: `/api/master/libros/${lId}/aportes-maquinas`,
+          method: 'POST',
+          payload: newRecord,
+          uuid: itemUuid
+        });
+      }
+    })();
   }
 
   async function handleEliminar(record) {
@@ -609,22 +633,16 @@
 
     const lId = libro?.uuid || libroId || libro?.id;
     const recordUuid = record.uuid || record.id;
-    try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${recordUuid}`, {
-        method: 'DELETE'
-      });
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        triggerToast('Registro eliminado correctamente', 'success');
-        records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
-        await deleteLocalItem('libro_aportes', recordUuid);
-      } else {
-        triggerToast(json?.error || 'Error al eliminar', 'error');
-      }
-    } catch (err) {
-      console.warn('[LocalDb] Modo Offline para eliminación de aporte:', err);
-      records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
-      await deleteLocalItem('libro_aportes', recordUuid);
+
+    // 1. Eliminación instantánea en memoria (0ms)
+    records = records.filter(r => String(r.uuid || r.id) !== String(recordUuid));
+    triggerToast('Registro eliminado correctamente', 'info');
+
+    // 2. Eliminación en base de datos local IndexedDB (<5ms)
+    await deleteLocalItem('libro_aportes', recordUuid);
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
       await queueOutboxAction({
         entity: 'libro_aportes',
         action: 'delete',
@@ -632,8 +650,31 @@
         method: 'DELETE',
         targetId: recordUuid
       });
-      triggerToast('Modo Offline: Registro eliminado localmente.', 'info');
+      return;
     }
+
+    // Segundo plano para backend
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${recordUuid}`, {
+          method: 'DELETE',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      } catch (delErr) {
+        console.warn('[LocalDb] Falló eliminación en vivo, encolando en Outbox:', delErr);
+        await queueOutboxAction({
+          entity: 'libro_aportes',
+          action: 'delete',
+          endpoint: `/api/master/libros/${lId}/aportes-maquinas/${recordUuid}`,
+          method: 'DELETE',
+          targetId: recordUuid
+        });
+      }
+    })();
   }
 
   function abrirModalEditar(record) {
@@ -682,33 +723,23 @@
       tipo: modalTipo || 'Aporte'
     };
 
-    isSavingModal = true;
-    try {
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${targetUuid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    const updatedOffline = {
+      ...editingRecord,
+      ...payload,
+      updated_at: new Date().toISOString()
+    };
 
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        triggerToast('Registro actualizado exitosamente', 'success');
-        const updatedData = json.data || { ...editingRecord, ...payload };
-        await upsertLocalItem('libro_aportes', updatedData);
-        cerrarModalEditar();
-        await loadRecords();
-      } else {
-        triggerToast(json?.error || 'Error al actualizar', 'error');
-      }
-    } catch (err) {
-      console.warn('[LocalDb] Modo Offline para edición de aporte:', err);
-      const updatedOffline = {
-        ...editingRecord,
-        ...payload,
-        updated_at: new Date().toISOString()
-      };
-      records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? updatedOffline : r);
-      await upsertLocalItem('libro_aportes', updatedOffline);
+    // 1. Actualización instantánea en memoria (0ms)
+    records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? updatedOffline : r);
+    cerrarModalEditar();
+    triggerToast('Registro actualizado exitosamente', 'success');
+    isSavingModal = false;
+
+    // 2. Guardado en base de datos local IndexedDB (<5ms)
+    await upsertLocalItem('libro_aportes', updatedOffline);
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
       await queueOutboxAction({
         entity: 'libro_aportes',
         action: 'update',
@@ -717,11 +748,42 @@
         payload: updatedOffline,
         targetId: targetUuid
       });
-      triggerToast('Modo Offline: Registro editado localmente.', 'info');
-      cerrarModalEditar();
-    } finally {
-      isSavingModal = false;
+      return;
     }
+
+    // Segundo plano para backend
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas/${targetUuid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data) {
+            await upsertLocalItem('libro_aportes', json.data);
+          }
+        } else {
+          throw new Error(`Server status ${res.status}`);
+        }
+      } catch (editErr) {
+        console.warn('[LocalDb] Falló edición en vivo, encolando en Outbox:', editErr);
+        await queueOutboxAction({
+          entity: 'libro_aportes',
+          action: 'update',
+          endpoint: `/api/master/libros/${lId}/aportes-maquinas/${targetUuid}`,
+          method: 'PUT',
+          payload: updatedOffline,
+          targetId: targetUuid
+        });
+      }
+    })();
   }
 </script>
 

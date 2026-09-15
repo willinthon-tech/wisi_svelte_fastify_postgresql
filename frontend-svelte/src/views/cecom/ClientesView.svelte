@@ -35,7 +35,13 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
-  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+  import { 
+    getLocalItems, 
+    saveLocalItems, 
+    upsertLocalItem, 
+    deleteLocalItem, 
+    queueOutboxAction 
+  } from '../../services/localDb.service.js';
 
   // Extract assigned sala IDs strictly for the logged-in user
   $: assignedSalaIds = (function () {
@@ -297,27 +303,78 @@
     const detail = event.detail || {};
     const onDone = detail.onDone;
     const { onDone: _, ...draft } = detail;
-    try {
-      const res = await fetch('/api/master/clientes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft)
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Cliente creado exitosamente', 'success');
-        isFormModalOpen = false;
-        formModalItem = null;
-        if (onDone) onDone(null);
-        await loadMasterStoresFromBackend();
-        await loadServerData();
-      } else {
-        throw new Error(json?.error || 'Error al crear cliente');
+
+    // 0ms instant local-first execution
+    const newUuid = draft.uuid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}`);
+    const salaObj = ($masterSalasStore || []).find(s => String(s.uuid || s.id) === String(draft.sala_uuid || draft.sala_id));
+    const tipoObj = tipoClientesOptions.find(t => String(t.uuid || t.id) === String(draft.tipo_cliente_uuid || draft.tipo_cliente_id));
+
+    const newRecord = {
+      ...draft,
+      uuid: newUuid,
+      id: newUuid,
+      sala_nombre: salaObj ? salaObj.nombre : (draft.sala_nombre || 'Sala'),
+      tipo_cliente_nombre: tipoObj ? tipoObj.nombre : (draft.tipo_cliente_nombre || 'Cliente'),
+      created_at: new Date().toISOString()
+    };
+
+    // 1. Inmediatamente actualizar memoria de la vista y cerrar modal (0ms)
+    items = [newRecord, ...items.filter(x => String(x.uuid || x.id) !== String(newRecord.uuid))];
+    totalCount++;
+    isFormModalOpen = false;
+    formModalItem = null;
+    if (onDone) onDone(null);
+    triggerToast('Cliente creado exitosamente', 'success');
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    upsertLocalItem('clientes', newRecord).catch(() => {});
+    masterClientesStore.update(l => [newRecord, ...(Array.isArray(l) ? l.filter(x => String(x.uuid || x.id) !== String(newRecord.uuid)) : [])]);
+
+    // 3. Sincronización en segundo plano con timeout y outbox fallback
+    (async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'clientes',
+          action: 'create',
+          endpoint: '/api/master/clientes',
+          method: 'POST',
+          payload: draft,
+          uuid: newUuid
+        });
+        return;
       }
-    } catch (err) {
-      triggerToast(`Error al crear cliente: ${err.message}`, 'error');
-      if (onDone) onDone(err);
-    }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch('/api/master/clientes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...draft, uuid: newUuid }),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json && json.success) {
+          const serverData = json.data || newRecord;
+          await upsertLocalItem('clientes', serverData);
+          items = items.map(x => String(x.uuid || x.id) === String(newUuid) ? { ...x, ...serverData } : x);
+        } else {
+          throw new Error(json?.error || 'Error al guardar cliente en servidor');
+        }
+      } catch (err) {
+        console.warn('[LocalDb] Encolando outbox para cliente:', err.message);
+        await queueOutboxAction({
+          entity: 'clientes',
+          action: 'create',
+          endpoint: '/api/master/clientes',
+          method: 'POST',
+          payload: draft,
+          uuid: newUuid
+        });
+      }
+    })();
   }
 
   async function handleSaveInline(event) {
@@ -327,27 +384,77 @@
     const onDone = draft?.onDone || detail.onDone;
     const cleanDraft = { ...draft };
     delete cleanDraft.onDone;
-    try {
-      const res = await fetch(`/api/master/clientes/${targetUuid}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cleanDraft)
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast('Cliente actualizado exitosamente', 'success');
-        isFormModalOpen = false;
-        formModalItem = null;
-        if (onDone) onDone(null);
-        await loadMasterStoresFromBackend();
-        await loadServerData();
-      } else {
-        throw new Error(json?.error || 'Error al actualizar cliente');
+
+    const existing = items.find(x => String(x.uuid || x.id) === String(targetUuid)) || {};
+    const salaObj = cleanDraft.sala_uuid || cleanDraft.sala_id ? ($masterSalasStore || []).find(s => String(s.uuid || s.id) === String(cleanDraft.sala_uuid || cleanDraft.sala_id)) : null;
+    const tipoObj = cleanDraft.tipo_cliente_uuid || cleanDraft.tipo_cliente_id ? tipoClientesOptions.find(t => String(t.uuid || t.id) === String(cleanDraft.tipo_cliente_uuid || cleanDraft.tipo_cliente_id)) : null;
+
+    const updatedRecord = {
+      ...existing,
+      ...cleanDraft,
+      uuid: targetUuid,
+      id: targetUuid,
+      sala_nombre: salaObj ? salaObj.nombre : existing.sala_nombre,
+      tipo_cliente_nombre: tipoObj ? tipoObj.nombre : existing.tipo_cliente_nombre,
+      updated_at: new Date().toISOString()
+    };
+
+    // 1. Inmediatamente actualizar memoria de la vista y cerrar modal (0ms)
+    items = items.map(x => String(x.uuid || x.id) === String(targetUuid) ? updatedRecord : x);
+    isFormModalOpen = false;
+    formModalItem = null;
+    if (onDone) onDone(null);
+    triggerToast('Cliente actualizado exitosamente', 'success');
+
+    // 2. Persistencia local inmediata en IndexedDB (<5ms)
+    upsertLocalItem('clientes', updatedRecord).catch(() => {});
+    masterClientesStore.update(l => (Array.isArray(l) ? l.map(it => String(it.uuid || it.id) === String(targetUuid) ? updatedRecord : it) : []));
+
+    // 3. Sincronización en segundo plano con timeout y outbox fallback
+    (async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'clientes',
+          action: 'update',
+          endpoint: `/api/master/clientes/${targetUuid}`,
+          method: 'PUT',
+          payload: cleanDraft,
+          targetId: targetUuid
+        });
+        return;
       }
-    } catch (err) {
-      triggerToast(`Error al actualizar cliente: ${err.message}`, 'error');
-      if (onDone) onDone(err);
-    }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/clientes/${targetUuid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cleanDraft),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json && json.success) {
+          const serverData = json.data || updatedRecord;
+          await upsertLocalItem('clientes', serverData);
+          items = items.map(x => String(x.uuid || x.id) === String(targetUuid) ? { ...x, ...serverData } : x);
+        } else {
+          throw new Error(json?.error || 'Error al actualizar cliente en servidor');
+        }
+      } catch (err) {
+        console.warn('[LocalDb] Encolando outbox para actualizar cliente:', err.message);
+        await queueOutboxAction({
+          entity: 'clientes',
+          action: 'update',
+          endpoint: `/api/master/clientes/${targetUuid}`,
+          method: 'PUT',
+          payload: cleanDraft,
+          targetId: targetUuid
+        });
+      }
+    })();
   }
 
   async function handleDelete(event) {

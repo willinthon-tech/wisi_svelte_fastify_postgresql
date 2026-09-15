@@ -35,7 +35,7 @@
   import LlavesBorradasView from "./views/cecom/LlavesBorradasView.svelte";
 
   // Import RRHH Views
-  import MarcajesView from "./views/rrhh/MarcajesView.svelte";
+  import MarcajesView, { persistentMarcajesFilters, forceReloadMarcajesStore } from "./views/rrhh/MarcajesView.svelte";
   import EmpleadosView from "./views/rrhh/EmpleadosView.svelte";
   import CargosView from "./views/rrhh/CargosView.svelte";
   import CicloDeHorarioView from "./views/rrhh/CicloDeHorarioView.svelte";
@@ -235,18 +235,36 @@
 
   let latestKnownRealtimeTimeMs = null;
 
+  function handleAttlogNotificationClick(recId, rec) {
+    try {
+      if (typeof window !== 'undefined') {
+        window.focus();
+      }
+    } catch (e) {}
+
+    // 1. Resetear filtros persistentes de marcajes a página 1 y sin búsqueda restrictiva
+    try {
+      persistentMarcajesFilters.update(f => ({
+        ...f,
+        currentPage: 1,
+        searchQuery: ''
+      }));
+      forceReloadMarcajesStore.update(n => n + 1);
+    } catch (e) {}
+
+    // 2. Redirigir de inmediato a la vista de marcajes
+    navigateToRoute('rrhh/marcajes');
+
+    // 3. Abrir modal con la foto y detalle del marcaje
+    if (recId || rec) {
+      openPhotoModalForAttlog(recId || rec?.id, rec);
+    }
+  }
+
   function openAttlogModalFromAlert(alertData) {
     if (!alertData) return;
     const rec = alertData.rawRecord || alertData;
-    openPhotoModal({
-      item: rec,
-      items: [rec],
-      currentIndex: 0,
-      currentPage: 0,
-      totalPages: 1,
-      totalCount: 1,
-      mode: 'alerta'
-    });
+    handleAttlogNotificationClick(rec?.id, rec);
   }
 
   let audioCtx = null;
@@ -626,10 +644,20 @@
               hasPerm = perm === 'granted';
             }
             if (hasPerm) {
+              if (typeof window !== 'undefined' && !window.__tauriNotifActionRegistered && typeof tauriNotif.onAction === 'function') {
+                window.__tauriNotifActionRegistered = true;
+                tauriNotif.onAction((actionData) => {
+                  const extra = actionData?.extra || actionData?.notification?.extra || {};
+                  const clickedRec = extra.rec;
+                  const clickedId = extra.attlog_id || clickedRec?.id;
+                  handleAttlogNotificationClick(clickedId, clickedRec);
+                });
+              }
               tauriNotif.sendNotification({
                 title,
                 body,
-                icon: 'icons/128x128.png'
+                icon: 'icons/128x128.png',
+                extra: { attlog_id: rec.id, rec }
               });
               return;
             }
@@ -647,10 +675,10 @@
               tag: `attlog-${rec.id || Date.now()}`,
               renotify: true
             });
-            sysNotif.onclick = () => {
-              window.focus();
-              sysNotif.close();
-              openPhotoModalForAttlog(rec.id, rec);
+            sysNotif.onclick = (e) => {
+              if (e && typeof e.preventDefault === 'function') e.preventDefault();
+              try { sysNotif.close(); } catch (err) {}
+              handleAttlogNotificationClick(rec.id, rec);
             };
           } catch (e) {}
         }

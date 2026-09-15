@@ -262,9 +262,18 @@
       }
     } catch (e) {}
 
-    // 2. Consulta al backend si hay conexión para refrescar
+    // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      isLoadingRecords = false;
+      return;
+    }
+
+    // 2. Consulta al backend en segundo plano si hay conexión para refrescar
     try {
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
         if (json && json.success) {
@@ -334,28 +343,29 @@
       clearTimeout(saveDebounceTimers[mesaId]);
     }
     saveDebounceTimers[mesaId] = setTimeout(() => {
-      saveRowToBackend(mesaId);
+      saveRow(mesaId);
     }, delay);
   }
 
-  async function saveRowToBackend(mesaId) {
+  // Guardar automáticamente la fila modificada
+  async function saveRow(mesaId) {
+    if (!canEdit && !canAdd) {
+      triggerToast('No tienes permiso para modificar registros en este módulo', 'warning');
+      return;
+    }
     const lId = libro?.uuid || libroId || libro?.id;
-    if (!lId || !mesaId) return;
+    if (!lId) return;
 
-    const row = rowsData[mesaId];
-    if (!row) return;
-
-    const existing = recordsMap.get(String(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
-    if (existing && !canEdit) {
-      return;
-    }
-    if (!existing && !canAdd) {
-      return;
-    }
+    const row = getRow(mesaId);
+    const existing = recordsMap.get(String(mesaId)) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId) || String(r.mesa_id) === String(mesaId));
 
     const hasAnyValue = Boolean(
-      row.hora_apertura || row.hora_cierre || row.pitboss ||
-      row.croupier_apertura || row.croupier_cierre || row.observacion
+      (row.hora_apertura || '').trim() ||
+      (row.hora_cierre || '').trim() ||
+      (row.pitboss || '').trim() ||
+      (row.croupier_apertura || '').trim() ||
+      (row.croupier_cierre || '').trim() ||
+      (row.observacion || '').trim()
     );
 
     if (!hasAnyValue && !existing) {
@@ -366,84 +376,87 @@
     const mesaUuid = mesaObj?.uuid || (String(mesaId).length > 20 ? mesaId : null);
     const itemUuid = existing?.uuid || crypto.randomUUID();
 
-    savingMesaIds.add(String(mesaId));
-    savingMesaIds = new Set(savingMesaIds);
-
-    const payload = {
+    const localRecord = {
       uuid: itemUuid,
+      libro_uuid: lId,
       mesa_uuid: mesaUuid,
       mesa_id: mesaUuid || String(mesaId),
+      mesa_nombre: mesaObj?.nombre || `Mesa #${mesaId}`,
       hora_apertura: row.hora_apertura || '',
       hora_cierre: row.hora_cierre || '',
       pitboss: row.pitboss || '',
       croupier_apertura: row.croupier_apertura || '',
       croupier_cierre: row.croupier_cierre || '',
-      observacion: row.observacion || ''
+      observacion: row.observacion || '',
+      updated_at: new Date().toISOString()
     };
 
-    try {
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA (0ms)
+    const idx = novedadesRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
+    if (idx >= 0) {
+      novedadesRecords[idx] = localRecord;
+    } else {
+      novedadesRecords = [...novedadesRecords, localRecord];
+    }
 
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        const savedRecord = json.data || { ...payload, uuid: itemUuid };
-        const idx = novedadesRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
-        if (idx >= 0) {
-          novedadesRecords[idx] = savedRecord;
-        } else {
-          novedadesRecords = [...novedadesRecords, savedRecord];
-        }
-        await upsertLocalItem('libro_novedades_mesas', savedRecord);
+    // Feedback visual instantáneo
+    savedSuccessMesaIds.add(String(mesaId));
+    savedSuccessMesaIds = new Set(savedSuccessMesaIds);
+    setTimeout(() => {
+      savedSuccessMesaIds.delete(String(mesaId));
+      savedSuccessMesaIds = new Set(savedSuccessMesaIds);
+    }, 2200);
 
-        savedSuccessMesaIds.add(String(mesaId));
-        savedSuccessMesaIds = new Set(savedSuccessMesaIds);
-        setTimeout(() => {
-          savedSuccessMesaIds.delete(String(mesaId));
-          savedSuccessMesaIds = new Set(savedSuccessMesaIds);
-        }, 2200);
-      } else {
-        triggerToast(json?.error || 'Error al guardar cambios de mesa', 'error');
-      }
-    } catch (err) {
-      console.warn('[LocalDb] Modo Offline: guardando fila de mesa en IndexedDB y encolando outbox:', err);
-      const offlineRecord = {
-        uuid: itemUuid,
-        libro_uuid: lId,
-        mesa_nombre: mesaObj?.nombre || `Mesa #${mesaId}`,
-        ...payload,
-        updated_at: new Date().toISOString()
-      };
+    // 2. Guardado en base de datos local IndexedDB (<5ms)
+    await upsertLocalItem('libro_novedades_mesas', localRecord);
 
-      const idx = novedadesRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === String(mesaId));
-      if (idx >= 0) {
-        novedadesRecords[idx] = offlineRecord;
-      } else {
-        novedadesRecords = [...novedadesRecords, offlineRecord];
-      }
-      await upsertLocalItem('libro_novedades_mesas', offlineRecord);
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    if (isOffline) {
       await queueOutboxAction({
         entity: 'libro_novedades_mesas',
         action: existing ? 'update' : 'create',
         endpoint: `/api/master/libros/${lId}/novedades-mesas`,
         method: 'POST',
-        payload: offlineRecord,
+        payload: localRecord,
         uuid: itemUuid
       });
-
-      savedSuccessMesaIds.add(String(mesaId));
-      savedSuccessMesaIds = new Set(savedSuccessMesaIds);
-      setTimeout(() => {
-        savedSuccessMesaIds.delete(String(mesaId));
-        savedSuccessMesaIds = new Set(savedSuccessMesaIds);
-      }, 2200);
-    } finally {
-      savingMesaIds.delete(String(mesaId));
-      savingMesaIds = new Set(savingMesaIds);
+      return;
     }
+
+    // 3. Sincronización en segundo plano con backend
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(localRecord),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data) {
+            await upsertLocalItem('libro_novedades_mesas', json.data);
+          }
+        } else {
+          throw new Error(`Server status ${res.status}`);
+        }
+      } catch (syncErr) {
+        console.warn('[LocalDb] Falló sync con backend en vivo, asegurando en Outbox:', syncErr);
+        await queueOutboxAction({
+          entity: 'libro_novedades_mesas',
+          action: existing ? 'update' : 'create',
+          endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+          method: 'POST',
+          payload: localRecord,
+          uuid: itemUuid
+        });
+      }
+    })();
   }
 
   // Eliminar o limpiar el registro de una mesa
@@ -467,28 +480,22 @@
     }
 
     const targetRecordId = existing.uuid || existing.id;
-    try {
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${targetRecordId}`, {
-        method: 'DELETE'
-      });
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        triggerToast('Registro de mesa eliminado', 'info');
-        novedadesRecords = novedadesRecords.filter(r => String(r.uuid || r.id) !== String(targetRecordId) && String(r.id) !== String(existing.id));
-        await deleteLocalItem('libro_novedades_mesas', targetRecordId);
-        updateField(mesaId, 'hora_apertura', '');
-        updateField(mesaId, 'hora_cierre', '');
-        updateField(mesaId, 'pitboss', '');
-        updateField(mesaId, 'croupier_apertura', '');
-        updateField(mesaId, 'croupier_cierre', '');
-        updateField(mesaId, 'observacion', '');
-      } else {
-        triggerToast(json?.error || 'Error al eliminar', 'error');
-      }
-    } catch (err) {
-      console.warn('[LocalDb] Modo Offline para eliminación de novedad de mesa:', err);
-      novedadesRecords = novedadesRecords.filter(r => String(r.uuid || r.id) !== String(targetRecordId) && String(r.id) !== String(existing.id));
-      await deleteLocalItem('libro_novedades_mesas', targetRecordId);
+
+    // 1. Limpieza instantánea en memoria (0ms)
+    novedadesRecords = novedadesRecords.filter(r => String(r.uuid || r.id) !== String(targetRecordId) && String(r.id) !== String(existing.id));
+    updateField(mesaId, 'hora_apertura', '');
+    updateField(mesaId, 'hora_cierre', '');
+    updateField(mesaId, 'pitboss', '');
+    updateField(mesaId, 'croupier_apertura', '');
+    updateField(mesaId, 'croupier_cierre', '');
+    updateField(mesaId, 'observacion', '');
+    triggerToast('Registro de mesa eliminado', 'info');
+
+    // 2. Eliminación en base de datos local IndexedDB (<5ms)
+    await deleteLocalItem('libro_novedades_mesas', targetRecordId);
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
       await queueOutboxAction({
         entity: 'libro_novedades_mesas',
         action: 'delete',
@@ -496,14 +503,31 @@
         method: 'DELETE',
         targetId: targetRecordId
       });
-      updateField(mesaId, 'hora_apertura', '');
-      updateField(mesaId, 'hora_cierre', '');
-      updateField(mesaId, 'pitboss', '');
-      updateField(mesaId, 'croupier_apertura', '');
-      updateField(mesaId, 'croupier_cierre', '');
-      updateField(mesaId, 'observacion', '');
-      triggerToast('Modo Offline: Registro de mesa eliminado localmente.', 'info');
+      return;
     }
+
+    // Segundo plano para backend
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/novedades-mesas/${targetRecordId}`, {
+          method: 'DELETE',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      } catch (delErr) {
+        console.warn('[LocalDb] Falló eliminación en vivo, encolando en Outbox:', delErr);
+        await queueOutboxAction({
+          entity: 'libro_novedades_mesas',
+          action: 'delete',
+          endpoint: `/api/master/libros/${lId}/novedades-mesas/${targetRecordId}`,
+          method: 'DELETE',
+          targetId: targetRecordId
+        });
+      }
+    })();
   }
 
   function limpiarBatchForm() {
@@ -542,50 +566,107 @@
       return;
     }
 
-    isSavingBatch = true;
-    try {
-      const promises = availableMesas.map(async (mesa) => {
-        const mid = mesa.id;
-        const cur = getRow(mid);
-        const payload = {
-          mesa_id: String(mid),
-          hora_apertura: batchHoraApertura.trim() ? batchHoraApertura.trim() : (cur.hora_apertura || ''),
-          hora_cierre: batchHoraCierre.trim() ? batchHoraCierre.trim() : (cur.hora_cierre || ''),
-          pitboss: batchPitboss.trim() ? batchPitboss.trim() : (cur.pitboss || ''),
-          croupier_apertura: cur.croupier_apertura || '',
-          croupier_cierre: cur.croupier_cierre || '',
-          observacion: batchObservacion.trim() ? batchObservacion.trim() : (cur.observacion || '')
-        };
+    // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA Y FILAS (0ms)
+    const newBatchRecords = [];
+    for (const mesa of availableMesas) {
+      const mid = String(mesa.uuid || mesa.id);
+      const cur = getRow(mid);
+      const existing = recordsMap.get(mid) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === mid || String(r.mesa_id) === String(mesa.id));
+      const itemUuid = existing?.uuid || crypto.randomUUID();
 
-        const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+      const newFields = {
+        hora_apertura: batchHoraApertura.trim() ? batchHoraApertura.trim() : (cur.hora_apertura || ''),
+        hora_cierre: batchHoraCierre.trim() ? batchHoraCierre.trim() : (cur.hora_cierre || ''),
+        pitboss: batchPitboss.trim() ? batchPitboss.trim() : (cur.pitboss || ''),
+        croupier_apertura: cur.croupier_apertura || '',
+        croupier_cierre: cur.croupier_cierre || '',
+        observacion: batchObservacion.trim() ? batchObservacion.trim() : (cur.observacion || '')
+      };
 
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.success) {
-            updateField(mid, 'hora_apertura', payload.hora_apertura);
-            updateField(mid, 'hora_cierre', payload.hora_cierre);
-            updateField(mid, 'pitboss', payload.pitboss);
-            updateField(mid, 'observacion', payload.observacion);
-            return json.data;
-          }
-        }
-        return null;
-      });
+      updateField(mid, 'hora_apertura', newFields.hora_apertura);
+      updateField(mid, 'hora_cierre', newFields.hora_cierre);
+      updateField(mid, 'pitboss', newFields.pitboss);
+      updateField(mid, 'observacion', newFields.observacion);
 
-      const results = await Promise.all(promises);
-      const successCount = results.filter(Boolean).length;
-      triggerToast(`¡Asignación aplicada a las ${successCount} mesas!`, 'success');
-      await loadRecords();
-    } catch (err) {
-      console.error('Error en asignación a mesas:', err);
-      triggerToast(`Error al asignar: ${err.message}`, 'error');
-    } finally {
-      isSavingBatch = false;
+      const localRecord = {
+        uuid: itemUuid,
+        libro_uuid: lId,
+        mesa_uuid: mesa.uuid || (String(mesa.id).length > 20 ? mesa.id : null),
+        mesa_id: mesa.uuid || String(mesa.id),
+        mesa_nombre: mesa.nombre || `Mesa #${mesa.id}`,
+        ...newFields,
+        updated_at: new Date().toISOString()
+      };
+
+      const idx = novedadesRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === mid || String(r.mesa_id) === String(mesa.id));
+      if (idx >= 0) {
+        novedadesRecords[idx] = localRecord;
+      } else {
+        novedadesRecords = [...novedadesRecords, localRecord];
+      }
+
+      newBatchRecords.push({ mid, localRecord, isUpdate: Boolean(existing), itemUuid });
     }
+
+    limpiarBatchForm();
+    triggerToast(`¡Asignación aplicada instantáneamente a las ${availableMesas.length} mesas!`, 'success');
+    isSavingBatch = false;
+
+    // 2. Guardado en base de datos local IndexedDB (<5ms)
+    for (const item of newBatchRecords) {
+      await upsertLocalItem('libro_novedades_mesas', item.localRecord);
+    }
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      for (const item of newBatchRecords) {
+        await queueOutboxAction({
+          entity: 'libro_novedades_mesas',
+          action: item.isUpdate ? 'update' : 'create',
+          endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+          method: 'POST',
+          payload: item.localRecord,
+          uuid: item.itemUuid
+        });
+      }
+      return;
+    }
+
+    // 3. Sincronización en segundo plano con backend
+    (async () => {
+      for (const item of newBatchRecords) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3500);
+          const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(item.localRecord),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const json = await res.json();
+            if (json?.data) {
+              await upsertLocalItem('libro_novedades_mesas', json.data);
+            }
+          } else {
+            throw new Error(`Server status ${res.status}`);
+          }
+        } catch (syncErr) {
+          console.warn('[LocalDb] Falló sync batch de mesa con backend en vivo, asegurando en Outbox:', syncErr);
+          await queueOutboxAction({
+            entity: 'libro_novedades_mesas',
+            action: item.isUpdate ? 'update' : 'create',
+            endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+            method: 'POST',
+            payload: item.localRecord,
+            uuid: item.itemUuid
+          });
+        }
+      }
+    })();
   }
 
   // --- Handlers de Modal de Edición Individual ---
@@ -595,7 +676,7 @@
       return;
     }
     editingMesaId = mesaId;
-    modalMesa = availableMesas.find(m => m.id === mesaId);
+    modalMesa = availableMesas.find(m => String(m.uuid || m.id) === String(mesaId) || String(m.id) === String(mesaId));
     const r = getRow(mesaId);
     modalHoraApertura = r.hora_apertura || '';
     modalHoraCierre = r.hora_cierre || '';
@@ -620,51 +701,96 @@
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !editingMesaId) return;
 
-    const cur = getRow(editingMesaId);
-    isSavingModal = true;
-    try {
-      const payload = {
-        mesa_id: String(editingMesaId),
-        hora_apertura: modalHoraApertura.trim(),
-        hora_cierre: modalHoraCierre.trim(),
-        pitboss: modalPitboss.trim(),
-        croupier_apertura: cur.croupier_apertura || '',
-        croupier_cierre: cur.croupier_cierre || '',
-        observacion: modalObservacion.trim()
-      };
+    const mid = String(editingMesaId);
+    const cur = getRow(mid);
+    const existing = recordsMap.get(mid) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === mid || String(r.mesa_id) === mid);
+    const itemUuid = existing?.uuid || crypto.randomUUID();
 
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    const newFields = {
+      hora_apertura: modalHoraApertura.trim(),
+      hora_cierre: modalHoraCierre.trim(),
+      pitboss: modalPitboss.trim(),
+      croupier_apertura: cur.croupier_apertura || '',
+      croupier_cierre: cur.croupier_cierre || '',
+      observacion: modalObservacion.trim()
+    };
 
-      const json = await res.json();
-      if (res.ok && json && json.success) {
-        updateField(editingMesaId, 'hora_apertura', payload.hora_apertura);
-        updateField(editingMesaId, 'hora_cierre', payload.hora_cierre);
-        updateField(editingMesaId, 'pitboss', payload.pitboss);
-        updateField(editingMesaId, 'observacion', payload.observacion);
+    // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA Y FILA (0ms)
+    updateField(mid, 'hora_apertura', newFields.hora_apertura);
+    updateField(mid, 'hora_cierre', newFields.hora_cierre);
+    updateField(mid, 'pitboss', newFields.pitboss);
+    updateField(mid, 'observacion', newFields.observacion);
 
-        const savedRecord = json.data;
-        const idx = novedadesRecords.findIndex(r => String(r.mesa_id) === String(editingMesaId));
-        if (idx >= 0) {
-          novedadesRecords[idx] = savedRecord;
-        } else {
-          novedadesRecords = [...novedadesRecords, savedRecord];
-        }
+    const localRecord = {
+      uuid: itemUuid,
+      libro_uuid: lId,
+      mesa_uuid: modalMesa?.uuid || (String(modalMesa?.id).length > 20 ? modalMesa?.id : null),
+      mesa_id: modalMesa?.uuid || String(mid),
+      mesa_nombre: modalMesa?.nombre || `Mesa #${mid}`,
+      ...newFields,
+      updated_at: new Date().toISOString()
+    };
 
-        triggerToast(`Mesa ${modalMesa?.nombre || ''} actualizada correctamente`, 'success');
-        cerrarModalEditar();
-      } else {
-        triggerToast(json?.error || 'Error al guardar cambios de mesa', 'error');
-      }
-    } catch (err) {
-      console.error('Error al guardar modal de mesa:', err);
-      triggerToast(`Error: ${err.message}`, 'error');
-    } finally {
-      isSavingModal = false;
+    const idx = novedadesRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === mid || String(r.mesa_id) === mid);
+    if (idx >= 0) {
+      novedadesRecords[idx] = localRecord;
+    } else {
+      novedadesRecords = [...novedadesRecords, localRecord];
     }
+
+    triggerToast(`Mesa ${modalMesa?.nombre || ''} actualizada correctamente`, 'success');
+    cerrarModalEditar();
+    isSavingModal = false;
+
+    // 2. Guardado en base de datos local IndexedDB (<5ms)
+    await upsertLocalItem('libro_novedades_mesas', localRecord);
+
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      await queueOutboxAction({
+        entity: 'libro_novedades_mesas',
+        action: existing ? 'update' : 'create',
+        endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+        method: 'POST',
+        payload: localRecord,
+        uuid: itemUuid
+      });
+      return;
+    }
+
+    // 3. Sincronización en segundo plano con backend
+    (async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(localRecord),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data) {
+            await upsertLocalItem('libro_novedades_mesas', json.data);
+          }
+        } else {
+          throw new Error(`Server status ${res.status}`);
+        }
+      } catch (syncErr) {
+        console.warn('[LocalDb] Falló sync de mesa en vivo, asegurando en Outbox:', syncErr);
+        await queueOutboxAction({
+          entity: 'libro_novedades_mesas',
+          action: existing ? 'update' : 'create',
+          endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+          method: 'POST',
+          payload: localRecord,
+          uuid: itemUuid
+        });
+      }
+    })();
   }
 
   // --- Handlers de Autocompletado de Croupiers (en la tabla) ---

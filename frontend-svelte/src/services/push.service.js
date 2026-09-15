@@ -2,6 +2,8 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { toBackendUrl } from '../config/api.config.js';
 import { openPhotoModalForAttlog } from '../controllers/globalModal.store.js';
+import { navigateToRoute } from '../controllers/router.store.js';
+import { persistentMarcajesFilters, forceReloadMarcajesStore } from '../views/rrhh/MarcajesView.svelte';
 
 /**
  * Inicializa y registra el dispositivo para Notificaciones Push (Firebase Cloud Messaging)
@@ -151,6 +153,11 @@ export async function initPushNotifications(userId, onNotificationReceived) {
       console.log('[Push] Acción sobre notificación:', notificationAction);
       const data = notificationAction.notification?.data || {};
       const attlogId = data.attlog_id || data.id;
+      try {
+        persistentMarcajesFilters.update(f => ({ ...f, currentPage: 1, searchQuery: '' }));
+        forceReloadMarcajesStore.update(n => n + 1);
+        navigateToRoute('rrhh/marcajes');
+      } catch (e) {}
       if (attlogId) {
         openPhotoModalForAttlog(attlogId);
       }

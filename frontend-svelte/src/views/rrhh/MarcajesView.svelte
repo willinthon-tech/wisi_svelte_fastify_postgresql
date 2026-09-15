@@ -19,6 +19,9 @@
     sortBy: "event_time",
     sortDir: "desc"
   });
+
+  // Signal store to force reload to page 1 (e.g. notification click)
+  export const forceReloadMarcajesStore = writable(0);
 </script>
 
 <script>
@@ -858,9 +861,29 @@
 
   let eventSource = null;
   let unsubscribeLatestAttlog = null;
+  let unsubscribeForceReload = null;
 
   onMount(() => {
     window.addEventListener("keydown", handleKeyDown);
+
+    // Escuchar recargas forzadas (p. ej. click en notificación del sistema o banner)
+    unsubscribeForceReload = forceReloadMarcajesStore.subscribe((val) => {
+      if (!val) return;
+      currentPage = 1;
+      searchQuery = "";
+      debouncedSearch = "";
+      attlogsPageCache.clear();
+      fetchAttlogs(
+        1,
+        pageSize,
+        "",
+        sortBy,
+        sortDir,
+        assignedSalaIds,
+        false,
+        true // force bypass cache
+      );
+    });
 
     // Live Socket / WebSocket Store para actualización instantánea en tiempo real
     unsubscribeLatestAttlog = latestAttlogEventStore.subscribe((newAtt) => {
@@ -905,6 +928,7 @@
 
   onDestroy(() => {
     if (searchTimeout) clearTimeout(searchTimeout);
+    if (unsubscribeForceReload) unsubscribeForceReload();
     if (unsubscribeLatestAttlog) unsubscribeLatestAttlog();
     window.removeEventListener("keydown", handleKeyDown);
   });
