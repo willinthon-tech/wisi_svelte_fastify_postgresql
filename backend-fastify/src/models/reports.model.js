@@ -1270,17 +1270,24 @@ export async function deleteExcepcionesRangoModel(params) {
   return { success: true, count: deletedCount };
 }
 
-export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
+export async function getMarcajesRapidosModel({ empleado_id, fecha, cedula }) {
   if (!isPgConnected || !sql) return { success: false, error: 'Base de datos no conectada' };
   const rawEmp = String(empleado_id || '').trim();
+  const rawCedula = String(cedula || '').trim();
   const cleanDateStr = String(fecha || '').trim().split('T')[0].split(' ')[0];
 
-  if (!rawEmp || !cleanDateStr) {
+  if ((!rawEmp && !rawCedula) || !cleanDateStr) {
     return { success: false, error: 'empleado_id y fecha son requeridos' };
   }
 
+  const cleanCedParam = (rawCedula || rawEmp).replace(/^[VE]/i, '').trim();
   const [emp] = await sql`
-    SELECT uuid, uuid AS id, cedula FROM empleados WHERE uuid::text = ${rawEmp} OR cedula = ${rawEmp}
+    SELECT uuid, uuid AS id, cedula FROM empleados 
+    WHERE uuid::text = ${rawEmp} 
+       OR cedula = ${rawEmp}
+       OR (LENGTH(${rawCedula}) > 0 AND cedula = ${rawCedula})
+       OR (LENGTH(${cleanCedParam}) > 0 AND REPLACE(REPLACE(REPLACE(UPPER(cedula), 'V', ''), 'E', ''), '-', '') = ${cleanCedParam})
+    LIMIT 1
   `;
   if (!emp) return { success: false, error: 'Empleado no encontrado' };
 
@@ -1467,6 +1474,7 @@ export async function getMarcajesRapidosModel({ empleado_id, fecha }) {
 
   return {
     success: true,
+    data: marcajesContext,
     marcajesContext,
     assignedPlantillas: directAssignments
   };

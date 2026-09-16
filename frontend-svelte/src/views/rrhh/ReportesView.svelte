@@ -165,7 +165,7 @@
     if (!salaId) return;
     if (String(currentLoadedSalaId) === String(salaId) && plantillasSalaExcepcion.length > 0) return;
     try {
-      const res = await fetch(`/api/master/horarios?sala_ids=${salaId}&limit=1000`);
+      const res = await fetch(toBackendUrl(`/api/master/horarios?sala_ids=${salaId}&limit=1000`));
       const json = await res.json();
       if (json && json.success) {
         plantillasSalaExcepcion = json.data || [];
@@ -447,7 +447,7 @@
       if (selectedSexo.length > 0) q.set("sexo", selectedSexo.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
-      const res = await fetch(`/api/master/empleados/filter-options?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/empleados/filter-options?${q.toString()}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -497,7 +497,7 @@
     try {
       const q = new URLSearchParams();
       if (sIds.length > 0) q.set("sala_ids", sIds.join(","));
-      const res = await fetch(`/api/master/dispositivos?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/dispositivos?${q.toString()}`));
       const json = await res.json();
       if (json && json.success) {
         dispositivos = json.data || [];
@@ -551,7 +551,7 @@
         search: searchQuery,
       });
 
-      const res = await fetch(`/api/reports/marcaje-personal?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/reports/marcaje-personal?${q.toString()}`));
       const json = await res.json();
 
       if (json && json.success) {

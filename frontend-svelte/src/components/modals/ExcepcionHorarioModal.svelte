@@ -29,7 +29,7 @@
 
   async function fetchExcepcionesConfig() {
     try {
-      const res = await fetch('/api/master/excepciones?limit=1000');
+      const res = await fetch(toBackendUrl('/api/master/excepciones?limit=1000'));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
@@ -327,16 +327,20 @@
 
   async function fetchMarcajesRapidos() {
     if (!empleado || !dia) return;
-    const empKey = empleado?.uuid || empleado?.id || empleado?.cedula;
+    const empCedula = empleado?.cedula || '';
+    const empUuid = empleado?.uuid || empleado?.id || '';
+    const empKey = empCedula || empUuid;
     const fetchId = ++currentFetchId;
     marcajesLoading = true;
     try {
-      const res = await fetch(`/api/reports/marcajes-rapidos?empleado_id=${empKey}&fecha=${dia.fechaStr}`);
+      const url = toBackendUrl(`/api/reports/marcajes-rapidos?empleado_id=${encodeURIComponent(empKey)}&cedula=${encodeURIComponent(empCedula)}&fecha=${encodeURIComponent(dia.fechaStr)}`);
+      const res = await fetch(url);
       if (fetchId !== currentFetchId) return;
       if (res.ok) {
         const json = await res.json();
-        if (json && json.success && Array.isArray(json.data)) {
-          marcajesContext = json.data;
+        const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json?.marcajesContext) ? json.marcajesContext : []);
+        if (json && json.success && Array.isArray(list)) {
+          marcajesContext = list;
           recalculateLocalEntryExit();
         }
       }
@@ -377,10 +381,9 @@
 
     recalculateLocalEntryExit();
 
-    // 2. Guardado inmediato en segundo plano
     showStatus('Guardando marcaje...', 'saving', 0);
     try {
-      const res = await fetch(`/api/reports/attlogs/${punchKey}/status`, {
+      const res = await fetch(toBackendUrl(`/api/reports/attlogs/${punchKey}/status`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: targetStatus })
@@ -481,7 +484,7 @@
         es_libre: isLibre
       };
 
-      const res = await fetch('/api/reports/excepciones', {
+      const res = await fetch(toBackendUrl('/api/reports/excepciones'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -677,10 +680,9 @@
   }
 
   async function handleDelete() {
-    if (!dia || !dia.excepcionId) return;
     showStatus('Borrando excepción...', 'saving', 0);
     try {
-      const res = await fetch(`/api/reports/excepciones/${dia.excepcionId}`, {
+      const res = await fetch(toBackendUrl(`/api/reports/excepciones/${dia.excepcionId}`), {
         method: 'DELETE'
       });
       const json = await res.json();

@@ -143,8 +143,8 @@ export async function deleteExcepcionesRango(req, reply) {
 
 export async function getMarcajesRapidos(req, reply) {
   try {
-    const { empleado_id, fecha } = req.query;
-    const result = await getMarcajesRapidosModel({ empleado_id, fecha });
+    const { empleado_id, fecha, cedula } = req.query;
+    const result = await getMarcajesRapidosModel({ empleado_id, fecha, cedula });
     return reply.send(result);
   } catch (error) {
     req.log.error(error);

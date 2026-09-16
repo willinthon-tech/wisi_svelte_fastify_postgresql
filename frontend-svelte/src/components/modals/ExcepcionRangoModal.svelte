@@ -65,7 +65,7 @@
   async function fetchExceptions() {
     loadingExceptions = true;
     try {
-      const res = await fetch('/api/master/excepciones?limit=1000');
+      const res = await fetch(toBackendUrl('/api/master/excepciones?limit=1000'));
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data)) {
         plantillasExcepcion = json.data.filter(p => p.tipo === 'Asignable');
@@ -115,7 +115,9 @@
     }
     loadingRangos = true;
     try {
-      const res = await fetch(`/api/reports/excepciones-empleado?empleado_id=${empKey}`);
+      const empCedula = empleado?.cedula || '';
+      const url = toBackendUrl(`/api/reports/excepciones-empleado?empleado_id=${encodeURIComponent(empKey)}&cedula=${encodeURIComponent(empCedula)}`);
+      const res = await fetch(url);
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data)) {
         rangosAsignados = json.data;
@@ -144,7 +146,7 @@
     const empKey = empleado?.uuid || empleado?.id;
     deletingIds = [...rango.ids];
     try {
-      const res = await fetch('/api/reports/excepciones-rango/delete', {
+      const res = await fetch(toBackendUrl('/api/reports/excepciones-rango/delete'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -210,7 +212,7 @@
         excepcion_uuid: excepcionId
       };
 
-      const res = await fetch('/api/reports/excepciones-rango', {
+      const res = await fetch(toBackendUrl('/api/reports/excepciones-rango'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
