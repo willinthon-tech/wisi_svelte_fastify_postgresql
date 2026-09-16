@@ -188,16 +188,18 @@
   })();
 
   onMount(async () => {
-    // 0ms instant display from IndexedDB
-    try {
-      const local = await getLocalItems('attlogs');
-      if (Array.isArray(local) && local.length > 0) {
-        attlogs = local;
-        totalCount = local.length;
-        isLoading = false;
-        isInitialLoad = false;
-      }
-    } catch (e) {}
+    // Si no hay conexión a internet, cargar de inmediato desde el almacenamiento local IndexedDB
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        const local = await getLocalItems('attlogs', null, 'fecha_hora', 'desc');
+        if (Array.isArray(local) && local.length > 0) {
+          attlogs = local.slice(0, pageSize);
+          totalCount = local.length;
+          isLoading = false;
+          isInitialLoad = false;
+        }
+      } catch (e) {}
+    }
   });
 
   $: selectedPhotoModal =
@@ -359,22 +361,21 @@
       if (selectedSexo.length > 0) q.set("sexo", selectedSexo.join(","));
 
       const res = await fetch(`${base}/attlogs/latest?${q.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          const seen = new Set();
-          attlogs = json.data.filter(item => {
-            const key = item?.uuid || item?.id;
-            if (!key) return false;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          totalCount = json.total || 0;
-          attlogsPageCache.set(pageCacheKey, { data: attlogs, total: totalCount });
-          if (page === 1) {
-            saveLocalItems('attlogs', attlogs).catch(() => {});
-          }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        const seen = new Set();
+        attlogs = json.data.filter(item => {
+          const key = item?.uuid || item?.id;
+          if (!key) return false;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        totalCount = json.total || 0;
+        attlogsPageCache.set(pageCacheKey, { data: attlogs, total: totalCount });
+        if (page === 1) {
+          saveLocalItems('attlogs', attlogs).catch(() => {});
         }
       }
     } catch (e) {
@@ -382,7 +383,7 @@
       try {
         const local = await getLocalItems('attlogs', null, 'fecha_hora', 'desc');
         if (Array.isArray(local) && local.length > 0) {
-          attlogs = local;
+          attlogs = local.slice(0, limit);
           totalCount = local.length;
         }
       } catch (err) {}
@@ -1285,7 +1286,7 @@
       <!-- Left: Filters Info -->
       <div style="font-size: 13px; color: #475569; font-weight: 500;">
         Total: (<strong style="color: #0f172a; font-weight: 800;"
-          >{totalCount}</strong
+          >{isLoading ? '...' : totalCount}</strong
         >) &nbsp;|&nbsp; Filtros Totales: (<strong
           style="color: #0f172a; font-weight: 800;">{totalFilters}</strong
         >) &nbsp;Filtros:
@@ -1314,7 +1315,11 @@
 
         <!-- Range indicator -->
         <span style="font-size: 13px; font-weight: 700; color: #0f172a;">
-          {startRecord} - {endRecord} de {totalCount}
+          {#if isLoading}
+            Cargando...
+          {:else}
+            {startRecord} - {endRecord} de {totalCount}
+          {/if}
         </span>
 
         <!-- Compact Pagination Group [< 1 / 184 >] -->
