@@ -1,9 +1,27 @@
 import { Capacitor } from '@capacitor/core';
 
-// Configuración Centralizada y Global de API y Endpoints WISI Space
+// Configuración Centralizada y Dinámica de API y Endpoints WISI Space
+export const CLOUD_SERVER_HOST = (function() {
+  if (typeof window !== 'undefined') {
+    const { hostname, host } = window.location;
+    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.includes('tauri')) {
+      return host;
+    }
+  }
+  return (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_BACKEND_HOST || import.meta.env.VITE_APP_DOMAIN)) || 'localhost:3030';
+})();
 
-export const CLOUD_SERVER_HOST = 'willinthon.wisi.space';
-export const CLOUD_SERVER_ORIGIN = `https://${CLOUD_SERVER_HOST}`;
+export const CLOUD_SERVER_ORIGIN = (function() {
+  if (typeof window !== 'undefined') {
+    const { hostname, origin } = window.location;
+    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.includes('tauri')) {
+      return origin;
+    }
+  }
+  const envUrl = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL;
+  if (envUrl) return envUrl.replace(/\/+$/, '');
+  return CLOUD_SERVER_HOST.startsWith('http') ? CLOUD_SERVER_HOST : `https://${CLOUD_SERVER_HOST}`;
+})();
 
 /**
  * Detecta si la aplicación se está ejecutando dentro de un contenedor nativo (Tauri en Windows o Capacitor en Android)
@@ -56,7 +74,7 @@ export function getCloudBaseUrl() {
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:3030';
     }
-    // 4. En producción en dominio real web (ej. https://willinthon.wisi.space)
+    // 4. En producción en dominio real web activo
     return origin;
   }
   return CLOUD_SERVER_ORIGIN;
@@ -66,7 +84,7 @@ export function getCloudBaseUrl() {
  * Obtiene la URL pública web para enlaces compartibles (cortes, reportes, etc.).
  * Garantiza que en apps nativas de Windows (Tauri) o Android (Capacitor), donde
  * window.location.origin es 'http://tauri.localhost' o 'http://localhost',
- * devuelva siempre el dominio web público oficial (ej. https://willinthon.wisi.space).
+ * devuelva siempre el dominio web público oficial configurado.
  */
 export function getPublicWebUrl(path = '') {
   let base = CLOUD_SERVER_ORIGIN;
@@ -125,18 +143,24 @@ export function toBackendUrl(path, options = {}) {
   let normalized = clean;
 
   if (clean.startsWith('http://') || clean.startsWith('https://')) {
-    if (clean.includes('willinthon.wisi.space')) {
-      if (base.includes('localhost') || base.includes('127.0.0.1')) {
-        normalized = clean.replace(/https?:\/\/willinthon\.wisi\.space/g, base);
+    try {
+      const u = new URL(clean);
+      const isApiPath = u.pathname.startsWith('/api/') || 
+                        u.pathname.startsWith('/attlogs/') || 
+                        u.pathname.startsWith('/empleados/') || 
+                        u.pathname.startsWith('/clientes/') || 
+                        u.pathname.startsWith('/salas/');
+      if (isApiPath) {
+        normalized = `${base}${u.pathname}${u.search}`;
+        normalized = normalized
+          .replace('/attlogs/', '/api/attlogs/')
+          .replace('/empleados/', '/api/empleados/')
+          .replace('/clientes/', '/api/clientes/')
+          .replace('/salas/', '/api/salas/');
       } else {
-        normalized = clean;
+        return clean;
       }
-      normalized = normalized
-        .replace('/attlogs/', '/api/attlogs/')
-        .replace('/empleados/', '/api/empleados/')
-        .replace('/clientes/', '/api/clientes/')
-        .replace('/salas/', '/api/salas/');
-    } else {
+    } catch {
       return clean;
     }
   } else {
@@ -276,7 +300,7 @@ export function toClientePhotoUrl(clientOrFoto, id = null, options = { thumb: tr
 /**
  * Interceptor global de window.fetch.
  * Redirige automáticamente todas las peticiones relativas (/api, /attlogs, /empleados, /clientes, /salas, etc.)
- * al servidor backend cloud (https://willinthon.wisi.space) cuando se ejecuta en Tauri o cuando sea necesario.
+ * al servidor backend cloud dinámico cuando se ejecuta en Tauri o cuando sea necesario.
  */
 export function setupGlobalFetchInterceptor() {
   if (typeof window === 'undefined' || window.__WISI_FETCH_INTERCEPTED__) return;

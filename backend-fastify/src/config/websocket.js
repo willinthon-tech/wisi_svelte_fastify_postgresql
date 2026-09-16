@@ -190,14 +190,22 @@ attlogEvents.on('new_attlog', (data) => {
     const empleadoKey = data.empleado_uuid || data.empleado_id;
     const salaKey = data.sala_uuid || data.sala_id;
 
+    const publicBase = (process.env.PUBLIC_URL || process.env.APP_URL || (process.env.APP_DOMAIN ? `https://${process.env.APP_DOMAIN}` : '') || '').replace(/\/+$/, '');
+    const toFullPhotoUrl = (relPath) => {
+      if (!relPath) return null;
+      if (relPath.startsWith('http://') || relPath.startsWith('https://')) return relPath;
+      const cleanPath = relPath.startsWith('/') ? relPath : `/${relPath}`;
+      return publicBase ? `${publicBase}${cleanPath}` : cleanPath;
+    };
+
     if (attlogKey) {
-      photoUrl = `https://willinthon.wisi.space/api/attlogs/${attlogKey}.jpg`;
+      photoUrl = toFullPhotoUrl(`/api/attlogs/${attlogKey}.jpg`);
     } else if (data.empleado_foto) {
-      photoUrl = data.empleado_foto.startsWith('http') ? data.empleado_foto : `https://willinthon.wisi.space${data.empleado_foto.startsWith('/') ? '' : '/'}${data.empleado_foto}`;
+      photoUrl = toFullPhotoUrl(data.empleado_foto);
     } else if (data.foto) {
-      photoUrl = data.foto.startsWith('http') ? data.foto : `https://willinthon.wisi.space${data.foto.startsWith('/') ? '' : '/'}${data.foto}`;
+      photoUrl = toFullPhotoUrl(data.foto);
     } else if (empleadoKey) {
-      photoUrl = `https://willinthon.wisi.space/api/empleados/${empleadoKey}.jpg`;
+      photoUrl = toFullPhotoUrl(`/api/empleados/${empleadoKey}.jpg`);
     }
 
     sendPushNotificationForAttlog({

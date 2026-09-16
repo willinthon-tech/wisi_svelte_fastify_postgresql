@@ -20,7 +20,7 @@
     try {
       return new URL(getCloudBaseUrl()).host;
     } catch {
-      return 'willinthon.wisi.space';
+      return (typeof window !== 'undefined' && window.location.host) ? window.location.host : 'localhost';
     }
   })();
 

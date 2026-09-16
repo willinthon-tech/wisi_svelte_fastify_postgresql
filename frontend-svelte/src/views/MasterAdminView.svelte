@@ -1043,11 +1043,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     );
     try {
       await loadSystemConfig();
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const payload = {
-        ip_domain: systemConfig.isapi_ip_domain || "willinthon.wisi.space",
+        ip_domain: systemConfig.isapi_ip_domain || currentHost,
         url: systemConfig.isapi_url || "/api/attlogs/sync",
-        port: Number(systemConfig.isapi_port) || 443,
-        protocol: systemConfig.isapi_protocol || "HTTPS",
+        port: Number(systemConfig.isapi_port) || (isHttps ? 443 : 80),
+        protocol: systemConfig.isapi_protocol || (isHttps ? "HTTPS" : "HTTP"),
       };
 
       const res = await fetch(
@@ -1084,12 +1086,14 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   async function openIsapiModal(device) {
     if (!device) return;
     await loadSystemConfig();
+    const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     isapiSelectedDevice = device;
     isapiForm = {
-      ip_domain: systemConfig.isapi_ip_domain || "willinthon.wisi.space",
+      ip_domain: systemConfig.isapi_ip_domain || currentHost,
       url: systemConfig.isapi_url || "/api/attlogs/sync",
-      port: systemConfig.isapi_port || 443,
-      protocol: systemConfig.isapi_protocol || "HTTPS",
+      port: systemConfig.isapi_port || (isHttps ? 443 : 80),
+      protocol: systemConfig.isapi_protocol || (isHttps ? "HTTPS" : "HTTP"),
     };
     isIsapiModalOpen = true;
   }

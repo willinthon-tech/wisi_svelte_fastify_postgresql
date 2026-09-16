@@ -748,7 +748,7 @@ export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
   const password = (dev.clave || '123456').trim();
 
   const savedConfig = await getConfiguracionModel();
-  const ipAddress = (config.ip_domain || savedConfig.isapi_ip_domain || 'willinthon.wisi.space').trim();
+  const ipAddress = (config.ip_domain || savedConfig.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || 'localhost').trim();
   const urlPath = (config.url || savedConfig.isapi_url || '/api/attlogs/sync').trim();
   const portNo = Number(config.port || savedConfig.isapi_port) || 443;
   const protocolType = String(config.protocol || savedConfig.isapi_protocol || 'HTTPS').toUpperCase();

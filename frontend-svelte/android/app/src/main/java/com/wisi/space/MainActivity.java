@@ -162,13 +162,24 @@ public class MainActivity extends BridgeActivity {
     public void downloadWithManager(String url, String contentDisposition, String mimetype) {
         if (url == null || url.trim().isEmpty()) return;
 
-        // 1. Normalizar URL si es relativa
+        // 1. Normalizar URL si es relativa usando dinámicamente el host activo del WebView
         String normalizedUrl = url.trim();
         if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
+            String activeHost = DEFAULT_HOST;
+            try {
+                WebView wv = getBridge().getWebView();
+                if (wv != null && wv.getUrl() != null && !wv.getUrl().isEmpty()) {
+                    Uri currentUri = Uri.parse(wv.getUrl());
+                    if (currentUri.getScheme() != null && currentUri.getAuthority() != null) {
+                        activeHost = currentUri.getScheme() + "://" + currentUri.getAuthority();
+                    }
+                }
+            } catch (Exception ignored) {}
+
             if (normalizedUrl.startsWith("/")) {
-                normalizedUrl = DEFAULT_HOST + normalizedUrl;
+                normalizedUrl = activeHost + normalizedUrl;
             } else {
-                normalizedUrl = DEFAULT_HOST + "/" + normalizedUrl;
+                normalizedUrl = activeHost + "/" + normalizedUrl;
             }
         }
 

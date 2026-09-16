@@ -366,7 +366,7 @@ export async function agregarEmpleadosABiometrico(request, reply) {
     const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
     const configMap = {};
     for (const r of savedConfigRows) configMap[r.clave] = r.valor;
-    const publicDomain = configMap.isapi_ip_domain || 'willinthon.wisi.space';
+    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || req.headers?.host?.split(':')[0] || 'localhost').trim();
 
     for (const emp of empleados) {
       const empRes = {
@@ -512,7 +512,7 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
     const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
     const configMap = {};
     for (const r of savedConfigRows) configMap[r.clave] = r.valor;
-    const publicDomain = configMap.isapi_ip_domain || 'willinthon.wisi.space';
+    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || req.headers?.host?.split(':')[0] || 'localhost').trim();
 
     const results = [];
 
