@@ -647,37 +647,6 @@
         </div>
       </div>
 
-      <!-- Resumen en Tiempo Real de la Mesa Actual -->
-      <div class="live-preview-box">
-        <div class="live-preview-header">
-          <div class="live-badge-group">
-            <span class="live-badge">
-              <span class="pulse-dot"></span> EN TIEMPO REAL
-            </span>
-            {#if isSavingAuto}
-              <span class="saving-badge">⚡ Guardando...</span>
-            {:else if selectedMesaId && currentMesaTotalMoney > 0}
-              <span class="synced-badge">✓ Sincronizado</span>
-            {/if}
-          </div>
-        </div>
-
-        <div class="live-preview-amount">
-          <span class="live-currency">$</span>
-          <span class="live-number">{currentMesaTotalMoney.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </div>
-
-        <div class="live-preview-stats">
-          <span class="stat-pill"><b>{currentMesaTotalPiezas}</b> billetes</span>
-          {#if selectedMesaId}
-            {@const selMesaObj = availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId) || String(m.id) === String(selectedMesaId))}
-            <span class="mesa-pill">{selMesaObj?.nombre || 'Mesa Seleccionada'}</span>
-          {:else}
-            <span class="hint-pill">Seleccione mesa arriba</span>
-          {/if}
-        </div>
-      </div>
-
       <!-- Botón Guardar -->
       {#if canAdd || canEdit}
         <button 
@@ -697,26 +666,9 @@
 
   <!-- Tarjeta Derecha: Tabla de Drop de Mesas -->
   <div class="card-table-drop">
-    <!-- Barra Superior Oscura con Sala, Fecha y Estadísticas en Vivo -->
+    <!-- Barra Superior Oscura con Sala y Fecha -->
     <div class="table-top-bar">
-      <div class="top-bar-left">
-        <span class="top-bar-title">{tableHeaderTitle}</span>
-        <span class="top-bar-sub">Control de Drop en Vivo</span>
-      </div>
-      <div class="top-bar-right-stats">
-        <div class="top-stat-pill">
-          <span class="stat-pill-label">Mesas Drop:</span>
-          <span class="stat-pill-val">{dropRecords.length} / {availableMesas.length}</span>
-        </div>
-        <div class="top-stat-pill">
-          <span class="stat-pill-label">Total Billetes:</span>
-          <span class="stat-pill-val">{totalPiezasDrop} pzs</span>
-        </div>
-        <div class="top-stat-pill highlight">
-          <span class="stat-pill-label">Total Acumulado:</span>
-          <span class="stat-pill-val">$ {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-        </div>
-      </div>
+      <span>{tableHeaderTitle}</span>
     </div>
 
     <!-- Tabla de Contenido -->
@@ -733,7 +685,7 @@
             <th class="th-center">$ 5</th>
             <th class="th-center">$ 1</th>
             <th class="th-center th-total">Total</th>
-            {#if canEdit || canDelete}
+            {#if canDelete}
               <th class="th-center th-acciones">Acciones</th>
             {/if}
           </tr>
@@ -741,7 +693,7 @@
         <tbody>
           {#if isLoadingRecords}
             <tr>
-              <td colspan={canEdit || canDelete ? 10 : 9} class="empty-state-cell">
+              <td colspan={canDelete ? 10 : 9} class="empty-state-cell">
                 <div class="loading-state-inline">
                   <div class="spinner-small"></div>
                   <span>Cargando registros de drop...</span>
@@ -750,7 +702,7 @@
             </tr>
           {:else if dropRecords.length === 0}
             <tr>
-              <td colspan={canEdit || canDelete ? 10 : 9} class="empty-state-cell">
+              <td colspan={canDelete ? 10 : 9} class="empty-state-cell">
                 <div class="empty-msg-box">
                   <p class="empty-text">
                     La tabla de drop está vacía para esta fecha. Seleccione una mesa en el formulario de la izquierda e ingrese los billetes para agregar registros.
@@ -783,30 +735,16 @@
                 <td class="td-center">{rec5}</td>
                 <td class="td-center">{rec1}</td>
                 <td class="td-center td-total-val">${recTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                {#if canEdit || canDelete}
+                {#if canDelete}
                   <td class="td-center td-acciones">
-                    <div class="acciones-btns-row">
-                      {#if canEdit}
-                        <button 
-                          type="button" 
-                          class="btn-editar-accion"
-                          on:click|stopPropagation={() => seleccionarMesaDesdeTabla(mesaKey)}
-                          title="Cargar y editar esta mesa"
-                        >
-                          Editar
-                        </button>
-                      {/if}
-                      {#if canDelete}
-                        <button 
-                          type="button" 
-                          class="btn-eliminar"
-                          on:click|stopPropagation={() => handleEliminar(record.uuid || record.id)}
-                          title="Eliminar este registro"
-                        >
-                          Eliminar
-                        </button>
-                      {/if}
-                    </div>
+                    <button 
+                      type="button" 
+                      class="btn-eliminar"
+                      on:click|stopPropagation={() => handleEliminar(record.uuid || record.id)}
+                      title="Eliminar este registro"
+                    >
+                      Eliminar
+                    </button>
                   </td>
                 {/if}
               </tr>
@@ -817,7 +755,7 @@
         <!-- Fila de Totales con línea separadora azul -->
         <tfoot>
           <tr class="divider-row">
-            <td colspan={canEdit || canDelete ? 10 : 9} class="divider-cell"></td>
+            <td colspan={canDelete ? 10 : 9} class="divider-cell"></td>
           </tr>
           <tr class="total-row">
             <td colspan="2" class="total-label-cell">TOTAL</td>
@@ -828,7 +766,7 @@
             <td class="td-center total-val-cell">$ {totalMoney5.toLocaleString()}</td>
             <td class="td-center total-val-cell">$ {totalMoney1.toLocaleString()}</td>
             <td class="td-center grand-total-cell">$ {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            {#if canEdit || canDelete}
+            {#if canDelete}
               <td class="td-center"></td>
             {/if}
           </tr>
@@ -991,128 +929,6 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
-     Widget en Tiempo Real de la Mesa
-  ───────────────────────────────────────────────────────────── */
-  .live-preview-box {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    border-radius: 8px;
-    padding: 14px 16px;
-    color: #ffffff;
-    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .live-preview-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .live-badge-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .live-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    color: #38bdf8;
-    text-transform: uppercase;
-  }
-
-  .pulse-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background-color: #38bdf8;
-    box-shadow: 0 0 8px #38bdf8;
-    animation: pulseGlow 1.5s infinite ease-in-out;
-  }
-
-  @keyframes pulseGlow {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.85); }
-  }
-
-  .saving-badge {
-    font-size: 11px;
-    font-weight: 600;
-    color: #facc15;
-    background: rgba(250, 204, 21, 0.15);
-    padding: 2px 7px;
-    border-radius: 10px;
-  }
-
-  .synced-badge {
-    font-size: 11px;
-    font-weight: 600;
-    color: #4ade80;
-    background: rgba(74, 222, 128, 0.15);
-    padding: 2px 7px;
-    border-radius: 10px;
-  }
-
-  .live-preview-amount {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    margin: 2px 0;
-  }
-
-  .live-currency {
-    font-size: 18px;
-    font-weight: 700;
-    color: #94a3b8;
-  }
-
-  .live-number {
-    font-size: 26px;
-    font-weight: 800;
-    color: #38bdf8;
-    letter-spacing: -0.5px;
-    line-height: 1.1;
-  }
-
-  .live-preview-stats {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #cbd5e1;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding-top: 8px;
-  }
-
-  .stat-pill {
-    color: #e2e8f0;
-  }
-
-  .mesa-pill {
-    font-weight: 700;
-    color: #67e8f9;
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .hint-pill {
-    font-size: 11px;
-    color: #94a3b8;
-    font-style: italic;
-  }
-
-  /* ─────────────────────────────────────────────────────────────
      Tarjeta Derecha: Tabla
   ───────────────────────────────────────────────────────────── */
   .card-table-drop {
@@ -1125,75 +941,13 @@
 
   /* Barra Superior Oscura */
   .table-top-bar {
-    background: #1e293b;
+    background: #54626f;
     color: #ffffff;
-    padding: 12px 18px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .top-bar-left {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .top-bar-title {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.2px;
-    color: #ffffff;
-  }
-
-  .top-bar-sub {
-    font-size: 11px;
-    color: #94a3b8;
-    font-weight: 500;
-  }
-
-  .top-bar-right-stats {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .top-stat-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 12px;
-  }
-
-  .top-stat-pill.highlight {
-    background: rgba(34, 197, 94, 0.15);
-    border-color: rgba(34, 197, 94, 0.35);
-  }
-
-  .stat-pill-label {
-    color: #94a3b8;
-    font-weight: 500;
-  }
-
-  .top-stat-pill.highlight .stat-pill-label {
-    color: #86efac;
-  }
-
-  .stat-pill-val {
-    color: #f8fafc;
-    font-weight: 700;
-  }
-
-  .top-stat-pill.highlight .stat-pill-val {
-    color: #4ade80;
-    font-weight: 800;
+    text-align: center;
+    padding: 12px 16px;
+    letter-spacing: 0.3px;
   }
 
   .table-wrapper {
@@ -1382,36 +1136,12 @@
   }
 
   /* Acciones */
-  .acciones-btns-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-  }
-
-  .btn-editar-accion {
-    background: #3b82f6;
-    color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    padding: 5px 10px;
-    font-size: 11.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    white-space: nowrap;
-  }
-
-  .btn-editar-accion:hover {
-    background: #2563eb;
-  }
-
   .btn-eliminar {
     background: #dc2626;
     color: #ffffff;
     border: none;
     border-radius: 4px;
-    padding: 5px 10px;
+    padding: 5px 12px;
     font-size: 11.5px;
     font-weight: 700;
     cursor: pointer;
