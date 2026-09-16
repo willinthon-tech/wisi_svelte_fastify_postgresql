@@ -3586,7 +3586,9 @@ export async function createEmpleadoModel(data) {
 
     const { randomUUID } = await import('crypto');
     const empUuid = data.uuid && isUuid(data.uuid) ? data.uuid : randomUUID();
-    const foto = data.foto || `/empleados/${empUuid}.jpg`;
+    const isWebp = (data.fotoBase64 || '').startsWith('data:image/webp');
+    const photoExt = isWebp ? '.webp' : '.jpg';
+    const foto = data.foto || `/empleados/${empUuid}${photoExt}`;
 
     // Guardar foto en disco si viene en base64
     if (data.fotoBase64) {
@@ -3597,7 +3599,7 @@ export async function createEmpleadoModel(data) {
         const path = await import('path');
         const dir = path.join(process.cwd(), 'empleados');
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(path.join(dir, `${empUuid}.jpg`), buffer);
+        fs.writeFileSync(path.join(dir, `${empUuid}${photoExt}`), buffer);
       } catch (e) {
         console.error('Error guardando foto de empleado:', e);
       }
@@ -3670,6 +3672,9 @@ export async function updateEmpleadoModel(id, data) {
     }
 
     // Guardar nueva foto en disco si viene en base64
+    const isWebp = (data.fotoBase64 || '').startsWith('data:image/webp');
+    const photoExt = isWebp ? '.webp' : '.jpg';
+
     if (data.fotoBase64) {
       try {
         const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
@@ -3678,13 +3683,13 @@ export async function updateEmpleadoModel(id, data) {
         const path = await import('path');
         const dir = path.join(process.cwd(), 'empleados');
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(path.join(dir, `${eUuid}.jpg`), buffer);
+        fs.writeFileSync(path.join(dir, `${eUuid}${photoExt}`), buffer);
       } catch (e) {
         console.error('Error actualizando foto de empleado:', e);
       }
     }
 
-    const foto = data.foto !== undefined ? data.foto : (data.fotoBase64 ? `/empleados/${eUuid}.jpg` : existing.foto);
+    const foto = data.foto !== undefined ? data.foto : (data.fotoBase64 ? `/empleados/${eUuid}${photoExt}` : existing.foto);
     const nombre = data.nombre !== undefined ? data.nombre : existing.nombre;
     const rawIngreso = data.fecha_ingreso !== undefined ? data.fecha_ingreso : existing.fecha_ingreso;
     const fecha_ingreso = cleanDateOnly(rawIngreso);
@@ -9772,12 +9777,14 @@ export async function createClienteModel(data) {
   let foto = data.foto || null;
   if (data.fotoBase64) {
     try {
+      const isWebp = data.fotoBase64.startsWith('data:image/webp');
+      const photoExt = isWebp ? '.webp' : '.jpg';
       const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
       const dir = resolveClientesDir();
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, `${clientUuid}.jpg`), buffer);
-      foto = `/clientes/${clientUuid}.jpg`;
+      fs.writeFileSync(path.join(dir, `${clientUuid}${photoExt}`), buffer);
+      foto = `/clientes/${clientUuid}${photoExt}`;
       invalidateClienteThumbnails(clientUuid);
     } catch (e) {
       console.error('Error guardando foto de cliente:', e);
@@ -9845,11 +9852,13 @@ export async function updateClienteModel(id, data) {
   let foto = data.foto;
   if (data.fotoBase64) {
     try {
+      const isWebp = data.fotoBase64.startsWith('data:image/webp');
+      const photoExt = isWebp ? '.webp' : '.jpg';
       const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
       const buffer = Buffer.from(base64Data, 'base64');
       const dir = resolveClientesDir();
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const filename = `${targetUuid}.jpg`;
+      const filename = `${targetUuid}${photoExt}`;
       fs.writeFileSync(path.join(dir, filename), buffer);
       foto = `/clientes/${filename}`;
       invalidateClienteThumbnails(targetUuid);
@@ -9860,8 +9869,10 @@ export async function updateClienteModel(id, data) {
     foto = null;
     try {
       const dir = resolveClientesDir();
-      const filePathU = path.join(dir, `${targetUuid}.jpg`);
-      if (fs.existsSync(filePathU)) fs.unlinkSync(filePathU);
+      const filePathJ = path.join(dir, `${targetUuid}.jpg`);
+      if (fs.existsSync(filePathJ)) fs.unlinkSync(filePathJ);
+      const filePathW = path.join(dir, `${targetUuid}.webp`);
+      if (fs.existsSync(filePathW)) fs.unlinkSync(filePathW);
       invalidateClienteThumbnails(targetUuid);
     } catch (e) {}
   }

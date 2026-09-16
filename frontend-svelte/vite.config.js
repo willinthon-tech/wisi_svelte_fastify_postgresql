@@ -71,6 +71,29 @@ export default defineConfig({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            urlPattern: ({ request, url }) => {
+              // Excluir endpoints de datos JSON y WebSockets
+              if (url.pathname.startsWith('/api/master/') || url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/ws')) {
+                return false;
+              }
+              return (
+                request.destination === 'image' ||
+                /^\/(api\/)?(empleados|clientes|attlogs|salas|photos)\/.*/i.test(url.pathname)
+              );
+            },
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'wisi-media-cache-v1',
+              expiration: {
+                maxEntries: 2500,
+                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
           }
         ]
       }

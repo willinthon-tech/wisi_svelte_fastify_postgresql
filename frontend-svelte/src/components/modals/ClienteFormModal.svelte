@@ -280,7 +280,15 @@
     outCtx.fillRect(0, 0, 400, 400);
     outCtx.drawImage(cropperImg, sx, sy, sSize, sSize, 0, 0, 400, 400);
 
-    const compressed = outCanvas.toDataURL('image/jpeg', 0.85);
+    let compressed;
+    try {
+      compressed = outCanvas.toDataURL('image/webp', 0.85);
+      if (!compressed.startsWith('data:image/webp')) {
+        compressed = outCanvas.toDataURL('image/jpeg', 0.85);
+      }
+    } catch (_) {
+      compressed = outCanvas.toDataURL('image/jpeg', 0.85);
+    }
     fotoBase64 = compressed;
     fotoUrl = compressed;
     removeFoto = false;
