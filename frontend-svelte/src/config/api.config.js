@@ -8,7 +8,7 @@ export const CLOUD_SERVER_HOST = (function() {
       return host;
     }
   }
-  return (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_BACKEND_HOST || import.meta.env.VITE_APP_DOMAIN)) || 'localhost:3030';
+  return (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_BACKEND_HOST || import.meta.env.VITE_APP_DOMAIN)) || 'wisi.space';
 })();
 
 export const CLOUD_SERVER_ORIGIN = (function() {
