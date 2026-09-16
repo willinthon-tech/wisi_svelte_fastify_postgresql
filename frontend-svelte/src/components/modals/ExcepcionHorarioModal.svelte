@@ -20,7 +20,12 @@
   let excepcionesList = [];
 
   $: uExcepcion = (excepcionesList || []).find(e => e.codigo === 'U');
-  $: filteredExcepciones = (excepcionesList || []).filter(e => e.codigo !== 'U');
+  $: sortedExcepciones = (() => {
+    if (!excepcionesList || excepcionesList.length === 0) return [];
+    const u = excepcionesList.find(e => e.codigo === 'U');
+    const rest = excepcionesList.filter(e => e.codigo !== 'U');
+    return u ? [u, ...rest] : rest;
+  })();
 
   let marcajesLoading = false;
   let marcajesContext = [];
@@ -851,22 +856,11 @@
             on:change={handleScheduleSelectChange}
             style="width: 100%; padding: 8px 10px; font-size: 11.5px; font-weight: 700; color: #0f172a; background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; cursor: pointer;"
           >
-            <!-- Opción Horario Único (U) deshabilitada de PRIMERO -->
-            {#if uExcepcion}
-              <option value="EXCEPCION_{uExcepcion.uuid || uExcepcion.id}" disabled style="font-size: 10.5px; font-weight: bold; color: #64748b;">
-                — {uExcepcion.descripcion} ({uExcepcion.codigo})
-              </option>
-            {:else}
-              <option value="BASE_U" disabled style="font-size: 10.5px; font-weight: bold; color: #64748b;">
-                — Horario Único (U)
-              </option>
-            {/if}
-
-            <!-- Optgroup 1: Excepciones de Asistencia (Configuración Global / Tabla excepciones) -->
-            {#if filteredExcepciones.length > 0}
+            <!-- Optgroup 1: Excepciones de Asistencia (Configuración Global / Tabla excepciones con Horario Único de primero) -->
+            {#if sortedExcepciones.length > 0}
               <optgroup label="📋 Excepciones de Asistencia (Configuración)">
-                {#each filteredExcepciones as exc}
-                  {#if exc.tipo === 'No Asignable'}
+                {#each sortedExcepciones as exc}
+                  {#if exc.codigo === 'U' || exc.tipo === 'No Asignable'}
                     <option value="EXCEPCION_{exc.uuid || exc.id}" disabled style="font-size: 10.5px;">
                       — {exc.descripcion} ({exc.codigo})
                     </option>
@@ -879,6 +873,7 @@
               </optgroup>
             {:else}
               <optgroup label="⚙️ Plantillas Base del Sistema">
+                <option value="BASE_U" disabled style="font-size: 10.5px;">— Horario Único (U)</option>
                 <option value="BASE_L">[L] Día Libre</option>
               </optgroup>
             {/if}
