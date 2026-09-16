@@ -19,6 +19,9 @@
   let plantillasExcepcion = [];
   let excepcionesList = [];
 
+  $: uExcepcion = (excepcionesList || []).find(e => e.codigo === 'U');
+  $: filteredExcepciones = (excepcionesList || []).filter(e => e.codigo !== 'U');
+
   let marcajesLoading = false;
   let marcajesContext = [];
   let assignedPlantillasEmp = [];
@@ -66,6 +69,9 @@
     const currentEmpId = empleado?.uuid || empleado?.id || empleado?.cedula;
     const currentFechaStr = dia?.fechaStr;
     if (currentEmpId !== lastLoadedEmpId || currentFechaStr !== lastLoadedFechaStr) {
+      if (currentEmpId !== lastLoadedEmpId) {
+        assignedPlantillasEmp = empleado?.horarios_asignados || [];
+      }
       lastLoadedEmpId = currentEmpId;
       lastLoadedFechaStr = currentFechaStr;
       if (excepcionesList.length === 0) {
@@ -339,9 +345,15 @@
       if (res.ok) {
         const json = await res.json();
         const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json?.marcajesContext) ? json.marcajesContext : []);
-        if (json && json.success && Array.isArray(list)) {
-          marcajesContext = list;
-          recalculateLocalEntryExit();
+        if (json && json.success) {
+          if (Array.isArray(list)) {
+            marcajesContext = list;
+            recalculateLocalEntryExit();
+          }
+          if (Array.isArray(json.assignedPlantillas)) {
+            assignedPlantillasEmp = json.assignedPlantillas;
+            initModalData();
+          }
         }
       }
     } catch (err) {
@@ -406,7 +418,8 @@
       e.target.blur();
     }
     const newVal = selectedValue;
-    if (newVal === 'BASE_U') {
+    const isUSelected = newVal === 'BASE_U' || (uExcepcion && newVal === `EXCEPCION_${uExcepcion.uuid || uExcepcion.id}`);
+    if (isUSelected) {
       triggerToast('El Horario Único es asignado automáticamente por el sistema.', 'info');
       selectedValue = initialSelectedValue;
       return;
@@ -838,11 +851,22 @@
             on:change={handleScheduleSelectChange}
             style="width: 100%; padding: 8px 10px; font-size: 11.5px; font-weight: 700; color: #0f172a; background-color: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px; outline: none; cursor: pointer;"
           >
+            <!-- Opción Horario Único (U) deshabilitada de PRIMERO -->
+            {#if uExcepcion}
+              <option value="EXCEPCION_{uExcepcion.uuid || uExcepcion.id}" disabled style="font-size: 10.5px; font-weight: bold; color: #64748b;">
+                — {uExcepcion.descripcion} ({uExcepcion.codigo})
+              </option>
+            {:else}
+              <option value="BASE_U" disabled style="font-size: 10.5px; font-weight: bold; color: #64748b;">
+                — Horario Único (U)
+              </option>
+            {/if}
+
             <!-- Optgroup 1: Excepciones de Asistencia (Configuración Global / Tabla excepciones) -->
-            {#if excepcionesList.length > 0}
+            {#if filteredExcepciones.length > 0}
               <optgroup label="📋 Excepciones de Asistencia (Configuración)">
-                {#each excepcionesList as exc}
-                  {#if exc.codigo === 'U' || exc.tipo === 'No Asignable'}
+                {#each filteredExcepciones as exc}
+                  {#if exc.tipo === 'No Asignable'}
                     <option value="EXCEPCION_{exc.uuid || exc.id}" disabled style="font-size: 10.5px;">
                       — {exc.descripcion} ({exc.codigo})
                     </option>
@@ -856,14 +880,13 @@
             {:else}
               <optgroup label="⚙️ Plantillas Base del Sistema">
                 <option value="BASE_L">[L] Día Libre</option>
-                <option value="BASE_U" disabled style="font-size: 10.5px;">[U] Horario Único (Asignado automáticamente por el sistema)</option>
               </optgroup>
             {/if}
 
-            <!-- 3. Grupo: Plantillas de Horarios Asignados / Sala -->
-            {#if horariosEmpleado.length > 0 || plantillasSala.length > 0}
-              <optgroup label="📋 Horarios Asignados / Disponibles">
-                {#each (horariosEmpleado.length > 0 ? horariosEmpleado : plantillasSala) as p}
+            <!-- 2. Grupo: Plantillas de Horarios Asignados al Empleado (SOLO los asignados a este empleado) -->
+            {#if horariosEmpleado.length > 0}
+              <optgroup label="📋 Horarios Asignados">
+                {#each horariosEmpleado as p}
                   <option value="PLANTILLA_{p.uuid || p.id}">
                     {p.nombre} {p.codigo ? `(${p.codigo})` : ''} {formatHours(p)}
                   </option>
