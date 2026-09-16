@@ -4,6 +4,7 @@ import { currentRouteStore } from './router.store.js';
 import { toBackendUrl } from '../config/api.config.js';
 import { 
   saveLocalItems, 
+  replaceLocalItems,
   getLocalItems, 
   upsertLocalItem, 
   deleteLocalItem, 
@@ -305,9 +306,10 @@ export async function loadMasterStoresFromBackend(force = false) {
             (json.data[0]?.updated_at && json.data[0]?.updated_at !== currentStoreVal[0]?.updated_at);
 
           if (hasChanged) {
-            store.set(json.data);
-            saveLocalItems(localStoreKey, json.data).catch(() => {});
+            if (store && typeof store.set === 'function') store.set(json.data);
           }
+          // Siempre asegurar que la base de datos local (IndexedDB) tenga el catálogo completo y actualizado
+          replaceLocalItems(localStoreKey, json.data).catch(() => {});
         }
       }
     } catch (err) {
@@ -382,6 +384,8 @@ export async function loadMasterStoresFromBackend(force = false) {
     fetchEntity('tipo-incidencias', masterTipoIncidenciasStore, 'tipo_incidencias'),
     fetchEntity('rangos', masterRangosStore, 'rangos'),
     fetchEntity('clientes', masterClientesStore, 'clientes'),
+    fetchEntity('cortes', masterCortesStore, 'cortes'),
+    fetchEntity('maquinas', masterMaquinasStore, 'maquinas'),
     fetchUserSalas(),
     fetchUserPerms()
   ]);
@@ -430,7 +434,6 @@ export async function syncMasterStoresDelta() {
       'areas': { store: masterAreasStore, local: 'areas' },
       'cargos': { store: masterCargosStore, local: 'cargos' },
       'horarios': { store: masterPlantillasHorariosStore, local: 'horarios' },
-      'maquinas': { store: null, local: 'maquinas' },
       'mesas': { store: masterMesasStore, local: 'mesas' },
       'llaves': { store: masterLlavesStore, local: 'llaves' },
       'estados': { store: masterEstadosStore, local: 'estados' },
@@ -449,7 +452,9 @@ export async function syncMasterStoresDelta() {
       'tipo_incidencias': { store: masterTipoIncidenciasStore, local: 'tipo_incidencias' },
       'dispositivos': { store: masterDispositivosStore, local: 'dispositivos' },
       'usuarios': { store: masterUsuariosStore, local: 'usuarios' },
-      'libros': { store: masterLibrosStore, local: 'libros' }
+      'libros': { store: masterLibrosStore, local: 'libros' },
+      'cortes': { store: masterCortesStore, local: 'cortes' },
+      'maquinas': { store: masterMaquinasStore, local: 'maquinas' }
     };
 
     let totalChanges = 0;
@@ -954,4 +959,18 @@ export const masterTipoIncidenciasActions = createMasterEntityActions(masterTipo
 export const masterRangosStore = writable(loadStore('rangos_v1', []));
 masterRangosStore.subscribe(val => saveStore('rangos_v1', val));
 export const masterRangosActions = createMasterEntityActions(masterRangosStore, 'rangos');
+
+// ==========================================
+// CORTES HISTÓRICOS DE ASISTENCIA (RRHH)
+// ==========================================
+export const masterCortesStore = writable(loadStore('cortes_v1', []));
+masterCortesStore.subscribe(val => saveStore('cortes_v1', val));
+export const masterCortesActions = createMasterEntityActions(masterCortesStore, 'cortes');
+
+// ==========================================
+// MÁQUINAS (CONF.M: MAQUINAS)
+// ==========================================
+export const masterMaquinasStore = writable(loadStore('maquinas_v1', []));
+masterMaquinasStore.subscribe(val => saveStore('maquinas_v1', val));
+export const masterMaquinasActions = createMasterEntityActions(masterMaquinasStore, 'maquinas');
 

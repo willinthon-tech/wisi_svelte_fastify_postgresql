@@ -35,6 +35,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -45,19 +46,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('excepciones');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      } else if (Array.isArray(allExcepciones) && allExcepciones.length > 0) {
-        items = allExcepciones;
-        totalCount = allExcepciones.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -65,6 +54,7 @@
   });
 
   async function loadServerData(params = {}) {
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -82,17 +72,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('excepciones', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para excepciones:', err);
-      const local = await getLocalItems('excepciones');
+      const local = await getLocalItems('excepciones', null, 'codigo', 'asc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterExcepcionesStore || []);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.codigo || '').toLowerCase().includes(q) || (x.descripcion || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -221,6 +212,7 @@
 </script>
 
 <PaginatedDataTable 
+  {isLoading}
   {items}
   existingItems={allExcepciones}
   {totalCount}

@@ -380,7 +380,7 @@
     } catch (e) {
       console.warn("Fallback local IndexedDB para attlogs:", e);
       try {
-        const local = await getLocalItems('attlogs');
+        const local = await getLocalItems('attlogs', null, 'fecha_hora', 'desc');
         if (Array.isArray(local) && local.length > 0) {
           attlogs = local;
           totalCount = local.length;

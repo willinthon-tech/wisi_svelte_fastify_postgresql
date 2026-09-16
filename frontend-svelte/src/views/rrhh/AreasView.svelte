@@ -68,6 +68,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -78,19 +79,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('areas');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      } else if (Array.isArray(allAreas) && allAreas.length > 0) {
-        items = allAreas;
-        totalCount = allAreas.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchFilterOptions(),
@@ -153,17 +142,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('areas', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para áreas:', err);
-      const local = await getLocalItems('areas');
+      const local = await getLocalItems('areas', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterAreasStore || []);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -292,6 +282,7 @@
 </script>
 
 <PaginatedDataTable 
+  {isLoading}
   {items}
   existingItems={allAreas}
   {totalCount}

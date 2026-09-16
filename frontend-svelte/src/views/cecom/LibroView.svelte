@@ -68,6 +68,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -78,23 +79,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local (filtrada por salas asignadas para evitar pestañeo)
-    try {
-      const local = await getLocalItems('libros');
-      let source = (Array.isArray(local) && local.length > 0) ? local : allLibros;
-      if (assignedSalaIds && assignedSalaIds.length > 0) {
-        source = source.filter(item => {
-          const sId = String(item.sala_uuid || item.sala_id || '');
-          return !sId || assignedSalaIds.includes(sId);
-        });
-      }
-      if (source && source.length > 0) {
-        items = source.slice(0, currentParams.limit || 10);
-        totalCount = source.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -129,6 +114,7 @@
   }
 
   async function loadServerData(params = {}) {
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -146,23 +132,31 @@
       }
 
       const res = await fetch(`/api/master/libros?${q.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      if (json && json.success) {
-        items = json.data || [];
-        totalCount = json.total || 0;
-        currentPage = json.page || 1;
-        pageSize = json.limit || 10;
-        saveLocalItems('libros', items).catch(() => {});
-      }
+      if (!json || !json.success) throw new Error(json?.message || 'Error en respuesta');
+
+      items = json.data || [];
+      totalCount = json.total || 0;
+      currentPage = json.page || 1;
+      pageSize = json.limit || 10;
     } catch (err) {
       console.warn('Fallback local IndexedDB para libros:', err);
-      const local = await getLocalItems('libros');
-      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterLibrosStore || []);
+      const local = await getLocalItems('libros', null, 'created_at', 'desc');
+      let source = (Array.isArray(local) && local.length > 0) ? local : ($masterLibrosStore || []);
+      if (assignedSalaIds && assignedSalaIds.length > 0) {
+        source = source.filter(item => {
+          const sId = String(item.sala_uuid || item.sala_id || '');
+          return !sId || assignedSalaIds.includes(sId);
+        });
+      }
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.descripcion || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -326,6 +320,7 @@
   {totalCount}
   {currentPage}
   {pageSize}
+  {isLoading}
   isServerSide={true}
   {columns}
   {createFields}

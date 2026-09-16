@@ -48,6 +48,8 @@
     fecha_formateada: `${String(item.dia).padStart(2, '0')} de ${mesNombres[item.mes] || item.mes}`
   }));
 
+  let isLoading = true;
+
   let currentParams = {
     page: 1,
     limit: 10,
@@ -57,19 +59,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('fechas_patrias');
-      if (Array.isArray(local) && local.length > 0) {
-        rawItems = local;
-        totalCount = local.length;
-      } else if (Array.isArray(allFechas) && allFechas.length > 0) {
-        rawItems = allFechas;
-        totalCount = allFechas.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -77,6 +67,7 @@
   });
 
   async function loadServerData(params = {}) {
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -94,17 +85,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('fechas_patrias', rawItems).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para fechas patrias:', err);
-      const local = await getLocalItems('fechas_patrias');
+      const local = await getLocalItems('fechas_patrias', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterFechasPatriasStore || []);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.descripcion || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       rawItems = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -252,6 +244,7 @@
 </script>
 
 <PaginatedDataTable 
+  {isLoading}
   {items}
   existingItems={allFechas}
   {totalCount}

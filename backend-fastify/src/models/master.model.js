@@ -4617,9 +4617,10 @@ export async function getCarnetsModel(params = {}) {
 // ==========================================
 
 export async function getCortesModel(options = {}) {
-  const page = parseInt(options.page) || 1;
-  const limit = parseInt(options.limit) || 10;
-  const offset = (page - 1) * limit;
+  const page = Math.max(1, Number(options.page) || 1);
+  const hasLimit = options.limit !== undefined && String(options.limit).toLowerCase() !== 'all' && Number(options.limit) > 0;
+  const limit = hasLimit ? Number(options.limit) : 0;
+  const offset = hasLimit ? (page - 1) * limit : 0;
   const search = options.search ? String(options.search).trim().toLowerCase() : '';
   const validSorts = ['id', 'uuid', 'fecha_desde', 'fecha_hasta', 'total_empleados', 'created_at', 'updated_at'];
   const sortBy = validSorts.includes(options.sortBy) ? options.sortBy : 'created_at';
@@ -4656,6 +4657,7 @@ export async function getCortesModel(options = {}) {
       const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
       const sortColumn = (sortBy === 'id' || sortBy === 'uuid' || sortBy === 'created_at' || !sortBy) ? 'created_at' : sortBy;
       const order = sql.unsafe(`ORDER BY cortes.${sortColumn} ${sortDir}, cortes.created_at DESC, cortes.uuid DESC`);
+      const limitClause = limit > 0 ? sql`LIMIT ${limit} OFFSET ${offset}` : sql``;
 
       const [countResult, rows] = await Promise.all([
         sql`SELECT COUNT(*)::int AS total FROM cortes ${where}`,
@@ -4678,7 +4680,7 @@ export async function getCortesModel(options = {}) {
           FROM cortes 
           ${where}
           ${order}
-          LIMIT ${limit} OFFSET ${offset}
+          ${limitClause}
         `
       ]);
 
@@ -4687,7 +4689,7 @@ export async function getCortesModel(options = {}) {
         data: rows,
         total: countResult[0]?.total || 0,
         page,
-        limit
+        limit: limit > 0 ? limit : (countResult[0]?.total || 0)
       };
     } catch (err) {
       console.error('Error getCortesModel en PG:', err);
@@ -4712,7 +4714,7 @@ export async function getCortesModel(options = {}) {
   }
   items.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   const total = items.length;
-  const paged = items.slice(offset, offset + limit).map(c => {
+  const paged = (limit > 0 ? items.slice(offset, offset + limit) : items).map(c => {
     const { data, ...rest } = c;
     return rest;
   });
@@ -4722,7 +4724,7 @@ export async function getCortesModel(options = {}) {
     data: paged,
     total,
     page,
-    limit
+    limit: limit > 0 ? limit : total
   };
 }
 

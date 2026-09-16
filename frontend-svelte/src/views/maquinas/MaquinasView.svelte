@@ -24,10 +24,10 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
-  import { masterSalasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterSalasStore, masterMaquinasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
-  import { getLocalItems, saveLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
+  import { getLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
@@ -139,6 +139,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -149,16 +150,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('maquinas');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchFilterOptions(),
@@ -261,12 +253,11 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('maquinas', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para máquinas:', err);
       const local = await getLocalItems('maquinas');
-      const source = (Array.isArray(local) && local.length > 0) ? local : [];
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterMaquinasStore || []);
       let filtered = source;
       if (searchNombre.trim()) {
         filtered = filtered.filter(x => (x.nombre || '').toLowerCase().includes(searchNombre.trim().toLowerCase()));
@@ -277,6 +268,8 @@
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -633,6 +626,7 @@
   {currentPage}
   {pageSize}
   isServerSide={true}
+  {isLoading}
   {columns}
   {createFields}
   entityType="máquina"

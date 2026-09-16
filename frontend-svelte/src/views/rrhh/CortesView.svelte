@@ -19,7 +19,8 @@
   import CorteSalasModal from '../../components/modals/CorteSalasModal.svelte';
   import { 
     loadMasterStoresFromBackend, 
-    userSalasStore as masterUserSalasStore 
+    userSalasStore as masterUserSalasStore,
+    masterCortesStore
   } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
@@ -121,6 +122,8 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
+  let isMounted = false;
 
   let currentParams = {
     page: 1,
@@ -131,38 +134,38 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
+    isLoading = true;
     try {
-      const local = await getLocalItems('cortes');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
-    await loadMasterStoresFromBackend();
+      await loadMasterStoresFromBackend();
+    } catch (e) {
+      console.warn("Error cargando stores maestros:", e);
+    }
     await Promise.all([
       fetchFilterOptions(),
       loadServerData(currentParams)
     ]);
+    isMounted = true;
   });
 
-  // Reactive reload when assigned rooms are resolved/changed
-  let lastAssignedSalasKey = null;
+  // Reactive reload when assigned rooms are resolved/changed AFTER initial mount
+  let lastAssignedSalasKey = undefined;
   $: assignedSalasKey = (assignedSalaIds || []).slice().sort().join(",");
-  $: if (assignedSalasKey !== lastAssignedSalasKey) {
+  $: if (isMounted && lastAssignedSalasKey !== undefined && assignedSalasKey !== lastAssignedSalasKey) {
     lastAssignedSalasKey = assignedSalasKey;
     loadServerData({ page: 1 });
     fetchFilterOptions();
+  } else if (!isMounted || lastAssignedSalasKey === undefined) {
+    lastAssignedSalasKey = assignedSalasKey;
   }
 
-  // Fetch filter options when active filters change
-  let lastFilterKey = "";
+  // Fetch filter options when active filters change AFTER initial mount
+  let lastFilterKey = undefined;
   $: filterKey = `${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${(searchQuery || "").trim()}`;
-  $: if (filterKey !== lastFilterKey) {
+  $: if (isMounted && lastFilterKey !== undefined && filterKey !== lastFilterKey) {
     lastFilterKey = filterKey;
     fetchFilterOptions();
+  } else if (!isMounted || lastFilterKey === undefined) {
+    lastFilterKey = filterKey;
   }
 
   async function fetchFilterOptions() {
@@ -187,6 +190,7 @@
   }
 
   async function loadServerData(params = {}) {
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -215,17 +219,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('cortes', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para cortes:', err);
       const local = await getLocalItems('cortes');
-      const source = (Array.isArray(local) && local.length > 0) ? local : [];
+      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterCortesStore || []);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.fecha_rango || '').toLowerCase().includes(q) || (x.salas_nombres || []).some(sn => sn.toLowerCase().includes(q))) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -385,6 +390,7 @@
   {currentPage}
   {pageSize}
   isServerSide={true}
+  {isLoading}
   {columns}
   createFields={[]}
   bind:searchQuery

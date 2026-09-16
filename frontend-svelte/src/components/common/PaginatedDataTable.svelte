@@ -679,7 +679,11 @@
   $: totalPages = Math.max(1, Math.ceil(displayTotalCount / numPageSize) || 1);
 
   $: paginatedItems = isServerSide 
-    ? items 
+    ? (Array.isArray(items)
+        ? (items.length > numPageSize 
+            ? items.slice((numCurrentPage - 1) * numPageSize, numCurrentPage * numPageSize) 
+            : items)
+        : [])
     : sortedItems.slice((numCurrentPage - 1) * numPageSize, numCurrentPage * numPageSize);
 
   $: startRecord = displayTotalCount === 0 ? 0 : (numCurrentPage - 1) * numPageSize + 1;

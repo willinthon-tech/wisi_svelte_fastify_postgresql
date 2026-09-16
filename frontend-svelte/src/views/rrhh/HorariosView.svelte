@@ -11,7 +11,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import { masterHorariosActions, masterHorariosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
-  import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+  import { getLocalItems, replaceLocalItems } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   // Initialize from persistent store so filters survive page and route transitions
@@ -37,6 +37,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
   let globalExcepciones = [];
 
   function getContrastColor(hexColor) {
@@ -60,12 +61,12 @@
         const json = await res.json();
         if (json && json.success) {
           globalExcepciones = json.data || [];
-          saveLocalItems('excepciones', globalExcepciones).catch(() => {});
+          replaceLocalItems('excepciones', globalExcepciones).catch(() => {});
         }
       }
     } catch (e) {
       console.warn("Error fetching excepciones in HorariosView:", e);
-      const local = await getLocalItems('excepciones');
+      const local = await getLocalItems('excepciones', null, 'codigo', 'asc');
       if (Array.isArray(local) && local.length > 0) {
         globalExcepciones = local;
       }
@@ -81,25 +82,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const [localHor, localExc] = await Promise.all([
-        getLocalItems('horarios'),
-        getLocalItems('excepciones')
-      ]);
-      if (Array.isArray(localHor) && localHor.length > 0) {
-        items = localHor;
-        totalCount = localHor.length;
-      } else if (Array.isArray(allHorarios) && allHorarios.length > 0) {
-        items = allHorarios;
-        totalCount = allHorarios.length;
-      }
-      if (Array.isArray(localExc) && localExc.length > 0) {
-        globalExcepciones = localExc;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadExcepciones(),
@@ -125,17 +108,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('horarios', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para horarios:', err);
-      const local = await getLocalItems('horarios');
+      const local = await getLocalItems('horarios', null, 'codigo', 'asc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterHorariosStore || []);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.codigo || '').toLowerCase().includes(q) || (x.nombre || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -290,6 +274,7 @@
 {/if}
 
 <PaginatedDataTable 
+  {isLoading}
   {items}
   existingItems={items}
   reservedCodes={globalExcepciones}

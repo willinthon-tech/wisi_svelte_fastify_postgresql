@@ -56,6 +56,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -80,17 +81,8 @@
   onMount(async () => {
     isMounted = true;
     lastFetchedSalaIds = assignedSalaIds.join(',');
+    isLoading = true;
 
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('ciclos');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchFilterOptions(),
@@ -148,17 +140,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('ciclos', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para ciclos:', err);
-      const local = await getLocalItems('ciclos');
+      const local = await getLocalItems('ciclos', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : [];
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.departamento_nombre || '').toLowerCase().includes(q) || (x.sala_nombre || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -190,6 +183,7 @@
 
 <div class="ciclos-view-container">
   <PaginatedDataTable
+    {isLoading}
     {items}
     {columns}
     {totalCount}

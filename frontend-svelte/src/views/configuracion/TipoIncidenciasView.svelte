@@ -34,6 +34,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -44,19 +45,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('tipo_incidencias');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      } else if (Array.isArray(allTipoIncidencias) && allTipoIncidencias.length > 0) {
-        items = allTipoIncidencias;
-        totalCount = allTipoIncidencias.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano desde backend
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -64,6 +53,7 @@
   });
 
   async function loadServerData(params = {}) {
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -81,17 +71,18 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('tipo_incidencias', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para tipo de incidencias:', err);
-      const local = await getLocalItems('tipo_incidencias');
+      const local = await getLocalItems('tipo_incidencias', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterTipoIncidenciasStore || []);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -206,6 +197,7 @@
 </script>
 
 <PaginatedDataTable 
+  {isLoading}
   {items}
   existingItems={allTipoIncidencias}
   {totalCount}

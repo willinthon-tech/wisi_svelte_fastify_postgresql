@@ -184,9 +184,44 @@ export async function saveLocalItems(storeName, items = []) {
 }
 
 /**
- * Obtiene todos los registros locales de una tabla.
+ * Reemplaza completamente el contenido de una tabla local con un conjunto de registros frescos.
+ * Limpia los registros antiguos (incluidos los borrados en servidor) y almacena el nuevo dataset completo.
  */
-export async function getLocalItems(storeName, filterFn = null) {
+export async function replaceLocalItems(storeName, items = []) {
+  const db = await initLocalDb();
+  if (!db) return;
+
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction([storeName], 'readwrite');
+      const store = tx.objectStore(storeName);
+      store.clear();
+
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          if (!item) continue;
+          const key = getItemKey(item);
+          const record = {
+            ...item,
+            _local_key: key,
+            _last_local_update: new Date().toISOString()
+          };
+          store.put(record);
+        }
+      }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = (e) => reject(e.target.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * Obtiene todos los registros locales de una tabla, asegurando orden cronológico por defecto.
+ */
+export async function getLocalItems(storeName, filterFn = null, sortBy = 'created_at', sortDir = 'desc') {
   const db = await initLocalDb();
   if (!db) return [];
 
@@ -201,6 +236,29 @@ export async function getLocalItems(storeName, filterFn = null) {
         if (typeof filterFn === 'function') {
           results = results.filter(filterFn);
         }
+
+        // Ordenamiento por defecto: cronológico DESC para que la data local siempre venga prolija
+        if (sortBy && results.length > 1) {
+          const dir = (sortDir || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+          results.sort((a, b) => {
+            if (sortBy === 'created_at' || sortBy === 'id' || sortBy === 'uuid') {
+              if (a.created_at || b.created_at) {
+                const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                if (tA !== tB) return (tA - tB) * (dir === 1 ? 1 : -1);
+              }
+            }
+            const valA = a[sortBy];
+            const valB = b[sortBy];
+            if (valA === null || valA === undefined) return 1;
+            if (valB === null || valB === undefined) return -1;
+            if (typeof valA === 'number' && typeof valB === 'number') {
+              return (valA - valB) * dir;
+            }
+            return String(valA).localeCompare(String(valB), 'es', { numeric: true }) * dir;
+          });
+        }
+
         resolve(results);
       };
 

@@ -119,7 +119,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
-  let loading = false;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -133,19 +133,7 @@
   let isMounted = false;
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('clientes');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      } else if (Array.isArray($masterClientesStore) && $masterClientesStore.length > 0) {
-        items = $masterClientesStore;
-        totalCount = $masterClientesStore.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -198,7 +186,7 @@
   }
 
   async function loadServerData(params = {}) {
-    loading = true;
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -219,17 +207,17 @@
       }
 
       const res = await fetch(`/api/master/clientes?${q.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      if (json && json.success) {
-        items = json.data || [];
-        totalCount = json.total || 0;
-        currentPage = json.page || 1;
-        pageSize = json.limit || 10;
-        saveLocalItems('clientes', items).catch(() => {});
-      }
+      if (!json || !json.success) throw new Error(json?.message || 'Error en respuesta');
+
+      items = json.data || [];
+      totalCount = json.total || 0;
+      currentPage = json.page || 1;
+      pageSize = json.limit || 10;
     } catch (err) {
       console.warn('Fallback local IndexedDB para clientes:', err);
-      const local = await getLocalItems('clientes');
+      const local = await getLocalItems('clientes', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterClientesStore || []);
       const query = (currentParams.search || '').trim().toLowerCase();
       const filtered = query ? source.filter(x => (x.nombre || '').toLowerCase().includes(query) || (x.descripcion || '').toLowerCase().includes(query)) : source;
@@ -237,7 +225,7 @@
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
     } finally {
-      loading = false;
+      isLoading = false;
     }
   }
 
@@ -533,6 +521,7 @@
   {totalCount}
   {currentPage}
   {pageSize}
+  {isLoading}
   isServerSide={true}
   {columns}
   createFields={[]}

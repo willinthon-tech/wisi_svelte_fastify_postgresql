@@ -67,6 +67,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -77,19 +78,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('llaves_borradas');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local;
-        totalCount = local.length;
-      } else if (Array.isArray(allLlavesBorradas) && allLlavesBorradas.length > 0) {
-        items = allLlavesBorradas;
-        totalCount = allLlavesBorradas.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -124,6 +113,7 @@
   }
 
   async function loadServerData(params = {}) {
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -142,23 +132,25 @@
       }
 
       const res = await fetch(`/api/master/llaves?${q.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      if (json && json.success) {
-        items = json.data || [];
-        totalCount = json.total || 0;
-        currentPage = json.page || 1;
-        pageSize = json.limit || 10;
-        saveLocalItems('llaves_borradas', items).catch(() => {});
-      }
+      if (!json || !json.success) throw new Error(json?.message || 'Error en respuesta');
+
+      items = json.data || [];
+      totalCount = json.total || 0;
+      currentPage = json.page || 1;
+      pageSize = json.limit || 10;
     } catch (err) {
       console.warn('Fallback local IndexedDB para llaves borradas:', err);
-      const local = await getLocalItems('llaves_borradas');
+      const local = await getLocalItems('llaves_borradas', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterLlavesStore || []).filter(m => (m.active ?? 1) === 0);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -212,6 +204,7 @@
   {totalCount}
   {currentPage}
   {pageSize}
+  {isLoading}
   isServerSide={true}
   {columns}
   actions={{ 

@@ -137,7 +137,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
-  let loading = false;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -151,19 +151,7 @@
   let isMounted = false;
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('empleados');
-      if (Array.isArray(local) && local.length > 0) {
-        items = local.filter(e => e.activo !== false);
-        totalCount = items.length;
-      } else if (Array.isArray($masterEmpleadosStore) && $masterEmpleadosStore.length > 0) {
-        items = $masterEmpleadosStore.filter(e => e.activo !== false);
-        totalCount = items.length;
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -219,7 +207,7 @@
   }
 
   async function loadServerData(params = {}) {
-    loading = true;
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -256,11 +244,10 @@
         totalCount = json.total || 0;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
-        saveLocalItems('empleados', items).catch(() => {});
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para empleados:', err);
-      const local = await getLocalItems('empleados');
+      const local = await getLocalItems('empleados', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterEmpleadosStore || []);
       const activeSource = source.filter(x => x.activo !== false);
       const q = (currentParams.search || '').trim().toLowerCase();
@@ -269,7 +256,7 @@
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
     } finally {
-      loading = false;
+      isLoading = false;
     }
   }
 
@@ -397,6 +384,7 @@
 </script>
 
 <PaginatedDataTable 
+  {isLoading}
   bind:items
   existingItems={$masterEmpleadosStore || []}
   createFields={[]}

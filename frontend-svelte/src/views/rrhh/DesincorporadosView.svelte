@@ -118,7 +118,7 @@
   let totalCount = 0;
   let currentPage = 1;
   let pageSize = 10;
-  let loading = false;
+  let isLoading = true;
 
   let currentParams = {
     page: 1,
@@ -129,19 +129,7 @@
   };
 
   onMount(async () => {
-    // 1. Carga instantánea (0ms) desde IndexedDB local
-    try {
-      const local = await getLocalItems('empleados');
-      if (Array.isArray(local) && local.length > 0) {
-        const inactive = local.filter(e => e.activo === false || e.activo === 0 || e.activo === '0');
-        if (inactive.length > 0) {
-          items = inactive;
-          totalCount = inactive.length;
-        }
-      }
-    } catch (e) {}
-
-    // 2. Carga en segundo plano
+    isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
@@ -181,7 +169,7 @@
   }
 
   async function loadServerData(params = {}) {
-    loading = true;
+    isLoading = true;
     currentParams = { ...currentParams, ...params };
     try {
       const q = new URLSearchParams({
@@ -221,7 +209,7 @@
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para desincorporados:', err);
-      const local = await getLocalItems('empleados');
+      const local = await getLocalItems('empleados', null, 'created_at', 'desc');
       const inactive = (Array.isArray(local) ? local : []).filter(e => e.activo === false || e.activo === 0 || e.activo === '0');
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? inactive.filter(x => (x.nombre || '').toLowerCase().includes(q) || (x.cedula || '').toLowerCase().includes(q)) : inactive;
@@ -229,7 +217,7 @@
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));
     } finally {
-      loading = false;
+      isLoading = false;
     }
   }
 
@@ -318,6 +306,7 @@
 </script>
 
 <PaginatedDataTable 
+  {isLoading}
   bind:items
   bind:totalCount
   bind:currentPage
