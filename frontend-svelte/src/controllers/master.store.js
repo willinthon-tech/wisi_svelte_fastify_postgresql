@@ -269,6 +269,15 @@ export function filterOptionsByActiveSalas(items = [], salaKey = 'sala_uuid') {
 
 // Load real-time master data from PostgreSQL backend in parallel using Promise.allSettled
 let lastMasterStoresLoadTime = 0;
+let isOnlineListenerAttached = false;
+
+if (typeof window !== 'undefined' && !isOnlineListenerAttached) {
+  isOnlineListenerAttached = true;
+  window.addEventListener('online', () => {
+    loadMasterStoresFromBackend(true).catch(() => {});
+  });
+}
+
 export async function loadMasterStoresFromBackend(force = false) {
   const now = Date.now();
   if (!force && (now - lastMasterStoresLoadTime) < 25000) {
@@ -294,6 +303,10 @@ export async function loadMasterStoresFromBackend(force = false) {
     }
 
     // 2. Si hay conexión a internet, refrescar desde el servidor y persistir SOLO si hay cambios reales
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return; // En modo sin internet, el store ya quedó poblado con IndexedDB arriba. Omitir peticiones de red fallidas.
+    }
+
     try {
       const res = await fetch(toBackendUrl(`/api/master/${entityName}?limit=all`));
       if (res.ok) {
@@ -313,11 +326,14 @@ export async function loadMasterStoresFromBackend(force = false) {
         }
       }
     } catch (err) {
-      console.warn(`Error fetching ${entityName} from backend (usando copia local):`, err);
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        console.warn(`Error fetching ${entityName} from backend (usando copia local):`, err);
+      }
     }
   };
 
   const fetchUserSalas = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     try {
       const resSalas = await fetch(toBackendUrl('/api/master/user-salas'));
       if (resSalas.ok) {
@@ -330,11 +346,14 @@ export async function loadMasterStoresFromBackend(force = false) {
         }
       }
     } catch (err) {
-      console.warn('Error fetching user salas from backend:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        console.warn('Error fetching user salas from backend:', err);
+      }
     }
   };
 
   const fetchUserPerms = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     try {
       const resPerms = await fetch(toBackendUrl('/api/master/user-permissions'));
       if (resPerms.ok) {
@@ -347,7 +366,9 @@ export async function loadMasterStoresFromBackend(force = false) {
         }
       }
     } catch (err) {
-      console.warn('Error fetching user permissions from backend:', err);
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        console.warn('Error fetching user permissions from backend:', err);
+      }
     }
   };
 

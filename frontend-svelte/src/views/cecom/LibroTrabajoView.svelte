@@ -96,6 +96,16 @@
       }
     } catch (e) {}
 
+    // Si estamos offline sin internet, no intentar fetch a la red
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      if (!libro) {
+        loadError = 'Sin conexión a internet. Este libro no se encuentra en el almacenamiento local.';
+      }
+      isLoading = false;
+      return;
+    }
+
     // 2. Consulta al backend si hay red
     try {
       const res = await fetch(`/api/master/libros/${id}`);
@@ -107,7 +117,9 @@
         loadError = json?.error || 'Libro no encontrado en el servidor';
       }
     } catch (err) {
-      console.warn('[LocalDb] Sin conexión para cargar libro (usando local si existe):', err);
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        console.warn('[LocalDb] Error al conectar con el servidor para cargar libro:', err);
+      }
       if (!libro) {
         loadError = 'Error de conexión al cargar los datos del libro';
       }

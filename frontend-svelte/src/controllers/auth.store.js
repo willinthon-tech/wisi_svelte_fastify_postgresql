@@ -202,6 +202,12 @@ export async function loadUserSession() {
     return;
   }
 
+  // Si estamos en modo offline sin conexión a internet, mantener la sesión local activa sin peticiones fallidas
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    isAuthenticatedStore.set(true);
+    return;
+  }
+
   try {
     const data = await getMeAuthModel();
     if (data.user) {
@@ -232,6 +238,14 @@ export async function loadUserSession() {
     }
     isAuthenticatedStore.set(true);
   } catch (err) {
-    console.warn('Fallback to local auth store:', err);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      console.warn('Fallback to local auth store:', err);
+    }
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    loadUserSession().catch(() => {});
+  });
 }

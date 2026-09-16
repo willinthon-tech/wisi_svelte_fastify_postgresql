@@ -492,11 +492,14 @@
   }
 
   async function refreshData() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     try {
       healthStatus = await fetchHealthModel();
       await loadMasterStoresFromBackend();
     } catch (err) {
-      console.warn("Aviso al refrescar estado del servidor:", err);
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        console.warn("Aviso al refrescar estado del servidor:", err);
+      }
     }
   }
 
@@ -517,6 +520,7 @@
 
     // Fetch last event time from backend to detect delayed / historical SYNC marcajes
     async function initLatestEventTime() {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       try {
         const backendUrl = getCloudBaseUrl();
         const base = backendUrl.endsWith('/api') ? backendUrl : `${backendUrl}/api`;
@@ -531,8 +535,17 @@
           }
         }
       } catch (e) {
-        console.warn("No se pudo obtener último event_time:", e);
+        if (typeof navigator === 'undefined' || navigator.onLine) {
+          console.warn("No se pudo obtener último event_time:", e);
+        }
       }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => {
+        refreshData();
+        initLatestEventTime();
+      });
     }
 
     async function getTauriNotificationPlugin() {

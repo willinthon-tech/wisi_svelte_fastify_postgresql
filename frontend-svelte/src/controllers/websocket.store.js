@@ -41,6 +41,12 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
   // Adjuntar escuchas de ciclo de vida una sola vez
   attachLifecycleListeners();
 
+  // Si no hay conexión a internet en el navegador/dispositivo, esperar pacientemente al evento 'online'
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    isWsConnectedStore.set(false);
+    return;
+  }
+
   const url = getWsUrl();
 
   try {
@@ -141,13 +147,17 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
     };
 
     socket.onerror = (err) => {
-      console.warn('[WebSocket] Error de socket:', err);
       isWsConnectedStore.set(false);
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        console.warn('[WebSocket] Conexión interrumpida:', err);
+      }
       try { socket?.close(); } catch (e) {}
     };
 
   } catch (err) {
-    console.error('Error inicializando WebSocket:', err);
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      console.error('Error inicializando WebSocket:', err);
+    }
     scheduleReconnect();
   }
 }
@@ -159,9 +169,14 @@ function cleanupPingTimers() {
 
 function scheduleReconnect() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
+  // Si estamos offline sin internet, no agendar reconexión ciega; el listener 'online' reconectará
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    isWsConnectedStore.set(false);
+    return;
+  }
   reconnectAttempts++;
-  // Backoff exponencial suave: 1s, 2s, 3s, máximo 5s
-  const delay = Math.min(reconnectAttempts * 1000, 5000);
+  // Backoff suave: 1s, 2s, 3s, máximo 10s
+  const delay = Math.min(reconnectAttempts * 1500, 10000);
   reconnectTimer = setTimeout(() => {
     initWebSocketConnection(currentCallback);
   }, delay);
