@@ -861,19 +861,15 @@
               <optgroup label="📋 Excepciones de Asistencia (Configuración)">
                 {#each sortedExcepciones as exc}
                   {#if exc.codigo === 'U' || exc.tipo === 'No Asignable'}
-                    <option value="EXCEPCION_{exc.uuid || exc.id}" disabled style="font-size: 10.5px;">
-                      — {exc.descripcion} ({exc.codigo})
-                    </option>
+                    <option value="EXCEPCION_{exc.uuid || exc.id}" disabled>{exc.descripcion} ({exc.codigo})</option>
                   {:else}
-                    <option value="EXCEPCION_{exc.uuid || exc.id}">
-                      {exc.descripcion} ({exc.codigo})
-                    </option>
+                    <option value="EXCEPCION_{exc.uuid || exc.id}">{exc.descripcion} ({exc.codigo})</option>
                   {/if}
                 {/each}
               </optgroup>
             {:else}
               <optgroup label="⚙️ Plantillas Base del Sistema">
-                <option value="BASE_U" disabled style="font-size: 10.5px;">— Horario Único (U)</option>
+                <option value="BASE_U" disabled>[U] Horario Único</option>
                 <option value="BASE_L">[L] Día Libre</option>
               </optgroup>
             {/if}
@@ -882,9 +878,7 @@
             {#if horariosEmpleado.length > 0}
               <optgroup label="📋 Horarios Asignados">
                 {#each horariosEmpleado as p}
-                  <option value="PLANTILLA_{p.uuid || p.id}">
-                    {p.nombre} {p.codigo ? `(${p.codigo})` : ''} {formatHours(p)}
-                  </option>
+                  <option value="PLANTILLA_{p.uuid || p.id}">{p.nombre} {p.codigo ? `(${p.codigo})` : ''} {formatHours(p)}</option>
                 {/each}
               </optgroup>
             {/if}
