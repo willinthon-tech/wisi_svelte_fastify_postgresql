@@ -83,48 +83,95 @@
     return `${salaName} - ${dateFormatted}`;
   })();
 
-  // Sugerencias de empleados para operadores CECOM (filtrados por la sala del libro)
-  $: listaEmpleados = ($masterEmpleadosStore || [])
-    .filter(e => {
-      if (targetSalaUuid && (e.sala_uuid || e.sala_id)) {
-        if (String(e.sala_uuid || e.sala_id) !== String(targetSalaUuid)) return false;
-      } else if (targetSalaId) {
-        if (String(e.sala_id || e.sala_uuid) !== String(targetSalaId)) return false;
+  let localEmpleados = [];
+
+  async function syncLocalEmpleados() {
+    try {
+      const stored = await getLocalItems('empleados');
+      if (Array.isArray(stored) && stored.length > 0) {
+        localEmpleados = stored;
       }
+    } catch (_) {}
+  }
+
+  function normalizeSearchStr(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  $: allEmpleados = (() => {
+    const storeEmps = $masterEmpleadosStore || [];
+    if (storeEmps.length >= localEmpleados.length && storeEmps.length > 0) {
+      return storeEmps;
+    }
+    if (localEmpleados.length > 0) {
+      return localEmpleados;
+    }
+    return storeEmps;
+  })();
+
+  $: effectiveSalaUuid = (() => {
+    if (targetSalaUuid) return String(targetSalaUuid);
+    if (targetSalaId) return String(targetSalaId);
+    if (libro?.sala_nombre) {
+      const found = ($masterSalasStore || []).find(s => s.nombre === libro.sala_nombre || s.nombre_comercial === libro.sala_nombre);
+      if (found) return String(found.uuid || found.id);
+    }
+    return null;
+  })();
+
+  function matchEmpleado(emp, q) {
+    if (!q) return true;
+    const normQ = normalizeSearchStr(q);
+    if (!normQ) return true;
+    const tokens = normQ.split(/\s+/).filter(Boolean);
+    const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
+    return tokens.every(token => targetText.includes(token));
+  }
+
+  // Sugerencias de empleados para operadores CECOM (filtrados por la sala del libro con fallback)
+  $: listaEmpleados = (() => {
+    let filtered = allEmpleados.filter(e => {
       if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
-      return true;
-    })
-    .map(e => {
+      if (!effectiveSalaUuid) return true;
+      const eSala = String(e.sala_uuid || e.sala_id || '');
+      if (eSala && eSala === effectiveSalaUuid) return true;
+      return !eSala;
+    });
+
+    if (filtered.length === 0 && allEmpleados.length > 0) {
+      filtered = allEmpleados.filter(e => e.activo !== false && Number(e.activo) !== 0);
+    }
+
+    return filtered.map(e => {
       const nom = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || '';
       return {
         uuid: e.uuid || e.id,
         id: e.uuid || e.id,
         nombre: nom,
         cargo_nombre: (e.cargo_nombre || '').trim(),
+        cedula: e.cedula || '',
         sala_uuid: e.sala_uuid || e.sala_id
       };
     })
     .filter(e => Boolean(e.nombre))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  })();
 
-  function matchEmpleado(emp, q) {
-    if (!q) return true;
-    const matchNom = emp.nombre.toLowerCase().includes(q);
-    const matchCargo = emp.cargo_nombre.toLowerCase().includes(q);
-    return matchNom || matchCargo;
-  }
-
-  // Sugerencias filtradas reactivas para Turno A
+  // Sugerencias filtradas reactivas para Turno A (escritura rápida tolerante a acentos y múltiples palabras)
   $: sugerenciasFiltradasA = (() => {
-    const q = (inputTempOperadorA || '').trim().toLowerCase();
+    const q = (inputTempOperadorA || '').trim();
     const disponibles = listaEmpleados.filter(emp => !operadoresTurnoAList.includes(emp.nombre));
     if (!q) return disponibles.slice(0, 10);
     return disponibles.filter(emp => matchEmpleado(emp, q)).slice(0, 10);
   })();
 
-  // Sugerencias filtradas reactivas para Turno C
+  // Sugerencias filtradas reactivas para Turno C (escritura rápida tolerante a acentos y múltiples palabras)
   $: sugerenciasFiltradasC = (() => {
-    const q = (inputTempOperadorC || '').trim().toLowerCase();
+    const q = (inputTempOperadorC || '').trim();
     const disponibles = listaEmpleados.filter(emp => !operadoresTurnoCList.includes(emp.nombre));
     if (!q) return disponibles.slice(0, 10);
     return disponibles.filter(emp => matchEmpleado(emp, q)).slice(0, 10);
@@ -347,10 +394,12 @@
   }
 
   onMount(async () => {
+    syncLocalEmpleados();
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadDatos()
     ]);
+    syncLocalEmpleados();
   });
 
   $: if (libroId || libro?.id || libro?.uuid) {

@@ -93,16 +93,26 @@
     return Array.from(map.values());
   })();
 
-  // Sugerencias combinadas estructuradas filtradas por nombre o por tipo de cliente
+  function normalizeSearchStr(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  // Sugerencias combinadas estructuradas filtradas por nombre o por tipo de cliente (escritura rápida)
   $: sugerenciasFiltradas = (() => {
-    const q = (cliente || '').trim().toLowerCase();
+    const q = (cliente || '').trim();
     if (!q) return allClientesList.slice(0, 10);
+    const normQ = normalizeSearchStr(q);
+    const tokens = normQ.split(/\s+/).filter(Boolean);
 
     return allClientesList
-      .filter(item => 
-        item.nombre.toLowerCase().includes(q) || 
-        (item.tipo_cliente_nombre && item.tipo_cliente_nombre.toLowerCase().includes(q))
-      )
+      .filter(item => {
+        const targetText = normalizeSearchStr(`${item.nombre || ''} ${item.tipo_cliente_nombre || ''}`);
+        return tokens.every(token => targetText.includes(token));
+      })
       .slice(0, 10);
   })();
 

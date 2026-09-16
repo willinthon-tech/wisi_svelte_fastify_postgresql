@@ -108,6 +108,25 @@
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  let localEmpleados = [];
+
+  async function syncLocalEmpleados() {
+    try {
+      const stored = await getLocalItems('empleados');
+      if (Array.isArray(stored) && stored.length > 0) {
+        localEmpleados = stored;
+      }
+    } catch (_) {}
+  }
+
+  function normalizeSearchStr(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
   // Lista de rangos disponibles
   $: listaRangos = (() => {
     const storeRangos = $masterRangosStore || [];
@@ -115,30 +134,54 @@
     return [...list].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }));
   })();
 
-  // Coincidencias de búsqueda de Rangos (idéntico a empleados)
+  // Coincidencias de búsqueda de Rangos (escritura rápida con soporte de acentos y tokens)
   $: rangosSugerencias = (() => {
-    const q = (rangoSearchQuery || '').trim().toLowerCase();
-    if (!q) return listaRangos;
-    return listaRangos.filter(rg => 
-      rg.nombre.toLowerCase().includes(q) ||
-      String(rg.id).includes(q)
-    );
+    const q = (rangoSearchQuery || '').trim();
+    if (!q) return listaRangos.slice(0, 10);
+    const normQ = normalizeSearchStr(q);
+    const tokens = normQ.split(/\s+/).filter(Boolean);
+    return listaRangos.filter(rg => {
+      const targetText = normalizeSearchStr(`${rg.nombre || ''} ${rg.id || ''}`);
+      return tokens.every(t => targetText.includes(t));
+    }).slice(0, 10);
   })();
 
-  // Lista de empleados activos de la sala
-  $: listaEmpleados = ($masterEmpleadosStore || [])
-    .filter(e => {
-      if (targetSalaUuid && e.sala_uuid) {
-        if (String(e.sala_uuid) !== String(targetSalaUuid)) return false;
-      } else if (targetSalaId && e.sala_id && String(e.sala_id) !== String(targetSalaId)) {
-        return false;
-      }
-      if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) {
-        return false;
-      }
-      return true;
-    })
-    .map(e => {
+  $: allEmpleados = (() => {
+    const storeEmps = $masterEmpleadosStore || [];
+    if (storeEmps.length >= localEmpleados.length && storeEmps.length > 0) {
+      return storeEmps;
+    }
+    if (localEmpleados.length > 0) {
+      return localEmpleados;
+    }
+    return storeEmps;
+  })();
+
+  $: effectiveSalaUuid = (() => {
+    if (targetSalaUuid) return String(targetSalaUuid);
+    if (targetSalaId) return String(targetSalaId);
+    if (libro?.sala_nombre) {
+      const found = ($masterSalasStore || []).find(s => s.nombre === libro.sala_nombre || s.nombre_comercial === libro.sala_nombre);
+      if (found) return String(found.uuid || found.id);
+    }
+    return null;
+  })();
+
+  // Lista de empleados activos de la sala (con fallback seguro para no quedar vacía)
+  $: listaEmpleados = (() => {
+    let filtered = allEmpleados.filter(e => {
+      if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
+      if (!effectiveSalaUuid) return true;
+      const eSala = String(e.sala_uuid || e.sala_id || '');
+      if (eSala && eSala === effectiveSalaUuid) return true;
+      return !eSala;
+    });
+
+    if (filtered.length === 0 && allEmpleados.length > 0) {
+      filtered = allEmpleados.filter(e => e.activo !== false && Number(e.activo) !== 0);
+    }
+
+    return filtered.map(e => {
       const fullName = [e.nombre, e.apellido].filter(Boolean).join(' ').trim() || e.nombre || (e.uuid ? `Empleado #${e.uuid.slice(0, 8)}` : `Empleado #${e.id}`);
       return {
         uuid: e.uuid || e.id,
@@ -151,17 +194,19 @@
         sala_uuid: e.sala_uuid || e.sala_id
       };
     })
+    .filter(e => Boolean(e.nombre))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  })();
 
-  // Coincidencias de búsqueda por NOMBRE o por CARGO (o por Cédula)
+  // Coincidencias de búsqueda por NOMBRE o por CARGO o Cédula (escritura rápida tolerante a acentos y orden de palabras)
   $: empleadosSugerencias = (() => {
-    const q = (empleadoSearchQuery || '').trim().toLowerCase();
+    const q = (empleadoSearchQuery || '').trim();
     if (!q) return listaEmpleados.slice(0, 10);
+    const normQ = normalizeSearchStr(q);
+    const tokens = normQ.split(/\s+/).filter(Boolean);
     return listaEmpleados.filter(emp => {
-      const matchNom = emp.nombre.toLowerCase().includes(q);
-      const matchCargo = emp.cargo_nombre.toLowerCase().includes(q);
-      const matchCedula = String(emp.cedula || '').toLowerCase().includes(q);
-      return matchNom || matchCargo || matchCedula;
+      const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
+      return tokens.every(t => targetText.includes(t));
     }).slice(0, 10);
   })();
 
@@ -252,23 +297,25 @@
 
     let filtered = list;
     if (busquedaEmpleadoResumen.trim()) {
-      const q = busquedaEmpleadoResumen.trim().toLowerCase();
-      filtered = list.filter(item => 
-        item.empleado_nombre.toLowerCase().includes(q) ||
-        item.cargo_nombre.toLowerCase().includes(q) ||
-        item.empleado_cedula.toLowerCase().includes(q)
-      );
+      const normQ = normalizeSearchStr(busquedaEmpleadoResumen.trim());
+      const tokens = normQ.split(/\s+/).filter(Boolean);
+      filtered = list.filter(item => {
+        const targetText = normalizeSearchStr(`${item.empleado_nombre || ''} ${item.cargo_nombre || ''} ${item.empleado_cedula || ''}`);
+        return tokens.every(t => targetText.includes(t));
+      });
     }
 
     return filtered.sort((a, b) => b.total_monto - a.total_monto);
   })();
 
   onMount(async () => {
+    syncLocalEmpleados();
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchRangosServer(),
       loadRecords()
     ]);
+    syncLocalEmpleados();
   });
 
   $: if (libroId || libro?.id || libro?.uuid) {

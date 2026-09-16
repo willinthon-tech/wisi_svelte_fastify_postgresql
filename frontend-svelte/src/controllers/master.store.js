@@ -191,6 +191,8 @@ function loadStore(key, fallback) {
 // Helper to save store to localStorage
 function saveStore(key, data) {
   if (typeof localStorage === 'undefined') return;
+  // No saturar localStorage con colecciones masivas que superen el límite de 5MB
+  if (key === 'empleados_v1' || (Array.isArray(data) && data.length > 300)) return;
   try {
     localStorage.setItem(`wisi_master_${key}`, JSON.stringify(data));
   } catch (err) {
@@ -289,17 +291,17 @@ export async function loadMasterStoresFromBackend(force = false) {
     let currentStoreVal = [];
     store.subscribe(v => currentStoreVal = v)();
 
-    // 1. Cargar de inmediato desde IndexedDB local SOLO si el store en memoria está vacío
-    if (!currentStoreVal || currentStoreVal.length === 0) {
-      try {
-        const localData = await getLocalItems(localStoreKey);
-        if (Array.isArray(localData) && localData.length > 0) {
-          store.set(localData);
+    // 1. Cargar de inmediato desde IndexedDB local si el store está vacío o si IndexedDB contiene más datos
+    try {
+      const localData = await getLocalItems(localStoreKey);
+      if (Array.isArray(localData) && localData.length > 0) {
+        if (!currentStoreVal || currentStoreVal.length === 0 || localData.length > currentStoreVal.length) {
+          if (store && typeof store.set === 'function') store.set(localData);
           currentStoreVal = localData;
         }
-      } catch (e) {
-        // Continuar si IndexedDB aún está cargando
       }
+    } catch (e) {
+      // Continuar si IndexedDB aún está cargando
     }
 
     // 2. Si hay conexión a internet, refrescar desde el servidor y persistir SOLO si hay cambios reales
