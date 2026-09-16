@@ -362,7 +362,7 @@
     return chips;
   })();
 
-  let loading = false;
+  let loading = true;
 
   // Reactive filtering of employees for the unified table
   $: filteredEmployees = (function () {
@@ -522,10 +522,15 @@
       updateInitialDaysHeader();
     }
 
-    await Promise.all([
-      fetchFilterOptions(),
-      (fechaDesde && fechaHasta) ? fetchReporteData(true) : Promise.resolve()
-    ]);
+    if (fechaDesde && fechaHasta) {
+      await Promise.all([
+        fetchFilterOptions(),
+        fetchReporteData(false)
+      ]);
+    } else {
+      await fetchFilterOptions();
+      loading = false;
+    }
   });
 
   async function fetchReporteData(silent = false) {
@@ -902,9 +907,11 @@
   <div class="unified-table-card">
     
     {#if loading}
-      <div class="empty-state-full-box">
-        <div class="pulse-loader"></div>
-        <span style="color: #64748b; font-size: 13px; font-weight: 700;">Cotejando registros de asistencia y horarios en el servidor...</span>
+      <div class="empty-state-full-box" style="min-height: 220px;">
+        <div class="spinner-small" style="width: 32px; height: 32px; border-width: 3.5px;"></div>
+        <span style="font-size: 13px; font-weight: 600; color: #64748b; letter-spacing: 0.2px;">
+          Cargando registros...
+        </span>
       </div>
     {:else if paginatedEmployees.length === 0}
       <div class="empty-state-full-box">
@@ -2101,14 +2108,15 @@
 
   /* .loading-state-box y .empty-state-box eliminados (no usados en este componente) */
 
-  .pulse-loader {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #e2e8f0;
+  .spinner-small {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #e2e8f0;
     border-top-color: #2563eb;
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 16px;
+    animation: spin 0.75s linear infinite;
+    display: inline-block;
+    flex-shrink: 0;
   }
 
   @keyframes spin {
