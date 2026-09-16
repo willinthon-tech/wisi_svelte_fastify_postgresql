@@ -352,7 +352,7 @@
               {#each plantillasExcepcion as p}
                 {@const pKey = p.uuid || p.id}
                 <option value={p.descripcion ? `EXCEPCION_${pKey}` : `PLANTILLA_${pKey}`}>
-                  [{p.codigo}] {p.descripcion || p.nombre}
+                  ({p.codigo}) {p.descripcion || p.nombre}
                 </option>
               {/each}
             {/if}
