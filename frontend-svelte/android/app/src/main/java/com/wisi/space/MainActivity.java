@@ -29,7 +29,6 @@ import androidx.core.content.FileProvider;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
-    private static final String DEFAULT_HOST = "https://willinthon.wisi.space";
     private boolean isKiosk = false;
     private BroadcastReceiver downloadReceiver;
     private BroadcastReceiver kioskCommandReceiver;
@@ -164,10 +163,10 @@ public class MainActivity extends BridgeActivity {
 
         // 1. Normalizar URL si es relativa usando dinámicamente el host activo del WebView
         String normalizedUrl = url.trim();
-        if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
-            String activeHost = DEFAULT_HOST;
+        if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://") && !normalizedUrl.startsWith("content://") && !normalizedUrl.startsWith("file://")) {
+            String activeHost = "";
             try {
-                WebView wv = getBridge().getWebView();
+                WebView wv = getBridge() != null ? getBridge().getWebView() : null;
                 if (wv != null && wv.getUrl() != null && !wv.getUrl().isEmpty()) {
                     Uri currentUri = Uri.parse(wv.getUrl());
                     if (currentUri.getScheme() != null && currentUri.getAuthority() != null) {
@@ -176,10 +175,12 @@ public class MainActivity extends BridgeActivity {
                 }
             } catch (Exception ignored) {}
 
-            if (normalizedUrl.startsWith("/")) {
-                normalizedUrl = activeHost + normalizedUrl;
-            } else {
-                normalizedUrl = activeHost + "/" + normalizedUrl;
+            if (!activeHost.isEmpty()) {
+                if (normalizedUrl.startsWith("/")) {
+                    normalizedUrl = activeHost + normalizedUrl;
+                } else {
+                    normalizedUrl = activeHost + "/" + normalizedUrl;
+                }
             }
         }
 
