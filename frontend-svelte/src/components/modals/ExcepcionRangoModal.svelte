@@ -2,6 +2,7 @@
   import { onMount, createEventDispatcher } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
+  import DeleteModal from './DeleteModal.svelte';
 
   export let show = false;
   export let empleado = null;
@@ -22,6 +23,9 @@
   let loadingRangos = false;
   let deletingIds = [];
   let lastLoadedEmpKey = null;
+
+  let isDeleteModalOpen = false;
+  let rangeToDelete = null;
 
   onMount(() => {
     fetchExceptions();
@@ -104,6 +108,8 @@
 
   function closeModal() {
     lastLoadedEmpKey = null;
+    isDeleteModalOpen = false;
+    rangeToDelete = null;
     show = false;
     dispatch('close');
   }
@@ -143,16 +149,24 @@
     }
   }
 
-  async function handleDeleteRange(rango) {
+  function promptDeleteRange(rango) {
     if (!rango || !rango.ids || rango.ids.length === 0) return;
-
-    const desc = rango.nombre || rango.codigo || 'esta excepción';
+    const desc = rango.nombre || rango.descripcion || rango.codigo || 'esta excepción';
     const rangoStr = `${formatDateDisplay(rango.fecha_desde)} al ${formatDateDisplay(rango.fecha_hasta)}`;
-    const confirmMsg = `¿Deseas eliminar el rango de excepción [${rango.codigo}] ${desc} (${rangoStr}, ${rango.dias_count} días)?`;
+    rangeToDelete = {
+      ...rango,
+      id: rango.ids[0],
+      uuid: rango.ids[0],
+      nombre: `[${rango.codigo}] ${desc} (${rangoStr}, ${rango.dias_count} ${rango.dias_count === 1 ? 'día' : 'días'})`
+    };
+    isDeleteModalOpen = true;
+  }
 
-    if (!window.confirm(confirmMsg)) {
-      return;
-    }
+  async function confirmDeleteRange() {
+    if (!rangeToDelete || !rangeToDelete.ids || rangeToDelete.ids.length === 0) return;
+    const rango = rangeToDelete;
+    isDeleteModalOpen = false;
+    rangeToDelete = null;
 
     const empKey = empleado?.uuid || empleado?.id;
     deletingIds = [...rango.ids];
@@ -500,7 +514,7 @@
                       <button
                         type="button"
                         class="btn-delete-rango"
-                        on:click={() => handleDeleteRange(rango)}
+                        on:click={() => promptDeleteRange(rango)}
                         disabled={deletingIds.length > 0}
                         title="Eliminar este rango de excepciones"
                       >
@@ -551,6 +565,14 @@
     </div>
   </div>
 {/if}
+
+<DeleteModal
+  isOpen={isDeleteModalOpen}
+  item={rangeToDelete}
+  entityType="excepción por rango"
+  on:confirm={confirmDeleteRange}
+  on:close={() => { isDeleteModalOpen = false; rangeToDelete = null; }}
+/>
 
 <style>
   .modal-overlay {
