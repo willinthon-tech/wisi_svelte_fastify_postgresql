@@ -96,15 +96,41 @@ export function broadcastNewAttlog(attlogData) {
 
 /**
  * Broadcasts master entity changes (create, update, delete) to connected WebSocket clients
+ * Debounced to avoid client request stampedes (Thundering Herd)
  */
+let masterSyncTimer = null;
 export function broadcastMasterSync(entityName, action, data) {
   if (activeClients.size === 0) return;
+  if (masterSyncTimer) clearTimeout(masterSyncTimer);
+  masterSyncTimer = setTimeout(() => {
+    const payload = JSON.stringify({
+      type: 'MASTER_SYNC',
+      entity: entityName,
+      action,
+      data,
+      timestamp: new Date().toISOString()
+    });
 
+    for (const client of activeClients) {
+      if (client.readyState === 1) {
+        try {
+          client.send(payload);
+        } catch (err) {
+          activeClients.delete(client);
+        }
+      }
+    }
+  }, 1500);
+}
+
+/**
+ * Broadcasts permission updates to connected clients
+ */
+export function broadcastPermissionsUpdated(userId) {
+  if (activeClients.size === 0) return;
   const payload = JSON.stringify({
-    type: 'MASTER_SYNC',
-    entity: entityName,
-    action,
-    data,
+    type: 'PERMISSIONS_UPDATED',
+    userId: String(userId || ''),
     timestamp: new Date().toISOString()
   });
 

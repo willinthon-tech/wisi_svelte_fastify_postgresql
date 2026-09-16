@@ -117,9 +117,16 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
             }
           }
         } else if (payload.type === 'MASTER_SYNC') {
-          // Dynamic real-time sync with PostgreSQL via Delta Sync
-          import('./master.store.js').then(({ syncMasterStoresDelta }) => {
-            syncMasterStoresDelta().catch(() => {});
+          // Jitter aleatorio (300ms-1500ms) para desincronizar clientes y evitar thundering herd sobre PostgreSQL
+          const jitterMs = 300 + Math.floor(Math.random() * 1200);
+          setTimeout(() => {
+            import('./master.store.js').then(({ syncMasterStoresDelta }) => {
+              syncMasterStoresDelta().catch(() => {});
+            });
+          }, jitterMs);
+        } else if (payload.type === 'PERMISSIONS_UPDATED') {
+          import('./master.store.js').then(({ loadMasterStoresFromBackend }) => {
+            loadMasterStoresFromBackend(true).catch(() => {});
           });
         }
       } catch (err) {

@@ -7,7 +7,8 @@ import {
   getLocalItems, 
   upsertLocalItem, 
   deleteLocalItem, 
-  queueOutboxAction 
+  queueOutboxAction,
+  generateSafeUuid
 } from '../services/localDb.service.js';
 
 const ROUTE_ALIASES = {
@@ -134,12 +135,30 @@ export function calculateUserModuleActions(route, user, permsMapAll, modulos = [
   }
 
   const mod = findModuleByRoute(clean, modulos);
+  const modUuid = mod ? (mod.uuid || mod.id) : null;
+  const modNombre = mod ? mod.nombre : clean;
+
+  // Superadmin bypass: los administradores del sistema siempre tienen acceso irrestricto
+  const username = (user?.usuario || '').trim().toLowerCase();
+  const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
+  if (isAdmin) {
+    return {
+      canView: true,
+      canAdd: true,
+      canEdit: true,
+      canDelete: true,
+      isModule: !!mod,
+      moduleUuid: modUuid,
+      moduleId: modUuid,
+      moduleNombre: modNombre
+    };
+  }
+
   if (!mod) {
     return { canView: true, canAdd: true, canEdit: true, canDelete: true, isModule: false };
   }
 
   const userUuid = user?.uuid || user?.id || null;
-  const modUuid = mod.uuid || mod.id;
   const userPerms = (userUuid && permsMapAll && (permsMapAll[userUuid] || (user?.id && permsMapAll[user.id]))) 
     ? (permsMapAll[userUuid]?.[modUuid] || permsMapAll[userUuid]?.[mod.id] || (user?.id && permsMapAll[user.id]?.[modUuid]) || []) 
     : [];
@@ -395,8 +414,7 @@ export async function syncMasterStoresDelta() {
     const url = toBackendUrl(`/api/sync/delta?since=${encodeURIComponent(lastSync)}`);
     const res = await fetch(url);
     if (!res.ok) {
-      console.warn('[DeltaSync] Servidor respondió con error, ejecutando carga completa...');
-      await loadMasterStoresFromBackend();
+      console.warn(`[DeltaSync] Servidor respondió con estado ${res.status}. Conservando datos locales para evitar sobrecarga.`);
       return;
     }
 
@@ -498,7 +516,7 @@ export async function syncMasterStoresDelta() {
 
 export async function saveUserSalasToBackend(userId, salaIds) {
   try {
-    await fetch(`/api/master/user-salas/${userId}`, {
+    await fetch(toBackendUrl(`/api/master/user-salas/${userId}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ salas: salaIds })
@@ -510,7 +528,7 @@ export async function saveUserSalasToBackend(userId, salaIds) {
 
 export async function saveUserPermissionsToBackend(userId, permissionsMap) {
   try {
-    await fetch(`/api/master/user-permissions/${userId}`, {
+    await fetch(toBackendUrl(`/api/master/user-permissions/${userId}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ permissions: permissionsMap })
@@ -526,7 +544,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
     add: async (item) => {
       let createdItem = { ...item };
       if (!createdItem.uuid) {
-        createdItem.uuid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `local-${Date.now()}`;
+        createdItem.uuid = generateSafeUuid();
       }
       if (!createdItem.id) {
         createdItem.id = createdItem.uuid;
@@ -559,7 +577,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
         try {
           const controller = new AbortController();
           const tId = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(`/api/master/${entityName}`, {
+          const res = await fetch(toBackendUrl(`/api/master/${entityName}`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(createdItem),
@@ -618,7 +636,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
         try {
           const controller = new AbortController();
           const tId = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
+          const res = await fetch(toBackendUrl(`/api/master/${entityName}/${targetUuid}`), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...draft }),
@@ -681,7 +699,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
       try {
         const controller = new AbortController();
         const tId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/${entityName}/${targetUuid}`, {
+        const res = await fetch(toBackendUrl(`/api/master/${entityName}/${targetUuid}`), {
           method: 'DELETE',
           signal: controller.signal
         });
@@ -746,7 +764,7 @@ export const masterMesasActions = {
   ...createMasterEntityActions(masterMesasStore, 'mesas'),
   restore: async (id) => {
     try {
-      const res = await fetch(`/api/master/mesas/${id}/restore`, { method: 'POST' });
+      const res = await fetch(toBackendUrl(`/api/master/mesas/${id}/restore`), { method: 'POST' });
       const json = await res.json();
       if (!res.ok || json?.success === false) {
         throw new Error(json?.error || 'Error al restaurar mesa');
@@ -760,7 +778,7 @@ export const masterMesasActions = {
   },
   purge: async (id) => {
     try {
-      const res = await fetch(`/api/master/mesas/${id}/purge`, { method: 'DELETE' });
+      const res = await fetch(toBackendUrl(`/api/master/mesas/${id}/purge`), { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok || json?.success === false) {
         throw new Error(json?.error || 'Error al eliminar mesa definitivamente');
@@ -778,7 +796,7 @@ export const masterLlavesActions = {
   ...createMasterEntityActions(masterLlavesStore, 'llaves'),
   restore: async (id) => {
     try {
-      const res = await fetch(`/api/master/llaves/${id}/restore`, { method: 'POST' });
+      const res = await fetch(toBackendUrl(`/api/master/llaves/${id}/restore`), { method: 'POST' });
       const json = await res.json();
       if (!res.ok || json?.success === false) {
         throw new Error(json?.error || 'Error al restaurar llave');
@@ -792,7 +810,7 @@ export const masterLlavesActions = {
   },
   purge: async (id) => {
     try {
-      const res = await fetch(`/api/master/llaves/${id}/purge`, { method: 'DELETE' });
+      const res = await fetch(toBackendUrl(`/api/master/llaves/${id}/purge`), { method: 'DELETE' });
       const json = await res.json();
       if (!res.ok || json?.success === false) {
         throw new Error(json?.error || 'Error al eliminar llave definitivamente');
@@ -812,7 +830,7 @@ export const masterModulosActions = {
   ...createMasterEntityActions(masterModulosStore, 'modulos'),
   reorder: async (orderedList = []) => {
     try {
-      const res = await fetch('/api/master/modulos/reorder', {
+      const res = await fetch(toBackendUrl('/api/master/modulos/reorder'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: orderedList })

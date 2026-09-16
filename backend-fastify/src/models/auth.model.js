@@ -65,3 +65,24 @@ export async function getUserNavMenuModel(userId) {
   }));
 }
 
+export async function getUserPermissionsModel(userId) {
+  if (!isPgConnected || !sql) return {};
+  const uIdStr = String(userId).trim();
+
+  const rows = await sql`
+    SELECT ump.module_uuid, p.nombre as perm_name
+    FROM user_module_permissions ump
+    INNER JOIN permissions p ON ump.permission_uuid = p.uuid
+    WHERE ump.user_uuid::text = ${uIdStr}
+  `;
+
+  const map = {};
+  for (const r of rows) {
+    if (!map[r.module_uuid]) map[r.module_uuid] = [];
+    if (!map[r.module_uuid].includes(r.perm_name)) {
+      map[r.module_uuid].push(r.perm_name);
+    }
+  }
+  return map;
+}
+

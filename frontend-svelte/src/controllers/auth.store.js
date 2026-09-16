@@ -118,6 +118,19 @@ export async function loginUserStore(usuario, password) {
       }
     }
     if (data.menu) navMenuStore.set(data.menu);
+    if (data.permissions && data.user) {
+      const userUuid = data.user.uuid || data.user.id;
+      try {
+        const { userModulePermissionsStore } = await import('./master.store.js');
+        userModulePermissionsStore.update(curr => ({
+          ...curr,
+          [userUuid]: data.permissions,
+          [String(userUuid)]: data.permissions
+        }));
+      } catch (e) {
+        console.warn('Error hydrating permissions on login:', e);
+      }
+    }
     isAuthenticatedStore.set(true);
 
     if (typeof localStorage !== 'undefined') {
@@ -204,6 +217,19 @@ export async function loadUserSession() {
       }
     }
     if (data.menu) navMenuStore.set(data.menu);
+    if (data.permissions && data.user) {
+      const userUuid = data.user.uuid || data.user.id;
+      try {
+        const { userModulePermissionsStore } = await import('./master.store.js');
+        userModulePermissionsStore.update(curr => ({
+          ...curr,
+          [userUuid]: data.permissions,
+          [String(userUuid)]: data.permissions
+        }));
+      } catch (e) {
+        console.warn('Error hydrating permissions on loadUserSession:', e);
+      }
+    }
     isAuthenticatedStore.set(true);
   } catch (err) {
     console.warn('Fallback to local auth store:', err);

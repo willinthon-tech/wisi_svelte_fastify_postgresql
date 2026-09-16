@@ -40,7 +40,8 @@
     saveLocalItems, 
     upsertLocalItem, 
     deleteLocalItem, 
-    queueOutboxAction 
+    queueOutboxAction,
+    generateSafeUuid 
   } from '../../services/localDb.service.js';
 
   // Extract assigned sala IDs strictly for the logged-in user
@@ -305,7 +306,7 @@
     const { onDone: _, ...draft } = detail;
 
     // 0ms instant local-first execution
-    const newUuid = draft.uuid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}`);
+    const newUuid = draft.uuid || generateSafeUuid();
     const salaObj = ($masterSalasStore || []).find(s => String(s.uuid || s.id) === String(draft.sala_uuid || draft.sala_id));
     const tipoObj = tipoClientesOptions.find(t => String(t.uuid || t.id) === String(draft.tipo_cliente_uuid || draft.tipo_cliente_id));
 

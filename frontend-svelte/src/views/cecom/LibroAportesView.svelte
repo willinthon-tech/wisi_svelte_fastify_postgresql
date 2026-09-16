@@ -14,7 +14,8 @@
     saveLocalItems,
     upsertLocalItem,
     deleteLocalItem,
-    queueOutboxAction
+    queueOutboxAction,
+    generateSafeUuid
   } from '../../services/localDb.service.js';
 
   export let libro = null;
@@ -531,7 +532,7 @@
 
     const empUuid = selectedEmpleado?.uuid || selectedEmpleado?.id || empId;
     const rUuid = selectedRango?.uuid || selectedRango?.id || rId;
-    const itemUuid = crypto.randomUUID();
+    const itemUuid = generateSafeUuid();
 
     const newRecord = {
       uuid: itemUuid,

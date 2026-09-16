@@ -15,7 +15,8 @@
     saveLocalItems,
     upsertLocalItem,
     deleteLocalItem,
-    queueOutboxAction
+    queueOutboxAction,
+    generateSafeUuid
   } from '../../services/localDb.service.js';
 
   export let libro = null;
@@ -271,7 +272,7 @@
 
     const mesaObj = availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId) || String(m.id) === String(selectedMesaId));
     const mesaUuid = mesaObj?.uuid || (String(selectedMesaId).length > 20 ? selectedMesaId : null);
-    const itemUuid = crypto.randomUUID();
+    const itemUuid = generateSafeUuid();
 
     const newRecord = {
       uuid: itemUuid,

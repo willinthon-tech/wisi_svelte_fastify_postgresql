@@ -17,7 +17,8 @@
     saveLocalItems,
     upsertLocalItem,
     deleteLocalItem,
-    queueOutboxAction
+    queueOutboxAction,
+    generateSafeUuid
   } from '../../services/localDb.service.js';
 
   export let libro = null;
@@ -374,7 +375,7 @@
 
     const mesaObj = availableMesas.find(m => String(m.uuid || m.id) === String(mesaId) || String(m.id) === String(mesaId));
     const mesaUuid = mesaObj?.uuid || (String(mesaId).length > 20 ? mesaId : null);
-    const itemUuid = existing?.uuid || crypto.randomUUID();
+    const itemUuid = existing?.uuid || generateSafeUuid();
 
     const localRecord = {
       uuid: itemUuid,
@@ -572,7 +573,7 @@
       const mid = String(mesa.uuid || mesa.id);
       const cur = getRow(mid);
       const existing = recordsMap.get(mid) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === mid || String(r.mesa_id) === String(mesa.id));
-      const itemUuid = existing?.uuid || crypto.randomUUID();
+      const itemUuid = existing?.uuid || generateSafeUuid();
 
       const newFields = {
         hora_apertura: batchHoraApertura.trim() ? batchHoraApertura.trim() : (cur.hora_apertura || ''),
@@ -704,7 +705,7 @@
     const mid = String(editingMesaId);
     const cur = getRow(mid);
     const existing = recordsMap.get(mid) || [...recordsMap.values()].find(r => String(r.mesa_uuid || r.mesa_id) === mid || String(r.mesa_id) === mid);
-    const itemUuid = existing?.uuid || crypto.randomUUID();
+    const itemUuid = existing?.uuid || generateSafeUuid();
 
     const newFields = {
       hora_apertura: modalHoraApertura.trim(),

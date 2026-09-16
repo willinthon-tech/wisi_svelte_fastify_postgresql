@@ -1,4 +1,4 @@
-import { findUserByUsername, getUserSalasModel, getUserNavMenuModel } from '../models/auth.model.js';
+import { findUserByUsername, getUserSalasModel, getUserNavMenuModel, getUserPermissionsModel } from '../models/auth.model.js';
 import { getUsuariosModel } from '../models/master.model.js';
 
 function parseBody(body) {
@@ -41,6 +41,7 @@ export async function loginController(request, reply) {
 
     const salas = await getUserSalasModel(user.id);
     const menu = await getUserNavMenuModel(user.id);
+    const permissions = await getUserPermissionsModel(user.id);
 
     const userUuid = user.uuid || user.id;
     const token = `token_wisi_${userUuid}_${Date.now()}`;
@@ -53,10 +54,12 @@ export async function loginController(request, reply) {
         uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,
-        salas
+        salas,
+        permissions
       },
       salas,
-      menu
+      menu,
+      permissions
     });
   } catch (err) {
     request.log.error(err);
@@ -108,6 +111,7 @@ export async function getMeController(request, reply) {
     const userUuid = user.uuid || user.id;
     const salas = await getUserSalasModel(userUuid);
     const menu = await getUserNavMenuModel(userUuid);
+    const permissions = await getUserPermissionsModel(userUuid);
 
     return reply.send({
       success: true,
@@ -116,10 +120,12 @@ export async function getMeController(request, reply) {
         uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,
-        salas
+        salas,
+        permissions
       },
       salas,
-      menu
+      menu,
+      permissions
     });
   } catch (err) {
     request.log.error(err);

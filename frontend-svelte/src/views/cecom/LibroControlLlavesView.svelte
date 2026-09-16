@@ -14,7 +14,8 @@
     saveLocalItems,
     upsertLocalItem,
     deleteLocalItem,
-    queueOutboxAction
+    queueOutboxAction,
+    generateSafeUuid
   } from '../../services/localDb.service.js';
 
   export let libro = null;
@@ -260,7 +261,7 @@
       return;
     }
 
-    const itemUuid = crypto.randomUUID();
+    const itemUuid = generateSafeUuid();
     const horaSalida = getCurrentTimeString();
     const newRecord = {
       uuid: itemUuid,

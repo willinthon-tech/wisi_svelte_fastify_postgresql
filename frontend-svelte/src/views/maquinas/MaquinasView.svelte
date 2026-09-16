@@ -27,7 +27,7 @@
   import { masterSalasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
-  import { getLocalItems, saveLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction } from '../../services/localDb.service.js';
+  import { getLocalItems, saveLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
@@ -393,8 +393,8 @@
 
   async function handleCreate(event) {
     let draft = { ...event.detail };
-    if (!draft.uuid && typeof crypto !== 'undefined' && crypto.randomUUID) {
-      draft.uuid = crypto.randomUUID();
+    if (!draft.uuid) {
+      draft.uuid = generateSafeUuid();
     }
     const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal'];
     fkMap.forEach(f => {
@@ -402,7 +402,7 @@
     });
 
     // 0ms instant local-first execution
-    const newUuid = draft.uuid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}`);
+    const newUuid = draft.uuid || generateSafeUuid();
     const localItem = { ...draft, uuid: newUuid, id: newUuid, created_at: new Date().toISOString() };
 
     // 1. Inmediatamente actualizar memoria reactiva (0ms)

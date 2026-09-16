@@ -18,7 +18,7 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toEmployeePhotoUrl } from '../../config/api.config.js';
   import CachedImage from '../../components/common/CachedImage.svelte';
-  import { upsertLocalItem, deleteLocalItem, queueOutboxAction } from '../../services/localDb.service.js';
+  import { upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
 
   // Extraer las salas asignadas estrictamente para el usuario logueado
   $: assignedSalaIds = (function () {
@@ -215,7 +215,7 @@
 
   async function handleCreate(e) {
     const data = e.detail;
-    const newUuid = data.uuid || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-${Date.now()}`);
+    const newUuid = data.uuid || generateSafeUuid();
     const newItem = { ...data, uuid: newUuid, id: newUuid, created_at: new Date().toISOString() };
 
     // 1. Inmediatamente actualizar memoria reactiva (0ms)

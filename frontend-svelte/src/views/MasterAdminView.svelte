@@ -204,7 +204,10 @@
     return "registro";
   }
 
-  let selectedUserId = 1;
+  let selectedUserId = null;
+  $: if ($masterUsuariosStore && $masterUsuariosStore.length > 0 && (!selectedUserId || selectedUserId === 1)) {
+    selectedUserId = $masterUsuariosStore[0].uuid || $masterUsuariosStore[0].id;
+  }
 
   const gruposSalas = [
     { id: 1, nombre: "SALA", descripcion: "Sala de juego / Casino" },
@@ -1367,10 +1370,11 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   }
 
   async function handleSavePermissions() {
-    const u = $masterUsuariosStore.find((x) => x.id === selectedUserId);
+    if (!selectedUserId) return;
+    const u = $masterUsuariosStore.find((x) => String(x.uuid || x.id) === String(selectedUserId));
     const userName = u ? u.nombre_apellido : `Usuario #${selectedUserId}`;
-    const userSalas = $userSalasStore[selectedUserId] || [];
-    const userPerms = $userModulePermissionsStore[selectedUserId] || {};
+    const userSalas = $userSalasStore[selectedUserId] || $userSalasStore[String(selectedUserId)] || [];
+    const userPerms = $userModulePermissionsStore[selectedUserId] || $userModulePermissionsStore[String(selectedUserId)] || {};
 
     await saveUserSalasToBackend(selectedUserId, userSalas);
     await saveUserPermissionsToBackend(selectedUserId, userPerms);

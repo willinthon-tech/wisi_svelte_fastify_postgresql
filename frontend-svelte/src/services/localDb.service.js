@@ -5,7 +5,31 @@ export const pendingSyncCountStore = writable(0);
 export const isLocalDbReadyStore = writable(false);
 
 const DB_NAME = 'wisi_local_db_v1';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
+
+/**
+ * Generador de UUID v4 seguro y compatible con cualquier entorno:
+ * navegadores modernos, HTTP local (insecure origin), Capacitor (Android) y Tauri (Windows).
+ */
+export function generateSafeUuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch (_) {}
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    try {
+      return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+      );
+    } catch (_) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 export const LOCAL_STORES = [
   'clientes',
@@ -121,11 +145,11 @@ export async function initLocalDb() {
 }
 
 function getItemKey(item) {
-  if (!item) return crypto.randomUUID();
+  if (!item) return generateSafeUuid();
   if (item._local_key) return String(item._local_key);
   if (item.uuid) return String(item.uuid);
   if (item.id !== undefined && item.id !== null) return `id_${item.id}`;
-  return crypto.randomUUID();
+  return generateSafeUuid();
 }
 
 /**
@@ -254,7 +278,7 @@ export async function queueOutboxAction({
   const db = await initLocalDb();
   if (!db) return;
 
-  const itemUuid = uuid || payload?.uuid || crypto.randomUUID();
+  const itemUuid = uuid || payload?.uuid || generateSafeUuid();
   const queueItem = {
     _local_key: itemUuid,
     uuid: itemUuid,
@@ -318,9 +342,13 @@ export async function processOutboxQueue() {
     for (const item of pendingItems) {
       try {
         const url = toBackendUrl(item.endpoint);
+        const token = (typeof localStorage !== 'undefined') ? (localStorage.getItem('wisi_token') || localStorage.getItem('token')) : null;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const options = {
           method: item.method || 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers
         };
 
         if (item.payload && ['POST', 'PUT', 'PATCH'].includes(options.method)) {

@@ -13,7 +13,8 @@
     saveLocalItems,
     upsertLocalItem,
     deleteLocalItem,
-    queueOutboxAction
+    queueOutboxAction,
+    generateSafeUuid
   } from '../../services/localDb.service.js';
 
   export let libro = null;
@@ -542,7 +543,7 @@
       return;
     }
 
-    const itemUuid = crypto.randomUUID();
+    const itemUuid = generateSafeUuid();
     const matchedMetodo = metodosDisponibles.find(m => 
       String(m.uuid || m.id) === String(selectedMetodoPagoUuid)
     ) || metodosDisponibles[0];

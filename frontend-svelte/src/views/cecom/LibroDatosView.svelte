@@ -13,7 +13,8 @@
     saveLocalItems,
     upsertLocalItem,
     deleteLocalItem,
-    queueOutboxAction
+    queueOutboxAction,
+    generateSafeUuid
   } from '../../services/localDb.service.js';
 
   export let libro = null;
@@ -479,7 +480,7 @@
       addOperadorC(inputTempOperadorC.trim());
     }
 
-    const itemUuid = recordUuid || crypto.randomUUID();
+    const itemUuid = recordUuid || generateSafeUuid();
     recordUuid = itemUuid;
     recordId = itemUuid;
     lastUpdatedAt = new Date().toISOString();
