@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { onMount, createEventDispatcher } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
 
@@ -21,16 +21,26 @@
   let rangosAsignados = [];
   let loadingRangos = false;
   let deletingIds = [];
-  let lastEmpleadoId = null;
+  let lastLoadedEmpKey = null;
+
+  onMount(() => {
+    fetchExceptions();
+  });
 
   $: if (show && empleado) {
-    const empKey = empleado.uuid || empleado.id;
-    if (lastEmpleadoId !== empKey) {
-      lastEmpleadoId = empKey;
+    const empKey = empleado.uuid || empleado.id || empleado.cedula;
+    if (lastLoadedEmpKey !== empKey) {
+      lastLoadedEmpKey = empKey;
       initData();
+      if (plantillasExcepcion.length === 0) {
+        fetchExceptions();
+      }
+      fetchEmpleadoRangos();
     }
-    fetchExceptions();
-    fetchEmpleadoRangos();
+  }
+
+  $: if (!show) {
+    lastLoadedEmpKey = null;
   }
 
   function ensureSelectedValue() {
@@ -63,12 +73,13 @@
   }
 
   async function fetchExceptions() {
+    if (loadingExceptions) return;
     loadingExceptions = true;
     try {
       const res = await fetch(toBackendUrl('/api/master/excepciones?limit=1000'));
       const json = await res.json();
       if (json && json.success && Array.isArray(json.data)) {
-        plantillasExcepcion = json.data.filter(p => p.tipo === 'Asignable');
+        plantillasExcepcion = json.data.filter(p => p.codigo !== 'U' && p.tipo !== 'No Asignable');
         ensureSelectedValue();
       }
     } catch (err) {
@@ -92,7 +103,7 @@
   }
 
   function closeModal() {
-    lastEmpleadoId = null;
+    lastLoadedEmpKey = null;
     show = false;
     dispatch('close');
   }
