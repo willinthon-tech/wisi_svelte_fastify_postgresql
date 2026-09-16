@@ -181,11 +181,24 @@
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
-          filterOptions = json.data;
+          let sList = json.data.salas || [];
+          if (assignedSalaIds.length > 0) {
+            sList = sList.filter(s => assignedSalaIds.includes(String(s.uuid || s.id)));
+          }
+          filterOptions = { ...json.data, salas: sList };
         }
       }
     } catch (e) {
       console.warn("Error fetching filter options from backend:", e);
+      try {
+        const { masterSalasStore } = await import('../../controllers/master.store.js');
+        let salas = [];
+        masterSalasStore.subscribe(val => salas = val)();
+        if (assignedSalaIds.length > 0) {
+          salas = salas.filter(s => assignedSalaIds.includes(String(s.uuid || s.id)));
+        }
+        filterOptions = { salas };
+      } catch (_) {}
     }
   }
 
@@ -210,25 +223,56 @@
       const res = await fetch(`/api/master/cortes?${q.toString()}`);
       const json = await res.json();
       if (json && json.success) {
-        items = (json.data || []).map(item => ({
+        let mapped = (json.data || []).map(item => ({
           ...item,
-          salas_ids: item.salas_ids || [],
+          salas_ids: item.salas_ids || item.salas_uuids || [],
           salas_nombres: item.salas_nombres || [],
           fecha_rango: `${formatDate(item.fecha_desde)} al ${formatDate(item.fecha_hasta)}`
         }));
-        totalCount = json.total || 0;
+        if (assignedSalaIds && assignedSalaIds.length > 0) {
+          mapped = mapped.filter(item => {
+            const sList = (item.salas_ids || item.salas_uuids || []).map(String);
+            return sList.some(s => assignedSalaIds.includes(s));
+          });
+        }
+        items = mapped;
+        totalCount = json.total !== undefined ? json.total : mapped.length;
         currentPage = json.page || 1;
         pageSize = json.limit || 10;
+        if (mapped.length > 0) {
+          saveLocalItems('cortes', mapped).catch(() => {});
+        }
       }
     } catch (err) {
       console.warn('Fallback local IndexedDB para cortes:', err);
       const local = await getLocalItems('cortes');
-      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterCortesStore || []);
+      let source = (Array.isArray(local) && local.length > 0) ? local : ($masterCortesStore || []);
+
+      // Filtrar estrictamente por salas asignadas al usuario logueado en modo offline
+      if (assignedSalaIds && assignedSalaIds.length > 0) {
+        source = source.filter(c => {
+          const sList = (c.salas_ids || c.salas_uuids || []).map(String);
+          return sList.some(s => assignedSalaIds.includes(s));
+        });
+      }
+
+      if (selectedSalas.length > 0) {
+        source = source.filter(c => {
+          const sList = (c.salas_ids || c.salas_uuids || []).map(String);
+          return sList.some(s => selectedSalas.map(String).includes(s));
+        });
+      }
+
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? source.filter(x => (x.fecha_rango || '').toLowerCase().includes(q) || (x.salas_nombres || []).some(sn => sn.toLowerCase().includes(q))) : source;
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
-      items = filtered.slice(start, start + (currentParams.limit || 10));
+      items = filtered.slice(start, start + (currentParams.limit || 10)).map(item => ({
+        ...item,
+        salas_ids: item.salas_ids || item.salas_uuids || [],
+        salas_nombres: item.salas_nombres || [],
+        fecha_rango: item.fecha_rango || `${formatDate(item.fecha_desde)} al ${formatDate(item.fecha_hasta)}`
+      }));
     } finally {
       isLoading = false;
     }
@@ -437,6 +481,7 @@
 <CorteEmpleadosModal
   isOpen={showEmpleadosModal}
   corte={selectedCorteParaEmpleados}
+  assignedSalaIds={assignedSalaIds}
   on:close={() => {
     showEmpleadosModal = false;
     selectedCorteParaEmpleados = null;
@@ -446,6 +491,7 @@
 <CorteSalasModal
   isOpen={showSalasModal}
   corte={selectedCorteParaSalas}
+  assignedSalaIds={assignedSalaIds}
   on:close={() => {
     showSalasModal = false;
     selectedCorteParaSalas = null;

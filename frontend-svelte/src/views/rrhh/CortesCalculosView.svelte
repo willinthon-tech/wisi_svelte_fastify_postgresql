@@ -27,6 +27,43 @@
   let processedEmployees = [];
 
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+  import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
+  import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
+
+  $: assignedSalaIds = (function () {
+    if (isPublic) return [];
+    const user = $currentUserStore;
+    const userId = user?.uuid || user?.id;
+    if (!userId) return [];
+
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
+        .filter(Boolean)
+        .map(String);
+    }
+
+    const masterMap = $masterUserSalasStore;
+    if (masterMap && typeof masterMap === "object" && !Array.isArray(masterMap)) {
+      const userList = masterMap[userId] || masterMap[String(userId)] || (user?.id ? masterMap[user.id] : null);
+      if (Array.isArray(userList) && userList.length > 0) {
+        return userList
+          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
+          .filter(Boolean)
+          .map(String);
+      }
+    }
+
+    const authSalas = $authUserSalasStore;
+    if (Array.isArray(authSalas) && authSalas.length > 0) {
+      return authSalas
+        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
+        .filter(Boolean)
+        .map(String);
+    }
+
+    return [];
+  })();
 
   onMount(async () => {
     // 1. Obtener ID de prop, del store o de la URL hash / pathname
@@ -101,6 +138,14 @@
       const json = await res.json();
       if (json && json.success && json.data) {
         corte = json.data;
+        if (!isPublic && assignedSalaIds && assignedSalaIds.length > 0) {
+          const corteSalas = (corte.salas_uuids || corte.salas_ids || []).map(String);
+          if (corteSalas.length > 0 && !corteSalas.some(s => assignedSalaIds.includes(s))) {
+            triggerToast('No tienes permisos para ver este corte', 'error');
+            handleBack();
+            return;
+          }
+        }
         computeCalculos(corte);
         saveLocalItems('cortes_detalle_' + id, [corte]).catch(() => {});
       } else if (!corte) {
@@ -211,6 +256,13 @@
         });
         rawEmpleados = flat;
       }
+    }
+
+    if (!isPublic && assignedSalaIds && assignedSalaIds.length > 0) {
+      rawEmpleados = rawEmpleados.filter(e => {
+        const s = e.sala_uuid || e.sala_id;
+        return s && assignedSalaIds.includes(String(s));
+      });
     }
 
     // 1. Construir lista de días y cabecera de meses

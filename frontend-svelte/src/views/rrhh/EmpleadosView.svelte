@@ -248,7 +248,13 @@
     } catch (err) {
       console.warn('Fallback local IndexedDB para empleados:', err);
       const local = await getLocalItems('empleados', null, 'created_at', 'desc');
-      const source = (Array.isArray(local) && local.length > 0) ? local : ($masterEmpleadosStore || []);
+      let source = (Array.isArray(local) && local.length > 0) ? local : ($masterEmpleadosStore || []);
+      if (assignedSalaIds && assignedSalaIds.length > 0) {
+        source = source.filter(x => {
+          const s = x.sala_uuid || x.sala_id;
+          return s && assignedSalaIds.includes(String(s));
+        });
+      }
       const activeSource = source.filter(x => x.activo !== false);
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? activeSource.filter(x => (x.nombre || '').toLowerCase().includes(q) || (x.cedula || '').includes(q)) : activeSource;

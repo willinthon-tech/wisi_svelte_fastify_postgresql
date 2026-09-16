@@ -4,6 +4,7 @@
 
   export let isOpen = false;
   export let corte = null;
+  export let assignedSalaIds = [];
 
   const dispatch = createEventDispatcher();
 
@@ -42,7 +43,7 @@
       });
     }
 
-    return ids.map((id, idx) => {
+    let list = ids.map((id, idx) => {
       const strId = String(id);
       const name = nombres[idx] || `Sala #${strId.slice(0, 8)}`;
       const count = empCounts.get(strId) || 0;
@@ -52,6 +53,12 @@
         empleadosCount: count
       };
     });
+
+    if (assignedSalaIds && assignedSalaIds.length > 0) {
+      list = list.filter(s => assignedSalaIds.includes(String(s.id)));
+    }
+
+    return list;
   })();
 
   $: filteredSalas = salasData.filter(s => {

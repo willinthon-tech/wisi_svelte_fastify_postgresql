@@ -4639,7 +4639,7 @@ export async function getCortesModel(options = {}) {
 
       const userSalaUuids = toUuidArray(options.userSalaIds);
       if (userSalaUuids.length > 0) {
-        conds.push(sql`(cortes.salas_uuids IS NULL OR cardinality(cortes.salas_uuids) = 0 OR cortes.salas_uuids && ${userSalaUuids}::uuid[])`);
+        conds.push(sql`(cortes.salas_uuids IS NOT NULL AND cortes.salas_uuids && ${userSalaUuids}::uuid[])`);
       }
 
       const salaUuids = toUuidArray(options.salaIds);
@@ -4705,7 +4705,7 @@ export async function getCortesModel(options = {}) {
   let items = [...(inMemoryData.cortes || [])].filter(c => c.visible !== false && c.visible !== 0);
   const userSalaUuids = toUuidArray(options.userSalaIds);
   if (userSalaUuids.length > 0) {
-    items = items.filter(c => !c.salas_uuids || c.salas_uuids.length === 0 || (Array.isArray(c.salas_uuids) && c.salas_uuids.some(id => userSalaUuids.includes(id))));
+    items = items.filter(c => Array.isArray(c.salas_uuids) && c.salas_uuids.some(id => userSalaUuids.includes(id)));
   }
   const salaUuids = toUuidArray(options.salaIds);
   if (salaUuids.length > 0) {

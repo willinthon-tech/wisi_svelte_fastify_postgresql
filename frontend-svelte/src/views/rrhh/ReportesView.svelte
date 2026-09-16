@@ -567,6 +567,13 @@
           empleados: json.empleados || [],
         };
 
+        // Cachear en localStorage para disponibilidad inmediata en modo offline
+        try {
+          const cacheKey = `cached_reporte_${fechaDesde}_${fechaHasta}`;
+          localStorage.setItem(cacheKey, JSON.stringify(json));
+          localStorage.setItem('cached_last_reporte', JSON.stringify(json));
+        } catch (_) {}
+
         // Flatten all evaluated employees into a single list
         if (json.empleados && json.empleados.length > 0) {
           allEvaluatedEmployees = json.empleados;
@@ -611,8 +618,35 @@
         triggerToast(json?.error || "Error al obtener el reporte", "error");
       }
     } catch (err) {
-      console.error("Error fetching report data:", err);
-      triggerToast("Error al cargar el reporte de asistencia", "error");
+      console.warn("Error fetching report data, intentando caché local offline:", err);
+      let loadedFromCache = false;
+      try {
+        const cacheKey = `cached_reporte_${fechaDesde}_${fechaHasta}`;
+        const raw = localStorage.getItem(cacheKey) || localStorage.getItem('cached_last_reporte');
+        if (raw) {
+          const cachedJson = JSON.parse(raw);
+          if (cachedJson && cachedJson.success) {
+            reportData = {
+              mesesAgrupados: cachedJson.mesesAgrupados || [],
+              diasDelMes: cachedJson.diasDelMes || [],
+              salas: cachedJson.salas || [],
+              empleados: cachedJson.empleados || [],
+            };
+            if (cachedJson.empleados && cachedJson.empleados.length > 0) {
+              allEvaluatedEmployees = cachedJson.empleados;
+            }
+            hasSearched = true;
+            loadedFromCache = true;
+            triggerToast("Mostrando reporte desde caché local offline", "info");
+          }
+        }
+      } catch (cErr) {
+        console.warn("Error leyendo reporte cacheado:", cErr);
+      }
+
+      if (!loadedFromCache) {
+        triggerToast("Sin conexión: no hay reporte guardado para este período", "warning");
+      }
     } finally {
       if (!silent) {
         loading = false;

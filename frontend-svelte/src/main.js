@@ -25,6 +25,11 @@ if (typeof window !== 'undefined') {
 import { setupGlobalFetchInterceptor } from './config/api.config.js';
 setupGlobalFetchInterceptor();
 
+import { registerSW } from 'virtual:pwa-register';
+if (typeof window !== 'undefined') {
+  registerSW({ immediate: true });
+}
+
 import { mount } from 'svelte';
 import './app.css';
 import App from './App.svelte';

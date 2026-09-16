@@ -4,6 +4,7 @@
 
   export let isOpen = false;
   export let corte = null;
+  export let assignedSalaIds = [];
 
   const dispatch = createEventDispatcher();
 
@@ -58,6 +59,10 @@
   }
 
   $: filteredEmpleados = (empleados || []).filter(emp => {
+    if (assignedSalaIds && assignedSalaIds.length > 0) {
+      const s = emp.sala_uuid || emp.sala_id;
+      if (!s || !assignedSalaIds.includes(String(s))) return false;
+    }
     if (!searchQuery.trim()) return true;
     const term = searchQuery.toLowerCase().trim();
     const nombre = (emp.nombre || '').toLowerCase();

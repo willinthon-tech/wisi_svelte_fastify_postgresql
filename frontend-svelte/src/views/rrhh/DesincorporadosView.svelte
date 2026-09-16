@@ -210,7 +210,13 @@
     } catch (err) {
       console.warn('Fallback local IndexedDB para desincorporados:', err);
       const local = await getLocalItems('empleados', null, 'created_at', 'desc');
-      const inactive = (Array.isArray(local) ? local : []).filter(e => e.activo === false || e.activo === 0 || e.activo === '0');
+      let inactive = (Array.isArray(local) ? local : []).filter(e => e.activo === false || e.activo === 0 || e.activo === '0');
+      if (assignedSalaIds && assignedSalaIds.length > 0) {
+        inactive = inactive.filter(x => {
+          const s = x.sala_uuid || x.sala_id;
+          return s && assignedSalaIds.includes(String(s));
+        });
+      }
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? inactive.filter(x => (x.nombre || '').toLowerCase().includes(q) || (x.cedula || '').toLowerCase().includes(q)) : inactive;
       totalCount = filtered.length;

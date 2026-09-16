@@ -12,6 +12,7 @@
   import { openPhotoModal, updatePhotoModalItems } from "../controllers/globalModal.store.js";
   import { currentRouteStore } from "../controllers/router.store.js";
   import CachedImage from "./common/CachedImage.svelte";
+  import { getLocalItems } from "../services/localDb.service.js";
 
   export let items = [];
 
@@ -220,12 +221,60 @@
             activeTabBirthday = "destacados";
           }
           activeCelebrantIdx = 0;
+          return;
         }
       }
     } catch (e) {
-      console.warn("Error cargando cumpleañeros:", e);
+      console.warn("Error cargando cumpleañeros del servidor, calculando desde IndexedDB:", e);
     } finally {
       isFetchingBirthdays = false;
+    }
+
+    // Fallback local a IndexedDB para modo offline
+    try {
+      const localEmps = await getLocalItems('empleados');
+      let emps = (Array.isArray(localEmps) ? localEmps : []).filter(e => e.activo !== false && e.fecha_nacimiento);
+      if (assignedSalaIds.length > 0) {
+        const allowed = new Set(assignedSalaIds.map(String));
+        emps = emps.filter(e => {
+          const s = e.sala_uuid || e.sala_id;
+          return s && allowed.has(String(s));
+        });
+      }
+      monthBirthdays = emps
+        .map(e => {
+          const parts = String(e.fecha_nacimiento).split('-');
+          const m = Number(parts[1]);
+          const d = Number(parts[2]);
+          const y = Number(parts[0]);
+          return {
+            id: e.uuid || e.id,
+            nombre: e.nombre,
+            cedula: e.cedula,
+            fecha_nacimiento: e.fecha_nacimiento,
+            fecha_ingreso: e.fecha_ingreso,
+            cargo: e.cargo_nombre || e.cargo,
+            foto: e.foto,
+            sala_id: e.sala_uuid || e.sala_id,
+            dia: d,
+            mes: m,
+            anio_nacimiento: y,
+            age: y ? (currentYearNum - y) : null
+          };
+        })
+        .filter(e => e.mes === currentMonthNum);
+
+      const hasToday = monthBirthdays.some((c) => Number(c.dia) === currentDay);
+      if (hasToday) {
+        activeTabBirthday = "hoy";
+      } else if (monthBirthdays.some((c) => Number(c.dia) > currentDay)) {
+        activeTabBirthday = "proximos";
+      } else {
+        activeTabBirthday = "destacados";
+      }
+      activeCelebrantIdx = 0;
+    } catch (locErr) {
+      console.warn("Error calculando cumpleañeros locales:", locErr);
     }
   }
 
@@ -260,24 +309,43 @@
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           latestRecord = json.data[0];
           lastSeenRecordId = latestRecord.id;
-        } else {
-          latestRecord = null;
+          return;
         }
       }
     } catch (e) {
       console.warn("Error fetching latest record:", e);
     }
+
+    // Fallback local a IndexedDB para modo offline
+    try {
+      const local = await getLocalItems('attlogs', null, 'fecha_hora', 'desc');
+      let filtered = Array.isArray(local) ? local : [];
+      if (assignedSalaIds.length > 0) {
+        const allowed = new Set(assignedSalaIds.map(String));
+        filtered = filtered.filter(a => {
+          const s = a.sala_uuid || a.sala_id;
+          return !s || allowed.has(String(s));
+        });
+      }
+      if (filtered.length > 0) {
+        latestRecord = filtered[0];
+        lastSeenRecordId = latestRecord.id || latestRecord.uuid;
+      }
+    } catch (locErr) {
+      console.warn("Error leyendo latest record local:", locErr);
+    }
   }
 
   // Reactively refetch when assignedSalaIds changes
-  let lastSalaKey = null;
+  let lastSalaKey = undefined;
   $: {
-    const salaKey = (assignedSalaIds || []).join(",");
-    if (lastSalaKey !== null && lastSalaKey !== salaKey) {
+    const salaKey = (assignedSalaIds || []).slice().sort().join(",");
+    if (lastSalaKey !== undefined && lastSalaKey !== salaKey) {
       lastSalaKey = salaKey;
       fetchLatestRecords();
       fetchTodayBirthdays();
-    } else if (lastSalaKey === null && salaKey) {
+      fetchAttlogsStats();
+    } else if (lastSalaKey === undefined) {
       lastSalaKey = salaKey;
     }
   }
@@ -640,13 +708,17 @@
     try {
       isFetchingStats = true;
       const base = backendUrl.endsWith("/api") ? backendUrl : `${backendUrl}/api`;
-      const salaParam = assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "-1";
-      let url = `${base}/attlogs/stats?sala_ids=${salaParam}`;
+      const salaParam = assignedSalaIds.length > 0 ? assignedSalaIds.join(",") : "";
+      let url = `${base}/attlogs/stats`;
+      const q = new URLSearchParams();
+      if (salaParam) q.set("sala_ids", salaParam);
 
       if (!isTraerTodo) {
         const dateStr = formatLocalDate(currentDate);
-        url += `&start_date=${encodeURIComponent(dateStr + 'T00:00:00')}&end_date=${encodeURIComponent(dateStr + 'T23:59:59')}`;
+        q.set("start_date", dateStr + 'T00:00:00');
+        q.set("end_date", dateStr + 'T23:59:59');
       }
+      url += `?${q.toString()}`;
 
       const res = await fetch(url);
       if (res.ok) {
@@ -660,12 +732,124 @@
             selectedHourInBlock = targetSlot.hour;
             selected10Slot = targetSlot;
           }
+          return;
         }
       }
     } catch (e) {
-      console.warn("Error fetching attlog stats:", e);
+      console.warn("Error fetching attlog stats del servidor, calculando desde IndexedDB:", e);
     } finally {
       isFetchingStats = false;
+    }
+
+    // Fallback local a IndexedDB para modo offline
+    try {
+      const localAttlogs = await getLocalItems('attlogs');
+      let atts = Array.isArray(localAttlogs) ? localAttlogs : [];
+      if (assignedSalaIds.length > 0) {
+        const allowed = new Set(assignedSalaIds.map(String));
+        atts = atts.filter(a => {
+          const s = a.sala_uuid || a.sala_id;
+          return !s || allowed.has(String(s));
+        });
+      }
+
+      const targetDateStr = formatLocalDate(currentDate);
+      if (!isTraerTodo) {
+        atts = atts.filter(a => {
+          const dStr = String(a.fecha_hora || a.timestamp || a.created_at || '').split('T')[0].split(' ')[0];
+          return dStr === targetDateStr;
+        });
+      }
+
+      const computedBlocks = default3HourBlocks.map(b => {
+        const hours = [0, 1, 2].map(offset => {
+          const h = b.startHour + offset;
+          const slots10 = [0, 10, 20, 30, 40, 50].map(m => {
+            const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            const mEnd = m + 10;
+            const hEnd = mEnd === 60 ? h + 1 : h;
+            const mEndStr = mEnd === 60 ? '00' : String(mEnd).padStart(2, '0');
+            const range = `${time} - ${String(hEnd).padStart(2, '0')}:${mEndStr}`;
+            return { minute: m, time, range, count: 0 };
+          });
+          return {
+            hour: h,
+            label: `${String(h).padStart(2, '0')}:00`,
+            count: 0,
+            slots10
+          };
+        });
+        return {
+          ...b,
+          count: 0,
+          hours
+        };
+      });
+
+      for (const a of atts) {
+        const rawTime = a.fecha_hora || a.timestamp || a.created_at;
+        if (!rawTime) continue;
+        const timePart = String(rawTime).includes('T') ? String(rawTime).split('T')[1] : String(rawTime).split(' ')[1];
+        if (!timePart) continue;
+        const [hStr, mStr] = timePart.split(':');
+        const h = parseInt(hStr, 10);
+        const m = parseInt(mStr, 10);
+        if (isNaN(h) || isNaN(m) || h < 0 || h > 23) continue;
+
+        const bIdx = Math.floor(h / 3);
+        const blk = computedBlocks[bIdx];
+        if (blk) {
+          blk.count++;
+          const hrObj = blk.hours.find(hr => hr.hour === h);
+          if (hrObj) {
+            hrObj.count++;
+            const sIdx = Math.floor(m / 10);
+            if (hrObj.slots10[sIdx]) {
+              hrObj.slots10[sIdx].count++;
+            }
+          }
+        }
+      }
+
+      for (const blk of computedBlocks) {
+        let bestSlot = null;
+        for (const hr of blk.hours) {
+          for (const s of hr.slots10) {
+            if (!bestSlot || s.count > bestSlot.count) {
+              bestSlot = { ...s, hour: hr.hour };
+            }
+          }
+        }
+        blk.slots10 = blk.hours.flatMap(hr => hr.slots10.map(s => ({ ...s, hour: hr.hour })));
+        blk.peak10Slot = bestSlot;
+      }
+
+      let peakIdx = 5;
+      let maxCnt = -1;
+      computedBlocks.forEach((b, idx) => {
+        if (b.count > maxCnt) {
+          maxCnt = b.count;
+          peakIdx = idx;
+        }
+      });
+
+      statsData = {
+        total: atts.length,
+        blocks: computedBlocks,
+        peakBlockIdx: peakIdx,
+        peakBlock: computedBlocks[peakIdx] || computedBlocks[0],
+        peakSlot: computedBlocks[peakIdx]?.peak10Slot || { time: "00:00", range: "00:00 - 00:10", count: 0 }
+      };
+
+      const { max, min } = computeGlobalSlots(computedBlocks);
+      const targetSlot = afluenciaMode === 'min' ? min : max;
+      if (targetSlot) {
+        selectedBlockIndex = targetSlot.blockIndex;
+        selectedHourInBlock = targetSlot.hour;
+        selected10Slot = targetSlot;
+      }
+    } catch (locErr) {
+      console.warn("Error calculando afluencia local:", locErr);
     }
   }
 
