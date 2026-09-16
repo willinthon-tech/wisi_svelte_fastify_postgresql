@@ -88,7 +88,21 @@
       }
     }
 
-    return pages;
+    // Separar páginas operativas normales (primero) y páginas de configuración CONF.M: (al final, abajo)
+    const normalPages = [];
+    const confPages = [];
+
+    for (const p of pages) {
+      const nom = String(p.nombre || '').toUpperCase().trim();
+      const isConf = nom.startsWith('CONF') || nom.includes('CONF.M');
+      if (isConf) {
+        confPages.push(p);
+      } else {
+        normalPages.push(p);
+      }
+    }
+
+    return [...normalPages, ...confPages];
   })();
 </script>
 
