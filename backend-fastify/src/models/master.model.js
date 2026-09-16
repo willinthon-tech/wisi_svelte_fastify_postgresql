@@ -2443,13 +2443,14 @@ export async function getDepartamentosModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'd.uuid',
-    'uuid': 'd.uuid',
+    'id': 'd.created_at',
+    'uuid': 'd.created_at',
+    'created_at': 'd.created_at',
     'nombre': 'd.nombre',
     'sala_nombre': 's.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'd.uuid';
+  const orderCol = allowedSortColumns[sortBy] || 'd.created_at';
 
   const countRes = await sql`
     SELECT COUNT(d.uuid)::int AS total
@@ -2459,7 +2460,7 @@ export async function getDepartamentosModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, d.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, d.created_at DESC, d.uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -2696,14 +2697,15 @@ export async function getAreasModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'a.uuid',
-    'uuid': 'a.uuid',
+    'id': 'a.created_at',
+    'uuid': 'a.created_at',
+    'created_at': 'a.created_at',
     'nombre': 'a.nombre',
     'departamento_nombre': 'd.nombre',
     'sala_nombre': 's.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'a.uuid';
+  const orderCol = allowedSortColumns[sortBy] || 'a.created_at';
 
   const countRes = await sql`
     SELECT COUNT(a.uuid)::int AS total
@@ -2714,7 +2716,7 @@ export async function getAreasModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, a.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, a.created_at DESC, a.uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -3002,15 +3004,16 @@ export async function getCargosModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'c.uuid',
-    'uuid': 'c.uuid',
+    'id': 'c.created_at',
+    'uuid': 'c.created_at',
+    'created_at': 'c.created_at',
     'nombre': 'c.nombre',
     'area_nombre': 'a.nombre',
     'departamento_nombre': 'd.nombre',
     'sala_nombre': 's.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'c.uuid';
+  const orderCol = allowedSortColumns[sortBy] || 'c.created_at';
 
   const countRes = await sql`
     SELECT COUNT(c.uuid)::int AS total
@@ -3022,7 +3025,7 @@ export async function getCargosModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, c.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, c.created_at DESC, c.uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -3420,8 +3423,9 @@ export async function getEmpleadosModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'e.uuid',
-    'uuid': 'e.uuid',
+    'id': 'e.created_at',
+    'uuid': 'e.created_at',
+    'created_at': 'e.created_at',
     'nombre': 'e.nombre',
     'cedula': 'e.cedula',
     'sexo': 'e.sexo',
@@ -3433,7 +3437,7 @@ export async function getEmpleadosModel(params = {}) {
     'sala_nombre': 's.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'e.uuid';
+  const orderCol = allowedSortColumns[sortBy] || 'e.created_at';
 
   const countRes = await sql`
     SELECT COUNT(e.uuid)::int AS total
@@ -3446,7 +3450,7 @@ export async function getEmpleadosModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, e.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, e.created_at DESC, e.uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -3775,7 +3779,9 @@ export async function getPlantillasHorariosModel(params = {}) {
   const sortDir = String(params.sortDir || params.sort_order || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
 
   const allowedSortColumns = {
-    'id': 'p.uuid',
+    'id': 'p.created_at',
+    'uuid': 'p.created_at',
+    'created_at': 'p.created_at',
     'codigo': "CASE WHEN p.codigo ~ '^[0-9]+$' THEN LPAD(p.codigo, 10, '0') ELSE UPPER(p.codigo) END",
     'nombre': 'UPPER(p.nombre)',
     'horas_trabajo': 'p.hora_entrada',
@@ -3787,7 +3793,7 @@ export async function getPlantillasHorariosModel(params = {}) {
   };
 
   const sortSql = allowedSortColumns[sortBy] || allowedSortColumns['codigo'];
-  const orderClause = sql.unsafe("ORDER BY " + sortSql + " " + sortDir + ", p.uuid DESC");
+  const orderClause = sql.unsafe("ORDER BY " + sortSql + " " + sortDir + ", p.created_at DESC, p.uuid DESC");
 
   if (isPgConnected && sql) {
     const conds = buildPlantillasHorariosConditions({
@@ -3965,10 +3971,10 @@ export async function getDepartamentosCiclosModel(params = {}) {
     orderBySql = sortOrder === 'DESC'
       ? sql`ORDER BY LOWER(s.nombre) DESC, d.nombre DESC`
       : sql`ORDER BY LOWER(s.nombre) ASC, d.nombre ASC`;
-  } else if (sortBy === 'id') {
+  } else if (sortBy === 'id' || sortBy === 'uuid' || sortBy === 'created_at') {
     orderBySql = sortOrder === 'DESC'
-      ? sql`ORDER BY d.uuid DESC`
-      : sql`ORDER BY d.uuid ASC`;
+      ? sql`ORDER BY d.created_at DESC, d.uuid DESC`
+      : sql`ORDER BY d.created_at ASC, d.uuid ASC`;
   }
 
   const userSalaUuids = toUuidArray(params.user_sala_ids);
@@ -4332,7 +4338,9 @@ export async function getFeriadosModel(params = {}) {
   const salaIds = params.sala_ids ? params.sala_ids.split(',').map(s => s.trim()).filter(Boolean) : [];
 
   const allowedSortColumns = {
-    'id': 'f.uuid ' + sortDir,
+    'id': 'f.created_at ' + sortDir,
+    'uuid': 'f.created_at ' + sortDir,
+    'created_at': 'f.created_at ' + sortDir,
     'nombre': 'UPPER(f.nombre) ' + sortDir,
     'sala_nombre': 'UPPER(s.nombre) ' + sortDir,
     'mes': 'f.mes ' + sortDir + ', f.dia ' + sortDir,
@@ -4613,8 +4621,8 @@ export async function getCortesModel(options = {}) {
   const limit = parseInt(options.limit) || 10;
   const offset = (page - 1) * limit;
   const search = options.search ? String(options.search).trim().toLowerCase() : '';
-  const validSorts = ['id', 'fecha_desde', 'fecha_hasta', 'total_empleados', 'created_at', 'updated_at'];
-  const sortBy = validSorts.includes(options.sortBy) ? options.sortBy : 'id';
+  const validSorts = ['id', 'uuid', 'fecha_desde', 'fecha_hasta', 'total_empleados', 'created_at', 'updated_at'];
+  const sortBy = validSorts.includes(options.sortBy) ? options.sortBy : 'created_at';
   const sortDir = (options.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
   if (isPgConnected && sql) {
@@ -4640,14 +4648,14 @@ export async function getCortesModel(options = {}) {
           EXISTS (
             SELECT 1 FROM salas s 
             WHERE s.uuid = ANY(cortes.salas_uuids) 
-              AND (LOWER(COALESCE(s.nombre_comercial, '')) LIKE ${term} OR LOWER(COALESCE(s.nombre, '')) LIKE ${term})
+              AND (LOWER(COALESCE(s.nombre, '')) LIKE ${term})
           )
         )`);
       }
 
       const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
-      const sortColumn = sortBy === 'id' ? 'uuid' : sortBy;
-      const order = sql.unsafe(`ORDER BY cortes.${sortColumn} ${sortDir}, cortes.uuid DESC`);
+      const sortColumn = (sortBy === 'id' || sortBy === 'uuid' || sortBy === 'created_at' || !sortBy) ? 'created_at' : sortBy;
+      const order = sql.unsafe(`ORDER BY cortes.${sortColumn} ${sortDir}, cortes.created_at DESC, cortes.uuid DESC`);
 
       const [countResult, rows] = await Promise.all([
         sql`SELECT COUNT(*)::int AS total FROM cortes ${where}`,
@@ -4663,7 +4671,7 @@ export async function getCortesModel(options = {}) {
             cortes.created_at, 
             cortes.updated_at,
             (
-              SELECT ARRAY_AGG(COALESCE(s.nombre_comercial, s.nombre))
+              SELECT ARRAY_AGG(COALESCE(s.nombre, 'Sala'))
               FROM salas s
               WHERE s.uuid = ANY(cortes.salas_uuids)
             ) AS salas_nombres
@@ -4702,7 +4710,7 @@ export async function getCortesModel(options = {}) {
       (c.salas_nombres || []).some(n => String(n).toLowerCase().includes(search))
     );
   }
-  items.sort((a, b) => String(b.uuid || b.id).localeCompare(String(a.uuid || a.id)));
+  items.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   const total = items.length;
   const paged = items.slice(offset, offset + limit).map(c => {
     const { data, ...rest } = c;
@@ -4911,7 +4919,7 @@ export async function getCortesFilterOptionsModel(options = {}) {
         rows = await sql`SELECT uuid AS id, uuid, nombre, nombre_comercial FROM salas ORDER BY nombre ASC`;
       }
       rows.forEach(s => {
-        salasMap.set(s.uuid, { id: s.uuid, uuid: s.uuid, nombre: s.nombre_comercial || s.nombre });
+        salasMap.set(s.uuid, { id: s.uuid, uuid: s.uuid, nombre: s.nombre || 'Sala' });
       });
       return {
         success: true,
@@ -4926,7 +4934,7 @@ export async function getCortesFilterOptionsModel(options = {}) {
 
   (inMemoryData.salas || []).forEach(s => {
     const sUuid = s.uuid || s.id;
-    salasMap.set(sUuid, { id: sUuid, uuid: sUuid, nombre: s.nombre_comercial || s.nombre });
+    salasMap.set(sUuid, { id: sUuid, uuid: sUuid, nombre: s.nombre || 'Sala' });
   });
 
   return {
@@ -5166,12 +5174,13 @@ export async function getJuegosModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'j.uuid',
-    'uuid': 'j.uuid',
+    'id': 'j.created_at',
+    'uuid': 'j.created_at',
+    'created_at': 'j.created_at',
     'nombre': 'j.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'j.nombre';
+  const orderCol = allowedSortColumns[sortBy] || 'j.created_at';
 
   const countRes = await sql`
     SELECT COUNT(j.uuid)::int AS total
@@ -5180,7 +5189,7 @@ export async function getJuegosModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, j.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, j.created_at DESC, j.uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -5456,14 +5465,15 @@ export async function getMesasModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'm.uuid',
-    'uuid': 'm.uuid',
+    'id': 'm.created_at',
+    'uuid': 'm.created_at',
+    'created_at': 'm.created_at',
     'nombre': 'm.nombre',
     'juego_nombre': 'j.nombre',
     'sala_nombre': 's.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'm.nombre';
+  const orderCol = allowedSortColumns[sortBy] || 'm.created_at';
 
   const countRes = await sql`
     SELECT COUNT(m.uuid)::int AS total
@@ -5474,7 +5484,7 @@ export async function getMesasModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, m.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, m.created_at DESC, m.uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -5692,8 +5702,10 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
       const limit = hasLimit ? Number(params.limit) : 0;
       const offset = hasLimit ? (page - 1) * limit : 0;
       const search = String(params.search || '').trim().toLowerCase();
-      const sortBy = params.sortBy === 'nombre' ? 'nombre' : (params.sortBy === 'created_at' ? 'created_at' : 'uuid');
-      const sortDir = (params.sortDir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+      const sortBy = (params.sortBy === 'nombre') 
+        ? 'nombre' 
+        : (params.sortBy === 'color' ? 'color' : 'created_at');
+      const sortDir = (params.sortDir || (sortBy === 'created_at' ? 'desc' : 'asc')).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
 
       const searchPattern = `%${search}%`;
       const whereClause = search
@@ -5707,7 +5719,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
       `;
       const total = countRes[0]?.total || 0;
 
-      const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, uuid DESC`);
+      const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, created_at DESC, uuid DESC`);
 
       let data;
       if (limit > 0) {
@@ -5982,7 +5994,15 @@ export async function getModelosModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, m.uuid DESC`);
+  const validSortCols = {
+    'id': 'm.created_at',
+    'uuid': 'm.created_at',
+    'created_at': 'm.created_at',
+    'nombre': 'm.nombre',
+    'marca_nombre': 'ma.nombre'
+  };
+  const orderCol = validSortCols[sortBy] || 'm.created_at';
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, m.created_at DESC, m.uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -6223,8 +6243,8 @@ export async function getExcepcionesModel(params = {}) {
   const limit = hasLimit ? Number(params.limit) : 0;
   const offset = hasLimit ? (page - 1) * limit : 0;
   const search = String(params.search || '').trim().toLowerCase();
-  const validSorts = ['codigo', 'descripcion', 'color', 'tipo', 'id', 'uuid'];
-  const sortBy = validSorts.includes(params.sortBy) ? (params.sortBy === 'id' ? 'uuid' : params.sortBy) : 'uuid';
+  const validSorts = ['codigo', 'descripcion', 'color', 'tipo', 'id', 'uuid', 'created_at'];
+  const sortBy = validSorts.includes(params.sortBy) ? (params.sortBy === 'id' || params.sortBy === 'uuid' ? 'created_at' : params.sortBy) : 'created_at';
   const sortDir = (params.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
   const searchPattern = `%${search}%`;
@@ -6234,7 +6254,7 @@ export async function getExcepcionesModel(params = {}) {
 
   const countRes = await sql`SELECT COUNT(uuid)::int AS total FROM excepciones ${whereClause}`;
   const total = countRes[0]?.total || 0;
-  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, created_at DESC, uuid DESC`);
 
   let data;
   if (limit > 0) {
@@ -6389,9 +6409,9 @@ export async function getFechasPatriasModel(params = {}) {
   const limit = hasLimit ? Number(params.limit) : 0;
   const offset = hasLimit ? (page - 1) * limit : 0;
   const search = String(params.search || '').trim().toLowerCase();
-  const validSorts = ['descripcion', 'dia', 'mes', 'id', 'uuid'];
-  const sortBy = validSorts.includes(params.sortBy) ? (params.sortBy === 'id' ? 'uuid' : params.sortBy) : 'mes, dia';
-  const sortDir = (params.sortDir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+  const validSorts = ['descripcion', 'dia', 'mes', 'id', 'uuid', 'created_at'];
+  const sortBy = validSorts.includes(params.sortBy) ? (params.sortBy === 'id' || params.sortBy === 'uuid' ? 'created_at' : params.sortBy) : 'mes, dia';
+  const sortDir = (params.sortDir || (sortBy === 'created_at' ? 'desc' : 'asc')).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
 
   const searchPattern = `%${search}%`;
   const whereClause = search
@@ -6400,7 +6420,7 @@ export async function getFechasPatriasModel(params = {}) {
 
   const countRes = await sql`SELECT COUNT(uuid)::int AS total FROM fechas_patrias ${whereClause}`;
   const total = countRes[0]?.total || 0;
-  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, uuid ASC`);
+  const orderClause = sql.unsafe(`ORDER BY ${sortBy} ${sortDir}, created_at DESC, uuid ASC`);
 
   let data;
   if (limit > 0) {
@@ -6654,8 +6674,9 @@ export async function getMaquinasModel(params = {}) {
     const whereClause = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
     const validSortCols = {
-      id: 'm.uuid',
-      uuid: 'm.uuid',
+      id: 'm.created_at',
+      uuid: 'm.created_at',
+      created_at: 'm.created_at',
       nombre: 'm.nombre',
       serial: 'm.serial',
       puestos: 'm.puestos',
@@ -6671,13 +6692,12 @@ export async function getMaquinasModel(params = {}) {
       modelo_nombre: 'mod.nombre',
       tipo_nombre: 't.nombre',
       modo_nombre: 'mo.nombre',
-      legal_nombre: 'l.nombre',
-      created_at: 'm.created_at'
+      legal_nombre: 'l.nombre'
     };
 
-    const sortCol = validSortCols[params.sortBy] || 'm.nombre';
-    const sortDir = (params.sortDir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-    const orderClause = sql.unsafe(`ORDER BY ${sortCol} ${sortDir}, m.uuid DESC`);
+    const sortCol = validSortCols[params.sortBy] || 'm.created_at';
+    const sortDir = (params.sortDir || (sortCol === 'm.created_at' ? 'desc' : 'asc')).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+    const orderClause = sql.unsafe(`ORDER BY ${sortCol} ${sortDir}, m.created_at DESC, m.uuid DESC`);
 
     const fromJoin = sql`
       FROM maquinas m
@@ -7496,13 +7516,14 @@ export async function getLlavesModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'l.uuid',
-    'uuid': 'l.uuid',
+    'id': 'l.created_at',
+    'uuid': 'l.created_at',
+    'created_at': 'l.created_at',
     'nombre': 'l.nombre',
     'sala_nombre': 's.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'l.nombre';
+  const orderCol = allowedSortColumns[sortBy] || 'l.created_at';
 
   const countRes = await sql`
     SELECT COUNT(l.uuid)::int AS total
@@ -7512,7 +7533,7 @@ export async function getLlavesModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, l.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, l.created_at DESC, l.uuid DESC`);
 
   const selectCols = sql`
     SELECT 
@@ -7853,13 +7874,14 @@ export async function getLibrosModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'l.uuid',
-    'uuid': 'l.uuid',
+    'id': 'l.created_at',
+    'uuid': 'l.created_at',
+    'created_at': 'l.created_at',
     'descripcion': 'l.descripcion',
     'sala_nombre': 's.nombre'
   };
 
-  const orderCol = allowedSortColumns[sortBy] || 'l.descripcion';
+  const orderCol = allowedSortColumns[sortBy] || 'l.created_at';
 
   const countRes = await sql`
     SELECT COUNT(l.uuid)::int AS total
@@ -7869,7 +7891,7 @@ export async function getLibrosModel(params = {}) {
   `;
   const total = countRes[0]?.total || 0;
 
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, l.uuid DESC`);
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, l.created_at DESC, l.uuid DESC`);
 
   const selectCols = sql`
     SELECT 
@@ -9569,16 +9591,16 @@ export async function getClientesModel(params = {}) {
   const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
 
   const allowedSortColumns = {
-    'id': 'c.uuid',
-    'uuid': 'c.uuid',
+    'id': 'c.created_at',
+    'uuid': 'c.created_at',
+    'created_at': 'c.created_at',
     'nombre': 'c.nombre',
     'tipo_cliente_nombre': 'tc.nombre',
     'sala_nombre': 's.nombre',
-    'descripcion': 'c.descripcion',
-    'created_at': 'c.created_at'
+    'descripcion': 'c.descripcion'
   };
-  const orderCol = allowedSortColumns[sortBy] || 'c.nombre';
-  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, c.uuid DESC`);
+  const orderCol = allowedSortColumns[sortBy] || 'c.created_at';
+  const orderClause = sql.unsafe(`ORDER BY ${orderCol} ${sortDir}, c.created_at DESC, c.uuid DESC`);
 
   const countRes = await sql`
     SELECT COUNT(c.uuid)::int AS total

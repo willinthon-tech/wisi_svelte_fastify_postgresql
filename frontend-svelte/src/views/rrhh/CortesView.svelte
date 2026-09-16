@@ -126,7 +126,7 @@
     page: 1,
     limit: 10,
     search: '',
-    sortBy: 'id',
+    sortBy: 'created_at',
     sortDir: 'desc'
   };
 
@@ -193,7 +193,7 @@
         page: currentParams.page,
         limit: currentParams.limit,
         search: currentParams.search || '',
-        sortBy: currentParams.sortBy || 'id',
+        sortBy: currentParams.sortBy || 'created_at',
         sortDir: currentParams.sortDir || 'desc'
       });
       if (assignedSalaIds && assignedSalaIds.length > 0) {
@@ -390,6 +390,8 @@
   bind:searchQuery
   searchPlaceholder="Buscar cortes por sala o ID..."
   entityType="corte"
+  sortBy="created_at"
+  sortDir="desc"
   actions={{ edit: false, delete: true }}
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:delete={handleDelete}

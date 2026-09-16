@@ -623,6 +623,15 @@
 
     const list = [...filteredItems];
     list.sort((a, b) => {
+      // Si se ordena por 'created_at' o por 'id'/'uuid' y existen fechas de creación, ordenar cronológicamente
+      if ((sortBy === 'created_at' || sortBy === 'id' || sortBy === 'uuid') && (a.created_at || b.created_at)) {
+        const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (tA !== tB) {
+          return sortDir === 'asc' ? tA - tB : tB - tA;
+        }
+      }
+
       // Especial para calendario: orden cronológico por mes y día
       if (sortBy === 'mes' || sortBy === 'mes_nombre') {
         const mA = Number(a.mes || 0);
