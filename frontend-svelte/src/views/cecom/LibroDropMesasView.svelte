@@ -111,7 +111,21 @@
     return str;
   }
 
-  // Totales calculados para el footer
+  // Función para obtener el total de una fila de forma robusta
+  function calcRecordTotal(r) {
+    if (!r) return 0;
+    const t = Number(r.total);
+    if (!isNaN(t) && t > 0) return t;
+    const v100 = Number(r.denominacion_100 ?? r.b100 ?? 0) || 0;
+    const v50 = Number(r.denominacion_50 ?? r.b50 ?? 0) || 0;
+    const v20 = Number(r.denominacion_20 ?? r.b20 ?? 0) || 0;
+    const v10 = Number(r.denominacion_10 ?? r.b10 ?? 0) || 0;
+    const v5 = Number(r.denominacion_5 ?? r.b5 ?? 0) || 0;
+    const v1 = Number(r.denominacion_1 ?? r.b1 ?? 0) || 0;
+    return (v100 * 100) + (v50 * 50) + (v20 * 20) + (v10 * 10) + (v5 * 5) + (v1 * 1);
+  }
+
+  // Totales calculados en vivo para la tabla y footer
   $: sum100 = dropRecords.reduce((acc, r) => acc + (Number(r.denominacion_100 ?? r.b100 ?? 0) || 0), 0);
   $: sum50 = dropRecords.reduce((acc, r) => acc + (Number(r.denominacion_50 ?? r.b50 ?? 0) || 0), 0);
   $: sum20 = dropRecords.reduce((acc, r) => acc + (Number(r.denominacion_20 ?? r.b20 ?? 0) || 0), 0);
@@ -126,7 +140,25 @@
   $: totalMoney5 = sum5 * 5;
   $: totalMoney1 = sum1 * 1;
 
-  $: grandTotal = dropRecords.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
+  $: grandTotal = totalMoney100 + totalMoney50 + totalMoney20 + totalMoney10 + totalMoney5 + totalMoney1;
+  $: totalPiezasDrop = sum100 + sum50 + sum20 + sum10 + sum5 + sum1;
+
+  // Totales en vivo para el formulario de la mesa actual
+  $: currentMesaBilletes100 = Number(b100) || 0;
+  $: currentMesaBilletes50 = Number(b50) || 0;
+  $: currentMesaBilletes20 = Number(b20) || 0;
+  $: currentMesaBilletes10 = Number(b10) || 0;
+  $: currentMesaBilletes5 = Number(b5) || 0;
+  $: currentMesaBilletes1 = Number(b1) || 0;
+
+  $: currentMesaTotalPiezas = currentMesaBilletes100 + currentMesaBilletes50 + currentMesaBilletes20 + currentMesaBilletes10 + currentMesaBilletes5 + currentMesaBilletes1;
+
+  $: currentMesaTotalMoney = (currentMesaBilletes100 * 100) + 
+                            (currentMesaBilletes50 * 50) + 
+                            (currentMesaBilletes20 * 20) + 
+                            (currentMesaBilletes10 * 10) + 
+                            (currentMesaBilletes5 * 5) + 
+                            (currentMesaBilletes1 * 1);
 
   onMount(async () => {
     await Promise.all([
@@ -258,6 +290,91 @@
     handleMesaChange();
   }
 
+  let autoSaveTimeout = null;
+  let isSavingAuto = false;
+
+  // Sincronización en tiempo real conforme el usuario teclea números en el formulario
+  function handleInputLive() {
+    if (!selectedMesaId) return;
+    syncCurrentFormToRecords(true);
+  }
+
+  function syncCurrentFormToRecords(scheduleAutoSave = true) {
+    if (!selectedMesaId) return;
+    const midStr = String(selectedMesaId);
+    const mesaObj = availableMesas.find(m => String(m.uuid || m.id) === midStr || String(m.id) === midStr);
+    const mesaUuid = mesaObj?.uuid || (midStr.length > 20 ? midStr : null);
+
+    const existingIdx = dropRecords.findIndex(r => String(r.mesa_uuid || r.mesa_id) === midStr || String(r.mesa_id) === midStr);
+
+    const updatedRow = {
+      uuid: existingIdx >= 0 ? (dropRecords[existingIdx].uuid || generateSafeUuid()) : generateSafeUuid(),
+      libro_uuid: libro?.uuid || libroId || libro?.id,
+      mesa_uuid: mesaUuid,
+      mesa_id: mesaUuid || midStr,
+      mesa_nombre: mesaObj?.nombre || `Mesa #${midStr}`,
+      denominacion_100: currentMesaBilletes100,
+      denominacion_50: currentMesaBilletes50,
+      denominacion_20: currentMesaBilletes20,
+      denominacion_10: currentMesaBilletes10,
+      denominacion_5: currentMesaBilletes5,
+      denominacion_1: currentMesaBilletes1,
+      b100: currentMesaBilletes100,
+      b50: currentMesaBilletes50,
+      b20: currentMesaBilletes20,
+      b10: currentMesaBilletes10,
+      b5: currentMesaBilletes5,
+      b1: currentMesaBilletes1,
+      total: currentMesaTotalMoney,
+      updated_at: new Date().toISOString()
+    };
+
+    if (existingIdx >= 0) {
+      dropRecords[existingIdx] = updatedRow;
+      dropRecords = [...dropRecords];
+    } else if (currentMesaTotalPiezas > 0) {
+      dropRecords = [updatedRow, ...dropRecords];
+    }
+
+    if (scheduleAutoSave && (canAdd || canEdit) && currentMesaTotalPiezas > 0) {
+      if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+      autoSaveTimeout = setTimeout(() => {
+        saveRecordSilently(updatedRow);
+      }, 850);
+    }
+  }
+
+  async function saveRecordSilently(record) {
+    const lId = libro?.uuid || libroId || libro?.id;
+    if (!lId || !record) return;
+    try {
+      isSavingAuto = true;
+      await upsertLocalItem('libro_drop_mesas', record);
+
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch(`/api/master/libros/${lId}/drop-mesas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(record),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data) {
+            await upsertLocalItem('libro_drop_mesas', json.data);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[LocalDb] Error en auto-guardado silencioso de drop:', e);
+    } finally {
+      isSavingAuto = false;
+    }
+  }
+
   async function handleGuardar() {
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) {
@@ -270,9 +387,14 @@
       return;
     }
 
-    const mesaObj = availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId) || String(m.id) === String(selectedMesaId));
-    const mesaUuid = mesaObj?.uuid || (String(selectedMesaId).length > 20 ? selectedMesaId : null);
-    const itemUuid = generateSafeUuid();
+    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+
+    const midStr = String(selectedMesaId);
+    const mesaObj = availableMesas.find(m => String(m.uuid || m.id) === midStr || String(m.id) === midStr);
+    const mesaUuid = mesaObj?.uuid || (midStr.length > 20 ? midStr : null);
+    
+    const existing = dropRecords.find(r => String(r.mesa_uuid || r.mesa_id) === midStr || String(r.mesa_id) === midStr);
+    const itemUuid = existing?.uuid || generateSafeUuid();
 
     const newRecord = {
       uuid: itemUuid,
@@ -280,30 +402,38 @@
       mesa_uuid: mesaUuid,
       mesa_id: mesaUuid || selectedMesaId,
       mesa_nombre: mesaObj?.nombre || `Mesa #${selectedMesaId}`,
-      denominacion_100: Number(b100) || 0,
-      denominacion_50: Number(b50) || 0,
-      denominacion_20: Number(b20) || 0,
-      denominacion_10: Number(b10) || 0,
-      denominacion_5: Number(b5) || 0,
-      denominacion_1: Number(b1) || 0,
+      denominacion_100: currentMesaBilletes100,
+      denominacion_50: currentMesaBilletes50,
+      denominacion_20: currentMesaBilletes20,
+      denominacion_10: currentMesaBilletes10,
+      denominacion_5: currentMesaBilletes5,
+      denominacion_1: currentMesaBilletes1,
+      b100: currentMesaBilletes100,
+      b50: currentMesaBilletes50,
+      b20: currentMesaBilletes20,
+      b10: currentMesaBilletes10,
+      b5: currentMesaBilletes5,
+      b1: currentMesaBilletes1,
+      total: currentMesaTotalMoney,
       created_at: new Date().toISOString()
     };
 
     // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA (0ms) -> UI reactiva inmediata
-    dropRecords = [newRecord, ...dropRecords.filter(r => String(r.mesa_uuid || r.mesa_id) !== String(selectedMesaId) && String(r.mesa_id) !== String(selectedMesaId))];
+    dropRecords = [newRecord, ...dropRecords.filter(r => String(r.mesa_uuid || r.mesa_id) !== midStr && String(r.mesa_id) !== midStr)];
 
-    // 2. Limpieza inmediata del formulario para continuar sin esperas
+    triggerToast(`Drop de ${newRecord.mesa_nombre} guardado ($${currentMesaTotalMoney.toLocaleString()})`, 'success');
+
     selectedMesaId = '';
     limpiarCampos();
     isSaving = false;
 
-    // 3. Guardado en base de datos local IndexedDB (<5ms)
+    // 2. Guardado en base de datos local IndexedDB (<5ms)
     await upsertLocalItem('libro_drop_mesas', newRecord);
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
     if (isOffline) {
-      // 4A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
+      // 3A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
       await queueOutboxAction({
         entity: 'libro_drop_mesas',
         action: 'create',
@@ -312,13 +442,10 @@
         payload: newRecord,
         uuid: itemUuid
       });
-      triggerToast('Modo Offline: Drop guardado en base de datos local.', 'info');
       return;
     }
 
-    // 4B. Modo Online: Notificación de éxito y sincronización en segundo plano con timeout
-    triggerToast('Registro de drop guardado exitosamente', 'success');
-
+    // 3B. Modo Online: Sincronización en segundo plano con timeout
     (async () => {
       try {
         const controller = new AbortController();
@@ -446,6 +573,7 @@
             placeholder=""
             class="denom-input" 
             bind:value={b100} 
+            on:input={handleInputLive}
           />
         </div>
         <div class="denom-field">
@@ -458,6 +586,7 @@
             placeholder=""
             class="denom-input" 
             bind:value={b50} 
+            on:input={handleInputLive}
           />
         </div>
 
@@ -472,6 +601,7 @@
             placeholder=""
             class="denom-input" 
             bind:value={b20} 
+            on:input={handleInputLive}
           />
         </div>
         <div class="denom-field">
@@ -484,6 +614,7 @@
             placeholder=""
             class="denom-input" 
             bind:value={b10} 
+            on:input={handleInputLive}
           />
         </div>
 
@@ -498,6 +629,7 @@
             placeholder=""
             class="denom-input" 
             bind:value={b5} 
+            on:input={handleInputLive}
           />
         </div>
         <div class="denom-field">
@@ -510,7 +642,39 @@
             placeholder=""
             class="denom-input" 
             bind:value={b1} 
+            on:input={handleInputLive}
           />
+        </div>
+      </div>
+
+      <!-- Resumen en Tiempo Real de la Mesa Actual -->
+      <div class="live-preview-box">
+        <div class="live-preview-header">
+          <div class="live-badge-group">
+            <span class="live-badge">
+              <span class="pulse-dot"></span> EN TIEMPO REAL
+            </span>
+            {#if isSavingAuto}
+              <span class="saving-badge">⚡ Guardando...</span>
+            {:else if selectedMesaId && currentMesaTotalMoney > 0}
+              <span class="synced-badge">✓ Sincronizado</span>
+            {/if}
+          </div>
+        </div>
+
+        <div class="live-preview-amount">
+          <span class="live-currency">$</span>
+          <span class="live-number">{currentMesaTotalMoney.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        </div>
+
+        <div class="live-preview-stats">
+          <span class="stat-pill"><b>{currentMesaTotalPiezas}</b> billetes</span>
+          {#if selectedMesaId}
+            {@const selMesaObj = availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId) || String(m.id) === String(selectedMesaId))}
+            <span class="mesa-pill">{selMesaObj?.nombre || 'Mesa Seleccionada'}</span>
+          {:else}
+            <span class="hint-pill">Seleccione mesa arriba</span>
+          {/if}
         </div>
       </div>
 
@@ -533,9 +697,26 @@
 
   <!-- Tarjeta Derecha: Tabla de Drop de Mesas -->
   <div class="card-table-drop">
-    <!-- Barra Superior Oscura con Sala y Fecha -->
+    <!-- Barra Superior Oscura con Sala, Fecha y Estadísticas en Vivo -->
     <div class="table-top-bar">
-      <span>{tableHeaderTitle}</span>
+      <div class="top-bar-left">
+        <span class="top-bar-title">{tableHeaderTitle}</span>
+        <span class="top-bar-sub">Control de Drop en Vivo</span>
+      </div>
+      <div class="top-bar-right-stats">
+        <div class="top-stat-pill">
+          <span class="stat-pill-label">Mesas Drop:</span>
+          <span class="stat-pill-val">{dropRecords.length} / {availableMesas.length}</span>
+        </div>
+        <div class="top-stat-pill">
+          <span class="stat-pill-label">Total Billetes:</span>
+          <span class="stat-pill-val">{totalPiezasDrop} pzs</span>
+        </div>
+        <div class="top-stat-pill highlight">
+          <span class="stat-pill-label">Total Acumulado:</span>
+          <span class="stat-pill-val">$ {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Tabla de Contenido -->
@@ -585,7 +766,7 @@
               {@const rec10 = Number(record.denominacion_10 ?? record.b10 ?? 0) || 0}
               {@const rec5 = Number(record.denominacion_5 ?? record.b5 ?? 0) || 0}
               {@const rec1 = Number(record.denominacion_1 ?? record.b1 ?? 0) || 0}
-              {@const recTotal = Number(record.total) || 0}
+              {@const recTotal = calcRecordTotal(record)}
               {@const mesaKey = record.mesa_uuid || record.mesa_id}
               <tr 
                 class="drop-row {String(selectedMesaId) === String(mesaKey) ? 'row-selected' : ''}"
@@ -601,7 +782,7 @@
                 <td class="td-center">{rec10}</td>
                 <td class="td-center">{rec5}</td>
                 <td class="td-center">{rec1}</td>
-                <td class="td-center td-total-val">${recTotal.toFixed(2)}</td>
+                <td class="td-center td-total-val">${recTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 {#if canEdit || canDelete}
                   <td class="td-center td-acciones">
                     <div class="acciones-btns-row">
@@ -640,13 +821,13 @@
           </tr>
           <tr class="total-row">
             <td colspan="2" class="total-label-cell">TOTAL</td>
-            <td class="td-center total-val-cell">$ {totalMoney100}</td>
-            <td class="td-center total-val-cell">$ {totalMoney50}</td>
-            <td class="td-center total-val-cell">$ {totalMoney20}</td>
-            <td class="td-center total-val-cell">$ {totalMoney10}</td>
-            <td class="td-center total-val-cell">$ {totalMoney5}</td>
-            <td class="td-center total-val-cell">$ {totalMoney1}</td>
-            <td class="td-center grand-total-cell">$ {grandTotal.toFixed(0)}</td>
+            <td class="td-center total-val-cell">$ {totalMoney100.toLocaleString()}</td>
+            <td class="td-center total-val-cell">$ {totalMoney50.toLocaleString()}</td>
+            <td class="td-center total-val-cell">$ {totalMoney20.toLocaleString()}</td>
+            <td class="td-center total-val-cell">$ {totalMoney10.toLocaleString()}</td>
+            <td class="td-center total-val-cell">$ {totalMoney5.toLocaleString()}</td>
+            <td class="td-center total-val-cell">$ {totalMoney1.toLocaleString()}</td>
+            <td class="td-center grand-total-cell">$ {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             {#if canEdit || canDelete}
               <td class="td-center"></td>
             {/if}
@@ -810,6 +991,128 @@
   }
 
   /* ─────────────────────────────────────────────────────────────
+     Widget en Tiempo Real de la Mesa
+  ───────────────────────────────────────────────────────────── */
+  .live-preview-box {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 8px;
+    padding: 14px 16px;
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .live-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .live-badge-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #38bdf8;
+    text-transform: uppercase;
+  }
+
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #38bdf8;
+    box-shadow: 0 0 8px #38bdf8;
+    animation: pulseGlow 1.5s infinite ease-in-out;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+
+  .saving-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: #facc15;
+    background: rgba(250, 204, 21, 0.15);
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+
+  .synced-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.15);
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+
+  .live-preview-amount {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin: 2px 0;
+  }
+
+  .live-currency {
+    font-size: 18px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+
+  .live-number {
+    font-size: 26px;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+  }
+
+  .live-preview-stats {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #cbd5e1;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+  }
+
+  .stat-pill {
+    color: #e2e8f0;
+  }
+
+  .mesa-pill {
+    font-weight: 700;
+    color: #67e8f9;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hint-pill {
+    font-size: 11px;
+    color: #94a3b8;
+    font-style: italic;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
      Tarjeta Derecha: Tabla
   ───────────────────────────────────────────────────────────── */
   .card-table-drop {
@@ -822,13 +1125,75 @@
 
   /* Barra Superior Oscura */
   .table-top-bar {
-    background: #54626f;
+    background: #1e293b;
     color: #ffffff;
-    font-size: 14px;
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .top-bar-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .top-bar-title {
+    font-size: 15px;
     font-weight: 700;
-    text-align: center;
-    padding: 12px 16px;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
+    color: #ffffff;
+  }
+
+  .top-bar-sub {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  .top-bar-right-stats {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .top-stat-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .top-stat-pill.highlight {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.35);
+  }
+
+  .stat-pill-label {
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  .top-stat-pill.highlight .stat-pill-label {
+    color: #86efac;
+  }
+
+  .stat-pill-val {
+    color: #f8fafc;
+    font-weight: 700;
+  }
+
+  .top-stat-pill.highlight .stat-pill-val {
+    color: #4ade80;
+    font-weight: 800;
   }
 
   .table-wrapper {

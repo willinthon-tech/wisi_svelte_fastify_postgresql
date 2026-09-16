@@ -381,9 +381,10 @@
   }
 
   function updateField(mesaId, field, val) {
-    const row = getRow(mesaId);
+    const mKey = String(mesaId);
+    const row = getRow(mKey);
     row[field] = val;
-    rowsData[mesaId] = row;
+    rowsData[mKey] = { ...row };
     rowsData = { ...rowsData };
   }
 
@@ -844,19 +845,22 @@
 
   // --- Handlers de Autocompletado de Croupiers (en la tabla) ---
   function handleFocusAutocomplete(mesaId, field) {
-    activeSug = { mesaId, field };
+    const mKey = String(mesaId);
+    activeSug = { mesaId: mKey, field };
     activeSugIndex = -1;
   }
 
   function handleInputAutocomplete(mesaId, field, val) {
-    updateField(mesaId, field, val);
-    activeSug = { mesaId, field };
+    const mKey = String(mesaId);
+    updateField(mKey, field, val);
+    activeSug = { mesaId: mKey, field };
     activeSugIndex = -1;
-    triggerAutoSave(mesaId, 900);
+    triggerAutoSave(mKey, 900);
   }
 
   function handleKeyDownAutocomplete(e, mesaId, field) {
-    if (!activeSug || activeSug.mesaId !== mesaId || activeSug.field !== field) return;
+    const mKey = String(mesaId);
+    if (!activeSug || activeSug.mesaId !== mKey || activeSug.field !== field) return;
 
     if (e.key === 'ArrowDown') {
       if (filteredCroupierSuggestions.length > 0) {
@@ -872,7 +876,7 @@
       if (filteredCroupierSuggestions.length > 0) {
         e.preventDefault();
         const selected = activeSugIndex >= 0 ? filteredCroupierSuggestions[activeSugIndex] : filteredCroupierSuggestions[0];
-        selectSuggestion(mesaId, field, selected);
+        selectSuggestion(mKey, field, selected);
       }
     } else if (e.key === 'Escape') {
       activeSug = null;
@@ -881,21 +885,23 @@
   }
 
   function selectSuggestion(mesaId, field, sugOrName) {
-    const val = (sugOrName && typeof sugOrName === 'object') ? sugOrName.nombre : (sugOrName || '');
-    updateField(mesaId, field, val);
+    const val = (sugOrName && typeof sugOrName === 'object') ? (sugOrName.nombre || '') : (sugOrName || '');
+    const mKey = String(mesaId);
+    updateField(mKey, field, val);
     activeSug = null;
     activeSugIndex = -1;
-    triggerAutoSave(mesaId, 0);
+    triggerAutoSave(mKey, 0);
   }
 
   function handleBlurAutocomplete(mesaId, field) {
+    const mKey = String(mesaId);
     setTimeout(() => {
-      if (activeSug && activeSug.mesaId === mesaId && activeSug.field === field) {
+      if (activeSug && activeSug.mesaId === mKey && activeSug.field === field) {
         activeSug = null;
         activeSugIndex = -1;
       }
     }, 200);
-    triggerAutoSave(mesaId, 0);
+    triggerAutoSave(mKey, 0);
   }
 
   // --- Handlers de Autocompletado de Pitboss (con coincidencias y Tab ⇥) ---
@@ -1149,10 +1155,10 @@
             </tr>
           {:else}
             {#each filteredMesas as mesa (mesa.uuid || mesa.id)}
-              {@const mesaKey = mesa.uuid || mesa.id}
-              {@const row = getRow(mesaKey)}
+              {@const mesaKey = String(mesa.uuid || mesa.id)}
+              {@const row = rowsData[mesaKey] || getRow(mesaKey)}
               {@const hasData = Boolean(row.hora_apertura || row.hora_cierre || row.pitboss || row.croupier_apertura || row.croupier_cierre || row.observacion)}
-              {@const isSavingThis = savingMesaIds.has(String(mesaKey))}
+              {@const isSavingThis = savingMesaIds.has(mesaKey)}
               <tr class="novedad-row {hasData ? 'row-has-data' : 'row-empty'}">
                 
                 <!-- MESA (Solo Nombre y Juego) -->
@@ -1172,7 +1178,7 @@
                       type="text" 
                       class="inline-text-input {activeSug?.mesaId === mesaKey && activeSug?.field === 'croupier_apertura' ? 'input-active' : ''}" 
                       placeholder="Escriba Croupier Apertura..." 
-                      value={row.croupier_apertura}
+                      value={rowsData[mesaKey]?.croupier_apertura || ''}
                       disabled={!canEdit && !canAdd}
                       on:focus={() => handleFocusAutocomplete(mesaKey, 'croupier_apertura')}
                       on:input={(e) => handleInputAutocomplete(mesaKey, 'croupier_apertura', e.target.value)}
@@ -1215,7 +1221,7 @@
                       type="text" 
                       class="inline-text-input {activeSug?.mesaId === mesaKey && activeSug?.field === 'croupier_cierre' ? 'input-active' : ''}" 
                       placeholder="Escriba Croupier Cierre..." 
-                      value={row.croupier_cierre}
+                      value={rowsData[mesaKey]?.croupier_cierre || ''}
                       disabled={!canEdit && !canAdd}
                       on:focus={() => handleFocusAutocomplete(mesaKey, 'croupier_cierre')}
                       on:input={(e) => handleInputAutocomplete(mesaKey, 'croupier_cierre', e.target.value)}
