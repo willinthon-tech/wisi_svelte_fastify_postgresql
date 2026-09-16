@@ -418,12 +418,26 @@ export async function processOutboxQueue() {
           // Marcar como sincronizado y eliminar de la cola
           await deleteLocalItem('outbox_sync_queue', item._local_key);
         } else {
-          // Incrementar reintentos si falló en el servidor
-          item.retries = (item.retries || 0) + 1;
-          if (item.retries > 5) {
-            item.status = 'failed';
+          let isDuplicate = false;
+          try {
+            const errJson = await res.clone().json();
+            const errMsg = String(errJson?.error || '').toLowerCase();
+            if (res.status === 409 || errMsg.includes('ya existe') || errMsg.includes('duplicate') || errMsg.includes('already exists')) {
+              isDuplicate = true;
+            }
+          } catch (_) {}
+
+          if (isDuplicate) {
+            console.log(`[OutboxSync] Registro ya existía en la nube (${item.endpoint}), marcando sincronizado.`);
+            await deleteLocalItem('outbox_sync_queue', item._local_key);
+          } else {
+            // Incrementar reintentos si falló en el servidor
+            item.retries = (item.retries || 0) + 1;
+            if (item.retries > 5) {
+              item.status = 'failed';
+            }
+            await upsertLocalItem('outbox_sync_queue', item);
           }
-          await upsertLocalItem('outbox_sync_queue', item);
         }
       } catch (err) {
         // Error de red momentáneo, detener procesamiento hasta nueva reconexión

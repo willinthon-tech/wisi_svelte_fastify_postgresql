@@ -77,16 +77,11 @@ export default defineConfig({
           },
           {
             urlPattern: ({ request, url }) => {
-              // Excluir endpoints de datos JSON y WebSockets
-              if (url.pathname.startsWith('/api/master/') || url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/ws')) {
-                return false;
-              }
-              return (
-                request.destination === 'image' ||
-                /^\/(api\/)?(empleados|clientes|attlogs|salas|photos)\/.*/i.test(url.pathname)
-              );
+              // Interceptar ÚNICAMENTE archivos de imágenes reales, jamás endpoints de datos JSON
+              const isImageExt = /\.(jpe?g|png|webp|gif|svg|ico|bmp)(\?.*)?$/i.test(url.pathname);
+              return request.destination === 'image' || isImageExt;
             },
-            handler: 'StaleWhileRevalidate',
+            handler: 'CacheFirst',
             options: {
               cacheName: 'wisi-media-cache-v1',
               expiration: {
@@ -95,7 +90,15 @@ export default defineConfig({
               },
               cacheableResponse: {
                 statuses: [0, 200]
-              }
+              },
+              plugins: [
+                {
+                  handlerDidError: async () => {
+                    // Evitar rechazo de promesa no controlada 'no-response' en Workbox offline
+                    return new Response('', { status: 404, statusText: 'Offline Media Not Cached' });
+                  }
+                }
+              ]
             }
           }
         ]

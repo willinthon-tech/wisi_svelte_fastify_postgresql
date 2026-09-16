@@ -8008,13 +8008,13 @@ export async function createLibroModel(data) {
 
   if (isPgConnected && sql) {
     const existing = await sql`
-      SELECT uuid FROM libros 
-      WHERE LOWER(TRIM(descripcion)) = LOWER(${cleanDesc}) 
-        AND sala_uuid = ${targetSalaUuid}::uuid
+      SELECT *, uuid AS id, sala_uuid AS sala_id FROM libros 
+      WHERE (uuid = ${libroUuid}::uuid)
+         OR (LOWER(TRIM(descripcion)) = LOWER(${cleanDesc}) AND sala_uuid = ${targetSalaUuid}::uuid)
       LIMIT 1
     `;
     if (existing.length > 0) {
-      throw new Error(`Ya existe un libro registrado con la fecha "${cleanDesc}" en esta sala`);
+      return existing[0];
     }
 
     const rows = await sql`
@@ -8027,6 +8027,9 @@ export async function createLibroModel(data) {
         ${cleanDesc}, 
         ${targetSalaUuid}::uuid
       )
+      ON CONFLICT (uuid) DO UPDATE SET
+        descripcion = EXCLUDED.descripcion,
+        updated_at = NOW()
       RETURNING *, uuid AS id, sala_uuid AS sala_id
     `;
     return rows[0];
@@ -8672,6 +8675,10 @@ export async function createLibroAporteModel(data) {
       ${rangoUuid}::uuid,
       ${monto}, ${tipo}
     )
+    ON CONFLICT (uuid) DO UPDATE SET
+      monto = EXCLUDED.monto,
+      tipo = EXCLUDED.tipo,
+      updated_at = NOW()
     RETURNING uuid
   `;
 
