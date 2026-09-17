@@ -25,7 +25,7 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { getPublicWebUrl } from '../../config/api.config.js';
+  import { getPublicWebUrl, toBackendUrl } from '../../config/api.config.js';
 
   import { 
     getLocalItems, 
@@ -53,6 +53,10 @@
   // Extract assigned sala IDs strictly for the logged-in user
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
+    const username = (user?.username || '').toLowerCase();
+    const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
+    if (isAdmin) return [];
+
     const userId = user?.uuid || user?.id;
     if (!userId) return [];
 
@@ -177,7 +181,7 @@
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
-      const res = await fetch(`/api/master/cortes/filter-options?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/cortes/filter-options?${q.toString()}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -220,7 +224,7 @@
         q.set('sala_ids', selectedSalas.join(','));
       }
 
-      const res = await fetch(`/api/master/cortes?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/cortes?${q.toString()}`));
       const json = await res.json();
       if (json && json.success) {
         let mapped = (json.data || []).map(item => ({

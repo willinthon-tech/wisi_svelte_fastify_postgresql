@@ -418,6 +418,8 @@
     }
   }
 
+  const handleLocalPunchChange = handlePunchStatusChange;
+
   async function handleScheduleSelectChange(e) {
     if (e && e.target && typeof e.target.blur === 'function') {
       e.target.blur();
@@ -983,7 +985,7 @@
                                 <!-- Selector desplegable para cambiar tipo E, S o O -->
                                 <select
                                   value={punch.type}
-                                  on:change={(e) => handleLocalPunchChange(punch, e.target.value)}
+                                  on:change={(e) => handlePunchStatusChange(punch, e.target.value)}
                                   style="cursor: pointer; font-size: 10px; font-weight: 900; border-radius: 4px; padding: 1px 3px; outline: none; margin-left: 2px; {
                                     punch.isActivePairEntry
                                       ? 'background: #ffffff; color: #15803d; border: 1.5px solid #14532d;'

@@ -4,7 +4,7 @@
   import { jsPDF } from "jspdf";
   import { saveOrShareFile } from "../../utils/fileSaver.js";
   import { triggerToast } from "../../controllers/ui.store.js";
-  import { getPublicWebUrl } from "../../config/api.config.js";
+  import { getPublicWebUrl, toBackendUrl } from "../../config/api.config.js";
   import { navigateToRoute } from "../../controllers/router.store.js";
   import {
     masterSalasStore,
@@ -126,7 +126,7 @@
 
     try {
       // Consume directamente del endpoint de la tabla libro_reporte
-      const res = await fetch(`/api/master/libros/${id}/reporte`);
+      const res = await fetch(toBackendUrl(`/api/master/libros/${id}/reporte`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -182,7 +182,7 @@
     if (!id) return;
     isSyncing = true;
     try {
-      const res = await fetch(`/api/master/libros/${id}/reporte`, {
+      const res = await fetch(toBackendUrl(`/api/master/libros/${id}/reporte`), {
         method: "POST",
       });
       const json = await res.json();
@@ -244,7 +244,7 @@
     if (typeof onSelectSubvista === "function") {
       onSelectSubvista(subId);
     } else {
-      const id = libroId || libro?.id || activeLibro?.id || resumenData.libro?.id;
+      const id = libroId || libro?.uuid || libro?.id || activeLibro?.uuid || activeLibro?.id || resumenData.libro?.uuid || resumenData.libro?.id;
       if (id) {
         navigateToRoute(`cecom/libro/${id}/${subId}`);
       }
@@ -748,7 +748,7 @@
 
   // Copiar enlace al portapapeles
   async function handleCompartir() {
-    const id = libroId || libro?.id || activeLibro?.id || resumenData.libro?.id;
+    const id = libroId || libro?.uuid || libro?.id || activeLibro?.uuid || activeLibro?.id || resumenData.libro?.uuid || resumenData.libro?.id;
     if (!id) return;
     const shareUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${id}`);
     try {

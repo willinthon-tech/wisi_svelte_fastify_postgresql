@@ -646,54 +646,51 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
       // 2. Persistencia local inmediata en IndexedDB (<5ms)
       upsertLocalItem(localStoreName, updatedItem).catch(e => console.warn(`[LocalDb] Error updating ${localStoreName}:`, e));
 
-      // 3. Sincronización en segundo plano sin bloquear la UI
-      (async () => {
-        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-        if (isOffline) {
-          await queueOutboxAction({
-            entity: localStoreName,
-            action: 'update',
-            endpoint: `/api/master/${entityName}/${targetUuid}`,
-            method: 'PUT',
-            payload: draft,
-            targetId: targetUuid
-          });
-          return;
-        }
+      // 3. Sincronización con el servidor
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: localStoreName,
+          action: 'update',
+          endpoint: `/api/master/${entityName}/${targetUuid}`,
+          method: 'PUT',
+          payload: draft,
+          targetId: targetUuid
+        });
+        return updatedItem;
+      }
 
-        try {
-          const controller = new AbortController();
-          const tId = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(toBackendUrl(`/api/master/${entityName}/${targetUuid}`), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...draft }),
-            signal: controller.signal
-          });
-          clearTimeout(tId);
-          const json = await res.json().catch(() => ({}));
-          if (res.ok && json && json.success !== false) {
-            const serverData = json.data || updatedItem;
-            await upsertLocalItem(localStoreName, serverData);
-            store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(targetUuid)) ? { ...it, ...serverData } : it) : []));
-          } else {
-            throw new Error(json?.error || `Error servidor al actualizar en ${entityName}`);
-          }
-        } catch (err) {
-          console.warn(`[LocalDb] Sincronización diferida para ${entityName} (encolando outbox):`, err.message);
-          await queueOutboxAction({
-            entity: localStoreName,
-            action: 'update',
-            endpoint: `/api/master/${entityName}/${targetUuid}`,
-            method: 'PUT',
-            payload: draft,
-            targetId: targetUuid
-          });
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 4500);
+        const res = await fetch(toBackendUrl(`/api/master/${entityName}/${targetUuid}`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...draft }),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json && json.success !== false) {
+          const serverData = json.data || updatedItem;
+          await upsertLocalItem(localStoreName, serverData);
+          store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(targetUuid)) ? { ...it, ...serverData } : it) : []));
+          return serverData;
+        } else {
+          throw new Error(json?.error || `Error servidor al actualizar en ${entityName}`);
         }
-      })();
-
-      // Retorno instantáneo (0ms)
-      return updatedItem;
+      } catch (err) {
+        console.warn(`[LocalDb] Sincronización diferida para ${entityName} (encolando outbox):`, err.message);
+        await queueOutboxAction({
+          entity: localStoreName,
+          action: 'update',
+          endpoint: `/api/master/${entityName}/${targetUuid}`,
+          method: 'PUT',
+          payload: draft,
+          targetId: targetUuid
+        });
+        return updatedItem;
+      }
     },
     delete: async (targetUuidOrId) => {
       const targetUuid = typeof targetUuidOrId === 'object' ? (targetUuidOrId.uuid || targetUuidOrId.id) : targetUuidOrId;

@@ -22,7 +22,7 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
-  import { getPublicWebUrl } from '../../config/api.config.js';
+  import { getPublicWebUrl, toBackendUrl } from '../../config/api.config.js';
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
@@ -101,7 +101,7 @@
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
-      const res = await fetch(`/api/master/libros/filter-options?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/libros/filter-options?${q.toString()}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -131,7 +131,7 @@
         q.set('sala_ids', selectedSalas.join(','));
       }
 
-      const res = await fetch(`/api/master/libros?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/libros?${q.toString()}`));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (!json || !json.success) throw new Error(json?.message || 'Error en respuesta');
@@ -204,10 +204,14 @@
     const targetUuid = id;
     const payload = { ...draft };
     if (payload.sala_uuid && !payload.sala_id) payload.sala_id = payload.sala_uuid;
+    // Actualización reactiva inmediata (0ms)
+    items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
     try {
-      await masterLibrosActions.update(targetUuid, payload);
+      const updated = await masterLibrosActions.update(targetUuid, payload);
       triggerToast('Libro actualizado exitosamente', 'success');
-      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      if (updated) {
+        items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...updated } : x);
+      }
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar libro: ${err.message}`, 'error');

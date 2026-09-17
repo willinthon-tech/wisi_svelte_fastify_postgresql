@@ -140,7 +140,8 @@
   }
 
   async function handleCompartir() {
-    const targetUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${libroId || ''}`);
+    const targetId = libroId || activeLibro?.uuid || activeLibro?.id || '';
+    const targetUrl = getPublicWebUrl(`/#/reportes/cecom/libro/${targetId}`);
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(targetUrl);

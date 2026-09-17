@@ -28,11 +28,15 @@
 
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
-  import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
+  import { masterSalasStore, userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
 
   $: assignedSalaIds = (function () {
     if (isPublic) return [];
     const user = $currentUserStore;
+    const username = (user?.username || '').toLowerCase();
+    const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
+    if (isAdmin) return [];
+
     const userId = user?.uuid || user?.id;
     if (!userId) return [];
 
@@ -139,8 +143,22 @@
       if (json && json.success && json.data) {
         corte = json.data;
         if (!isPublic && assignedSalaIds && assignedSalaIds.length > 0) {
+          const allowedSalaIdsSet = new Set(assignedSalaIds.map(String));
+          const allowedSalaNamesSet = new Set();
+          ($masterSalasStore || []).forEach(s => {
+            const sUuid = String(s.uuid || s.id || '');
+            if (allowedSalaIdsSet.has(sUuid)) {
+              if (s.nombre) allowedSalaNamesSet.add(s.nombre.trim().toLowerCase());
+              if (s.nombre_comercial) allowedSalaNamesSet.add(s.nombre_comercial.trim().toLowerCase());
+              if (s.id) allowedSalaIdsSet.add(String(s.id));
+            }
+          });
           const corteSalas = (corte.salas_uuids || corte.salas_ids || []).map(String);
-          if (corteSalas.length > 0 && !corteSalas.some(s => assignedSalaIds.includes(s))) {
+          const corteNombres = (corte.salas_nombres || (corte.sala_nombre ? [corte.sala_nombre] : [])).map(n => String(n).trim().toLowerCase());
+          const hasAccess = corteSalas.length === 0 || 
+                            corteSalas.some(s => allowedSalaIdsSet.has(s)) ||
+                            corteNombres.some(n => allowedSalaNamesSet.has(n));
+          if (!hasAccess) {
             triggerToast('No tienes permisos para ver este corte', 'error');
             handleBack();
             return;
@@ -259,9 +277,28 @@
     }
 
     if (!isPublic && assignedSalaIds && assignedSalaIds.length > 0) {
+      const allowedSalaIdsSet = new Set(assignedSalaIds.map(String));
+      const allowedSalaNamesSet = new Set();
+      const allSalas = $masterSalasStore || [];
+      allSalas.forEach(s => {
+        const sUuid = String(s.uuid || s.id || '');
+        if (allowedSalaIdsSet.has(sUuid)) {
+          if (s.nombre) allowedSalaNamesSet.add(s.nombre.trim().toLowerCase());
+          if (s.nombre_comercial) allowedSalaNamesSet.add(s.nombre_comercial.trim().toLowerCase());
+          if (s.id) allowedSalaIdsSet.add(String(s.id));
+        }
+      });
+
       rawEmpleados = rawEmpleados.filter(e => {
-        const s = e.sala_uuid || e.sala_id;
-        return s && assignedSalaIds.includes(String(s));
+        const sUuid = e.sala_uuid ? String(e.sala_uuid) : '';
+        const sId = e.sala_id ? String(e.sala_id) : '';
+        const sName = e.sala_nombre ? e.sala_nombre.trim().toLowerCase() : '';
+
+        if (sUuid && allowedSalaIdsSet.has(sUuid)) return true;
+        if (sId && allowedSalaIdsSet.has(sId)) return true;
+        if (sName && allowedSalaNamesSet.has(sName)) return true;
+        if (!sUuid && !sId && !sName) return true;
+        return false;
       });
     }
 

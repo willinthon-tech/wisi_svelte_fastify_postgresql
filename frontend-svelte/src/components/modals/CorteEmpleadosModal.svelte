@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { toBackendUrl } from '../../config/api.config.js';
+  import { masterSalasStore } from '../../controllers/master.store.js';
 
   export let isOpen = false;
   export let corte = null;
@@ -60,8 +61,26 @@
 
   $: filteredEmpleados = (empleados || []).filter(emp => {
     if (assignedSalaIds && assignedSalaIds.length > 0) {
-      const s = emp.sala_uuid || emp.sala_id;
-      if (!s || !assignedSalaIds.includes(String(s))) return false;
+      const allowedSalaIdsSet = new Set(assignedSalaIds.map(String));
+      const allowedSalaNamesSet = new Set();
+      ($masterSalasStore || []).forEach(s => {
+        const sUuid = String(s.uuid || s.id || '');
+        if (allowedSalaIdsSet.has(sUuid)) {
+          if (s.nombre) allowedSalaNamesSet.add(s.nombre.trim().toLowerCase());
+          if (s.nombre_comercial) allowedSalaNamesSet.add(s.nombre_comercial.trim().toLowerCase());
+          if (s.id) allowedSalaIdsSet.add(String(s.id));
+        }
+      });
+
+      const sUuid = emp.sala_uuid ? String(emp.sala_uuid) : '';
+      const sId = emp.sala_id ? String(emp.sala_id) : '';
+      const sName = emp.sala_nombre ? emp.sala_nombre.trim().toLowerCase() : '';
+
+      const match = (sUuid && allowedSalaIdsSet.has(sUuid)) ||
+                    (sId && allowedSalaIdsSet.has(sId)) ||
+                    (sName && allowedSalaNamesSet.has(sName)) ||
+                    (!sUuid && !sId && !sName);
+      if (!match) return false;
     }
     if (!searchQuery.trim()) return true;
     const term = searchQuery.toLowerCase().trim();

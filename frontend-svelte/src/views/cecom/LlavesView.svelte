@@ -21,7 +21,7 @@
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
-
+  import { toBackendUrl } from '../../config/api.config.js';
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
@@ -101,7 +101,7 @@
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
 
-      const res = await fetch(`/api/master/llaves/filter-options?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/llaves/filter-options?${q.toString()}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -131,7 +131,7 @@
         q.set('sala_ids', selectedSalas.join(','));
       }
 
-      const res = await fetch(`/api/master/llaves?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/llaves?${q.toString()}`));
       const json = await res.json();
       if (json && json.success) {
         items = json.data || [];
@@ -197,10 +197,14 @@
     const targetUuid = id;
     const payload = { ...draft };
     if (payload.sala_uuid && !payload.sala_id) payload.sala_id = payload.sala_uuid;
+    // Actualización reactiva inmediata (0ms)
+    items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
     try {
-      await masterLlavesActions.update(targetUuid, payload);
+      const updated = await masterLlavesActions.update(targetUuid, payload);
       triggerToast('Llave actualizada exitosamente', 'success');
-      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...payload } : x);
+      if (updated) {
+        items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...updated } : x);
+      }
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar llave: ${err.message}`, 'error');

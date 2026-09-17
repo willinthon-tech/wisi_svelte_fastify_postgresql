@@ -34,6 +34,7 @@
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   import { 
     getLocalItems, 
@@ -172,8 +173,7 @@
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if (selectedTipoClientes.length > 0) q.set("tipo_cliente_ids", selectedTipoClientes.join(","));
       if ((searchQuery || "").trim()) q.set("search", searchQuery.trim());
-
-      const res = await fetch(`/api/master/clientes/filter-options?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/clientes/filter-options?${q.toString()}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && json.data) {
@@ -206,7 +206,7 @@
         q.set('tipo_cliente_ids', selectedTipoClientes.join(','));
       }
 
-      const res = await fetch(`/api/master/clientes?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/clientes?${q.toString()}`));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (!json || !json.success) throw new Error(json?.message || 'Error en respuesta');
@@ -336,8 +336,8 @@
 
       try {
         const controller = new AbortController();
-        const tId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch('/api/master/clientes', {
+        const tId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(toBackendUrl('/api/master/clientes'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...draft, uuid: newUuid }),
@@ -357,7 +357,7 @@
         await queueOutboxAction({
           entity: 'clientes',
           action: 'create',
-          endpoint: '/api/master/clientes',
+          endpoint: `/api/master/clientes`,
           method: 'POST',
           payload: draft,
           uuid: newUuid
@@ -383,6 +383,7 @@
       ...cleanDraft,
       uuid: targetUuid,
       id: targetUuid,
+      foto: cleanDraft.fotoBase64 ? cleanDraft.fotoBase64 : (cleanDraft.removeFoto ? null : existing.foto),
       sala_nombre: salaObj ? salaObj.nombre : existing.sala_nombre,
       tipo_cliente_nombre: tipoObj ? tipoObj.nombre : existing.tipo_cliente_nombre,
       updated_at: new Date().toISOString()
@@ -416,8 +417,8 @@
 
       try {
         const controller = new AbortController();
-        const tId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/clientes/${targetUuid}`, {
+        const tId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(toBackendUrl(`/api/master/clientes/${targetUuid}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(cleanDraft),

@@ -786,13 +786,13 @@
 
   function getPublicCorteId(route) {
     const clean = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
-    const match = clean.match(/reportes\/rrhh\/corte\/(\d+)/i);
+    const match = clean.match(/reportes\/rrhh\/corte\/([a-zA-Z0-9_-]+)/i);
     return match ? match[1] : null;
   }
 
   function getPublicLibroId(route) {
     const clean = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
-    const match = clean.match(/reportes\/cecom\/(?:libro|ibro)\/(\d+)/i);
+    const match = clean.match(/reportes\/cecom\/(?:libro|ibro)\/([a-zA-Z0-9_-]+)/i);
     return match ? match[1] : null;
   }
 
