@@ -7,13 +7,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const PGHOST = process.env.PGHOST || 'localhost';
-const PGPORT = process.env.PGPORT || 5432;
-const PGDATABASE = process.env.PGDATABASE || 'wisi_db';
-const PGUSER = process.env.PGUSER || 'postgres';
-const PGPASSWORD = process.env.PGPASSWORD || 'postgres';
+const PGHOST = process.env.PGHOST;
+const PGPORT = process.env.PGPORT ? Number(process.env.PGPORT) : 5432;
+const PGDATABASE = process.env.PGDATABASE;
+const PGUSER = process.env.PGUSER;
+const PGPASSWORD = process.env.PGPASSWORD;
 
 export let sql = null;
 export let isPgConnected = false;
@@ -32,16 +33,20 @@ export const inMemoryData = new Proxy({}, {
 
 export async function initDb() {
   try {
+    if (!PGHOST || !PGDATABASE || !PGUSER) {
+      throw new Error('Variables de conexión a PostgreSQL (PGHOST, PGDATABASE, PGUSER) no están configuradas en .env');
+    }
+
     sql = postgres({
       host: PGHOST,
-      port: Number(PGPORT),
+      port: PGPORT,
       database: PGDATABASE,
       username: PGUSER,
       password: PGPASSWORD,
-      connect_timeout: 15,
-      max_lifetime: 1800, // 30 minutos de vida útil para evitar reconexiones continuas
-      idle_timeout: 10,   // Cierra conexiones inactivas después de 10 segundos
-      max: 50,            // Soporta hasta 50 conexiones concurrentes
+      connect_timeout: 10,
+      max_lifetime: 300, // 5 minutos de vida útil máxima para reciclar conexiones
+      idle_timeout: 5,   // Cierra conexiones inactivas rápidamente (5 segundos)
+      max: Number(process.env.PGMAX_CONNECTIONS) || 15, // Máximo 15 conexiones concurrentes para no saturar PostgreSQL
       onnotice: () => { },
       parameters: {
         timezone: 'UTC'

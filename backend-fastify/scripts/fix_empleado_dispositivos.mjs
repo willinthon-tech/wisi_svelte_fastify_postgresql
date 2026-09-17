@@ -8,12 +8,25 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+const PGHOST = process.env.PGHOST;
+const PGPORT = process.env.PGPORT ? Number(process.env.PGPORT) : 5432;
+const PGDATABASE = process.env.PGDATABASE;
+const PGUSER = process.env.PGUSER;
+const PGPASSWORD = process.env.PGPASSWORD;
+
+if (!PGHOST || !PGDATABASE || !PGUSER) {
+  console.error('❌ Error: Variables de conexión (PGHOST, PGDATABASE, PGUSER) no están definidas en .env');
+  process.exit(1);
+}
+
 const sql = postgres({
-  host: process.env.PGHOST || 'localhost',
-  port: Number(process.env.PGPORT) || 5432,
-  database: process.env.PGDATABASE || 'wisi',
-  username: process.env.PGUSER || 'root',
-  password: process.env.PGPASSWORD || 'S0p0rt3R0y4l-2025',
+  host: PGHOST,
+  port: PGPORT,
+  database: PGDATABASE,
+  username: PGUSER,
+  password: PGPASSWORD,
+  max: 1, // Sólo 1 conexión para no competir por slots
+  connect_timeout: 10,
   onnotice: () => {}
 });
 
