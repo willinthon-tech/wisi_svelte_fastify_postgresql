@@ -384,7 +384,8 @@ export async function agregarEmpleadosABiometrico(request, reply) {
       if (dev.ip_remota && (target === 'both' || target === 'bio')) {
         try {
           const userRes = await addUserToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp, false);
-          if (userRes.ok || userRes.status === 200) {
+          const isUserOk = (userRes.ok || userRes.status === 200) && (!userRes.data?.statusCode || userRes.data.statusCode === 1);
+          if (isUserOk) {
             empRes.biometrico.success = true;
             empRes.biometrico.message = 'Usuario agregado exitosamente';
 
@@ -408,7 +409,8 @@ export async function agregarEmpleadosABiometrico(request, reply) {
               }
             }
           } else {
-            empRes.biometrico.message = `El biométrico respondió HTTP ${userRes.status}`;
+            const errMsg = userRes.data?.errorMsg || userRes.data?.statusString || userRes.data?.subStatusCode || `HTTP ${userRes.status}`;
+            empRes.biometrico.message = `El biométrico rechazó: ${errMsg}`;
           }
         } catch (bioErr) {
           empRes.biometrico.message = bioErr.message;
@@ -419,7 +421,8 @@ export async function agregarEmpleadosABiometrico(request, reply) {
       if (dev.ip_panel && dev.ip_panel.trim() && (target === 'both' || target === 'panel')) {
         try {
           const panelRes = await addUserToDevice(dev.ip_panel, dev.usuario || 'admin', dev.clave || '', emp, true);
-          if (panelRes.ok || panelRes.status === 200) {
+          const isPanelOk = (panelRes.ok || panelRes.status === 200) && (!panelRes.data?.statusCode || panelRes.data.statusCode === 1);
+          if (isPanelOk) {
             empRes.panel.success = true;
             empRes.panel.message = 'Usuario agregado a panel';
 
@@ -430,7 +433,8 @@ export async function agregarEmpleadosABiometrico(request, reply) {
               } catch (cardErr) {}
             }
           } else {
-            empRes.panel.message = `El panel respondió HTTP ${panelRes.status}`;
+            const errMsg = panelRes.data?.errorMsg || panelRes.data?.statusString || panelRes.data?.subStatusCode || `HTTP ${panelRes.status}`;
+            empRes.panel.message = `El panel rechazó: ${errMsg}`;
           }
         } catch (panelErr) {
           empRes.panel.message = panelErr.message;
@@ -531,7 +535,7 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
     const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
     const configMap = {};
     for (const r of savedConfigRows) configMap[r.clave] = r.valor;
-    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || req.headers?.host?.split(':')[0] || 'localhost').trim();
+    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || request.headers?.host?.split(':')[0] || 'localhost').trim();
 
     const results = [];
 
@@ -549,7 +553,8 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
       if (dev.ip_remota && (target === 'both' || target === 'bio')) {
         try {
           const userRes = await addUserToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp, false);
-          if (userRes.ok || userRes.status === 200) {
+          const isUserOk = (userRes.ok || userRes.status === 200) && (!userRes.data?.statusCode || userRes.data.statusCode === 1);
+          if (isUserOk) {
             empRes.biometrico.success = true;
             empRes.biometrico.message = 'Usuario actualizado exitosamente';
 
@@ -569,7 +574,8 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
               } catch (faceErr) {}
             }
           } else {
-            empRes.biometrico.message = `El biométrico respondió HTTP ${userRes.status}`;
+            const errMsg = userRes.data?.errorMsg || userRes.data?.statusString || userRes.data?.subStatusCode || `HTTP ${userRes.status}`;
+            empRes.biometrico.message = `El biométrico rechazó: ${errMsg}`;
           }
         } catch (bioErr) {
           empRes.biometrico.message = bioErr.message;
@@ -580,7 +586,8 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
       if (dev.ip_panel && dev.ip_panel.trim() && (target === 'both' || target === 'panel')) {
         try {
           const panelRes = await addUserToDevice(dev.ip_panel, dev.usuario || 'admin', dev.clave || '', emp, true);
-          if (panelRes.ok || panelRes.status === 200) {
+          const isPanelOk = (panelRes.ok || panelRes.status === 200) && (!panelRes.data?.statusCode || panelRes.data.statusCode === 1);
+          if (isPanelOk) {
             empRes.panel.success = true;
             empRes.panel.message = 'Usuario actualizado en panel';
 
@@ -591,7 +598,8 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
               } catch (cardErr) {}
             }
           } else {
-            empRes.panel.message = `El panel respondió HTTP ${panelRes.status}`;
+            const errMsg = panelRes.data?.errorMsg || panelRes.data?.statusString || panelRes.data?.subStatusCode || `HTTP ${panelRes.status}`;
+            empRes.panel.message = `El panel rechazó: ${errMsg}`;
           }
         } catch (panelErr) {
           empRes.panel.message = panelErr.message;

@@ -199,7 +199,12 @@
       });
       const json = await res.json();
       if (json && json.success) {
-        triggerToast(`🔄 ${json.successCount || empleadoIds.length} empleado(s) actualizados en el equipo con nombre y foto actual`, 'success');
+        if (json.successCount > 0) {
+          triggerToast(`🔄 ${json.successCount} empleado(s) actualizados en el equipo con nombre y foto actual`, 'success');
+        } else {
+          const firstErr = json.results?.[0]?.biometrico?.message || json.results?.[0]?.panel?.message || 'El dispositivo no aceptó la actualización';
+          triggerToast(`⚠️ No se pudo actualizar en el equipo: ${firstErr}`, 'error');
+        }
         await handleAudit();
       } else {
         throw new Error(json.error || 'Error al actualizar empleados en el equipo');
@@ -229,7 +234,12 @@
       });
       const json = await res.json();
       if (json && json.success) {
-        triggerToast(`✅ ${json.successCount || empleadoIds.length} empleado(s) agregados al equipo exitosamente`, 'success');
+        if (json.successCount > 0) {
+          triggerToast(`✅ ${json.successCount} empleado(s) agregados al equipo exitosamente`, 'success');
+        } else {
+          const firstErr = json.results?.[0]?.biometrico?.message || json.results?.[0]?.panel?.message || 'El dispositivo no aceptó la adición';
+          triggerToast(`⚠️ No se pudo agregar al equipo: ${firstErr}`, 'error');
+        }
         await handleAudit();
       } else {
         throw new Error(json.error || 'Error al agregar empleados al equipo');

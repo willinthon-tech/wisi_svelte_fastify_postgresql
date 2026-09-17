@@ -306,7 +306,16 @@ export async function addUserToDevice(ipHost, username, password, employeeData, 
   const nombre = String(employeeData.nombre || employeeData.name || '').trim();
   const gender = (employeeData.sexo || '').toLowerCase().includes('fem') ? 'female' : 'male';
 
-  const beginTime = employeeData.fecha_ingreso ? `${employeeData.fecha_ingreso}T00:00:00` : '2024-01-01T00:00:00';
+  let datePart = '2024-01-01';
+  if (employeeData.fecha_ingreso instanceof Date) {
+    datePart = employeeData.fecha_ingreso.toISOString().slice(0, 10);
+  } else if (employeeData.fecha_ingreso) {
+    const s = String(employeeData.fecha_ingreso).trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      datePart = s;
+    }
+  }
+  const beginTime = `${datePart}T00:00:00`;
   const endTime = '2035-12-31T23:59:59';
 
   let body;
