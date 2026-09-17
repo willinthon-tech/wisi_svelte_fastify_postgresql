@@ -160,25 +160,6 @@ export async function initDb() {
               END;
             END IF;
           END IF;
-
-          -- Auto-curación universal: Si alguna tabla tiene columna 'id' que no es PK pero tiene NOT NULL, remover el NOT NULL
-          BEGIN
-            EXECUTE (
-              SELECT COALESCE(string_agg('ALTER TABLE "' || c.table_name || '" ALTER COLUMN id DROP NOT NULL;', ' '), '')
-              FROM information_schema.columns c
-              LEFT JOIN (
-                SELECT tc.table_name, ccu.column_name
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
-                WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'
-              ) pk ON c.table_name = pk.table_name AND c.column_name = pk.column_name
-              WHERE c.table_schema = 'public' 
-                AND c.column_name = 'id' 
-                AND (pk.column_name IS NULL OR pk.column_name != 'id')
-                AND c.is_nullable = 'NO'
-            );
-          EXCEPTION WHEN OTHERS THEN NULL;
-          END;
         END $$;
       `);
     } catch (healErr) {

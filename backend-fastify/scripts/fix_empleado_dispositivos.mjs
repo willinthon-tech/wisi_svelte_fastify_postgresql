@@ -18,71 +18,69 @@ const sql = postgres({
 });
 
 async function main() {
-  console.log('--- REPARACIÓN Y SANEAMIENTO DE EMPLEADO_DISPOSITIVOS Y KEYS ---');
+  console.log('--- REPARACIÓN DE EMPLEADO_DISPOSITIVOS ---');
 
-  await sql.unsafe(`
-    DO $$
-    BEGIN
-      -- 1. empleado_dispositivos: asegurar UUID, remover NOT NULL de id y columnas legadas
-      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos') THEN
-        ALTER TABLE empleado_dispositivos ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();
-        ALTER TABLE empleado_dispositivos ALTER COLUMN uuid SET DEFAULT gen_random_uuid();
+  // Establecer timeout para evitar que se quede esperando locks infinitamente
+  await sql`SET lock_timeout = '10s';`;
+  console.log('1. Lock timeout establecido en 10s.');
 
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'id') THEN
-          ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
-          BEGIN
-            ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
-          EXCEPTION WHEN OTHERS THEN NULL;
-          END;
-        END IF;
+  console.log('2. Verificando tabla empleado_dispositivos...');
+  await sql.unsafe(`ALTER TABLE empleado_dispositivos ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();`);
+  await sql.unsafe(`ALTER TABLE empleado_dispositivos ALTER COLUMN uuid SET DEFAULT gen_random_uuid();`);
+  console.log('✔ Columna uuid configurada con gen_random_uuid().');
 
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'empleado_id') THEN
-          ALTER TABLE empleado_dispositivos ALTER COLUMN empleado_id DROP NOT NULL;
-        END IF;
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'dispositivo_id') THEN
-          ALTER TABLE empleado_dispositivos ALTER COLUMN dispositivo_id DROP NOT NULL;
-        END IF;
+  console.log('3. Removiendo NOT NULL de columna id (si existe)...');
+  try {
+    await sql.unsafe(`ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;`);
+    console.log('✔ NOT NULL removido de columna id.');
+  } catch (e) {
+    console.log('   (columna id no tiene NOT NULL o no existe)');
+  }
 
-        DROP TRIGGER IF EXISTS trg_sync_dual_keys_ed ON empleado_dispositivos CASCADE;
+  try {
+    await sql.unsafe(`ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;`);
+    console.log('✔ Columna id eliminada.');
+  } catch (e) {
+    console.log('   (columna id ya no existe)');
+  }
 
+  console.log('4. Asegurando compatibilidad con columnas legadas...');
+  try {
+    await sql.unsafe(`ALTER TABLE empleado_dispositivos ALTER COLUMN empleado_id DROP NOT NULL;`);
+  } catch (_) {}
+  try {
+    await sql.unsafe(`ALTER TABLE empleado_dispositivos ALTER COLUMN dispositivo_id DROP NOT NULL;`);
+  } catch (_) {}
+  try {
+    await sql.unsafe(`DROP TRIGGER IF EXISTS trg_sync_dual_keys_ed ON empleado_dispositivos CASCADE;`);
+  } catch (_) {}
+
+  console.log('5. Asegurando constraint UNIQUE (empleado_uuid, dispositivo_uuid)...');
+  try {
+    await sql.unsafe(`
+      DO $$
+      BEGIN
         IF NOT EXISTS (
           SELECT 1 FROM pg_constraint WHERE conname = 'uk_emp_disp_uuid' OR conname = 'empleado_dispositivos_empleado_uuid_dispositivo_uuid_key'
         ) THEN
-          BEGIN
-            DELETE FROM empleado_dispositivos a USING empleado_dispositivos b 
-            WHERE a.ctid < b.ctid AND a.empleado_uuid = b.empleado_uuid AND a.dispositivo_uuid = b.dispositivo_uuid;
-            ALTER TABLE empleado_dispositivos ADD CONSTRAINT uk_emp_disp_uuid UNIQUE (empleado_uuid, dispositivo_uuid);
-          EXCEPTION WHEN OTHERS THEN NULL;
-          END;
+          DELETE FROM empleado_dispositivos a USING empleado_dispositivos b 
+          WHERE a.ctid < b.ctid AND a.empleado_uuid = b.empleado_uuid AND a.dispositivo_uuid = b.dispositivo_uuid;
+          ALTER TABLE empleado_dispositivos ADD CONSTRAINT uk_emp_disp_uuid UNIQUE (empleado_uuid, dispositivo_uuid);
         END IF;
-      END IF;
+      END $$;
+    `);
+    console.log('✔ Constraint UNIQUE (empleado_uuid, dispositivo_uuid) configurado.');
+  } catch (e) {
+    console.log('   Aviso en constraint UNIQUE:', e.message);
+  }
 
-      -- 2. Saneamiento universal: remover NOT NULL de cualquier columna 'id' que no sea PK
-      BEGIN
-        EXECUTE (
-          SELECT COALESCE(string_agg('ALTER TABLE "' || c.table_name || '" ALTER COLUMN id DROP NOT NULL;', ' '), '')
-          FROM information_schema.columns c
-          LEFT JOIN (
-            SELECT tc.table_name, ccu.column_name
-            FROM information_schema.table_constraints tc
-            JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
-            WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'
-          ) pk ON c.table_name = pk.table_name AND c.column_name = pk.column_name
-          WHERE c.table_schema = 'public' 
-            AND c.column_name = 'id' 
-            AND (pk.column_name IS NULL OR pk.column_name != 'id')
-            AND c.is_nullable = 'NO'
-        );
-      EXCEPTION WHEN OTHERS THEN NULL;
-      END;
-    END $$;
-  `);
-
-  console.log('✔ Tabla empleado_dispositivos saneada con éxito.');
+  console.log('\n============================================================');
+  console.log('✔ TABLA EMPLEADO_DISPOSITIVOS REPARADA CON ÉXITO');
+  console.log('============================================================');
   await sql.end();
 }
 
 main().catch(err => {
-  console.error('Error durante la reparación:', err);
+  console.error('\n❌ Error durante la reparación:', err.message);
   process.exit(1);
 });
