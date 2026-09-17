@@ -3533,13 +3533,14 @@ export async function checkEmpleadoCedulaModel(cedula, excludeId = null) {
 }
 
 export async function getEmpleadoDispositivosModel(empleadoId) {
-  if (!isPgConnected || !sql || !empleadoId || !isUuid(empleadoId)) return [];
+  if (!isPgConnected || !sql || !empleadoId) return [];
+  const isU = isUuid(empleadoId);
   const rows = await sql`
-    SELECT dispositivo_uuid 
+    SELECT COALESCE(dispositivo_uuid::text, '') AS dispositivo_uuid
     FROM empleado_dispositivos 
-    WHERE empleado_uuid = ${empleadoId}::uuid
+    WHERE ${isU ? sql`empleado_uuid = ${empleadoId}::uuid` : sql`empleado_uuid::text = ${String(empleadoId)}`}
   `;
-  return rows.map(r => r.dispositivo_uuid);
+  return rows.map(r => r.dispositivo_uuid).filter(Boolean);
 }
 
 function cleanDateOnly(val) {
@@ -3630,12 +3631,32 @@ export async function createEmpleadoModel(data) {
 
     // Sincronizar dispositivos seleccionados
     const validDevs = toUuidArray(data.dispositivo_ids);
-    for (const devUuid of validDevs) {
-      await sql`
-        INSERT INTO empleado_dispositivos (empleado_uuid, dispositivo_uuid)
-        VALUES (${empUuid}::uuid, ${devUuid}::uuid)
-        ON CONFLICT DO NOTHING
-      `;
+    if (validDevs.length > 0) {
+      try {
+        for (const devUuid of validDevs) {
+          await sql`
+            INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+            VALUES (gen_random_uuid(), ${empUuid}::uuid, ${devUuid}::uuid)
+            ON CONFLICT DO NOTHING
+          `;
+        }
+      } catch (insertErr) {
+        if (insertErr.message && (insertErr.message.includes('column "id"') || insertErr.message.includes('empleado_dispositivos'))) {
+          await sql.unsafe(`
+            ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
+            ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+          `).catch(() => {});
+          for (const devUuid of validDevs) {
+            await sql`
+              INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+              VALUES (gen_random_uuid(), ${empUuid}::uuid, ${devUuid}::uuid)
+              ON CONFLICT DO NOTHING
+            `;
+          }
+        } else {
+          throw insertErr;
+        }
+      }
     }
 
     return emp;
@@ -3724,12 +3745,32 @@ export async function updateEmpleadoModel(id, data) {
     if (Array.isArray(data.dispositivo_ids)) {
       await sql`DELETE FROM empleado_dispositivos WHERE empleado_uuid = ${eUuid}::uuid`;
       const validDevs = toUuidArray(data.dispositivo_ids);
-      for (const devUuid of validDevs) {
-        await sql`
-          INSERT INTO empleado_dispositivos (empleado_uuid, dispositivo_uuid)
-          VALUES (${eUuid}::uuid, ${devUuid}::uuid)
-          ON CONFLICT DO NOTHING
-        `;
+      if (validDevs.length > 0) {
+        try {
+          for (const devUuid of validDevs) {
+            await sql`
+              INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+              VALUES (gen_random_uuid(), ${eUuid}::uuid, ${devUuid}::uuid)
+              ON CONFLICT DO NOTHING
+            `;
+          }
+        } catch (insertErr) {
+          if (insertErr.message && (insertErr.message.includes('column "id"') || insertErr.message.includes('empleado_dispositivos'))) {
+            await sql.unsafe(`
+              ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
+              ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+            `).catch(() => {});
+            for (const devUuid of validDevs) {
+              await sql`
+                INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+                VALUES (gen_random_uuid(), ${eUuid}::uuid, ${devUuid}::uuid)
+                ON CONFLICT DO NOTHING
+              `;
+            }
+          } else {
+            throw insertErr;
+          }
+        }
       }
     }
 

@@ -126,6 +126,59 @@ export async function initDb() {
               END;
             END IF;
           END IF;
+
+          -- empleado_dispositivos: auto-curación de uuid, eliminación de constraint id NOT NULL y unificación de keys
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos') THEN
+            ALTER TABLE empleado_dispositivos ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();
+            ALTER TABLE empleado_dispositivos ALTER COLUMN uuid SET DEFAULT gen_random_uuid();
+
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'id') THEN
+              ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
+              BEGIN
+                ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+              EXCEPTION WHEN OTHERS THEN NULL;
+              END;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'empleado_id') THEN
+              ALTER TABLE empleado_dispositivos ALTER COLUMN empleado_id DROP NOT NULL;
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'dispositivo_id') THEN
+              ALTER TABLE empleado_dispositivos ALTER COLUMN dispositivo_id DROP NOT NULL;
+            END IF;
+
+            DROP TRIGGER IF EXISTS trg_sync_dual_keys_ed ON empleado_dispositivos CASCADE;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint WHERE conname = 'uk_emp_disp_uuid' OR conname = 'empleado_dispositivos_empleado_uuid_dispositivo_uuid_key'
+            ) THEN
+              BEGIN
+                DELETE FROM empleado_dispositivos a USING empleado_dispositivos b 
+                WHERE a.ctid < b.ctid AND a.empleado_uuid = b.empleado_uuid AND a.dispositivo_uuid = b.dispositivo_uuid;
+                ALTER TABLE empleado_dispositivos ADD CONSTRAINT uk_emp_disp_uuid UNIQUE (empleado_uuid, dispositivo_uuid);
+              EXCEPTION WHEN OTHERS THEN NULL;
+              END;
+            END IF;
+          END IF;
+
+          -- Auto-curación universal: Si alguna tabla tiene columna 'id' que no es PK pero tiene NOT NULL, remover el NOT NULL
+          BEGIN
+            EXECUTE (
+              SELECT COALESCE(string_agg('ALTER TABLE "' || c.table_name || '" ALTER COLUMN id DROP NOT NULL;', ' '), '')
+              FROM information_schema.columns c
+              LEFT JOIN (
+                SELECT tc.table_name, ccu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+                WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'
+              ) pk ON c.table_name = pk.table_name AND c.column_name = pk.column_name
+              WHERE c.table_schema = 'public' 
+                AND c.column_name = 'id' 
+                AND (pk.column_name IS NULL OR pk.column_name != 'id')
+                AND c.is_nullable = 'NO'
+            );
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
         END $$;
       `);
     } catch (healErr) {

@@ -184,7 +184,9 @@ export async function auditarSalaBiometricos(request, reply) {
 
       // Filtrar empleados asignados a este dispositivo
       const activeEmployeesForDev = activeEmployees.filter(emp => {
-        return assignedEmpDevSet.has(`${emp.id}_${dev.id}`);
+        const empKey = String(emp.uuid || emp.id);
+        const devKey = String(dev.uuid || dev.id);
+        return assignedEmpDevSet.has(`${empKey}_${devKey}`);
       });
       const targetEmployees = activeEmployeesForDev.length > 0 ? activeEmployeesForDev : activeEmployees;
 
@@ -443,10 +445,27 @@ export async function agregarEmpleadosABiometrico(request, reply) {
           LIMIT 1
         `;
         if (existingRel.length === 0) {
-          await sql`
-            INSERT INTO empleado_dispositivos (empleado_uuid, dispositivo_uuid)
-            VALUES (${emp.uuid}::uuid, ${dev.uuid}::uuid)
-          `;
+          try {
+            await sql`
+              INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+              VALUES (gen_random_uuid(), ${emp.uuid}::uuid, ${dev.uuid}::uuid)
+              ON CONFLICT DO NOTHING
+            `;
+          } catch (insertErr) {
+            if (insertErr.message && (insertErr.message.includes('column "id"') || insertErr.message.includes('empleado_dispositivos'))) {
+              await sql.unsafe(`
+                ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
+                ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+              `).catch(() => {});
+              await sql`
+                INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+                VALUES (gen_random_uuid(), ${emp.uuid}::uuid, ${dev.uuid}::uuid)
+                ON CONFLICT DO NOTHING
+              `;
+            } else {
+              throw insertErr;
+            }
+          }
         }
       } catch (dbErr) {
         console.error('Error insertando en empleado_dispositivos:', dbErr);
