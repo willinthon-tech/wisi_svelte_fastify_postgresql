@@ -555,9 +555,7 @@
       fecha_nacimiento: fechaNacimiento || null,
       sexo,
       cargo_uuid: cargoUuid ? String(cargoUuid) : null,
-      cargo_id: cargoUuid ? String(cargoUuid) : null,
-      dispositivo_uuids: Array.from(selectedDispositivoUuids).map(String),
-      dispositivo_ids: Array.from(selectedDispositivoUuids).map(String)
+      dispositivo_uuids: Array.from(selectedDispositivoUuids).map(String)
     };
 
     if (removeFoto) {

@@ -10,8 +10,7 @@ import masterRoutes from './routes/master.routes.js';
 import { reportsRoutes } from './routes/reports.routes.js';
 import biometricosSyncRoutes from './routes/biometricos-sync.routes.js';
 import { syncAttlogs } from './controllers/master.controller.js';
-import { initDb, isPgConnected } from './config/db.js';
-import { ensureEmpleadosSchemaSafe } from './models/master.model.js';
+import { initDb } from './config/db.js';
 
 import { initWebsockets } from './config/websocket.js';
 import sharp from 'sharp';
@@ -106,9 +105,6 @@ async function startServer() {
 
     // Initialize PostgreSQL Database & Run Schema Migrations
     await initDb();
-    if (isPgConnected) {
-      await ensureEmpleadosSchemaSafe().catch(() => {});
-    }
 
     // Register API Routes
     await fastify.register(healthRoutes, { prefix: '/api' });

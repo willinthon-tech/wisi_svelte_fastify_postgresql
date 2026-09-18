@@ -574,9 +574,7 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
       if (!createdItem.uuid) {
         createdItem.uuid = generateSafeUuid();
       }
-      if (!createdItem.id) {
-        createdItem.id = createdItem.uuid;
-      }
+      delete createdItem.id;
       if (!createdItem.created_at) {
         createdItem.created_at = new Date().toISOString();
       }
