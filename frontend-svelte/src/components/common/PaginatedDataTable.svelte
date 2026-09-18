@@ -822,10 +822,13 @@
     let rawPath = '';
     if (item.foto && typeof item.foto === 'string' && item.foto.trim().length > 0) {
       rawPath = item.foto;
+    } else if (item.foto === null || item.foto === '') {
+      // Foto explícitamente eliminada o vacía: no cargar fallback inexistente
+      return '';
     } else if (entityType === 'cliente') {
       const cId = item.uuid || item.id;
       rawPath = cId ? `/clientes/${cId}.jpg` : '';
-    } else {
+    } else if (item.foto === undefined) {
       const empId = item.empleado_uuid || item.uuid || item.empleado_id || item.id;
       rawPath = empId ? `/empleados/${empId}.jpg` : '';
     }

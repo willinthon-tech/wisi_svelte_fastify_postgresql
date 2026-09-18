@@ -3570,6 +3570,72 @@ function cleanDateOnly(val) {
   return null;
 }
 
+function resolveEmpleadosDir() {
+  const candidates = [
+    path.join(process.cwd(), 'empleados'),
+    path.join(process.cwd(), 'backend-fastify', 'empleados'),
+    path.resolve(__dirname, '../../empleados'),
+    path.resolve(__dirname, '../empleados'),
+    '/var/www/wisi/backend-fastify/empleados',
+    '/var/www/wisi/empleados'
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir)) return dir;
+  }
+  const fallback = path.join(process.cwd(), 'empleados');
+  try {
+    fs.mkdirSync(fallback, { recursive: true });
+  } catch (e) {}
+  return fallback;
+}
+
+function removeEmpleadoPhysicalPhotos(eId) {
+  if (!eId) return;
+  try {
+    const candidates = [
+      path.join(process.cwd(), 'empleados'),
+      path.join(process.cwd(), 'backend-fastify', 'empleados'),
+      path.resolve(__dirname, '../../empleados'),
+      path.resolve(__dirname, '../empleados'),
+      '/var/www/wisi/backend-fastify/empleados',
+      '/var/www/wisi/empleados'
+    ];
+    const extensions = ['.webp', '.jpg', '.jpeg', '.png'];
+    for (const dir of candidates) {
+      if (fs.existsSync(dir)) {
+        for (const ext of extensions) {
+          const p = path.join(dir, `${eId}${ext}`);
+          if (fs.existsSync(p)) {
+            try { fs.unlinkSync(p); } catch (e) {}
+          }
+        }
+      }
+    }
+  } catch (e) {}
+}
+
+function invalidateEmpleadoThumbnails(eId) {
+  if (!eId) return;
+  try {
+    const candidateCacheDirs = [
+      path.join(process.cwd(), 'cache', 'thumbs'),
+      path.join(process.cwd(), 'backend-fastify', 'cache', 'thumbs'),
+      '/var/www/wisi/backend-fastify/cache/thumbs',
+      '/var/www/wisi/cache/thumbs'
+    ];
+    for (const cDir of candidateCacheDirs) {
+      if (fs.existsSync(cDir)) {
+        const files = fs.readdirSync(cDir);
+        for (const file of files) {
+          if (file.startsWith(`empleado_${eId}_`) || file.startsWith(`${eId}_`)) {
+            try { fs.unlinkSync(path.join(cDir, file)); } catch (e) {}
+          }
+        }
+      }
+    }
+  } catch (e) {}
+}
+
 export async function createEmpleadoModel(data) {
   if (isPgConnected && sql) {
     if (data.cedula && String(data.cedula).trim()) {
@@ -3587,20 +3653,20 @@ export async function createEmpleadoModel(data) {
 
     const { randomUUID } = await import('crypto');
     const empUuid = data.uuid && isUuid(data.uuid) ? data.uuid : randomUUID();
-    const isWebp = (data.fotoBase64 || '').startsWith('data:image/webp');
-    const photoExt = isWebp ? '.webp' : '.jpg';
-    const foto = data.foto || `/empleados/${empUuid}${photoExt}`;
+    let foto = data.foto || null;
 
     // Guardar foto en disco si viene en base64
     if (data.fotoBase64) {
       try {
+        const isWebp = (data.fotoBase64 || '').startsWith('data:image/webp');
+        const photoExt = isWebp ? '.webp' : '.jpg';
         const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
-        const fs = await import('fs');
-        const path = await import('path');
-        const dir = path.join(process.cwd(), 'empleados');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const dir = resolveEmpleadosDir();
+        removeEmpleadoPhysicalPhotos(empUuid);
         fs.writeFileSync(path.join(dir, `${empUuid}${photoExt}`), buffer);
+        foto = `/empleados/${empUuid}${photoExt}`;
+        invalidateEmpleadoThumbnails(empUuid);
       } catch (e) {
         console.error('Error guardando foto de empleado:', e);
       }
@@ -3692,25 +3758,30 @@ export async function updateEmpleadoModel(id, data) {
       }
     }
 
-    // Guardar nueva foto en disco si viene en base64
-    const isWebp = (data.fotoBase64 || '').startsWith('data:image/webp');
-    const photoExt = isWebp ? '.webp' : '.jpg';
+    // Gestion de Fotografía (Crear nueva, Reemplazar o Eliminar)
+    const isRemoveFoto = Boolean(data.removeFoto || data.foto === null);
+    let foto = data.foto !== undefined ? data.foto : existing.foto;
 
     if (data.fotoBase64) {
       try {
+        const isWebp = (data.fotoBase64 || '').startsWith('data:image/webp');
+        const photoExt = isWebp ? '.webp' : '.jpg';
         const base64Data = data.fotoBase64.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
-        const fs = await import('fs');
-        const path = await import('path');
-        const dir = path.join(process.cwd(), 'empleados');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const dir = resolveEmpleadosDir();
+        removeEmpleadoPhysicalPhotos(eUuid);
         fs.writeFileSync(path.join(dir, `${eUuid}${photoExt}`), buffer);
+        foto = `/empleados/${eUuid}${photoExt}`;
+        invalidateEmpleadoThumbnails(eUuid);
       } catch (e) {
         console.error('Error actualizando foto de empleado:', e);
       }
+    } else if (isRemoveFoto) {
+      foto = null;
+      removeEmpleadoPhysicalPhotos(eUuid);
+      invalidateEmpleadoThumbnails(eUuid);
     }
 
-    const foto = data.foto !== undefined ? data.foto : (data.fotoBase64 ? `/empleados/${eUuid}${photoExt}` : existing.foto);
     const nombre = data.nombre !== undefined ? data.nombre : existing.nombre;
     const rawIngreso = data.fecha_ingreso !== undefined ? data.fecha_ingreso : existing.fecha_ingreso;
     const fecha_ingreso = cleanDateOnly(rawIngreso);
@@ -3780,7 +3851,15 @@ export async function updateEmpleadoModel(id, data) {
 }
 
 export async function deleteEmpleadoModel(id) {
-  return await deleteEntityDynamic('empleados', 'empleado', id);
+  const result = await deleteEntityDynamic('empleados', 'empleado', id);
+  if (result && (result.success || result.id || result.uuid)) {
+    const targetUuid = result.uuid || (isUuid(id) ? id : null);
+    if (targetUuid) {
+      removeEmpleadoPhysicalPhotos(targetUuid);
+      invalidateEmpleadoThumbnails(targetUuid);
+    }
+  }
+  return result;
 }
 
 

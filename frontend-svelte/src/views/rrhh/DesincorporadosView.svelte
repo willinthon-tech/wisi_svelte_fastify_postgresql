@@ -17,43 +17,9 @@
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
   import { masterCargosStore, masterEmpleadosActions, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
-  import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
-  import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
-
-  // Computed assigned sala IDs for the active user
-  $: assignedSalaIds = (() => {
-    const user = $currentUserStore;
-    const userId = user?.uuid || user?.id;
-    if (!userId) return [];
-
-    const masterMap = $masterUserSalasStore;
-    if (
-      masterMap &&
-      typeof masterMap === "object" &&
-      !Array.isArray(masterMap)
-    ) {
-      const userList = masterMap[userId] || masterMap[String(userId)];
-      if (Array.isArray(userList)) {
-        return userList
-          .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
-          .filter(Boolean)
-          .map(String);
-      }
-    }
-
-    const authSalas = $authUserSalasStore;
-    if (Array.isArray(authSalas) && authSalas.length > 0) {
-      return authSalas
-        .map((s) => (typeof s === "object" ? (s.uuid || s.id) : s))
-        .filter(Boolean)
-        .map(String);
-    }
-
-    return [];
-  })();
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -136,9 +102,9 @@
     ]);
   });
 
-  // Fetch filter options ONLY when active filters, user assigned salas or search change
+  // Fetch filter options ONLY when active filters or search change (all salas without user restriction)
   let lastFilterKey = "";
-  $: filterKey = `${(assignedSalaIds || []).join(",")}_${selectedSalas.join(",")}_${selectedDepartamentos.join(",")}_${selectedAreas.join(",")}_${selectedCargos.join(",")}_${selectedSexo.join(",")}_${(searchQuery || "").trim()}`;
+  $: filterKey = `${selectedSalas.join(",")}_${selectedDepartamentos.join(",")}_${selectedAreas.join(",")}_${selectedCargos.join(",")}_${selectedSexo.join(",")}_${(searchQuery || "").trim()}`;
   $: if (filterKey !== lastFilterKey) {
     lastFilterKey = filterKey;
     fetchFilterOptions();
@@ -148,7 +114,7 @@
     try {
       const q = new URLSearchParams();
       q.set("activo", "false");
-      if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
+      // Note: No se envia user_sala_ids para que todas las salas y registros esten disponibles sin restriccion
       if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
       if (selectedDepartamentos.length > 0) q.set("departamento_ids", selectedDepartamentos.join(","));
       if (selectedAreas.length > 0) q.set("area_ids", selectedAreas.join(","));
@@ -180,9 +146,7 @@
         sortDir: currentParams.sortDir || 'desc',
         activo: 'false'
       });
-      if (assignedSalaIds && assignedSalaIds.length > 0) {
-        q.set('user_sala_ids', assignedSalaIds.join(','));
-      }
+      // Sin restriccion de salas de usuario para desincorporados
       if (selectedSalas.length > 0) {
         q.set('sala_ids', selectedSalas.join(','));
       }
@@ -210,13 +174,8 @@
     } catch (err) {
       console.warn('Fallback local IndexedDB para desincorporados:', err);
       const local = await getLocalItems('empleados', null, 'created_at', 'desc');
+      // Mostrar todos los inactivos sin restriccion de salas asignadas
       let inactive = (Array.isArray(local) ? local : []).filter(e => e.activo === false || e.activo === 0 || e.activo === '0');
-      if (assignedSalaIds && assignedSalaIds.length > 0) {
-        inactive = inactive.filter(x => {
-          const s = x.sala_uuid || x.sala_id;
-          return s && assignedSalaIds.includes(String(s));
-        });
-      }
       const q = (currentParams.search || '').trim().toLowerCase();
       const filtered = q ? inactive.filter(x => (x.nombre || '').toLowerCase().includes(q) || (x.cedula || '').toLowerCase().includes(q)) : inactive;
       totalCount = filtered.length;
@@ -237,11 +196,7 @@
     loadServerData({ page: 1, search: "" });
   }
 
-  $: filteredCargosStore = ($masterCargosStore || []).filter(c => {
-    if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
-    const cSala = c.sala_uuid || c.sala_id;
-    return !cSala || assignedSalaIds.includes(String(cSala));
-  });
+  $: filteredCargosStore = $masterCargosStore || [];
 
   $: columns = [
     { key: 'foto', label: 'Foto', type: 'photo', sortable: false, editable: false },

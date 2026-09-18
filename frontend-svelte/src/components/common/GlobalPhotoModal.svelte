@@ -260,7 +260,13 @@
     // Si es un empleado o desincorporado (sin evento de marcaje), usa su foto de empleado
     if (mode === 'empleado' || mode === 'desincorporado') {
       if (record.foto && typeof record.foto === 'string' && record.foto.trim().length > 0) {
-        return toBackendUrl(record.foto, opts);
+        const ts = record.updated_at ? new Date(record.updated_at).getTime() : '';
+        const sep = record.foto.includes('?') ? '&' : '?';
+        const pathWithTs = ts ? `${record.foto}${sep}t=${ts}` : record.foto;
+        return toBackendUrl(pathWithTs, opts);
+      }
+      if (record.foto === null || record.foto === '') {
+        return "";
       }
       const empId = record.empleado_id || record.id;
       if (empId) return toBackendUrl(`/empleados/${empId}.jpg`, opts);

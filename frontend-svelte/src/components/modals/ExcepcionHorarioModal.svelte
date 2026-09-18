@@ -27,6 +27,41 @@
     return u ? [u, ...rest] : rest;
   })();
 
+  const DIAS_LETRAS = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  const DIAS_NOMBRES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+  function getDiaLetra(fechaStr, fallbackDayOfWeek) {
+    if (fallbackDayOfWeek && typeof fallbackDayOfWeek === 'string' && fallbackDayOfWeek.trim().length === 1) {
+      return fallbackDayOfWeek.trim().toUpperCase();
+    }
+    if (!fechaStr) return '';
+    try {
+      const parts = String(fechaStr).split('-');
+      if (parts.length < 3) return '';
+      const [y, m, d] = parts.map(Number);
+      const dt = new Date(y, m - 1, d, 12, 0, 0);
+      return DIAS_LETRAS[dt.getDay()] || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function getDiaNombreCompleto(fechaStr) {
+    if (!fechaStr) return '';
+    try {
+      const parts = String(fechaStr).split('-');
+      if (parts.length < 3) return '';
+      const [y, m, d] = parts.map(Number);
+      const dt = new Date(y, m - 1, d, 12, 0, 0);
+      return DIAS_NOMBRES[dt.getDay()] || '';
+    } catch {
+      return '';
+    }
+  }
+
+  $: diaLetra = getDiaLetra(dia?.fechaStr, dia?.dayOfWeek);
+  $: diaNombreCompleto = getDiaNombreCompleto(dia?.fechaStr);
+
   let marcajesLoading = false;
   let marcajesContext = [];
   let assignedPlantillasEmp = [];
@@ -816,10 +851,22 @@
           </div>
         </div>
 
-        <!-- Derecha (otra esquina): Fecha en badge azul y botón cerrar -->
-        <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-          <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 7px; background: #eff6ff; border: 1.5px solid #3b82f6; color: #1d4ed8; font-size: 13px; font-weight: 900; letter-spacing: 0.5px; box-shadow: 0 1px 3px rgba(59, 130, 246, 0.15);">
-            📅 {dia?.fechaStr || ''}
+        <!-- Derecha (otra esquina): Fecha en badge azul con la letra del día (L, M, M, J, V, S, D) y botón cerrar -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+          <span 
+            style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 7px; background: #eff6ff; border: 1.5px solid #3b82f6; color: #1d4ed8; font-size: 13px; font-weight: 900; letter-spacing: 0.3px; box-shadow: 0 1px 3px rgba(59, 130, 246, 0.15);" 
+            title="{diaNombreCompleto ? `${diaNombreCompleto}, ` : ''}{dia?.fechaStr || ''}"
+          >
+            <span>🗓️</span>
+            <span style="font-family: monospace; font-size: 13px; letter-spacing: 0.5px;">{dia?.fechaStr || ''}</span>
+            {#if diaLetra}
+              <span 
+                style="display: inline-flex; align-items: center; justify-content: center; background: #2563eb; color: #ffffff; width: 20px; height: 20px; border-radius: 5px; font-size: 11.5px; font-weight: 900; line-height: 1; box-shadow: 0 1px 2px rgba(37,99,235,0.3); margin-left: 2px;" 
+                title="Día de la semana: {diaNombreCompleto} ({diaLetra})"
+              >
+                {diaLetra}
+              </span>
+            {/if}
           </span>
 
           <button 
@@ -936,7 +983,14 @@
                   {#each marcajesContext as ctx}
                     <tr style="border-bottom: 1px solid #f1f5f9; background-color: {ctx.fechaStr === dia?.fechaStr ? '#eff6ff' : '#ffffff'};">
                       <td style="padding: 6px 10px; font-weight: {ctx.fechaStr === dia?.fechaStr ? '900' : '700'}; color: {ctx.fechaStr === dia?.fechaStr ? '#1d4ed8' : '#334155'}; white-space: nowrap;">
-                        {ctx.label}
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                          <span>{ctx.label}</span>
+                          {#if getDiaLetra(ctx.fechaStr)}
+                            <span style="display: inline-flex; align-items: center; justify-content: center; background: {ctx.fechaStr === dia?.fechaStr ? '#2563eb' : '#e2e8f0'}; color: {ctx.fechaStr === dia?.fechaStr ? '#ffffff' : '#334155'}; width: 16px; height: 16px; border-radius: 4px; font-size: 9.5px; font-weight: 900; line-height: 1;" title="{getDiaNombreCompleto(ctx.fechaStr)}">
+                              {getDiaLetra(ctx.fechaStr)}
+                            </span>
+                          {/if}
+                        </div>
                         <span style="display: block; font-size: 9.5px; color: #64748b; font-weight: 500;">{ctx.fechaStr}</span>
                       </td>
                       <td style="padding: 6px 10px; font-weight: 800; font-size: 11px;">

@@ -18,6 +18,7 @@
   let uuid = null;
   let fotoUrl = '';
   let fotoBase64 = '';
+  let removeFoto = false;
   let cedulaPrefix = 'V';
   let isPrefixDropdownOpen = false;
   let cedulaNumber = '';
@@ -175,6 +176,7 @@
     isPrefixDropdownOpen = false;
     isCropperOpen = false;
     fotoBase64 = '';
+    removeFoto = false;
 
     // Si los stores de cargos o dispositivos aún no están listos en la primera apertura, cargarlos inmediatamente
     if (!$masterCargosStore || $masterCargosStore.length === 0 || !$masterDispositivosStore || $masterDispositivosStore.length === 0) {
@@ -184,7 +186,10 @@
     if (item && (item.uuid || item.id)) {
       uuid = item.uuid || item.id;
       const targetUuid = item.uuid || item.id;
-      fotoUrl = item.foto ? toBackendUrl(item.foto, { preview: true }) : toBackendUrl(`/empleados/${targetUuid}.jpg`, { preview: true });
+      const v = item.updated_at ? new Date(item.updated_at).getTime() : Date.now();
+      fotoUrl = (item.foto && typeof item.foto === 'string') 
+        ? toBackendUrl(item.foto, { preview: true, v }) 
+        : '';
       nombre = item.nombre || '';
       
       const rawCed = String(item.cedula || '').trim().toUpperCase();
@@ -223,6 +228,8 @@
       // New employee defaults
       uuid = null;
       fotoUrl = '';
+      fotoBase64 = '';
+      removeFoto = false;
       cedulaPrefix = 'V';
       cedulaNumber = '';
       nombre = '';
@@ -484,9 +491,18 @@
     }
     fotoBase64 = compressed;
     fotoUrl = compressed;
+    removeFoto = false;
     isCropperOpen = false;
     cropperImg = null;
     triggerToast('Fotografía procesada y optimizada con éxito', 'success');
+  }
+
+  function handleRemovePhoto() {
+    fotoUrl = '';
+    fotoBase64 = '';
+    removeFoto = true;
+    if (fileInput) fileInput.value = '';
+    triggerToast('Foto eliminada del formulario', 'info');
   }
 
   function close() {
@@ -527,7 +543,10 @@
       dispositivo_ids: Array.from(selectedDispositivoUuids).map(String)
     };
 
-    if (fotoBase64) {
+    if (removeFoto) {
+      payload.removeFoto = true;
+      payload.foto = null;
+    } else if (fotoBase64) {
       payload.fotoBase64 = fotoBase64;
     }
 
@@ -606,6 +625,15 @@
               </div>
             {/if}
           </button>
+          {#if fotoUrl}
+            <button 
+              type="button" 
+              class="btn-remove-photo" 
+              on:click|stopPropagation={handleRemovePhoto}
+              title="Eliminar foto del empleado">
+              ✕ Quitar foto
+            </button>
+          {/if}
         </div>
 
         <!-- Cédula Field -->
@@ -976,9 +1004,31 @@
   /* Photo Section */
   .avatar-container {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    margin-bottom: 4px;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .btn-remove-photo {
+    background: #fee2e2;
+    color: #ef4444;
+    border: 1px solid #fca5a5;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-remove-photo:hover {
+    background: #fecaca;
+    color: #dc2626;
   }
 
   .avatar-circle-btn {

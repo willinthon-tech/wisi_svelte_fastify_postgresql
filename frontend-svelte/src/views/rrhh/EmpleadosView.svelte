@@ -344,11 +344,11 @@
     const targetUuid = detail.uuid || detail.id;
     const draft = detail.draft || detail;
     try {
-      await masterEmpleadosActions.update(targetUuid, draft);
+      const updated = await masterEmpleadosActions.update(targetUuid, draft);
       triggerToast('Empleado actualizado exitosamente', 'success');
       isFormModalOpen = false;
       formModalItem = null;
-      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft, ...(updated || {}) } : x);
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar empleado: ${err.message}`, 'error');

@@ -109,6 +109,20 @@
 
   $: if (src) {
     loadImage(src);
+  } else {
+    cleanupObjectUrl();
+    displaySrc = '';
+    isLoading = false;
+    hasError = true;
+  }
+
+  // Reactividad al cambiar la versión (ej. updated_at del empleado tras editar/guardar foto)
+  let lastWatchedVersion = version;
+  $: if (version !== lastWatchedVersion) {
+    lastWatchedVersion = version;
+    if (src) {
+      loadImage(src);
+    }
   }
 
   function handleImgError() {
