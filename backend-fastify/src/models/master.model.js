@@ -6724,6 +6724,10 @@ export function buildMaquinasConditions(params = {}) {
     const lUuids = toUuidArray(params.legalIds || params.legalUuids);
     if (lUuids.length > 0) conds.push(sql`m.legal_uuid = ANY(${lUuids})`);
   }
+  if (!params.skipRangos) {
+    const rUuids = toUuidArray(params.rangoIds || params.rangoUuids);
+    if (rUuids.length > 0) conds.push(sql`m.rango_uuid = ANY(${rUuids})`);
+  }
 
   conds.push(sql`COALESCE(m.is_deleted, false) = false`);
 
@@ -6751,6 +6755,7 @@ export function buildMaquinasConditions(params = {}) {
       LOWER(COALESCE(j.nombre, '')) LIKE ${term} OR
       LOWER(COALESCE(mod.nombre, '')) LIKE ${term} OR
       LOWER(COALESCE(mar.nombre, '')) LIKE ${term} OR
+      LOWER(COALESCE(r.nombre, '')) LIKE ${term} OR
       m.uuid::text LIKE ${term}
     )`);
   }
@@ -6819,7 +6824,13 @@ export async function getMaquinasModel(params = {}) {
       modelo_nombre: 'mod.nombre',
       tipo_nombre: 't.nombre',
       modo_nombre: 'mo.nombre',
-      legal_nombre: 'l.nombre'
+      legal_nombre: 'l.nombre',
+      rango_nombre: 'r.nombre',
+      rango_uuid: 'r.nombre',
+      rango_id: 'r.nombre',
+      contador_entrada_inicial: 'm.contador_entrada_inicial',
+      contador_salida_inicial: 'm.contador_salida_inicial',
+      contador_jackpot_inicial: 'm.contador_jackpot_inicial'
     };
 
     const sortCol = validSortCols[params.sortBy] || 'm.created_at';
@@ -6839,6 +6850,7 @@ export async function getMaquinasModel(params = {}) {
       LEFT JOIN tipos t ON m.tipo_uuid = t.uuid
       LEFT JOIN modos mo ON m.modo_uuid = mo.uuid
       LEFT JOIN legal l ON m.legal_uuid = l.uuid
+      LEFT JOIN rangos r ON m.rango_uuid = r.uuid
     `;
 
     const countRes = await sql`SELECT COUNT(m.uuid)::int AS total ${fromJoin} ${whereClause}`;
@@ -6885,6 +6897,12 @@ export async function getMaquinasModel(params = {}) {
         m.legal_uuid,
         m.legal_uuid AS legal_id,
         l.nombre AS legal_nombre,
+        m.rango_uuid,
+        m.rango_uuid AS rango_id,
+        r.nombre AS rango_nombre,
+        COALESCE(m.contador_entrada_inicial, 0) AS contador_entrada_inicial,
+        COALESCE(m.contador_salida_inicial, 0) AS contador_salida_inicial,
+        COALESCE(m.contador_jackpot_inicial, 0) AS contador_jackpot_inicial,
         m.is_deleted,
         m.created_at,
         m.updated_at
@@ -6920,7 +6938,8 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
         modelos: inMemoryData.modelos || [],
         tipos: inMemoryData.tipos || [],
         modos: inMemoryData.modos || [],
-        legales: inMemoryData.legal || []
+        legales: inMemoryData.legal || [],
+        rangos: inMemoryData.rangos || []
       }
     };
   }
@@ -6939,9 +6958,10 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
       LEFT JOIN tipos t ON m.tipo_uuid = t.uuid
       LEFT JOIN modos mo ON m.modo_uuid = mo.uuid
       LEFT JOIN legal l ON m.legal_uuid = l.uuid
+      LEFT JOIN rangos r ON m.rango_uuid = r.uuid
     `;
 
-    const [sociedadesRes, legalesRes, marcasRes, modelosRes, juegosRes, gruposRes, salasRes, estadosRes, valoresRes, tiposRes, modosRes] = await Promise.all([
+    const [sociedadesRes, legalesRes, marcasRes, modelosRes, juegosRes, gruposRes, salasRes, estadosRes, valoresRes, tiposRes, modosRes, rangosRes] = await Promise.all([
       // 1. Sociedades
       (async () => {
         const conds = buildMaquinasConditions({ ...options, skipSociedades: true });
@@ -7154,6 +7174,24 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
         return (res || [])
           .map(r => ({ id: r.uuid, uuid: r.uuid, nombre: toTitleCase(r.nombre), count: r.count }))
           .filter(r => r.count > 0 || active.has(r.uuid));
+      })(),
+
+      // 12. Rangos
+      (async () => {
+        const conds = buildMaquinasConditions({ ...options, skipRangos: true });
+        const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
+        const res = await sql`
+          SELECT r.uuid, r.uuid AS id, r.nombre, COUNT(DISTINCT m.uuid)::int AS count
+          ${fromJoin}
+          ${where}
+          AND r.uuid IS NOT NULL
+          GROUP BY r.uuid, r.nombre
+          ORDER BY r.nombre ASC
+        `.catch(() => []);
+        const active = new Set(toUuidArray(options.rangoIds || options.rangoUuids));
+        return (res || [])
+          .map(r => ({ id: r.uuid, uuid: r.uuid, nombre: toTitleCase(r.nombre), count: r.count }))
+          .filter(r => r.count > 0 || active.has(r.uuid));
       })()
     ]);
 
@@ -7170,7 +7208,8 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
         estados: estadosRes || [],
         valores: valoresRes || [],
         tipos: tiposRes || [],
-        modos: modosRes || []
+        modos: modosRes || [],
+        rangos: rangosRes || []
       }
     };
   } catch (err) {
@@ -7188,7 +7227,8 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
         modelos: [],
         tipos: [],
         modos: [],
-        legales: []
+        legales: [],
+        rangos: []
       }
     };
   }
@@ -7241,6 +7281,12 @@ export async function getMaquinaByIdModel(id) {
         m.legal_uuid,
         m.legal_uuid AS legal_id,
         l.nombre AS legal_nombre,
+        m.rango_uuid,
+        m.rango_uuid AS rango_id,
+        r.nombre AS rango_nombre,
+        COALESCE(m.contador_entrada_inicial, 0) AS contador_entrada_inicial,
+        COALESCE(m.contador_salida_inicial, 0) AS contador_salida_inicial,
+        COALESCE(m.contador_jackpot_inicial, 0) AS contador_jackpot_inicial,
         m.is_deleted,
         m.created_at,
         m.updated_at
@@ -7256,6 +7302,7 @@ export async function getMaquinaByIdModel(id) {
       LEFT JOIN tipos t ON m.tipo_uuid = t.uuid
       LEFT JOIN modos mo ON m.modo_uuid = mo.uuid
       LEFT JOIN legal l ON m.legal_uuid = l.uuid
+      LEFT JOIN rangos r ON m.rango_uuid = r.uuid
       WHERE m.uuid = ${targetUuid}::uuid
       LIMIT 1
     `;
@@ -7300,6 +7347,13 @@ export async function createMaquinaModel(data) {
   const rawLegal = data.legal_uuid || data.legal_id;
   const legal_uuid = rawLegal && isUuid(rawLegal) ? String(rawLegal).trim() : null;
 
+  const rawRango = data.rango_uuid || data.rango_id;
+  const rango_uuid = rawRango && isUuid(rawRango) ? String(rawRango).trim() : null;
+
+  const contador_entrada_inicial = (data.contador_entrada_inicial !== undefined && data.contador_entrada_inicial !== null && data.contador_entrada_inicial !== '') ? Number(data.contador_entrada_inicial) : 0;
+  const contador_salida_inicial = (data.contador_salida_inicial !== undefined && data.contador_salida_inicial !== null && data.contador_salida_inicial !== '') ? Number(data.contador_salida_inicial) : 0;
+  const contador_jackpot_inicial = (data.contador_jackpot_inicial !== undefined && data.contador_jackpot_inicial !== null && data.contador_jackpot_inicial !== '') ? Number(data.contador_jackpot_inicial) : 0;
+
   if (isPgConnected && sql) {
     if (serial.toUpperCase() !== 'N/A') {
       const existing = await sql`
@@ -7324,7 +7378,11 @@ export async function createMaquinaModel(data) {
         modelo_uuid, 
         tipo_uuid, 
         modo_uuid, 
-        legal_uuid
+        legal_uuid,
+        rango_uuid,
+        contador_entrada_inicial,
+        contador_salida_inicial,
+        contador_jackpot_inicial
       ) VALUES (
         ${maquinaUuid}::uuid,
         ${nombre}, ${serial}, ${puestos}, 
@@ -7336,11 +7394,15 @@ export async function createMaquinaModel(data) {
         ${modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`}, 
         ${tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`}, 
         ${modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`}, 
-        ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`}
+        ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`},
+        ${rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`},
+        ${contador_entrada_inicial},
+        ${contador_salida_inicial},
+        ${contador_jackpot_inicial}
       )
       RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
         sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
-        modo_uuid AS modo_id, legal_uuid AS legal_id
+        modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
     `;
     return rows[0];
   } else {
@@ -7375,6 +7437,11 @@ export async function createMaquinaModel(data) {
       modo_id: modo_uuid,
       legal_uuid,
       legal_id: legal_uuid,
+      rango_uuid,
+      rango_id: rango_uuid,
+      contador_entrada_inicial,
+      contador_salida_inicial,
+      contador_jackpot_inicial,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -7419,6 +7486,13 @@ export async function updateMaquinaModel(id, data) {
   const rawLegal = data.legal_uuid !== undefined ? data.legal_uuid : data.legal_id;
   const legal_uuid = rawLegal !== undefined ? (rawLegal && isUuid(rawLegal) ? String(rawLegal).trim() : null) : undefined;
 
+  const rawRango = data.rango_uuid !== undefined ? data.rango_uuid : data.rango_id;
+  const rango_uuid = rawRango !== undefined ? (rawRango && isUuid(rawRango) ? String(rawRango).trim() : null) : undefined;
+
+  const contador_entrada_inicial = (data.contador_entrada_inicial !== undefined && data.contador_entrada_inicial !== null && data.contador_entrada_inicial !== '') ? Number(data.contador_entrada_inicial) : (data.contador_entrada_inicial === '' ? 0 : undefined);
+  const contador_salida_inicial = (data.contador_salida_inicial !== undefined && data.contador_salida_inicial !== null && data.contador_salida_inicial !== '') ? Number(data.contador_salida_inicial) : (data.contador_salida_inicial === '' ? 0 : undefined);
+  const contador_jackpot_inicial = (data.contador_jackpot_inicial !== undefined && data.contador_jackpot_inicial !== null && data.contador_jackpot_inicial !== '') ? Number(data.contador_jackpot_inicial) : (data.contador_jackpot_inicial === '' ? 0 : undefined);
+
   if (isPgConnected && sql) {
     if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
       const existing = await sql`
@@ -7447,11 +7521,15 @@ export async function updateMaquinaModel(id, data) {
         tipo_uuid = ${tipo_uuid !== undefined ? (tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`) : sql`tipo_uuid`},
         modo_uuid = ${modo_uuid !== undefined ? (modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`) : sql`modo_uuid`},
         legal_uuid = ${legal_uuid !== undefined ? (legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`) : sql`legal_uuid`},
+        rango_uuid = ${rango_uuid !== undefined ? (rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`) : sql`rango_uuid`},
+        contador_entrada_inicial = ${contador_entrada_inicial !== undefined ? contador_entrada_inicial : sql`contador_entrada_inicial`},
+        contador_salida_inicial = ${contador_salida_inicial !== undefined ? contador_salida_inicial : sql`contador_salida_inicial`},
+        contador_jackpot_inicial = ${contador_jackpot_inicial !== undefined ? contador_jackpot_inicial : sql`contador_jackpot_inicial`},
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid = ${targetUuid}::uuid
       RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
         sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
-        modo_uuid AS modo_id, legal_uuid AS legal_id
+        modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
     `;
     return rows[0] || null;
   } else {
@@ -7503,6 +7581,13 @@ export async function updateMaquinaModel(id, data) {
         list[idx].legal_uuid = legal_uuid;
         list[idx].legal_id = legal_uuid;
       }
+      if (rango_uuid !== undefined) {
+        list[idx].rango_uuid = rango_uuid;
+        list[idx].rango_id = rango_uuid;
+      }
+      if (contador_entrada_inicial !== undefined) list[idx].contador_entrada_inicial = contador_entrada_inicial;
+      if (contador_salida_inicial !== undefined) list[idx].contador_salida_inicial = contador_salida_inicial;
+      if (contador_jackpot_inicial !== undefined) list[idx].contador_jackpot_inicial = contador_jackpot_inicial;
       list[idx].updated_at = new Date().toISOString();
       return list[idx];
     }

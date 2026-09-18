@@ -16,6 +16,7 @@
     selectedValores: [],
     selectedTipos: [],
     selectedModos: [],
+    selectedRangos: [],
     searchQuery: ""
   });
 </script>
@@ -24,7 +25,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
-  import { masterSalasStore, masterMaquinasStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterSalasStore, masterMaquinasStore, masterRangosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { getLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
@@ -57,6 +58,7 @@
   let selectedValores = initial.selectedValores || [];
   let selectedTipos = initial.selectedTipos || [];
   let selectedModos = initial.selectedModos || [];
+  let selectedRangos = initial.selectedRangos || [];
   let searchQuery = initial.searchQuery || "";
 
   // Debounce inputs for searchNombre and searchSerial
@@ -84,6 +86,7 @@
       selectedValores,
       selectedTipos,
       selectedModos,
+      selectedRangos,
       searchQuery
     });
   }
@@ -100,7 +103,8 @@
     modelos: [],
     tipos: [],
     modos: [],
-    legales: []
+    legales: [],
+    rangos: []
   };
 
   $: hasActiveFilters = Boolean(
@@ -117,7 +121,8 @@
     selectedEstados.length > 0 ||
     selectedValores.length > 0 ||
     selectedTipos.length > 0 ||
-    selectedModos.length > 0
+    selectedModos.length > 0 ||
+    selectedRangos.length > 0
   );
 
   $: totalFilters = ((searchNombre || "").trim() ? 1 : 0) +
@@ -133,7 +138,8 @@
     selectedEstados.length +
     selectedValores.length +
     selectedTipos.length +
-    selectedModos.length;
+    selectedModos.length +
+    selectedRangos.length;
 
   let items = [];
   let totalCount = 0;
@@ -160,7 +166,7 @@
 
   // Fetch filter options dynamically whenever active filters, search inputs or user assigned salas change
   let lastFilterKey = "";
-  $: filterKey = `${(assignedSalaIds || []).join(",")}_${searchNombre.trim()}_${searchSerial.trim()}_${selectedSociedades.join(",")}_${selectedLegales.join(",")}_${selectedMarcas.join(",")}_${selectedModelos.join(",")}_${selectedJuegos.join(",")}_${selectedGrupos.join(",")}_${selectedSalas.join(",")}_${selectedEstados.join(",")}_${selectedValores.join(",")}_${selectedTipos.join(",")}_${selectedModos.join(",")}_${searchQuery.trim()}`;
+  $: filterKey = `${(assignedSalaIds || []).join(",")}_${searchNombre.trim()}_${searchSerial.trim()}_${selectedSociedades.join(",")}_${selectedLegales.join(",")}_${selectedMarcas.join(",")}_${selectedModelos.join(",")}_${selectedJuegos.join(",")}_${selectedGrupos.join(",")}_${selectedSalas.join(",")}_${selectedEstados.join(",")}_${selectedValores.join(",")}_${selectedTipos.join(",")}_${selectedModos.join(",")}_${selectedRangos.join(",")}_${searchQuery.trim()}`;
   $: if (filterKey !== lastFilterKey) {
     lastFilterKey = filterKey;
     fetchFilterOptions();
@@ -181,6 +187,7 @@
       if (selectedTipos.length > 0) q.set("tipo_ids", selectedTipos.join(","));
       if (selectedModos.length > 0) q.set("modo_ids", selectedModos.join(","));
       if (selectedLegales.length > 0) q.set("legal_ids", selectedLegales.join(","));
+      if (selectedRangos.length > 0) q.set("rango_ids", selectedRangos.join(","));
       if (searchNombre.trim()) q.set("search_nombre", searchNombre.trim());
       if (searchSerial.trim()) q.set("search_serial", searchSerial.trim());
       if (searchQuery.trim()) q.set("search", searchQuery.trim());
@@ -245,6 +252,9 @@
       if (selectedLegales.length > 0) {
         q.set('legal_ids', selectedLegales.join(','));
       }
+      if (selectedRangos.length > 0) {
+        q.set('rango_ids', selectedRangos.join(','));
+      }
 
       const res = await fetch(`/api/master/maquinas?${q.toString()}`);
       const json = await res.json();
@@ -292,6 +302,7 @@
     selectedValores = [];
     selectedTipos = [];
     selectedModos = [];
+    selectedRangos = [];
     loadServerData({ page: 1, search: "" });
   }
 
@@ -319,6 +330,15 @@
 
   $: defaultSalaId = (assignedSalaIds && assignedSalaIds.length > 0) ? assignedSalaIds[0] : (userSalasForCreate[0]?.uuid || userSalasForCreate[0]?.id || 1);
 
+  $: rangosOptions = ($masterRangosStore && $masterRangosStore.length > 0
+    ? $masterRangosStore
+    : (filterOptions.rangos || [])
+  ).map(r => ({
+    uuid: r.uuid,
+    id: r.uuid || r.id,
+    nombre: r.nombre
+  }));
+
   // Column definitions for PaginatedDataTable
   $: columns = [
     { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
@@ -335,7 +355,11 @@
     { key: 'valor_nombre', keyId: 'valor_uuid', label: 'VALOR', sortable: true, editable: true, type: 'select', options: filterOptions.valores || [] },
     { key: 'tipo_nombre', keyId: 'tipo_uuid', label: 'TIPO', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
     { key: 'modo_nombre', keyId: 'modo_uuid', label: 'MODO', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
-    { key: 'legal_nombre', keyId: 'legal_uuid', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] }
+    { key: 'legal_nombre', keyId: 'legal_uuid', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] },
+    { key: 'rango_nombre', keyId: 'rango_uuid', label: 'RANGO', sortable: true, editable: true, type: 'select', options: rangosOptions },
+    { key: 'contador_entrada_inicial', label: 'ENTRADA INICIAL', type: 'number', sortable: true, editable: true },
+    { key: 'contador_salida_inicial', label: 'SALIDA INICIAL', type: 'number', sortable: true, editable: true },
+    { key: 'contador_jackpot_inicial', label: 'JACKPOT INICIAL', type: 'number', sortable: true, editable: true }
   ];
 
   // Create modal form fields: nombre and serial are at the BOTTOM in col-6 format
@@ -378,6 +402,20 @@
     {
       type: 'row',
       fields: [
+        { key: 'rango_uuid', label: 'Rango', type: 'select', options: rangosOptions, required: false },
+        { key: 'contador_entrada_inicial', label: 'Contador Entrada Inicial', type: 'number', placeholder: '0.00', defaultValue: 0, min: 0, step: 'any', required: false }
+      ]
+    },
+    {
+      type: 'row',
+      fields: [
+        { key: 'contador_salida_inicial', label: 'Contador Salida Inicial', type: 'number', placeholder: '0.00', defaultValue: 0, min: 0, step: 'any', required: false },
+        { key: 'contador_jackpot_inicial', label: 'Contador Jackpot Inicial', type: 'number', placeholder: '0.00', defaultValue: 0, min: 0, step: 'any', required: false }
+      ]
+    },
+    {
+      type: 'row',
+      fields: [
         { key: 'nombre', label: 'Nombre de Máquina', type: 'text', placeholder: 'Ej. MAQ-001 (o N/A)', required: false },
         { key: 'serial', label: 'Serial de Máquina', type: 'text', placeholder: 'Ej. SN-89234812 (o N/A)', required: false }
       ]
@@ -389,10 +427,20 @@
     if (!draft.uuid) {
       draft.uuid = generateSafeUuid();
     }
-    const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal'];
+    const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal', 'rango'];
     fkMap.forEach(f => {
       if (draft[`${f}_uuid`] && !draft[`${f}_id`]) draft[`${f}_id`] = draft[`${f}_uuid`];
     });
+
+    if (draft.rango_uuid) {
+      const matchedRango = rangosOptions.find(r => String(r.uuid || r.id) === String(draft.rango_uuid));
+      if (matchedRango) {
+        draft.rango_nombre = matchedRango.nombre;
+      }
+    }
+    draft.contador_entrada_inicial = parseFloat(draft.contador_entrada_inicial || 0) || 0;
+    draft.contador_salida_inicial = parseFloat(draft.contador_salida_inicial || 0) || 0;
+    draft.contador_jackpot_inicial = parseFloat(draft.contador_jackpot_inicial || 0) || 0;
 
     // 0ms instant local-first execution
     const newUuid = draft.uuid || generateSafeUuid();
@@ -457,10 +505,30 @@
     const { id, draft } = event.detail;
     const targetUuid = id;
     const payload = { ...draft };
-    const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal'];
+    const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal', 'rango'];
     fkMap.forEach(f => {
       if (payload[`${f}_uuid`] && !payload[`${f}_id`]) payload[`${f}_id`] = payload[`${f}_uuid`];
     });
+
+    if (payload.rango_uuid !== undefined) {
+      if (payload.rango_uuid) {
+        const matchedRango = rangosOptions.find(r => String(r.uuid || r.id) === String(payload.rango_uuid));
+        if (matchedRango) {
+          payload.rango_nombre = matchedRango.nombre;
+        }
+      } else {
+        payload.rango_nombre = null;
+      }
+    }
+    if (payload.contador_entrada_inicial !== undefined) {
+      payload.contador_entrada_inicial = parseFloat(payload.contador_entrada_inicial || 0) || 0;
+    }
+    if (payload.contador_salida_inicial !== undefined) {
+      payload.contador_salida_inicial = parseFloat(payload.contador_salida_inicial || 0) || 0;
+    }
+    if (payload.contador_jackpot_inicial !== undefined) {
+      payload.contador_jackpot_inicial = parseFloat(payload.contador_jackpot_inicial || 0) || 0;
+    }
 
     const existing = items.find(x => String(x.uuid || x.id) === String(targetUuid)) || {};
     const updated = { ...existing, ...payload, uuid: targetUuid, id: targetUuid, updated_at: new Date().toISOString() };
@@ -638,8 +706,8 @@
   on:batchDelete={handleBatchDelete}
 >
   <div slot="filters" class="maquinas-filters-container">
-    <!-- FILA 1: SOCIEDAD (col-6), LEGAL (col-6) -->
-    <div class="filters-row-2">
+    <!-- FILA 1: SOCIEDAD, LEGAL, RANGO -->
+    <div class="filters-row-3">
       <div class="filter-select-col">
         <SmartMultiSelect
           id="filter-maquinas-sociedades"
@@ -656,6 +724,16 @@
           label="LEGAL"
           options={filterOptions.legales}
           bind:selectedValues={selectedLegales}
+          on:change={handleFilterChange}
+        />
+      </div>
+
+      <div class="filter-select-col">
+        <SmartMultiSelect
+          id="filter-maquinas-rangos"
+          label="RANGO"
+          options={filterOptions.rangos && filterOptions.rangos.length > 0 ? filterOptions.rangos : rangosOptions}
+          bind:selectedValues={selectedRangos}
           on:change={handleFilterChange}
         />
       </div>

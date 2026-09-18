@@ -548,11 +548,20 @@
     const draft = {};
     if (Array.isArray(createFields)) {
       for (const f of createFields) {
-        if (f.defaultValue) {
-          draft[f.key] = f.defaultValue === 'today' ? new Date().toISOString().split('T')[0] : f.defaultValue;
-        } else if (f.type === 'date') {
-          // Prellenar con la fecha actual en formato AAAA-MM-DD para selector de fecha
-          draft[f.key] = new Date().toISOString().split('T')[0];
+        if (f.type === 'row' && Array.isArray(f.fields)) {
+          for (const sub of f.fields) {
+            if (sub.defaultValue !== undefined && sub.defaultValue !== null) {
+              draft[sub.key] = sub.defaultValue === 'today' ? new Date().toISOString().split('T')[0] : sub.defaultValue;
+            } else if (sub.type === 'date') {
+              draft[sub.key] = new Date().toISOString().split('T')[0];
+            }
+          }
+        } else {
+          if (f.defaultValue !== undefined && f.defaultValue !== null) {
+            draft[f.key] = f.defaultValue === 'today' ? new Date().toISOString().split('T')[0] : f.defaultValue;
+          } else if (f.type === 'date') {
+            draft[f.key] = new Date().toISOString().split('T')[0];
+          }
         }
       }
     }
@@ -1466,6 +1475,18 @@
                           placeholder="#000000"
                         />
                       </div>
+
+                    {:else if col.type === 'number'}
+                      <!-- Number Input -->
+                      <input 
+                        type="number" 
+                        step={col.step || 'any'}
+                        min={col.min !== undefined ? col.min : 0}
+                        bind:value={inlineDraft[col.key]}
+                        class="inline-input"
+                        style="width: 95px; padding: 3px 6px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: 1px solid #2563eb; background: #ffffff;"
+                        placeholder={col.label}
+                      />
 
                     {:else if col.type === 'time'}
                       <!-- Time Input -->
@@ -2809,11 +2830,11 @@
     
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div 
-      style="background: #ffffff; border-radius: 14px; max-width: 480px; width: 100%; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4); border: 1px solid #e2e8f0; color: #0f172a;"
+      style="background: #ffffff; border-radius: 14px; max-width: 580px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4); border: 1px solid #e2e8f0; color: #0f172a;"
       on:click|stopPropagation>
       
       <!-- Modal Header -->
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
         <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
           <span>➕</span> {createModalTitle || `Agregar Nuevo ${toTitleCase(entityType)}`}
         </h3>
@@ -2826,7 +2847,7 @@
       </div>
 
       <!-- Modal Body Form -->
-      <form on:submit|preventDefault={submitCreateModal} style="padding: 20px;">
+      <form on:submit|preventDefault={submitCreateModal} style="padding: 20px; overflow-y: auto; flex: 1;">
         {#each createFields as field}
           {#if field.type === 'row'}
             <!-- 2-Column Side-by-Side Row (e.g. Hora Entrada & Hora Salida) -->
@@ -2876,7 +2897,7 @@
                       <input 
                         id={`create_subfield_${subField.key}`}
                         type={subField.type || 'text'} 
-                        step={subField.type === 'time' ? '1' : undefined}
+                        step={subField.step || (subField.type === 'time' ? '1' : (subField.type === 'number' ? 'any' : undefined))}
                         min={subField.min}
                         max={subField.max}
                         value={createDraft[subField.key] ?? ''}

@@ -1651,6 +1651,7 @@ export async function getMaquinas(request, reply) {
     const tipoIds = parseIds(q.tipo_ids);
     const modoIds = parseIds(q.modo_ids);
     const legalIds = parseIds(q.legal_ids);
+    const rangoIds = parseIds(q.rango_ids || q.rango_uuids || q.rangos);
 
     const res = await getMaquinasModel({
       page: q.page,
@@ -1671,7 +1672,8 @@ export async function getMaquinas(request, reply) {
       valorIds,
       tipoIds,
       modoIds,
-      legalIds
+      legalIds,
+      rangoIds
     });
     return reply.send(res);
   } catch (err) {
@@ -1696,6 +1698,7 @@ export async function getMaquinasFilterOptions(request, reply) {
       tipoIds: parseIds(q.tipo_ids),
       modoIds: parseIds(q.modo_ids),
       legalIds: parseIds(q.legal_ids),
+      rangoIds: parseIds(q.rango_ids || q.rango_uuids || q.rangos),
       searchNombre: q.search_nombre || q.searchNombre || '',
       searchSerial: q.search_serial || q.searchSerial || '',
       search: q.search || ''
