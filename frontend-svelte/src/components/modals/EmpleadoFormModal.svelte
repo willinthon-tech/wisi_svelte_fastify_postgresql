@@ -324,6 +324,26 @@
     reader.onload = (event) => {
       const img = new Image();
       img.onload = async () => {
+        // Generar inmediatamente JPEG base64 cuadrado por defecto
+        try {
+          const quickCanvas = document.createElement('canvas');
+          quickCanvas.width = 400;
+          quickCanvas.height = 400;
+          const qCtx = quickCanvas.getContext('2d');
+          const scale = Math.max(400 / img.width, 400 / img.height);
+          const drawW = img.width * scale;
+          const drawH = img.height * scale;
+          qCtx.fillStyle = '#ffffff';
+          qCtx.fillRect(0, 0, 400, 400);
+          qCtx.drawImage(img, (400 - drawW) / 2, (400 - drawH) / 2, drawW, drawH);
+          const initialJpg = quickCanvas.toDataURL('image/jpeg', 0.90);
+          fotoBase64 = initialJpg;
+          fotoUrl = initialJpg;
+          removeFoto = false;
+        } catch (prepErr) {
+          console.warn('Error preparando foto rápida:', prepErr);
+        }
+
         cropperImg = img;
         cropperZoom = 1.0;
         cropperOffsetX = 0;
@@ -482,12 +502,9 @@
 
     let compressed;
     try {
-      compressed = outCanvas.toDataURL('image/webp', 0.85);
-      if (!compressed.startsWith('data:image/webp')) {
-        compressed = outCanvas.toDataURL('image/jpeg', 0.85);
-      }
+      compressed = outCanvas.toDataURL('image/jpeg', 0.90);
     } catch (_) {
-      compressed = outCanvas.toDataURL('image/jpeg', 0.85);
+      compressed = outCanvas.toDataURL();
     }
     fotoBase64 = compressed;
     fotoUrl = compressed;

@@ -3770,6 +3770,16 @@ export async function updateEmpleadoModel(id, data) {
         const buffer = Buffer.from(base64Data, 'base64');
         const dir = resolveEmpleadosDir();
         removeEmpleadoPhysicalPhotos(eUuid);
+        if (existing.foto) {
+          const oldBase = path.basename(existing.foto).replace(/\.[^/.]+$/, "");
+          removeEmpleadoPhysicalPhotos(oldBase);
+          invalidateEmpleadoThumbnails(oldBase);
+        }
+        if (existing.cedula) {
+          const cleanCed = String(existing.cedula).replace(/V|-/g, '');
+          removeEmpleadoPhysicalPhotos(cleanCed);
+          invalidateEmpleadoThumbnails(cleanCed);
+        }
         fs.writeFileSync(path.join(dir, `${eUuid}${photoExt}`), buffer);
         foto = `/empleados/${eUuid}${photoExt}`;
         invalidateEmpleadoThumbnails(eUuid);
@@ -3779,6 +3789,16 @@ export async function updateEmpleadoModel(id, data) {
     } else if (isRemoveFoto) {
       foto = null;
       removeEmpleadoPhysicalPhotos(eUuid);
+      if (existing.foto) {
+        const oldBase = path.basename(existing.foto).replace(/\.[^/.]+$/, "");
+        removeEmpleadoPhysicalPhotos(oldBase);
+        invalidateEmpleadoThumbnails(oldBase);
+      }
+      if (existing.cedula) {
+        const cleanCed = String(existing.cedula).replace(/V|-/g, '');
+        removeEmpleadoPhysicalPhotos(cleanCed);
+        invalidateEmpleadoThumbnails(cleanCed);
+      }
       invalidateEmpleadoThumbnails(eUuid);
     }
 
@@ -3845,7 +3865,21 @@ export async function updateEmpleadoModel(id, data) {
       }
     }
 
-    return updatedEmp;
+    const fullRows = await sql`
+      SELECT e.uuid, e.uuid AS id, e.foto, e.nombre, e.cedula, e.sexo, e.cargo_uuid, e.cargo_uuid AS cargo_id, e.activo, e.motivo_desincorporacion,
+             e.created_at, e.updated_at,
+             to_char(e.fecha_nacimiento, 'YYYY-MM-DD') AS fecha_nacimiento,
+             to_char(e.fecha_ingreso, 'YYYY-MM-DD') AS fecha_ingreso,
+             c.nombre AS cargo_nombre, a.nombre AS area_nombre, d.nombre AS departamento_nombre, s.uuid AS sala_id, s.uuid AS sala_uuid, s.nombre AS sala_nombre
+      FROM empleados e
+      LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+      LEFT JOIN areas a ON c.area_uuid = a.uuid
+      LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+      LEFT JOIN salas s ON d.sala_uuid = s.uuid
+      WHERE e.uuid = ${eUuid}::uuid
+      LIMIT 1
+    `;
+    return fullRows[0] || updatedEmp;
   }
   return null;
 }

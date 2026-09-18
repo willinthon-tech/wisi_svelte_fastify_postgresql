@@ -273,7 +273,7 @@ async function startServer() {
       const { sql, isPgConnected } = await import('./config/db.js');
 
       let filename = req.params.filename || req.params.id || '';
-      if (!filename.endsWith('.jpg') && !filename.endsWith('.png') && !filename.endsWith('.jpeg')) {
+      if (!filename.endsWith('.jpg') && !filename.endsWith('.png') && !filename.endsWith('.jpeg') && !filename.endsWith('.webp')) {
         filename += '.jpg';
       }
 
@@ -284,7 +284,14 @@ async function startServer() {
       const searchDirs = isAttlogReq
         ? [path.join(process.cwd(), 'attlogs'), path.join(process.cwd(), 'photos')]
         : isEmpleadoReq
-          ? [path.join(process.cwd(), 'empleados'), path.resolve(__dirname, '../empleados')]
+          ? [
+              path.join(process.cwd(), 'empleados'),
+              path.join(process.cwd(), 'backend-fastify', 'empleados'),
+              path.resolve(__dirname, '../empleados'),
+              path.resolve(__dirname, '../../empleados'),
+              '/var/www/wisi/backend-fastify/empleados',
+              '/var/www/wisi/empleados'
+            ]
           : isClienteReq
             ? [
                 path.join(process.cwd(), 'clientes'),
@@ -402,7 +409,7 @@ async function startServer() {
       // 4. Ultimate Fallback: Stream SVG avatar placeholder with 200 OK so browser console NEVER logs 404!
       reply.header('Access-Control-Allow-Origin', '*');
       reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-      reply.header('Cache-Control', 'public, max-age=86400');
+      reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
       reply.type('image/svg+xml').status(200);
       return reply.send(DEFAULT_AVATAR_SVG);
     };

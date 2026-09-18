@@ -348,8 +348,10 @@
       triggerToast('Empleado actualizado exitosamente', 'success');
       isFormModalOpen = false;
       formModalItem = null;
-      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft, ...(updated || {}) } : x);
-      loadServerData().catch(() => {});
+      const cleanDraft = { ...draft };
+      delete cleanDraft.fotoBase64;
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...cleanDraft, ...(updated || {}) } : x);
+      await loadServerData();
     } catch (err) {
       triggerToast(`Error al actualizar empleado: ${err.message}`, 'error');
     }

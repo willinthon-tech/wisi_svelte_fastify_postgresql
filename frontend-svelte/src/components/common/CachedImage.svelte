@@ -61,7 +61,7 @@
       const cachedResponse = await cache.match(cacheKey);
       if (cachedResponse && cachedResponse.ok) {
         const blob = await cachedResponse.blob();
-        if (blob.size > 0) {
+        if (blob.size > 0 && blob.type !== 'image/svg+xml') {
           cleanupObjectUrl();
           currentObjectUrl = URL.createObjectURL(blob);
           displaySrc = currentObjectUrl;
@@ -90,11 +90,13 @@
         displaySrc = currentObjectUrl;
         isLoading = false;
 
-        // Guardar en la caché local en segundo plano
-        try {
-          await cache.put(cacheKey, responseClone);
-        } catch (cacheErr) {
-          // Ignorar cuota o error de guardado en caché
+        // Guardar en la caché local en segundo plano (solo imágenes reales, nunca el placeholder SVG)
+        if (blob.type !== 'image/svg+xml') {
+          try {
+            await cache.put(cacheKey, responseClone);
+          } catch (cacheErr) {
+            // Ignorar cuota o error de guardado en caché
+          }
         }
       } else {
         hasError = true;
