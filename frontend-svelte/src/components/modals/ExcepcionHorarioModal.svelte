@@ -858,15 +858,15 @@
             title="{diaNombreCompleto ? `${diaNombreCompleto}, ` : ''}{dia?.fechaStr || ''}"
           >
             <span>🗓️</span>
-            <span style="font-family: monospace; font-size: 13px; letter-spacing: 0.5px;">{dia?.fechaStr || ''}</span>
             {#if diaLetra}
               <span 
-                style="display: inline-flex; align-items: center; justify-content: center; background: #2563eb; color: #ffffff; width: 20px; height: 20px; border-radius: 5px; font-size: 11.5px; font-weight: 900; line-height: 1; box-shadow: 0 1px 2px rgba(37,99,235,0.3); margin-left: 2px;" 
+                style="display: inline-flex; align-items: center; justify-content: center; background: #2563eb; color: #ffffff; width: 20px; height: 20px; border-radius: 5px; font-size: 11.5px; font-weight: 900; line-height: 1; box-shadow: 0 1px 2px rgba(37,99,235,0.3);" 
                 title="Día de la semana: {diaNombreCompleto} ({diaLetra})"
               >
                 {diaLetra}
               </span>
             {/if}
+            <span style="font-family: monospace; font-size: 13px; letter-spacing: 0.5px;">{dia?.fechaStr || ''}</span>
           </span>
 
           <button 
@@ -983,15 +983,20 @@
                   {#each marcajesContext as ctx}
                     <tr style="border-bottom: 1px solid #f1f5f9; background-color: {ctx.fechaStr === dia?.fechaStr ? '#eff6ff' : '#ffffff'};">
                       <td style="padding: 6px 10px; font-weight: {ctx.fechaStr === dia?.fechaStr ? '900' : '700'}; color: {ctx.fechaStr === dia?.fechaStr ? '#1d4ed8' : '#334155'}; white-space: nowrap;">
-                        <div style="display: flex; align-items: center; gap: 4px;">
-                          <span>{ctx.label}</span>
+                        <div style="display: flex; align-items: flex-start; gap: 6px;">
                           {#if getDiaLetra(ctx.fechaStr)}
-                            <span style="display: inline-flex; align-items: center; justify-content: center; background: {ctx.fechaStr === dia?.fechaStr ? '#2563eb' : '#e2e8f0'}; color: {ctx.fechaStr === dia?.fechaStr ? '#ffffff' : '#334155'}; width: 16px; height: 16px; border-radius: 4px; font-size: 9.5px; font-weight: 900; line-height: 1;" title="{getDiaNombreCompleto(ctx.fechaStr)}">
+                            <span 
+                              style="display: inline-flex; align-items: center; justify-content: center; background: {ctx.fechaStr === dia?.fechaStr ? '#2563eb' : '#e2e8f0'}; color: {ctx.fechaStr === dia?.fechaStr ? '#ffffff' : '#334155'}; width: 17px; height: 17px; border-radius: 4px; font-size: 10px; font-weight: 900; line-height: 1; flex-shrink: 0; margin-top: 1px; box-shadow: {ctx.fechaStr === dia?.fechaStr ? '0 1px 2px rgba(37,99,235,0.25)' : 'none'};" 
+                              title="{getDiaNombreCompleto(ctx.fechaStr)}"
+                            >
                               {getDiaLetra(ctx.fechaStr)}
                             </span>
                           {/if}
+                          <div style="display: flex; flex-direction: column;">
+                            <span style="line-height: 1.2;">{ctx.label}</span>
+                            <span style="font-size: 9.5px; color: #64748b; font-weight: 500; line-height: 1.2; margin-top: 2px;">{ctx.fechaStr}</span>
+                          </div>
                         </div>
-                        <span style="display: block; font-size: 9.5px; color: #64748b; font-weight: 500;">{ctx.fechaStr}</span>
                       </td>
                       <td style="padding: 6px 10px; font-weight: 800; font-size: 11px;">
                         {#if ctx.punches && ctx.punches.length > 0}
