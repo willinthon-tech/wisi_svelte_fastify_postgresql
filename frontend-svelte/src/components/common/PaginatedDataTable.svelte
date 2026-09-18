@@ -51,19 +51,33 @@
     }
   }
 
-  function formatDateYYYYMMDD(dateStr) {
-    if (!dateStr) return '—';
-    try {
-      const str = dateStr instanceof Date ? dateStr.toISOString().split('T')[0] : String(dateStr).trim();
-      const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-      if (match) {
-        return `${match[1]}/${match[2].padStart(2, '0')}/${match[3].padStart(2, '0')}`;
+  function isColorLight(colorStr) {
+    if (!colorStr) return false;
+    let r = 0, g = 0, b = 0;
+    const str = String(colorStr).trim().toLowerCase();
+    const namedLight = ['white', 'yellow', 'lightyellow', 'lightcyan', 'lightpink', 'pink', 'peachpuff', 'lavender', 'beige', 'wheat'];
+    if (namedLight.includes(str)) return true;
+    if (str.startsWith('#')) {
+      let hex = str.slice(1);
+      if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+      if (hex.length >= 6) {
+        r = parseInt(hex.substring(0, 2), 16) || 0;
+        g = parseInt(hex.substring(2, 4), 16) || 0;
+        b = parseInt(hex.substring(4, 6), 16) || 0;
       }
-      return str;
-    } catch {
-      return '—';
+    } else if (str.startsWith('rgb')) {
+      const matches = str.match(/\d+/g);
+      if (matches && matches.length >= 3) {
+        r = parseInt(matches[0], 10) || 0;
+        g = parseInt(matches[1], 10) || 0;
+        b = parseInt(matches[2], 10) || 0;
+      }
+    } else {
+      return false;
     }
+    return ((r * 299 + g * 587 + b * 114) / 1000) >= 155;
   }
+
 
   function formatDateForInput(dateVal) {
     if (!dateVal) return '';
@@ -1572,8 +1586,9 @@
                     <div style="display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
                       {#if item.horarios_asignados && item.horarios_asignados.length > 0}
                         {#each item.horarios_asignados as h}
+                          {@const light = isColorLight(h.color)}
                           <div 
-                            style="display: inline-flex; align-items: center; gap: 4px; background: {h.color || '#3b82f6'}; color: #ffffff; padding: 3px 9px; border-radius: 12px; font-weight: 800; font-size: 11px; box-shadow: 0 1px 2px rgba(0,0,0,0.12);"
+                            style="display: inline-flex; align-items: center; gap: 4px; background: {h.color || '#3b82f6'}; color: {light ? '#0f172a' : '#ffffff'}; border: {light ? '1.5px solid rgba(15, 23, 42, 0.4)' : '1.5px solid rgba(255, 255, 255, 0.8)'}; padding: 2px 8px; border-radius: 12px; font-weight: 900; font-size: 11px; box-shadow: 0 1px 2px rgba(0,0,0,0.12);"
                             title="{h.nombre} ({h.hora_entrada || ''} - {h.hora_salida || ''})">
                             <span>{h.codigo || 'H'}</span>
                           </div>
