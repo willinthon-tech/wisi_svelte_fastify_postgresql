@@ -3636,8 +3636,104 @@ function invalidateEmpleadoThumbnails(eId) {
   } catch (e) {}
 }
 
+let isEmpleadosSchemaSafeDone = false;
+
+export async function ensureEmpleadosSchemaSafe() {
+  if (isEmpleadosSchemaSafeDone || !isPgConnected || !sql) return;
+  try {
+    await sql.unsafe(`
+      DO $$
+      DECLARE
+        pk_name text;
+      BEGIN
+        -- 1. Si la tabla empleados tiene columna 'id'
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' AND table_name = 'empleados' AND column_name = 'id'
+        ) THEN
+          -- Si 'id' es PRIMARY KEY en empleados, cambiar la PK a uuid
+          SELECT tc.constraint_name INTO pk_name
+          FROM information_schema.table_constraints tc
+          JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+          WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' AND tc.table_name = 'empleados' AND ccu.column_name = 'id';
+
+          IF pk_name IS NOT NULL THEN
+            EXECUTE 'ALTER TABLE empleados DROP CONSTRAINT IF EXISTS "' || pk_name || '" CASCADE';
+          END IF;
+
+          -- Asegurar que uuid sea PRIMARY KEY
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints tc
+            JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+            WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' AND tc.table_name = 'empleados' AND ccu.column_name = 'uuid'
+          ) THEN
+            BEGIN
+              ALTER TABLE empleados ADD PRIMARY KEY (uuid);
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+          END IF;
+
+          -- Eliminar triggers viejos dual-key que pudieran interferir con id
+          DROP TRIGGER IF EXISTS trg_sync_dual_key_empleados ON empleados CASCADE;
+
+          -- Quitar NOT NULL a la columna id
+          BEGIN
+            ALTER TABLE empleados ALTER COLUMN id DROP NOT NULL;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+
+          -- Intentar dropear la columna id
+          BEGIN
+            ALTER TABLE empleados DROP COLUMN IF EXISTS id CASCADE;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+        END IF;
+
+        -- 2. Asegurar que cargo_id si existe no sea NOT NULL
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' AND table_name = 'empleados' AND column_name = 'cargo_id' AND is_nullable = 'NO'
+        ) THEN
+          BEGIN
+            ALTER TABLE empleados ALTER COLUMN cargo_id DROP NOT NULL;
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+        END IF;
+
+        -- 3. Asegurar empleado_dispositivos
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos') THEN
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'id') THEN
+            BEGIN
+              ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
+              ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'empleado_id') THEN
+            BEGIN
+              ALTER TABLE empleado_dispositivos ALTER COLUMN empleado_id DROP NOT NULL;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+          END IF;
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'dispositivo_id') THEN
+            BEGIN
+              ALTER TABLE empleado_dispositivos ALTER COLUMN dispositivo_id DROP NOT NULL;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+          END IF;
+        END IF;
+      END $$;
+    `);
+    isEmpleadosSchemaSafeDone = true;
+  } catch (e) {
+    console.warn('[DB AUTO-HEAL] Advertencia verificando esquema de empleados:', e.message);
+  }
+}
+
 export async function createEmpleadoModel(data) {
   if (isPgConnected && sql) {
+    await ensureEmpleadosSchemaSafe();
+
     if (data.cedula && String(data.cedula).trim()) {
       const normCedula = String(data.cedula).trim().toUpperCase().replace(/V|-/g, '');
       const existing = await sql`
@@ -3677,26 +3773,78 @@ export async function createEmpleadoModel(data) {
     const rawCargo = data.cargo_uuid || data.cargo_id;
     const isCargoU = rawCargo && isUuid(rawCargo);
 
-    const rows = await sql`
-      INSERT INTO empleados (uuid, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_uuid, activo, motivo_desincorporacion)
-      VALUES (
-        ${empUuid}::uuid, 
-        ${foto}, 
-        ${data.nombre}, 
-        ${data.cedula}, 
-        ${fIngreso ? sql`${fIngreso}::date` : sql`NULL`}, 
-        ${fNacimiento ? sql`${fNacimiento}::date` : sql`NULL`}, 
-        ${data.sexo || 'Masculino'}, 
-        ${isCargoU ? sql`${rawCargo}::uuid` : sql`NULL`}, 
-        ${data.activo ?? true}, 
-        ${data.motivo_desincorporacion || null}
-      )
-      RETURNING *, uuid AS id, cargo_uuid AS cargo_id
-    `;
+    let rows;
+    try {
+      rows = await sql`
+        INSERT INTO empleados (uuid, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_uuid, activo, motivo_desincorporacion)
+        VALUES (
+          ${empUuid}::uuid, 
+          ${foto}, 
+          ${data.nombre}, 
+          ${data.cedula}, 
+          ${fIngreso ? sql`${fIngreso}::date` : sql`NULL`}, 
+          ${fNacimiento ? sql`${fNacimiento}::date` : sql`NULL`}, 
+          ${data.sexo || 'Masculino'}, 
+          ${isCargoU ? sql`${rawCargo}::uuid` : sql`NULL`}, 
+          ${data.activo ?? true}, 
+          ${data.motivo_desincorporacion || null}
+        )
+        RETURNING *, uuid AS id, cargo_uuid AS cargo_id
+      `;
+    } catch (insertErr) {
+      if (insertErr.message && (
+        insertErr.message.includes('column "id"') || 
+        insertErr.message.includes('not-null constraint') ||
+        insertErr.message.includes('empleados')
+      )) {
+        isEmpleadosSchemaSafeDone = false;
+        await ensureEmpleadosSchemaSafe();
+
+        try {
+          rows = await sql`
+            INSERT INTO empleados (uuid, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_uuid, activo, motivo_desincorporacion)
+            VALUES (
+              ${empUuid}::uuid, 
+              ${foto}, 
+              ${data.nombre}, 
+              ${data.cedula}, 
+              ${fIngreso ? sql`${fIngreso}::date` : sql`NULL`}, 
+              ${fNacimiento ? sql`${fNacimiento}::date` : sql`NULL`}, 
+              ${data.sexo || 'Masculino'}, 
+              ${isCargoU ? sql`${rawCargo}::uuid` : sql`NULL`}, 
+              ${data.activo ?? true}, 
+              ${data.motivo_desincorporacion || null}
+            )
+            RETURNING *, uuid AS id, cargo_uuid AS cargo_id
+          `;
+        } catch (retryErr) {
+          // Fallback seguro: si la columna id todavía existe en la tabla y requiere valor entero
+          rows = await sql`
+            INSERT INTO empleados (id, uuid, foto, nombre, cedula, fecha_ingreso, fecha_nacimiento, sexo, cargo_uuid, activo, motivo_desincorporacion)
+            VALUES (
+              COALESCE((SELECT MAX(id) FROM empleados), 0) + 1,
+              ${empUuid}::uuid, 
+              ${foto}, 
+              ${data.nombre}, 
+              ${data.cedula}, 
+              ${fIngreso ? sql`${fIngreso}::date` : sql`NULL`}, 
+              ${fNacimiento ? sql`${fNacimiento}::date` : sql`NULL`}, 
+              ${data.sexo || 'Masculino'}, 
+              ${isCargoU ? sql`${rawCargo}::uuid` : sql`NULL`}, 
+              ${data.activo ?? true}, 
+              ${data.motivo_desincorporacion || null}
+            )
+            RETURNING *, uuid AS id, cargo_uuid AS cargo_id
+          `;
+        }
+      } else {
+        throw insertErr;
+      }
+    }
     const emp = rows[0];
 
     // Sincronizar dispositivos seleccionados
-    const validDevs = toUuidArray(data.dispositivo_ids);
+    const validDevs = toUuidArray(data.dispositivo_ids || data.dispositivo_uuids);
     if (validDevs.length > 0) {
       try {
         for (const devUuid of validDevs) {
@@ -3707,17 +3855,43 @@ export async function createEmpleadoModel(data) {
           `;
         }
       } catch (insertErr) {
-        if (insertErr.message && (insertErr.message.includes('column "id"') || insertErr.message.includes('empleado_dispositivos'))) {
+        if (insertErr.message && (
+          insertErr.message.includes('column "id"') || 
+          insertErr.message.includes('empleado_dispositivos') ||
+          insertErr.message.includes('not-null constraint')
+        )) {
           await sql.unsafe(`
-            ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
-            ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+            DO $$
+            BEGIN
+              IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'id') THEN
+                ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
+                BEGIN
+                  ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+              END IF;
+              IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'empleado_id') THEN
+                ALTER TABLE empleado_dispositivos ALTER COLUMN empleado_id DROP NOT NULL;
+              END IF;
+              IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'dispositivo_id') THEN
+                ALTER TABLE empleado_dispositivos ALTER COLUMN dispositivo_id DROP NOT NULL;
+              END IF;
+            END $$;
           `).catch(() => {});
           for (const devUuid of validDevs) {
-            await sql`
-              INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
-              VALUES (gen_random_uuid(), ${empUuid}::uuid, ${devUuid}::uuid)
-              ON CONFLICT DO NOTHING
-            `;
+            try {
+              await sql`
+                INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+                VALUES (gen_random_uuid(), ${empUuid}::uuid, ${devUuid}::uuid)
+                ON CONFLICT DO NOTHING
+              `;
+            } catch (retryDevErr) {
+              await sql`
+                INSERT INTO empleado_dispositivos (id, uuid, empleado_uuid, dispositivo_uuid)
+                VALUES (COALESCE((SELECT MAX(id) FROM empleado_dispositivos), 0) + 1, gen_random_uuid(), ${empUuid}::uuid, ${devUuid}::uuid)
+                ON CONFLICT DO NOTHING
+              `.catch(() => {});
+            }
           }
         } else {
           throw insertErr;
@@ -3833,9 +4007,10 @@ export async function updateEmpleadoModel(id, data) {
     const updatedEmp = rows[0];
 
     // Sincronizar dispositivos seleccionados si se enviaron
-    if (Array.isArray(data.dispositivo_ids)) {
+    const rawDevs = data.dispositivo_ids !== undefined ? data.dispositivo_ids : data.dispositivo_uuids;
+    if (Array.isArray(rawDevs)) {
       await sql`DELETE FROM empleado_dispositivos WHERE empleado_uuid = ${eUuid}::uuid`;
-      const validDevs = toUuidArray(data.dispositivo_ids);
+      const validDevs = toUuidArray(rawDevs);
       if (validDevs.length > 0) {
         try {
           for (const devUuid of validDevs) {
@@ -3846,17 +4021,43 @@ export async function updateEmpleadoModel(id, data) {
             `;
           }
         } catch (insertErr) {
-          if (insertErr.message && (insertErr.message.includes('column "id"') || insertErr.message.includes('empleado_dispositivos'))) {
+          if (insertErr.message && (
+            insertErr.message.includes('column "id"') || 
+            insertErr.message.includes('empleado_dispositivos') ||
+            insertErr.message.includes('not-null constraint')
+          )) {
             await sql.unsafe(`
-              ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
-              ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+              DO $$
+              BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'id') THEN
+                  ALTER TABLE empleado_dispositivos ALTER COLUMN id DROP NOT NULL;
+                  BEGIN
+                    ALTER TABLE empleado_dispositivos DROP COLUMN IF EXISTS id CASCADE;
+                  EXCEPTION WHEN OTHERS THEN NULL;
+                  END;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'empleado_id') THEN
+                  ALTER TABLE empleado_dispositivos ALTER COLUMN empleado_id DROP NOT NULL;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'empleado_dispositivos' AND column_name = 'dispositivo_id') THEN
+                  ALTER TABLE empleado_dispositivos ALTER COLUMN dispositivo_id DROP NOT NULL;
+                END IF;
+              END $$;
             `).catch(() => {});
             for (const devUuid of validDevs) {
-              await sql`
-                INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
-                VALUES (gen_random_uuid(), ${eUuid}::uuid, ${devUuid}::uuid)
-                ON CONFLICT DO NOTHING
-              `;
+              try {
+                await sql`
+                  INSERT INTO empleado_dispositivos (uuid, empleado_uuid, dispositivo_uuid)
+                  VALUES (gen_random_uuid(), ${eUuid}::uuid, ${devUuid}::uuid)
+                  ON CONFLICT DO NOTHING
+                `;
+              } catch (retryDevErr) {
+                await sql`
+                  INSERT INTO empleado_dispositivos (id, uuid, empleado_uuid, dispositivo_uuid)
+                  VALUES (COALESCE((SELECT MAX(id) FROM empleado_dispositivos), 0) + 1, gen_random_uuid(), ${eUuid}::uuid, ${devUuid}::uuid)
+                  ON CONFLICT DO NOTHING
+                `.catch(() => {});
+              }
             }
           } else {
             throw insertErr;
