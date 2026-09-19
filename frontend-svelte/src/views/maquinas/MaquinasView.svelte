@@ -339,6 +339,45 @@
     nombre: r.nombre
   }));
 
+  // Distribuciones reactivas para panel de badges (Data Filtrada)
+  $: distribucionTipos = (filterOptions.tipos || []).filter(t => Number(t.count) > 0);
+  $: distribucionSociedades = (filterOptions.sociedades || []).filter(s => Number(s.count) > 0);
+  $: distribucionSalas = (filterOptions.salas || []).filter(s => {
+    const lbl = (s.subgroup_label || s.grupo_nombre || '').toLowerCase();
+    const isGalpon = lbl.includes('galp') || s.grupo_id === 2;
+    return !isGalpon && Number(s.count) > 0;
+  });
+  $: distribucionGalpones = (filterOptions.salas || []).filter(s => {
+    const lbl = (s.subgroup_label || s.grupo_nombre || '').toLowerCase();
+    const isGalpon = lbl.includes('galp') || s.grupo_id === 2;
+    return isGalpon && Number(s.count) > 0;
+  });
+
+  function toggleBadgeFilter(type, id) {
+    if (!id) return;
+    const strId = String(id);
+    if (type === 'tipos') {
+      if (selectedTipos.includes(strId)) {
+        selectedTipos = selectedTipos.filter(x => String(x) !== strId);
+      } else {
+        selectedTipos = [...selectedTipos, strId];
+      }
+    } else if (type === 'sociedades') {
+      if (selectedSociedades.includes(strId)) {
+        selectedSociedades = selectedSociedades.filter(x => String(x) !== strId);
+      } else {
+        selectedSociedades = [...selectedSociedades, strId];
+      }
+    } else if (type === 'salas') {
+      if (selectedSalas.includes(strId)) {
+        selectedSalas = selectedSalas.filter(x => String(x) !== strId);
+      } else {
+        selectedSalas = [...selectedSalas, strId];
+      }
+    }
+    handleFilterChange();
+  }
+
   // Column definitions for PaginatedDataTable
   $: columns = [
     { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
@@ -875,6 +914,101 @@
       </button>
     {/if}
   </div>
+
+  <!-- Panel de Distribución por Badges (Data Filtrada) -->
+  <div slot="info-banner" class="maquinas-distribucion-wrapper">
+    {#if distribucionTipos.length > 0 || distribucionSociedades.length > 0 || distribucionSalas.length > 0 || distribucionGalpones.length > 0}
+      <div class="maquinas-distribucion-panel">
+        <!-- 1. Distribución por Tipo -->
+        {#if distribucionTipos.length > 0}
+          <div class="distrib-row">
+            <span class="distrib-label">Distribucion por tipo:</span>
+            <div class="distrib-badges">
+              {#each distribucionTipos as t}
+                {@const isSelected = selectedTipos.some(v => String(v) === String(t.uuid || t.id))}
+                <button
+                  type="button"
+                  class="distrib-badge badge-tipo"
+                  class:is-active={isSelected}
+                  on:click={() => toggleBadgeFilter('tipos', t.uuid || t.id)}
+                  title="Filtrar por tipo {t.nombre}"
+                >
+                  <span class="badge-title">{t.nombre.toUpperCase()}:</span>
+                  <span class="badge-count">{t.count}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- 2. Distribución por Sociedades -->
+        {#if distribucionSociedades.length > 0}
+          <div class="distrib-row">
+            <span class="distrib-label">Distribucion por Sociedades:</span>
+            <div class="distrib-badges">
+              {#each distribucionSociedades as s}
+                {@const isSelected = selectedSociedades.some(v => String(v) === String(s.uuid || s.id))}
+                <button
+                  type="button"
+                  class="distrib-badge badge-sociedad"
+                  class:is-active={isSelected}
+                  on:click={() => toggleBadgeFilter('sociedades', s.uuid || s.id)}
+                  title="Filtrar por sociedad {s.nombre}"
+                >
+                  <span class="badge-title">{s.nombre.toUpperCase()}:</span>
+                  <span class="badge-count">{s.count}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- 3. Distribución por Salas -->
+        {#if distribucionSalas.length > 0}
+          <div class="distrib-row">
+            <span class="distrib-label">Distribucion por Salas:</span>
+            <div class="distrib-badges">
+              {#each distribucionSalas as s}
+                {@const isSelected = selectedSalas.some(v => String(v) === String(s.uuid || s.id))}
+                <button
+                  type="button"
+                  class="distrib-badge badge-sala"
+                  class:is-active={isSelected}
+                  on:click={() => toggleBadgeFilter('salas', s.uuid || s.id)}
+                  title="Filtrar por sala {s.nombre}"
+                >
+                  <span class="badge-title">{s.nombre.toUpperCase()}:</span>
+                  <span class="badge-count">{s.count}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- 4. Distribución por Galpones -->
+        {#if distribucionGalpones.length > 0}
+          <div class="distrib-row">
+            <span class="distrib-label">Distribucion por Galpones:</span>
+            <div class="distrib-badges">
+              {#each distribucionGalpones as g}
+                {@const isSelected = selectedSalas.some(v => String(v) === String(g.uuid || g.id))}
+                <button
+                  type="button"
+                  class="distrib-badge badge-galpon"
+                  class:is-active={isSelected}
+                  on:click={() => toggleBadgeFilter('salas', g.uuid || g.id)}
+                  title="Filtrar por galpón {g.nombre}"
+                >
+                  <span class="badge-title">{g.nombre.toUpperCase()}:</span>
+                  <span class="badge-count">{g.count}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </PaginatedDataTable>
 
 <style>
@@ -984,5 +1118,137 @@
     font-size: 14px;
     opacity: 0.6;
     pointer-events: none;
+  }
+
+  /* Panel de Distribución por Badges */
+  .maquinas-distribucion-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    box-sizing: border-box;
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+
+  .distrib-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .distrib-label {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #475569;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    min-width: 195px;
+    flex-shrink: 0;
+  }
+
+  .distrib-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .distrib-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    font-size: 11.5px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    line-height: 1.35;
+    outline: none;
+  }
+
+  .distrib-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+    border-color: #94a3b8;
+    background: #ffffff;
+  }
+
+  .distrib-badge .badge-title {
+    font-weight: 800;
+    color: #2563eb;
+    letter-spacing: 0.3px;
+  }
+
+  .distrib-badge.badge-sociedad .badge-title {
+    color: #0284c7;
+  }
+
+  .distrib-badge.badge-sala .badge-title {
+    color: #059669;
+  }
+
+  .distrib-badge.badge-galpon .badge-title {
+    color: #d97706;
+  }
+
+  .distrib-badge .badge-count {
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  .distrib-badge.is-active {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+  }
+
+  .distrib-badge.badge-sociedad.is-active {
+    background: #f0f9ff;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.25);
+  }
+
+  .distrib-badge.badge-sala.is-active {
+    background: #ecfdf5;
+    border-color: #059669;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.25);
+  }
+
+  .distrib-badge.badge-galpon.is-active {
+    background: #fffbeb;
+    border-color: #d97706;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.25);
+  }
+
+  @media (max-width: 860px) {
+    .distrib-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 5px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .distrib-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .distrib-label {
+      min-width: unset;
+    }
   }
 </style>
