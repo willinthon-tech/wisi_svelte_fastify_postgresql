@@ -1081,62 +1081,17 @@
       </div>
     {/if}
 
-    <!-- Botonera de Reportes / Subvistas (Simple y Detallados) -->
+    <!-- Botón a Subvista de Reportes -->
     <div class="maquinas-reportes-toolbar">
-      <div class="reportes-toolbar-label">
-        <span class="reportes-label-icon">📊</span>
-        <span class="reportes-label-text">REPORTES Y VISTAS:</span>
-      </div>
-      <div class="reportes-buttons-list">
-        <button 
-          type="button" 
-          class="btn-reporte btn-rep-simple"
-          on:click={() => irAReporte('simple')}
-          title="Ver reporte simple con todos los registros filtrados"
-        >
-          📄 Simple
-        </button>
-        <button 
-          type="button" 
-          class="btn-reporte btn-rep-sociedad"
-          on:click={() => irAReporte('detallado/sociedad')}
-          title="Ver matriz detallada agrupada por sociedad"
-        >
-          🏢 Detallado por Sociedad
-        </button>
-        <button 
-          type="button" 
-          class="btn-reporte btn-rep-salas"
-          on:click={() => irAReporte('detallado/salas')}
-          title="Ver matriz detallada agrupada por salas de juego"
-        >
-          🎰 Detallado por Salas
-        </button>
-        <button 
-          type="button" 
-          class="btn-reporte btn-rep-galpones"
-          on:click={() => irAReporte('detallado/galpones')}
-          title="Ver matriz detallada agrupada por galpones y depósitos"
-        >
-          📦 Detallado por Galpones
-        </button>
-        <button 
-          type="button" 
-          class="btn-reporte btn-rep-tipo"
-          on:click={() => irAReporte('detallado/tipo')}
-          title="Ver matriz detallada agrupada por tipo de máquina"
-        >
-          🏷️ Detallado por Tipo
-        </button>
-        <button 
-          type="button" 
-          class="btn-reporte btn-rep-marcas"
-          on:click={() => irAReporte('detallado/marcas')}
-          title="Ver matriz detallada agrupada por marcas"
-        >
-          ✨ Detallado por Marcas
-        </button>
-      </div>
+      <button 
+        type="button" 
+        class="btn-reportes-main"
+        on:click={() => irAReporte('simple')}
+        title="Ver reportes y vistas de máquinas con los filtros actuales"
+      >
+        <span class="reportes-btn-icon">📊</span>
+        <span>REPORTES Y VISTAS</span>
+      </button>
     </div>
   </div>
 </PaginatedDataTable>
@@ -1449,103 +1404,46 @@
     }
   }
 
-  /* Botonera de Reportes / Subvistas */
+  /* Botón de Reportes y Vistas */
   .maquinas-reportes-toolbar {
     display: flex;
     align-items: center;
-    gap: 12px;
     width: 100%;
-    padding: 8px 12px;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-    box-sizing: border-box;
     margin-top: 4px;
     margin-bottom: 4px;
-    flex-wrap: wrap;
+    box-sizing: border-box;
   }
 
-  .reportes-toolbar-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 800;
-    color: #475569;
-    letter-spacing: 0.3px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .reportes-label-icon {
-    font-size: 14px;
-  }
-
-  .reportes-buttons-list {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    flex: 1;
-  }
-
-  .btn-reporte {
+  .btn-reportes-main {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
+    gap: 7px;
+    padding: 6px 14px;
     border-radius: 6px;
     font-size: 11.5px;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
+    border: 1px solid #1e3a5f;
+    background: #1e3a5f;
+    color: #ffffff;
+    letter-spacing: 0.4px;
+    box-shadow: 0 1px 3px rgba(30, 58, 95, 0.2);
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    white-space: nowrap;
     outline: none;
   }
 
-  .btn-reporte:hover {
+  .btn-reportes-main:hover {
+    background: #2b4c7e;
+    border-color: #2b4c7e;
     transform: translateY(-1px);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 3px 6px rgba(30, 58, 95, 0.3);
   }
 
-  .btn-rep-simple:hover {
-    background: #eff6ff;
-    border-color: #3b82f6;
-    color: #1d4ed8;
+  .btn-reportes-main:active {
+    transform: translateY(0);
   }
 
-  .btn-rep-sociedad:hover {
-    background: #f0f9ff;
-    border-color: #0284c7;
-    color: #0369a1;
-  }
-
-  .btn-rep-salas:hover {
-    background: #ecfdf5;
-    border-color: #059669;
-    color: #047857;
-  }
-
-  .btn-rep-galpones:hover {
-    background: #fffbeb;
-    border-color: #d97706;
-    color: #b45309;
-  }
-
-  .btn-rep-tipo:hover {
-    background: #f5f3ff;
-    border-color: #8b5cf6;
-    color: #6d28d9;
-  }
-
-  .btn-rep-marcas:hover {
-    background: #fdf2f8;
-    border-color: #ec4899;
-    color: #be185d;
+  .reportes-btn-icon {
+    font-size: 14px;
   }
 </style>
