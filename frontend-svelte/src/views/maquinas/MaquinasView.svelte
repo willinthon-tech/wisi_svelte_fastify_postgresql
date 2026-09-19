@@ -431,10 +431,7 @@
     { key: 'tipo_nombre', keyId: 'tipo_uuid', label: 'TIPO', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
     { key: 'modo_nombre', keyId: 'modo_uuid', label: 'MODO', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
     { key: 'legal_nombre', keyId: 'legal_uuid', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] },
-    { key: 'rango_nombre', keyId: 'rango_uuid', label: 'RANGO', sortable: true, editable: true, type: 'select', options: rangosOptions },
-    { key: 'contador_entrada_inicial', label: 'ENTRADA INICIAL', type: 'number', sortable: true, editable: true },
-    { key: 'contador_salida_inicial', label: 'SALIDA INICIAL', type: 'number', sortable: true, editable: true },
-    { key: 'contador_jackpot_inicial', label: 'JACKPOT INICIAL', type: 'number', sortable: true, editable: true }
+    { key: 'rango_nombre', keyId: 'rango_uuid', label: 'RANGO', sortable: true, editable: true, type: 'select', options: rangosOptions }
   ];
 
   // Create modal form fields: nombre and serial are at the BOTTOM in col-6 format
@@ -477,15 +474,7 @@
     {
       type: 'row',
       fields: [
-        { key: 'rango_uuid', label: 'Rango', type: 'select', options: rangosOptions, required: false },
-        { key: 'contador_entrada_inicial', label: 'Contador Entrada Inicial', type: 'number', placeholder: '0.00', defaultValue: 0, min: 0, step: 'any', required: false }
-      ]
-    },
-    {
-      type: 'row',
-      fields: [
-        { key: 'contador_salida_inicial', label: 'Contador Salida Inicial', type: 'number', placeholder: '0.00', defaultValue: 0, min: 0, step: 'any', required: false },
-        { key: 'contador_jackpot_inicial', label: 'Contador Jackpot Inicial', type: 'number', placeholder: '0.00', defaultValue: 0, min: 0, step: 'any', required: false }
+        { key: 'rango_uuid', label: 'Rango', type: 'select', options: rangosOptions, required: false }
       ]
     },
     {
@@ -513,9 +502,6 @@
         draft.rango_nombre = matchedRango.nombre;
       }
     }
-    draft.contador_entrada_inicial = parseFloat(draft.contador_entrada_inicial || 0) || 0;
-    draft.contador_salida_inicial = parseFloat(draft.contador_salida_inicial || 0) || 0;
-    draft.contador_jackpot_inicial = parseFloat(draft.contador_jackpot_inicial || 0) || 0;
 
     // 0ms instant local-first execution
     const newUuid = draft.uuid || generateSafeUuid();
@@ -594,15 +580,6 @@
       } else {
         payload.rango_nombre = null;
       }
-    }
-    if (payload.contador_entrada_inicial !== undefined) {
-      payload.contador_entrada_inicial = parseFloat(payload.contador_entrada_inicial || 0) || 0;
-    }
-    if (payload.contador_salida_inicial !== undefined) {
-      payload.contador_salida_inicial = parseFloat(payload.contador_salida_inicial || 0) || 0;
-    }
-    if (payload.contador_jackpot_inicial !== undefined) {
-      payload.contador_jackpot_inicial = parseFloat(payload.contador_jackpot_inicial || 0) || 0;
     }
 
     const existing = items.find(x => String(x.uuid || x.id) === String(targetUuid)) || {};
