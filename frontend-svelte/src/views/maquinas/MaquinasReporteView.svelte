@@ -10,7 +10,7 @@
   let items = [];
   let isLoading = true;
   let generadoEn = '';
-  let activeTab = subtipo || 'simple'; // 'simple' | 'sociedad' | 'salas' | 'galpones' | 'tipo' | 'marcas' | 'juego'
+  let activeTab = subtipo || 'simple'; // 'simple' | 'sociedad' | 'salas' | 'galpones' | 'tipo' | 'marcas'
 
   // Modales
   let resumenModalOpen = false;
@@ -62,8 +62,6 @@
       activeTab = 'tipo';
     } else if (cleanHash.includes('/marcas')) {
       activeTab = 'marcas';
-    } else if (cleanHash.includes('/juego')) {
-      activeTab = 'juego';
     } else if (subtipo) {
       activeTab = subtipo;
     }
@@ -178,15 +176,9 @@
     } else if (mode === 'marcas') {
       groupKey1 = 'marca_nombre';
       groupLabel1 = 'MARCA';
-      groupKey2 = 'modelo_nombre';
-      groupLabel2 = 'MODELO';
-      crossKey = 'tipo_nombre';
-    } else if (mode === 'juego') {
-      groupKey1 = 'juego_nombre';
-      groupLabel1 = 'JUEGO';
-      groupKey2 = 'marca_nombre';
-      groupLabel2 = 'MARCA';
-      crossKey = 'tipo_nombre';
+      groupKey2 = 'sociedad_nombre';
+      groupLabel2 = 'SOCIEDAD';
+      crossKey = 'modelo_nombre';
     }
 
     // 1. Columnas cruzadas distintas con conteo global
@@ -275,18 +267,30 @@
 
   // Abrir Modal 1: Resumen de Grupo (ojo del encabezado de fila)
   function openResumenModal(group) {
-    const typeCountMap = new Map();
+    let breakdownKey = 'tipo_nombre';
+    let colHeader = 'TIPO';
+
+    if (activeTab === 'tipo') {
+      breakdownKey = 'sociedad_nombre';
+      colHeader = 'SOCIEDAD';
+    } else if (activeTab === 'marcas') {
+      breakdownKey = 'modelo_nombre';
+      colHeader = 'MODELO';
+    }
+
+    const countMap = new Map();
     group.rawMachines.forEach(m => {
-      const t = m.tipo_nombre || 'SLOTS';
-      typeCountMap.set(t, (typeCountMap.get(t) || 0) + 1);
+      const val = m[breakdownKey] || 'N/A';
+      countMap.set(val, (countMap.get(val) || 0) + 1);
     });
 
-    const breakdown = Array.from(typeCountMap.entries())
+    const breakdown = Array.from(countMap.entries())
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count);
 
     resumenModalData = {
       title: `Resumen: ${group.name}`,
+      colHeader,
       items: breakdown
     };
     resumenModalOpen = true;
@@ -450,14 +454,6 @@
     >
       ✨ Por Marcas
     </button>
-    <button 
-      type="button" 
-      class="tab-btn" 
-      class:active={activeTab === 'juego'} 
-      on:click={() => handleTabChange('juego')}
-    >
-      🎲 Por Juego
-    </button>
   </div>
 
   <!-- Content Section -->
@@ -606,7 +602,7 @@
         <table class="modal-table">
           <thead>
             <tr>
-              <th>TIPO</th>
+              <th>{resumenModalData.colHeader || 'TIPO'}</th>
               <th class="text-right">CANTIDAD</th>
             </tr>
           </thead>

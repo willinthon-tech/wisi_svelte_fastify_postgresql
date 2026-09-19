@@ -1136,14 +1136,6 @@
         >
           ✨ Detallado por Marcas
         </button>
-        <button 
-          type="button" 
-          class="btn-reporte btn-rep-juego"
-          on:click={() => irAReporte('detallado/juego')}
-          title="Ver matriz detallada agrupada por juegos"
-        >
-          🎲 Detallado por Juego
-        </button>
       </div>
     </div>
   </div>
@@ -1555,11 +1547,5 @@
     background: #fdf2f8;
     border-color: #ec4899;
     color: #be185d;
-  }
-
-  .btn-rep-juego:hover {
-    background: #fff7ed;
-    border-color: #f97316;
-    color: #c2410c;
   }
 </style>
