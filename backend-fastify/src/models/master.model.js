@@ -6022,7 +6022,7 @@ export const createTipoIncidenciaModel = tipoIncidenciasCrud.create;
 export const updateTipoIncidenciaModel = tipoIncidenciasCrud.update;
 export const deleteTipoIncidenciaModel = tipoIncidenciasCrud.delete;
 
-// 1.4. RANGOS (CONF.M: CECOM)
+// 1.4. RANGOS (CONF.M: MAQUINAS)
 const rangosCrud = buildSimpleConfigCrud('rangos', 'rango', 'rangos');
 export const getRangosModel = rangosCrud.get;
 export const createRangoModel = rangosCrud.create;

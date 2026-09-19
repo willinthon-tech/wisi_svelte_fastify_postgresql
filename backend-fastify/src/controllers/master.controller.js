@@ -2259,7 +2259,7 @@ export async function deleteCliente(request, reply) {
 }
 
 // ==========================================
-// 🏅 RANGOS (CONF.M: CECOM)
+// 🏅 RANGOS (CONF.M: MAQUINAS)
 // ==========================================
 const rangosCtrl = buildCrudControllers(getRangosModel, createRangoModel, updateRangoModel, deleteRangoModel);
 export const getRangos = rangosCtrl.get;

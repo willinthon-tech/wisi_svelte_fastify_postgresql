@@ -397,7 +397,7 @@ export default async function masterRoutes(fastify, options) {
   fastify.delete('/master/tipo-incidencias/:id', deleteTipoIncidencia);
   fastify.delete('/api/master/tipo-incidencias/:id', deleteTipoIncidencia);
 
-  // Rangos (Configuración: CONF.M: CECOM)
+  // Rangos (Configuración: CONF.M: MAQUINAS)
   fastify.get('/master/rangos', getRangos);
   fastify.get('/api/master/rangos', getRangos);
   fastify.post('/master/rangos', createRango);
