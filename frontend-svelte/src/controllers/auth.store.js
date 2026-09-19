@@ -67,7 +67,8 @@ export const navMenuStore = writable([
       { uuid: '5982130f-8bcd-498a-8233-8f2dd4582b15', nombre: 'Modelos', ruta: '/configuracion/modelos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { uuid: 'd5d8ecee-2c48-42c0-abbe-fecd3e3d9387', nombre: 'Tipos', ruta: '/configuracion/tipos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { uuid: 'f214acec-737c-477c-8cfb-8c974e39ab4c', nombre: 'Modos', ruta: '/configuracion/modos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { uuid: 'ab5d4cd0-9d84-413c-8001-6570efe02bbe', nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: 'ab5d4cd0-9d84-413c-8001-6570efe02bbe', nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '6b601f8a-b30f-4523-92c2-6fea0d151387', nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
@@ -97,8 +98,7 @@ export const navMenuStore = writable([
     modulos: [
       { uuid: 'd3dbf58d-cda0-4a44-9773-ab2af79c76c9', nombre: 'Horarios', ruta: '/configuracion/horarios', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { uuid: 'd2992a2a-642a-4b29-8547-772c8f1963a3', nombre: 'Excepciones', ruta: '/configuracion/excepciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { uuid: '4827f008-2c8b-44d9-be39-6ff3f4ee744e', nombre: 'Fechas Patrias', ruta: '/configuracion/fechas-patrias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { uuid: '6b601f8a-b30f-4523-92c2-6fea0d151387', nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: '4827f008-2c8b-44d9-be39-6ff3f4ee744e', nombre: 'Fechas Patrias', ruta: '/configuracion/fechas-patrias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   }
 ]);
