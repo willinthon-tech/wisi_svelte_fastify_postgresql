@@ -936,7 +936,7 @@
             <div class="distrib-group-header">
               <div class="distrib-header-title-box">
                 <span class="distrib-tag tag-tipo">TIPO</span>
-                <span class="distrib-title">Distribución por Tipo:</span>
+                <span class="distrib-title">Distribución:</span>
               </div>
               <div class="distrib-header-line"></div>
               <span class="distrib-counter-badge">
@@ -967,7 +967,7 @@
             <div class="distrib-group-header">
               <div class="distrib-header-title-box">
                 <span class="distrib-tag tag-sociedad">SOCIEDADES</span>
-                <span class="distrib-title">Distribución por Sociedades:</span>
+                <span class="distrib-title">Distribución:</span>
               </div>
               <div class="distrib-header-line"></div>
               <span class="distrib-counter-badge">
@@ -998,7 +998,7 @@
             <div class="distrib-group-header">
               <div class="distrib-header-title-box">
                 <span class="distrib-tag tag-sala">SALAS</span>
-                <span class="distrib-title">Distribución por Salas:</span>
+                <span class="distrib-title">Distribución:</span>
               </div>
               <div class="distrib-header-line"></div>
               <span class="distrib-counter-badge">
@@ -1029,7 +1029,7 @@
             <div class="distrib-group-header">
               <div class="distrib-header-title-box">
                 <span class="distrib-tag tag-galpon">GALPONES</span>
-                <span class="distrib-title">Distribución por Galpones:</span>
+                <span class="distrib-title">Distribución:</span>
               </div>
               <div class="distrib-header-line"></div>
               <span class="distrib-counter-badge">
@@ -1175,52 +1175,52 @@
   .maquinas-distribucion-panel {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
     width: 100%;
-    margin-top: 4px;
-    margin-bottom: 6px;
+    margin-top: 2px;
+    margin-bottom: 4px;
     box-sizing: border-box;
   }
 
   .distrib-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 5px;
     width: 100%;
-    padding: 10px 14px;
+    padding: 6px 10px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
     box-sizing: border-box;
     transition: all 0.15s ease;
   }
 
   .distrib-group:hover {
     border-color: #cbd5e1;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
   }
 
   .distrib-group-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
   }
 
   .distrib-header-title-box {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
   }
 
   .distrib-tag {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 800;
-    letter-spacing: 0.5px;
-    padding: 2px 8px;
-    border-radius: 6px;
+    letter-spacing: 0.4px;
+    padding: 1.5px 6px;
+    border-radius: 4px;
     line-height: 1.2;
     text-transform: uppercase;
   }
@@ -1250,9 +1250,9 @@
   }
 
   .distrib-title {
-    font-size: 12px;
-    font-weight: 800;
-    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
     letter-spacing: 0.2px;
     white-space: nowrap;
   }
@@ -1264,13 +1264,13 @@
   }
 
   .distrib-counter-badge {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     color: #64748b;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    padding: 2px 9px;
-    border-radius: 12px;
+    padding: 1px 7px;
+    border-radius: 10px;
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -1278,7 +1278,7 @@
   .distrib-badges {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     flex-wrap: wrap;
     width: 100%;
   }
@@ -1286,23 +1286,23 @@
   .distrib-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
-    border-radius: 8px;
+    gap: 5px;
+    padding: 2px 7px;
+    border-radius: 6px;
     border: 1px solid #e2e8f0;
     background: #f8fafc;
-    font-size: 11.5px;
+    font-size: 10.5px;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
     transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
-    line-height: 1.35;
+    line-height: 1.25;
     outline: none;
   }
 
   .distrib-badge:hover {
     transform: translateY(-1px);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
     border-color: #94a3b8;
     background: #ffffff;
   }
@@ -1310,7 +1310,7 @@
   .distrib-badge .badge-title {
     font-weight: 800;
     color: #2563eb;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
   }
 
   .distrib-badge.badge-sociedad .badge-title {
@@ -1328,7 +1328,7 @@
   .distrib-badge .badge-count {
     font-family: inherit;
     font-variant-numeric: tabular-nums;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
     color: #0f172a;
   }
