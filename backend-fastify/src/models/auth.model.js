@@ -36,7 +36,7 @@ export async function getUserNavMenuModel(userId) {
   const uIdStr = String(userId).trim();
 
   const pages = await sql`
-    SELECT DISTINCT p.uuid, p.uuid AS id, p.nombre
+    SELECT DISTINCT p.uuid, p.nombre
     FROM paginas p
     INNER JOIN modulos m ON p.uuid = m.page_uuid
     INNER JOIN user_module_permissions ump ON m.uuid = ump.module_uuid
@@ -45,7 +45,7 @@ export async function getUserNavMenuModel(userId) {
   `;
 
   const modules = await sql`
-    SELECT m.uuid, m.uuid AS id, m.nombre, m.icono, m.ruta, m.page_uuid, m.page_uuid AS page_id, m.orden,
+    SELECT m.uuid, m.nombre, m.icono, m.ruta, m.page_uuid, m.orden,
            COALESCE(m.orden, 0) as sort_orden,
            STRING_AGG(DISTINCT perm.nombre, ',') as permisos
     FROM modulos m

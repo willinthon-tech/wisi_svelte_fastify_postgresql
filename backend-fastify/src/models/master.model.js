@@ -320,7 +320,7 @@ export async function deleteSalaModel(id) {
 // --- PÁGINAS ---
 export async function getPaginasModel() {
   if (isPgConnected && sql) {
-    return await sql`SELECT *, uuid AS id FROM paginas ORDER BY nombre ASC`;
+    return await sql`SELECT * FROM paginas ORDER BY nombre ASC`;
   }
   return inMemoryData.paginas;
 }
@@ -330,12 +330,11 @@ export async function createPaginaModel(data) {
     const rows = await sql`
       INSERT INTO paginas (nombre)
       VALUES (${data.nombre})
-      RETURNING *, uuid AS id
+      RETURNING *
     `;
     return rows[0];
   } else {
-    const nextId = inMemoryData.paginas.length > 0 ? Math.max(...inMemoryData.paginas.map(p => p.id)) + 1 : 1;
-    const newPagina = { id: nextId, uuid: `pag-${Date.now()}`, ...data };
+    const newPagina = { uuid: `pag-${Date.now()}`, ...data };
     inMemoryData.paginas.push(newPagina);
     return newPagina;
   }
@@ -349,11 +348,11 @@ export async function updatePaginaModel(id, data) {
       UPDATE paginas
       SET nombre = ${data.nombre}, updated_at = CURRENT_TIMESTAMP
       WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`uuid::text = ${String(id)}`}
-      RETURNING *, uuid AS id
+      RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = inMemoryData.paginas.findIndex(p => String(p.uuid) === String(id) || String(p.id) === String(id));
+    const idx = inMemoryData.paginas.findIndex(p => String(p.uuid) === String(id));
     if (idx !== -1) {
       inMemoryData.paginas[idx] = { ...inMemoryData.paginas[idx], ...data };
       return inMemoryData.paginas[idx];
@@ -370,7 +369,7 @@ export async function deletePaginaModel(id) {
 // --- MÓDULOS ---
 export async function getModulosModel() {
   if (isPgConnected && sql) {
-    return await sql`SELECT *, uuid AS id FROM modulos ORDER BY orden ASC, nombre ASC`;
+    return await sql`SELECT * FROM modulos ORDER BY orden ASC, nombre ASC`;
   }
   return [...inMemoryData.modulos].sort((a, b) => (a.orden || 0) - (b.orden || 0));
 }
@@ -383,23 +382,23 @@ export async function reorderModulosModel(items = []) {
   if (isPgConnected && sql) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const mId = item.uuid || item.id;
+      const mUuid = item.uuid || (isUuid(item.id) ? item.id : null);
       const newOrder = Number(item.orden !== undefined ? item.orden : (i + 1));
-      if (mId) {
+      if (mUuid) {
         await sql`
           UPDATE modulos
           SET orden = ${newOrder}, updated_at = CURRENT_TIMESTAMP
-          WHERE uuid::text = ${String(mId)}
+          WHERE uuid = ${mUuid}::uuid
         `;
       }
     }
-    const updated = await sql`SELECT *, uuid AS id FROM modulos ORDER BY orden ASC, nombre ASC`;
+    const updated = await sql`SELECT * FROM modulos ORDER BY orden ASC, nombre ASC`;
     return { success: true, data: updated };
   } else {
     items.forEach((item, i) => {
-      const mId = String(item.uuid || item.id);
+      const mUuid = String(item.uuid || item.id);
       const newOrder = Number(item.orden !== undefined ? item.orden : (i + 1));
-      const target = inMemoryData.modulos.find(m => String(m.uuid) === mId || String(m.id) === mId);
+      const target = inMemoryData.modulos.find(m => String(m.uuid) === mUuid);
       if (target) {
         target.orden = newOrder;
       }
@@ -410,8 +409,7 @@ export async function reorderModulosModel(items = []) {
 }
 
 export async function createModuloModel(data) {
-  const rawPage = data.page_uuid || data.page_id;
-  const pageUuid = rawPage && isUuid(rawPage) ? String(rawPage).trim() : null;
+  const pageUuid = data.page_uuid && isUuid(data.page_uuid) ? String(data.page_uuid).trim() : null;
 
   if (isPgConnected && sql) {
     let newOrder = data.orden !== undefined ? Number(data.orden) : null;
@@ -422,12 +420,11 @@ export async function createModuloModel(data) {
     const rows = await sql`
       INSERT INTO modulos (nombre, icono, ruta, page_uuid, orden)
       VALUES (${data.nombre}, ${data.icono || 'settings'}, ${data.ruta}, ${pageUuid ? sql`${pageUuid}::uuid` : sql`NULL`}, ${newOrder || 0})
-      RETURNING *, uuid AS id
+      RETURNING *
     `;
     return rows[0];
   } else {
-    const nextId = inMemoryData.modulos.length > 0 ? Math.max(...inMemoryData.modulos.map(m => m.id)) + 1 : 1;
-    const newModulo = { id: nextId, uuid: `mod-${Date.now()}`, ...data, orden: data.orden || inMemoryData.modulos.length + 1 };
+    const newModulo = { uuid: `mod-${Date.now()}`, ...data, orden: data.orden || inMemoryData.modulos.length + 1 };
     inMemoryData.modulos.push(newModulo);
     return newModulo;
   }
@@ -436,7 +433,7 @@ export async function createModuloModel(data) {
 export async function updateModuloModel(id, data) {
   if (!id) throw new Error('ID inválido');
   const isU = isUuid(id);
-  const rawPage = data.page_uuid !== undefined ? data.page_uuid : data.page_id;
+  const rawPage = data.page_uuid;
   const pageUuid = rawPage && isUuid(rawPage) ? String(rawPage).trim() : null;
 
   if (isPgConnected && sql) {
@@ -449,11 +446,11 @@ export async function updateModuloModel(id, data) {
           orden = ${data.orden !== undefined ? Number(data.orden) : sql`orden`},
           updated_at = CURRENT_TIMESTAMP
       WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`uuid::text = ${String(id)}`}
-      RETURNING *, uuid AS id
+      RETURNING *
     `;
     return rows[0];
   } else {
-    const idx = inMemoryData.modulos.findIndex(m => String(m.uuid) === String(id) || String(m.id) === String(id));
+    const idx = inMemoryData.modulos.findIndex(m => String(m.uuid) === String(id));
     if (idx !== -1) {
       inMemoryData.modulos[idx] = { ...inMemoryData.modulos[idx], ...data };
       return inMemoryData.modulos[idx];

@@ -201,8 +201,8 @@ function saveStore(key, data) {
 }
 
 export const masterSalasStore = writable(loadStore('salas_v5', []));
-export const masterPaginasStore = writable(loadStore('paginas_v5', []));
-export const masterModulosStore = writable(loadStore('modulos_v5', []));
+export const masterPaginasStore = writable(loadStore('paginas_v6', []));
+export const masterModulosStore = writable(loadStore('modulos_v6', []));
 export const masterDispositivosStore = writable(loadStore('dispositivos_v6', []));
 export const masterUsuariosStore = writable(loadStore('usuarios_v4', []));
 export const userSalasStore = writable(loadStore('user_salas_v4', {}));
@@ -210,8 +210,8 @@ export const userModulePermissionsStore = writable(loadStore('user_perms_v4', {}
 
 // Sync stores to localStorage automatically
 masterSalasStore.subscribe(val => saveStore('salas_v5', val));
-masterPaginasStore.subscribe(val => saveStore('paginas_v5', val));
-masterModulosStore.subscribe(val => saveStore('modulos_v5', val));
+masterPaginasStore.subscribe(val => saveStore('paginas_v6', val));
+masterModulosStore.subscribe(val => saveStore('modulos_v6', val));
 masterDispositivosStore.subscribe(val => saveStore('dispositivos_v6', val));
 masterUsuariosStore.subscribe(val => saveStore('usuarios_v4', val));
 userSalasStore.subscribe(val => saveStore('user_salas_v4', val));
@@ -316,9 +316,7 @@ export async function loadMasterStoresFromBackend(force = false) {
         if (json && json.success && Array.isArray(json.data)) {
           // Evitar re-renders masivos si la lista no ha cambiado
           const hasChanged = currentStoreVal.length === 0 || 
-            json.data.length !== currentStoreVal.length || 
-            (json.data[0]?.uuid && json.data[0]?.uuid !== currentStoreVal[0]?.uuid) ||
-            (json.data[0]?.updated_at && json.data[0]?.updated_at !== currentStoreVal[0]?.updated_at);
+            JSON.stringify(currentStoreVal) !== JSON.stringify(json.data);
 
           if (hasChanged) {
             if (store && typeof store.set === 'function') store.set(json.data);

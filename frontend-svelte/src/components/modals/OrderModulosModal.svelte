@@ -16,10 +16,10 @@
 
   // Sincronizar lista local cuando se abre el modal o cambian los modulos/página
   $: if (show && pagina && modulos) {
-    const pageUuid = String(pagina.uuid || pagina.id);
+    const pageUuid = String(pagina.uuid || '');
     const filtered = modulos
-      .filter(m => String(m.page_uuid || m.pagina_uuid || m.page_id || m.pagina_id) === pageUuid)
-      .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.uuid || a.id || '').localeCompare(String(b.uuid || b.id || '')));
+      .filter(m => String(m.page_uuid || '') === pageUuid)
+      .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.uuid || '').localeCompare(String(b.uuid || '')));
     
     // Clonar para manipulación local
     items = filtered.map((m, idx) => ({ ...m, local_order: idx + 1 }));
@@ -90,8 +90,7 @@
 
     try {
       const payload = items.map((m, idx) => ({
-        uuid: m.uuid || m.id,
-        id: m.uuid || m.id,
+        uuid: m.uuid,
         orden: idx + 1
       }));
 

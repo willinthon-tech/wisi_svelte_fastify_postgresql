@@ -800,9 +800,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     return g ? g.nombre : String(grupoId) === "2" ? "GALPÓN" : "SALA";
   }
 
-  function getPaginaNombre(pageId) {
-    const p = $masterPaginasStore.find((x) => String(x.id) === String(pageId));
-    return p ? p.nombre : `Página #${pageId}`;
+  function getPaginaNombre(pageUuid) {
+    const p = $masterPaginasStore.find((x) => String(x.uuid || x.id) === String(pageUuid));
+    return p ? p.nombre : 'Página';
   }
 
   function getSalaNombre(salaId) {
@@ -928,7 +928,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     } else if (activeTab === "modulos") {
       createForm = {
         nombre: "",
-        page_id: 1,
+        page_uuid: $masterPaginasStore[0]?.uuid || "",
         ruta: "/cecom/nuevo",
         icono: "settings",
       };
@@ -1318,7 +1318,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   }
 
   function getModulosForPage(pageId) {
-    return $masterModulosStore.filter((m) => String(m.page_uuid || m.page_id) === String(pageId));
+    return $masterModulosStore.filter((m) => String(m.page_uuid) === String(pageId));
   }
 
   function areAllPagePermsChecked(permsMap, pageId) {
@@ -2707,11 +2707,11 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       title="Definir el orden de los módulos de esta página"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
-                      <span
-                        >Ordenar Módulos ({($masterModulosStore || []).filter(
-                          (m) => String(m.page_uuid || m.page_id) === String(item.uuid || item.id),
-                        ).length})</span
-                      >
+                      <span>
+                        Ordenar Módulos ({($masterModulosStore || []).filter(
+                          (m) => String(m.page_uuid) === String(item.uuid),
+                        ).length})
+                      </span>
                     </button>
                   </td>
                 {:else if activeTab === "modulos"}
@@ -2727,15 +2727,15 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                   >
                     {#if isEditing}
                       <select
-                        bind:value={inlineDraft.page_id}
+                        bind:value={inlineDraft.page_uuid}
                         style="padding: 4px 6px; border-radius: 4px; border: 1px solid #cbd5e1;"
                       >
-                        {#each $masterPaginasStore as p}<option value={p.id}
+                        {#each $masterPaginasStore as p}<option value={p.uuid}
                             >{p.nombre}</option
                           >{/each}
                       </select>
                     {:else}
-                      <span>{getPaginaNombre(item.page_id)}</span>
+                      <span>{getPaginaNombre(item.page_uuid)}</span>
                     {/if}
                   </td>
                   <td
@@ -3071,11 +3071,11 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
             >
               Página Asociada (Foránea)
               <select
-                bind:value={createForm.page_id}
+                bind:value={createForm.page_uuid}
                 class="form-input"
                 style="width: 100%; padding: 7px 10px; font-size: 13px; margin-top: 4px; display: block; font-weight: 400;"
               >
-                {#each $masterPaginasStore as p}<option value={p.id}
+                {#each $masterPaginasStore as p}<option value={p.uuid}
                     >{p.nombre}</option
                   >{/each}
               </select>

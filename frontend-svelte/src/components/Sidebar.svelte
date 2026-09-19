@@ -31,9 +31,9 @@
   }
 
   // Permisología dinámica en tiempo real según el usuario activo y permiso 'VER'
-  $: activeUserId = $currentUserStore?.uuid || $currentUserStore?.id || null;
+  $: activeUserId = $currentUserStore?.uuid || null;
   $: activeUserPermsMap = (activeUserId && $userModulePermissionsStore)
-    ? ($userModulePermissionsStore[activeUserId] || $userModulePermissionsStore[String(activeUserId)] || ($currentUserStore?.id ? $userModulePermissionsStore[$currentUserStore.id] : null) || {})
+    ? ($userModulePermissionsStore[activeUserId] || $userModulePermissionsStore[String(activeUserId)] || {})
     : {};
 
   $: filteredNavPages = (() => {
@@ -41,29 +41,28 @@
     const pageMap = new Map();
     for (const page of $masterPaginasStore) {
       const normName = (page.nombre || '').trim().toUpperCase();
-      const pId = String(page.uuid || page.id);
+      const pUuid = String(page.uuid || '');
+      if (!pUuid) continue;
       if (!pageMap.has(normName)) {
         pageMap.set(normName, {
-          id: pId,
-          uuid: page.uuid || page.id,
+          uuid: pUuid,
           nombre: page.nombre,
-          pageIds: [pId, String(page.id || '')].filter(Boolean)
+          pageUuids: [pUuid]
         });
       } else {
-        pageMap.get(normName).pageIds.push(pId);
-        if (page.id) pageMap.get(normName).pageIds.push(String(page.id));
+        pageMap.get(normName).pageUuids.push(pUuid);
       }
     }
 
     const pages = [];
     for (const group of pageMap.values()) {
       const pageModulos = $masterModulosStore
-        .filter(m => group.pageIds.includes(String(m.page_uuid || m.page_id)))
-        .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.uuid || a.id || '').localeCompare(String(b.uuid || b.id || '')));
+        .filter(m => group.pageUuids.includes(String(m.page_uuid || '')))
+        .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.uuid || '').localeCompare(String(b.uuid || '')));
 
       const visibleModulos = pageModulos.filter(m => {
-        const mKey = m.uuid || m.id;
-        const perms = activeUserPermsMap[mKey] || (m.id ? activeUserPermsMap[m.id] : null) || [];
+        const mKey = m.uuid;
+        const perms = (mKey && activeUserPermsMap[mKey]) || [];
         return perms.includes('VER');
       });
 
@@ -80,7 +79,6 @@
 
       if (uniqueModulos.length > 0) {
         pages.push({
-          id: group.id,
           uuid: group.uuid,
           nombre: group.nombre,
           modulos: uniqueModulos

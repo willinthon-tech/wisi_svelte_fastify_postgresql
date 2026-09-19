@@ -24,81 +24,81 @@ export const selectedSalaStore = writable(1);
 
 export const navMenuStore = writable([
   {
-    id: 1,
+    uuid: '05734605-9d74-42de-802b-55704afeddd9',
     nombre: 'CECOM',
     icono: 'file',
     modulos: [
-      { id: 5, nombre: 'Libro', ruta: '/cecom/libro', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 37, nombre: 'Clientes', ruta: '/cecom/clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 32, nombre: 'Llaves', ruta: '/cecom/llaves', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 33, nombre: 'Llaves Borradas', ruta: '/cecom/llaves-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: 'mod-cecom-libro', nombre: 'Libro', ruta: '/cecom/libro', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-cecom-clientes', nombre: 'Clientes', ruta: '/cecom/clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-cecom-llaves', nombre: 'Llaves', ruta: '/cecom/llaves', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-cecom-llaves-b', nombre: 'Llaves Borradas', ruta: '/cecom/llaves-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
-    id: 2,
+    uuid: '71e865d8-169a-4ff0-9c15-a1a368501ec8',
     nombre: 'RRHH',
     icono: 'file',
     modulos: [
-      { id: 1, nombre: 'Marcajes', ruta: '/rrhh/marcajes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 2, nombre: 'Empleados', ruta: '/rrhh/empleados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 3, nombre: 'Cargos', ruta: '/rrhh/cargos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 4, nombre: 'Asignaciones', ruta: '/rrhh/asignaciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 24, nombre: 'Areas', ruta: '/rrhh/areas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 25, nombre: 'Departamentos', ruta: '/rrhh/departamentos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 26, nombre: 'Registros', ruta: '/rrhh/registros', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 27, nombre: 'Desincorporados', ruta: '/rrhh/desincorporados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 28, nombre: 'Carnet', ruta: '/rrhh/carnet', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 30, nombre: 'Cumpleaños', ruta: '/rrhh/cumpleanos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 31, nombre: 'Calendario', ruta: '/rrhh/calendario', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 36, nombre: 'Cortes', ruta: '/rrhh/cortes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: 'mod-rrhh-marcajes', nombre: 'Marcajes', ruta: '/rrhh/marcajes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-empleados', nombre: 'Empleados', ruta: '/rrhh/empleados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-cargos', nombre: 'Cargos', ruta: '/rrhh/cargos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-asignaciones', nombre: 'Asignaciones', ruta: '/rrhh/asignaciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-areas', nombre: 'Areas', ruta: '/rrhh/areas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-deptos', nombre: 'Departamentos', ruta: '/rrhh/departamentos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-registros', nombre: 'Registros', ruta: '/rrhh/registros', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-desincorporados', nombre: 'Desincorporados', ruta: '/rrhh/desincorporados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-carnet', nombre: 'Carnet', ruta: '/rrhh/carnet', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-cumpleanos', nombre: 'Cumpleaños', ruta: '/rrhh/cumpleanos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-calendario', nombre: 'Calendario', ruta: '/rrhh/calendario', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-rrhh-cortes', nombre: 'Cortes', ruta: '/rrhh/cortes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
-    id: 3,
+    uuid: '9a64bbc1-4e84-4fb4-b66c-78dfb3e5e091',
     nombre: 'CONF.M: MAQUINAS',
     icono: 'file',
     modulos: [
-      { id: 23, nombre: 'Máquinas', ruta: '/configuracion/maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 14, nombre: 'Estados', ruta: '/configuracion/estados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 15, nombre: 'Sociedades', ruta: '/configuracion/sociedades', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 16, nombre: 'Valores', ruta: '/configuracion/valores', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 17, nombre: 'Juegos', ruta: '/configuracion/juegos-maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 18, nombre: 'Marcas', ruta: '/configuracion/marcas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 19, nombre: 'Modelos', ruta: '/configuracion/modelos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 20, nombre: 'Tipos', ruta: '/configuracion/tipos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 21, nombre: 'Modos', ruta: '/configuracion/modos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 22, nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 41, nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: 'b1605f01-5b1a-4f84-afdd-537caf2c7678', nombre: 'Máquinas', ruta: '/configuracion/maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '62eaa4df-8466-4ad9-876c-d34e9b9055d3', nombre: 'Estados', ruta: '/configuracion/estados', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '11d13c1f-88bc-4245-bf7e-bd550c2d6424', nombre: 'Sociedades', ruta: '/configuracion/sociedades', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '2ec54cc0-4a06-4885-a20f-3e5a5c7d4266', nombre: 'Valores', ruta: '/configuracion/valores', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '158a9bff-f23d-4f42-9196-c1661e516e32', nombre: 'Juegos', ruta: '/configuracion/juegos-maquinas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '73a401c8-07fc-4824-9ff2-1c57a8ad9552', nombre: 'Marcas', ruta: '/configuracion/marcas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '5982130f-8bcd-498a-8233-8f2dd4582b15', nombre: 'Modelos', ruta: '/configuracion/modelos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'd5d8ecee-2c48-42c0-abbe-fecd3e3d9387', nombre: 'Tipos', ruta: '/configuracion/tipos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'f214acec-737c-477c-8cfb-8c974e39ab4c', nombre: 'Modos', ruta: '/configuracion/modos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'ab5d4cd0-9d84-413c-8001-6570efe02bbe', nombre: 'Legal', ruta: '/configuracion/legal', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
-    id: 7,
+    uuid: 'c0e6fa7a-7b34-4989-a59d-57863502cb4c',
     nombre: 'MESAS EN VIVO',
     icono: 'file',
     modulos: [
-      { id: 12, nombre: 'Mesas', ruta: '/gestion-de-mesas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 34, nombre: 'Juegos', ruta: '/mesas/juegos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 35, nombre: 'Mesas Borradas', ruta: '/mesas/mesas-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: 'mod-mesas-mesas', nombre: 'Mesas', ruta: '/gestion-de-mesas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-mesas-juegos', nombre: 'Juegos', ruta: '/mesas/juegos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'mod-mesas-borradas', nombre: 'Mesas Borradas', ruta: '/mesas/mesas-borradas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
-    id: 8,
+    uuid: 'b37ea319-497c-49ae-bd71-1b17ab60fb16',
     nombre: 'CONF.M: CECOM',
     icono: 'file',
     modulos: [
-      { id: 38, nombre: 'Tipo Clientes', ruta: '/configuracion/tipo-clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 39, nombre: 'Métodos de Pago', ruta: '/configuracion/metodos-pago', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 40, nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: 'f6cc58ea-b74c-462a-8d36-4b08f46cd077', nombre: 'Tipo Clientes', ruta: '/configuracion/tipo-clientes', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '7b9ccfd3-bfe0-4e02-bd68-3221494f432d', nombre: 'Métodos de Pago', ruta: '/configuracion/metodos-pago', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '435bd067-fe42-49b0-b525-210b7c19a1fc', nombre: 'Tipo Incidencias', ruta: '/configuracion/tipo-incidencias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   },
   {
-    id: 10,
+    uuid: '26cb7129-363f-44bd-b45a-55dac3e92799',
     nombre: 'CONF.M: RRHH',
     icono: 'file',
     modulos: [
-      { id: 29, nombre: 'Horarios', ruta: '/configuracion/horarios', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 37, nombre: 'Excepciones', ruta: '/configuracion/excepciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
-      { id: 38, nombre: 'Fechas Patrias', ruta: '/configuracion/fechas-patrias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+      { uuid: 'd3dbf58d-cda0-4a44-9773-ab2af79c76c9', nombre: 'Horarios', ruta: '/configuracion/horarios', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: 'd2992a2a-642a-4b29-8547-772c8f1963a3', nombre: 'Excepciones', ruta: '/configuracion/excepciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '4827f008-2c8b-44d9-be39-6ff3f4ee744e', nombre: 'Fechas Patrias', ruta: '/configuracion/fechas-patrias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
+      { uuid: '6b601f8a-b30f-4523-92c2-6fea0d151387', nombre: 'Rangos', ruta: '/configuracion/rangos', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
   }
 ]);
