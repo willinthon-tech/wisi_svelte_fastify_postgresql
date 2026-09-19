@@ -1,5 +1,8 @@
 <script>
   import { onMount } from 'svelte';
+  import html2canvas from 'html2canvas';
+  import { jsPDF } from 'jspdf';
+  import { saveOrShareFile } from '../../utils/fileSaver.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
@@ -9,6 +12,8 @@
 
   let items = [];
   let isLoading = true;
+  let isGeneratingPdf = false;
+  let printableAreaEl;
   let generadoEn = '';
   let activeTab = subtipo || 'simple'; // 'simple' | 'sociedad' | 'salas' | 'galpones' | 'tipo' | 'marcas'
 
@@ -121,8 +126,124 @@
     }
   }
 
-  function handleImprimir() {
-    window.print();
+  async function handleDescargarPdf() {
+    if (isGeneratingPdf) return;
+    isGeneratingPdf = true;
+
+    const fechaClean = new Date().toISOString().slice(0, 10);
+    const fileName = `Reporte_Maquinas_${activeTab}_${fechaClean}.pdf`;
+
+    triggerToast("Preparando descarga del PDF...", "info");
+
+    try {
+      const targetElement = printableAreaEl || document.querySelector(".printable-report-area") || document.querySelector(".table-responsive-box") || document.querySelector(".reporte-content");
+
+      if (!targetElement) {
+        throw new Error("No se encontró el elemento para generar el PDF");
+      }
+
+      const canvas = await html2canvas(targetElement, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        onclone: (clonedDoc, clonedElement) => {
+          clonedElement.style.animation = "none";
+          clonedElement.style.transition = "none";
+          clonedElement.style.transform = "none";
+          clonedElement.style.boxShadow = "none";
+          clonedElement.style.border = "none";
+          clonedElement.style.margin = "0";
+          clonedElement.style.width = "100%";
+          clonedElement.style.overflow = "visible";
+          const tableBox = clonedElement.querySelector(".table-responsive-box");
+          if (tableBox) {
+            tableBox.style.overflow = "visible";
+            tableBox.style.width = "auto";
+          }
+          const pdfHdr = clonedElement.querySelector(".pdf-export-header");
+          if (pdfHdr) {
+            pdfHdr.style.display = "block";
+          }
+          const allAnim = clonedElement.querySelectorAll("*");
+          allAnim.forEach((el) => {
+            el.style.animation = "none";
+            el.style.transition = "none";
+          });
+        },
+      });
+
+      // Orientación apaisada (Landscape) para formato de reporte ancho
+      const pdf = new jsPDF("l", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // 297 mm
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // 210 mm
+      const margin = 8;
+      const printWidth = pdfWidth - margin * 2; // 281 mm
+      const printHeight = pdfHeight - margin * 2; // 194 mm
+
+      const pxToMm = printWidth / canvas.width;
+      const totalHeightMm = canvas.height * pxToMm;
+
+      if (totalHeightMm <= printHeight) {
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        pdf.addImage(imgData, "JPEG", margin, margin, printWidth, totalHeightMm);
+      } else {
+        const sliceHeightPx = Math.floor(printHeight / pxToMm);
+        let yOffset = 0;
+        let pageNum = 0;
+
+        while (yOffset < canvas.height) {
+          const currentSliceHeight = Math.min(sliceHeightPx, canvas.height - yOffset);
+          const pageCanvas = document.createElement("canvas");
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = currentSliceHeight;
+          const pageCtx = pageCanvas.getContext("2d");
+
+          pageCtx.fillStyle = "#ffffff";
+          pageCtx.fillRect(0, 0, pageCanvas.width, currentSliceHeight);
+
+          pageCtx.drawImage(
+            canvas,
+            0,
+            yOffset,
+            canvas.width,
+            currentSliceHeight,
+            0,
+            0,
+            canvas.width,
+            currentSliceHeight
+          );
+
+          const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+          const currentSliceHeightMm = currentSliceHeight * pxToMm;
+
+          if (pageNum > 0) {
+            pdf.addPage();
+          }
+
+          pdf.addImage(pageImgData, "JPEG", margin, margin, printWidth, currentSliceHeightMm);
+          yOffset += currentSliceHeight;
+          pageNum++;
+        }
+      }
+
+      const pdfBlob = pdf.output("blob");
+      await saveOrShareFile({
+        blob: pdfBlob,
+        fileName,
+        dialogTitle: "Descargar Reporte PDF Máquinas",
+        mimeType: "application/pdf",
+      });
+
+      triggerToast("PDF descargado con éxito.", "success");
+    } catch (err) {
+      console.error("[PDF] Error al generar archivo PDF:", err);
+      triggerToast("No se pudo generar PDF directo. Abriendo diálogo de impresión...", "warning");
+      window.print();
+    } finally {
+      isGeneratingPdf = false;
+    }
   }
 
   // Matrix Cross-Tabulation Calculation
@@ -381,8 +502,6 @@
             Reporte Detallado por Tipo
           {:else if activeTab === 'marcas'}
             Reporte Detallado por Marcas
-          {:else if activeTab === 'juego'}
-            Reporte Detallado por Juego
           {/if}
         </h1>
         <div class="toolbar-meta">
@@ -396,10 +515,20 @@
     <!-- Right Actions -->
     <div class="toolbar-right">
       <button type="button" class="btn-tool btn-share" on:click={handleCompartir} title="Copiar enlace para compartir">
-        🔗 Compartir
+        Compartir
       </button>
-      <button type="button" class="btn-tool btn-print" on:click={handleImprimir} title="Imprimir reporte o exportar a PDF">
-        🖨️ Imprimir / PDF
+      <button 
+        type="button" 
+        class="btn-tool btn-pdf" 
+        on:click={handleDescargarPdf} 
+        disabled={isGeneratingPdf} 
+        title="Bajar reporte a PDF"
+      >
+        {#if isGeneratingPdf}
+          <span>Generando...</span>
+        {:else}
+          <span>PDF</span>
+        {/if}
       </button>
     </div>
   </div>
@@ -412,7 +541,7 @@
       class:active={activeTab === 'simple'} 
       on:click={() => handleTabChange('simple')}
     >
-      📄 Simple
+      Simple
     </button>
     <button 
       type="button" 
@@ -420,7 +549,7 @@
       class:active={activeTab === 'sociedad'} 
       on:click={() => handleTabChange('sociedad')}
     >
-      🏢 Por Sociedad
+      Por Sociedad
     </button>
     <button 
       type="button" 
@@ -428,7 +557,7 @@
       class:active={activeTab === 'salas'} 
       on:click={() => handleTabChange('salas')}
     >
-      🎰 Por Salas
+      Por Salas
     </button>
     <button 
       type="button" 
@@ -436,7 +565,7 @@
       class:active={activeTab === 'galpones'} 
       on:click={() => handleTabChange('galpones')}
     >
-      📦 Por Galpones
+      Por Galpones
     </button>
     <button 
       type="button" 
@@ -444,7 +573,7 @@
       class:active={activeTab === 'tipo'} 
       on:click={() => handleTabChange('tipo')}
     >
-      🏷️ Por Tipo
+      Por Tipo
     </button>
     <button 
       type="button" 
@@ -452,12 +581,35 @@
       class:active={activeTab === 'marcas'} 
       on:click={() => handleTabChange('marcas')}
     >
-      ✨ Por Marcas
+      Por Marcas
     </button>
   </div>
 
-  <!-- Content Section -->
-  <div class="reporte-content">
+  <!-- Área Imprimible / Exportable a PDF -->
+  <div class="printable-report-area" bind:this={printableAreaEl}>
+    <div class="pdf-export-header">
+      <div class="pdf-header-title">
+        {#if activeTab === 'simple'}
+          Reporte de Máquinas (Vista Simple)
+        {:else if activeTab === 'sociedad'}
+          Reporte Detallado por Sociedad
+        {:else if activeTab === 'salas'}
+          Reporte Detallado por Salas
+        {:else if activeTab === 'galpones'}
+          Reporte Detallado por Galpones
+        {:else if activeTab === 'tipo'}
+          Reporte Detallado por Tipo
+        {:else if activeTab === 'marcas'}
+          Reporte Detallado por Marcas
+        {/if}
+      </div>
+      <div class="pdf-header-meta">
+        Generado en: {generadoEn} | Registros: {items.length}
+      </div>
+    </div>
+
+    <!-- Content Section -->
+    <div class="reporte-content">
     {#if isLoading}
       <div class="reporte-loading">
         <div class="spinner"></div>
@@ -587,6 +739,7 @@
         </table>
       </div>
     {/if}
+  </div>
   </div>
 </div>
 
@@ -841,13 +994,41 @@
     background: #dbeafe;
   }
 
-  .btn-print {
+  .btn-print,
+  .btn-pdf {
     background: #0f172a;
     color: #ffffff;
     border-color: #0f172a;
   }
-  .btn-print:hover {
+  .btn-print:hover,
+  .btn-pdf:hover:not(:disabled) {
     background: #1e293b;
+  }
+  .btn-pdf:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Header exclusivo para exportación a PDF */
+  .pdf-export-header {
+    display: none;
+    padding: 12px 16px;
+    background: #1e3a5f;
+    color: #ffffff;
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 8px;
+  }
+
+  .pdf-header-title {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+  }
+
+  .pdf-header-meta {
+    font-size: 11px;
+    opacity: 0.88;
+    margin-top: 3px;
   }
 
   /* Tabs Bar */

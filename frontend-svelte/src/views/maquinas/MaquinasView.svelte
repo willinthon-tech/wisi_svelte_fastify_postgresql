@@ -1089,7 +1089,6 @@
         on:click={() => irAReporte('simple')}
         title="Ver reportes y vistas de máquinas con los filtros actuales"
       >
-        <span class="reportes-btn-icon">📊</span>
         <span>REPORTES Y VISTAS</span>
       </button>
     </div>
@@ -1409,8 +1408,8 @@
     display: flex;
     align-items: center;
     width: 100%;
-    margin-top: 4px;
-    margin-bottom: 4px;
+    margin-top: 14px;
+    margin-bottom: 10px;
     box-sizing: border-box;
   }
 
@@ -1441,9 +1440,5 @@
 
   .btn-reportes-main:active {
     transform: translateY(0);
-  }
-
-  .reportes-btn-icon {
-    font-size: 14px;
   }
 </style>
