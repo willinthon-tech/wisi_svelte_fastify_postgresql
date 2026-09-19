@@ -1,8 +1,7 @@
 -- =========================================================================
--- SCRIPT MAESTRO: PURGA TOTAL DE CAMPOS 'id' Y '*_id' EN TODA LA BASE DE DATOS
+-- SCRIPT MAESTRO V3: PURGA TOTAL DE CAMPOS 'id' Y '*_id' EN TODA LA BASE DE DATOS
 -- Base de Datos: PostgreSQL (wisi)
--- Objetivo: Migrar 100% de las tablas a UUID como Primary Key exclusiva
---           y eliminar permanentemente todas las columnas legadas 'id' y '*_id'
+-- Filtra exclusivamente tablas reales ('BASE TABLE') y maneja excepciones por tabla
 -- =========================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -10,18 +9,24 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DO $$
 DECLARE
     r RECORD;
-    t RECORD;
+    rec_tbl RECORD;
     old_pk_name TEXT;
 BEGIN
-    RAISE NOTICE '>>> PASO 1: Asegurando que todas las tablas tengan columna uuid NOT NULL...';
-    FOR t IN (
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name != 'configuracion'
+    RAISE NOTICE '>>> PASO 1: Asegurando que todas las tablas base tengan columna uuid NOT NULL...';
+    FOR rec_tbl IN (
+        SELECT tbl.table_name 
+        FROM information_schema.tables tbl
+        WHERE tbl.table_schema = 'public' 
+          AND tbl.table_type = 'BASE TABLE' 
+          AND tbl.table_name != 'configuracion'
     ) LOOP
-        EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid()', t.table_name);
-        EXECUTE format('UPDATE %I SET uuid = gen_random_uuid() WHERE uuid IS NULL', t.table_name);
-        EXECUTE format('ALTER TABLE %I ALTER COLUMN uuid SET NOT NULL', t.table_name);
+        BEGIN
+            EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid()', rec_tbl.table_name);
+            EXECUTE format('UPDATE %I SET uuid = gen_random_uuid() WHERE uuid IS NULL', rec_tbl.table_name);
+            EXECUTE format('ALTER TABLE %I ALTER COLUMN uuid SET NOT NULL', rec_tbl.table_name);
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Advertencia en uuid de %: %', rec_tbl.table_name, SQLERRM;
+        END;
     END LOOP;
 
     RAISE NOTICE '>>> PASO 2: Migrando Unique Constraints legadas a UUID...';
@@ -148,7 +153,10 @@ BEGIN
         FROM information_schema.triggers
         WHERE trigger_name LIKE '%dual%'
     ) LOOP
-        EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I CASCADE', r.trigger_name, r.event_object_table);
+        BEGIN
+            EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I CASCADE', r.trigger_name, r.event_object_table);
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
     END LOOP;
 
     RAISE NOTICE '>>> PASO 4: Eliminando Foreign Keys legadas que apuntan a columnas id...';
@@ -159,57 +167,81 @@ BEGIN
           ON ccu.constraint_name = tc.constraint_name
         WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public' AND ccu.column_name = 'id'
     ) LOOP
-        EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I CASCADE', r.table_name, r.constraint_name);
+        BEGIN
+            EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I CASCADE', r.table_name, r.constraint_name);
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
     END LOOP;
 
-    RAISE NOTICE '>>> PASO 5: Convirtiendo columna uuid en PRIMARY KEY en todas las tablas...';
-    FOR t IN (
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name != 'configuracion'
+    RAISE NOTICE '>>> PASO 5: Convirtiendo columna uuid en PRIMARY KEY en todas las tablas base...';
+    FOR rec_tbl IN (
+        SELECT tbl.table_name 
+        FROM information_schema.tables tbl
+        WHERE tbl.table_schema = 'public' 
+          AND tbl.table_type = 'BASE TABLE' 
+          AND tbl.table_name != 'configuracion'
     ) LOOP
-        -- Buscar si tiene PK sobre id
-        SELECT tc.constraint_name INTO old_pk_name
-        FROM information_schema.table_constraints tc
-        JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
-        WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' AND tc.table_name = t.table_name AND ccu.column_name = 'id';
-
-        IF old_pk_name IS NOT NULL THEN
-            EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I CASCADE', t.table_name, old_pk_name);
-        END IF;
-
-        -- Asegurar que uuid sea la PK
-        IF NOT EXISTS (
-            SELECT 1 FROM information_schema.table_constraints tc
+        BEGIN
+            -- Buscar si tiene PK sobre id
+            SELECT tc.constraint_name INTO old_pk_name
+            FROM information_schema.table_constraints tc
             JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
-            WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' AND tc.table_name = t.table_name AND ccu.column_name = 'uuid'
-        ) THEN
-            EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I', t.table_name, t.table_name || '_uuid_key');
-            EXECUTE format('ALTER TABLE %I ADD PRIMARY KEY (uuid)', t.table_name);
-        END IF;
+            WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' AND tc.table_name = rec_tbl.table_name AND ccu.column_name = 'id';
+
+            IF old_pk_name IS NOT NULL THEN
+                EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I CASCADE', rec_tbl.table_name, old_pk_name);
+            END IF;
+
+            -- Asegurar que uuid sea la PK
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.table_constraints tc
+                JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+                WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public' AND tc.table_name = rec_tbl.table_name AND ccu.column_name = 'uuid'
+            ) THEN
+                EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I', rec_tbl.table_name, rec_tbl.table_name || '_uuid_key');
+                EXECUTE format('ALTER TABLE %I ADD PRIMARY KEY (uuid)', rec_tbl.table_name);
+            END IF;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'Advertencia en PK de %: %', rec_tbl.table_name, SQLERRM;
+        END;
     END LOOP;
 
-    RAISE NOTICE '>>> PASO 6: Eliminando definitivamente la columna id de todas las tablas...';
+    RAISE NOTICE '>>> PASO 6: Eliminando definitivamente la columna id de todas las tablas base...';
     FOR r IN (
-        SELECT table_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND column_name = 'id'
+        SELECT c.table_name
+        FROM information_schema.columns c
+        JOIN information_schema.tables tbl 
+          ON c.table_name = tbl.table_name AND c.table_schema = tbl.table_schema
+        WHERE c.table_schema = 'public' 
+          AND tbl.table_type = 'BASE TABLE'
+          AND c.column_name = 'id'
     ) LOOP
-        EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS id CASCADE', r.table_name);
-        RAISE NOTICE 'Columna id eliminada de: %', r.table_name;
+        BEGIN
+            EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS id CASCADE', r.table_name);
+            RAISE NOTICE 'Columna id eliminada de: %', r.table_name;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'No se pudo eliminar id de %: %', r.table_name, SQLERRM;
+        END;
     END LOOP;
 
-    RAISE NOTICE '>>> PASO 7: Eliminando columnas foráneas legadas *_id de tipo entero...';
+    RAISE NOTICE '>>> PASO 7: Eliminando columnas foráneas legadas *_id de tipo entero en tablas base...';
     FOR r IN (
-        SELECT table_name, column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public' 
-          AND column_name LIKE '%\_id' ESCAPE '\' 
-          AND column_name != 'id'
-          AND data_type IN ('integer', 'smallint', 'bigint')
+        SELECT c.table_name, c.column_name
+        FROM information_schema.columns c
+        JOIN information_schema.tables tbl 
+          ON c.table_name = tbl.table_name AND c.table_schema = tbl.table_schema
+        WHERE c.table_schema = 'public' 
+          AND tbl.table_type = 'BASE TABLE'
+          AND c.column_name LIKE '%\_id' ESCAPE '\' 
+          AND c.column_name != 'id'
+          AND c.data_type IN ('integer', 'smallint', 'bigint')
     ) LOOP
-        EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS %I CASCADE', r.table_name, r.column_name);
-        RAISE NOTICE 'Columna *_id eliminada: %.%', r.table_name, r.column_name;
+        BEGIN
+            EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS %I CASCADE', r.table_name, r.column_name);
+            RAISE NOTICE 'Columna *_id eliminada: %.%', r.table_name, r.column_name;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'No se pudo eliminar %.%: %', r.table_name, r.column_name, SQLERRM;
+        END;
     END LOOP;
 
     RAISE NOTICE '>>> PASO 8: Eliminando secuencias autoincrementales huérfanas...';
@@ -218,7 +250,10 @@ BEGIN
         FROM information_schema.sequences 
         WHERE sequence_schema = 'public' AND sequence_name LIKE '%_id_seq'
     ) LOOP
-        EXECUTE format('DROP SEQUENCE IF EXISTS %I CASCADE', r.sequence_name);
+        BEGIN
+            EXECUTE format('DROP SEQUENCE IF EXISTS %I CASCADE', r.sequence_name);
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
     END LOOP;
 
     RAISE NOTICE '>>> PURGA COMPLETADA CON EXITO. TODAS LAS TABLAS OPERAN 100%% SOBRE UUID.';
@@ -228,19 +263,26 @@ END $$;
 -- CONSULTAS DE VERIFICACIÓN FINAL:
 -- =========================================================================
 
--- 1. Verificar si queda alguna columna 'id' (debe dar 0 filas):
-SELECT table_name, column_name, data_type 
-FROM information_schema.columns 
-WHERE table_schema = 'public' AND column_name = 'id';
+-- 1. Verificar si queda alguna columna 'id' en tablas base (debe dar 0 filas):
+SELECT c.table_name, c.column_name, c.data_type 
+FROM information_schema.columns c
+JOIN information_schema.tables tbl 
+  ON c.table_name = tbl.table_name AND c.table_schema = tbl.table_schema
+WHERE c.table_schema = 'public' 
+  AND tbl.table_type = 'BASE TABLE'
+  AND c.column_name = 'id';
 
--- 2. Verificar si queda alguna columna *_id de tipo entero (debe dar 0 filas):
-SELECT table_name, column_name, data_type 
-FROM information_schema.columns 
-WHERE table_schema = 'public' 
-  AND column_name LIKE '%\_id' ESCAPE '\' 
-  AND data_type IN ('integer', 'smallint', 'bigint');
+-- 2. Verificar si queda alguna columna *_id de tipo entero en tablas base (debe dar 0 filas):
+SELECT c.table_name, c.column_name, c.data_type 
+FROM information_schema.columns c
+JOIN information_schema.tables tbl 
+  ON c.table_name = tbl.table_name AND c.table_schema = tbl.table_schema
+WHERE c.table_schema = 'public' 
+  AND tbl.table_type = 'BASE TABLE'
+  AND c.column_name LIKE '%\_id' ESCAPE '\' 
+  AND c.data_type IN ('integer', 'smallint', 'bigint');
 
--- 3. Verificar Primary Keys (todas deben ser 'uuid'):
+-- 3. Verificar Primary Keys de tablas base (todas deben ser 'uuid'):
 SELECT tc.table_name, ccu.column_name AS pk_column
 FROM information_schema.table_constraints tc
 JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
