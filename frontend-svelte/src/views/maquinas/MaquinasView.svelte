@@ -339,19 +339,30 @@
     nombre: r.nombre
   }));
 
-  // Distribuciones reactivas para panel de badges (Data Filtrada)
-  $: distribucionTipos = (filterOptions.tipos || []).filter(t => Number(t.count) > 0);
-  $: distribucionSociedades = (filterOptions.sociedades || []).filter(s => Number(s.count) > 0);
-  $: distribucionSalas = (filterOptions.salas || []).filter(s => {
-    const lbl = (s.subgroup_label || s.grupo_nombre || '').toLowerCase();
-    const isGalpon = lbl.includes('galp') || s.grupo_id === 2;
-    return !isGalpon && Number(s.count) > 0;
-  });
-  $: distribucionGalpones = (filterOptions.salas || []).filter(s => {
-    const lbl = (s.subgroup_label || s.grupo_nombre || '').toLowerCase();
-    const isGalpon = lbl.includes('galp') || s.grupo_id === 2;
-    return isGalpon && Number(s.count) > 0;
-  });
+  // Distribuciones reactivas para panel de badges (Data Filtrada) - Ordenadas de MAYOR a MENOR
+  $: distribucionTipos = (filterOptions.tipos || [])
+    .filter(t => Number(t.count) > 0)
+    .sort((a, b) => Number(b.count) - Number(a.count));
+
+  $: distribucionSociedades = (filterOptions.sociedades || [])
+    .filter(s => Number(s.count) > 0)
+    .sort((a, b) => Number(b.count) - Number(a.count));
+
+  $: distribucionSalas = (filterOptions.salas || [])
+    .filter(s => {
+      const lbl = (s.subgroup_label || s.grupo_nombre || '').toLowerCase();
+      const isGalpon = lbl.includes('galp') || s.grupo_id === 2 || s.grupo_uuid === '55d65e8b-09b2-4164-8491-efbdd50433b6';
+      return !isGalpon && Number(s.count) > 0;
+    })
+    .sort((a, b) => Number(b.count) - Number(a.count));
+
+  $: distribucionGalpones = (filterOptions.salas || [])
+    .filter(s => {
+      const lbl = (s.subgroup_label || s.grupo_nombre || '').toLowerCase();
+      const isGalpon = lbl.includes('galp') || s.grupo_id === 2 || s.grupo_uuid === '55d65e8b-09b2-4164-8491-efbdd50433b6';
+      return isGalpon && Number(s.count) > 0;
+    })
+    .sort((a, b) => Number(b.count) - Number(a.count));
 
   function toggleBadgeFilter(type, id) {
     if (!id) return;
@@ -921,8 +932,17 @@
       <div class="maquinas-distribucion-panel">
         <!-- 1. Distribución por Tipo -->
         {#if distribucionTipos.length > 0}
-          <div class="distrib-row">
-            <span class="distrib-label">Distribucion por tipo:</span>
+          <div class="distrib-group">
+            <div class="distrib-group-header">
+              <div class="distrib-header-title-box">
+                <span class="distrib-tag tag-tipo">TIPO</span>
+                <span class="distrib-title">Distribución por Tipo:</span>
+              </div>
+              <div class="distrib-header-line"></div>
+              <span class="distrib-counter-badge">
+                {distribucionTipos.reduce((acc, t) => acc + Number(t.count || 0), 0)} máquinas
+              </span>
+            </div>
             <div class="distrib-badges">
               {#each distribucionTipos as t}
                 {@const isSelected = selectedTipos.some(v => String(v) === String(t.uuid || t.id))}
@@ -943,8 +963,17 @@
 
         <!-- 2. Distribución por Sociedades -->
         {#if distribucionSociedades.length > 0}
-          <div class="distrib-row">
-            <span class="distrib-label">Distribucion por Sociedades:</span>
+          <div class="distrib-group">
+            <div class="distrib-group-header">
+              <div class="distrib-header-title-box">
+                <span class="distrib-tag tag-sociedad">SOCIEDADES</span>
+                <span class="distrib-title">Distribución por Sociedades:</span>
+              </div>
+              <div class="distrib-header-line"></div>
+              <span class="distrib-counter-badge">
+                {distribucionSociedades.reduce((acc, s) => acc + Number(s.count || 0), 0)} máquinas ({distribucionSociedades.length} sociedades)
+              </span>
+            </div>
             <div class="distrib-badges">
               {#each distribucionSociedades as s}
                 {@const isSelected = selectedSociedades.some(v => String(v) === String(s.uuid || s.id))}
@@ -965,8 +994,17 @@
 
         <!-- 3. Distribución por Salas -->
         {#if distribucionSalas.length > 0}
-          <div class="distrib-row">
-            <span class="distrib-label">Distribucion por Salas:</span>
+          <div class="distrib-group">
+            <div class="distrib-group-header">
+              <div class="distrib-header-title-box">
+                <span class="distrib-tag tag-sala">SALAS</span>
+                <span class="distrib-title">Distribución por Salas:</span>
+              </div>
+              <div class="distrib-header-line"></div>
+              <span class="distrib-counter-badge">
+                {distribucionSalas.reduce((acc, s) => acc + Number(s.count || 0), 0)} máquinas ({distribucionSalas.length} salas)
+              </span>
+            </div>
             <div class="distrib-badges">
               {#each distribucionSalas as s}
                 {@const isSelected = selectedSalas.some(v => String(v) === String(s.uuid || s.id))}
@@ -987,8 +1025,17 @@
 
         <!-- 4. Distribución por Galpones -->
         {#if distribucionGalpones.length > 0}
-          <div class="distrib-row">
-            <span class="distrib-label">Distribucion por Galpones:</span>
+          <div class="distrib-group">
+            <div class="distrib-group-header">
+              <div class="distrib-header-title-box">
+                <span class="distrib-tag tag-galpon">GALPONES</span>
+                <span class="distrib-title">Distribución por Galpones:</span>
+              </div>
+              <div class="distrib-header-line"></div>
+              <span class="distrib-counter-badge">
+                {distribucionGalpones.reduce((acc, g) => acc + Number(g.count || 0), 0)} máquinas ({distribucionGalpones.length} galpones)
+              </span>
+            </div>
             <div class="distrib-badges">
               {#each distribucionGalpones as g}
                 {@const isSelected = selectedSalas.some(v => String(v) === String(g.uuid || g.id))}
@@ -1121,36 +1168,110 @@
   }
 
   /* Panel de Distribución por Badges */
+  .maquinas-distribucion-wrapper {
+    width: 100%;
+  }
+
   .maquinas-distribucion-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    margin-top: 4px;
+    margin-bottom: 6px;
+    box-sizing: border-box;
+  }
+
+  .distrib-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
     width: 100%;
-    padding: 12px 16px;
+    padding: 10px 14px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     box-sizing: border-box;
-    margin-top: 4px;
-    margin-bottom: 4px;
+    transition: all 0.15s ease;
   }
 
-  .distrib-row {
+  .distrib-group:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  }
+
+  .distrib-group-header {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
-    flex-wrap: wrap;
   }
 
-  .distrib-label {
-    font-size: 11.5px;
+  .distrib-header-title-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .distrib-tag {
+    font-size: 10px;
     font-weight: 800;
-    color: #475569;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .distrib-tag.tag-tipo {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+
+  .distrib-tag.tag-sociedad {
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+  }
+
+  .distrib-tag.tag-sala {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+  }
+
+  .distrib-tag.tag-galpon {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  .distrib-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #334155;
     letter-spacing: 0.2px;
     white-space: nowrap;
-    min-width: 195px;
+  }
+
+  .distrib-header-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 100%);
+  }
+
+  .distrib-counter-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 2px 9px;
+    border-radius: 12px;
+    white-space: nowrap;
     flex-shrink: 0;
   }
 
@@ -1159,7 +1280,7 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
-    flex: 1;
+    width: 100%;
   }
 
   .distrib-badge {
@@ -1205,7 +1326,8 @@
   }
 
   .distrib-badge .badge-count {
-    font-family: monospace;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
     font-size: 12px;
     font-weight: 900;
     color: #0f172a;
@@ -1235,20 +1357,12 @@
     box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.25);
   }
 
-  @media (max-width: 860px) {
-    .distrib-row {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 5px;
-      padding-bottom: 6px;
-      border-bottom: 1px dashed #e2e8f0;
+  @media (max-width: 768px) {
+    .distrib-group-header {
+      flex-wrap: wrap;
     }
-    .distrib-row:last-child {
-      border-bottom: none;
-      padding-bottom: 0;
-    }
-    .distrib-label {
-      min-width: unset;
+    .distrib-header-line {
+      display: none;
     }
   }
 </style>
