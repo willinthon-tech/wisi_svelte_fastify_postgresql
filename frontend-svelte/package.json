@@ -28,6 +28,7 @@
     "@tauri-apps/plugin-notification": "^2.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "jszip": "^3.10.1"
   }
 }

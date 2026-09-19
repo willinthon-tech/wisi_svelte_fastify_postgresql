@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
-  import html2canvas from 'html2canvas';
   import { jsPDF } from 'jspdf';
+  import autoTable from 'jspdf-autotable';
   import { saveOrShareFile } from '../../utils/fileSaver.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
@@ -126,6 +126,16 @@
     }
   }
 
+  function getReportTitle(tab) {
+    if (tab === 'simple') return 'Reporte de Máquinas (Vista Simple)';
+    if (tab === 'sociedad') return 'Reporte Detallado por Sociedad';
+    if (tab === 'salas') return 'Reporte Detallado por Salas';
+    if (tab === 'galpones') return 'Reporte Detallado por Galpones';
+    if (tab === 'tipo') return 'Reporte Detallado por Tipo';
+    if (tab === 'marcas') return 'Reporte Detallado por Marcas';
+    return 'Reporte de Máquinas';
+  }
+
   async function handleDescargarPdf() {
     if (isGeneratingPdf) return;
     isGeneratingPdf = true;
@@ -133,99 +143,131 @@
     const fechaClean = new Date().toISOString().slice(0, 10);
     const fileName = `Reporte_Maquinas_${activeTab}_${fechaClean}.pdf`;
 
-    triggerToast("Preparando descarga del PDF...", "info");
+    triggerToast("Generando archivo PDF...", "info");
 
     try {
-      const targetElement = printableAreaEl || document.querySelector(".printable-report-area") || document.querySelector(".table-responsive-box") || document.querySelector(".reporte-content");
+      // PDF en formato A4 apaisado (Landscape: 297mm x 210mm)
+      const pdf = new jsPDF("l", "mm", "a4");
+      const reportTitle = getReportTitle(activeTab);
 
-      if (!targetElement) {
-        throw new Error("No se encontró el elemento para generar el PDF");
+      let head = [];
+      let body = [];
+
+      if (activeTab === 'simple') {
+        head = [
+          [
+            'NOMBRE',
+            'SERIAL',
+            'MARCA',
+            'MODELO',
+            'JUEGO',
+            'TIPO',
+            'PUESTOS',
+            'MODO',
+            'SOCIEDAD',
+            'VALOR',
+            'ESTADO',
+            'LEGAL',
+            'GRUPO',
+            'SALA',
+            'RANGO'
+          ]
+        ];
+        body = items.map((m) => [
+          m.nombre || '—',
+          m.serial || '—',
+          m.marca_nombre || 'N/A',
+          m.modelo_nombre || 'N/A',
+          m.juego_nombre || 'N/A',
+          m.tipo_nombre || 'SLOTS',
+          String(m.puestos || 1),
+          m.modo_nombre || 'BILL',
+          m.sociedad_nombre || 'N/A',
+          m.valor_nombre || '0.01',
+          m.estado_nombre || 'OPERATIVA',
+          m.legal_nombre || 'SI',
+          m.grupo_sala_nombre || (m.grupo_sala_id === 2 ? 'GALPON' : 'SALA'),
+          m.sala_nombre || 'N/A',
+          m.rango_nombre || 'General'
+        ]);
+      } else if (matrixData) {
+        const colHeaders = [
+          matrixData.groupLabel1,
+          matrixData.groupLabel2,
+          ...matrixData.crossColumns.map((c) => `${c.name} (${c.count})`)
+        ];
+        head = [colHeaders];
+
+        matrixData.groups.forEach((g1) => {
+          g1.subgroups.forEach((g2, subIdx) => {
+            const row = [];
+            if (subIdx === 0) {
+              row.push({
+                content: `${g1.name}\n(Total: ${g1.total})`,
+                rowSpan: g1.subgroups.length,
+                styles: { valign: 'middle', halign: 'center', fontStyle: 'bold', fillColor: [255, 255, 255] }
+              });
+            }
+            row.push(`${g2.name} (Total: ${g2.total})`);
+            g2.cells.forEach((cell) => {
+              row.push(cell.count > 0 ? String(cell.count) : '0');
+            });
+            body.push(row);
+          });
+        });
       }
 
-      const canvas = await html2canvas(targetElement, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-        onclone: (clonedDoc, clonedElement) => {
-          clonedElement.style.animation = "none";
-          clonedElement.style.transition = "none";
-          clonedElement.style.transform = "none";
-          clonedElement.style.boxShadow = "none";
-          clonedElement.style.border = "none";
-          clonedElement.style.margin = "0";
-          clonedElement.style.width = "100%";
-          clonedElement.style.overflow = "visible";
-          const tableBox = clonedElement.querySelector(".table-responsive-box");
-          if (tableBox) {
-            tableBox.style.overflow = "visible";
-            tableBox.style.width = "auto";
-          }
-          const pdfHdr = clonedElement.querySelector(".pdf-export-header");
-          if (pdfHdr) {
-            pdfHdr.style.display = "block";
-          }
-          const allAnim = clonedElement.querySelectorAll("*");
-          allAnim.forEach((el) => {
-            el.style.animation = "none";
-            el.style.transition = "none";
-          });
+      autoTable(pdf, {
+        head,
+        body,
+        startY: 22,
+        margin: { top: 22, right: 8, bottom: 12, left: 8 },
+        theme: 'grid',
+        styles: {
+          fontSize: activeTab === 'simple' ? 6.5 : 7.5,
+          cellPadding: 1.5,
+          textColor: [30, 41, 59],
+          lineColor: [226, 232, 240],
+          lineWidth: 0.1,
+          overflow: 'linebreak',
         },
+        headStyles: {
+          fillColor: [30, 58, 95], // #1e3a5f
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: activeTab === 'simple' ? 7 : 8,
+          halign: 'center',
+          valign: 'middle',
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+        didDrawPage: (data) => {
+          // Encabezado institucional en cada página
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(13);
+          pdf.setTextColor(30, 58, 95);
+          pdf.text(reportTitle, 8, 10);
+
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8.5);
+          pdf.setTextColor(100, 116, 139);
+          pdf.text(`Generado en: ${generadoEn}   |   Registros: ${items.length}`, 8, 16);
+        }
       });
 
-      // Orientación apaisada (Landscape) para formato de reporte ancho
-      const pdf = new jsPDF("l", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth(); // 297 mm
-      const pdfHeight = pdf.internal.pageSize.getHeight(); // 210 mm
-      const margin = 8;
-      const printWidth = pdfWidth - margin * 2; // 281 mm
-      const printHeight = pdfHeight - margin * 2; // 194 mm
+      // Añadir numeración de páginas precisa a todas las páginas generadas
+      const totalPages = pdf.internal.getNumberOfPages();
+      const pageSize = pdf.internal.pageSize;
+      const pageWidth = pageSize.width || pageSize.getWidth();
+      const pageHeight = pageSize.height || pageSize.getHeight();
 
-      const pxToMm = printWidth / canvas.width;
-      const totalHeightMm = canvas.height * pxToMm;
-
-      if (totalHeightMm <= printHeight) {
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-        pdf.addImage(imgData, "JPEG", margin, margin, printWidth, totalHeightMm);
-      } else {
-        const sliceHeightPx = Math.floor(printHeight / pxToMm);
-        let yOffset = 0;
-        let pageNum = 0;
-
-        while (yOffset < canvas.height) {
-          const currentSliceHeight = Math.min(sliceHeightPx, canvas.height - yOffset);
-          const pageCanvas = document.createElement("canvas");
-          pageCanvas.width = canvas.width;
-          pageCanvas.height = currentSliceHeight;
-          const pageCtx = pageCanvas.getContext("2d");
-
-          pageCtx.fillStyle = "#ffffff";
-          pageCtx.fillRect(0, 0, pageCanvas.width, currentSliceHeight);
-
-          pageCtx.drawImage(
-            canvas,
-            0,
-            yOffset,
-            canvas.width,
-            currentSliceHeight,
-            0,
-            0,
-            canvas.width,
-            currentSliceHeight
-          );
-
-          const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
-          const currentSliceHeightMm = currentSliceHeight * pxToMm;
-
-          if (pageNum > 0) {
-            pdf.addPage();
-          }
-
-          pdf.addImage(pageImgData, "JPEG", margin, margin, printWidth, currentSliceHeightMm);
-          yOffset += currentSliceHeight;
-          pageNum++;
-        }
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(148, 163, 184);
+        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 28, pageHeight - 5);
       }
 
       const pdfBlob = pdf.output("blob");
@@ -238,7 +280,7 @@
 
       triggerToast("PDF descargado con éxito.", "success");
     } catch (err) {
-      console.error("[PDF] Error al generar archivo PDF:", err);
+      console.error("[PDF] Error al generar archivo PDF con autoTable:", err);
       triggerToast("No se pudo generar PDF directo. Abriendo diálogo de impresión...", "warning");
       window.print();
     } finally {
