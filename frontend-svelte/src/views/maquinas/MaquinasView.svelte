@@ -30,6 +30,7 @@
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { getLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { navigateToRoute } from '../../controllers/router.store.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
   $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id) ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
@@ -387,6 +388,30 @@
       }
     }
     handleFilterChange();
+  }
+
+  function irAReporte(subtipo) {
+    const q = new URLSearchParams();
+    if (searchNombre.trim()) q.set("search_nombre", searchNombre.trim());
+    if (searchSerial.trim()) q.set("search_serial", searchSerial.trim());
+    if (searchQuery.trim()) q.set("search", searchQuery.trim());
+    if (assignedSalaIds.length > 0) q.set("user_sala_ids", assignedSalaIds.join(","));
+    if (selectedGrupos.length > 0) q.set("grupo_ids", selectedGrupos.join(","));
+    if (selectedSalas.length > 0) q.set("sala_ids", selectedSalas.join(","));
+    if (selectedMarcas.length > 0) q.set("marca_ids", selectedMarcas.join(","));
+    if (selectedModelos.length > 0) q.set("modelo_ids", selectedModelos.join(","));
+    if (selectedJuegos.length > 0) q.set("juego_ids", selectedJuegos.join(","));
+    if (selectedEstados.length > 0) q.set("estado_ids", selectedEstados.join(","));
+    if (selectedSociedades.length > 0) q.set("sociedad_ids", selectedSociedades.join(","));
+    if (selectedValores.length > 0) q.set("valor_ids", selectedValores.join(","));
+    if (selectedTipos.length > 0) q.set("tipo_ids", selectedTipos.join(","));
+    if (selectedModos.length > 0) q.set("modo_ids", selectedModos.join(","));
+    if (selectedLegales.length > 0) q.set("legal_ids", selectedLegales.join(","));
+    if (selectedRangos.length > 0) q.set("rango_ids", selectedRangos.join(","));
+
+    const queryStr = q.toString();
+    const route = `maquinas/maquinas/vista/${subtipo}${queryStr ? '?' + queryStr : ''}`;
+    navigateToRoute(route);
   }
 
   // Column definitions for PaginatedDataTable
@@ -1055,6 +1080,72 @@
         {/if}
       </div>
     {/if}
+
+    <!-- Botonera de Reportes / Subvistas (Simple y Detallados) -->
+    <div class="maquinas-reportes-toolbar">
+      <div class="reportes-toolbar-label">
+        <span class="reportes-label-icon">📊</span>
+        <span class="reportes-label-text">REPORTES Y VISTAS:</span>
+      </div>
+      <div class="reportes-buttons-list">
+        <button 
+          type="button" 
+          class="btn-reporte btn-rep-simple"
+          on:click={() => irAReporte('simple')}
+          title="Ver reporte simple con todos los registros filtrados"
+        >
+          📄 Simple
+        </button>
+        <button 
+          type="button" 
+          class="btn-reporte btn-rep-sociedad"
+          on:click={() => irAReporte('detallado/sociedad')}
+          title="Ver matriz detallada agrupada por sociedad"
+        >
+          🏢 Detallado por Sociedad
+        </button>
+        <button 
+          type="button" 
+          class="btn-reporte btn-rep-salas"
+          on:click={() => irAReporte('detallado/salas')}
+          title="Ver matriz detallada agrupada por salas de juego"
+        >
+          🎰 Detallado por Salas
+        </button>
+        <button 
+          type="button" 
+          class="btn-reporte btn-rep-galpones"
+          on:click={() => irAReporte('detallado/galpones')}
+          title="Ver matriz detallada agrupada por galpones y depósitos"
+        >
+          📦 Detallado por Galpones
+        </button>
+        <button 
+          type="button" 
+          class="btn-reporte btn-rep-tipo"
+          on:click={() => irAReporte('detallado/tipo')}
+          title="Ver matriz detallada agrupada por tipo de máquina"
+        >
+          🏷️ Detallado por Tipo
+        </button>
+        <button 
+          type="button" 
+          class="btn-reporte btn-rep-marcas"
+          on:click={() => irAReporte('detallado/marcas')}
+          title="Ver matriz detallada agrupada por marcas"
+        >
+          ✨ Detallado por Marcas
+        </button>
+        <button 
+          type="button" 
+          class="btn-reporte btn-rep-juego"
+          on:click={() => irAReporte('detallado/juego')}
+          title="Ver matriz detallada agrupada por juegos"
+        >
+          🎲 Detallado por Juego
+        </button>
+      </div>
+    </div>
   </div>
 </PaginatedDataTable>
 
@@ -1364,5 +1455,111 @@
     .distrib-header-line {
       display: none;
     }
+  }
+
+  /* Botonera de Reportes / Subvistas */
+  .maquinas-reportes-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    box-sizing: border-box;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+
+  .reportes-toolbar-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #475569;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .reportes-label-icon {
+    font-size: 14px;
+  }
+
+  .reportes-buttons-list {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .btn-reporte {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    white-space: nowrap;
+    outline: none;
+  }
+
+  .btn-reporte:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+  }
+
+  .btn-rep-simple:hover {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+  }
+
+  .btn-rep-sociedad:hover {
+    background: #f0f9ff;
+    border-color: #0284c7;
+    color: #0369a1;
+  }
+
+  .btn-rep-salas:hover {
+    background: #ecfdf5;
+    border-color: #059669;
+    color: #047857;
+  }
+
+  .btn-rep-galpones:hover {
+    background: #fffbeb;
+    border-color: #d97706;
+    color: #b45309;
+  }
+
+  .btn-rep-tipo:hover {
+    background: #f5f3ff;
+    border-color: #8b5cf6;
+    color: #6d28d9;
+  }
+
+  .btn-rep-marcas:hover {
+    background: #fdf2f8;
+    border-color: #ec4899;
+    color: #be185d;
+  }
+
+  .btn-rep-juego:hover {
+    background: #fff7ed;
+    border-color: #f97316;
+    color: #c2410c;
   }
 </style>

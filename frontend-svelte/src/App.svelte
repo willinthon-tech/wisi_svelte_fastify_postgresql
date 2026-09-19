@@ -67,6 +67,7 @@
   import MetodosPagoView from "./views/configuracion/MetodosPagoView.svelte";
   import TipoIncidenciasView from "./views/configuracion/TipoIncidenciasView.svelte";
   import RangosView from "./views/configuracion/RangosView.svelte";
+  import MaquinasReporteView from "./views/maquinas/MaquinasReporteView.svelte";
 
   // Import MESAS EN VIVO Views
   import MesasView from "./views/mesas-en-vivo/MesasView.svelte";
@@ -801,6 +802,7 @@
   $: publicCorteId = getPublicCorteId(cleanPublicRoute);
   $: isLibroPublicRoute = cleanPublicRoute.startsWith('reportes/cecom/libro/') || cleanPublicRoute.startsWith('reportes/cecom/ibro/');
   $: publicLibroId = getPublicLibroId(cleanPublicRoute);
+  $: isMaquinasPublicRoute = cleanPublicRoute.startsWith('reportes/maquinas/vista');
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
@@ -818,6 +820,11 @@
     <!-- Standalone Public CECOM Daily Book Report View -->
     <div class="standalone-public-report">
       <LibroResumenView isPublic={true} libroId={publicLibroId} />
+    </div>
+  {:else if isMaquinasPublicRoute}
+    <!-- Standalone Public Maquinas Report View -->
+    <div class="standalone-public-report">
+      <MaquinasReporteView isPublic={true} />
     </div>
   {/if}
 {:else if $isAuthenticatedStore}
@@ -844,10 +851,10 @@
       <!-- Content Body -->
       <main
         class="content-body"
-        class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos')}
+        class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') || String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') || String($currentRouteStore || '').startsWith('maquinas/vista')}
       >
         <!-- Page Title Header without breadcrumbs -->
-        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos' && !String($currentRouteStore || '').startsWith('cecom/libro/') && !String($currentRouteStore || '').startsWith('libro/')}
+        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos' && !String($currentRouteStore || '').startsWith('cecom/libro/') && !String($currentRouteStore || '').startsWith('libro/') && !String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') && !String($currentRouteStore || '').startsWith('maquinas/vista')}
           {@const currentTitle = getTabTitle($currentRouteStore)}
           {@const isConfM = String(currentTitle || '').toUpperCase().includes('CONF.M:') || String(currentTitle || '').toUpperCase().includes('CONF.M')}
           <div
@@ -1067,6 +1074,8 @@
           <CortesCalculosView />
 
           <!-- MAQUINAS Module Views -->
+        {:else if String($currentRouteStore || '').startsWith("maquinas/maquinas/vista") || String($currentRouteStore || '').startsWith("maquinas/vista")}
+          <MaquinasReporteView isPublic={false} />
         {:else if $currentRouteStore === "configuracion/maquinas" || $currentRouteStore === "maquinas" || $currentRouteStore === "maquinas/maquinas"}
           <MaquinasView />
         {:else if $currentRouteStore === "configuracion/estados" || $currentRouteStore === "estados"}

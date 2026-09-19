@@ -7,7 +7,8 @@ export function isPublicRoute(route) {
   return clean === 'willinthontech' || 
          clean.startsWith('reportes/rrhh/corte/') || 
          clean.startsWith('reportes/cecom/libro/') || 
-         clean.startsWith('reportes/cecom/ibro/');
+         clean.startsWith('reportes/cecom/ibro/') ||
+         clean.startsWith('reportes/maquinas/vista');
 }
 
 export function initRouter() {
@@ -20,7 +21,8 @@ export function initRouter() {
       if (pathname === 'willinthontech' || 
           pathname.startsWith('reportes/rrhh/corte/') || 
           pathname.startsWith('reportes/cecom/libro/') || 
-          pathname.startsWith('reportes/cecom/ibro/')) {
+          pathname.startsWith('reportes/cecom/ibro/') ||
+          pathname.startsWith('reportes/maquinas/vista')) {
         route = pathname;
       }
     }
