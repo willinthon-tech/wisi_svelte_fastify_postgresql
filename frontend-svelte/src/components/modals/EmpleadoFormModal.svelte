@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher, onMount, tick } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { masterCargosStore, masterSalasStore, masterDispositivosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterCargosStore, masterSalasStore, masterDispositivosStore, masterEmpleadosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
 
   export let isOpen = false;
@@ -166,11 +166,21 @@
   })();
 
   // Watch item changes to reset or populate form
-  $: if (isOpen) {
+  let lastIsOpen = false;
+  let lastItemId = undefined;
+
+  $: if (isOpen && (!lastIsOpen || (item ? (item.uuid || item.id) : null) !== lastItemId)) {
+    lastIsOpen = isOpen;
+    lastItemId = item ? (item.uuid || item.id) : null;
     initForm();
+  }
+  $: if (!isOpen) {
+    lastIsOpen = false;
+    lastItemId = undefined;
   }
 
   async function initForm() {
+    lastTargetSalaUuid = null;
     checkingCedula = false;
     cedulaError = null;
     isPrefixDropdownOpen = false;
@@ -215,7 +225,7 @@
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data)) {
-            selectedDispositivoUuids = new Set(json.data.map(d => String(typeof d === 'object' ? (d.uuid || d.id) : d)));
+            selectedDispositivoUuids = new Set(json.data.map(d => String(typeof d === 'object' ? (d.dispositivo_uuid || d.uuid || d.id) : d)));
           } else {
             selectedDispositivoUuids = new Set();
           }
@@ -267,8 +277,28 @@
     checkTimeout = setTimeout(async () => {
       try {
         const fullCedula = `${cedulaPrefix}${cedulaNumber}`;
+        const targetExcludeUuid = uuid || (item && (item.uuid || item.id));
+
+        // 1. Verificación instantánea local (0ms) en el store de empleados
+        const cleanInput = fullCedula.toUpperCase().replace(/V|-/g, '');
+        const localMatch = ($masterEmpleadosStore || []).find(emp => {
+          if (targetExcludeUuid && String(emp.uuid || emp.id) === String(targetExcludeUuid)) return false;
+          const empCed = String(emp.cedula || '').toUpperCase().replace(/V|-/g, '');
+          return empCed === cleanInput;
+        });
+
+        if (localMatch) {
+          cedulaError = `Este empleado cédula ${fullCedula} ya está agregado, se llama ${localMatch.nombre} y está en la sala ${localMatch.sala_nombre || 'General'} (Empleado ${localMatch.activo !== false ? 'Activo' : 'Desincorporado'})`;
+          checkingCedula = false;
+          return;
+        }
+
+        // 2. Verificación en el backend (por si otro usuario lo registró o no está en memoria)
         const q = new URLSearchParams({ cedula: fullCedula });
-        if (id) q.set('excludeId', id);
+        if (targetExcludeUuid) {
+          q.set('excludeUuid', String(targetExcludeUuid));
+          q.set('excludeId', String(targetExcludeUuid));
+        }
 
         const res = await fetch(toBackendUrl(`/api/master/empleados/check-cedula?${q.toString()}`));
         if (res.ok) {
@@ -297,13 +327,15 @@
   }
 
   function toggleDispositivo(devUuid) {
+    if (!devUuid) return;
     const val = String(devUuid);
-    if (selectedDispositivoUuids.has(val)) {
-      selectedDispositivoUuids.delete(val);
+    const next = new Set(selectedDispositivoUuids);
+    if (next.has(val)) {
+      next.delete(val);
     } else {
-      selectedDispositivoUuids.add(val);
+      next.add(val);
     }
-    selectedDispositivoUuids = new Set(selectedDispositivoUuids);
+    selectedDispositivoUuids = next;
   }
 
   // --- Photo Cropper Management ---
@@ -820,11 +852,9 @@
                     </div>
                     <div class="sala-devices-items">
                       {#each devs as dev (dev.uuid || dev.id)}
-                        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-                        <div 
+                        <label 
                           class="device-item" 
-                          title="Dispositivo: {dev.nombre} (Sala: {salaNombre})"
-                          on:click={() => toggleDispositivo(dev.uuid || dev.id)}>
+                          title="Dispositivo: {dev.nombre} (Sala: {salaNombre})">
                           <input 
                             type="checkbox" 
                             checked={selectedDispositivoUuids.has(String(dev.uuid || dev.id))} 
@@ -834,7 +864,7 @@
                           <span class="device-name">
                             {dev.nombre}
                           </span>
-                        </div>
+                        </label>
                       {/each}
                     </div>
                   </div>
@@ -1354,19 +1384,31 @@
     align-items: center;
     gap: 10px;
     cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background-color 0.15s ease;
+  }
+
+  .device-item:hover {
+    background-color: #f1f5f9;
   }
 
   .device-checkbox {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     accent-color: #2563eb;
     cursor: pointer;
+    flex-shrink: 0;
   }
 
   .device-name {
     font-size: 13px;
     font-weight: 700;
     color: #1e293b;
+    cursor: pointer;
   }
 
   .help-text {

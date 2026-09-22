@@ -3493,7 +3493,8 @@ export async function checkEmpleadoCedulaModel(cedula, excludeId = null) {
   const clean = String(cedula).trim();
   const normCedula = clean.toUpperCase().replace(/V|-/g, '');
   if (!normCedula) return { exists: false };
-  const isExcU = excludeId && isUuid(excludeId);
+  const strExclude = excludeId ? String(excludeId).trim() : null;
+  const isExcU = strExclude && isUuid(strExclude);
 
   const rows = await sql`
     SELECT 
@@ -3509,7 +3510,7 @@ export async function checkEmpleadoCedulaModel(cedula, excludeId = null) {
     LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
     LEFT JOIN salas s ON d.sala_uuid = s.uuid
     WHERE REPLACE(REPLACE(UPPER(COALESCE(e.cedula, '')), 'V', ''), '-', '') = ${normCedula}
-      ${isExcU ? sql`AND e.uuid != ${excludeId}::uuid` : sql``}
+      ${isExcU ? sql`AND e.uuid != ${strExclude}::uuid` : sql``}
     LIMIT 1
   `;
 

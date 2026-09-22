@@ -1138,8 +1138,9 @@ export async function getEmpleados(request, reply) {
 
 export async function checkEmpleadoCedula(request, reply) {
   try {
-    const { cedula, excludeId } = request.query || {};
-    const result = await checkEmpleadoCedulaModel(cedula, excludeId);
+    const { cedula, excludeId, excludeUuid } = request.query || {};
+    const targetExclude = excludeUuid || excludeId;
+    const result = await checkEmpleadoCedulaModel(cedula, targetExclude);
     return reply.send({ success: true, ...result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
