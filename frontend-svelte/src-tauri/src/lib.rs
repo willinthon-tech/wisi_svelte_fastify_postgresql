@@ -9,32 +9,15 @@ fn save_file_to_downloads(app_handle: tauri::AppHandle, file_name: String, bytes
   std::fs::write(&file_path, &bytes)
     .map_err(|e| format!("No se pudo guardar el archivo en {}: {}", file_path.display(), e))?;
 
-  #[cfg(target_os = "windows")]
-  {
-    // Abrir la carpeta Descargas con el archivo seleccionado en el Explorador de Windows
-    let path_str = file_path.to_string_lossy().to_string();
-    let _ = std::process::Command::new("explorer")
-      .args(["/select,", &path_str])
-      .spawn();
-  }
+  // Abrir la carpeta de descargas de forma nativa sin invocar procesos cmd o explorer
+  let _ = open::that(&download_dir);
 
   Ok(file_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 fn open_in_browser(url: String) -> Result<(), String> {
-  #[cfg(target_os = "windows")]
-  {
-    std::process::Command::new("cmd")
-      .args(["/C", "start", "", &url])
-      .spawn()
-      .map_err(|e| format!("Error al abrir navegador: {}", e))?;
-  }
-  #[cfg(not(target_os = "windows"))]
-  {
-    let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
-  }
-  Ok(())
+  open::that(&url).map_err(|e| format!("Error al abrir navegador: {}", e))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
