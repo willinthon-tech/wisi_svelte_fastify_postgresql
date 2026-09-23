@@ -49,6 +49,7 @@ import {
   getLibroAportesModel, createLibroAporteModel, updateLibroAporteModel, deleteLibroAporteModel,
   getDeltaSyncModel
 } from '../models/master.model.js';
+import { broadcastSystemVersionUpdate } from '../config/websocket.js';
 
 function parseIds(val) {
   if (!val) return null;
@@ -737,6 +738,25 @@ export async function getConfiguracion(request, reply) {
   }
 }
 
+export async function getSystemVersion(request, reply) {
+  try {
+    const config = await getConfiguracionModel();
+    const versionData = {
+      version_web: config.version_web || '1.0.0',
+      version_windows: config.version_windows || '1.0.0',
+      version_android: config.version_android || '1.0.0',
+      url_descarga_windows: config.url_descarga_windows || '',
+      url_descarga_android: config.url_descarga_android || '',
+      notas_version: config.notas_version || '',
+      forzar_actualizacion: config.forzar_actualizacion === 'true' || config.forzar_actualizacion === true,
+      updated_at: config.version_updated_at || config.updated_at || new Date().toISOString()
+    };
+    return reply.send({ success: true, data: versionData });
+  } catch (err) {
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
 export async function updateConfiguracion(request, reply) {
   try {
     const body = parseBody(request.body) || {};
@@ -744,7 +764,37 @@ export async function updateConfiguracion(request, reply) {
     if (body.clave && body.valor !== undefined) {
       dataToUpdate = { [body.clave]: body.valor };
     }
+
+    const versionKeys = [
+      'version_web', 'version_windows', 'version_android',
+      'url_descarga_windows', 'url_descarga_android',
+      'notas_version', 'forzar_actualizacion'
+    ];
+    const isVersionChange = Object.keys(dataToUpdate).some(k => versionKeys.includes(k));
+
+    if (isVersionChange) {
+      dataToUpdate.version_updated_at = new Date().toISOString();
+    }
+
     const result = await updateConfiguracionModel(dataToUpdate);
+
+    if (isVersionChange) {
+      try {
+        broadcastSystemVersionUpdate({
+          version_web: result.version_web || '1.0.0',
+          version_windows: result.version_windows || '1.0.0',
+          version_android: result.version_android || '1.0.0',
+          url_descarga_windows: result.url_descarga_windows || '',
+          url_descarga_android: result.url_descarga_android || '',
+          notas_version: result.notas_version || '',
+          forzar_actualizacion: result.forzar_actualizacion === 'true' || result.forzar_actualizacion === true,
+          updated_at: result.version_updated_at || new Date().toISOString()
+        });
+      } catch (wsErr) {
+        console.warn('Error broadcasting version update:', wsErr);
+      }
+    }
+
     return reply.send({ success: true, message: 'Configuración actualizada exitosamente', data: result });
   } catch (err) {
     return reply.status(500).send({ success: false, error: err.message });

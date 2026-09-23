@@ -1,8 +1,8 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { currentUserStore } from '../controllers/auth.store.js';
-  import { triggerToast } from '../controllers/ui.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
+  import { executeHardRefresh } from '../controllers/version.store.js';
 
   const dispatch = createEventDispatcher();
 
@@ -12,44 +12,17 @@
 
   let isRefreshing = false;
   let refreshCount = 0;
-  let refreshTimeout = null;
 
   async function handleHardRefresh(e) {
     e.stopPropagation();
     refreshCount++;
     isRefreshing = true;
 
-    triggerToast(
-      refreshCount > 1 
-        ? `Refrescando aplicación (${refreshCount}x)...` 
-        : 'Recargando aplicación y limpiando caché...', 
-      'info'
-    );
+    const msg = refreshCount > 1 
+      ? `Refrescando aplicación (${refreshCount}x)...` 
+      : 'Recargando aplicación y limpiando caché...';
 
-    try {
-      if (typeof window !== 'undefined') {
-        // Limpiar todas las cachés locales de assets / service worker
-        if ('caches' in window) {
-          const cacheKeys = await caches.keys();
-          await Promise.all(cacheKeys.map(key => caches.delete(key)));
-        }
-        // Desregistrar service workers si existen para forzar bundle fresco
-        if ('serviceWorker' in navigator) {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          for (const reg of registrations) {
-            await reg.unregister();
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Error al limpiar caché:', err);
-    }
-
-    if (refreshTimeout) clearTimeout(refreshTimeout);
-    refreshTimeout = setTimeout(() => {
-      // Recarga completa idéntica a Ctrl + F5
-      window.location.reload();
-    }, 280);
+    await executeHardRefresh(msg);
   }
 </script>
 

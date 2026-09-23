@@ -145,6 +145,28 @@ export function broadcastPermissionsUpdated(userId) {
   }
 }
 
+/**
+ * Broadcasts system version updates to all connected clients
+ */
+export function broadcastSystemVersionUpdate(versionData) {
+  if (activeClients.size === 0) return;
+  const payload = JSON.stringify({
+    type: 'SYSTEM_VERSION_UPDATE',
+    data: versionData || {},
+    timestamp: new Date().toISOString()
+  });
+
+  for (const client of activeClients) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch (err) {
+        activeClients.delete(client);
+      }
+    }
+  }
+}
+
 // Automatically subscribe to system-wide attlog events
 attlogEvents.on('new_attlog', (data) => {
   // 1. Enviar a clientes WebSocket en primer plano

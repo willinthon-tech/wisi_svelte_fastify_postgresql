@@ -8,7 +8,7 @@ import {
   getModulos, createModulo, updateModulo, deleteModulo, reorderModulos,
   getDispositivos, createDispositivo, updateDispositivo, injectDispositivoPushConfig, injectHikvisionIsapiHttpListening, deleteDispositivo,
   getAttlogs, getLatestAttlogs, getAttlogsFilterOptions, getAttlogsStats, syncAttlogs, getLastAttlogEventTime, getAttlogPosition, getAttlogDetail,
-  getConfiguracion, updateConfiguracion,
+  getConfiguracion, updateConfiguracion, getSystemVersion,
   getUserSalasMap, updateUserSalas, getUserPermissionsMap, updateUserPermissions,
   getDepartamentos, getDepartamentosFilterOptions, createDepartamento, updateDepartamento, deleteDepartamento,
   getAreas, getAreasFilterOptions, createArea, updateArea, deleteArea,
@@ -150,12 +150,14 @@ export default async function masterRoutes(fastify, options) {
   fastify.delete('/api/master/cortes/:id', deleteCorte);
   fastify.delete('/cortes/:id', deleteCorte);
 
-  // Configuracion del sistema
+  // Configuracion del sistema y control de versiones
   fastify.get('/configuracion', getConfiguracion);
   fastify.get('/api/configuracion', getConfiguracion);
   fastify.post('/configuracion', updateConfiguracion);
   fastify.post('/api/configuracion', updateConfiguracion);
   fastify.put('/api/configuracion', updateConfiguracion);
+  fastify.get('/system/version', getSystemVersion);
+  fastify.get('/api/system/version', getSystemVersion);
 
   // User Salas & User Permissions
   fastify.get('/master/user-salas', getUserSalasMap);

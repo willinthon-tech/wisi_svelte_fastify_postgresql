@@ -55,6 +55,13 @@
     isapi_port: "8015",
     isapi_protocol: "HTTP",
     timezone: "America/Caracas",
+    version_web: "1.0.0",
+    version_windows: "1.0.0",
+    url_descarga_windows: "",
+    version_android: "1.0.0",
+    url_descarga_android: "",
+    notas_version: "",
+    forzar_actualizacion: false,
   };
   let isSavingConfig = false;
 
@@ -65,6 +72,7 @@
       if (json && json.success && json.data) {
         systemConfig = { ...systemConfig, ...json.data };
         if (json.data.timezone) selectedTimezone = json.data.timezone;
+        systemConfig.forzar_actualizacion = json.data.forzar_actualizacion === 'true' || json.data.forzar_actualizacion === true;
       }
     } catch (e) {
       console.error("Error cargando configuración:", e);
@@ -2493,6 +2501,152 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 <option value="HTTPS">HTTPS</option>
               </select>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Control de Versiones y Despliegues Multiplataforma -->
+      <div
+        style="background: #1e293b; border-radius: 14px; border: 1px solid #334155; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.25);"
+      >
+        <div
+          style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;"
+        >
+          <div
+            style="width: 42px; height: 42px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); display: flex; align-items: center; justify-content: center; font-size: 22px;"
+          >
+            🚀
+          </div>
+          <div>
+            <h3
+              style="margin: 0; font-size: 16px; font-weight: 800; color: #f8fafc;"
+            >
+              Control de Versiones y Despliegues (Web, Windows y Android)
+            </h3>
+            <span style="font-size: 12px; color: #94a3b8;">
+              Al guardar, los cambios se notifican en tiempo real por WebSocket a todos los usuarios conectados
+            </span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- 3 Version inputs row -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+            <div>
+              <label
+                for="version-web"
+                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
+              >
+                🌐 Versión Web / PWA (`version_web`)
+              </label>
+              <input
+                id="version-web"
+                type="text"
+                bind:value={systemConfig.version_web}
+                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #38bdf8; font-size: 14px; font-weight: 700; font-family: monospace; outline: none;"
+                placeholder="1.0.0"
+              />
+            </div>
+
+            <div>
+              <label
+                for="version-windows"
+                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
+              >
+                🪟 Versión Windows (`version_windows`)
+              </label>
+              <input
+                id="version-windows"
+                type="text"
+                bind:value={systemConfig.version_windows}
+                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #38bdf8; font-size: 14px; font-weight: 700; font-family: monospace; outline: none;"
+                placeholder="1.0.0"
+              />
+            </div>
+
+            <div>
+              <label
+                for="version-android"
+                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
+              >
+                🤖 Versión Android (`version_android`)
+              </label>
+              <input
+                id="version-android"
+                type="text"
+                bind:value={systemConfig.version_android}
+                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #38bdf8; font-size: 14px; font-weight: 700; font-family: monospace; outline: none;"
+                placeholder="1.0.0"
+              />
+            </div>
+          </div>
+
+          <!-- Download URLs -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div>
+              <label
+                for="url-descarga-windows"
+                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
+              >
+                Enlace Descarga Windows (`.exe` / `.msi`)
+              </label>
+              <input
+                id="url-descarga-windows"
+                type="text"
+                bind:value={systemConfig.url_descarga_windows}
+                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #f8fafc; font-size: 13px; font-family: monospace; outline: none;"
+                placeholder="https://wisi.space/descargas/wisi-space-setup.exe"
+              />
+            </div>
+
+            <div>
+              <label
+                for="url-descarga-android"
+                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
+              >
+                Enlace Descarga Android (`.apk`)
+              </label>
+              <input
+                id="url-descarga-android"
+                type="text"
+                bind:value={systemConfig.url_descarga_android}
+                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #f8fafc; font-size: 13px; font-family: monospace; outline: none;"
+                placeholder="https://wisi.space/descargas/wisi-space.apk"
+              />
+            </div>
+          </div>
+
+          <!-- Release Notes -->
+          <div>
+            <label
+              for="notas-version"
+              style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
+            >
+              Notas de la Versión / Novedades para los Usuarios
+            </label>
+            <textarea
+              id="notas-version"
+              rows="3"
+              bind:value={systemConfig.notas_version}
+              style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #f8fafc; font-size: 13px; line-height: 1.5; resize: vertical; outline: none;"
+              placeholder="Ej: Se optimizó la sincronización con biométricos locales, corrección de reportes de asistencia y mejoras de interfaz."
+            ></textarea>
+          </div>
+
+          <!-- Checkbox Forzar Actualización -->
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(15, 23, 42, 0.6); border-radius: 10px; border: 1px solid #334155;">
+            <input
+              id="forzar-actualizacion"
+              type="checkbox"
+              bind:checked={systemConfig.forzar_actualizacion}
+              style="width: 18px; height: 18px; cursor: pointer; accent-color: #2563eb;"
+            />
+            <label
+              for="forzar-actualizacion"
+              style="font-size: 13px; font-weight: 700; color: #e2e8f0; cursor: pointer;"
+            >
+              Requerir actualización obligatoria (informa al usuario que debe actualizar para continuar operando)
+            </label>
           </div>
         </div>
       </div>

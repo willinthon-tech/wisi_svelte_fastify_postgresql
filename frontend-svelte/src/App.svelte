@@ -14,6 +14,8 @@
   import MasterAdminView from "./views/MasterAdminView.svelte";
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
   import SyncBiometricosModal from "./components/modals/SyncBiometricosModal.svelte";
+  import VersionUpdateModal from "./components/modals/VersionUpdateModal.svelte";
+  import { initVersionChecker } from "./controllers/version.store.js";
   import { isTauriWindows } from "./services/tauriIsapi.service.js";
   import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
   import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal, openPhotoModalForAttlog } from "./controllers/globalModal.store.js";
@@ -521,6 +523,7 @@
     initRouter();
     await loadUserSession();
     await refreshData();
+    initVersionChecker();
 
     // Fetch last event time from backend to detect delayed / historical SYNC marcajes
     async function initLatestEventTime() {
@@ -1319,6 +1322,9 @@
 
 <!-- Modal Global Unificado de Fotografías y Fichas -->
 <GlobalPhotoModal />
+
+<!-- Modal Informativo de Actualización de Versión Multiplataforma -->
+<VersionUpdateModal />
 
 <!-- Modal de Auditoría y Sincronización de Biométricos -->
 {#if $isAuthenticatedStore}

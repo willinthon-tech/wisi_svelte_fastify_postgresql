@@ -1,10 +1,43 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
+import fs from 'fs';
+
+const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
+const APP_VERSION = pkg.version || '1.0.0';
+const BUILD_TIME = Date.now();
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME)
+  },
   plugins: [
     svelte(),
+    {
+      name: 'generate-version-json',
+      buildStart() {
+        const versionData = JSON.stringify({
+          version: APP_VERSION,
+          buildTime: BUILD_TIME,
+          buildDate: new Date(BUILD_TIME).toISOString()
+        }, null, 2);
+        try {
+          fs.writeFileSync(new URL('./public/version.json', import.meta.url), versionData);
+        } catch (e) {}
+      },
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'version.json',
+          source: JSON.stringify({
+            version: APP_VERSION,
+            buildTime: BUILD_TIME,
+            buildDate: new Date(BUILD_TIME).toISOString()
+          }, null, 2)
+        });
+      }
+    },
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
@@ -58,10 +91,14 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/ws/, /^\/empleados\//, /^\/clientes\//, /^\/attlogs\//, /^\/salas\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/ws/, /^\/version\.json/, /^\/empleados\//, /^\/clientes\//, /^\/attlogs\//, /^\/salas\//],
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
+          {
+            urlPattern: /version\.json(\?.*)?$/i,
+            handler: 'NetworkOnly'
+          },
           {
             urlPattern: /^https:\/\/cdn-icons-png\.flaticon\.com\/.*/i,
             handler: 'CacheFirst',

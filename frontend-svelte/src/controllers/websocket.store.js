@@ -134,6 +134,10 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
           import('./master.store.js').then(({ loadMasterStoresFromBackend }) => {
             loadMasterStoresFromBackend(true).catch(() => {});
           });
+        } else if (payload.type === 'SYSTEM_VERSION_UPDATE') {
+          import('./version.store.js').then(({ checkSystemVersion }) => {
+            checkSystemVersion({ isSilent: false }).catch(() => {});
+          });
         }
       } catch (err) {
         console.warn('Error parseando mensaje WebSocket:', err);
