@@ -67,12 +67,14 @@ export async function getSalaContextoBiometricos(request, reply) {
       ORDER BY e.nombre ASC
     `;
 
-    // 4. Configurar URL pública completa de foto para cada empleado
-    const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
-    const configMap = {};
-    for (const r of savedConfigRows) configMap[r.clave] = r.valor;
-    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || request.headers?.host?.split(':')[0] || 'wisi.space').trim();
-    const proto = (request.headers?.['x-forwarded-proto'] || 'https').includes('https') ? 'https' : 'http';
+    // 4. Configurar URL pública completa de foto para cada empleado (priorizar dominio web real wisi.space)
+    let publicDomain = 'wisi.space';
+    if (process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim()) {
+      publicDomain = process.env.APP_DOMAIN.trim();
+    } else if (process.env.SERVER_DOMAIN && process.env.SERVER_DOMAIN.trim()) {
+      publicDomain = process.env.SERVER_DOMAIN.trim();
+    }
+    const proto = 'https';
 
     const enrichedEmployees = activeEmployees.map(emp => {
       let photoUrl = '';
@@ -80,7 +82,8 @@ export async function getSalaContextoBiometricos(request, reply) {
         if (emp.foto.startsWith('http')) {
           photoUrl = emp.foto;
         } else {
-          photoUrl = `${proto}://${publicDomain}${emp.foto.startsWith('/') ? '' : '/'}${emp.foto}`;
+          const cleanPath = emp.foto.startsWith('/') ? emp.foto : `/${emp.foto}`;
+          photoUrl = `${proto}://${publicDomain}${cleanPath}`;
         }
       }
       return {
@@ -91,7 +94,9 @@ export async function getSalaContextoBiometricos(request, reply) {
 
     // 5. Todos los empleados del sistema para matching de 'sobran'
     const allSystemEmployees = await sql`
-      SELECT e.uuid, e.uuid AS id, e.nombre, e.cedula, e.activo, e.motivo_desincorporacion, s.nombre as sala_nombre
+      SELECT e.uuid, e.uuid AS id, e.nombre, e.cedula, e.activo, e.motivo_desincorporacion, e.foto, e.sexo,
+             s.nombre as sala_nombre, s.uuid as sala_uuid, s.uuid as sala_id,
+             d.nombre as departamento_nombre, c.nombre as cargo_nombre
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
       LEFT JOIN areas a ON c.area_uuid = a.uuid

@@ -111,11 +111,16 @@
   let searchSobran = '';
 
   // Selecciones masivas
+  // Selecciones masivas y tracking de acciones individuales
   let selectedSyncIds = new Set();
   let selectedFaltanIds = new Set();
   let selectedSobranNos = new Set();
   let actionTarget = 'both'; // 'both' | 'bio' | 'panel'
   let isExecutingAction = false;
+  let updatingEmpIds = new Set();
+  let addingEmpIds = new Set();
+  let deletingEmpNos = new Set();
+  let updateProgress = { current: 0, total: 0 };
 
   $: currentDevice = auditResult?.devices?.[selectedDeviceIndex] || null;
 
@@ -163,8 +168,8 @@
     searchSobran = '';
   }
 
-  // Compara usuarios físicos contra empleados del sistema usando variantes de cédula
-  function reconcileUsers(bioUsers, activeEmployees, allSystemEmployees) {
+  // Compara usuarios físicos contra empleados del sistema usando variantes de cédula y cotejo de rostro
+  function reconcileUsers(bioUsers, activeEmployees, allSystemEmployees, currentSala = null) {
     const sincronizados = [];
     const faltan = [];
     const matchedBioIndices = new Set();
@@ -181,9 +186,25 @@
 
       if (matchIdx !== -1) {
         matchedBioIndices.add(matchIdx);
+        const bioUser = bioUsers[matchIdx];
+        const nameInDev = String(bioUser.name || '').trim();
+        const nameInSys = String(emp.nombre || '').trim();
+        const nameDiffers = Boolean(nameInDev && nameInSys && nameInDev.toLowerCase() !== nameInSys.toLowerCase());
+        const hasFaceOnDevice = Number(bioUser.numOfFace || bioUser.numOfFaces || 0) > 0 || !!emp.hasFaceOnDevice;
+        const hasCardOnDevice = Number(bioUser.numOfCard || bioUser.numOfCards || 0) > 0 || !!emp.hasCardOnDevice;
+
         sincronizados.push({
           ...emp,
-          bioUser: bioUsers[matchIdx]
+          bioUser,
+          deviceUser: {
+            employeeNo: bioUser.employeeNo,
+            name: bioUser.name,
+            numOfCard: bioUser.numOfCard || 0,
+            numOfFace: bioUser.numOfFace || 0
+          },
+          nameDiffers,
+          hasFaceOnDevice,
+          hasCardOnDevice
         });
       } else {
         faltan.push(emp);
@@ -200,9 +221,57 @@
           return eVariants.some(v => uVariants.includes(v));
         });
 
+        // 🛡️ REGLA FUNDAMENTAL: Si el empleado está ACTIVO y pertenece a esta misma sala,
+        // ¡NUNCA DEBE SER CLASIFICADO COMO "SOBRANTE"! Pertenece a este biométrico y se incorpora a Sincronizados.
+        const currentSalaUuid = String(currentSala?.uuid || currentSala?.id || '').trim().toLowerCase();
+        const currentSalaNombre = String(currentSala?.nombre || '').trim().toLowerCase();
+        const empSalaUuid = String(sysEmp?.sala_uuid || sysEmp?.sala_id || '').trim().toLowerCase();
+        const empSalaNombre = String(sysEmp?.sala_nombre || '').trim().toLowerCase();
+
+        const isMismaSala = Boolean(
+          sysEmp?.activo && (
+            (currentSalaUuid && empSalaUuid && currentSalaUuid === empSalaUuid) ||
+            (currentSalaNombre && empSalaNombre && currentSalaNombre === empSalaNombre)
+          )
+        );
+
+        if (isMismaSala) {
+          const nameInDev = String(u.name || '').trim();
+          const nameInSys = String(sysEmp.nombre || '').trim();
+          const nameDiffers = Boolean(nameInDev && nameInSys && nameInDev.toLowerCase() !== nameInSys.toLowerCase());
+          const hasFaceOnDevice = Number(u.numOfFace || u.numOfFaces || 0) > 0;
+          const hasCardOnDevice = Number(u.numOfCard || u.numOfCards || 0) > 0;
+
+          sincronizados.push({
+            ...sysEmp,
+            bioUser: u,
+            deviceUser: {
+              employeeNo: u.employeeNo,
+              name: u.name,
+              numOfCard: u.numOfCard || 0,
+              numOfFace: u.numOfFace || 0
+            },
+            nameDiffers,
+            hasFaceOnDevice,
+            hasCardOnDevice
+          });
+
+          // Si por alguna razón estaba registrado en faltan, removerlo para evitar duplicidad
+          const faltanIdx = faltan.findIndex(f => {
+            const fVariants = getCedulaVariants(f.cedula);
+            return fVariants.some(v => uVariants.includes(v));
+          });
+          if (faltanIdx !== -1) {
+            faltan.splice(faltanIdx, 1);
+          }
+          return;
+        }
+
         sobran.push({
           employeeNo: u.employeeNo,
           name: u.name || 'Sin nombre',
+          numOfFace: Number(u.numOfFace || u.numOfFaces || 0),
+          numOfCard: Number(u.numOfCard || u.numOfCards || 0),
           systemStatus: sysEmp ? (sysEmp.activo ? `Activo en ${sysEmp.sala_nombre || 'otra sala'}` : `Desincorporado (${sysEmp.motivo_desincorporacion || 'Inactivo'})`) : 'No existe en el sistema',
           systemEmployeeName: sysEmp ? sysEmp.nombre : 'Desconocido'
         });
@@ -305,7 +374,7 @@
         }
 
         // Cruzar y clasificar datos
-        const recon = reconcileUsers(bioUsers, contextActiveEmployees, contextAllSystemEmployees);
+        const recon = reconcileUsers(bioUsers, contextActiveEmployees, contextAllSystemEmployees, json.sala || targetDev?.salaObj);
         devRes.sincronizados = recon.sincronizados;
         devRes.faltan = recon.faltan;
         devRes.sobran = recon.sobran;
@@ -392,17 +461,69 @@
     }
   }
 
+  // Refresco silencioso de auditoría local sin reiniciar la pantalla ni perder búsquedas o filtros
+  async function silentAuditRefresh() {
+    if (!currentDevice || !currentDevice.ip_local) return;
+    try {
+      let bioUsers = [];
+      try {
+        bioUsers = await localGetDeviceUsers(currentDevice.ip_local, currentDevice.usuario || 'admin', currentDevice.clave || '');
+      } catch (e) {
+        console.warn('Error en silent refresh de biométrico:', e);
+        return;
+      }
+
+      let panelUsers = [];
+      if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—') {
+        try {
+          panelUsers = await localGetDeviceUsers(currentDevice.ip_panel, currentDevice.usuario || 'admin', currentDevice.clave || '');
+        } catch (e) {
+          console.warn('Error en silent refresh de panel:', e);
+        }
+      }
+
+      const currentSala = auditResult?.sala || biometricosDisponibles.find(d => (d.uuid || d.id) === selectedDispositivoId)?.salaObj;
+      const recon = reconcileUsers(bioUsers, contextActiveEmployees, contextAllSystemEmployees, currentSala);
+
+      if (auditResult && auditResult.devices && auditResult.devices[selectedDeviceIndex]) {
+        const d = auditResult.devices[selectedDeviceIndex];
+        d.sincronizados = recon.sincronizados;
+        d.faltan = recon.faltan;
+        d.sobran = recon.sobran;
+        d.totalEnDispositivo = bioUsers.length;
+        if (panelUsers.length > 0) {
+          d.totalEnPanel = panelUsers.length;
+        }
+        auditResult = { ...auditResult };
+      }
+    } catch (err) {
+      console.warn('Error en silentAuditRefresh:', err);
+    }
+  }
+
   // Actualizar empleados en biométrico / panel localmente
   async function handleUpdateEmployees(empleadoIds) {
     if (!currentDevice || !empleadoIds || empleadoIds.length === 0) return;
 
+    for (const id of empleadoIds) {
+      updatingEmpIds.add(id);
+    }
+    updatingEmpIds = new Set(updatingEmpIds);
+
     isExecutingAction = true;
+    updateProgress = { current: 0, total: empleadoIds.length };
     let successCount = 0;
 
     try {
       for (const empId of empleadoIds) {
+        updateProgress.current++;
+        updateProgress = { ...updateProgress };
+
         const emp = contextActiveEmployees.find(e => (e.uuid || e.id) === empId);
         if (!emp) continue;
+
+        // Construir URL pública garantizada de foto (usando wisi.space)
+        const photoUrl = emp.photoUrl || (emp.foto ? (emp.foto.startsWith('http') ? emp.foto : `https://wisi.space${emp.foto.startsWith('/') ? '' : '/'}${emp.foto}`) : '');
 
         // 1. Biométrico local
         if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
@@ -412,8 +533,8 @@
             if (cardNo) {
               await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
             }
-            if (emp.photoUrl) {
-              await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, emp.photoUrl);
+            if (photoUrl) {
+              await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, photoUrl);
             }
             successCount++;
           } catch (e) {
@@ -422,7 +543,7 @@
         }
 
         // 2. Panel local si aplica
-        if (currentDevice.ip_panel && (actionTarget === 'both' || actionTarget === 'panel')) {
+        if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
             const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
@@ -433,19 +554,40 @@
             console.warn(`Error actualizando ${emp.nombre} en panel:`, e.message);
           }
         }
+
+        // Reflejar cambio inmediato en el objeto local en memoria
+        const matchEmp = (currentDevice.sincronizados || []).find(e => (e.uuid || e.id) === empId);
+        if (matchEmp) {
+          matchEmp.hasFaceOnDevice = !!photoUrl;
+          matchEmp.nameDiffers = false;
+          if (matchEmp.deviceUser) {
+            matchEmp.deviceUser.name = emp.nombre;
+            matchEmp.deviceUser.numOfFace = photoUrl ? 1 : 0;
+          }
+        }
       }
 
       if (successCount > 0) {
-        triggerToast(`🔄 ${successCount} empleado(s) actualizados localmente con nombre y foto`, 'success');
+        if (empleadoIds.length === 1) {
+          const emp = contextActiveEmployees.find(e => (e.uuid || e.id) === empleadoIds[0]);
+          triggerToast(`✅ ${emp ? emp.nombre : 'Empleado'} actualizado exitosamente`, 'success');
+        } else {
+          triggerToast(`🔄 ${successCount} empleado(s) actualizados con nombre y foto`, 'success');
+        }
       } else {
         triggerToast('⚠️ No se pudo completar la actualización local en el equipo', 'error');
       }
 
-      await handleAudit();
+      // Refresco silencioso de fondo sin reiniciar la vista
+      await silentAuditRefresh();
     } catch (err) {
       console.error(err);
       triggerToast(`Error al actualizar: ${err.message}`, 'error');
     } finally {
+      for (const id of empleadoIds) {
+        updatingEmpIds.delete(id);
+      }
+      updatingEmpIds = new Set(updatingEmpIds);
       isExecutingAction = false;
     }
   }
@@ -453,6 +595,11 @@
   // Agregar empleados al biométrico / panel localmente
   async function handleAddEmployees(empleadoIds) {
     if (!currentDevice || !empleadoIds || empleadoIds.length === 0) return;
+
+    for (const id of empleadoIds) {
+      addingEmpIds.add(id);
+    }
+    addingEmpIds = new Set(addingEmpIds);
 
     isExecutingAction = true;
     let successCount = 0;
@@ -464,6 +611,7 @@
         if (!emp) continue;
 
         let addedOk = false;
+        const photoUrl = emp.photoUrl || (emp.foto ? (emp.foto.startsWith('http') ? emp.foto : `https://wisi.space${emp.foto.startsWith('/') ? '' : '/'}${emp.foto}`) : '');
 
         // 1. Biométrico local
         if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
@@ -473,8 +621,8 @@
             if (cardNo) {
               await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
             }
-            if (emp.photoUrl) {
-              await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, emp.photoUrl);
+            if (photoUrl) {
+              await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, photoUrl);
             }
             addedOk = true;
           } catch (e) {
@@ -483,7 +631,7 @@
         }
 
         // 2. Panel local si aplica
-        if (currentDevice.ip_panel && (actionTarget === 'both' || actionTarget === 'panel')) {
+        if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
             const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
@@ -517,16 +665,21 @@
       }
 
       if (successCount > 0) {
-        triggerToast(`✅ ${successCount} empleado(s) agregados localmente al equipo exitosamente`, 'success');
+        triggerToast(`✅ ${successCount} empleado(s) agregados al equipo exitosamente`, 'success');
       } else {
         triggerToast('⚠️ El dispositivo local no aceptó agregar a los empleados', 'error');
       }
 
-      await handleAudit();
+      // Refresco silencioso sin reiniciar la vista
+      await silentAuditRefresh();
     } catch (err) {
       console.error(err);
       triggerToast(`Error al agregar: ${err.message}`, 'error');
     } finally {
+      for (const id of empleadoIds) {
+        addingEmpIds.delete(id);
+      }
+      addingEmpIds = new Set(addingEmpIds);
       isExecutingAction = false;
     }
   }
@@ -538,6 +691,11 @@
     if (!confirm(`¿Estás seguro de que deseas eliminar ${employeeNos.length} usuario(s) de este dispositivo biométrico local?`)) {
       return;
     }
+
+    for (const no of employeeNos) {
+      deletingEmpNos.add(no);
+    }
+    deletingEmpNos = new Set(deletingEmpNos);
 
     isExecutingAction = true;
     let deletedCount = 0;
@@ -557,7 +715,7 @@
         }
 
         // 2. Eliminar de Panel local si aplica
-        if (currentDevice.ip_panel && (actionTarget === 'both' || actionTarget === 'panel')) {
+        if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localDeleteUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, empNo, true);
             delOk = true;
@@ -582,11 +740,16 @@
       } catch (e) {}
 
       triggerToast(`🗑️ ${deletedCount} usuario(s) eliminados del equipo local`, 'success');
-      await handleAudit();
+      // Refresco silencioso sin reiniciar la vista
+      await silentAuditRefresh();
     } catch (err) {
       console.error(err);
       triggerToast(`Error al eliminar: ${err.message}`, 'error');
     } finally {
+      for (const no of employeeNos) {
+        deletingEmpNos.delete(no);
+      }
+      deletingEmpNos = new Set(deletingEmpNos);
       isExecutingAction = false;
     }
   }
@@ -844,10 +1007,14 @@
                           type="button" 
                           class="sync-btn-update-all"
                           on:click={() => handleUpdateEmployees(currentDevice.sincronizados.map(e => e.uuid || e.id))}
-                          disabled={isExecutingAction}
+                          disabled={isExecutingAction || currentDevice.sincronizados.length === 0}
                           title="Actualiza en lote a todos con el nombre y foto más reciente"
                         >
-                          🔄 Actualizar Todos (Nombre y Foto)
+                          {#if isExecutingAction && updateProgress.total > 1}
+                            <span class="sync-spinner"></span> Actualizando ({updateProgress.current}/{updateProgress.total})...
+                          {:else}
+                            🔄 Actualizar Todos (Nombre y Foto)
+                          {/if}
                         </button>
                       </div>
                     </div>
@@ -930,11 +1097,15 @@
                                   <button
                                     type="button"
                                     class="sync-btn-update-single"
-                                    on:click={() => handleUpdateEmployees([emp.uuid || emp.id])}
-                                    disabled={isExecutingAction}
+                                    on:click={() => handleUpdateEmployees([empKey])}
+                                    disabled={updatingEmpIds.has(empKey) || isExecutingAction}
                                     title="Actualizar nombre, foto y tarjeta en el biométrico y panel"
                                   >
-                                    🔄 Actualizar
+                                    {#if updatingEmpIds.has(empKey)}
+                                      <span class="sync-spinner"></span> Actualizando...
+                                    {:else}
+                                      🔄 Actualizar
+                                    {/if}
                                   </button>
                                 </td>
                               </tr>
@@ -1012,9 +1183,13 @@
                           type="button" 
                           class="sync-btn-add-all"
                           on:click={() => handleAddEmployees(currentDevice.faltan.map(e => e.uuid || e.id))}
-                          disabled={isExecutingAction}
+                          disabled={isExecutingAction || currentDevice.faltan.length === 0}
                         >
-                          ➕ Agregar Todos ({currentDevice.faltan.length})
+                          {#if isExecutingAction && addingEmpIds.size > 1}
+                            <span class="sync-spinner"></span> Agregando...
+                          {:else}
+                            ➕ Agregar Todos ({currentDevice.faltan.length})
+                          {/if}
                         </button>
                       </div>
                     </div>
@@ -1082,9 +1257,13 @@
                                     type="button" 
                                     class="sync-btn-add-single"
                                     on:click={() => handleAddEmployees([empKey])}
-                                    disabled={isExecutingAction}
+                                    disabled={addingEmpIds.has(empKey) || isExecutingAction}
                                   >
-                                    ➕ Agregar
+                                    {#if addingEmpIds.has(empKey)}
+                                      <span class="sync-spinner"></span> Agregando...
+                                    {:else}
+                                      ➕ Agregar
+                                    {/if}
                                   </button>
                                 </td>
                               </tr>
@@ -1162,9 +1341,13 @@
                           type="button" 
                           class="sync-btn-del-all"
                           on:click={() => handleDeleteUsers(currentDevice.sobran.map(u => u.employeeNo))}
-                          disabled={isExecutingAction}
+                          disabled={isExecutingAction || currentDevice.sobran.length === 0}
                         >
-                          🗑️ Eliminar Todos ({currentDevice.sobran.length})
+                          {#if isExecutingAction && deletingEmpNos.size > 1}
+                            <span class="sync-spinner"></span> Eliminando...
+                          {:else}
+                            🗑️ Eliminar Todos ({currentDevice.sobran.length})
+                          {/if}
                         </button>
                       </div>
                     </div>
@@ -1232,9 +1415,13 @@
                                     type="button" 
                                     class="sync-btn-del-single"
                                     on:click={() => handleDeleteUsers([u.employeeNo])}
-                                    disabled={isExecutingAction}
+                                    disabled={deletingEmpNos.has(u.employeeNo) || isExecutingAction}
                                   >
-                                    🗑️ Eliminar
+                                    {#if deletingEmpNos.has(u.employeeNo)}
+                                      <span class="sync-spinner"></span> Eliminando...
+                                    {:else}
+                                      🗑️ Eliminar
+                                    {/if}
                                   </button>
                                 </td>
                               </tr>
