@@ -10851,12 +10851,27 @@ export async function getDeltaSyncModel(params = {}) {
 
   const changes = {};
 
+  const validUserSalas = toUuidArray(params.userSalaIds || params.user_sala_ids);
+
   for (const tbl of targetTables) {
     try {
+      let salaCond = sql``;
+      if (validUserSalas.length > 0) {
+        if (tbl === 'salas') {
+          salaCond = sql`AND uuid = ANY(${validUserSalas}::uuid[])`;
+        } else if (['clientes', 'departamentos', 'dispositivos', 'libros', 'llaves', 'maquinas', 'mesas'].includes(tbl)) {
+          salaCond = sql`AND (sala_uuid = ANY(${validUserSalas}::uuid[]) OR sala_uuid IS NULL)`;
+        } else if (tbl === 'empleados') {
+          salaCond = sql`AND (cargo_uuid IN (SELECT c.uuid FROM cargos c JOIN areas ar ON c.area_uuid = ar.uuid JOIN departamentos dep ON ar.departamento_uuid = dep.uuid WHERE dep.sala_uuid = ANY(${validUserSalas}::uuid[])) OR cargo_uuid IS NULL)`;
+        } else if (tbl.startsWith('libro_')) {
+          salaCond = sql`AND libro_uuid IN (SELECT uuid FROM libros WHERE sala_uuid = ANY(${validUserSalas}::uuid[]))`;
+        }
+      }
+
       // Upserted: records where updated_at >= since and is_deleted is false (or null)
       const upserted = await sql`
         SELECT *, uuid AS id FROM ${sql(tbl)}
-        WHERE updated_at >= ${validSince} AND (is_deleted IS FALSE OR is_deleted IS NULL)
+        WHERE updated_at >= ${validSince} AND (is_deleted IS FALSE OR is_deleted IS NULL) ${salaCond}
         ORDER BY updated_at ASC
         LIMIT 1000
       `;
@@ -10864,7 +10879,7 @@ export async function getDeltaSyncModel(params = {}) {
       // Deleted: records where updated_at >= since and is_deleted is true
       const deleted = await sql`
         SELECT uuid, uuid AS id, deleted_at FROM ${sql(tbl)}
-        WHERE updated_at >= ${validSince} AND is_deleted IS TRUE
+        WHERE updated_at >= ${validSince} AND is_deleted IS TRUE ${salaCond}
         ORDER BY updated_at ASC
         LIMIT 1000
       `;

@@ -237,17 +237,30 @@ export async function getLocalItems(storeName, filterFn = null, sortBy = 'create
           results = results.filter(filterFn);
         }
 
-        // Ordenamiento por defecto: cronológico DESC para que la data local siempre venga prolija
+        // Ordenamiento robusto: cronológico y numérico
         if (sortBy && results.length > 1) {
           const dir = (sortDir || 'desc').toLowerCase() === 'asc' ? 1 : -1;
-          results.sort((a, b) => {
-            if (sortBy === 'created_at' || sortBy === 'id' || sortBy === 'uuid') {
-              if (a.created_at || b.created_at) {
-                const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
-                const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
-                if (tA !== tB) return (tA - tB) * (dir === 1 ? 1 : -1);
-              }
+          const isDateField = sortBy.includes('date') || sortBy.includes('fecha') || sortBy.includes('time') || sortBy.includes('created') || sortBy.includes('updated');
+
+          const parseDateVal = (d) => {
+            if (!d) return 0;
+            if (typeof d === 'string' && /^\d{2}[/-]\d{2}[/-]\d{4}/.test(d.trim())) {
+              const parts = d.trim().split(/[\sT]+/);
+              const dateParts = parts[0].split(/[/-]/);
+              const timePart = parts[1] || '00:00:00';
+              return new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T${timePart}`).getTime() || 0;
             }
+            const parsed = new Date(d).getTime();
+            return isNaN(parsed) ? 0 : parsed;
+          };
+
+          results.sort((a, b) => {
+            if (isDateField || sortBy === 'created_at' || sortBy === 'event_time' || sortBy === 'fecha_hora') {
+              const tA = parseDateVal(a[sortBy] || a.created_at || a.event_time || a.fecha_hora);
+              const tB = parseDateVal(b[sortBy] || b.created_at || b.event_time || b.fecha_hora);
+              if (tA !== tB) return (tA - tB) * dir;
+            }
+
             const valA = a[sortBy];
             const valB = b[sortBy];
             if (valA === null || valA === undefined) return 1;
@@ -255,7 +268,10 @@ export async function getLocalItems(storeName, filterFn = null, sortBy = 'create
             if (typeof valA === 'number' && typeof valB === 'number') {
               return (valA - valB) * dir;
             }
-            return String(valA).localeCompare(String(valB), 'es', { numeric: true }) * dir;
+            if (!isNaN(Number(valA)) && !isNaN(Number(valB)) && valA !== '' && valB !== '') {
+              return (Number(valA) - Number(valB)) * dir;
+            }
+            return String(valA).localeCompare(String(valB), 'es', { numeric: true, sensitivity: 'base' }) * dir;
           });
         }
 
@@ -297,7 +313,7 @@ export async function upsertLocalItem(storeName, item) {
 }
 
 /**
- * Elimina un registro localmente.
+ * Elimina un registro localmente buscando por _local_key, uuid o id para asegurar borrado limpio.
  */
 export async function deleteLocalItem(storeName, idOrUuid) {
   const db = await initLocalDb();
@@ -308,9 +324,28 @@ export async function deleteLocalItem(storeName, idOrUuid) {
       const tx = db.transaction([storeName], 'readwrite');
       const store = tx.objectStore(storeName);
       
-      // Intentar clave directa, o buscar por id / uuid
-      const directKey = String(idOrUuid).startsWith('id_') ? String(idOrUuid) : (typeof idOrUuid === 'number' ? `id_${idOrUuid}` : String(idOrUuid));
-      store.delete(directKey);
+      const strVal = String(idOrUuid);
+      store.delete(strVal);
+      if (!strVal.startsWith('id_')) {
+        store.delete(`id_${strVal}`);
+      }
+
+      // Buscar también por índices de uuid o id para borrar cualquier coincidencia
+      try {
+        if (store.indexNames.contains('uuid')) {
+          const reqUuid = store.index('uuid').getKey(strVal);
+          reqUuid.onsuccess = () => {
+            if (reqUuid.result) store.delete(reqUuid.result);
+          };
+        }
+        if (store.indexNames.contains('id')) {
+          const numVal = Number(idOrUuid);
+          const reqId = store.index('id').getKey(isNaN(numVal) ? strVal : numVal);
+          reqId.onsuccess = () => {
+            if (reqId.result) store.delete(reqId.result);
+          };
+        }
+      } catch (_) {}
 
       tx.oncomplete = () => resolve();
       tx.onerror = (e) => reject(e.target.error);
@@ -318,6 +353,21 @@ export async function deleteLocalItem(storeName, idOrUuid) {
       reject(err);
     }
   });
+}
+
+/**
+ * Limpia las tablas locales en IndexedDB para reiniciar caché y eliminar inconsistencias acumuladas.
+ */
+export async function purgeStaleLocalData(storesToPurge = null) {
+  const db = await initLocalDb();
+  if (!db) return;
+  const targetStores = Array.isArray(storesToPurge) ? storesToPurge : LOCAL_STORES.filter(s => s !== 'outbox_sync_queue');
+  for (const s of targetStores) {
+    try {
+      const tx = db.transaction([s], 'readwrite');
+      tx.objectStore(s).clear();
+    } catch (_) {}
+  }
 }
 
 /**

@@ -43,10 +43,10 @@ export async function initDb() {
       database: PGDATABASE,
       username: PGUSER,
       password: PGPASSWORD,
-      connect_timeout: 10,
-      max_lifetime: 300, // 5 minutos de vida útil máxima para reciclar conexiones
-      idle_timeout: 5,   // Cierra conexiones inactivas rápidamente (5 segundos)
-      max: Number(process.env.PGMAX_CONNECTIONS) || 15, // Máximo 15 conexiones concurrentes para no saturar PostgreSQL
+      connect_timeout: 15,
+      max_lifetime: 600, // 10 minutos de vida útil máxima para reciclar conexiones
+      idle_timeout: 10,  // Cierra conexiones inactivas suavemente
+      max: Number(process.env.PGMAX_CONNECTIONS) || 25, // Soporta ráfagas concurrentes de clientes sin saturar PostgreSQL
       onnotice: () => { },
       parameters: {
         timezone: 'UTC'

@@ -152,8 +152,31 @@
       console.warn('Fallback local IndexedDB para mesas:', err);
       const local = await getLocalItems('mesas', null, 'created_at', 'desc');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterMesasStore || []);
+      let filtered = source.filter(x => !x.is_deleted);
+
+      // Aislamiento estricto por sala asignada y filtros activos
+      if (assignedSalaIds && assignedSalaIds.length > 0) {
+        filtered = filtered.filter(x => {
+          const s = x.sala_uuid || x.sala_id;
+          return s && assignedSalaIds.includes(String(s));
+        });
+      }
+      if (selectedSalas.length > 0) {
+        filtered = filtered.filter(x => {
+          const s = x.sala_uuid || x.sala_id;
+          return s && selectedSalas.includes(String(s));
+        });
+      }
+      if (selectedJuegos.length > 0) {
+        filtered = filtered.filter(x => selectedJuegos.includes(String(x.juego_uuid || x.juego_id)));
+      }
       const q = (currentParams.search || '').trim().toLowerCase();
-      const filtered = q ? source.filter(x => (x.nombre || '').toLowerCase().includes(q)) : source;
+      if (q) {
+        filtered = filtered.filter(x => 
+          (x.nombre || '').toLowerCase().includes(q) || 
+          (x.sala_nombre || '').toLowerCase().includes(q)
+        );
+      }
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
       items = filtered.slice(start, start + (currentParams.limit || 10));

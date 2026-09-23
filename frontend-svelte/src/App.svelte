@@ -515,7 +515,6 @@
 
   onMount(async () => {
     initRouter();
-    loadMasterStoresFromBackend();
     await loadUserSession();
     await refreshData();
 

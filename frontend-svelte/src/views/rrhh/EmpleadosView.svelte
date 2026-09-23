@@ -249,11 +249,25 @@
       console.warn('Fallback local IndexedDB para empleados:', err);
       const local = await getLocalItems('empleados', null, 'created_at', 'desc');
       let source = (Array.isArray(local) && local.length > 0) ? local : ($masterEmpleadosStore || []);
+      const cargosMap = new Map(($masterCargosStore || []).map(c => [String(c.uuid || c.id), String(c.sala_uuid || c.sala_id)]));
+
       if (assignedSalaIds && assignedSalaIds.length > 0) {
         source = source.filter(x => {
-          const s = x.sala_uuid || x.sala_id;
+          const s = x.sala_uuid || x.sala_id || (x.cargo_uuid ? cargosMap.get(String(x.cargo_uuid)) : null);
           return s && assignedSalaIds.includes(String(s));
         });
+      }
+      if (selectedSalas && selectedSalas.length > 0) {
+        source = source.filter(x => {
+          const s = x.sala_uuid || x.sala_id || (x.cargo_uuid ? cargosMap.get(String(x.cargo_uuid)) : null);
+          return s && selectedSalas.includes(String(s));
+        });
+      }
+      if (selectedCargos && selectedCargos.length > 0) {
+        source = source.filter(x => selectedCargos.includes(String(x.cargo_uuid || x.cargo_id)));
+      }
+      if (selectedSexo && selectedSexo.length > 0) {
+        source = source.filter(x => selectedSexo.includes(String(x.sexo).toLowerCase()));
       }
       const activeSource = source.filter(x => x.activo !== false);
       const q = (currentParams.search || '').trim().toLowerCase();

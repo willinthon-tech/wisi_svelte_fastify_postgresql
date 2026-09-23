@@ -291,11 +291,11 @@ export async function loadMasterStoresFromBackend(force = false) {
     let currentStoreVal = [];
     store.subscribe(v => currentStoreVal = v)();
 
-    // 1. Cargar de inmediato desde IndexedDB local si el store está vacío o si IndexedDB contiene más datos
+    // 1. Cargar de inmediato desde IndexedDB local SOLO si el store en memoria está vacío (cold start inicial)
     try {
       const localData = await getLocalItems(localStoreKey);
       if (Array.isArray(localData) && localData.length > 0) {
-        if (!currentStoreVal || currentStoreVal.length === 0 || localData.length > currentStoreVal.length) {
+        if (!currentStoreVal || currentStoreVal.length === 0) {
           if (store && typeof store.set === 'function') store.set(localData);
           currentStoreVal = localData;
         }
@@ -304,24 +304,31 @@ export async function loadMasterStoresFromBackend(force = false) {
       // Continuar si IndexedDB aún está cargando
     }
 
-    // 2. Si hay conexión a internet, refrescar desde el servidor y persistir SOLO si hay cambios reales
+    // 2. Si no hay conexión, mantener copia local
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      return; // En modo sin internet, el store ya quedó poblado con IndexedDB arriba. Omitir peticiones de red fallidas.
+      return;
     }
 
     try {
-      const res = await fetch(toBackendUrl(`/api/master/${entityName}?limit=all`));
+      const token = (typeof localStorage !== 'undefined') ? (localStorage.getItem('wisi_token') || localStorage.getItem('token')) : null;
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const assignedSalas = getActiveUserAssignedSalaUuids();
+      if (assignedSalas && assignedSalas.length > 0) {
+        headers['x-user-salas'] = assignedSalas.join(',');
+      }
+
+      let qUrl = `/api/master/${entityName}?limit=all`;
+      if (assignedSalas && assignedSalas.length > 0) {
+        qUrl += `&user_sala_ids=${encodeURIComponent(assignedSalas.join(','))}`;
+      }
+
+      const res = await fetch(toBackendUrl(qUrl), { headers });
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
-          // Evitar re-renders masivos si la lista no ha cambiado
-          const hasChanged = currentStoreVal.length === 0 || 
-            JSON.stringify(currentStoreVal) !== JSON.stringify(json.data);
-
-          if (hasChanged) {
-            if (store && typeof store.set === 'function') store.set(json.data);
-          }
-          // Siempre asegurar que la base de datos local (IndexedDB) tenga el catálogo completo y actualizado
+          // El servidor es la fuente autorizada de verdad
+          if (store && typeof store.set === 'function') store.set(json.data);
           replaceLocalItems(localStoreKey, json.data).catch(() => {});
         }
       }
@@ -372,41 +379,50 @@ export async function loadMasterStoresFromBackend(force = false) {
     }
   };
 
-  // Carga ultra rápida en paralelo de todas las tablas maestras
+  // Carga organizada en lotes de 5 para no saturar las conexiones de PostgreSQL ni congelar el navegador
+  const entityList = [
+    ['horarios', masterPlantillasHorariosStore, 'horarios'],
+    ['departamentos', masterDepartamentosStore, 'departamentos'],
+    ['areas', masterAreasStore, 'areas'],
+    ['cargos', masterCargosStore, 'cargos'],
+    ['empleados', masterEmpleadosStore, 'empleados'],
+    ['usuarios', masterUsuariosStore, 'usuarios'],
+    ['salas', masterSalasStore, 'salas'],
+    ['paginas', masterPaginasStore, 'paginas'],
+    ['modulos', masterModulosStore, 'modulos'],
+    ['dispositivos', masterDispositivosStore, 'dispositivos'],
+    ['descargas', masterDescargasStore, 'descargas'],
+    ['juegos', masterJuegosStore, 'juegos'],
+    ['mesas', masterMesasStore, 'mesas'],
+    ['llaves', masterLlavesStore, 'llaves'],
+    ['libros', masterLibrosStore, 'libros'],
+    ['estados', masterEstadosStore, 'estados'],
+    ['sociedades', masterSociedadesStore, 'sociedades'],
+    ['valores', masterValoresStore, 'valores'],
+    ['juegos-maquinas', masterJuegosMaquinasStore, 'juegos_maquinas'],
+    ['marcas', masterMarcasStore, 'marcas'],
+    ['modelos', masterModelosStore, 'modelos'],
+    ['tipos', masterTiposStore, 'tipos'],
+    ['modos', masterModosStore, 'modos'],
+    ['legal', masterLegalStore, 'legal'],
+    ['excepciones', masterExcepcionesStore, 'excepciones'],
+    ['fechas-patrias', masterFechasPatriasStore, 'fechas_patrias'],
+    ['tipo-clientes', masterTipoClientesStore, 'tipo_clientes'],
+    ['metodos-pago', masterMetodosPagoStore, 'metodos_pago'],
+    ['tipo-incidencias', masterTipoIncidenciasStore, 'tipo_incidencias'],
+    ['rangos', masterRangosStore, 'rangos'],
+    ['clientes', masterClientesStore, 'clientes'],
+    ['cortes', masterCortesStore, 'cortes'],
+    ['maquinas', masterMaquinasStore, 'maquinas']
+  ];
+
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < entityList.length; i += BATCH_SIZE) {
+    const chunk = entityList.slice(i, i + BATCH_SIZE);
+    await Promise.allSettled(chunk.map(([e, s, l]) => fetchEntity(e, s, l)));
+  }
+
   await Promise.allSettled([
-    fetchEntity('horarios', masterPlantillasHorariosStore, 'horarios'),
-    fetchEntity('departamentos', masterDepartamentosStore, 'departamentos'),
-    fetchEntity('areas', masterAreasStore, 'areas'),
-    fetchEntity('cargos', masterCargosStore, 'cargos'),
-    fetchEntity('empleados', masterEmpleadosStore, 'empleados'),
-    fetchEntity('usuarios', masterUsuariosStore, 'usuarios'),
-    fetchEntity('salas', masterSalasStore, 'salas'),
-    fetchEntity('paginas', masterPaginasStore, 'paginas'),
-    fetchEntity('modulos', masterModulosStore, 'modulos'),
-    fetchEntity('dispositivos', masterDispositivosStore, 'dispositivos'),
-    fetchEntity('descargas', masterDescargasStore, 'descargas'),
-    fetchEntity('juegos', masterJuegosStore, 'juegos'),
-    fetchEntity('mesas', masterMesasStore, 'mesas'),
-    fetchEntity('llaves', masterLlavesStore, 'llaves'),
-    fetchEntity('libros', masterLibrosStore, 'libros'),
-    fetchEntity('estados', masterEstadosStore, 'estados'),
-    fetchEntity('sociedades', masterSociedadesStore, 'sociedades'),
-    fetchEntity('valores', masterValoresStore, 'valores'),
-    fetchEntity('juegos-maquinas', masterJuegosMaquinasStore, 'juegos_maquinas'),
-    fetchEntity('marcas', masterMarcasStore, 'marcas'),
-    fetchEntity('modelos', masterModelosStore, 'modelos'),
-    fetchEntity('tipos', masterTiposStore, 'tipos'),
-    fetchEntity('modos', masterModosStore, 'modos'),
-    fetchEntity('legal', masterLegalStore, 'legal'),
-    fetchEntity('excepciones', masterExcepcionesStore, 'excepciones'),
-    fetchEntity('fechas-patrias', masterFechasPatriasStore, 'fechas_patrias'),
-    fetchEntity('tipo-clientes', masterTipoClientesStore, 'tipo_clientes'),
-    fetchEntity('metodos-pago', masterMetodosPagoStore, 'metodos_pago'),
-    fetchEntity('tipo-incidencias', masterTipoIncidenciasStore, 'tipo_incidencias'),
-    fetchEntity('rangos', masterRangosStore, 'rangos'),
-    fetchEntity('clientes', masterClientesStore, 'clientes'),
-    fetchEntity('cortes', masterCortesStore, 'cortes'),
-    fetchEntity('maquinas', masterMaquinasStore, 'maquinas'),
     fetchUserSalas(),
     fetchUserPerms()
   ]);
@@ -421,7 +437,7 @@ let isSyncingDelta = false;
 /**
  * Motor de sincronización incremental Delta para tiendas maestras en el cliente (Local-First).
  * Solo consulta y aplica los registros que han cambiado desde la última sincronización,
- * evitando 33 peticiones paralelas pesadas y garantizando actualización en 0ms.
+ * evitando peticiones masivas y garantizando aislamiento estricto de salas.
  */
 export async function syncMasterStoresDelta() {
   if (isSyncingDelta) return;
@@ -436,8 +452,18 @@ export async function syncMasterStoresDelta() {
       return;
     }
 
-    const url = toBackendUrl(`/api/sync/delta?since=${encodeURIComponent(lastSync)}`);
-    const res = await fetch(url);
+    const assignedSalas = getActiveUserAssignedSalaUuids();
+    let url = toBackendUrl(`/api/sync/delta?since=${encodeURIComponent(lastSync)}`);
+    if (assignedSalas && assignedSalas.length > 0) {
+      url += `&user_sala_ids=${encodeURIComponent(assignedSalas.join(','))}`;
+    }
+
+    const token = (typeof localStorage !== 'undefined') ? (localStorage.getItem('wisi_token') || localStorage.getItem('token')) : null;
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (assignedSalas && assignedSalas.length > 0) headers['x-user-salas'] = assignedSalas.join(',');
+
+    const res = await fetch(url, { headers });
     if (!res.ok) {
       console.warn(`[DeltaSync] Servidor respondió con estado ${res.status}. Conservando datos locales para evitar sobrecarga.`);
       return;
@@ -479,16 +505,31 @@ export async function syncMasterStoresDelta() {
     };
 
     let totalChanges = 0;
+    const hasSalaRestriction = assignedSalas && assignedSalas.length > 0;
 
     for (const [tbl, data] of Object.entries(json.changes)) {
       const mapping = tableToStoreMap[tbl];
       const localStoreKey = mapping?.local || tbl;
       const store = mapping?.store;
 
-      const upserted = Array.isArray(data.upserted) ? data.upserted : [];
+      const rawUpserted = Array.isArray(data.upserted) ? data.upserted : [];
       const deleted = Array.isArray(data.deleted) ? data.deleted : [];
 
-      if (upserted.length === 0 && deleted.length === 0) continue;
+      if (rawUpserted.length === 0 && deleted.length === 0) continue;
+
+      // Filtrado estricto por sala en cliente como defensa en profundidad
+      const upserted = rawUpserted.filter(item => {
+        if (!item) return false;
+        if (!hasSalaRestriction) return true;
+        const itemSala = item.sala_uuid || item.sala_id;
+        if (itemSala) {
+          return assignedSalas.includes(String(itemSala));
+        }
+        if (tbl === 'salas') {
+          return assignedSalas.includes(String(item.uuid || item.id));
+        }
+        return true;
+      });
 
       // Actualizar base de datos local IndexedDB
       for (const item of upserted) {
@@ -518,6 +559,17 @@ export async function syncMasterStoresDelta() {
               items.push(up);
             }
           }
+
+          // 3. Re-ordenar cronológicamente para que nunca queden desordenados
+          if (items.length > 1) {
+            items.sort((a, b) => {
+              const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+              const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+              if (tA && tB && tA !== tB) return tB - tA;
+              return 0;
+            });
+          }
+
           return items;
         });
       }
@@ -531,7 +583,7 @@ export async function syncMasterStoresDelta() {
     }
 
     if (totalChanges > 0) {
-      console.log(`[DeltaSync] Sincronización delta aplicada con éxito: ${totalChanges} cambios reflejados en 0ms.`);
+      console.log(`[DeltaSync] Sincronización delta aplicada con éxito: ${totalChanges} cambios reflejados con aislamiento de salas.`);
     }
   } catch (err) {
     console.warn('[DeltaSync] Error sincronizando delta:', err);

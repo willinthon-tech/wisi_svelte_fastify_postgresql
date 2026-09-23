@@ -17,6 +17,23 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 
+// Configuración de Sharp optimizada para VPS (evitar fugas de memoria y OOM Killer de Linux)
+try {
+  sharp.cache({ memory: 50, files: 20, items: 200 });
+  sharp.concurrency(2);
+} catch (e) {
+  console.warn('Advertencia configurando caché de sharp:', e.message);
+}
+
+// Red de seguridad global para capturar errores imprevistos y evitar que caiga el proceso
+process.on('uncaughtException', (err) => {
+  console.error('\x1b[31m[CRITICAL UNCAUGHT EXCEPTION]\x1b[0m', err?.stack || err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('\x1b[31m[CRITICAL UNHANDLED REJECTION]\x1b[0m at:', promise, 'reason:', reason);
+});
+
 const cacheThumbsDir = path.join(process.cwd(), 'cache_thumbs');
 if (!fs.existsSync(cacheThumbsDir)) {
   fs.mkdirSync(cacheThumbsDir, { recursive: true });

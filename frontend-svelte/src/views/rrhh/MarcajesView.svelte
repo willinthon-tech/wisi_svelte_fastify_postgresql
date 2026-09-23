@@ -188,13 +188,17 @@
   })();
 
   onMount(async () => {
-    // Si no hay conexión a internet, cargar de inmediato desde el almacenamiento local IndexedDB
+    // Si no hay conexión a internet, cargar de inmediato desde el almacenamiento local IndexedDB con aislamiento de sala
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       try {
-        const local = await getLocalItems('attlogs', null, 'fecha_hora', 'desc');
+        const local = await getLocalItems('attlogs', null, 'event_time', 'desc');
         if (Array.isArray(local) && local.length > 0) {
-          attlogs = local.slice(0, pageSize);
-          totalCount = local.length;
+          const validSalas = (assignedSalaIds || []).map(String);
+          const filtered = validSalas.length > 0 
+            ? local.filter(x => validSalas.includes(String(x.sala_uuid || x.sala_id))) 
+            : local;
+          attlogs = filtered.slice(0, pageSize);
+          totalCount = filtered.length;
           isLoading = false;
           isInitialLoad = false;
         }
@@ -381,10 +385,17 @@
     } catch (e) {
       console.warn("Fallback local IndexedDB para attlogs:", e);
       try {
-        const local = await getLocalItems('attlogs', null, 'fecha_hora', 'desc');
+        const local = await getLocalItems('attlogs', null, 'event_time', 'desc');
         if (Array.isArray(local) && local.length > 0) {
-          attlogs = local.slice(0, limit);
-          totalCount = local.length;
+          const validSalas = (assignedSalaIds || []).map(String);
+          let filtered = validSalas.length > 0 
+            ? local.filter(x => validSalas.includes(String(x.sala_uuid || x.sala_id))) 
+            : local;
+          if (selectedSalas.length > 0) {
+            filtered = filtered.filter(x => selectedSalas.includes(String(x.sala_uuid || x.sala_id)));
+          }
+          attlogs = filtered.slice(0, limit);
+          totalCount = filtered.length;
         }
       } catch (err) {}
     } finally {

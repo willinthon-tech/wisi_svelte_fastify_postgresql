@@ -612,7 +612,10 @@ export async function syncAttlogs(request, reply) {
     // Case 2: Direct Hikvision Push Event (XML, JSON, or Multipart string/buffer)
     let rawStr = '';
     if (rawBuf) {
-      rawStr = rawBuf.toString('binary');
+      // Optimización de memoria: solo convertir los primeros 64KB a string para buscar tags XML/JSON
+      // Los datos binarios de la imagen JPEG se procesan directamente sobre el buffer nativo
+      const headerLength = Math.min(rawBuf.length, 65536);
+      rawStr = rawBuf.subarray(0, headerLength).toString('utf8');
     } else if (typeof body === 'string') {
       rawStr = body;
     } else {
@@ -662,16 +665,16 @@ export async function syncAttlogs(request, reply) {
       });
     }
 
-    // 4. Fallback: Si no coincide ninguna IP local específica, asignar al dispositivo más apropiado sin descartar
-    if (!matchedDev && dispositivos.length > 0) {
-      matchedDev = dispositivos[0];
-      console.log(`\x1b[33m[HIKVISION]\x1b[0m No se encontró dispositivo para IP ${callerIp}. Fallback -> ${matchedDev.nombre}`);
-    } else if (matchedDev) {
+    // 4. Seguridad multi-sala: Si no coincide ninguna IP local específica, NO asignar ciegamente a dispositivos[0]
+    // para evitar contaminar salas ajenas con marcajes de origen desconocido.
+    if (!matchedDev) {
+      console.log(`\x1b[33m[HIKVISION]\x1b[0m No se encontró dispositivo para IP ${callerIp}. Registrando sin sala asignada para evitar contaminación.`);
+    } else {
       console.log(`\x1b[32m[HIKVISION]\x1b[0m Dispositivo matched: ${matchedDev.nombre} (sala: ${matchedDev.sala_nombre || matchedDev.sala_uuid})`);
     }
 
-    const devNombre = matchedDev ? (matchedDev.nombre || `Biométrico (${matchedDev.ip_local || callerIp})`) : 'Biométrico';
-    const salaNombre = matchedDev ? (matchedDev.sala_nombre || 'Sin Sala') : 'Sin Sala';
+    const devNombre = matchedDev ? (matchedDev.nombre || `Biométrico (${matchedDev.ip_local || callerIp})`) : `Biométrico (${callerIp || 'IP desconocida'})`;
+    const salaNombre = matchedDev ? (matchedDev.sala_nombre || null) : null;
 
     // Connection state tracking ONLY (Conectado / Desconectado)
     const now = Date.now();
@@ -2319,7 +2322,9 @@ export async function deleteLibroAporte(request, reply) {
  */
 export async function getDeltaSync(request, reply) {
   try {
-    const result = await getDeltaSyncModel(request.query);
+    const q = request.query || {};
+    const userSalaIds = parseIds(q.user_sala_ids || q.user_salas || q.sala_ids || request.headers['x-user-salas']);
+    const result = await getDeltaSyncModel({ ...q, userSalaIds });
     return reply.send({ success: true, ...result });
   } catch (err) {
     return reply.status(500).send({ success: false, error: err.message });

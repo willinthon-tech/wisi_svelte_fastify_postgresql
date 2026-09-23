@@ -269,12 +269,64 @@
       console.warn('Fallback local IndexedDB para máquinas:', err);
       const local = await getLocalItems('maquinas');
       const source = (Array.isArray(local) && local.length > 0) ? local : ($masterMaquinasStore || []);
-      let filtered = source;
+      let filtered = source.filter(x => !x.is_deleted);
+
+      // Aislamiento estricto de sala en fallback local
+      if (assignedSalaIds && assignedSalaIds.length > 0) {
+        filtered = filtered.filter(x => {
+          const s = x.sala_uuid || x.sala_id;
+          return s && assignedSalaIds.includes(String(s));
+        });
+      }
+      if (selectedSalas.length > 0) {
+        filtered = filtered.filter(x => {
+          const s = x.sala_uuid || x.sala_id;
+          return s && selectedSalas.includes(String(s));
+        });
+      }
       if (searchNombre.trim()) {
         filtered = filtered.filter(x => (x.nombre || '').toLowerCase().includes(searchNombre.trim().toLowerCase()));
       }
       if (searchSerial.trim()) {
         filtered = filtered.filter(x => (x.serial || '').toLowerCase().includes(searchSerial.trim().toLowerCase()));
+      }
+      if (searchQuery && searchQuery.trim()) {
+        const qTerm = searchQuery.trim().toLowerCase();
+        filtered = filtered.filter(x => 
+          (x.nombre || '').toLowerCase().includes(qTerm) ||
+          (x.serial || '').toLowerCase().includes(qTerm) ||
+          (x.sala_nombre || '').toLowerCase().includes(qTerm)
+        );
+      }
+      if (selectedMarcas.length > 0) {
+        filtered = filtered.filter(x => selectedMarcas.includes(String(x.marca_uuid || x.marca_id)));
+      }
+      if (selectedModelos.length > 0) {
+        filtered = filtered.filter(x => selectedModelos.includes(String(x.modelo_uuid || x.modelo_id)));
+      }
+      if (selectedJuegos.length > 0) {
+        filtered = filtered.filter(x => selectedJuegos.includes(String(x.juego_uuid || x.juego_id)));
+      }
+      if (selectedEstados.length > 0) {
+        filtered = filtered.filter(x => selectedEstados.includes(String(x.estado_uuid || x.estado_id)));
+      }
+      if (selectedSociedades.length > 0) {
+        filtered = filtered.filter(x => selectedSociedades.includes(String(x.sociedad_uuid || x.sociedad_id)));
+      }
+      if (selectedValores.length > 0) {
+        filtered = filtered.filter(x => selectedValores.includes(String(x.valor_uuid || x.valor_id)));
+      }
+      if (selectedTipos.length > 0) {
+        filtered = filtered.filter(x => selectedTipos.includes(String(x.tipo_uuid || x.tipo_id)));
+      }
+      if (selectedModos.length > 0) {
+        filtered = filtered.filter(x => selectedModos.includes(String(x.modo_uuid || x.modo_id)));
+      }
+      if (selectedLegales.length > 0) {
+        filtered = filtered.filter(x => selectedLegales.includes(String(x.legal_uuid || x.legal_id)));
+      }
+      if (selectedRangos.length > 0) {
+        filtered = filtered.filter(x => selectedRangos.includes(String(x.rango_uuid || x.rango_id)));
       }
       totalCount = filtered.length;
       const start = ((currentParams.page || 1) - 1) * (currentParams.limit || 10);
@@ -532,7 +584,7 @@
 
       try {
         const controller = new AbortController();
-        const tId = setTimeout(() => controller.abort(), 3500);
+        const tId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch('/api/master/maquinas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -609,7 +661,7 @@
 
       try {
         const controller = new AbortController();
-        const tId = setTimeout(() => controller.abort(), 3500);
+        const tId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -668,7 +720,7 @@
 
     try {
       const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 3500);
+      const tId = setTimeout(() => controller.abort(), 12000);
       const res = await fetch(`/api/master/maquinas/${targetUuid}`, {
         method: 'DELETE',
         signal: controller.signal

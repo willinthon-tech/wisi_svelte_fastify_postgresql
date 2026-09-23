@@ -609,27 +609,49 @@ export default async function masterRoutes(fastify, options) {
     reply.raw.setHeader('X-Accel-Buffering', 'no');
     reply.raw.setHeader('Access-Control-Allow-Origin', '*');
 
-    reply.raw.write('retry: 5000\n\n');
+    // Manejo ultra seguro de cierre y errores para evitar caídas del proceso (EPIPE / ECONNRESET)
+    let isCleanedUp = false;
+    const cleanup = () => {
+      if (isCleanedUp) return;
+      isCleanedUp = true;
+      try { clearInterval(keepAlive); } catch (_) {}
+      try { attlogEvents.removeListener('new_attlog', onNewAttlog); } catch (_) {}
+      try {
+        if (!reply.raw.writableEnded && !reply.raw.destroyed) {
+          reply.raw.end();
+        }
+      } catch (_) {}
+    };
 
-    // Heartbeat ping cada 15 segundos para evitar que Nginx / proxies cierren por inactividad
-    const keepAlive = setInterval(() => {
-      if (!reply.raw.writableEnded && !reply.raw.destroyed) {
-        reply.raw.write(': ping\n\n');
+    reply.raw.on('error', cleanup);
+    request.raw.on('error', cleanup);
+    request.raw.on('close', cleanup);
+    reply.raw.on('close', cleanup);
+
+    const safeWrite = (payload) => {
+      if (isCleanedUp || reply.raw.writableEnded || reply.raw.destroyed) {
+        cleanup();
+        return;
       }
-    }, 15000);
-
-    const onNewAttlog = (data) => {
-      if (!reply.raw.writableEnded && !reply.raw.destroyed) {
-        reply.raw.write(`event: new_attlog\ndata: ${JSON.stringify(data)}\n\n`);
+      try {
+        reply.raw.write(payload);
+      } catch (err) {
+        cleanup();
       }
     };
 
-    attlogEvents.on('new_attlog', onNewAttlog);
+    safeWrite('retry: 5000\n\n');
 
-    request.raw.on('close', () => {
-      clearInterval(keepAlive);
-      attlogEvents.removeListener('new_attlog', onNewAttlog);
-    });
+    // Heartbeat ping cada 15 segundos para evitar que Nginx / proxies cierren por inactividad
+    const keepAlive = setInterval(() => {
+      safeWrite(': ping\n\n');
+    }, 15000);
+
+    const onNewAttlog = (data) => {
+      safeWrite(`event: new_attlog\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    attlogEvents.on('new_attlog', onNewAttlog);
   };
 
   fastify.get('/attlogs/stream', streamAttlogs);
