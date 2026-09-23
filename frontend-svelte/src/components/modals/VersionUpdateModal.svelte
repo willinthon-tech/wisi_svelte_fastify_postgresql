@@ -1,8 +1,8 @@
 <script>
-  import { isVersionModalOpenStore, availableUpdateStore, executeHardRefresh } from '../../controllers/version.store.js';
+  import { isVersionModalOpenStore, availableUpdateStore } from '../../controllers/version.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
-
-  let isRefreshingData = false;
+  import { toBackendUrl } from '../../config/api.config.js';
+  import { isTauriWindows } from '../../services/tauriIsapi.service.js';
 
   $: update = $availableUpdateStore;
 
@@ -10,36 +10,60 @@
     isVersionModalOpenStore.set(false);
   }
 
-  function handleDownload() {
+  function formatVersion(val) {
+    if (val === null || val === undefined || val === '') return 'v1';
+    const str = String(val).trim();
+    const clean = str.replace(/^v+/i, '');
+    return `v${clean}`;
+  }
+
+  async function handleDownload() {
     if (!update?.downloadUrl) {
       triggerToast('No hay URL de descarga disponible para esta versión.', 'warning');
       return;
     }
 
+    const fullUrl = toBackendUrl(update.downloadUrl);
+    triggerToast(`Iniciando descarga oficial de ${formatVersion(update.remoteVersion)}...`, 'info');
+
     try {
+      // 1. En entorno de escritorio Windows (Tauri), invocar comando nativo en Rust para abrir el navegador del sistema
+      if (isTauriWindows()) {
+        let invokeFn = null;
+        if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') {
+          invokeFn = window.__TAURI_INTERNALS__.invoke;
+        } else {
+          try {
+            const tauriCore = await import('@tauri-apps/api/core');
+            invokeFn = tauriCore.invoke;
+          } catch (_) {}
+        }
+
+        if (invokeFn) {
+          await invokeFn('open_in_browser', { url: fullUrl });
+          return;
+        }
+      }
+
+      // 2. En Android (Capacitor) o navegador Web
       if (typeof window !== 'undefined') {
-        const link = document.createElement('a');
-        link.href = update.downloadUrl;
-        if (update.filename) link.download = update.filename;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const isCapacitor = typeof window.Capacitor !== 'undefined';
+        const target = isCapacitor ? '_system' : '_blank';
+        const opened = window.open(fullUrl, target);
+
+        if (!opened) {
+          const link = document.createElement('a');
+          link.href = fullUrl;
+          if (update.filename) link.download = update.filename;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
       }
     } catch (e) {
-      triggerToast('Error al iniciar la descarga del instalador', 'error');
-    }
-  }
-
-  async function handleRefreshData() {
-    isRefreshingData = true;
-    triggerToast('Sincronizando datos y limpiando caché del sistema...', 'info');
-    try {
-      await executeHardRefresh();
-    } finally {
-      setTimeout(() => {
-        isRefreshingData = false;
-      }, 1000);
+      console.error('Error al iniciar descarga:', e);
+      triggerToast('Error al iniciar la descarga del instalador.', 'error');
     }
   }
 </script>
@@ -65,7 +89,7 @@
             </div>
             <h2 class="version-title">¡Nueva Versión Disponible!</h2>
             <p class="version-subtitle">
-              Se ha detectado una versión más reciente de la aplicación en el servidor.
+              Hay una versión más reciente de la aplicación lista para instalar.
             </p>
           </div>
         </div>
@@ -74,12 +98,12 @@
         <div class="version-compare-card">
           <div class="version-box version-current">
             <span class="version-box-label">Instalada</span>
-            <span class="version-box-value">v{update.currentVersion}</span>
+            <span class="version-box-value">{formatVersion(update.currentVersion)}</span>
           </div>
           <div class="version-arrow">➜</div>
           <div class="version-box version-new">
             <span class="version-box-label">Disponible</span>
-            <span class="version-box-value">v{update.remoteVersion}</span>
+            <span class="version-box-value">{formatVersion(update.remoteVersion)}</span>
           </div>
         </div>
 
@@ -113,22 +137,9 @@
                 <polyline points="7 10 12 15 17 10"/>
                 <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
-              <span>Descargar e Instalar v{update.remoteVersion} ({update.platform === 'android' ? '.APK' : '.EXE'})</span>
+              <span>Descargar e Instalar {formatVersion(update.remoteVersion)} ({update.platform === 'android' ? '.APK' : '.EXE'})</span>
             </button>
           {/if}
-
-          <button
-            type="button"
-            class="version-btn-secondary {isRefreshingData ? 'is-spinning' : ''}"
-            on:click={handleRefreshData}
-            disabled={isRefreshingData}
-            title="Recargar y sincronizar datos del sistema"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="refresh-svg">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-            </svg>
-            <span>{isRefreshingData ? 'Refrescando Datos...' : 'Refrescar Datos del Sistema'}</span>
-          </button>
 
           <button
             type="button"

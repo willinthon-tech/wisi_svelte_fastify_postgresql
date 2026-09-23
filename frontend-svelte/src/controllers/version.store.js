@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 import { isTauriWindows } from '../services/tauriIsapi.service.js';
 import { triggerToast } from './ui.store.js';
 import { loadMasterStoresFromBackend } from './master.store.js';
+import { toBackendUrl } from '../config/api.config.js';
 
 // Versión local inyectada en build time
 export const LOCAL_APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v6';
@@ -314,9 +315,10 @@ export async function checkSystemVersion(options = { isSilent: false }) {
     // --- PLATAFORMA WINDOWS (Desktop Tauri) ---
     else if (platform === 'windows') {
       const winData = versionData?.windows || {};
-      const remoteWinVer = winData.version_num || parseVersionNumber(winData.archivo) || 1;
+      const remoteWinVer = parseVersionNumber(winData.version_num) || parseVersionNumber(winData.archivo) || 1;
       const localWinVer = getLocalHtmlVersionNum();
       const isNewer = remoteWinVer > localWinVer;
+      const rawWinUrl = winData.download_url || (winData.archivo ? `/api/downloads/${winData.archivo}` : '');
 
       if (isNewer) {
         availableUpdateStore.set({
@@ -325,7 +327,7 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           platformIcon: '🪟',
           currentVersion: localWinVer,
           remoteVersion: remoteWinVer,
-          downloadUrl: winData.download_url || (winData.archivo ? `/api/downloads/${winData.archivo}` : ''),
+          downloadUrl: rawWinUrl ? toBackendUrl(rawWinUrl) : '',
           filename: winData.archivo,
           peso: winData.peso,
           fecha: winData.fecha
@@ -340,9 +342,10 @@ export async function checkSystemVersion(options = { isSilent: false }) {
     // --- PLATAFORMA ANDROID (Capacitor) ---
     else if (platform === 'android') {
       const androidData = versionData?.android || {};
-      const remoteAndroidVer = androidData.version_num || parseVersionNumber(androidData.archivo) || 1;
+      const remoteAndroidVer = parseVersionNumber(androidData.version_num) || parseVersionNumber(androidData.archivo) || 1;
       const localAndroidVer = getLocalHtmlVersionNum();
       const isNewer = remoteAndroidVer > localAndroidVer;
+      const rawAndroidUrl = androidData.download_url || (androidData.archivo ? `/api/downloads/${androidData.archivo}` : '');
 
       if (isNewer) {
         availableUpdateStore.set({
@@ -351,7 +354,7 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           platformIcon: '🤖',
           currentVersion: localAndroidVer,
           remoteVersion: remoteAndroidVer,
-          downloadUrl: androidData.download_url || (androidData.archivo ? `/api/downloads/${androidData.archivo}` : ''),
+          downloadUrl: rawAndroidUrl ? toBackendUrl(rawAndroidUrl) : '',
           filename: androidData.archivo,
           peso: androidData.peso,
           fecha: androidData.fecha
