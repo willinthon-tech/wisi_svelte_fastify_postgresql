@@ -26,6 +26,8 @@ frontend-svelte/dist/
 frontend-svelte/build/
 frontend-svelte/.svelte-kit/
 frontend-svelte/public/version.json
+app-versiones/
+app-versiones/*
 
 # Archivos de registros y logs
 *.log

@@ -1,14 +1,17 @@
 {
   "name": "frontend-svelte",
   "private": true,
-  "version": "6.0.0",
+  "version": "8.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "build:windows": "tauri build"
+    "build:windows": "tauri build",
+    "build:platform": "node scripts/build-platform.mjs",
+    "build:apk": "node scripts/build-platform.mjs --android",
+    "build:exe": "node scripts/build-platform.mjs --windows"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

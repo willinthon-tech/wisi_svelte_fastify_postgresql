@@ -5215,7 +5215,17 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
       }
     }
 
-    const versionNum = highestVersion + 1;
+    // Detectar si el archivo que se está subiendo ya incluye una versión explícita en su nombre (ej. app-wisi-windows-v8.exe o app-wisi-android-v8.apk)
+    let explicitVersion = null;
+    const nameMatch = String(filename || '').match(/(?:-v|^v)(\d+)(?:\D|$)/i);
+    if (nameMatch && nameMatch[1]) {
+      const parsed = parseInt(nameMatch[1], 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        explicitVersion = parsed;
+      }
+    }
+
+    const versionNum = explicitVersion ? explicitVersion : (highestVersion + 1);
 
     // 4. Insert initial record to get generated UUID
     const inserted = await sql`
@@ -5275,7 +5285,17 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
       if (v > highestVersion) highestVersion = v;
     }
   }
-  const versionNum = highestVersion + 1;
+
+  let explicitVersionMem = null;
+  const nameMatchMem = String(filename || '').match(/(?:-v|^v)(\d+)(?:\D|$)/i);
+  if (nameMatchMem && nameMatchMem[1]) {
+    const parsed = parseInt(nameMatchMem[1], 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      explicitVersionMem = parsed;
+    }
+  }
+
+  const versionNum = explicitVersionMem ? explicitVersionMem : (highestVersion + 1);
   const nextUuid = `descarga-${Date.now()}`;
   const finalFilename = `app-wisi-${plataforma}-v${versionNum}-${nextUuid.slice(0, 8)}.${formato}`;
 
