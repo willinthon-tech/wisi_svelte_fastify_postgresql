@@ -60,6 +60,7 @@ export default defineConfig({
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/ws/, /^\/empleados\//, /^\/clientes\//, /^\/attlogs\//, /^\/salas\//],
         cleanupOutdatedCaches: true,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/cdn-icons-png\.flaticon\.com\/.*/i,

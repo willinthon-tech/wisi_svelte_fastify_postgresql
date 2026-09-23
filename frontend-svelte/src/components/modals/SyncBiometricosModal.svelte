@@ -1,6 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
-  import { masterSalasStore } from '../../controllers/master.store.js';
+  import { masterSalasStore, masterDispositivosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toEmployeePhotoUrl } from '../../config/api.config.js';
   import {
@@ -10,7 +10,8 @@
     localSetupCard,
     localUploadFace,
     localDeleteUser,
-    generarCardNoDesdeCedula
+    generarCardNoDesdeCedula,
+    getCedulaVariants
   } from '../../services/tauriIsapi.service.js';
 
   export let isOpen = false;
@@ -19,6 +20,11 @@
 
   const dispatch = createEventDispatcher();
   const isWindows = isTauriWindows();
+
+  // Asegurar carga de dispositivos al abrir si están vacíos
+  $: if (isOpen && (!$masterDispositivosStore || $masterDispositivosStore.length === 0)) {
+    loadMasterStoresFromBackend();
+  }
 
   // Filtrar solo salas Tipo 1 (grupo_id === 1) asignadas al usuario
   $: salasTipo1 = ($masterSalasStore || []).filter(s => {
@@ -29,9 +35,65 @@
     return allowed.includes(s.uuid) || allowed.includes(s.id);
   });
 
+  // Lista de biométricos disponibles: "[Nombre Biométrico] ( [Nombre Sala] )" (sin nombre comercial)
+  $: biometricosDisponibles = ($masterDispositivosStore || []).map(dev => {
+    const salaId = dev.sala_uuid || dev.sala_id;
+    const sala = ($masterSalasStore || []).find(s => String(s.uuid || s.id) === String(salaId));
+
+    const rawDevName = (dev.nombre || 'Biométrico').trim();
+    // Limpiar paréntesis redundantes si el nombre ya traía algo como " ( Monagas )"
+    const cleanDevName = rawDevName.replace(/\s*\([^)]*\)\s*$/, '').trim() || rawDevName;
+    const salaNombre = sala ? sala.nombre : ''; // ESTRICTAMENTE sala.nombre, NUNCA nombre_comercial
+    const selectLabel = salaNombre ? `${cleanDevName} ( ${salaNombre} )` : cleanDevName;
+
+    return {
+      ...dev,
+      uuid: dev.uuid || dev.id,
+      id: dev.uuid || dev.id,
+      cleanNombre: cleanDevName,
+      salaObj: sala,
+      salaNombre,
+      selectLabel
+    };
+  }).filter(dev => {
+    if (!dev.salaObj) return false;
+    const isTipo1 = Number(dev.salaObj.grupo_id) === 1 || !dev.salaObj.grupo_id;
+    if (!isTipo1) return false;
+    const allowed = assignedSalaUuids && assignedSalaUuids.length > 0 ? assignedSalaUuids : assignedSalaIds;
+    if (!allowed || allowed.length === 0) return true;
+    return allowed.includes(dev.salaObj.uuid) || allowed.includes(dev.salaObj.id) || allowed.includes(String(dev.salaObj.uuid)) || allowed.includes(String(dev.salaObj.id));
+  });
+
+  let selectedDispositivoId = null;
   let selectedSalaId = null;
-  $: if (salasTipo1.length > 0 && (!selectedSalaId || !salasTipo1.some(s => (s.uuid || s.id) === selectedSalaId))) {
-    selectedSalaId = salasTipo1[0].uuid || salasTipo1[0].id;
+
+  $: if (biometricosDisponibles.length > 0 && (!selectedDispositivoId || !biometricosDisponibles.some(d => (d.uuid || d.id) === selectedDispositivoId))) {
+    selectedDispositivoId = biometricosDisponibles[0].uuid || biometricosDisponibles[0].id;
+  }
+
+  $: {
+    const selDev = biometricosDisponibles.find(d => (d.uuid || d.id) === selectedDispositivoId);
+    if (selDev) {
+      selectedSalaId = selDev.sala_uuid || selDev.sala_id;
+    }
+  }
+
+  function handleSelectDispositivoChange(newDevId) {
+    selectedDispositivoId = newDevId;
+    const selDev = biometricosDisponibles.find(d => (d.uuid || d.id) === newDevId);
+    if (selDev) {
+      const devSalaId = selDev.sala_uuid || selDev.sala_id;
+      // Si la sala ya fue auditada, pasamos a enfocar el dispositivo en su pestaña
+      if (auditResult && String(auditResult.sala?.id || auditResult.sala?.uuid) === String(devSalaId)) {
+        const foundIdx = (auditResult.devices || []).findIndex(d => (d.uuid || d.id) === newDevId);
+        if (foundIdx !== -1) {
+          selectedDeviceIndex = foundIdx;
+          return;
+        }
+      }
+      // Si es de otra sala, reseteamos la auditoría
+      auditResult = null;
+    }
   }
 
   let isAuditing = false;
@@ -101,21 +163,20 @@
     searchSobran = '';
   }
 
-  // Compara usuarios físicos contra empleados del sistema
+  // Compara usuarios físicos contra empleados del sistema usando variantes de cédula
   function reconcileUsers(bioUsers, activeEmployees, allSystemEmployees) {
     const sincronizados = [];
     const faltan = [];
     const matchedBioIndices = new Set();
 
     for (const emp of activeEmployees) {
-      const cleanCedula = String(emp.cedula || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
-      const digitsOnly = cleanCedula.replace(/\D/g, '');
+      const empVariants = getCedulaVariants(emp.cedula);
 
       const matchIdx = bioUsers.findIndex((u, idx) => {
         if (matchedBioIndices.has(idx)) return false;
-        const uNo = String(u.employeeNo || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
-        const uDigits = uNo.replace(/\D/g, '');
-        return uNo === cleanCedula || (digitsOnly && uDigits === digitsOnly);
+        const uVariants = getCedulaVariants(u.employeeNo);
+        // Cotejo por intersección de variantes (cédula, con/sin V, con prefijo 1/2 de panel, etc.)
+        return empVariants.some(v => uVariants.includes(v));
       });
 
       if (matchIdx !== -1) {
@@ -132,13 +193,11 @@
     const sobran = [];
     bioUsers.forEach((u, idx) => {
       if (!matchedBioIndices.has(idx)) {
-        const uNo = String(u.employeeNo || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
-        const uDigits = uNo.replace(/\D/g, '');
+        const uVariants = getCedulaVariants(u.employeeNo);
 
         const sysEmp = (allSystemEmployees || []).find(e => {
-          const eNo = String(e.cedula || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
-          const eDigits = eNo.replace(/\D/g, '');
-          return eNo === uNo || (uDigits && eDigits === uDigits);
+          const eVariants = getCedulaVariants(e.cedula);
+          return eVariants.some(v => uVariants.includes(v));
         });
 
         sobran.push({
@@ -154,8 +213,11 @@
   }
 
   async function handleAudit() {
-    if (!selectedSalaId) {
-      triggerToast('Por favor selecciona una sala para auditar', 'error');
+    const targetDev = biometricosDisponibles.find(d => (d.uuid || d.id) === selectedDispositivoId);
+    const targetSalaId = targetDev ? (targetDev.sala_uuid || targetDev.sala_id) : selectedSalaId;
+
+    if (!targetSalaId) {
+      triggerToast('Por favor selecciona un biométrico para auditar', 'error');
       return;
     }
 
@@ -174,7 +236,7 @@
 
     try {
       // 1. Obtener contexto de la sala (dispositivos y empleados activos) desde el backend
-      const res = await fetch(`/api/biometricos/sala-contexto/${selectedSalaId}`);
+      const res = await fetch(`/api/biometricos/sala-contexto/${targetSalaId}`);
       const json = await res.json();
       if (!json || !json.success) {
         throw new Error(json?.error || 'Error al obtener contexto de la sala');
@@ -256,6 +318,10 @@
         sala: json.sala,
         devices: auditedDevices
       };
+
+      // Posicionar en el dispositivo seleccionado
+      const foundIdx = auditedDevices.findIndex(d => (d.uuid || d.id) === selectedDispositivoId);
+      selectedDeviceIndex = foundIdx !== -1 ? foundIdx : 0;
 
       triggerToast(`Auditoría local completada para ${auditedDevices.length} dispositivo(s)`, 'success');
     } catch (err) {
@@ -564,19 +630,24 @@
         </div>
       {/if}
 
-      <!-- Controls Bar: Room Selector & Audit Button -->
+      <!-- Controls Bar: Device Selector & Audit Button -->
       <div class="sync-controls-bar">
         <div class="sync-select-group">
           <select 
-            id="sync-sala-select" 
+            id="sync-device-select" 
             class="sync-select" 
-            aria-label="Seleccionar Sala"
-            bind:value={selectedSalaId}
+            aria-label="Seleccionar Biométrico"
+            value={selectedDispositivoId}
+            on:change={(e) => handleSelectDispositivoChange(e.target.value)}
             disabled={isAuditing || isExecutingAction || !isWindows}
           >
-            {#each salasTipo1 as s}
-              <option value={s.id}>{s.nombre} {s.nombre_comercial ? `(${s.nombre_comercial})` : ''}</option>
-            {/each}
+            {#if biometricosDisponibles.length === 0}
+              <option value="" disabled>No hay biométricos disponibles</option>
+            {:else}
+              {#each biometricosDisponibles as d}
+                <option value={d.uuid || d.id}>{d.selectLabel}</option>
+              {/each}
+            {/if}
           </select>
         </div>
 
@@ -584,7 +655,7 @@
           type="button" 
           class="sync-audit-btn" 
           on:click={handleAudit}
-          disabled={isAuditing || isExecutingAction || !selectedSalaId || !isWindows}
+          disabled={isAuditing || isExecutingAction || !selectedDispositivoId || !isWindows}
         >
           {#if isAuditing}
             <span class="sync-spinner"></span> Conectando...
@@ -609,7 +680,7 @@
             <div style="font-size: 48px; margin-bottom: 12px;">📡</div>
             <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0 0 6px 0;">Auditoría no iniciada</h3>
             <p style="font-size: 13px; color: #64748b; margin: 0; max-width: 420px; text-align: center;">
-              Selecciona la sala que deseas checar arriba y presiona <strong>"Chequear"</strong> para consultar el estado en vivo de los equipos en la red local.
+              Selecciona el biométrico que deseas checar arriba y presiona <strong>"Chequear"</strong> para consultar el estado en vivo de los equipos en la red local.
             </p>
           </div>
         {:else if auditResult.devices.length === 0}
@@ -626,7 +697,10 @@
               <button
                 type="button"
                 class="sync-device-pill {isSelected ? 'active' : ''}"
-                on:click={() => selectedDeviceIndex = idx}
+                on:click={() => {
+                  selectedDeviceIndex = idx;
+                  selectedDispositivoId = dev.uuid || dev.id;
+                }}
               >
                 <div class="sync-pill-top">
                   <span class="sync-pill-name">{dev.nombre}</span>

@@ -73,16 +73,57 @@ export function generarCardNoDesdeCedula(cedula) {
 }
 
 /**
+ * Obtiene todas las variantes de una cédula para cotejo contra biométricos y paneles
+ */
+export function getCedulaVariants(raw) {
+  if (!raw) return [];
+  const s = String(raw).trim().toUpperCase();
+  const variants = new Set();
+
+  const alphaNum = s.replace(/[^0-9A-Z]/g, '');
+  if (alphaNum) variants.add(alphaNum);
+
+  const digits = s.replace(/\D/g, '');
+  if (digits) {
+    variants.add(digits);
+    const noLeadingZeros = digits.replace(/^0+/, '');
+    if (noLeadingZeros) variants.add(noLeadingZeros);
+  }
+
+  if (alphaNum.startsWith('V')) {
+    variants.add('1' + alphaNum.substring(1));
+    if (digits) variants.add('1' + digits);
+  } else if (alphaNum.startsWith('E')) {
+    variants.add('2' + alphaNum.substring(1));
+    if (digits) variants.add('2' + digits);
+  } else if (digits) {
+    variants.add('1' + digits);
+    variants.add('V' + digits);
+    if (digits.startsWith('1') && digits.length >= 7) {
+      variants.add('V' + digits.substring(1));
+      variants.add(digits.substring(1));
+    }
+    if (digits.startsWith('2') && digits.length >= 7) {
+      variants.add('E' + digits.substring(1));
+      variants.add(digits.substring(1));
+    }
+  }
+
+  return Array.from(variants);
+}
+
+/**
  * Obtiene todos los usuarios registrados físicamente en un biométrico o panel
  */
 export async function localGetDeviceUsers(host, username = 'admin', password = '') {
   let allUsers = [];
   let position = 0;
-  const maxResults = 50;
+  const maxResults = 30;
   let hasMore = true;
   let safetyCounter = 0;
+  let totalMatches = 0;
 
-  while (hasMore && safetyCounter < 50) {
+  while (hasMore && safetyCounter < 100) {
     safetyCounter++;
     const searchBody = {
       UserInfoSearchCond: {
@@ -99,7 +140,7 @@ export async function localGetDeviceUsers(host, username = 'admin', password = '
 
     let parsed = null;
     try {
-      parsed = JSON.parse(res.data);
+      parsed = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
     } catch (e) {
       throw new Error(`Respuesta no válida del dispositivo ${host}`);
     }
@@ -107,17 +148,19 @@ export async function localGetDeviceUsers(host, username = 'admin', password = '
     const userInfoSearch = parsed?.UserInfoSearch;
     if (!userInfoSearch) break;
 
-    const matches = userInfoSearch.numOfMatches || 0;
+    totalMatches = Number(userInfoSearch.totalMatches) || 0;
+    const currentMatches = Number(userInfoSearch.numOfMatches) || 0;
     const users = userInfoSearch.UserInfo || [];
 
-    if (Array.isArray(users)) {
+    if (Array.isArray(users) && users.length > 0) {
       allUsers.push(...users);
-    } else if (users && typeof users === 'object') {
+      position += users.length;
+    } else if (users && typeof users === 'object' && users.employeeNo) {
       allUsers.push(users);
+      position += 1;
     }
 
-    position += (Array.isArray(users) ? users.length : 1);
-    if (position >= matches || (Array.isArray(users) && users.length === 0)) {
+    if (currentMatches === 0 || currentMatches < maxResults || (totalMatches > 0 && allUsers.length >= totalMatches) || (Array.isArray(users) && users.length === 0)) {
       hasMore = false;
     }
   }
@@ -276,12 +319,17 @@ export async function localDeleteUser(host, username = 'admin', password = '', e
   }
 
   // 3. Eliminar usuario
+  const employeeNoList = [
+    { employeeNo: cleanNo },
+    { employeeNo: digitsOnly }
+  ];
+  if (cardNo && cardNo !== cleanNo && cardNo !== digitsOnly) {
+    employeeNoList.push({ employeeNo: String(cardNo) });
+  }
+
   const userDelBody = {
     UserInfoDelCond: {
-      EmployeeNoList: [
-        { employeeNo: cleanNo },
-        { employeeNo: digitsOnly }
-      ]
+      EmployeeNoList: employeeNoList
     }
   };
   return await callLocalIsapi(host, '/ISAPI/AccessControl/UserInfo/Delete?format=json', 'PUT', userDelBody, username, password, 10);
