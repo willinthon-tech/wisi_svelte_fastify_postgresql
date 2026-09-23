@@ -25,6 +25,7 @@ backend-fastify/scratch/
 frontend-svelte/dist/
 frontend-svelte/build/
 frontend-svelte/.svelte-kit/
+frontend-svelte/public/version.json
 
 # Archivos de registros y logs
 *.log
