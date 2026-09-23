@@ -85,25 +85,29 @@
         const ip = (dev.ip_local || '').trim();
         if (!ip || ip === '—') {
           reachabilityMap[devId] = false;
+          reachabilityMap = { ...reachabilityMap };
           return;
         }
         try {
-          const ok = await localPingDevice(ip, 800);
+          const ok = await localPingDevice(ip, 1200);
           reachabilityMap[devId] = Boolean(ok);
         } catch (e) {
           reachabilityMap[devId] = false;
         }
+        reachabilityMap = { ...reachabilityMap };
       });
 
       await Promise.allSettled(pingPromises);
       reachabilityMap = { ...reachabilityMap };
       hasCheckedReachability = true;
 
-      // Si el seleccionado actual quedó inalcanzable, cambiar automáticamente al primer alcanzable disponible
-      if (selectedDispositivoId && reachabilityMap[selectedDispositivoId] === false) {
+      // Auto-seleccionar el primer equipo Hikvision alcanzable si el actual no lo es
+      const isCurrentOk = selectedDispositivoId && reachabilityMap[selectedDispositivoId] === true;
+      if (!isCurrentOk) {
         const firstReachable = biometricosDisponibles.find(d => reachabilityMap[d.uuid || d.id] === true);
         if (firstReachable) {
-          handleSelectDispositivoChange(firstReachable.uuid || firstReachable.id);
+          selectedDispositivoId = firstReachable.uuid || firstReachable.id;
+          selectedSalaId = firstReachable.sala_uuid || firstReachable.sala_id;
         }
       }
     } finally {
@@ -951,7 +955,7 @@
             aria-label="Seleccionar Biométrico"
             value={selectedDispositivoId}
             on:change={(e) => handleSelectDispositivoChange(e.target.value)}
-            disabled={isAuditing || isExecutingAction || !isWindows}
+            disabled={isCheckingReachability || isAuditing || isExecutingAction || !isWindows}
           >
             {#if biometricosDisponibles.length === 0}
               <option value="" disabled>No hay biométricos disponibles</option>
@@ -961,9 +965,9 @@
                 {@const isReachable = reachabilityMap[devId]}
                 <option 
                   value={devId} 
-                  disabled={isReachable === false}
+                  disabled={isCheckingReachability || isReachable === false}
                 >
-                  {d.selectLabel}{#if isReachable === false} — (Inalcanzable){:else if isReachable === true} — (En línea){/if}
+                  {d.selectLabel}{#if isReachable === true} — 🟢 (En línea){:else if isReachable === false} — ⛔ (Inalcanzable){:else if isCheckingReachability} — ⏳ (Verificando...){/if}
                 </option>
               {/each}
             {/if}
@@ -971,23 +975,36 @@
 
           <button 
             type="button" 
-            class="sync-ping-refresh-btn" 
+            class="sync-ping-refresh-btn {isCheckingReachability ? 'is-scanning' : ''}" 
             on:click={() => checkReachabilityAllDevices(true)}
-            title="Escanear y verificar alcance en red local de los equipos"
+            title={isCheckingReachability ? "Escaneando y verificando equipos Hikvision en red..." : "Escanear y verificar alcance de equipos Hikvision en red"}
             disabled={isCheckingReachability || isAuditing}
           >
-            <span class={isCheckingReachability ? 'sync-spin' : ''}>🔄</span>
+            {#if isCheckingReachability}
+              <span class="sync-ping-spinner"></span>
+            {:else}
+              <span>🔄</span>
+            {/if}
           </button>
+
+          {#if isCheckingReachability}
+            <div class="sync-scanning-pill">
+              <span class="sync-scanning-spinner"></span>
+              <span>Verificando equipos Hikvision...</span>
+            </div>
+          {/if}
         </div>
 
         <button 
           type="button" 
           class="sync-audit-btn" 
           on:click={handleAudit}
-          disabled={isAuditing || isExecutingAction || !selectedDispositivoId || !isWindows}
+          disabled={isCheckingReachability || isAuditing || isExecutingAction || !selectedDispositivoId || !isWindows || reachabilityMap[selectedDispositivoId] === false}
         >
           {#if isAuditing}
             <span class="sync-spinner"></span> Conectando...
+          {:else if isCheckingReachability}
+            <span class="sync-spinner"></span> Verificando red...
           {:else}
             <span>Chequear</span>
           {/if}
@@ -2571,6 +2588,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    min-width: 34px;
+    min-height: 34px;
   }
 
   .sync-ping-refresh-btn:hover:not(:disabled) {
@@ -2579,9 +2598,48 @@
     color: #0f172a;
   }
 
+  .sync-ping-refresh-btn.is-scanning {
+    background: #eff6ff;
+    border-color: #3b82f6;
+    cursor: wait;
+  }
+
   .sync-ping-refresh-btn:disabled {
-    opacity: 0.6;
+    opacity: 0.7;
     cursor: not-allowed;
+  }
+
+  .sync-ping-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #2563eb;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: syncSpin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  .sync-scanning-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1d4ed8;
+  }
+
+  .sync-scanning-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #2563eb;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: syncSpin 0.7s linear infinite;
+    display: inline-block;
   }
 
   .sync-device-info-actions {

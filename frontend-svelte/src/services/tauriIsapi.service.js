@@ -364,7 +364,10 @@ export async function localPingDevice(host, timeoutMs = 800) {
   // 2. Fallback: llamada ISAPI ligera con timeout corto (1 segundo)
   try {
     const res = await callLocalIsapi(host, '/ISAPI/System/deviceInfo', 'GET', null, 'admin', '', 1);
-    return res && (res.ok || res.status === 200 || res.status === 401);
+    if (!res) return false;
+    const bodyStr = typeof res.data === 'string' ? res.data : JSON.stringify(res.data || '');
+    const isHikvision = bodyStr.toLowerCase().includes('isapi.org') || bodyStr.toLowerCase().includes('usercheck') || bodyStr.toLowerCase().includes('deviceinfo');
+    return isHikvision && (res.ok || res.status === 200 || res.status === 401);
   } catch (e) {
     return false;
   }

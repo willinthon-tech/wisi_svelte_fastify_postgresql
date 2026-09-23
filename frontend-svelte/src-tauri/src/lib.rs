@@ -185,7 +185,6 @@ async fn isapi_request(
 
 #[tauri::command]
 async fn ping_device(host: String, timeout_ms: Option<u64>) -> bool {
-  use std::net::ToSocketAddrs;
   let clean_host = host.trim()
     .trim_start_matches("http://")
     .trim_start_matches("https://")
@@ -197,53 +196,53 @@ async fn ping_device(host: String, timeout_ms: Option<u64>) -> bool {
     .unwrap_or("")
     .to_string();
 
-  if clean_host.is_empty() {
+  if clean_host.is_empty() || clean_host == "—" {
     return false;
   }
 
-  let t_ms = timeout_ms.unwrap_or(800);
-  let t = Duration::from_millis(t_ms);
-  let host_clone = clean_host.clone();
+  let t_ms = timeout_ms.unwrap_or(1200);
+  let timeout = Duration::from_millis(t_ms);
 
-  tauri::async_runtime::spawn_blocking(move || {
-    // 1. Intento rápido de conexión TCP a los puertos comunes de biométricos/paneles (80, 8000, 443)
-    for port in [80, 8000, 443] {
-      let target = format!("{}:{}", host_clone, port);
-      if let Ok(mut addrs) = target.to_socket_addrs() {
-        if let Some(addr) = addrs.next() {
-          if std::net::TcpStream::connect_timeout(&addr, t).is_ok() {
+  let client = match reqwest::Client::builder()
+    .timeout(timeout)
+    .connect_timeout(timeout)
+    .danger_accept_invalid_certs(true)
+    .build() {
+      Ok(c) => c,
+      Err(_) => return false,
+    };
+
+  // Validar estrictamente contra endpoints ISAPI de Hikvision
+  // Un equipo Hikvision (biométrico o panel) responde a /ISAPI/System/deviceInfo con status 401 o 200 y esquema isapi.org o userCheck
+  // Equipos ajenos (impresoras, routers, PCs, etc.) responden con 404, HTML o timeout, y son descartados
+  let urls = [
+    format!("http://{}/ISAPI/System/deviceInfo", clean_host),
+    format!("http://{}:8000/ISAPI/System/deviceInfo", clean_host),
+    format!("https://{}/ISAPI/System/deviceInfo", clean_host),
+  ];
+
+  for url in urls {
+    if let Ok(resp) = client.get(&url).send().await {
+      let status = resp.status().as_u16();
+      if status == 200 || status == 401 {
+        let www_auth = resp.headers().get("www-authenticate")
+          .and_then(|h| h.to_str().ok())
+          .unwrap_or("")
+          .to_lowercase();
+
+        if let Ok(text) = resp.text().await {
+          let lower = text.to_lowercase();
+          if lower.contains("isapi.org") || lower.contains("usercheck") || lower.contains("deviceinfo") || lower.contains("substatuscode") || lower.contains("hikvision") || www_auth.contains("digest") {
             return true;
           }
+        } else if www_auth.contains("digest") {
+          return true;
         }
       }
     }
+  }
 
-    // 2. Si los puertos TCP no respondieron (por firewall o puertos no estándar entre VLANs),
-    // ejecutar ping ICMP a nivel de sistema operativo
-    #[cfg(windows)]
-    {
-      use std::os::windows::process::CommandExt;
-      let timeout_str = t_ms.to_string();
-      let output = std::process::Command::new("ping")
-        .args(["-n", "1", "-w", &timeout_str, &host_clone])
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW: no abre ventana de consola
-        .output();
-
-      if let Ok(out) = output {
-        if out.status.success() {
-          let text = String::from_utf8_lossy(&out.stdout).to_lowercase();
-          let is_loss = text.contains("100% perdidos") || text.contains("100% loss");
-          let is_unreachable = text.contains("inaccesible") || text.contains("unreachable") || text.contains("agotado") || text.contains("timed out");
-          let has_reply = text.contains("ttl=") || text.contains("bytes=");
-          if has_reply && !is_loss && !is_unreachable {
-            return true;
-          }
-        }
-      }
-    }
-
-    false
-  }).await.unwrap_or(false)
+  false
 }
 
 #[tauri::command]
