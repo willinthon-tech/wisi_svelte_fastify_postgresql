@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { masterSalasStore, masterDispositivosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { currentUserStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toEmployeePhotoUrl } from '../../config/api.config.js';
   import {
@@ -23,18 +24,64 @@
   const dispatch = createEventDispatcher();
   const isWindows = isTauriWindows();
 
+  // Variables de estado de la auditoría y selecciones
+  let isAuditing = false;
+  let auditResult = null;
+  let selectedDeviceIndex = 0;
+  let activeTab = 'sincronizados'; // 'sincronizados' | 'faltan' | 'sobran'
+
+  // Contexto de empleados obtenidos del servidor
+  let contextActiveEmployees = [];
+  let contextAllSystemEmployees = [];
+
+  // Búsquedas por pestaña
+  let searchSync = '';
+  let searchFaltan = '';
+  let searchSobran = '';
+
+  // Selecciones masivas y tracking de acciones individuales
+  let selectedSyncIds = new Set();
+  let selectedFaltanIds = new Set();
+  let selectedSobranNos = new Set();
+  let actionTarget = 'both'; // 'both' | 'bio' | 'panel'
+  let isExecutingAction = false;
+  let updatingEmpIds = new Set();
+  let addingEmpIds = new Set();
+  let deletingEmpNos = new Set();
+  let updateProgress = { current: 0, total: 0 };
+
+  // Función para resetear completamente el estado de la auditoría y selecciones
+  function resetAuditState() {
+    auditResult = null;
+    selectedDeviceIndex = 0;
+    activeTab = 'sincronizados';
+    selectedSyncIds = new Set();
+    selectedFaltanIds = new Set();
+    selectedSobranNos = new Set();
+    searchSync = '';
+    searchFaltan = '';
+    searchSobran = '';
+    updatingEmpIds = new Set();
+    addingEmpIds = new Set();
+    deletingEmpNos = new Set();
+    updateProgress = { current: 0, total: 0 };
+    contextActiveEmployees = [];
+    contextAllSystemEmployees = [];
+  }
+
   // Asegurar carga de dispositivos al abrir si están vacíos
   $: if (isOpen && (!$masterDispositivosStore || $masterDispositivosStore.length === 0)) {
     loadMasterStoresFromBackend();
   }
 
   // Filtrar solo salas Tipo 1 (grupo_id === 1) asignadas al usuario
+  $: effectiveAssignedSalas = (assignedSalaUuids && assignedSalaUuids.length > 0) ? assignedSalaUuids : (assignedSalaIds || []);
+
   $: salasTipo1 = ($masterSalasStore || []).filter(s => {
     const isTipo1 = Number(s.grupo_id) === 1 || !s.grupo_id;
     if (!isTipo1) return false;
-    const allowed = assignedSalaUuids && assignedSalaUuids.length > 0 ? assignedSalaUuids : assignedSalaIds;
-    if (!allowed || allowed.length === 0) return true;
-    return allowed.includes(s.uuid) || allowed.includes(s.id);
+    if (!effectiveAssignedSalas || effectiveAssignedSalas.length === 0) return true;
+    return effectiveAssignedSalas.includes(s.uuid) || effectiveAssignedSalas.includes(s.id) || effectiveAssignedSalas.includes(String(s.uuid)) || effectiveAssignedSalas.includes(String(s.id));
   });
 
   // Lista de biométricos disponibles: "[Nombre Biométrico] ( [Nombre Sala] )" (sin nombre comercial)
@@ -61,9 +108,8 @@
     if (!dev.salaObj) return false;
     const isTipo1 = Number(dev.salaObj.grupo_id) === 1 || !dev.salaObj.grupo_id;
     if (!isTipo1) return false;
-    const allowed = assignedSalaUuids && assignedSalaUuids.length > 0 ? assignedSalaUuids : assignedSalaIds;
-    if (!allowed || allowed.length === 0) return true;
-    return allowed.includes(dev.salaObj.uuid) || allowed.includes(dev.salaObj.id) || allowed.includes(String(dev.salaObj.uuid)) || allowed.includes(String(dev.salaObj.id));
+    if (!effectiveAssignedSalas || effectiveAssignedSalas.length === 0) return true;
+    return effectiveAssignedSalas.includes(dev.salaObj.uuid) || effectiveAssignedSalas.includes(dev.salaObj.id) || effectiveAssignedSalas.includes(String(dev.salaObj.uuid)) || effectiveAssignedSalas.includes(String(dev.salaObj.id));
   });
 
   let selectedDispositivoId = null;
@@ -73,6 +119,57 @@
   let reachabilityMap = {};
   let isCheckingReachability = false;
   let hasCheckedReachability = false;
+
+  // 1. Limpiar estado completo al cerrar el modal
+  $: if (!isOpen) {
+    hasCheckedReachability = false;
+    reachabilityMap = {};
+    resetAuditState();
+  }
+
+  // 2. Detectar cambio de usuario autenticado
+  let prevUserToken = undefined;
+  $: currentUserId = $currentUserStore?.uuid || $currentUserStore?.id || null;
+  $: {
+    if (prevUserToken !== undefined && prevUserToken !== currentUserId) {
+      resetAuditState();
+      selectedDispositivoId = null;
+      selectedSalaId = null;
+      reachabilityMap = {};
+      hasCheckedReachability = false;
+    }
+    prevUserToken = currentUserId;
+  }
+
+  // 3. Detectar cambio en salas asignadas
+  let prevSalasKey = undefined;
+  $: currentSalasKey = effectiveAssignedSalas.map(String).slice().sort().join(',');
+  $: {
+    if (prevSalasKey !== undefined && prevSalasKey !== currentSalasKey) {
+      resetAuditState();
+      selectedDispositivoId = null;
+      selectedSalaId = null;
+      reachabilityMap = {};
+      hasCheckedReachability = false;
+    }
+    prevSalasKey = currentSalasKey;
+  }
+
+  // 4. Salvaguarda crítica: si auditResult no pertenece a la sala del biométrico actualmente seleccionado, resetear
+  $: if (auditResult) {
+    const auditSalaId = String(auditResult.sala?.uuid || auditResult.sala?.id || '');
+    const selDev = biometricosDisponibles.find(d => String(d.uuid || d.id) === String(selectedDispositivoId));
+    const currentDevSalaId = selDev ? String(selDev.sala_uuid || selDev.sala_id || '') : '';
+
+    if (!auditSalaId || !currentDevSalaId || auditSalaId !== currentDevSalaId) {
+      resetAuditState();
+    }
+  }
+
+  // 5. Ajustar selectedDeviceIndex si se sale de rango
+  $: if (auditResult && auditResult.devices && (selectedDeviceIndex >= auditResult.devices.length || selectedDeviceIndex < 0)) {
+    selectedDeviceIndex = 0;
+  }
 
   async function checkReachabilityAllDevices(force = false) {
     if (!isWindows || !biometricosDisponibles || biometricosDisponibles.length === 0) return;
@@ -120,10 +217,6 @@
     checkReachabilityAllDevices();
   }
 
-  $: if (!isOpen) {
-    hasCheckedReachability = false;
-  }
-
   $: if (biometricosDisponibles.length > 0 && (!selectedDispositivoId || !biometricosDisponibles.some(d => (d.uuid || d.id) === selectedDispositivoId))) {
     const firstReachable = biometricosDisponibles.find(d => reachabilityMap[d.uuid || d.id] === true);
     selectedDispositivoId = firstReachable ? (firstReachable.uuid || firstReachable.id) : (biometricosDisponibles[0].uuid || biometricosDisponibles[0].id);
@@ -137,24 +230,23 @@
   }
 
   function handleSelectDispositivoChange(newDevId) {
+    selectedDispositivoId = newDevId;
     if (reachabilityMap[newDevId] === false) {
       triggerToast('Este biométrico no es alcanzable en la red local actual.', 'warning');
-      return;
     }
-    selectedDispositivoId = newDevId;
-    const selDev = biometricosDisponibles.find(d => (d.uuid || d.id) === newDevId);
+    const selDev = biometricosDisponibles.find(d => String(d.uuid || d.id) === String(newDevId));
     if (selDev) {
-      const devSalaId = selDev.sala_uuid || selDev.sala_id;
+      const devSalaId = String(selDev.sala_uuid || selDev.sala_id || '');
       // Si la sala ya fue auditada, pasamos a enfocar el dispositivo en su pestaña
-      if (auditResult && String(auditResult.sala?.id || auditResult.sala?.uuid) === String(devSalaId)) {
-        const foundIdx = (auditResult.devices || []).findIndex(d => (d.uuid || d.id) === newDevId);
+      if (auditResult && String(auditResult.sala?.uuid || auditResult.sala?.id || '') === devSalaId) {
+        const foundIdx = (auditResult.devices || []).findIndex(d => String(d.uuid || d.id) === String(newDevId));
         if (foundIdx !== -1) {
           selectedDeviceIndex = foundIdx;
           return;
         }
       }
-      // Si es de otra sala, reseteamos la auditoría
-      auditResult = null;
+      // Si es de otra sala o no está en la auditoría, reseteamos la auditoría
+      resetAuditState();
     }
   }
 
@@ -222,32 +314,6 @@
       isInjectingListener = false;
     }
   }
-
-  let isAuditing = false;
-  let auditResult = null;
-  let selectedDeviceIndex = 0;
-  let activeTab = 'sincronizados'; // 'sincronizados' | 'faltan' | 'sobran'
-
-  // Contexto de empleados obtenidos del servidor
-  let contextActiveEmployees = [];
-  let contextAllSystemEmployees = [];
-
-  // Búsquedas por pestaña
-  let searchSync = '';
-  let searchFaltan = '';
-  let searchSobran = '';
-
-  // Selecciones masivas
-  // Selecciones masivas y tracking de acciones individuales
-  let selectedSyncIds = new Set();
-  let selectedFaltanIds = new Set();
-  let selectedSobranNos = new Set();
-  let actionTarget = 'both'; // 'both' | 'bio' | 'panel'
-  let isExecutingAction = false;
-  let updatingEmpIds = new Set();
-  let addingEmpIds = new Set();
-  let deletingEmpNos = new Set();
-  let updateProgress = { current: 0, total: 0 };
 
   $: currentDevice = auditResult?.devices?.[selectedDeviceIndex] || null;
 
@@ -890,6 +956,7 @@
 
   function handleClose() {
     isOpen = false;
+    resetAuditState();
     dispatch('close');
   }
 </script>

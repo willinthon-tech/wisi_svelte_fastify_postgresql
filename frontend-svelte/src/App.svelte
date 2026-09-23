@@ -177,6 +177,9 @@
   })();
 
   let isSyncBiometricosModalOpen = false;
+  $: if (!$isAuthenticatedStore) {
+    isSyncBiometricosModalOpen = false;
+  }
   let globalMarcajeAlert = null;
   let globalMarcajeAlertTimer = null;
 
@@ -1318,7 +1321,9 @@
 <GlobalPhotoModal />
 
 <!-- Modal de Auditoría y Sincronización de Biométricos -->
-<SyncBiometricosModal bind:isOpen={isSyncBiometricosModalOpen} {assignedSalaIds} />
+{#if $isAuthenticatedStore}
+  <SyncBiometricosModal bind:isOpen={isSyncBiometricosModalOpen} {assignedSalaIds} />
+{/if}
 
 <style>
   :global(*::-webkit-scrollbar) {
