@@ -158,81 +158,66 @@
     }
   }
 
-  // Inyección de HTTP Listener por ISAPI Local (Tauri en Windows)
-  let isInjectModalOpen = false;
+  // Inyección DIRECTA de HTTP Listener por ISAPI Local (Tauri en Windows)
   let isInjectingListener = false;
-  let injectForm = {
-    ip_domain: 'wisi.space',
-    url: '/api/attlogs/sync',
-    port: 443,
-    protocol: 'HTTPS'
-  };
 
-  async function openInjectListenerModal() {
-    if (!currentDevice) return;
+  async function handleDirectInjectListener() {
+    if (!currentDevice || isInjectingListener) return;
     if (!isWindows) {
       triggerToast('La inyección directa por IP local solo está disponible en la app de escritorio en Windows.', 'warning');
       return;
     }
-    try {
-      const res = await fetch('/api/master/configuracion');
-      const json = await res.json();
-      if (json?.success && json?.data) {
-        const d = json.data;
-        if (d.isapi_ip_domain) injectForm.ip_domain = d.isapi_ip_domain;
-        if (d.isapi_url) injectForm.url = d.isapi_url;
-        if (d.isapi_port) injectForm.port = Number(d.isapi_port) || injectForm.port;
-        if (d.isapi_protocol) injectForm.protocol = d.isapi_protocol;
-      }
-    } catch (e) {
-      console.warn('Usando valores por defecto para formulario ISAPI:', e);
-    }
-    isInjectModalOpen = true;
-  }
-
-  async function confirmInjectListener() {
-    if (!currentDevice || isInjectingListener) return;
 
     const host = (currentDevice.ip_local || '').trim();
     if (!host || host === '—') {
-      triggerToast('El dispositivo no tiene una IP local configurada.', 'error');
+      triggerToast('El dispositivo seleccionado no tiene una IP local configurada.', 'error');
       return;
     }
 
     isInjectingListener = true;
-    triggerToast(`⏳ Inyectando HTTP Listener en '${currentDevice.nombre}' (${host})...`, 'info');
+    triggerToast(`⏳ Inyectando HTTP Listener directamente en '${currentDevice.nombre}' (${host})...`, 'info');
 
     try {
-      // Guardar opcionalmente en master configuracion en segundo plano
-      fetch('/api/master/configuracion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          isapi_ip_domain: injectForm.ip_domain,
-          isapi_url: injectForm.url,
-          isapi_port: String(injectForm.port),
-          isapi_protocol: injectForm.protocol
-        })
-      }).catch(() => {});
+      let configOptions = {
+        ip_domain: 'wisi.space',
+        url: '/api/attlogs/sync',
+        port: 443,
+        protocol: 'HTTPS'
+      };
 
-      // Inyectar directamente a la IP Local vía Tauri ISAPI
+      try {
+        const resConf = await fetch('/api/master/configuracion');
+        const jsonConf = await resConf.json();
+        if (jsonConf?.success && jsonConf?.data) {
+          const d = jsonConf.data;
+          configOptions = {
+            ip_domain: d.isapi_ip_domain || 'wisi.space',
+            url: d.isapi_url || '/api/attlogs/sync',
+            port: Number(d.isapi_port) || 443,
+            protocol: d.isapi_protocol || 'HTTPS'
+          };
+        }
+      } catch (e) {
+        console.warn('Usando valores por defecto para inyección ISAPI:', e);
+      }
+
+      // Inyectar directamente a la IP Local del biométrico vía Tauri ISAPI
       const res = await localInjectHttpListener(
         host,
         currentDevice.usuario || 'admin',
         currentDevice.clave || currentDevice.password || '',
-        injectForm
+        configOptions
       );
 
       if (res && (res.ok || res.status === 200)) {
         triggerToast(`⚡ ¡HTTP Listener inyectado exitosamente en ${currentDevice.nombre} (${host})!`, 'success');
-        isInjectModalOpen = false;
       } else {
         const detail = res?.data?.subStatusCode || res?.data?.statusString || res?.statusText || 'Error en respuesta ISAPI';
-        triggerToast(`❌ Error al configurar HTTP Listener en ${host}: ${detail}`, 'error');
+        triggerToast(`❌ Error al inyectar HTTP Listener en ${host}: ${detail}`, 'error');
       }
     } catch (err) {
       console.error('Error inyectando HTTP Listener:', err);
-      triggerToast(`❌ No se pudo conectar con el biométrico en ${host}: ${err.message}`, 'error');
+      triggerToast(`❌ Error al conectar con el biométrico en ${host}: ${err.message}`, 'error');
     } finally {
       isInjectingListener = false;
     }
@@ -1107,11 +1092,11 @@
                     </div>
                   {/if}
 
-                  <!-- Botón Inyectar Listener (señalado con flecha en la vista) -->
+                  <!-- Botón Inyectar Listener (Inyección DIRECTA) -->
                   <button 
                     type="button" 
                     class="sync-inject-listener-btn" 
-                    on:click={openInjectListenerModal}
+                    on:click={handleDirectInjectListener}
                     disabled={isAuditing || isExecutingAction || isInjectingListener || currentDevice.status !== 'online' || !isWindows}
                     title="Inyectar configuración de HTTP Listener directamente en el biométrico usando su IP local"
                   >
@@ -1657,99 +1642,6 @@
 
     </div>
   </div>
-
-  <!-- Submodal para Inyectar HTTP Listener (ISAPI Local) -->
-  {#if isInjectModalOpen}
-    <div class="sync-submodal-overlay" on:click|self={() => isInjectModalOpen = false}>
-      <div class="sync-submodal-content">
-        <div class="sync-submodal-header">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 20px;">⚡</span>
-            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">
-              Inyectar HTTP Listener (ISAPI Local)
-            </h3>
-          </div>
-          <button type="button" class="sync-submodal-close" on:click={() => isInjectModalOpen = false}>✕</button>
-        </div>
-
-        <div class="sync-submodal-body">
-          <div class="sync-inject-info-note">
-            <span>Configura directamente en el biométrico <strong>{currentDevice?.nombre}</strong> (IP Local: <code>{currentDevice?.ip_local}</code>) la URL y host hacia donde debe reportar cada marcaje en tiempo real.</span>
-          </div>
-
-          <div class="sync-inject-form-grid">
-            <div>
-              <label class="sync-inject-label" for="inject-host">IP o Dominio Servidor Receptor</label>
-              <input 
-                id="inject-host" 
-                class="sync-inject-input" 
-                type="text" 
-                bind:value={injectForm.ip_domain} 
-                placeholder="wisi.space o 190.72.102.210" 
-              />
-            </div>
-
-            <div>
-              <label class="sync-inject-label" for="inject-port">Puerto</label>
-              <input 
-                id="inject-port" 
-                class="sync-inject-input" 
-                type="number" 
-                bind:value={injectForm.port} 
-                placeholder="443" 
-              />
-            </div>
-
-            <div>
-              <label class="sync-inject-label" for="inject-proto">Protocolo</label>
-              <select id="inject-proto" class="sync-inject-select" bind:value={injectForm.protocol}>
-                <option value="HTTPS">HTTPS (Recomendado)</option>
-                <option value="HTTP">HTTP</option>
-              </select>
-            </div>
-
-            <div>
-              <label class="sync-inject-label" for="inject-url">Ruta URL de Notificación</label>
-              <input 
-                id="inject-url" 
-                class="sync-inject-input" 
-                type="text" 
-                bind:value={injectForm.url} 
-                placeholder="/api/attlogs/sync" 
-              />
-            </div>
-          </div>
-
-          <div class="sync-inject-target-preview">
-            <span>Destino configurado: <code>{injectForm.protocol.toLowerCase()}://{injectForm.ip_domain}:{injectForm.port}{injectForm.url}</code></span>
-          </div>
-        </div>
-
-        <div class="sync-submodal-footer">
-          <button 
-            type="button" 
-            class="sync-submodal-cancel-btn" 
-            on:click={() => isInjectModalOpen = false}
-            disabled={isInjectingListener}
-          >
-            Cancelar
-          </button>
-          <button 
-            type="button" 
-            class="sync-submodal-confirm-btn" 
-            on:click={confirmInjectListener}
-            disabled={isInjectingListener}
-          >
-            {#if isInjectingListener}
-              <span class="sync-spinner"></span> Inyectando vía IP Local...
-            {:else}
-              ⚡ Inyectar en Biométrico
-            {/if}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
 {/if}
 
 <style>
@@ -2692,173 +2584,4 @@
     display: inline-block;
   }
 
-  .sync-submodal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(2px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100000;
-    animation: syncModalPop 0.15s ease-out;
-  }
-
-  .sync-submodal-content {
-    background: #ffffff;
-    border-radius: 16px;
-    width: 90%;
-    max-width: 520px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border: 1px solid #cbd5e1;
-  }
-
-  .sync-submodal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid #e2e8f0;
-    background: #f8fafc;
-  }
-
-  .sync-submodal-close {
-    background: none;
-    border: none;
-    font-size: 18px;
-    color: #64748b;
-    cursor: pointer;
-    line-height: 1;
-    padding: 4px;
-    border-radius: 6px;
-  }
-
-  .sync-submodal-close:hover {
-    color: #0f172a;
-    background: #e2e8f0;
-  }
-
-  .sync-submodal-body {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .sync-inject-info-note {
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 12.5px;
-    color: #1e40af;
-    line-height: 1.45;
-  }
-
-  .sync-inject-info-note code {
-    background: #dbeafe;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 700;
-  }
-
-  .sync-inject-form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-
-  .sync-inject-label {
-    display: block;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: #475569;
-    margin-bottom: 5px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-
-  .sync-inject-input, .sync-inject-select {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #0f172a;
-    background: #f8fafc;
-    box-sizing: border-box;
-    outline: none;
-  }
-
-  .sync-inject-input:focus, .sync-inject-select:focus {
-    border-color: #2563eb;
-    background: #ffffff;
-  }
-
-  .sync-inject-target-preview {
-    background: #f8fafc;
-    border: 1px dashed #cbd5e1;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 12px;
-    color: #475569;
-  }
-
-  .sync-inject-target-preview code {
-    color: #2563eb;
-    font-weight: 700;
-    font-family: monospace;
-  }
-
-  .sync-submodal-footer {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-    padding: 14px 20px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-  }
-
-  .sync-submodal-cancel-btn {
-    padding: 8px 16px;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #475569;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-
-  .sync-submodal-confirm-btn {
-    padding: 8px 18px;
-    border-radius: 8px;
-    border: none;
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-    color: #ffffff;
-    font-size: 13px;
-    font-weight: 800;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .sync-submodal-confirm-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #dc2626, #b91c1c);
-  }
-
-  .sync-submodal-confirm-btn:disabled, .sync-submodal-cancel-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
 </style>
