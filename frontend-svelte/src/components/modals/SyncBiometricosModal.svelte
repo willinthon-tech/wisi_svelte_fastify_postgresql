@@ -3,12 +3,22 @@
   import { masterSalasStore } from '../../controllers/master.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toEmployeePhotoUrl } from '../../config/api.config.js';
+  import {
+    isTauriWindows,
+    localGetDeviceUsers,
+    localAddUser,
+    localSetupCard,
+    localUploadFace,
+    localDeleteUser,
+    generarCardNoDesdeCedula
+  } from '../../services/tauriIsapi.service.js';
 
   export let isOpen = false;
   export let assignedSalaUuids = [];
   export let assignedSalaIds = assignedSalaUuids;
 
   const dispatch = createEventDispatcher();
+  const isWindows = isTauriWindows();
 
   // Filtrar solo salas Tipo 1 (grupo_id === 1) asignadas al usuario
   $: salasTipo1 = ($masterSalasStore || []).filter(s => {
@@ -28,6 +38,10 @@
   let auditResult = null;
   let selectedDeviceIndex = 0;
   let activeTab = 'sincronizados'; // 'sincronizados' | 'faltan' | 'sobran'
+
+  // Contexto de empleados obtenidos del servidor
+  let contextActiveEmployees = [];
+  let contextAllSystemEmployees = [];
 
   // Búsquedas por pestaña
   let searchSync = '';
@@ -87,9 +101,66 @@
     searchSobran = '';
   }
 
+  // Compara usuarios físicos contra empleados del sistema
+  function reconcileUsers(bioUsers, activeEmployees, allSystemEmployees) {
+    const sincronizados = [];
+    const faltan = [];
+    const matchedBioIndices = new Set();
+
+    for (const emp of activeEmployees) {
+      const cleanCedula = String(emp.cedula || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
+      const digitsOnly = cleanCedula.replace(/\D/g, '');
+
+      const matchIdx = bioUsers.findIndex((u, idx) => {
+        if (matchedBioIndices.has(idx)) return false;
+        const uNo = String(u.employeeNo || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
+        const uDigits = uNo.replace(/\D/g, '');
+        return uNo === cleanCedula || (digitsOnly && uDigits === digitsOnly);
+      });
+
+      if (matchIdx !== -1) {
+        matchedBioIndices.add(matchIdx);
+        sincronizados.push({
+          ...emp,
+          bioUser: bioUsers[matchIdx]
+        });
+      } else {
+        faltan.push(emp);
+      }
+    }
+
+    const sobran = [];
+    bioUsers.forEach((u, idx) => {
+      if (!matchedBioIndices.has(idx)) {
+        const uNo = String(u.employeeNo || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
+        const uDigits = uNo.replace(/\D/g, '');
+
+        const sysEmp = (allSystemEmployees || []).find(e => {
+          const eNo = String(e.cedula || '').trim().toUpperCase().replace(/[^0-9A-Z]/g, '');
+          const eDigits = eNo.replace(/\D/g, '');
+          return eNo === uNo || (uDigits && eDigits === uDigits);
+        });
+
+        sobran.push({
+          employeeNo: u.employeeNo,
+          name: u.name || 'Sin nombre',
+          systemStatus: sysEmp ? (sysEmp.activo ? `Activo en ${sysEmp.sala_nombre || 'otra sala'}` : `Desincorporado (${sysEmp.motivo_desincorporacion || 'Inactivo'})`) : 'No existe en el sistema',
+          systemEmployeeName: sysEmp ? sysEmp.nombre : 'Desconocido'
+        });
+      }
+    });
+
+    return { sincronizados, faltan, sobran };
+  }
+
   async function handleAudit() {
     if (!selectedSalaId) {
       triggerToast('Por favor selecciona una sala para auditar', 'error');
+      return;
+    }
+
+    if (!isWindows) {
+      triggerToast('La sincronización de biométricos requiere la aplicación de escritorio en Windows conectada a la red local.', 'warning');
       return;
     }
 
@@ -102,21 +173,94 @@
     selectedSobranNos = new Set();
 
     try {
-      const res = await fetch(`/api/biometricos/auditar-sala/${selectedSalaId}`);
+      // 1. Obtener contexto de la sala (dispositivos y empleados activos) desde el backend
+      const res = await fetch(`/api/biometricos/sala-contexto/${selectedSalaId}`);
       const json = await res.json();
-      if (json && json.success) {
-        auditResult = json;
-        if (!json.devices || json.devices.length === 0) {
-          triggerToast('No se encontraron dispositivos en la sala seleccionada', 'warning');
-        } else {
-          triggerToast(`Auditoría completada para ${json.devices.length} dispositivo(s)`, 'success');
-        }
-      } else {
-        throw new Error(json.error || 'Error al auditar biométricos');
+      if (!json || !json.success) {
+        throw new Error(json?.error || 'Error al obtener contexto de la sala');
       }
+
+      contextActiveEmployees = json.activeEmployees || [];
+      contextAllSystemEmployees = json.allSystemEmployees || [];
+      const devices = json.devices || [];
+
+      if (devices.length === 0) {
+        triggerToast('No se encontraron dispositivos en la sala seleccionada', 'warning');
+        auditResult = { success: true, sala: json.sala, devices: [] };
+        return;
+      }
+
+      // 2. Auditar cada dispositivo directamente en la LAN desde Windows (Tauri Nativo)
+      const auditedDevices = [];
+      for (const dev of devices) {
+        const devRes = {
+          uuid: dev.uuid,
+          id: dev.uuid,
+          nombre: dev.nombre,
+          ip_local: dev.ip_local || '',
+          ip_panel: dev.ip_panel || '',
+          usuario: dev.usuario || 'admin',
+          clave: dev.clave || '',
+          status: 'offline',
+          panelStatus: dev.ip_panel ? 'offline' : null,
+          error: null,
+          panelError: null,
+          totalEnDispositivo: 0,
+          totalEnPanel: 0,
+          sincronizados: [],
+          faltan: [],
+          sobran: []
+        };
+
+        if (!dev.ip_local || dev.ip_local === '—') {
+          devRes.error = 'Sin IP local configurada';
+          auditedDevices.push(devRes);
+          continue;
+        }
+
+        // Consultar usuarios físicos del biométrico en la LAN
+        let bioUsers = [];
+        try {
+          bioUsers = await localGetDeviceUsers(dev.ip_local, dev.usuario || 'admin', dev.clave || '');
+          devRes.status = 'online';
+          devRes.totalEnDispositivo = bioUsers.length;
+        } catch (err) {
+          devRes.status = 'error';
+          devRes.error = err.message;
+        }
+
+        // Consultar usuarios físicos del panel en la LAN si tiene ip_panel
+        let panelUsers = [];
+        if (dev.ip_panel && dev.ip_panel.trim() && dev.ip_panel !== '—') {
+          try {
+            panelUsers = await localGetDeviceUsers(dev.ip_panel, dev.usuario || 'admin', dev.clave || '');
+            devRes.panelStatus = 'online';
+            devRes.totalEnPanel = panelUsers.length;
+          } catch (err) {
+            devRes.panelStatus = 'error';
+            devRes.panelError = err.message;
+          }
+        }
+
+        // Cruzar y clasificar datos
+        const recon = reconcileUsers(bioUsers, contextActiveEmployees, contextAllSystemEmployees);
+        devRes.sincronizados = recon.sincronizados;
+        devRes.faltan = recon.faltan;
+        devRes.sobran = recon.sobran;
+
+        auditedDevices.push(devRes);
+      }
+
+      auditResult = {
+        success: true,
+        sala: json.sala,
+        devices: auditedDevices
+      };
+
+      triggerToast(`Auditoría local completada para ${auditedDevices.length} dispositivo(s)`, 'success');
     } catch (err) {
       console.error(err);
-      triggerToast(`Error de auditoría: ${err.message}`, 'error');
+      triggerToast(`Error de auditoría local: ${err.message}`, 'error');
     } finally {
       isAuditing = false;
     }
@@ -182,33 +326,56 @@
     }
   }
 
-  // Actualizar empleados en biométrico / panel (Nombre, Foto y Tarjeta)
+  // Actualizar empleados en biométrico / panel localmente
   async function handleUpdateEmployees(empleadoIds) {
     if (!currentDevice || !empleadoIds || empleadoIds.length === 0) return;
 
     isExecutingAction = true;
+    let successCount = 0;
+
     try {
-      const res = await fetch('/api/biometricos/actualizar-empleados', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dispositivoId: currentDevice.id,
-          empleado_ids: empleadoIds,
-          target: actionTarget
-        })
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        if (json.successCount > 0) {
-          triggerToast(`🔄 ${json.successCount} empleado(s) actualizados en el equipo con nombre y foto actual`, 'success');
-        } else {
-          const firstErr = json.results?.[0]?.biometrico?.message || json.results?.[0]?.panel?.message || 'El dispositivo no aceptó la actualización';
-          triggerToast(`⚠️ No se pudo actualizar en el equipo: ${firstErr}`, 'error');
+      for (const empId of empleadoIds) {
+        const emp = contextActiveEmployees.find(e => (e.uuid || e.id) === empId);
+        if (!emp) continue;
+
+        // 1. Biométrico local
+        if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
+          try {
+            await localAddUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp, false);
+            const cardNo = generarCardNoDesdeCedula(emp.cedula);
+            if (cardNo) {
+              await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
+            }
+            if (emp.photoUrl) {
+              await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, emp.photoUrl);
+            }
+            successCount++;
+          } catch (e) {
+            console.warn(`Error actualizando ${emp.nombre} en biométrico:`, e.message);
+          }
         }
-        await handleAudit();
-      } else {
-        throw new Error(json.error || 'Error al actualizar empleados en el equipo');
+
+        // 2. Panel local si aplica
+        if (currentDevice.ip_panel && (actionTarget === 'both' || actionTarget === 'panel')) {
+          try {
+            await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
+            const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
+            if (panelId) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelId, panelId);
+            }
+          } catch (e) {
+            console.warn(`Error actualizando ${emp.nombre} en panel:`, e.message);
+          }
+        }
       }
+
+      if (successCount > 0) {
+        triggerToast(`🔄 ${successCount} empleado(s) actualizados localmente con nombre y foto`, 'success');
+      } else {
+        triggerToast('⚠️ No se pudo completar la actualización local en el equipo', 'error');
+      }
+
+      await handleAudit();
     } catch (err) {
       console.error(err);
       triggerToast(`Error al actualizar: ${err.message}`, 'error');
@@ -217,33 +384,79 @@
     }
   }
 
-  // Agregar empleados al biométrico / panel
+  // Agregar empleados al biométrico / panel localmente
   async function handleAddEmployees(empleadoIds) {
     if (!currentDevice || !empleadoIds || empleadoIds.length === 0) return;
 
     isExecutingAction = true;
+    let successCount = 0;
+    const addedUuids = [];
+
     try {
-      const res = await fetch('/api/biometricos/agregar-empleados', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dispositivoId: currentDevice.id,
-          empleado_ids: empleadoIds,
-          target: actionTarget
-        })
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        if (json.successCount > 0) {
-          triggerToast(`✅ ${json.successCount} empleado(s) agregados al equipo exitosamente`, 'success');
-        } else {
-          const firstErr = json.results?.[0]?.biometrico?.message || json.results?.[0]?.panel?.message || 'El dispositivo no aceptó la adición';
-          triggerToast(`⚠️ No se pudo agregar al equipo: ${firstErr}`, 'error');
+      for (const empId of empleadoIds) {
+        const emp = contextActiveEmployees.find(e => (e.uuid || e.id) === empId);
+        if (!emp) continue;
+
+        let addedOk = false;
+
+        // 1. Biométrico local
+        if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
+          try {
+            await localAddUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp, false);
+            const cardNo = generarCardNoDesdeCedula(emp.cedula);
+            if (cardNo) {
+              await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
+            }
+            if (emp.photoUrl) {
+              await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, emp.photoUrl);
+            }
+            addedOk = true;
+          } catch (e) {
+            console.warn(`Error agregando ${emp.nombre} a biométrico:`, e.message);
+          }
         }
-        await handleAudit();
-      } else {
-        throw new Error(json.error || 'Error al agregar empleados al equipo');
+
+        // 2. Panel local si aplica
+        if (currentDevice.ip_panel && (actionTarget === 'both' || actionTarget === 'panel')) {
+          try {
+            await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
+            const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
+            if (panelId) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelId, panelId);
+            }
+            addedOk = true;
+          } catch (e) {
+            console.warn(`Error agregando ${emp.nombre} a panel:`, e.message);
+          }
+        }
+
+        if (addedOk) {
+          successCount++;
+          addedUuids.push(emp.uuid || emp.id);
+        }
       }
+
+      // 3. Reportar asignaciones agregadas a Postgres
+      if (addedUuids.length > 0) {
+        try {
+          await fetch('/api/biometricos/reportar-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              dispositivoId: currentDevice.id,
+              agregados: addedUuids
+            })
+          });
+        } catch (e) {}
+      }
+
+      if (successCount > 0) {
+        triggerToast(`✅ ${successCount} empleado(s) agregados localmente al equipo exitosamente`, 'success');
+      } else {
+        triggerToast('⚠️ El dispositivo local no aceptó agregar a los empleados', 'error');
+      }
+
+      await handleAudit();
     } catch (err) {
       console.error(err);
       triggerToast(`Error al agregar: ${err.message}`, 'error');
@@ -252,32 +465,58 @@
     }
   }
 
-  // Eliminar usuarios del biométrico / panel
+  // Eliminar usuarios del biométrico / panel localmente
   async function handleDeleteUsers(employeeNos) {
     if (!currentDevice || !employeeNos || employeeNos.length === 0) return;
 
-    if (!confirm(`¿Estás seguro de que deseas eliminar ${employeeNos.length} usuario(s) de este dispositivo biométrico?`)) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar ${employeeNos.length} usuario(s) de este dispositivo biométrico local?`)) {
       return;
     }
 
     isExecutingAction = true;
+    let deletedCount = 0;
+
     try {
-      const res = await fetch('/api/biometricos/eliminar-usuarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dispositivoId: currentDevice.id,
-          employee_nos: employeeNos,
-          target: actionTarget
-        })
-      });
-      const json = await res.json();
-      if (json && json.success) {
-        triggerToast(`🗑️ ${json.successCount || employeeNos.length} usuario(s) eliminados del equipo`, 'success');
-        await handleAudit();
-      } else {
-        throw new Error(json.error || 'Error al eliminar usuarios del equipo');
+      for (const empNo of employeeNos) {
+        let delOk = false;
+
+        // 1. Eliminar de Biométrico local
+        if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
+          try {
+            await localDeleteUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, empNo, false);
+            delOk = true;
+          } catch (e) {
+            console.warn(`Error eliminando ${empNo} de biométrico:`, e.message);
+          }
+        }
+
+        // 2. Eliminar de Panel local si aplica
+        if (currentDevice.ip_panel && (actionTarget === 'both' || actionTarget === 'panel')) {
+          try {
+            await localDeleteUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, empNo, true);
+            delOk = true;
+          } catch (e) {
+            console.warn(`Error eliminando ${empNo} de panel:`, e.message);
+          }
+        }
+
+        if (delOk) deletedCount++;
       }
+
+      // 3. Reportar eliminaciones a Postgres
+      try {
+        await fetch('/api/biometricos/reportar-sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dispositivoId: currentDevice.id,
+            eliminados: employeeNos
+          })
+        });
+      } catch (e) {}
+
+      triggerToast(`🗑️ ${deletedCount} usuario(s) eliminados del equipo local`, 'success');
+      await handleAudit();
     } catch (err) {
       console.error(err);
       triggerToast(`Error al eliminar: ${err.message}`, 'error');
@@ -305,7 +544,7 @@
           </div>
           <div>
             <h2 class="sync-header-title">Auditoría y Sincronización de Biométricos y Paneles</h2>
-            <p class="sync-header-subtitle">Compara y sincroniza en tiempo real los empleados del sistema contra los equipos físicos y paneles por IP pública</p>
+            <p class="sync-header-subtitle">Compara y sincroniza en tiempo real los empleados del sistema contra los equipos físicos y paneles por red local (LAN)</p>
           </div>
         </div>
 
@@ -319,6 +558,12 @@
         </button>
       </div>
 
+      {#if !isWindows}
+        <div style="background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 10px 18px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 10px 24px 0 24px; border-radius: 8px;">
+          <span>⚠️ <strong>Aviso de plataforma:</strong> La sincronización directa por IP local solo puede ejecutarse desde la aplicación de escritorio en Windows conectada a la red de la sala.</span>
+        </div>
+      {/if}
+
       <!-- Controls Bar: Room Selector & Audit Button -->
       <div class="sync-controls-bar">
         <div class="sync-select-group">
@@ -327,7 +572,7 @@
             class="sync-select" 
             aria-label="Seleccionar Sala"
             bind:value={selectedSalaId}
-            disabled={isAuditing || isExecutingAction}
+            disabled={isAuditing || isExecutingAction || !isWindows}
           >
             {#each salasTipo1 as s}
               <option value={s.id}>{s.nombre} {s.nombre_comercial ? `(${s.nombre_comercial})` : ''}</option>
@@ -339,7 +584,7 @@
           type="button" 
           class="sync-audit-btn" 
           on:click={handleAudit}
-          disabled={isAuditing || isExecutingAction || !selectedSalaId}
+          disabled={isAuditing || isExecutingAction || !selectedSalaId || !isWindows}
         >
           {#if isAuditing}
             <span class="sync-spinner"></span> Conectando...
@@ -354,9 +599,9 @@
         {#if isAuditing}
           <div class="sync-loading-container">
             <div class="sync-loading-spinner-large"></div>
-            <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 16px 0 6px 0;">Consultando biométricos y paneles vía ISAPI...</h3>
+            <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 16px 0 6px 0;">Consultando biométricos y paneles vía ISAPI Local...</h3>
             <p style="font-size: 13px; color: #64748b; margin: 0; max-width: 480px; text-align: center;">
-              Estableciendo conexión por IP pública a cada dispositivo de la sala, descargando listas completas de usuarios registrados y contrastando contra los empleados activos.
+              Estableciendo conexión por IP local a cada dispositivo de la sala, descargando listas completas de usuarios registrados y contrastando contra los empleados activos.
             </p>
           </div>
         {:else if !auditResult}
@@ -364,7 +609,7 @@
             <div style="font-size: 48px; margin-bottom: 12px;">📡</div>
             <h3 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 0 0 6px 0;">Auditoría no iniciada</h3>
             <p style="font-size: 13px; color: #64748b; margin: 0; max-width: 420px; text-align: center;">
-              Selecciona la sala que deseas checar arriba y presiona <strong>"Chequear"</strong> para consultar el estado en vivo de los equipos.
+              Selecciona la sala que deseas checar arriba y presiona <strong>"Chequear"</strong> para consultar el estado en vivo de los equipos en la red local.
             </p>
           </div>
         {:else if auditResult.devices.length === 0}
@@ -388,7 +633,7 @@
                   <span class="sync-status-dot {dev.status === 'online' ? 'dot-online' : 'dot-offline'}" title={dev.status === 'online' ? 'En línea' : 'Desconectado / Error'}></span>
                 </div>
                 <div class="sync-pill-meta">
-                  <span>IP: {dev.ip_remota || 'Sin IP'}</span>
+                  <span>IP: {dev.ip_local || 'Sin IP'}</span>
                   {#if dev.ip_panel}
                     <span class="sync-panel-chip" title="Panel asociado">📡 Panel</span>
                   {/if}
@@ -422,7 +667,7 @@
                     {/if}
                   </div>
                   <div style="font-size: 12.5px; color: #64748b; margin-top: 4px; display: flex; gap: 16px; flex-wrap: wrap;">
-                    <span>📍 IP Pública Biométrico: <strong>{currentDevice.ip_remota}</strong></span>
+                    <span>📍 IP Local Biométrico: <strong>{currentDevice.ip_local}</strong></span>
                     <span>👥 Total en Biométrico: <strong>{currentDevice.totalEnDispositivo}</strong></span>
                     {#if currentDevice.ip_panel}
                       <span>🚪 Total en Panel: <strong>{currentDevice.totalEnPanel}</strong></span>

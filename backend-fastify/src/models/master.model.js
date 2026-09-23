@@ -735,10 +735,10 @@ export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
     throw new Error(`Dispositivo con ID ${id} no encontrado`);
   }
 
-  // REGLA DEL USUARIO: La conexión debe hacerse estrictamente por 'ip_remota'
-  const rawIp = (dev.ip_remota || '').trim();
+  // Conexión local al dispositivo
+  const rawIp = (dev.ip_local || dev.ip_remota || '').trim();
   if (!rawIp || rawIp === '—') {
-    throw new Error(`El dispositivo '${dev.nombre}' no tiene configurada la 'ip_remota'`);
+    throw new Error(`El dispositivo '${dev.nombre}' no tiene configurada la 'ip_local'`);
   }
 
   const username = (dev.usuario || 'admin').trim();

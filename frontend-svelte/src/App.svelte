@@ -14,6 +14,7 @@
   import MasterAdminView from "./views/MasterAdminView.svelte";
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
   import SyncBiometricosModal from "./components/modals/SyncBiometricosModal.svelte";
+  import { isTauriWindows } from "./services/tauriIsapi.service.js";
   import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
   import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal, openPhotoModalForAttlog } from "./controllers/globalModal.store.js";
 
@@ -868,18 +869,34 @@
 
             <div style="display: flex; align-items: center; gap: 10px;">
               {#if $currentRouteStore === 'rrhh/empleados' || $currentRouteStore === 'empleados'}
-                <button
-                  on:click={() => (isSyncBiometricosModalOpen = true)}
-                  type="button"
-                  class="btn-flow"
-                  style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; background: #0284c7; color: #fff; box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none;"
-                  title="Auditar y Sincronizar Biométricos y Paneles"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                  </svg>
-                  Sync
-                </button>
+                {#if isTauriWindows()}
+                  <button
+                    on:click={() => (isSyncBiometricosModalOpen = true)}
+                    type="button"
+                    class="btn-flow"
+                    style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; background: #0284c7; color: #fff; box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none;"
+                    title="Auditar y Sincronizar Biométricos y Paneles en red local"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                    Sync
+                  </button>
+                {:else}
+                  <button
+                    type="button"
+                    disabled
+                    on:click={() => triggerToast('La sincronización de biométricos requiere la aplicación de escritorio en Windows conectada a la red local de la sala.', 'warning')}
+                    class="btn-flow"
+                    style="padding: 10px 18px; font-weight: 700; font-size: 13.5px; border-radius: 8px; background: #475569; color: #94a3b8; opacity: 0.65; cursor: not-allowed; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed rgba(148, 163, 184, 0.4);"
+                    title="Función deshabilitada: Debe acceder desde la aplicación de escritorio en Windows conectada a la red local de la sala"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                    Sync (Solo Windows)
+                  </button>
+                {/if}
               {/if}
 
               {#if !isBuiltInTab($currentRouteStore) && $currentRoutePermissionsStore.canAdd}

@@ -414,7 +414,6 @@ exit
               sala_id: d.sala_uuid || d.sala_id,
               sala_nombre: salaObj ? salaObj.nombre : `Sala #${d.sala_uuid || d.sala_id}`,
               ip_local: d.ip_local,
-              ip_remota: d.ip_remota,
               ip_panel: d.ip_panel,
               usuario: d.usuario,
               clave: d.clave,
@@ -679,7 +678,7 @@ async function handleHikvisionPushEvent(req, res) {
     const empNo = extracted.empNo;
     const name = extracted.name || null;
     const eventTimeStr = formatLocalDateTime(extracted.rawTime);
-    const matchedDev = (config.dispositivos || []).find(d => (d.ip_local || '').includes(callerIp) || (d.ip_remota || '').includes(callerIp)) || config.dispositivos?.[0];
+    const matchedDev = (config.dispositivos || []).find(d => (d.ip_local || '').includes(callerIp) || (d.ip_panel || '').includes(callerIp)) || config.dispositivos?.[0];
 
     const attlogRecord = {
       employee_no: String(empNo),
@@ -937,7 +936,6 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         nombre: "",
         sala_id: 1,
         ip_local: "",
-        ip_remota: "",
         ip_panel: "",
         usuario: "admin",
         clave: "Sigma2025",
@@ -1015,7 +1013,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     } catch (err) {
       console.error("Error inyectando configuración al dispositivo:", err);
       triggerToast(
-        `Inyección HTTP Push enviada a '${device.nombre}' (${device.ip_remota || device.ip_local})`,
+        `Inyección HTTP Push enviada a '${device.nombre}' (${device.ip_local || device.ip_panel})`,
         "success",
       );
     } finally {
@@ -2288,8 +2286,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                           <div
                             style="font-size: 11px; font-family: monospace; color: #64748b; margin-top: 2px;"
                           >
-                            Remota: {device.ip_remota || "—"} | Local: {device.ip_local ||
-                              "—"}
+                            IP Local: {device.ip_local || "—"}{#if device.ip_panel} | Panel: {device.ip_panel}{/if}
                           </div>
                         </div>
                       </div>
@@ -2583,8 +2580,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 <th style="padding: 10px 14px;">Nombre Dispositivo</th>
                 <th style="padding: 10px 14px;">Sala Pertenece (Foránea)</th>
                 <th style="padding: 10px 14px;">IP Local</th>
-                <th style="padding: 10px 14px;">IP Remota</th>
-                <th style="padding: 10px 14px;">IP Panel Remota</th>
+                <th style="padding: 10px 14px;">IP Panel Local</th>
                 <th style="padding: 10px 14px;">Usuario</th>
                 <th style="padding: 10px 14px;">Clave</th>
               {:else if activeTab === "usuarios"}
@@ -2777,14 +2773,6 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         class="form-input"
                         style="padding: 3px 6px; font-size: 12.5px;"
                       />{:else}<span>{item.ip_local || "—"}</span>{/if}</td
-                  >
-                  <td
-                    style="padding: 8px 14px; font-family: monospace; color: #2563eb; font-weight: 600;"
-                    >{#if isEditing}<input
-                        bind:value={inlineDraft.ip_remota}
-                        class="form-input"
-                        style="padding: 3px 6px; font-size: 12.5px;"
-                      />{:else}<span>{item.ip_remota || "—"}</span>{/if}</td
                   >
                   <td
                     style="padding: 8px 14px; font-family: monospace; color: #059669; font-weight: 600;"
@@ -3141,25 +3129,12 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
             <label
               style="display: block; font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 4px;"
             >
-              IP Remota
-              <input
-                bind:value={createForm.ip_remota}
-                class="form-input"
-                style="width: 100%; padding: 7px 10px; font-size: 13px; margin-top: 4px; display: block; font-weight: 400;"
-                placeholder="Ej. 190.153.101.14:8087"
-              />
-            </label>
-          </div>
-          <div>
-            <label
-              style="display: block; font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 4px;"
-            >
-              IP Panel Remota
+              IP Panel Local
               <input
                 bind:value={createForm.ip_panel}
                 class="form-input"
                 style="width: 100%; padding: 7px 10px; font-size: 13px; margin-top: 4px; display: block; font-weight: 400;"
-                placeholder="Ej. 190.153.101.14:8090"
+                placeholder="Ej. 192.168.1.202"
               />
             </label>
           </div>
@@ -3330,8 +3305,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
             <strong style="color: #0f172a;">IP Destino ISAPI:</strong>
             <span
               style="font-family: monospace; color: #059669; font-weight: 700;"
-              >{isapiSelectedDevice?.ip_remota ||
-                isapiSelectedDevice?.ip_local ||
+              >{isapiSelectedDevice?.ip_local ||
                 "127.0.0.1"}</span
             >
           </div>

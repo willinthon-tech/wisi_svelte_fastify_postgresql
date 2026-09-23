@@ -22,6 +22,169 @@ function isUuid(val) {
 }
 
 /**
+ * GET /api/biometricos/sala-contexto/:salaId
+ * Retorna dispositivos locales (ip_local, ip_panel) y empleados con URLs públicas de foto
+ */
+export async function getSalaContextoBiometricos(request, reply) {
+  try {
+    const { salaId } = request.params;
+    if (!salaId || !String(salaId).trim()) {
+      return reply.status(400).send({ success: false, error: 'ID de sala inválido' });
+    }
+    const isSalaU = isUuid(salaId);
+    if (!isPgConnected || !sql) {
+      return reply.status(500).send({ success: false, error: 'Base de datos no disponible' });
+    }
+
+    // 1. Datos de la sala
+    const salaRows = await sql`SELECT uuid, uuid AS id, nombre FROM salas WHERE ${isSalaU ? sql`uuid = ${salaId}::uuid` : sql`uuid::text = ${salaId}`}`;
+    if (salaRows.length === 0) {
+      return reply.status(404).send({ success: false, error: 'Sala no encontrada' });
+    }
+    const sala = salaRows[0];
+
+    // 2. Dispositivos locales (ip_local e ip_panel)
+    const dispositivos = await sql`
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_local, ip_panel, usuario, clave
+      FROM dispositivos
+      WHERE sala_uuid = ${sala.uuid}
+      ORDER BY nombre ASC
+    `;
+
+    // 3. Empleados activos de la sala
+    const activeEmployees = await sql`
+      SELECT 
+        e.uuid, e.uuid AS id, e.nombre, e.cedula, e.foto, e.sexo, e.fecha_ingreso, e.activo,
+        c.uuid AS cargo_id, c.nombre AS cargo_nombre,
+        d.uuid AS departamento_id, d.nombre AS departamento_nombre,
+        s.uuid AS sala_id, s.nombre AS sala_nombre
+      FROM empleados e
+      LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+      LEFT JOIN areas a ON c.area_uuid = a.uuid
+      LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+      LEFT JOIN salas s ON d.sala_uuid = s.uuid
+      WHERE e.activo = true AND d.sala_uuid = ${sala.uuid}
+      ORDER BY e.nombre ASC
+    `;
+
+    // 4. Configurar URL pública completa de foto para cada empleado
+    const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
+    const configMap = {};
+    for (const r of savedConfigRows) configMap[r.clave] = r.valor;
+    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || request.headers?.host?.split(':')[0] || 'wisi.space').trim();
+    const proto = (request.headers?.['x-forwarded-proto'] || 'https').includes('https') ? 'https' : 'http';
+
+    const enrichedEmployees = activeEmployees.map(emp => {
+      let photoUrl = '';
+      if (emp.foto) {
+        if (emp.foto.startsWith('http')) {
+          photoUrl = emp.foto;
+        } else {
+          photoUrl = `${proto}://${publicDomain}${emp.foto.startsWith('/') ? '' : '/'}${emp.foto}`;
+        }
+      }
+      return {
+        ...emp,
+        photoUrl
+      };
+    });
+
+    // 5. Todos los empleados del sistema para matching de 'sobran'
+    const allSystemEmployees = await sql`
+      SELECT e.uuid, e.uuid AS id, e.nombre, e.cedula, e.activo, e.motivo_desincorporacion, s.nombre as sala_nombre
+      FROM empleados e
+      LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+      LEFT JOIN areas a ON c.area_uuid = a.uuid
+      LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+      LEFT JOIN salas s ON d.sala_uuid = s.uuid
+    `;
+
+    return reply.send({
+      success: true,
+      sala,
+      devices: dispositivos,
+      activeEmployees: enrichedEmployees,
+      allSystemEmployees
+    });
+  } catch (err) {
+    console.error('Error en getSalaContextoBiometricos:', err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+/**
+ * POST /api/biometricos/reportar-sync
+ * Persiste en Postgres las relaciones sincronizadas
+ */
+export async function reportarSyncBiometricos(request, reply) {
+  try {
+    const { dispositivoId, agregados = [], eliminados = [] } = request.body || {};
+    if (!dispositivoId) {
+      return reply.status(400).send({ success: false, error: 'ID de dispositivo requerido' });
+    }
+    const isDevU = isUuid(dispositivoId);
+    if (!isPgConnected || !sql) {
+      return reply.status(500).send({ success: false, error: 'Base de datos no disponible' });
+    }
+
+    const [dev] = await sql`
+      SELECT uuid FROM dispositivos
+      WHERE ${isDevU ? sql`uuid = ${dispositivoId}::uuid` : sql`uuid::text = ${dispositivoId}`}
+      LIMIT 1
+    `;
+    if (!dev) {
+      return reply.status(404).send({ success: false, error: 'Dispositivo no encontrado' });
+    }
+
+    // Insertar agregados
+    if (Array.isArray(agregados) && agregados.length > 0) {
+      for (const empUuid of agregados) {
+        if (isUuid(empUuid)) {
+          try {
+            await sql`
+              INSERT INTO empleado_dispositivos (empleado_uuid, dispositivo_uuid)
+              VALUES (${empUuid}::uuid, ${dev.uuid}::uuid)
+              ON CONFLICT (empleado_uuid, dispositivo_uuid) DO NOTHING
+            `;
+          } catch (e) {}
+        }
+      }
+    }
+
+    // Limpiar eliminados
+    if (Array.isArray(eliminados) && eliminados.length > 0) {
+      for (const item of eliminados) {
+        if (isUuid(item)) {
+          try {
+            await sql`
+              DELETE FROM empleado_dispositivos
+              WHERE dispositivo_uuid = ${dev.uuid}::uuid AND empleado_uuid = ${item}::uuid
+            `;
+          } catch (e) {}
+        } else {
+          const variants = getCedulaVariants(item);
+          for (const v of variants) {
+            try {
+              await sql`
+                DELETE FROM empleado_dispositivos
+                WHERE dispositivo_uuid = ${dev.uuid}::uuid AND empleado_uuid IN (
+                  SELECT uuid FROM empleados WHERE REPLACE(UPPER(COALESCE(cedula, '')), '-', '') = ${v}
+                )
+              `;
+            } catch (e) {}
+          }
+        }
+      }
+    }
+
+    return reply.send({ success: true, message: 'Sincronización persistida en Postgres' });
+  } catch (err) {
+    console.error('Error en reportarSyncBiometricos:', err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+/**
  * GET /api/biometricos/auditar-sala/:salaId
  * Audita todos los dispositivos biométricos y paneles de una sala
  */
@@ -46,7 +209,7 @@ export async function auditarSalaBiometricos(request, reply) {
 
     // 2. Obtener dispositivos de la sala
     const dispositivos = await sql`
-      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_local, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_local, ip_panel, usuario, clave
       FROM dispositivos
       WHERE sala_uuid = ${sala.uuid}
       ORDER BY nombre ASC
@@ -116,7 +279,7 @@ export async function auditarSalaBiometricos(request, reply) {
         uuid: dev.uuid,
         id: dev.uuid,
         nombre: dev.nombre,
-        ip_remota: dev.ip_remota || '',
+        ip_local: dev.ip_local || '',
         ip_panel: dev.ip_panel || '',
         status: 'offline',
         panelStatus: dev.ip_panel ? 'offline' : null,
@@ -129,15 +292,15 @@ export async function auditarSalaBiometricos(request, reply) {
         sobran: []
       };
 
-      if (!dev.ip_remota || dev.ip_remota === '—') {
-        result.error = 'Sin IP remota configurada';
+      if (!dev.ip_local || dev.ip_local === '—') {
+        result.error = 'Sin IP local configurada';
         return result;
       }
 
       // Consulta de usuarios en el biométrico físico
       let bioUsers = [];
       try {
-        const bioRes = await getDeviceUsers(dev.ip_remota, dev.usuario || 'admin', dev.clave || '');
+        const bioRes = await getDeviceUsers(dev.ip_local, dev.usuario || 'admin', dev.clave || '');
         bioUsers = bioRes.users || [];
         result.status = 'online';
         result.totalEnDispositivo = bioUsers.length;
@@ -346,7 +509,7 @@ export async function agregarEmpleadosABiometrico(request, reply) {
     }
 
     const [dev] = await sql`
-      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_local, ip_panel, usuario, clave
       FROM dispositivos
       WHERE ${isDevU ? sql`uuid = ${dispositivoId}::uuid` : sql`uuid::text = ${dispositivoId}`}
       LIMIT 1
@@ -368,7 +531,8 @@ export async function agregarEmpleadosABiometrico(request, reply) {
     const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
     const configMap = {};
     for (const r of savedConfigRows) configMap[r.clave] = r.valor;
-    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || req.headers?.host?.split(':')[0] || 'localhost').trim();
+    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || request.headers?.host?.split(':')[0] || 'wisi.space').trim();
+    const proto = (request.headers?.['x-forwarded-proto'] || 'https').includes('https') ? 'https' : 'http';
 
     for (const emp of empleados) {
       const empRes = {
@@ -381,9 +545,9 @@ export async function agregarEmpleadosABiometrico(request, reply) {
       };
 
       // 1. Agregar a Biométrico
-      if (dev.ip_remota && (target === 'both' || target === 'bio')) {
+      if (dev.ip_local && (target === 'both' || target === 'bio')) {
         try {
-          const userRes = await addUserToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp, false);
+          const userRes = await addUserToDevice(dev.ip_local, dev.usuario || 'admin', dev.clave || '', emp, false);
           const isUserOk = (userRes.ok || userRes.status === 200) && (!userRes.data?.statusCode || userRes.data.statusCode === 1);
           if (isUserOk) {
             empRes.biometrico.success = true;
@@ -393,7 +557,7 @@ export async function agregarEmpleadosABiometrico(request, reply) {
             const cardNo = generarCardNoDesdeCedula(emp.cedula);
             if (cardNo) {
               try {
-                await setupCardInDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp.cedula, cardNo);
+                await setupCardInDevice(dev.ip_local, dev.usuario || 'admin', dev.clave || '', emp.cedula, cardNo);
               } catch (cardErr) {
                 console.warn(`Aviso al registrar tarjeta ${cardNo}:`, cardErr.message);
               }
@@ -401,9 +565,9 @@ export async function agregarEmpleadosABiometrico(request, reply) {
 
             // Foto
             if (emp.foto) {
-              const photoUrl = `http://${publicDomain}${emp.foto}`;
+              const photoUrl = emp.foto.startsWith('http') ? emp.foto : `${proto}://${publicDomain}${emp.foto.startsWith('/') ? '' : '/'}${emp.foto}`;
               try {
-                await uploadFaceToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp.cedula, emp.nombre, emp.sexo, photoUrl);
+                await uploadFaceToDevice(dev.ip_local, dev.usuario || 'admin', dev.clave || '', emp.cedula, emp.nombre, emp.sexo, photoUrl);
               } catch (faceErr) {
                 console.warn(`Aviso al registrar foto:`, faceErr.message);
               }
@@ -514,7 +678,7 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
     }
 
     const [dev] = await sql`
-      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_local, ip_panel, usuario, clave
       FROM dispositivos
       WHERE ${isDevU ? sql`uuid = ${dispositivoId}::uuid` : sql`uuid::text = ${dispositivoId}`}
       LIMIT 1
@@ -535,7 +699,8 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
     const savedConfigRows = await sql`SELECT clave, valor FROM configuracion`;
     const configMap = {};
     for (const r of savedConfigRows) configMap[r.clave] = r.valor;
-    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || request.headers?.host?.split(':')[0] || 'localhost').trim();
+    const publicDomain = (configMap.isapi_ip_domain || process.env.APP_DOMAIN || process.env.SERVER_DOMAIN || request.headers?.host?.split(':')[0] || 'wisi.space').trim();
+    const proto = (request.headers?.['x-forwarded-proto'] || 'https').includes('https') ? 'https' : 'http';
 
     const results = [];
 
@@ -550,9 +715,9 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
       };
 
       // 1. Actualizar en Biométrico
-      if (dev.ip_remota && (target === 'both' || target === 'bio')) {
+      if (dev.ip_local && (target === 'both' || target === 'bio')) {
         try {
-          const userRes = await addUserToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp, false);
+          const userRes = await addUserToDevice(dev.ip_local, dev.usuario || 'admin', dev.clave || '', emp, false);
           const isUserOk = (userRes.ok || userRes.status === 200) && (!userRes.data?.statusCode || userRes.data.statusCode === 1);
           if (isUserOk) {
             empRes.biometrico.success = true;
@@ -562,15 +727,15 @@ export async function actualizarEmpleadosEnBiometrico(request, reply) {
             const cardNo = generarCardNoDesdeCedula(emp.cedula);
             if (cardNo) {
               try {
-                await setupCardInDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp.cedula, cardNo);
+                await setupCardInDevice(dev.ip_local, dev.usuario || 'admin', dev.clave || '', emp.cedula, cardNo);
               } catch (cardErr) {}
             }
 
             // Actualizar Foto
             if (emp.foto) {
-              const photoUrl = `http://${publicDomain}${emp.foto}`;
+              const photoUrl = emp.foto.startsWith('http') ? emp.foto : `${proto}://${publicDomain}${emp.foto.startsWith('/') ? '' : '/'}${emp.foto}`;
               try {
-                await uploadFaceToDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', emp.cedula, emp.nombre, emp.sexo, photoUrl);
+                await uploadFaceToDevice(dev.ip_local, dev.usuario || 'admin', dev.clave || '', emp.cedula, emp.nombre, emp.sexo, photoUrl);
               } catch (faceErr) {}
             }
           } else {
@@ -645,7 +810,7 @@ export async function eliminarUsuariosDeBiometrico(request, reply) {
     }
 
     const [dev] = await sql`
-      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_remota, ip_panel, usuario, clave
+      SELECT uuid, uuid AS id, nombre, sala_uuid, ip_local, ip_panel, usuario, clave
       FROM dispositivos
       WHERE ${isDevU ? sql`uuid = ${dispositivoId}::uuid` : sql`uuid::text = ${dispositivoId}`}
       LIMIT 1
@@ -665,9 +830,9 @@ export async function eliminarUsuariosDeBiometrico(request, reply) {
       };
 
       // 1. Eliminar de Biométrico
-      if (dev.ip_remota && (target === 'both' || target === 'bio')) {
+      if (dev.ip_local && (target === 'both' || target === 'bio')) {
         try {
-          const delRes = await deleteUserFromDevice(dev.ip_remota, dev.usuario || 'admin', dev.clave || '', cleanNo, false);
+          const delRes = await deleteUserFromDevice(dev.ip_local, dev.usuario || 'admin', dev.clave || '', cleanNo, false);
           if (delRes.ok || delRes.status === 200) {
             itemRes.biometrico.success = true;
             itemRes.biometrico.message = 'Usuario eliminado del biométrico';
