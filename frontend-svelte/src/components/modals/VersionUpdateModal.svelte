@@ -7,31 +7,33 @@
   $: update = $availableUpdateStore;
 
   function handleClose() {
-    if (update?.isForced) {
-      triggerToast('Esta actualización es obligatoria para continuar operando en esta terminal.', 'warning');
-      return;
-    }
     isVersionModalOpenStore.set(false);
   }
 
   function handleDownload() {
     if (!update?.downloadUrl) {
-      triggerToast('No hay URL de descarga configurada. Por favor contacta al administrador.', 'warning');
+      triggerToast('No hay URL de descarga disponible para esta versión.', 'warning');
       return;
     }
 
     try {
       if (typeof window !== 'undefined') {
-        window.open(update.downloadUrl, '_blank');
+        const link = document.createElement('a');
+        link.href = update.downloadUrl;
+        if (update.filename) link.download = update.filename;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
     } catch (e) {
-      triggerToast('Error al abrir enlace de descarga', 'error');
+      triggerToast('Error al iniciar la descarga del instalador', 'error');
     }
   }
 
   async function handleRefreshData() {
     isRefreshingData = true;
-    triggerToast('Refrescando datos y limpiando caché del sistema...', 'info');
+    triggerToast('Sincronizando datos y limpiando caché del sistema...', 'info');
     try {
       await executeHardRefresh();
     } finally {
@@ -63,7 +65,7 @@
             </div>
             <h2 class="version-title">¡Nueva Versión Disponible!</h2>
             <p class="version-subtitle">
-              Hay una versión más reciente de la aplicación lista para instalar.
+              Se ha detectado una versión más reciente de la aplicación en el servidor.
             </p>
           </div>
         </div>
@@ -81,21 +83,20 @@
           </div>
         </div>
 
-        <!-- Release Notes Section -->
-        {#if update.notes && update.notes.trim()}
-          <div class="version-notes-section">
-            <div class="version-notes-title">
-              <span>📋 Novedades y Mejoras:</span>
+        <!-- File Details Card -->
+        {#if update.filename}
+          <div class="version-file-card">
+            <div class="version-file-name">
+              📁 {update.filename}
             </div>
-            <div class="version-notes-box">
-              <p class="version-notes-text">{update.notes}</p>
-            </div>
-          </div>
-        {/if}
-
-        {#if update.isForced}
-          <div class="version-forced-notice">
-            <span>⚠️ <strong>Actualización Requerida:</strong> Esta versión incluye cambios críticos de compatibilidad con el servidor.</span>
+            {#if update.peso}
+              <div class="version-file-meta">
+                <span>Tamaño: {update.peso}</span>
+                {#if update.fecha}
+                  <span>• Fecha: {new Date(update.fecha).toLocaleDateString('es-VE')}</span>
+                {/if}
+              </div>
+            {/if}
           </div>
         {/if}
 
@@ -112,7 +113,7 @@
                 <polyline points="7 10 12 15 17 10"/>
                 <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
-              <span>Descargar e Instalar v{update.remoteVersion}</span>
+              <span>Descargar e Instalar v{update.remoteVersion} ({update.platform === 'android' ? '.APK' : '.EXE'})</span>
             </button>
           {/if}
 
@@ -129,15 +130,13 @@
             <span>{isRefreshingData ? 'Refrescando Datos...' : 'Refrescar Datos del Sistema'}</span>
           </button>
 
-          {#if !update.isForced}
-            <button
-              type="button"
-              class="version-btn-close"
-              on:click={handleClose}
-            >
-              Recordar más tarde
-            </button>
-          {/if}
+          <button
+            type="button"
+            class="version-btn-close"
+            on:click={handleClose}
+          >
+            Continuar trabajando
+          </button>
         </div>
 
       </div>
@@ -278,44 +277,30 @@
     font-weight: 800;
   }
 
-  /* Notes */
-  .version-notes-section {
+  /* File Card */
+  .version-file-card {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 14px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
-  .version-notes-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: #334155;
-  }
-
-  .version-notes-box {
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 12px 14px;
-    max-height: 120px;
-    overflow-y: auto;
-  }
-
-  .version-notes-text {
-    margin: 0;
+  .version-file-name {
     font-size: 12.5px;
-    color: #334155;
-    line-height: 1.5;
-    white-space: pre-line;
+    font-family: ui-monospace, monospace;
+    font-weight: 700;
+    color: #0f172a;
+    word-break: break-all;
   }
 
-  .version-forced-notice {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #b91c1c;
-    padding: 10px 14px;
-    border-radius: 10px;
-    font-size: 12px;
-    line-height: 1.4;
+  .version-file-meta {
+    font-size: 11px;
+    color: #64748b;
+    display: flex;
+    gap: 8px;
   }
 
   /* Actions */

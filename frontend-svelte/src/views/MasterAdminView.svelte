@@ -55,15 +55,31 @@
     isapi_port: "8015",
     isapi_protocol: "HTTP",
     timezone: "America/Caracas",
-    version_web: "1.0.0",
-    version_windows: "1.0.0",
-    url_descarga_windows: "",
-    version_android: "1.0.0",
-    url_descarga_android: "",
-    notas_version: "",
-    forzar_actualizacion: false,
   };
   let isSavingConfig = false;
+
+  function getLatestRecordForPlatform(records, plataforma) {
+    const list = (records || []).filter(d => (d.plataforma || '').toLowerCase() === plataforma.toLowerCase() && !d.is_deleted);
+    if (!list.length) return null;
+    let maxV = 0;
+    let topRecord = list[0];
+    for (const r of list) {
+      let v = r.version_num ? Number(r.version_num) : 0;
+      const m = String(r.archivo || '').match(/-v(\d+)-/i);
+      if (m && m[1]) {
+        const parsed = parseInt(m[1], 10);
+        if (parsed > v) v = parsed;
+      }
+      if (v > maxV) {
+        maxV = v;
+        topRecord = { ...r, calculated_version: v };
+      }
+    }
+    return topRecord ? { ...topRecord, calculated_version: maxV || 1, version_str: `v${maxV || 1}` } : null;
+  }
+
+  $: latestWinDownload = getLatestRecordForPlatform($masterDescargasStore, 'windows');
+  $: latestAndroidDownload = getLatestRecordForPlatform($masterDescargasStore, 'android');
 
   async function loadSystemConfig() {
     try {
@@ -72,7 +88,6 @@
       if (json && json.success && json.data) {
         systemConfig = { ...systemConfig, ...json.data };
         if (json.data.timezone) selectedTimezone = json.data.timezone;
-        systemConfig.forzar_actualizacion = json.data.forzar_actualizacion === 'true' || json.data.forzar_actualizacion === true;
       }
     } catch (e) {
       console.error("Error cargando configuración:", e);
@@ -831,11 +846,11 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     if (ext === 'apk') {
       plataforma = 'android';
       formato = 'apk';
-    } else if (ext === 'exe' || ext === 'msi') {
+    } else if (ext === 'exe') {
       plataforma = 'windows';
-      formato = ext;
+      formato = 'exe';
     } else {
-      uploadError = `Formato .${ext} no soportado. Debe ser .apk (Android) o .exe / .msi (Windows).`;
+      uploadError = `Formato .${ext} no soportado. Debe ser .apk para Android o .exe para Windows.`;
       selectedFile = null;
       return;
     }
@@ -849,8 +864,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     }
 
     const currentRecords = $masterDescargasStore || [];
-    const countForPlatform = currentRecords.filter(d => d.plataforma === plataforma).length;
-    const versionProyectada = countForPlatform + 1;
+    const platformRecords = currentRecords.filter(d => (d.plataforma || '').toLowerCase() === plataforma.toLowerCase() && !d.is_deleted);
+    let highestV = 0;
+    for (const r of platformRecords) {
+      if (r.version_num && Number(r.version_num) > highestV) highestV = Number(r.version_num);
+      const m = String(r.archivo || '').match(/-v(\d+)-/i);
+      if (m && m[1]) {
+        const v = parseInt(m[1], 10);
+        if (v > highestV) highestV = v;
+      }
+    }
+    const versionProyectada = highestV + 1;
 
     detectedInfo = {
       formato,
@@ -858,8 +882,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       pesoText,
       pesoBytes: bytes,
       fecha: new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' }),
+      ultimaVersionRegistrada: highestV > 0 ? `v${highestV}` : 'Ninguna',
       versionProyectada,
-      nombreProyectado: `app-wisi-${plataforma}-v${versionProyectada}-c[id].${formato}`
+      nombreProyectado: `app-wisi-${plataforma}-v${versionProyectada}-[hash].${formato}`
     };
   }
 
@@ -2505,148 +2530,114 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         </div>
       </div>
 
-      <!-- Control de Versiones y Despliegues Multiplataforma -->
+      <!-- Control y Estado de Versiones del Sistema (Automatizado desde Descargas) -->
       <div
         style="background: #1e293b; border-radius: 14px; border: 1px solid #334155; padding: 24px; box-shadow: 0 4px 14px rgba(0,0,0,0.25);"
       >
         <div
-          style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;"
+          style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;"
         >
-          <div
-            style="width: 42px; height: 42px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); display: flex; align-items: center; justify-content: center; font-size: 22px;"
-          >
-            🚀
-          </div>
-          <div>
-            <h3
-              style="margin: 0; font-size: 16px; font-weight: 800; color: #f8fafc;"
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div
+              style="width: 42px; height: 42px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); display: flex; align-items: center; justify-content: center; font-size: 22px;"
             >
-              Control de Versiones y Despliegues (Web, Windows y Android)
-            </h3>
-            <span style="font-size: 12px; color: #94a3b8;">
-              Al guardar, los cambios se notifican en tiempo real por WebSocket a todos los usuarios conectados
-            </span>
+              🚀
+            </div>
+            <div>
+              <h3
+                style="margin: 0; font-size: 16px; font-weight: 800; color: #f8fafc;"
+              >
+                Control y Estado de Versiones del Sistema
+              </h3>
+              <span style="font-size: 12px; color: #94a3b8;">
+                El versionado correlativo (v1, v2... v6, v7) se gestiona de forma automática desde la pestaña Descargas
+              </span>
+            </div>
           </div>
+
+          <button
+            type="button"
+            on:click={() => (activeTab = "descargas")}
+            style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.15s ease;"
+          >
+            <span>Ir al Módulo de Descargas ({$masterDescargasStore.length})</span>
+            <span class="material-icons" style="font-size: 16px;">arrow_forward</span>
+          </button>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-          <!-- 3 Version inputs row -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
-            <div>
-              <label
-                for="version-web"
-                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
-              >
-                🌐 Versión Web / PWA (`version_web`)
-              </label>
-              <input
-                id="version-web"
-                type="text"
-                bind:value={systemConfig.version_web}
-                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #38bdf8; font-size: 14px; font-weight: 700; font-family: monospace; outline: none;"
-                placeholder="1.0.0"
-              />
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+          <!-- Card Web / PWA -->
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 13px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                🌐 Versión Web / PWA
+              </span>
+              <span style="font-size: 11px; font-weight: 800; background: #064e3b; color: #34d399; border: 1px solid #059669; padding: 2px 8px; border-radius: 6px;">
+                Automática e Invisible
+              </span>
             </div>
-
-            <div>
-              <label
-                for="version-windows"
-                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
-              >
-                🪟 Versión Windows (`version_windows`)
-              </label>
-              <input
-                id="version-windows"
-                type="text"
-                bind:value={systemConfig.version_windows}
-                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #38bdf8; font-size: 14px; font-weight: 700; font-family: monospace; outline: none;"
-                placeholder="1.0.0"
-              />
-            </div>
-
-            <div>
-              <label
-                for="version-android"
-                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
-              >
-                🤖 Versión Android (`version_android`)
-              </label>
-              <input
-                id="version-android"
-                type="text"
-                bind:value={systemConfig.version_android}
-                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #38bdf8; font-size: 14px; font-weight: 700; font-family: monospace; outline: none;"
-                placeholder="1.0.0"
-              />
+            <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.4;">
+              Detecta despliegues nuevos en el servidor y ejecuta recarga limpia sin requerir intervención manual ni descargas de archivos.
+            </p>
+            <div style="margin-top: auto; padding-top: 8px; border-top: 1px solid #334155; font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 5px;">
+              <span style="color: #38bdf8;">●</span> Estado: Despliegue continuo sincronizado
             </div>
           </div>
 
-          <!-- Download URLs -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
-            <div>
-              <label
-                for="url-descarga-windows"
-                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
-              >
-                Enlace Descarga Windows (`.exe` / `.msi`)
-              </label>
-              <input
-                id="url-descarga-windows"
-                type="text"
-                bind:value={systemConfig.url_descarga_windows}
-                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #f8fafc; font-size: 13px; font-family: monospace; outline: none;"
-                placeholder="https://wisi.space/descargas/wisi-space-setup.exe"
-              />
+          <!-- Card Windows -->
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 13px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                🪟 Versión Windows (.EXE)
+              </span>
+              <span style="font-size: 12px; font-weight: 800; background: #1e3a8a; color: #93c5fd; border: 1px solid #3b82f6; padding: 2px 10px; border-radius: 6px; font-family: monospace;">
+                {latestWinDownload?.version_str || 'v1'}
+              </span>
             </div>
-
-            <div>
-              <label
-                for="url-descarga-android"
-                style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
+            <div style="font-size: 12px; color: #cbd5e1; font-family: monospace; word-break: break-all;">
+              {latestWinDownload?.archivo || 'No hay instalador subido'}
+            </div>
+            <p style="margin: 0; font-size: 11.5px; color: #94a3b8; line-height: 1.4;">
+              Al importar un nuevo archivo <strong style="color: #f1f5f9;">.exe</strong> en Descargas, la versión se incrementará automáticamente a <strong style="color: #60a5fa;">v{(latestWinDownload?.calculated_version || 1) + 1}</strong>.
+            </p>
+            <div style="margin-top: auto; padding-top: 8px; border-top: 1px solid #334155; font-size: 11px; color: #64748b; display: flex; align-items: center; justify-content: space-between;">
+              <span>Peso: {latestWinDownload?.peso || 'N/A'}</span>
+              <button
+                type="button"
+                on:click={() => { activeTab = "descargas"; openCreateModal(); }}
+                style="background: transparent; border: none; color: #38bdf8; font-weight: 700; cursor: pointer; padding: 0; font-size: 11px;"
               >
-                Enlace Descarga Android (`.apk`)
-              </label>
-              <input
-                id="url-descarga-android"
-                type="text"
-                bind:value={systemConfig.url_descarga_android}
-                style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #f8fafc; font-size: 13px; font-family: monospace; outline: none;"
-                placeholder="https://wisi.space/descargas/wisi-space.apk"
-              />
+                + Subir nuevo .exe
+              </button>
             </div>
           </div>
 
-          <!-- Release Notes -->
-          <div>
-            <label
-              for="notas-version"
-              style="display: block; font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;"
-            >
-              Notas de la Versión / Novedades para los Usuarios
-            </label>
-            <textarea
-              id="notas-version"
-              rows="3"
-              bind:value={systemConfig.notas_version}
-              style="width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #475569; border-radius: 10px; color: #f8fafc; font-size: 13px; line-height: 1.5; resize: vertical; outline: none;"
-              placeholder="Ej: Se optimizó la sincronización con biométricos locales, corrección de reportes de asistencia y mejoras de interfaz."
-            ></textarea>
-          </div>
-
-          <!-- Checkbox Forzar Actualización -->
-          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(15, 23, 42, 0.6); border-radius: 10px; border: 1px solid #334155;">
-            <input
-              id="forzar-actualizacion"
-              type="checkbox"
-              bind:checked={systemConfig.forzar_actualizacion}
-              style="width: 18px; height: 18px; cursor: pointer; accent-color: #2563eb;"
-            />
-            <label
-              for="forzar-actualizacion"
-              style="font-size: 13px; font-weight: 700; color: #e2e8f0; cursor: pointer;"
-            >
-              Requerir actualización obligatoria (informa al usuario que debe actualizar para continuar operando)
-            </label>
+          <!-- Card Android -->
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 13px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                🤖 Versión Android (.APK)
+              </span>
+              <span style="font-size: 12px; font-weight: 800; background: #064e3b; color: #6ee7b7; border: 1px solid #10b981; padding: 2px 10px; border-radius: 6px; font-family: monospace;">
+                {latestAndroidDownload?.version_str || 'v1'}
+              </span>
+            </div>
+            <div style="font-size: 12px; color: #cbd5e1; font-family: monospace; word-break: break-all;">
+              {latestAndroidDownload?.archivo || 'No hay instalador subido'}
+            </div>
+            <p style="margin: 0; font-size: 11.5px; color: #94a3b8; line-height: 1.4;">
+              Al importar un nuevo archivo <strong style="color: #f1f5f9;">.apk</strong> en Descargas, la versión se incrementará automáticamente a <strong style="color: #34d399;">v{(latestAndroidDownload?.calculated_version || 1) + 1}</strong>.
+            </p>
+            <div style="margin-top: auto; padding-top: 8px; border-top: 1px solid #334155; font-size: 11px; color: #64748b; display: flex; align-items: center; justify-content: space-between;">
+              <span>Peso: {latestAndroidDownload?.peso || 'N/A'}</span>
+              <button
+                type="button"
+                on:click={() => { activeTab = "descargas"; openCreateModal(); }}
+                style="background: transparent; border: none; color: #34d399; font-weight: 700; cursor: pointer; padding: 0; font-size: 11px;"
+              >
+                + Subir nuevo .apk
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -3591,17 +3582,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
             for="descarga-file-input"
             style="display: block; font-size: 11.5px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;"
           >
-            * Seleccionar Archivo Instalador (.apk, .exe, .msi)
+            * Seleccionar Archivo Instalador (.apk, .exe)
           </label>
           <input
             id="descarga-file-input"
             type="file"
-            accept=".apk,.exe,.msi"
+            accept=".apk,.exe"
             on:change={handleFileSelected}
             style="width: 100%; padding: 10px 12px; border: 2px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; font-size: 13px; cursor: pointer;"
           />
           <span style="display: block; font-size: 11.5px; color: #64748b; margin-top: 4px;">
-            Formatos admitidos: <strong>.apk</strong> para Android | <strong>.exe</strong> o <strong>.msi</strong> para Windows
+            Formatos admitidos: <strong>.apk</strong> para Android | <strong>.exe</strong> para Windows
           </span>
         </div>
 
@@ -3636,22 +3627,22 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 <strong>{detectedInfo.pesoText}</strong>
               </div>
               <div>
-                <span style="color: #64748b; display: block; font-size: 11px;">Versión Proyectada:</span>
-                <strong style="color: #2563eb;">v{detectedInfo.versionProyectada}</strong>
+                <span style="color: #64748b; display: block; font-size: 11px;">Última Versión Registrada:</span>
+                <strong style="color: #475569;">{detectedInfo.ultimaVersionRegistrada || 'Ninguna'}</strong>
               </div>
               <div>
-                <span style="color: #64748b; display: block; font-size: 11px;">Fecha de Registro:</span>
-                <span style="font-size: 11.5px;">{detectedInfo.fecha}</span>
+                <span style="color: #64748b; display: block; font-size: 11px;">Nueva Versión (+1 Automática):</span>
+                <strong style="color: #16a34a; font-size: 14px;">v{detectedInfo.versionProyectada}</strong>
               </div>
             </div>
 
             <div style="margin-top: 4px;">
-              <span style="color: #64748b; display: block; font-size: 11px; margin-bottom: 4px;">Nombre que se asignará en el Servidor:</span>
+              <span style="color: #64748b; display: block; font-size: 11px; margin-bottom: 4px;">Nombre oficial que se asignará en el Servidor:</span>
               <div style="background: #0f172a; color: #38bdf8; font-family: monospace; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; word-break: break-all;">
-                app-wisi-{detectedInfo.plataforma}-v{detectedInfo.versionProyectada}-c[id].{detectedInfo.formato}
+                app-wisi-{detectedInfo.plataforma}-v{detectedInfo.versionProyectada}-[hash].{detectedInfo.formato}
               </div>
               <span style="font-size: 10.5px; color: #94a3b8; display: block; margin-top: 2px;">
-                * El [id] final será asignado por el ID auto-incremental de la base de datos al guardar.
+                * El [hash] de seguridad corto será generado automáticamente por el servidor al guardar.
               </span>
             </div>
           </div>

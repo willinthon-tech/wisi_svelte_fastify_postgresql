@@ -15,7 +15,7 @@
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
   import SyncBiometricosModal from "./components/modals/SyncBiometricosModal.svelte";
   import VersionUpdateModal from "./components/modals/VersionUpdateModal.svelte";
-  import { initVersionChecker } from "./controllers/version.store.js";
+  import { initVersionChecker, checkAppVersionOnStartup } from "./controllers/version.store.js";
   import { isTauriWindows } from "./services/tauriIsapi.service.js";
   import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
   import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal, openPhotoModalForAttlog } from "./controllers/globalModal.store.js";
@@ -502,7 +502,7 @@
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     try {
       healthStatus = await fetchHealthModel();
-      await loadMasterStoresFromBackend();
+      await loadMasterStoresFromBackend(true);
     } catch (err) {
       if (typeof navigator === 'undefined' || navigator.onLine) {
         console.warn("Aviso al refrescar estado del servidor:", err);
@@ -521,6 +521,7 @@
 
   onMount(async () => {
     initRouter();
+    await checkAppVersionOnStartup();
     await loadUserSession();
     await refreshData();
     initVersionChecker();

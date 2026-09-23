@@ -49,7 +49,7 @@ import {
   getLibroAportesModel, createLibroAporteModel, updateLibroAporteModel, deleteLibroAporteModel,
   getDeltaSyncModel
 } from '../models/master.model.js';
-import { broadcastSystemVersionUpdate } from '../config/websocket.js';
+import { broadcastMasterSync, broadcastSystemVersionUpdate } from '../config/websocket.js';
 
 function parseIds(val) {
   if (!val) return null;
@@ -740,16 +740,37 @@ export async function getConfiguracion(request, reply) {
 
 export async function getSystemVersion(request, reply) {
   try {
-    const config = await getConfiguracionModel();
+    const latestRes = await getLatestDescargasModel();
+    const downloads = latestRes?.data || {};
+
+    const winDescarga = downloads.windows || null;
+    const androidDescarga = downloads.android || null;
+
+    const winVersionNum = winDescarga?.version_num || 1;
+    const androidVersionNum = androidDescarga?.version_num || 1;
+
     const versionData = {
-      version_web: config.version_web || '1.0.0',
-      version_windows: config.version_windows || '1.0.0',
-      version_android: config.version_android || '1.0.0',
-      url_descarga_windows: config.url_descarga_windows || '',
-      url_descarga_android: config.url_descarga_android || '',
-      notas_version: config.notas_version || '',
-      forzar_actualizacion: config.forzar_actualizacion === 'true' || config.forzar_actualizacion === true,
-      updated_at: config.version_updated_at || config.updated_at || new Date().toISOString()
+      windows: {
+        version_num: winVersionNum,
+        version_str: `v${winVersionNum}`,
+        archivo: winDescarga?.archivo || null,
+        download_url: winDescarga?.archivo_url || (winDescarga?.archivo ? `/api/downloads/${winDescarga.archivo}` : null),
+        peso: winDescarga?.peso || null,
+        fecha: winDescarga?.fecha || null
+      },
+      android: {
+        version_num: androidVersionNum,
+        version_str: `v${androidVersionNum}`,
+        archivo: androidDescarga?.archivo || null,
+        download_url: androidDescarga?.archivo_url || (androidDescarga?.archivo ? `/api/downloads/${androidDescarga.archivo}` : null),
+        peso: androidDescarga?.peso || null,
+        fecha: androidDescarga?.fecha || null
+      },
+      version_windows: `v${winVersionNum}`,
+      version_android: `v${androidVersionNum}`,
+      url_descarga_windows: winDescarga?.archivo_url || '',
+      url_descarga_android: androidDescarga?.archivo_url || '',
+      updated_at: new Date().toISOString()
     };
     return reply.send({ success: true, data: versionData });
   } catch (err) {
@@ -1542,6 +1563,22 @@ export async function uploadDescarga(request, reply) {
       return reply.status(400).send({ success: false, error: 'Debe proporcionar archivo y nombre' });
     }
     const res = await createDescargaUploadModel(body);
+    if (res?.success && res?.data) {
+      try {
+        broadcastMasterSync('descargas', 'INSERT', res.data);
+        broadcastSystemVersionUpdate({
+          platform: res.data.plataforma,
+          version: res.data.version_num,
+          version_str: res.data.version_str || `v${res.data.version_num}`,
+          filename: res.data.archivo,
+          download_url: res.data.archivo_url || `/api/downloads/${res.data.archivo}`,
+          peso: res.data.peso,
+          fecha: res.data.fecha
+        });
+      } catch (wsErr) {
+        console.warn('Error broadcasting descarga version update:', wsErr?.message || wsErr);
+      }
+    }
     return reply.status(201).send(res);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -1552,6 +1589,16 @@ export async function deleteDescarga(request, reply) {
   try {
     const { id } = request.params;
     const res = await deleteDescargaModel(id);
+    if (res?.success) {
+      try {
+        broadcastMasterSync('descargas', 'DELETE', { id, uuid: id });
+        const latest = await getLatestDescargasModel();
+        broadcastSystemVersionUpdate({
+          action: 'DELETED',
+          latest: latest?.data
+        });
+      } catch (e) {}
+    }
     return reply.send(res);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });

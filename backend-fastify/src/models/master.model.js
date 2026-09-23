@@ -5093,19 +5093,35 @@ export async function getLatestDescargasModel() {
     try {
       const androidRows = await sql`
         SELECT *, uuid AS id FROM descargas 
-        WHERE plataforma = 'android' 
-        ORDER BY fecha DESC, created_at DESC LIMIT 1
+        WHERE plataforma = 'android' AND (is_deleted = false OR is_deleted IS NULL)
+        ORDER BY version_num DESC, fecha DESC, created_at DESC LIMIT 1
       `;
       const windowsRows = await sql`
         SELECT *, uuid AS id FROM descargas 
-        WHERE plataforma = 'windows' 
-        ORDER BY fecha DESC, created_at DESC LIMIT 1
+        WHERE plataforma = 'windows' AND (is_deleted = false OR is_deleted IS NULL)
+        ORDER BY version_num DESC, fecha DESC, created_at DESC LIMIT 1
       `;
+
+      const formatRow = (r) => {
+        if (!r) return null;
+        let vNum = r.version_num;
+        if (!vNum) {
+          const m = String(r.archivo || '').match(/-v(\d+)-/i);
+          vNum = m && m[1] ? parseInt(m[1], 10) : 1;
+        }
+        return {
+          ...r,
+          version_num: vNum,
+          version_str: `v${vNum}`,
+          archivo_url: `/api/downloads/${r.archivo}`
+        };
+      };
+
       return {
         success: true,
         data: {
-          android: androidRows[0] || null,
-          windows: windowsRows[0] || null
+          android: formatRow(androidRows[0]),
+          windows: formatRow(windowsRows[0])
         }
       };
     } catch (err) {
@@ -5114,10 +5130,26 @@ export async function getLatestDescargasModel() {
     }
   }
 
-  const list = inMemoryData.descargas || [];
-  const android = list.filter(d => d.plataforma === 'android').slice(-1)[0] || null;
-  const windows = list.filter(d => d.plataforma === 'windows').slice(-1)[0] || null;
-  return { success: true, data: { android, windows } };
+  const list = (inMemoryData.descargas || []).filter(d => !d.is_deleted);
+  const getLatestMem = (plat) => {
+    const platItems = list.filter(d => d.plataforma === plat);
+    if (!platItems.length) return null;
+    platItems.sort((a, b) => (b.version_num || 1) - (a.version_num || 1));
+    const r = platItems[0];
+    return {
+      ...r,
+      version_str: `v${r.version_num || 1}`,
+      archivo_url: `/api/downloads/${r.archivo}`
+    };
+  };
+
+  return { 
+    success: true, 
+    data: { 
+      android: getLatestMem('android'), 
+      windows: getLatestMem('windows') 
+    } 
+  };
 }
 
 export async function createDescargaUploadModel({ fileBase64, filename, size, sizeText }) {
@@ -5128,7 +5160,7 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
     throw new Error('No se recibió el contenido del archivo');
   }
 
-  // 1. Detect extension and format
+  // 1. Detect extension and format - Únicamente .apk y .exe admitidos
   const ext = path.extname(filename || '').toLowerCase().replace('.', '');
   let formato = ext;
   let plataforma = 'windows';
@@ -5136,11 +5168,11 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
   if (ext === 'apk') {
     plataforma = 'android';
     formato = 'apk';
-  } else if (ext === 'exe' || ext === 'msi') {
+  } else if (ext === 'exe') {
     plataforma = 'windows';
-    formato = ext;
+    formato = 'exe';
   } else {
-    throw new Error(`Formato .${ext} no soportado. Debe ser .apk (Android) o .exe / .msi (Windows)`);
+    throw new Error(`Formato .${ext} no soportado. Debe ser .apk para Android o .exe para Windows`);
   }
 
   // 2. Decode file buffer and calculate real size
@@ -5157,15 +5189,33 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
     }
   }
 
-  // 3. Calculate sequential version count for this platform
-  let versionNum = 1;
+  // 3. Buscar la versión más alta registrada actualmente para esta plataforma y sumarle 1 (+1)
+  let highestVersion = 0;
   if (isPgConnected && sql) {
-    const countRes = await sql`
-      SELECT COUNT(*)::int AS count 
+    const maxRes = await sql`
+      SELECT COALESCE(MAX(version_num), 0)::int AS max_v 
       FROM descargas 
-      WHERE plataforma = ${plataforma}
+      WHERE plataforma = ${plataforma} AND (is_deleted = false OR is_deleted IS NULL)
     `;
-    versionNum = (countRes[0]?.count || 0) + 1;
+    highestVersion = Number(maxRes[0]?.max_v || 0);
+
+    // Revisar nombres de archivo existentes por si version_num era nulo o legado
+    const allRows = await sql`
+      SELECT archivo, version_num FROM descargas 
+      WHERE plataforma = ${plataforma} AND (is_deleted = false OR is_deleted IS NULL)
+    `;
+    for (const r of allRows) {
+      if (r.version_num && Number(r.version_num) > highestVersion) {
+        highestVersion = Number(r.version_num);
+      }
+      const m = String(r.archivo || '').match(/-v(\d+)-/i);
+      if (m && m[1]) {
+        const v = parseInt(m[1], 10);
+        if (v > highestVersion) highestVersion = v;
+      }
+    }
+
+    const versionNum = highestVersion + 1;
 
     // 4. Insert initial record to get generated UUID
     const inserted = await sql`
@@ -5175,7 +5225,7 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
     `;
     const recordUuid = inserted[0].uuid;
 
-    // 5. Generate official filename: app-wisi-{plataforma}-v{conteo}-{uuid_corta}.{formato}
+    // 5. Generate official filename: app-wisi-{plataforma}-v{versionNum}-{uuid_corta}.{formato}
     const shortUuid = recordUuid.slice(0, 8);
     const finalFilename = `app-wisi-${plataforma}-v${versionNum}-${shortUuid}.${formato}`;
 
@@ -5194,20 +5244,38 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
       } catch (e) {}
     }
 
-    // 7. Update row with final filename
+    // 7. Update row with final filename and version_num
     const updated = await sql`
       UPDATE descargas 
-      SET archivo = ${finalFilename} 
+      SET archivo = ${finalFilename}, version_num = ${versionNum}
       WHERE uuid = ${recordUuid}::uuid
       RETURNING *, uuid AS id
     `;
 
-    return { success: true, data: updated[0] };
+    const row = updated[0];
+    return {
+      success: true,
+      data: {
+        ...row,
+        version_num: versionNum,
+        version_str: `v${versionNum}`,
+        archivo_url: `/api/downloads/${finalFilename}`
+      }
+    };
   }
 
   // Fallback in-memory
   if (!inMemoryData.descargas) inMemoryData.descargas = [];
-  versionNum = inMemoryData.descargas.filter(d => d.plataforma === plataforma).length + 1;
+  const platItems = inMemoryData.descargas.filter(d => d.plataforma === plataforma);
+  for (const d of platItems) {
+    if (d.version_num && Number(d.version_num) > highestVersion) highestVersion = Number(d.version_num);
+    const m = String(d.archivo || '').match(/-v(\d+)-/i);
+    if (m && m[1]) {
+      const v = parseInt(m[1], 10);
+      if (v > highestVersion) highestVersion = v;
+    }
+  }
+  const versionNum = highestVersion + 1;
   const nextUuid = `descarga-${Date.now()}`;
   const finalFilename = `app-wisi-${plataforma}-v${versionNum}-${nextUuid.slice(0, 8)}.${formato}`;
 
@@ -5226,6 +5294,8 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
     peso: pesoFormateado,
     peso_bytes: pesoBytes,
     version_num: versionNum,
+    version_str: `v${versionNum}`,
+    archivo_url: `/api/downloads/${finalFilename}`,
     fecha: new Date().toISOString()
   };
   inMemoryData.descargas.unshift(newDescarga);

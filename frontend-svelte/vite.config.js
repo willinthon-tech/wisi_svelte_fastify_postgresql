@@ -4,16 +4,27 @@ import { VitePWA } from 'vite-plugin-pwa';
 import fs from 'fs';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
-const APP_VERSION = pkg.version || '1.0.0';
+const APP_VERSION = pkg.version || '6.0.0';
+const APP_VERSION_NUM = parseInt(APP_VERSION, 10) || 6;
 const BUILD_TIME = Date.now();
 
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __APP_VERSION__: JSON.stringify(`v${APP_VERSION_NUM}`),
+    __APP_VERSION_NUM__: JSON.stringify(APP_VERSION_NUM),
     __BUILD_TIME__: JSON.stringify(BUILD_TIME)
   },
   plugins: [
     svelte(),
+    {
+      name: 'html-version-injector',
+      transformIndexHtml(html) {
+        return html
+          .replace(/<meta name="app-version" content="[^"]*"/, `<meta name="app-version" content="v${APP_VERSION_NUM}"`)
+          .replace(/<meta name="app-version-num" content="[^"]*"/, `<meta name="app-version-num" content="${APP_VERSION_NUM}"`)
+          .replace(/<meta name="build-time" content="[^"]*"/, `<meta name="build-time" content="${BUILD_TIME}"`);
+      }
+    },
     {
       name: 'generate-version-json',
       buildStart() {
