@@ -826,10 +826,6 @@
   async function handleDeleteUsers(employeeNos) {
     if (!currentDevice || !employeeNos || employeeNos.length === 0) return;
 
-    if (!confirm(`¿Estás seguro de que deseas eliminar ${employeeNos.length} usuario(s) de este dispositivo biométrico local?`)) {
-      return;
-    }
-
     for (const no of employeeNos) {
       deletingEmpNos.add(no);
     }
