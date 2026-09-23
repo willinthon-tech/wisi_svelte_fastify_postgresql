@@ -11,7 +11,9 @@
     localUploadFace,
     localDeleteUser,
     generarCardNoDesdeCedula,
-    getCedulaVariants
+    getCedulaVariants,
+    localPingDevice,
+    localInjectHttpListener
   } from '../../services/tauriIsapi.service.js';
 
   export let isOpen = false;
@@ -67,8 +69,60 @@
   let selectedDispositivoId = null;
   let selectedSalaId = null;
 
+  // Mapa de alcance en red local: { [devId]: true | false }
+  let reachabilityMap = {};
+  let isCheckingReachability = false;
+  let hasCheckedReachability = false;
+
+  async function checkReachabilityAllDevices(force = false) {
+    if (!isWindows || !biometricosDisponibles || biometricosDisponibles.length === 0) return;
+    if (isCheckingReachability && !force) return;
+
+    isCheckingReachability = true;
+    try {
+      const pingPromises = biometricosDisponibles.map(async (dev) => {
+        const devId = dev.uuid || dev.id;
+        const ip = (dev.ip_local || '').trim();
+        if (!ip || ip === '—') {
+          reachabilityMap[devId] = false;
+          return;
+        }
+        try {
+          const ok = await localPingDevice(ip, 800);
+          reachabilityMap[devId] = Boolean(ok);
+        } catch (e) {
+          reachabilityMap[devId] = false;
+        }
+      });
+
+      await Promise.allSettled(pingPromises);
+      reachabilityMap = { ...reachabilityMap };
+      hasCheckedReachability = true;
+
+      // Si el seleccionado actual quedó inalcanzable, cambiar automáticamente al primer alcanzable disponible
+      if (selectedDispositivoId && reachabilityMap[selectedDispositivoId] === false) {
+        const firstReachable = biometricosDisponibles.find(d => reachabilityMap[d.uuid || d.id] === true);
+        if (firstReachable) {
+          handleSelectDispositivoChange(firstReachable.uuid || firstReachable.id);
+        }
+      }
+    } finally {
+      isCheckingReachability = false;
+    }
+  }
+
+  // Verificar alcance de biométricos al abrir el modal
+  $: if (isOpen && isWindows && biometricosDisponibles.length > 0 && !hasCheckedReachability && !isCheckingReachability) {
+    checkReachabilityAllDevices();
+  }
+
+  $: if (!isOpen) {
+    hasCheckedReachability = false;
+  }
+
   $: if (biometricosDisponibles.length > 0 && (!selectedDispositivoId || !biometricosDisponibles.some(d => (d.uuid || d.id) === selectedDispositivoId))) {
-    selectedDispositivoId = biometricosDisponibles[0].uuid || biometricosDisponibles[0].id;
+    const firstReachable = biometricosDisponibles.find(d => reachabilityMap[d.uuid || d.id] === true);
+    selectedDispositivoId = firstReachable ? (firstReachable.uuid || firstReachable.id) : (biometricosDisponibles[0].uuid || biometricosDisponibles[0].id);
   }
 
   $: {
@@ -79,6 +133,10 @@
   }
 
   function handleSelectDispositivoChange(newDevId) {
+    if (reachabilityMap[newDevId] === false) {
+      triggerToast('Este biométrico no es alcanzable en la red local actual.', 'warning');
+      return;
+    }
     selectedDispositivoId = newDevId;
     const selDev = biometricosDisponibles.find(d => (d.uuid || d.id) === newDevId);
     if (selDev) {
@@ -93,6 +151,86 @@
       }
       // Si es de otra sala, reseteamos la auditoría
       auditResult = null;
+    }
+  }
+
+  // Inyección de HTTP Listener por ISAPI Local (Tauri en Windows)
+  let isInjectModalOpen = false;
+  let isInjectingListener = false;
+  let injectForm = {
+    ip_domain: 'wisi.space',
+    url: '/api/attlogs/sync',
+    port: 443,
+    protocol: 'HTTPS'
+  };
+
+  async function openInjectListenerModal() {
+    if (!currentDevice) return;
+    if (!isWindows) {
+      triggerToast('La inyección directa por IP local solo está disponible en la app de escritorio en Windows.', 'warning');
+      return;
+    }
+    try {
+      const res = await fetch('/api/master/configuracion');
+      const json = await res.json();
+      if (json?.success && json?.data) {
+        const d = json.data;
+        if (d.isapi_ip_domain) injectForm.ip_domain = d.isapi_ip_domain;
+        if (d.isapi_url) injectForm.url = d.isapi_url;
+        if (d.isapi_port) injectForm.port = Number(d.isapi_port) || injectForm.port;
+        if (d.isapi_protocol) injectForm.protocol = d.isapi_protocol;
+      }
+    } catch (e) {
+      console.warn('Usando valores por defecto para formulario ISAPI:', e);
+    }
+    isInjectModalOpen = true;
+  }
+
+  async function confirmInjectListener() {
+    if (!currentDevice || isInjectingListener) return;
+
+    const host = (currentDevice.ip_local || '').trim();
+    if (!host || host === '—') {
+      triggerToast('El dispositivo no tiene una IP local configurada.', 'error');
+      return;
+    }
+
+    isInjectingListener = true;
+    triggerToast(`⏳ Inyectando HTTP Listener en '${currentDevice.nombre}' (${host})...`, 'info');
+
+    try {
+      // Guardar opcionalmente en master configuracion en segundo plano
+      fetch('/api/master/configuracion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isapi_ip_domain: injectForm.ip_domain,
+          isapi_url: injectForm.url,
+          isapi_port: String(injectForm.port),
+          isapi_protocol: injectForm.protocol
+        })
+      }).catch(() => {});
+
+      // Inyectar directamente a la IP Local vía Tauri ISAPI
+      const res = await localInjectHttpListener(
+        host,
+        currentDevice.usuario || 'admin',
+        currentDevice.clave || currentDevice.password || '',
+        injectForm
+      );
+
+      if (res && (res.ok || res.status === 200)) {
+        triggerToast(`⚡ ¡HTTP Listener inyectado exitosamente en ${currentDevice.nombre} (${host})!`, 'success');
+        isInjectModalOpen = false;
+      } else {
+        const detail = res?.data?.subStatusCode || res?.data?.statusString || res?.statusText || 'Error en respuesta ISAPI';
+        triggerToast(`❌ Error al configurar HTTP Listener en ${host}: ${detail}`, 'error');
+      }
+    } catch (err) {
+      console.error('Error inyectando HTTP Listener:', err);
+      triggerToast(`❌ No se pudo conectar con el biométrico en ${host}: ${err.message}`, 'error');
+    } finally {
+      isInjectingListener = false;
     }
   }
 
@@ -168,29 +306,39 @@
     searchSobran = '';
   }
 
-  // Compara usuarios físicos contra empleados del sistema usando variantes de cédula y cotejo de rostro
+  // Normaliza nombres ignorando acentos y espacios múltiples para cotejo limpio
+  function normalizeName(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  // Compara usuarios físicos del biométrico contra empleados del sistema usando la cédula EXACTA
   function reconcileUsers(bioUsers, activeEmployees, allSystemEmployees, currentSala = null) {
     const sincronizados = [];
     const faltan = [];
     const matchedBioIndices = new Set();
 
     for (const emp of activeEmployees) {
-      const empVariants = getCedulaVariants(emp.cedula);
+      const exactCedula = String(emp.cedula || '').trim().toUpperCase();
 
+      // Cotejo EXACTO de cédula contra el biométrico (si en sistema está con V y en equipo sin V, son 2 registros totalmente distintos)
       const matchIdx = bioUsers.findIndex((u, idx) => {
         if (matchedBioIndices.has(idx)) return false;
-        const uVariants = getCedulaVariants(u.employeeNo);
-        // Cotejo por intersección de variantes (cédula, con/sin V, con prefijo 1/2 de panel, etc.)
-        return empVariants.some(v => uVariants.includes(v));
+        return String(u.employeeNo || '').trim().toUpperCase() === exactCedula;
       });
 
       if (matchIdx !== -1) {
         matchedBioIndices.add(matchIdx);
         const bioUser = bioUsers[matchIdx];
+
         const nameInDev = String(bioUser.name || '').trim();
         const nameInSys = String(emp.nombre || '').trim();
-        const nameDiffers = Boolean(nameInDev && nameInSys && nameInDev.toLowerCase() !== nameInSys.toLowerCase());
-        const hasFaceOnDevice = Number(bioUser.numOfFace || bioUser.numOfFaces || 0) > 0 || !!emp.hasFaceOnDevice;
+        const nameDiffers = Boolean(nameInDev && nameInSys && normalizeName(nameInDev) !== normalizeName(nameInSys));
+        const hasFaceOnDevice = Number(bioUser.numOfFace || bioUser.numOfFaces || 0) > 0 || (bioUser.userVerifyMode === 'face') || !!emp.hasFaceOnDevice;
         const hasCardOnDevice = Number(bioUser.numOfCard || bioUser.numOfCards || 0) > 0 || !!emp.hasCardOnDevice;
 
         sincronizados.push({
@@ -214,11 +362,11 @@
     const sobran = [];
     bioUsers.forEach((u, idx) => {
       if (!matchedBioIndices.has(idx)) {
-        const uVariants = getCedulaVariants(u.employeeNo);
+        const uNo = String(u.employeeNo || '').trim().toUpperCase();
 
+        // Buscar coincidencia EXACTA en todos los empleados del sistema
         const sysEmp = (allSystemEmployees || []).find(e => {
-          const eVariants = getCedulaVariants(e.cedula);
-          return eVariants.some(v => uVariants.includes(v));
+          return String(e.cedula || '').trim().toUpperCase() === uNo;
         });
 
         // 🛡️ REGLA FUNDAMENTAL: Si el empleado está ACTIVO y pertenece a esta misma sala,
@@ -238,9 +386,9 @@
         if (isMismaSala) {
           const nameInDev = String(u.name || '').trim();
           const nameInSys = String(sysEmp.nombre || '').trim();
-          const nameDiffers = Boolean(nameInDev && nameInSys && nameInDev.toLowerCase() !== nameInSys.toLowerCase());
-          const hasFaceOnDevice = Number(u.numOfFace || u.numOfFaces || 0) > 0;
-          const hasCardOnDevice = Number(u.numOfCard || u.numOfCards || 0) > 0;
+          const nameDiffers = Boolean(nameInDev && nameInSys && normalizeName(nameInDev) !== normalizeName(nameInSys));
+          const hasFaceOnDevice = Number(u.numOfFace || u.numOfFaces || 0) > 0 || (u.userVerifyMode === 'face') || !!sysEmp.hasFaceOnDevice;
+          const hasCardOnDevice = Number(u.numOfCard || u.numOfCards || 0) > 0 || !!sysEmp.hasCardOnDevice;
 
           sincronizados.push({
             ...sysEmp,
@@ -257,10 +405,7 @@
           });
 
           // Si por alguna razón estaba registrado en faltan, removerlo para evitar duplicidad
-          const faltanIdx = faltan.findIndex(f => {
-            const fVariants = getCedulaVariants(f.cedula);
-            return fVariants.some(v => uVariants.includes(v));
-          });
+          const faltanIdx = faltan.findIndex(f => String(f.cedula || '').trim().toUpperCase() === uNo);
           if (faltanIdx !== -1) {
             faltan.splice(faltanIdx, 1);
           }
@@ -562,8 +707,12 @@
           matchEmp.nameDiffers = false;
           if (matchEmp.deviceUser) {
             matchEmp.deviceUser.name = emp.nombre;
+            matchEmp.deviceUser.employeeNo = emp.cedula;
             matchEmp.deviceUser.numOfFace = photoUrl ? 1 : 0;
           }
+        }
+        if (auditResult) {
+          auditResult = { ...auditResult };
         }
       }
 
@@ -808,10 +957,27 @@
               <option value="" disabled>No hay biométricos disponibles</option>
             {:else}
               {#each biometricosDisponibles as d}
-                <option value={d.uuid || d.id}>{d.selectLabel}</option>
+                {@const devId = d.uuid || d.id}
+                {@const isReachable = reachabilityMap[devId]}
+                <option 
+                  value={devId} 
+                  disabled={isReachable === false}
+                >
+                  {d.selectLabel}{#if isReachable === false} — (Inalcanzable){:else if isReachable === true} — (En línea){/if}
+                </option>
               {/each}
             {/if}
           </select>
+
+          <button 
+            type="button" 
+            class="sync-ping-refresh-btn" 
+            on:click={() => checkReachabilityAllDevices(true)}
+            title="Escanear y verificar alcance en red local de los equipos"
+            disabled={isCheckingReachability || isAuditing}
+          >
+            <span class={isCheckingReachability ? 'sync-spin' : ''}>🔄</span>
+          </button>
         </div>
 
         <button 
@@ -889,7 +1055,7 @@
             <div class="sync-device-details-card">
               <!-- Device Sub-header -->
               <div class="sync-device-info-bar">
-                <div>
+                <div class="sync-device-info-text">
                   <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a;">
                       {currentDevice.nombre}
@@ -912,16 +1078,33 @@
                   </div>
                 </div>
 
-                {#if currentDevice.ip_panel}
-                  <div class="sync-target-box">
-                    <span style="font-size: 11px; font-weight: 700; color: #475569;">Aplicar a:</span>
-                    <select bind:value={actionTarget} class="sync-target-select">
-                      <option value="both">Biométrico y Panel</option>
-                      <option value="bio">Solo Biométrico</option>
-                      <option value="panel">Solo Panel</option>
-                    </select>
-                  </div>
-                {/if}
+                <div class="sync-device-info-actions">
+                  {#if currentDevice.ip_panel}
+                    <div class="sync-target-box">
+                      <span style="font-size: 11px; font-weight: 700; color: #475569;">Aplicar a:</span>
+                      <select bind:value={actionTarget} class="sync-target-select">
+                        <option value="both">Biométrico y Panel</option>
+                        <option value="bio">Solo Biométrico</option>
+                        <option value="panel">Solo Panel</option>
+                      </select>
+                    </div>
+                  {/if}
+
+                  <!-- Botón Inyectar Listener (señalado con flecha en la vista) -->
+                  <button 
+                    type="button" 
+                    class="sync-inject-listener-btn" 
+                    on:click={openInjectListenerModal}
+                    disabled={isAuditing || isExecutingAction || isInjectingListener || currentDevice.status !== 'online' || !isWindows}
+                    title="Inyectar configuración de HTTP Listener directamente en el biométrico usando su IP local"
+                  >
+                    {#if isInjectingListener}
+                      <span class="sync-spinner-red"></span> Inyectando...
+                    {:else}
+                      ⚡ Inyectar Listener
+                    {/if}
+                  </button>
+                </div>
               </div>
 
               <!-- 3 Main Tabs -->
@@ -1373,15 +1556,13 @@
                             <th style="width: 140px;">Cédula en Equipo</th>
                             <th>Nombre en Equipo</th>
                             <th>Estado en Base de Datos</th>
-                            <th style="width: 90px; text-align: center;">Rostro</th>
-                            <th style="width: 90px; text-align: center;">Tarjeta</th>
                             <th style="width: 140px; text-align: center;">Acción</th>
                           </tr>
                         </thead>
                         <tbody>
                           {#if filteredSobran.length === 0}
                             <tr>
-                              <td colspan="7" style="text-align: center; padding: 36px 16px; color: #64748b; font-weight: 600;">
+                              <td colspan="5" style="text-align: center; padding: 36px 16px; color: #64748b; font-weight: 600;">
                                 No se encontraron usuarios sobrantes que coincidan con la búsqueda "{searchSobran}".
                               </td>
                             </tr>
@@ -1403,12 +1584,6 @@
                                   <span class="sync-chip-system-status {u.systemStatus.includes('Desincorporado') ? 'chip-desinc' : u.systemStatus.includes('Activo') ? 'chip-other-sala' : u.systemStatus.includes('Coincide') ? 'chip-name-match' : 'chip-unknown'}">
                                     {u.systemStatus}
                                   </span>
-                                </td>
-                                <td style="text-align: center;">
-                                  {u.numOfFace > 0 ? '👤 Sí' : '—'}
-                                </td>
-                                <td style="text-align: center;">
-                                  {u.numOfCard > 0 ? '💳 Sí' : '—'}
                                 </td>
                                 <td style="text-align: center;">
                                   <button 
@@ -1465,6 +1640,99 @@
 
     </div>
   </div>
+
+  <!-- Submodal para Inyectar HTTP Listener (ISAPI Local) -->
+  {#if isInjectModalOpen}
+    <div class="sync-submodal-overlay" on:click|self={() => isInjectModalOpen = false}>
+      <div class="sync-submodal-content">
+        <div class="sync-submodal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">⚡</span>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">
+              Inyectar HTTP Listener (ISAPI Local)
+            </h3>
+          </div>
+          <button type="button" class="sync-submodal-close" on:click={() => isInjectModalOpen = false}>✕</button>
+        </div>
+
+        <div class="sync-submodal-body">
+          <div class="sync-inject-info-note">
+            <span>Configura directamente en el biométrico <strong>{currentDevice?.nombre}</strong> (IP Local: <code>{currentDevice?.ip_local}</code>) la URL y host hacia donde debe reportar cada marcaje en tiempo real.</span>
+          </div>
+
+          <div class="sync-inject-form-grid">
+            <div>
+              <label class="sync-inject-label" for="inject-host">IP o Dominio Servidor Receptor</label>
+              <input 
+                id="inject-host" 
+                class="sync-inject-input" 
+                type="text" 
+                bind:value={injectForm.ip_domain} 
+                placeholder="wisi.space o 190.72.102.210" 
+              />
+            </div>
+
+            <div>
+              <label class="sync-inject-label" for="inject-port">Puerto</label>
+              <input 
+                id="inject-port" 
+                class="sync-inject-input" 
+                type="number" 
+                bind:value={injectForm.port} 
+                placeholder="443" 
+              />
+            </div>
+
+            <div>
+              <label class="sync-inject-label" for="inject-proto">Protocolo</label>
+              <select id="inject-proto" class="sync-inject-select" bind:value={injectForm.protocol}>
+                <option value="HTTPS">HTTPS (Recomendado)</option>
+                <option value="HTTP">HTTP</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="sync-inject-label" for="inject-url">Ruta URL de Notificación</label>
+              <input 
+                id="inject-url" 
+                class="sync-inject-input" 
+                type="text" 
+                bind:value={injectForm.url} 
+                placeholder="/api/attlogs/sync" 
+              />
+            </div>
+          </div>
+
+          <div class="sync-inject-target-preview">
+            <span>Destino configurado: <code>{injectForm.protocol.toLowerCase()}://{injectForm.ip_domain}:{injectForm.port}{injectForm.url}</code></span>
+          </div>
+        </div>
+
+        <div class="sync-submodal-footer">
+          <button 
+            type="button" 
+            class="sync-submodal-cancel-btn" 
+            on:click={() => isInjectModalOpen = false}
+            disabled={isInjectingListener}
+          >
+            Cancelar
+          </button>
+          <button 
+            type="button" 
+            class="sync-submodal-confirm-btn" 
+            on:click={confirmInjectListener}
+            disabled={isInjectingListener}
+          >
+            {#if isInjectingListener}
+              <span class="sync-spinner"></span> Inyectando vía IP Local...
+            {:else}
+              ⚡ Inyectar en Biométrico
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -2291,9 +2559,248 @@
     transition: all 0.15s ease;
   }
 
-  .sync-close-footer-btn:hover {
-    background: #f1f5f9;
-    color: #0f172a;
+  .sync-ping-refresh-btn {
+    padding: 7px 11px;
+    border-radius: 8px;
+    border: 1.5px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sync-ping-refresh-btn:hover:not(:disabled) {
+    background: #e2e8f0;
     border-color: #94a3b8;
+    color: #0f172a;
+  }
+
+  .sync-ping-refresh-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .sync-device-info-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+  }
+
+  .sync-inject-listener-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 15px;
+    font-size: 12.5px;
+    font-weight: 700;
+    border-radius: 8px;
+    border: 1px solid #fca5a5;
+    background: #fff5f5;
+    color: #dc2626;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(239, 68, 68, 0.1);
+  }
+
+  .sync-inject-listener-btn:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #ef4444;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(239, 68, 68, 0.2);
+  }
+
+  .sync-inject-listener-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #e2e8f0;
+    background: #f1f5f9;
+    color: #94a3b8;
+    box-shadow: none;
+  }
+
+  .sync-spinner-red {
+    width: 13px;
+    height: 13px;
+    border: 2px solid #dc2626;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: syncSpin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  .sync-submodal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+    animation: syncModalPop 0.15s ease-out;
+  }
+
+  .sync-submodal-content {
+    background: #ffffff;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 520px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+  }
+
+  .sync-submodal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .sync-submodal-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #64748b;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px;
+    border-radius: 6px;
+  }
+
+  .sync-submodal-close:hover {
+    color: #0f172a;
+    background: #e2e8f0;
+  }
+
+  .sync-submodal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .sync-inject-info-note {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    color: #1e40af;
+    line-height: 1.45;
+  }
+
+  .sync-inject-info-note code {
+    background: #dbeafe;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+
+  .sync-inject-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .sync-inject-label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .sync-inject-input, .sync-inject-select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    background: #f8fafc;
+    box-sizing: border-box;
+    outline: none;
+  }
+
+  .sync-inject-input:focus, .sync-inject-select:focus {
+    border-color: #2563eb;
+    background: #ffffff;
+  }
+
+  .sync-inject-target-preview {
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #475569;
+  }
+
+  .sync-inject-target-preview code {
+    color: #2563eb;
+    font-weight: 700;
+    font-family: monospace;
+  }
+
+  .sync-submodal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .sync-submodal-cancel-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .sync-submodal-confirm-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sync-submodal-confirm-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+  }
+
+  .sync-submodal-confirm-btn:disabled, .sync-submodal-cancel-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>

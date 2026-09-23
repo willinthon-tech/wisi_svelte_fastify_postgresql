@@ -2879,22 +2879,8 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                       >
                         ⬇ Descargar
                       </button>
-                    {:else if activeTab === "dispositivos"}
-                      <button
-                        on:click={() => executeDirectIsapiInjection(item)}
-                        type="button"
-                        class="btn-flow-sec"
-                        style="padding: 4px 8px; font-size: 12px; color: #dc2626; border-color: #fca5a5; background: #fef2f2; font-weight: 700; gap: 4px;"
-                        disabled={String(injectingDeviceId) === String(item.uuid || item.id)}
-                        title="Inyectar parámetros guardados en Configuración directamente al biométrico"
-                      >
-                        {#if String(injectingDeviceId) === String(item.uuid || item.id)}
-                          ⏳ Inyectando...
-                        {:else}
-                          ⚡ HTTP Listener
-                        {/if}
-                      </button>
                     {/if}
+
                     {#if activeTab !== "descargas"}
                       <button
                         on:click={() => startInlineEdit(item)}

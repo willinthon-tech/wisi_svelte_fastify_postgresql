@@ -109,9 +109,27 @@ async fn isapi_request(
       _ => client.get(&full_url),
     };
 
+    let is_xml = if let Some(ref b) = body {
+      b.trim().starts_with('<')
+    } else {
+      false
+    };
+
+    let content_type = if is_xml {
+      "application/xml; charset=UTF-8"
+    } else {
+      "application/json; charset=UTF-8"
+    };
+
+    let accept_header = if is_xml {
+      "application/xml, text/xml, */*"
+    } else {
+      "application/json, text/plain, */*"
+    };
+
     req = req
-      .header("Accept", "application/json, text/plain, */*")
-      .header("Content-Type", "application/json; charset=UTF-8");
+      .header("Accept", accept_header)
+      .header("Content-Type", content_type);
 
     if let Some(auth_val) = auth {
       req = req.header("Authorization", auth_val);
@@ -166,6 +184,69 @@ async fn isapi_request(
 }
 
 #[tauri::command]
+async fn ping_device(host: String, timeout_ms: Option<u64>) -> bool {
+  use std::net::ToSocketAddrs;
+  let clean_host = host.trim()
+    .trim_start_matches("http://")
+    .trim_start_matches("https://")
+    .split('/')
+    .next()
+    .unwrap_or("")
+    .split(':')
+    .next()
+    .unwrap_or("")
+    .to_string();
+
+  if clean_host.is_empty() {
+    return false;
+  }
+
+  let t_ms = timeout_ms.unwrap_or(800);
+  let t = Duration::from_millis(t_ms);
+  let host_clone = clean_host.clone();
+
+  tauri::async_runtime::spawn_blocking(move || {
+    // 1. Intento rápido de conexión TCP a los puertos comunes de biométricos/paneles (80, 8000, 443)
+    for port in [80, 8000, 443] {
+      let target = format!("{}:{}", host_clone, port);
+      if let Ok(mut addrs) = target.to_socket_addrs() {
+        if let Some(addr) = addrs.next() {
+          if std::net::TcpStream::connect_timeout(&addr, t).is_ok() {
+            return true;
+          }
+        }
+      }
+    }
+
+    // 2. Si los puertos TCP no respondieron (por firewall o puertos no estándar entre VLANs),
+    // ejecutar ping ICMP a nivel de sistema operativo
+    #[cfg(windows)]
+    {
+      use std::os::windows::process::CommandExt;
+      let timeout_str = t_ms.to_string();
+      let output = std::process::Command::new("ping")
+        .args(["-n", "1", "-w", &timeout_str, &host_clone])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW: no abre ventana de consola
+        .output();
+
+      if let Ok(out) = output {
+        if out.status.success() {
+          let text = String::from_utf8_lossy(&out.stdout).to_lowercase();
+          let is_loss = text.contains("100% perdidos") || text.contains("100% loss");
+          let is_unreachable = text.contains("inaccesible") || text.contains("unreachable") || text.contains("agotado") || text.contains("timed out");
+          let has_reply = text.contains("ttl=") || text.contains("bytes=");
+          if has_reply && !is_loss && !is_unreachable {
+            return true;
+          }
+        }
+      }
+    }
+
+    false
+  }).await.unwrap_or(false)
+}
+
+#[tauri::command]
 fn save_file_to_downloads(app_handle: tauri::AppHandle, file_name: String, bytes: Vec<u8>) -> Result<String, String> {
   let download_dir = app_handle.path().download_dir()
     .map_err(|e| format!("No se pudo obtener la carpeta de descargas: {}", e))?;
@@ -202,7 +283,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       save_file_to_downloads,
       open_in_browser,
-      isapi_request
+      isapi_request,
+      ping_device
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

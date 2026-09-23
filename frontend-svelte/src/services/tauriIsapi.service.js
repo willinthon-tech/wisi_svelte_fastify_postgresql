@@ -334,3 +334,71 @@ export async function localDeleteUser(host, username = 'admin', password = '', e
   };
   return await callLocalIsapi(host, '/ISAPI/AccessControl/UserInfo/Delete?format=json', 'PUT', userDelBody, username, password, 10);
 }
+
+/**
+ * Comprueba si un dispositivo es alcanzable en la red local (ping/socket TCP)
+ */
+export async function localPingDevice(host, timeoutMs = 800) {
+  if (!isTauriWindows() || !host || host === '—') return false;
+
+  let invokeFn = null;
+  if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') {
+    invokeFn = window.__TAURI_INTERNALS__.invoke;
+  } else {
+    try {
+      const tauriCore = await import('@tauri-apps/api/core');
+      invokeFn = tauriCore.invoke;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 1. Intentar comando nativo en Rust ping_device (súper veloz TCP socket)
+  try {
+    const isOnline = await invokeFn('ping_device', { host, timeoutMs });
+    if (typeof isOnline === 'boolean') return isOnline;
+  } catch (e) {
+    // Si no está registrado en el binario actual, pasar al fallback
+  }
+
+  // 2. Fallback: llamada ISAPI ligera con timeout corto (1 segundo)
+  try {
+    const res = await callLocalIsapi(host, '/ISAPI/System/deviceInfo', 'GET', null, 'admin', '', 1);
+    return res && (res.ok || res.status === 200 || res.status === 401);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Inyecta la configuración de HTTP Listener / Event Notification directamente al biométrico en la LAN
+ */
+export async function localInjectHttpListener(host, username = 'admin', password = '', options = {}) {
+  const ipAddress = (options.ip_domain || 'wisi.space').trim();
+  const urlPath = (options.url || '/api/attlogs/sync').trim();
+  const portNo = Number(options.port) || 443;
+  const protocolType = String(options.protocol || 'HTTPS').toUpperCase();
+
+  const isDomain = /[a-zA-Z]/.test(ipAddress);
+  const hostXml = isDomain
+    ? `  <addressingFormatType>hostname</addressingFormatType>\n  <hostName>${ipAddress}</hostName>`
+    : `  <addressingFormatType>ipaddress</addressingFormatType>\n  <ipAddress>${ipAddress}</ipAddress>`;
+
+  const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
+<HttpHostNotification version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+<id>1</id>
+<url>${urlPath}</url>
+<protocolType>${protocolType}</protocolType>
+<parameterFormatType></parameterFormatType>
+${hostXml}
+<portNo>${portNo}</portNo>
+<httpAuthenticationMethod></httpAuthenticationMethod>
+<SubscribeEvent><heartbeat>30</heartbeat><eventMode>all</eventMode><EventList><Event><type>AccessControllerEvent</type><minorAlarm></minorAlarm><minorException></minorException><minorOperation></minorOperation><minorEvent></minorEvent><pictureURLType>binary</pictureURLType></Event></EventList></SubscribeEvent>
+<httpListening>
+  <enable>true</enable>
+</httpListening>
+</HttpHostNotification>`;
+
+  return await callLocalIsapi(host, '/ISAPI/Event/notification/httpHosts/1', 'PUT', xmlPayload, username, password, 10);
+}
+
