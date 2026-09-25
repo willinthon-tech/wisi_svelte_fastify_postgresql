@@ -118,10 +118,23 @@ const indexHtmlPath = path.join(frontendDir, 'index.html');
 try {
   if (fs.existsSync(indexHtmlPath)) {
     let htmlContent = fs.readFileSync(indexHtmlPath, 'utf-8');
-    htmlContent = htmlContent
-      .replace(/<meta\s+name=["']app-version["']\s+content=["'][^"']*["']/i, `<meta name="app-version" content="${versionTag}"`)
-      .replace(/<meta\s+name=["']app-version-num["']\s+content=["'][^"']*["']/i, `<meta name="app-version-num" content="${targetVersionNum}"`)
-      .replace(/<meta\s+name=["']build-time["']\s+content=["'][^"']*["']/i, `<meta name="build-time" content="${buildTimestamp}"`);
+    if (htmlContent.includes('name="app-version"')) {
+      htmlContent = htmlContent.replace(/<meta\s+name=["']app-version["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="app-version" content="${versionTag}" />`);
+    } else {
+      htmlContent = htmlContent.replace('</head>', `    <meta name="app-version" content="${versionTag}" />\n  </head>`);
+    }
+
+    if (htmlContent.includes('name="app-version-num"')) {
+      htmlContent = htmlContent.replace(/<meta\s+name=["']app-version-num["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="app-version-num" content="${targetVersionNum}" />`);
+    } else {
+      htmlContent = htmlContent.replace('</head>', `    <meta name="app-version-num" content="${targetVersionNum}" />\n  </head>`);
+    }
+
+    if (htmlContent.includes('name="build-time"')) {
+      htmlContent = htmlContent.replace(/<meta\s+name=["']build-time["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="build-time" content="${buildTimestamp}" />`);
+    } else {
+      htmlContent = htmlContent.replace('</head>', `    <meta name="build-time" content="${buildTimestamp}" />\n  </head>`);
+    }
     fs.writeFileSync(indexHtmlPath, htmlContent);
     console.log(`✔ index.html actualizado -> meta: ${versionTag} (num: ${targetVersionNum})`);
   }

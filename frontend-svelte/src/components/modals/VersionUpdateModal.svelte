@@ -1,10 +1,23 @@
 <script>
-  import { isVersionModalOpenStore, availableUpdateStore } from '../../controllers/version.store.js';
+  import { isVersionModalOpenStore, availableUpdateStore, executeHardRefresh } from '../../controllers/version.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
   import { isTauriWindows } from '../../services/tauriIsapi.service.js';
 
   $: update = $availableUpdateStore;
+
+  let isRefreshingData = false;
+
+  async function handleRefreshData() {
+    isRefreshingData = true;
+    try {
+      await executeHardRefresh('Recargando aplicación y renovando archivos estáticos...');
+    } finally {
+      setTimeout(() => {
+        isRefreshingData = false;
+      }, 2000);
+    }
+  }
 
   function handleClose() {
     isVersionModalOpenStore.set(false);
@@ -140,6 +153,20 @@
               <span>Descargar e Instalar {formatVersion(update.remoteVersion)} ({update.platform === 'android' ? '.APK' : '.EXE'})</span>
             </button>
           {/if}
+
+          <!-- Botón para refrescar estáticos y datos (lo de la flechita circular) -->
+          <button
+            type="button"
+            class="version-btn-secondary {isRefreshingData ? 'is-spinning' : ''}"
+            on:click={handleRefreshData}
+            disabled={isRefreshingData}
+            title="Recargar y limpiar archivos estáticos y datos (Ctrl + F5)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="refresh-svg">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>{isRefreshingData ? 'Refrescando Estáticos...' : 'Ya actualicé (Refrescar Estáticos y Caché)'}</span>
+          </button>
 
           <button
             type="button"

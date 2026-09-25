@@ -19,10 +19,26 @@ export default defineConfig({
     {
       name: 'html-version-injector',
       transformIndexHtml(html) {
-        return html
-          .replace(/<meta name="app-version" content="[^"]*"/, `<meta name="app-version" content="v${APP_VERSION_NUM}"`)
-          .replace(/<meta name="app-version-num" content="[^"]*"/, `<meta name="app-version-num" content="${APP_VERSION_NUM}"`)
-          .replace(/<meta name="build-time" content="[^"]*"/, `<meta name="build-time" content="${BUILD_TIME}"`);
+        let result = html;
+        if (result.includes('name="app-version"')) {
+          result = result.replace(/<meta\s+name=["']app-version["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="app-version" content="v${APP_VERSION_NUM}" />`);
+        } else {
+          result = result.replace('</head>', `    <meta name="app-version" content="v${APP_VERSION_NUM}" />\n  </head>`);
+        }
+
+        if (result.includes('name="app-version-num"')) {
+          result = result.replace(/<meta\s+name=["']app-version-num["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="app-version-num" content="${APP_VERSION_NUM}" />`);
+        } else {
+          result = result.replace('</head>', `    <meta name="app-version-num" content="${APP_VERSION_NUM}" />\n  </head>`);
+        }
+
+        if (result.includes('name="build-time"')) {
+          result = result.replace(/<meta\s+name=["']build-time["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="build-time" content="${BUILD_TIME}" />`);
+        } else {
+          result = result.replace('</head>', `    <meta name="build-time" content="${BUILD_TIME}" />\n  </head>`);
+        }
+
+        return result;
       }
     },
     {

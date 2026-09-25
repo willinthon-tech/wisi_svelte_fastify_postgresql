@@ -5,7 +5,7 @@ import { loadMasterStoresFromBackend } from './master.store.js';
 import { toBackendUrl } from '../config/api.config.js';
 
 // Versión local inyectada en build time
-export const LOCAL_APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v6';
+export const LOCAL_APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v10';
 export const LOCAL_BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? Number(__BUILD_TIME__) : 0;
 
 // Stores reactivos
@@ -45,24 +45,32 @@ export function parseVersionNumber(val) {
 }
 
 /**
- * Obtiene la versión local de la aplicación leyendo la etiqueta <meta name="app-version-num"> del HTML o bundle compilado
+ * Obtiene la versión local de la aplicación.
+ * Compara tanto la constante compilada en el bundle JS (__APP_VERSION_NUM__)
+ * como las etiquetas <meta> del HTML para garantizar que NUNCA reporte una versión
+ * inferior a la compilada si el DOM cargó de una caché vieja.
  */
 export function getLocalHtmlVersionNum() {
+  const compiled = typeof __APP_VERSION_NUM__ !== 'undefined' ? Number(__APP_VERSION_NUM__) : null;
+  let domVer = null;
+
   if (typeof document !== 'undefined') {
     const metaNum = document.querySelector('meta[name="app-version-num"]');
     if (metaNum && metaNum.content) {
       const parsed = parseInt(metaNum.content, 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+      if (!isNaN(parsed) && parsed > 0) domVer = parsed;
     }
-    const metaVer = document.querySelector('meta[name="app-version"]');
-    if (metaVer && metaVer.content) {
-      const parsed = parseVersionNumber(metaVer.content);
-      if (parsed > 0) return parsed;
+    if (!domVer) {
+      const metaVer = document.querySelector('meta[name="app-version"]');
+      if (metaVer && metaVer.content) {
+        const parsed = parseVersionNumber(metaVer.content);
+        if (parsed > 0) domVer = parsed;
+      }
     }
   }
-  const compiled = typeof __APP_VERSION_NUM__ !== 'undefined' ? Number(__APP_VERSION_NUM__) : null;
-  if (compiled && !isNaN(compiled) && compiled > 0) return compiled;
-  return parseVersionNumber(LOCAL_APP_VERSION) || 6;
+
+  const candidates = [compiled, domVer, parseVersionNumber(LOCAL_APP_VERSION)].filter(v => typeof v === 'number' && !isNaN(v) && v > 0);
+  return candidates.length > 0 ? Math.max(...candidates) : 10;
 }
 
 /**
@@ -81,23 +89,35 @@ export function getLocalHtmlBuildTime() {
 
 /**
  * Verifica en el arranque si la versión o build del DOM HTML / Bundle actual es más reciente
- * que la última registrada en el almacenamiento persistente (localStorage).
- * Esto es FUNDAMENTAL para Windows (Tauri .exe) y Android (Capacitor .apk):
- * Cuando el usuario instala una nueva versión (.exe o .apk), la WebView local mantiene
- * residuos de caché, Service Workers y estados viejos.
- * Esta función detecta que se abrió un nuevo instalador/versión, purga de raíz todas las cachés
- * viejas (CacheStorage, Service Workers), sincroniza los datos frescos desde PostgreSQL
- * con loadMasterStoresFromBackend(true) y recarga limpiamente el WebView sin necesidad
- * de que el usuario tenga que presionar manualmente el botón de refrescar.
+ * que la última registrada en el almacenamiento persistente (localStorage), o si el WebView
+ * cargó un HTML obsoleto de la caché de disco.
+ * 
+ * En Windows (.exe) y Android (.apk), desregistra proactivamente Service Workers y CacheStorage
+ * para que siempre se sirvan los archivos estáticos empaquetados en el instalador más reciente.
  */
 export async function checkAppVersionOnStartup() {
   if (typeof window === 'undefined') return;
 
   const platform = getAppPlatform();
+  const compiledVer = typeof __APP_VERSION_NUM__ !== 'undefined' ? Number(__APP_VERSION_NUM__) : null;
   const htmlVerNum = getLocalHtmlVersionNum();
   const htmlBuildTime = getLocalHtmlBuildTime();
 
-  // 1. Verificar si venimos de un reinicio limpio post-actualización
+  // 1. Limpieza preventiva de Service Workers en aplicaciones nativas (Windows y Android)
+  if (platform === 'windows' || platform === 'android') {
+    if ('serviceWorker' in navigator) {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        if (regs && regs.length > 0) {
+          for (const reg of regs) {
+            await reg.unregister();
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  // 2. Verificar si venimos de un reinicio limpio post-actualización
   try {
     const justUpgraded = sessionStorage.getItem('wisi_just_upgraded_reload');
     if (justUpgraded) {
@@ -107,7 +127,7 @@ export async function checkAppVersionOnStartup() {
     }
   } catch (_) {}
 
-  // 2. Leer versión previamente instalada/registrada en este dispositivo
+  // 3. Leer versión previamente registrada en este dispositivo
   let savedVer = null;
   let savedBuildTime = null;
   try {
@@ -118,16 +138,27 @@ export async function checkAppVersionOnStartup() {
   const parsedSavedVer = savedVer ? parseVersionNumber(savedVer) : null;
   const parsedSavedBuildTime = savedBuildTime ? Number(savedBuildTime) : null;
 
-  // 3. Determinar si es una actualización sobre una versión anterior
+  // 4. Detectar si el HTML del DOM tiene una versión inferior al JS compilado (indica caché vieja del WebView)
+  let domVerNum = null;
+  if (typeof document !== 'undefined') {
+    const metaNum = document.querySelector('meta[name="app-version-num"]');
+    if (metaNum && metaNum.content) {
+      const p = parseInt(metaNum.content, 10);
+      if (!isNaN(p) && p > 0) domVerNum = p;
+    }
+  }
+  const hasStaleDomCache = domVerNum !== null && compiledVer !== null && compiledVer > domVerNum;
+
+  // 5. Determinar si se trata de una actualización sobre una versión anterior o caché residual
   const isUpgrade = (parsedSavedVer !== null && htmlVerNum > parsedSavedVer) ||
-    (parsedSavedBuildTime !== null && htmlBuildTime > 0 && parsedSavedBuildTime > 0 && htmlBuildTime > parsedSavedBuildTime);
+    (parsedSavedBuildTime !== null && htmlBuildTime > 0 && parsedSavedBuildTime > 0 && htmlBuildTime > parsedSavedBuildTime) ||
+    hasStaleDomCache;
 
   const isFirstRun = parsedSavedVer === null;
 
   if (isUpgrade || isFirstRun) {
     console.log(`[VersionStore] 🚀 Detectada versión v${htmlVerNum} (build: ${htmlBuildTime}) en ${platform}. ${isUpgrade ? '¡Actualización detectada!' : 'Instalación inicial'}`);
 
-    // Guardar inmediatamente la versión actual en localStorage para evitar bucles
     try {
       localStorage.setItem('wisi_installed_app_version', String(htmlVerNum));
       if (htmlBuildTime > 0) {
@@ -135,9 +166,9 @@ export async function checkAppVersionOnStartup() {
       }
     } catch (_) {}
 
-    // Si es una actualización sobre una versión previa (e.g. nuevo .exe o .apk instalado):
+    // Si es una actualización sobre una versión previa o se detectó caché sucia:
     if (isUpgrade) {
-      console.log(`[VersionStore] Purgando automáticamente cachés viejas y sincronizando datos...`);
+      console.log(`[VersionStore] Purgando automáticamente cachés viejas y sincronizando estáticos y datos...`);
 
       // A) Limpiar todos los caches locales de CacheStorage
       if ('caches' in window) {
@@ -149,7 +180,7 @@ export async function checkAppVersionOnStartup() {
         }
       }
 
-      // B) Desregistrar Service Workers activos para que no sirvan chunks viejos
+      // B) Desregistrar Service Workers activos
       if ('serviceWorker' in navigator) {
         try {
           const registrations = await navigator.serviceWorker.getRegistrations();
@@ -166,14 +197,20 @@ export async function checkAppVersionOnStartup() {
         await loadMasterStoresFromBackend(true);
       } catch (e) {}
 
-      // D) En Windows o Android, el motor WebView mantiene scripts y DOM en memoria viva;
-      // un reinicio limpio asegura que arranque con 100% de los nuevos archivos y componentes
-      if (platform === 'windows' || platform === 'android') {
+      // D) En Windows o Android o si el DOM venía de caché, forzar un refresco limpio con cache-busting
+      if (hasStaleDomCache || platform === 'windows' || platform === 'android') {
         try {
           sessionStorage.setItem('wisi_just_upgraded_reload', '1');
         } catch (_) {}
         setTimeout(() => {
-          window.location.reload();
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('_v', String(htmlVerNum));
+            url.searchParams.set('_t', String(Date.now()));
+            window.location.replace(url.toString());
+          } catch (_) {
+            window.location.reload();
+          }
         }, 150);
         return;
       }
@@ -184,8 +221,9 @@ export async function checkAppVersionOnStartup() {
 }
 
 /**
- * Ejecuta una recarga limpia completa idéntica a Ctrl + F5:
- * Limpia caches de Service Worker, desregistra workers viejos y recarga la ventana.
+ * Ejecuta una recarga limpia completa ("lo de la flechita circular"):
+ * Limpia caches de CacheStorage, desregistra Service Workers y recarga con cache-busting
+ * forzando la renovación inmediata de archivos estáticos y datos.
  */
 export async function executeHardRefresh(customMessage = null) {
   if (typeof window === 'undefined') return;
@@ -206,9 +244,7 @@ export async function executeHardRefresh(customMessage = null) {
     // 2. Desregistrar Service Workers activos para que al recargar tome el nuevo bundle
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const reg of registrations) {
-        await reg.unregister();
-      }
+      await Promise.all(registrations.map(r => r.unregister()));
     }
 
     // 3. Forzar actualización de datos en memoria y backend
@@ -220,9 +256,15 @@ export async function executeHardRefresh(customMessage = null) {
     console.warn('[VersionStore] Advertencia al limpiar caché:', err);
   }
 
-  // Recarga forzada idéntica a presionar el botón circular de la barra
+  // Recarga forzada con cache-busting en la URL idéntica a presionar el botón circular
   setTimeout(() => {
-    window.location.reload();
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('_refresh', Date.now().toString());
+      window.location.replace(url.toString());
+    } catch (_) {
+      window.location.reload();
+    }
   }, 250);
 }
 
@@ -333,6 +375,9 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           fecha: winData.fecha
         });
         isVersionModalOpenStore.set(true);
+      } else {
+        availableUpdateStore.set(null);
+        isVersionModalOpenStore.set(false);
       }
 
       // Siempre refrescar datos del backend en segundo plano de forma automática
@@ -360,6 +405,9 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           fecha: androidData.fecha
         });
         isVersionModalOpenStore.set(true);
+      } else {
+        availableUpdateStore.set(null);
+        isVersionModalOpenStore.set(false);
       }
 
       // Siempre refrescar datos del backend en segundo plano de forma automática

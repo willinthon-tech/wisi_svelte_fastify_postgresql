@@ -25,9 +25,28 @@ if (typeof window !== 'undefined') {
 import { setupGlobalFetchInterceptor } from './config/api.config.js';
 setupGlobalFetchInterceptor();
 
+import { isTauriWindows } from './services/tauriIsapi.service.js';
 import { registerSW } from 'virtual:pwa-register';
+
 if (typeof window !== 'undefined') {
-  registerSW({ immediate: true });
+  const isNativeApp = isTauriWindows() ||
+    Boolean(window.Capacitor?.isNativePlatform?.()) ||
+    (/Android/i.test(navigator.userAgent) && (window.location.hostname === 'localhost' || window.location.protocol === 'capacitor:'));
+
+  if (isNativeApp) {
+    // En Windows (Tauri) y Android (Capacitor), NUNCA usar Service Worker.
+    // Desregistrar cualquier Service Worker residual de versiones anteriores y purgar CacheStorage.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        for (const reg of regs) {
+          reg.unregister().catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  } else {
+    // Solo en navegador Web / PWA
+    registerSW({ immediate: true });
+  }
 }
 
 import { mount } from 'svelte';
