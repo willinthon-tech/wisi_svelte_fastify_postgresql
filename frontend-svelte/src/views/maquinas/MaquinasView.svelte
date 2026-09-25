@@ -44,6 +44,7 @@
   import { getLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   $: userSalasMap = $masterUserSalasStore || {};
   $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id) ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || []) : [];
@@ -602,7 +603,7 @@
     };
 
     try {
-      const res = await fetch('/api/master/maquinas-reportes', {
+      const res = await fetch(toBackendUrl('/api/master/maquinas-reportes'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subtipo, filtros })

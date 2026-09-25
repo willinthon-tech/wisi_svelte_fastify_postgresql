@@ -1741,19 +1741,19 @@ export const deleteFechaPatria = fechasPatriasCtrl.delete;
 export async function getMaquinas(request, reply) {
   try {
     const q = request.query || {};
-    const userSalaIds = parseIds(q.user_sala_ids);
-    const salaIds = parseIds(q.sala_ids);
-    const grupoIds = parseIds(q.grupo_ids || q.grupo_sala_ids);
-    const marcaIds = parseIds(q.marca_ids);
-    const modeloIds = parseIds(q.modelo_ids);
-    const juegoIds = parseIds(q.juego_ids);
-    const estadoIds = parseIds(q.estado_ids);
-    const sociedadIds = parseIds(q.sociedad_ids);
-    const valorIds = parseIds(q.valor_ids);
-    const tipoIds = parseIds(q.tipo_ids);
-    const modoIds = parseIds(q.modo_ids);
-    const legalIds = parseIds(q.legal_ids);
-    const rangoIds = parseIds(q.rango_ids || q.rango_uuids || q.rangos);
+    const userSalaIds = q.user_sala_ids !== undefined ? parseIds(q.user_sala_ids) : undefined;
+    const salaIds = q.sala_ids !== undefined ? parseIds(q.sala_ids) : undefined;
+    const grupoIds = (q.grupo_ids || q.grupo_sala_ids) !== undefined ? parseIds(q.grupo_ids || q.grupo_sala_ids) : undefined;
+    const marcaIds = q.marca_ids !== undefined ? parseIds(q.marca_ids) : undefined;
+    const modeloIds = q.modelo_ids !== undefined ? parseIds(q.modelo_ids) : undefined;
+    const juegoIds = q.juego_ids !== undefined ? parseIds(q.juego_ids) : undefined;
+    const estadoIds = q.estado_ids !== undefined ? parseIds(q.estado_ids) : undefined;
+    const sociedadIds = q.sociedad_ids !== undefined ? parseIds(q.sociedad_ids) : undefined;
+    const valorIds = q.valor_ids !== undefined ? parseIds(q.valor_ids) : undefined;
+    const tipoIds = q.tipo_ids !== undefined ? parseIds(q.tipo_ids) : undefined;
+    const modoIds = q.modo_ids !== undefined ? parseIds(q.modo_ids) : undefined;
+    const legalIds = q.legal_ids !== undefined ? parseIds(q.legal_ids) : undefined;
+    const rangoIds = (q.rango_ids || q.rango_uuids || q.rangos) !== undefined ? parseIds(q.rango_ids || q.rango_uuids || q.rangos) : undefined;
 
     const res = await getMaquinasModel({
       page: q.page,
@@ -1790,19 +1790,19 @@ export async function getMaquinasFilterOptions(request, reply) {
 
     const res = await getMaquinasFilterOptionsModel({
       maquinas_reportes: q.maquinas_reportes || q.masquinas_reportes || q.reporte_uuid || q.reporte,
-      userSalaIds: parseIds(q.user_sala_ids),
-      salaIds: parseIds(q.sala_ids),
-      grupoIds: parseIds(q.grupo_ids),
-      marcaIds: parseIds(q.marca_ids),
-      modeloIds: parseIds(q.modelo_ids),
-      juegoIds: parseIds(q.juego_ids),
-      estadoIds: parseIds(q.estado_ids),
-      sociedadIds: parseIds(q.sociedad_ids),
-      valorIds: parseIds(q.valor_ids),
-      tipoIds: parseIds(q.tipo_ids),
-      modoIds: parseIds(q.modo_ids),
-      legalIds: parseIds(q.legal_ids),
-      rangoIds: parseIds(q.rango_ids || q.rango_uuids || q.rangos),
+      userSalaIds: q.user_sala_ids !== undefined ? parseIds(q.user_sala_ids) : undefined,
+      salaIds: q.sala_ids !== undefined ? parseIds(q.sala_ids) : undefined,
+      grupoIds: (q.grupo_ids || q.grupo_sala_ids) !== undefined ? parseIds(q.grupo_ids || q.grupo_sala_ids) : undefined,
+      marcaIds: q.marca_ids !== undefined ? parseIds(q.marca_ids) : undefined,
+      modeloIds: q.modelo_ids !== undefined ? parseIds(q.modelo_ids) : undefined,
+      juegoIds: q.juego_ids !== undefined ? parseIds(q.juego_ids) : undefined,
+      estadoIds: q.estado_ids !== undefined ? parseIds(q.estado_ids) : undefined,
+      sociedadIds: q.sociedad_ids !== undefined ? parseIds(q.sociedad_ids) : undefined,
+      valorIds: q.valor_ids !== undefined ? parseIds(q.valor_ids) : undefined,
+      tipoIds: q.tipo_ids !== undefined ? parseIds(q.tipo_ids) : undefined,
+      modoIds: q.modo_ids !== undefined ? parseIds(q.modo_ids) : undefined,
+      legalIds: q.legal_ids !== undefined ? parseIds(q.legal_ids) : undefined,
+      rangoIds: (q.rango_ids || q.rango_uuids || q.rangos) !== undefined ? parseIds(q.rango_ids || q.rango_uuids || q.rangos) : undefined,
       searchNombre: q.search_nombre || q.searchNombre || '',
       searchSerial: q.search_serial || q.searchSerial || '',
       search: q.search || ''

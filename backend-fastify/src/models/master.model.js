@@ -6761,59 +6761,101 @@ export async function deleteFechaPatriaModel(id) {
 // 12. MÁQUINAS (CRUD PRINCIPAL)
 // ==========================================
 
+export function mergeMaquinasReporteFiltros(target = {}, rawFiltros = {}) {
+  let f = rawFiltros;
+  if (typeof f === 'string') {
+    try { f = JSON.parse(f); } catch (e) {}
+  }
+  if (!f || typeof f !== 'object') return target;
+
+  const assignIfMissing = (camelKey, snakeKey) => {
+    const val = f[snakeKey] !== undefined ? f[snakeKey] : f[camelKey];
+    if (val && Array.isArray(val) && val.length > 0) {
+      if (!target[camelKey] || target[camelKey].length === 0) {
+        target[camelKey] = val;
+      }
+      if (!target[snakeKey] || target[snakeKey].length === 0) {
+        target[snakeKey] = val;
+      }
+    } else if (val && typeof val === 'string' && val.trim().length > 0) {
+      if (!target[camelKey]) target[camelKey] = val;
+      if (!target[snakeKey]) target[snakeKey] = val;
+    }
+  };
+
+  assignIfMissing('userSalaIds', 'user_sala_ids');
+  assignIfMissing('salaIds', 'sala_ids');
+  assignIfMissing('grupoIds', 'grupo_ids');
+  assignIfMissing('marcaIds', 'marca_ids');
+  assignIfMissing('modeloIds', 'modelo_ids');
+  assignIfMissing('juegoIds', 'juego_ids');
+  assignIfMissing('estadoIds', 'estado_ids');
+  assignIfMissing('sociedadIds', 'sociedad_ids');
+  assignIfMissing('valorIds', 'valor_ids');
+  assignIfMissing('tipoIds', 'tipo_ids');
+  assignIfMissing('modoIds', 'modo_ids');
+  assignIfMissing('legalIds', 'legal_ids');
+  assignIfMissing('rangoIds', 'rango_ids');
+  assignIfMissing('searchNombre', 'search_nombre');
+  assignIfMissing('searchSerial', 'search_serial');
+  assignIfMissing('search', 'search');
+
+  return target;
+}
+
 export function buildMaquinasConditions(params = {}) {
   const conds = [];
 
-  const uSalas = toUuidArray(params.userSalaIds || params.userSalaUuids);
+  const uSalas = toUuidArray(params.userSalaIds || params.userSalaUuids || params.user_sala_ids);
   if (uSalas.length > 0) {
     conds.push(sql`m.sala_uuid = ANY(${uSalas})`);
   }
   if (!params.skipSalas) {
-    const sUuids = toUuidArray(params.salaIds || params.salaUuids);
+    const sUuids = toUuidArray(params.salaIds || params.salaUuids || params.sala_ids);
     if (sUuids.length > 0) conds.push(sql`m.sala_uuid = ANY(${sUuids})`);
   }
   if (!params.skipGrupos) {
-    const gUuids = toUuidArray(params.grupoIds || params.grupoUuids);
+    const gUuids = toUuidArray(params.grupoIds || params.grupoUuids || params.grupo_ids || params.grupo_sala_ids);
     if (gUuids.length > 0) conds.push(sql`s.grupo_uuid = ANY(${gUuids})`);
   }
   if (!params.skipMarcas) {
-    const mUuids = toUuidArray(params.marcaIds || params.marcaUuids);
+    const mUuids = toUuidArray(params.marcaIds || params.marcaUuids || params.marca_ids);
     if (mUuids.length > 0) conds.push(sql`mod.marca_uuid = ANY(${mUuids})`);
   }
   if (!params.skipModelos) {
-    const moUuids = toUuidArray(params.modeloIds || params.modeloUuids);
+    const moUuids = toUuidArray(params.modeloIds || params.modeloUuids || params.modelo_ids);
     if (moUuids.length > 0) conds.push(sql`m.modelo_uuid = ANY(${moUuids})`);
   }
   if (!params.skipJuegos) {
-    const jUuids = toUuidArray(params.juegoIds || params.juegoUuids);
+    const jUuids = toUuidArray(params.juegoIds || params.juegoUuids || params.juego_ids);
     if (jUuids.length > 0) conds.push(sql`m.juego_uuid = ANY(${jUuids})`);
   }
   if (!params.skipEstados) {
-    const eUuids = toUuidArray(params.estadoIds || params.estadoUuids);
+    const eUuids = toUuidArray(params.estadoIds || params.estadoUuids || params.estado_ids);
     if (eUuids.length > 0) conds.push(sql`m.estado_uuid = ANY(${eUuids})`);
   }
   if (!params.skipSociedades) {
-    const socUuids = toUuidArray(params.sociedadIds || params.sociedadUuids);
+    const socUuids = toUuidArray(params.sociedadIds || params.sociedadUuids || params.sociedad_ids);
     if (socUuids.length > 0) conds.push(sql`m.sociedad_uuid = ANY(${socUuids})`);
   }
   if (!params.skipValores) {
-    const vUuids = toUuidArray(params.valorIds || params.valorUuids);
+    const vUuids = toUuidArray(params.valorIds || params.valorUuids || params.valor_ids);
     if (vUuids.length > 0) conds.push(sql`m.valor_uuid = ANY(${vUuids})`);
   }
   if (!params.skipTipos) {
-    const tUuids = toUuidArray(params.tipoIds || params.tipoUuids);
+    const tUuids = toUuidArray(params.tipoIds || params.tipoUuids || params.tipo_ids);
     if (tUuids.length > 0) conds.push(sql`m.tipo_uuid = ANY(${tUuids})`);
   }
   if (!params.skipModos) {
-    const moUuids = toUuidArray(params.modoIds || params.modoUuids);
+    const moUuids = toUuidArray(params.modoIds || params.modoUuids || params.modo_ids);
     if (moUuids.length > 0) conds.push(sql`m.modo_uuid = ANY(${moUuids})`);
   }
   if (!params.skipLegales) {
-    const lUuids = toUuidArray(params.legalIds || params.legalUuids);
+    const lUuids = toUuidArray(params.legalIds || params.legalUuids || params.legal_ids);
     if (lUuids.length > 0) conds.push(sql`m.legal_uuid = ANY(${lUuids})`);
   }
   if (!params.skipRangos) {
-    const rUuids = toUuidArray(params.rangoIds || params.rangoUuids);
+    const rUuids = toUuidArray(params.rangoIds || params.rangoUuids || params.rango_ids);
     if (rUuids.length > 0) conds.push(sql`m.rango_uuid = ANY(${rUuids})`);
   }
 
@@ -6857,7 +6899,7 @@ export async function getMaquinasModel(params = {}) {
     try {
       const rep = await getMaquinasReporteByUuidModel(reporteId);
       if (rep && rep.filtros) {
-        params = { ...rep.filtros, ...params };
+        mergeMaquinasReporteFiltros(params, rep.filtros);
       }
     } catch (e) {
       console.warn('Error resolviendo maquinas_reportes en getMaquinasModel:', e);
@@ -6865,8 +6907,9 @@ export async function getMaquinasModel(params = {}) {
   }
 
   const page = Math.max(1, Number(params.page) || 1);
-  const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
-  const limit = hasLimit ? Number(params.limit) : 10;
+  const isAllOrReporte = Boolean(reporteId || String(params.limit || '').toLowerCase() === 'all' || String(params.limit || '').toLowerCase() === 'none' || params.all === true);
+  const hasLimit = !isAllOrReporte && params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
+  const limit = hasLimit ? Number(params.limit) : 0;
   const offset = hasLimit ? (page - 1) * limit : 0;
   const search = String(params.search || '').trim().toLowerCase();
   const searchNombre = String(params.searchNombre || params.search_nombre || '').trim().toLowerCase();
@@ -7010,7 +7053,7 @@ export async function getMaquinasModel(params = {}) {
     }
 
     const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
-    return { success: true, data, total, page, limit, totalPages };
+    return { success: true, data, total, page, limit: hasLimit ? limit : total, totalPages };
   } catch (err) {
     console.error('Error getMaquinasModel en PG:', err);
     return { success: true, data: [], total: 0, page, limit, totalPages: 1 };
@@ -7023,7 +7066,7 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
     try {
       const rep = await getMaquinasReporteByUuidModel(reporteId);
       if (rep && rep.filtros) {
-        options = { ...rep.filtros, ...options };
+        mergeMaquinasReporteFiltros(options, rep.filtros);
       }
     } catch (e) {
       console.warn('Error resolviendo maquinas_reportes en getMaquinasFilterOptionsModel:', e);

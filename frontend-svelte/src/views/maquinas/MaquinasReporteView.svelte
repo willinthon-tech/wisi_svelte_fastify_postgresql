@@ -107,7 +107,7 @@
     isLoading = true;
     try {
       const q = currentReporteUuid ? `maquinas_reportes=${encodeURIComponent(currentReporteUuid)}` : queryString;
-      const url = toBackendUrl(`/api/master/maquinas?limit=10000&${q}`);
+      const url = toBackendUrl(`/api/master/maquinas?limit=all&${q}`);
       const res = await fetch(url);
       const json = await res.json();
       if (json && json.success) {
@@ -281,7 +281,7 @@
           m.valor_nombre || '0.01',
           m.estado_nombre || 'OPERATIVA',
           m.legal_nombre || 'SI',
-          m.grupo_sala_nombre || (m.grupo_sala_id === 2 ? 'GALPON' : 'SALA'),
+          m.grupo_sala_nombre || ((String(m.grupo_sala_uuid || m.grupo_sala_id) === '55d65e8b-09b2-4164-8491-efbdd50433b6' || m.grupo_sala_id === 2 || String(m.grupo_sala_nombre || '').toLowerCase().includes('galp')) ? 'GALPÓN' : 'SALA'),
           m.sala_nombre || 'N/A',
           m.rango_nombre || 'General'
         ]);
@@ -407,7 +407,10 @@
       // Filtrar sólo salas
       filteredData = data.filter(m => {
         const gName = (m.grupo_sala_nombre || '').toLowerCase();
-        return !gName.includes('galp') && m.grupo_sala_id !== 2;
+        const isGalp = gName.includes('galp') || 
+                       String(m.grupo_sala_uuid || m.grupo_sala_id) === '55d65e8b-09b2-4164-8491-efbdd50433b6' || 
+                       String(m.grupo_sala_id) === '2';
+        return !isGalp;
       });
       groupKey1 = 'sala_nombre';
       groupLabel1 = 'SALA';
@@ -418,7 +421,10 @@
       // Filtrar sólo galpones
       filteredData = data.filter(m => {
         const gName = (m.grupo_sala_nombre || '').toLowerCase();
-        return gName.includes('galp') || m.grupo_sala_id === 2;
+        const isGalp = gName.includes('galp') || 
+                       String(m.grupo_sala_uuid || m.grupo_sala_id) === '55d65e8b-09b2-4164-8491-efbdd50433b6' || 
+                       String(m.grupo_sala_id) === '2';
+        return isGalp;
       });
       groupKey1 = 'sala_nombre';
       groupLabel1 = 'GALPÓN';
