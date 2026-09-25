@@ -9,6 +9,7 @@
 
   export let isPublic = false;
   export let subtipo = 'simple';
+  export let reporteUuid = null;
 
   let items = [];
   let isLoading = true;
@@ -44,6 +45,11 @@
 
   function parseRouteAndQuery() {
     if (typeof window === 'undefined') return;
+
+    if (!currentReporteUuid && reporteUuid) {
+      currentReporteUuid = reporteUuid;
+    }
+
     const hash = window.location.hash || '';
     const qIndex = hash.indexOf('?');
     if (qIndex !== -1) {
@@ -52,6 +58,23 @@
       const pIndex = window.location.search.indexOf('?');
       if (pIndex !== -1) {
         queryString = window.location.search.substring(pIndex + 1);
+      }
+    }
+
+    // Si viene en pathname o hash con el formato /reportes/maquinas/shared/:uuid o /reportes/maquinas/:uuid
+    const pathCandidate = (window.location.pathname.replace(/^\//, '') || hash.replace(/^#\/?/, '')).split('?')[0];
+    const pathParts = pathCandidate.split('/').filter(Boolean);
+    if (pathParts.length >= 3 && pathParts[0] === 'reportes' && pathParts[1] === 'maquinas') {
+      if (pathParts[2] === 'shared' && pathParts[3]) {
+        currentReporteUuid = pathParts[3];
+        if (pathParts[4]) {
+          activeTab = pathParts[4];
+        }
+      } else if (pathParts[2] !== 'vista' && pathParts[2] !== 'shared') {
+        currentReporteUuid = pathParts[2];
+        if (pathParts[3]) {
+          activeTab = pathParts[3];
+        }
       }
     }
 
@@ -102,10 +125,16 @@
 
   function handleTabChange(tab) {
     activeTab = tab;
-    const basePrefix = isPublic ? 'reportes/maquinas/vista' : 'maquinas/maquinas/vista';
-    const qStr = currentReporteUuid ? `maquinas_reportes=${encodeURIComponent(currentReporteUuid)}` : queryString;
-    const newRoute = `${basePrefix}/${tab}${qStr ? '?' + qStr : ''}`;
-    window.location.hash = `#/${newRoute}`;
+    if (isPublic) {
+      if (currentReporteUuid && window.history && window.history.replaceState) {
+        window.history.replaceState({}, '', `/reportes/maquinas/shared/${currentReporteUuid}`);
+      }
+    } else {
+      const basePrefix = 'maquinas/maquinas/vista';
+      const qStr = currentReporteUuid ? `maquinas_reportes=${encodeURIComponent(currentReporteUuid)}` : queryString;
+      const newRoute = `${basePrefix}/${tab}${qStr ? '?' + qStr : ''}`;
+      window.location.hash = `#/${newRoute}`;
+    }
   }
 
   function handleVolver() {
@@ -157,16 +186,15 @@
         }
       }
 
-      // Si tenemos reporteUuid, construir URL corta; si falló la API, fallback
-      const basePrefix = isPublic ? 'reportes/maquinas/vista' : 'maquinas/maquinas/vista';
+      // Generar URL compartida limpia sin '#' ni parámetros: wisi.space/reportes/maquinas/shared/:uuid
       let shareUrl = '';
       if (reporteUuid) {
-        shareUrl = getPublicWebUrl(`/#/reportes/maquinas/vista/${activeTab}?maquinas_reportes=${reporteUuid}`);
-        // Actualizar hash en la barra de navegación para que se vea limpio y corto
-        queryString = `maquinas_reportes=${reporteUuid}`;
-        window.location.hash = `#/${basePrefix}/${activeTab}?${queryString}`;
+        shareUrl = getPublicWebUrl(`/reportes/maquinas/shared/${reporteUuid}`);
+        if (isPublic && window.history && window.history.replaceState) {
+          window.history.replaceState({}, '', `/reportes/maquinas/shared/${reporteUuid}`);
+        }
       } else {
-        shareUrl = getPublicWebUrl(`/#/reportes/maquinas/vista/${activeTab}${queryString ? '?' + queryString : ''}`);
+        shareUrl = getPublicWebUrl(`/reportes/maquinas/vista/${activeTab}${queryString ? '?' + queryString : ''}`);
       }
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -182,12 +210,16 @@
       triggerToast('Enlace público copiado al portapapeles', 'success');
     } catch (e) {
       console.warn('Error al compartir reporte de máquinas:', e);
-      const fallbackUrl = getPublicWebUrl(`/#/reportes/maquinas/vista/${activeTab}${queryString ? '?' + queryString : ''}`);
+      const fallbackUrl = currentReporteUuid 
+        ? getPublicWebUrl(`/reportes/maquinas/shared/${currentReporteUuid}`)
+        : getPublicWebUrl(`/reportes/maquinas/vista/${activeTab}${queryString ? '?' + queryString : ''}`);
       prompt('Copia el enlace del reporte:', fallbackUrl);
     } finally {
       isSavingReporte = false;
     }
   }
+
+
 
   function getReportTitle(tab) {
     if (tab === 'simple') return 'Reporte de Máquinas (Vista Simple)';

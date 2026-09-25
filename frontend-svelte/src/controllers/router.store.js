@@ -8,7 +8,7 @@ export function isPublicRoute(route) {
          clean.startsWith('reportes/rrhh/corte/') || 
          clean.startsWith('reportes/cecom/libro/') || 
          clean.startsWith('reportes/cecom/ibro/') ||
-         clean.startsWith('reportes/maquinas/vista');
+         clean.startsWith('reportes/maquinas');
 }
 
 export function initRouter() {
@@ -18,12 +18,13 @@ export function initRouter() {
     let route = window.location.hash.replace(/^#\/?/, '').trim();
     if (!route) {
       const pathname = window.location.pathname.replace(/^\//, '').trim();
+      const search = window.location.search || '';
       if (pathname === 'willinthontech' || 
           pathname.startsWith('reportes/rrhh/corte/') || 
           pathname.startsWith('reportes/cecom/libro/') || 
           pathname.startsWith('reportes/cecom/ibro/') ||
-          pathname.startsWith('reportes/maquinas/vista')) {
-        route = pathname;
+          pathname.startsWith('reportes/maquinas')) {
+        route = pathname + search;
       }
     }
     if (!route) {

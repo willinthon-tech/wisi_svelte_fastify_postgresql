@@ -804,12 +804,38 @@
     return match ? match[1] : null;
   }
 
+  function getPublicMaquinaReporteId(route) {
+    const raw = route ? String(route).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
+    const clean = raw.split('?')[0];
+
+    // 1. Prioridad: reportes/maquinas/shared/:uuid
+    const sharedMatch = clean.match(/reportes\/maquinas\/shared\/([a-zA-Z0-9_-]+)/i);
+    if (sharedMatch) return sharedMatch[1];
+
+    // 2. reportes/maquinas/:uuid (si no es 'vista' ni 'shared')
+    const parts = clean.split('/').filter(Boolean);
+    if (parts.length >= 3 && parts[0] === 'reportes' && parts[1] === 'maquinas' && parts[2] !== 'vista' && parts[2] !== 'shared') {
+      return parts[2];
+    }
+
+    // 3. Fallback: parámetro maquinas_reportes en query string
+    if (raw.includes('?')) {
+      const qs = raw.substring(raw.indexOf('?') + 1);
+      const sp = new URLSearchParams(qs);
+      const qVal = sp.get('maquinas_reportes') || sp.get('masquinas_reportes') || sp.get('reporte_uuid');
+      if (qVal) return qVal;
+    }
+
+    return null;
+  }
+
   $: cleanPublicRoute = $currentRouteStore ? String($currentRouteStore).replace(/^#\/?/, '').replace(/^\//, '').trim() : '';
   $: isCortePublicRoute = cleanPublicRoute.startsWith('reportes/rrhh/corte/');
   $: publicCorteId = getPublicCorteId(cleanPublicRoute);
   $: isLibroPublicRoute = cleanPublicRoute.startsWith('reportes/cecom/libro/') || cleanPublicRoute.startsWith('reportes/cecom/ibro/');
   $: publicLibroId = getPublicLibroId(cleanPublicRoute);
-  $: isMaquinasPublicRoute = cleanPublicRoute.startsWith('reportes/maquinas/vista');
+  $: isMaquinasPublicRoute = cleanPublicRoute.startsWith('reportes/maquinas');
+  $: publicMaquinaReporteId = getPublicMaquinaReporteId(cleanPublicRoute);
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
@@ -831,7 +857,7 @@
   {:else if isMaquinasPublicRoute}
     <!-- Standalone Public Maquinas Report View -->
     <div class="standalone-public-report">
-      <MaquinasReporteView isPublic={true} />
+      <MaquinasReporteView isPublic={true} reporteUuid={publicMaquinaReporteId} />
     </div>
   {/if}
 {:else if $isAuthenticatedStore}
