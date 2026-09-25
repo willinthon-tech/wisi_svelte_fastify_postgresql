@@ -874,7 +874,18 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         if (v > highestV) highestV = v;
       }
     }
-    const versionProyectada = highestV + 1;
+
+    // Detectar si el nombre del archivo contiene una versión explícita (ej. app-wisi-windows-v11.exe o v11)
+    let explicitVersion = null;
+    const nameMatch = String(file.name || '').match(/(?:-v|^v)(\d+)(?:\D|$)/i);
+    if (nameMatch && nameMatch[1]) {
+      const parsed = parseInt(nameMatch[1], 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        explicitVersion = parsed;
+      }
+    }
+
+    const versionProyectada = explicitVersion || (highestV + 1);
 
     detectedInfo = {
       formato,
@@ -884,6 +895,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       fecha: new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' }),
       ultimaVersionRegistrada: highestV > 0 ? `v${highestV}` : 'Ninguna',
       versionProyectada,
+      esVersionDetectada: !!explicitVersion,
       nombreProyectado: `app-wisi-${plataforma}-v${versionProyectada}-[hash].${formato}`
     };
   }
@@ -904,12 +916,14 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           const result = await masterDescargasActions.upload({
             fileBase64: base64,
             filename: selectedFile.name,
+            versionNum: detectedInfo.versionProyectada,
             size: detectedInfo.pesoBytes,
             sizeText: detectedInfo.pesoText
           });
           triggerToast(`✅ Instalador ${result.archivo} importado y registrado exitosamente`, 'success');
           isCreateDescargaModalOpen = false;
           selectedFile = null;
+          await loadMasterStoresFromBackend(true);
         } catch (err) {
           uploadError = err.message || 'Error al subir instalador';
           triggerToast(uploadError, 'error');
@@ -930,6 +944,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
   function openCreateModal() {
     if (activeTab === "descargas") {
+      loadMasterStoresFromBackend(true);
       selectedFile = null;
       detectedInfo = {
         formato: '',
@@ -1245,8 +1260,43 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         ? $masterDescargasStore
                         : [];
 
-  $: filteredItems = currentItems
-    ? currentItems.filter((i) => {
+  $: sortedItems = (() => {
+    if (!currentItems) return [];
+    if (activeTab === "descargas") {
+      return [...currentItems].sort((a, b) => {
+        const getV = (item) => {
+          if (item && item.version_num != null && !isNaN(Number(item.version_num))) {
+            return Number(item.version_num);
+          }
+          const m = String(item?.archivo || '').match(/(?:-v|^v)(\d+)(?:\D|$)/i);
+          return m && m[1] ? parseInt(m[1], 10) : 0;
+        };
+        const vA = getV(a);
+        const vB = getV(b);
+        if (vB !== vA) return vB - vA;
+
+        const parseTime = (item) => {
+          const val = item?.fecha || item?.created_at;
+          if (!val) return 0;
+          const t = new Date(val).getTime();
+          if (!isNaN(t)) return t;
+          const match = String(val).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+          if (match) {
+            return new Date(`${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`).getTime() || 0;
+          }
+          return 0;
+        };
+
+        const tA = parseTime(a);
+        const tB = parseTime(b);
+        return tB - tA;
+      });
+    }
+    return currentItems;
+  })();
+
+  $: filteredItems = sortedItems
+    ? sortedItems.filter((i) => {
         if (!searchQuery.trim()) return true;
         const q = searchQuery.toLowerCase().trim();
         return Object.values(i).some(
@@ -1538,7 +1588,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   </div>
 {:else}
   <div
-    style="min-height: 100vh; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 24px;"
+    style="min-height: 100vh; background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; padding: 24px; box-sizing: border-box;"
   >
   <!-- Master Header Banner -->
   <div
@@ -1699,6 +1749,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         activeTab = "descargas";
         searchQuery = "";
         editingInlineId = null;
+        loadMasterStoresFromBackend(true);
       }}
       type="button"
       style="padding: 10px 18px; border-radius: 8px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; background: {activeTab ===
@@ -2691,11 +2742,11 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       </div>
 
       <!-- Table Section -->
-      <div style="overflow-x: auto;">
+      <div style="overflow-x: auto; max-height: calc(100vh - 280px); overflow-y: auto;">
         <table
           style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;"
         >
-          <thead>
+          <thead style="position: sticky; top: 0; z-index: 5; background: #f1f5f9; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
             <tr
               style="background: #f1f5f9; border-bottom: 1px solid #e2e8f0; color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;"
             >
@@ -3631,7 +3682,9 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 <strong style="color: #475569;">{detectedInfo.ultimaVersionRegistrada || 'Ninguna'}</strong>
               </div>
               <div>
-                <span style="color: #64748b; display: block; font-size: 11px;">Nueva Versión (+1 Automática):</span>
+                <span style="color: #64748b; display: block; font-size: 11px;">
+                  {detectedInfo.esVersionDetectada ? 'Versión Detectada en Archivo:' : 'Nueva Versión (+1 Automática):'}
+                </span>
                 <strong style="color: #16a34a; font-size: 14px;">v{detectedInfo.versionProyectada}</strong>
               </div>
             </div>

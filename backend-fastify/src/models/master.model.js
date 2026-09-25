@@ -5077,7 +5077,8 @@ export async function getDescargasModel() {
     try {
       const rows = await sql`
         SELECT *, uuid AS id FROM descargas 
-        ORDER BY fecha DESC, created_at DESC
+        WHERE (is_deleted = false OR is_deleted IS NULL)
+        ORDER BY version_num DESC, fecha DESC, created_at DESC
       `;
       return { success: true, data: rows };
     } catch (err) {
@@ -5152,7 +5153,7 @@ export async function getLatestDescargasModel() {
   };
 }
 
-export async function createDescargaUploadModel({ fileBase64, filename, size, sizeText }) {
+export async function createDescargaUploadModel({ fileBase64, filename, size, sizeText, versionNum: explicitVersionParam }) {
   const fs = await import('fs');
   const path = await import('path');
 
@@ -5215,13 +5216,17 @@ export async function createDescargaUploadModel({ fileBase64, filename, size, si
       }
     }
 
-    // Detectar si el archivo que se está subiendo ya incluye una versión explícita en su nombre (ej. app-wisi-windows-v8.exe o app-wisi-android-v8.apk)
+    // Detectar si el archivo que se está subiendo ya incluye una versión explícita en su nombre o parámetro
     let explicitVersion = null;
-    const nameMatch = String(filename || '').match(/(?:-v|^v)(\d+)(?:\D|$)/i);
-    if (nameMatch && nameMatch[1]) {
-      const parsed = parseInt(nameMatch[1], 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        explicitVersion = parsed;
+    if (explicitVersionParam && !isNaN(Number(explicitVersionParam)) && Number(explicitVersionParam) > 0) {
+      explicitVersion = Number(explicitVersionParam);
+    } else {
+      const nameMatch = String(filename || '').match(/(?:-v|^v)(\d+)(?:\D|$)/i);
+      if (nameMatch && nameMatch[1]) {
+        const parsed = parseInt(nameMatch[1], 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          explicitVersion = parsed;
+        }
       }
     }
 
