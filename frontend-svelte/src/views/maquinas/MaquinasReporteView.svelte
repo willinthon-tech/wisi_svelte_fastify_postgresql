@@ -133,13 +133,13 @@
       const basePrefix = 'maquinas/maquinas/vista';
       const qStr = currentReporteUuid ? `maquinas_reportes=${encodeURIComponent(currentReporteUuid)}` : queryString;
       const newRoute = `${basePrefix}/${tab}${qStr ? '?' + qStr : ''}`;
-      window.location.hash = `#/${newRoute}`;
+      navigateToRoute(newRoute);
     }
   }
 
   function handleVolver() {
     if (isPublic) {
-      window.location.hash = '#/dashboard';
+      navigateToRoute('dashboard');
     } else {
       navigateToRoute('maquinas/maquinas');
     }
