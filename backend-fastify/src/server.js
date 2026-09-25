@@ -78,7 +78,7 @@ async function startServer() {
     await fastify.register(cors, {
       origin: '*',
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With']
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'x-user-salas', 'X-User-Salas', '*']
     });
 
     // Strip URL parameters like ?id=... or ?uuid=... so that Fastify handles routes cleanly

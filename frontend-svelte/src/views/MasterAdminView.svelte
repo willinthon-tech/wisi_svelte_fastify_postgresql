@@ -159,7 +159,7 @@
       pinError = "";
       // Únicamente al colocar la clave correcta se cargan los datos de la vista
       loadSystemConfig();
-      loadMasterStoresFromBackend();
+      loadMasterStoresFromBackend(true);
     } else {
       pinError = "Clave incorrecta. Acceso denegado.";
       enteredPin = "";
@@ -2731,14 +2731,31 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
           >
         </div>
 
-        <button
-          on:click={openCreateModal}
-          type="button"
-          class="btn-flow"
-          style="padding: 9px 18px; font-size: 13px; font-weight: 700; white-space: nowrap;"
-        >
-          Nuevo registro
-        </button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          {#if activeTab === "descargas"}
+            <button
+              on:click={() => {
+                loadMasterStoresFromBackend(true);
+                triggerToast('Lista de instaladores actualizada', 'info');
+              }}
+              type="button"
+              class="btn-flow-sec"
+              style="padding: 9px 14px; font-size: 13px; font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;"
+              title="Refrescar descargas desde el servidor"
+            >
+              🔄 Actualizar
+            </button>
+          {/if}
+
+          <button
+            on:click={openCreateModal}
+            type="button"
+            class="btn-flow"
+            style="padding: 9px 18px; font-size: 13px; font-weight: 700; white-space: nowrap;"
+          >
+            Nuevo registro
+          </button>
+        </div>
       </div>
 
       <!-- Table Section -->

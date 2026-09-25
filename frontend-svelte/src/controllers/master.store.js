@@ -313,14 +313,14 @@ export async function loadMasterStoresFromBackend(force = false) {
       const token = (typeof localStorage !== 'undefined') ? (localStorage.getItem('wisi_token') || localStorage.getItem('token')) : null;
       const headers = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const assignedSalas = getActiveUserAssignedSalaUuids();
-      if (assignedSalas && assignedSalas.length > 0) {
-        headers['x-user-salas'] = assignedSalas.join(',');
-      }
-
       let qUrl = `/api/master/${entityName}?limit=all`;
-      if (assignedSalas && assignedSalas.length > 0) {
-        qUrl += `&user_sala_ids=${encodeURIComponent(assignedSalas.join(','))}`;
+      const isEntityWithSalas = ['empleados', 'dispositivos', 'mesas', 'llaves', 'libros', 'marcajes'].includes(entityName);
+      if (isEntityWithSalas) {
+        const assignedSalas = getActiveUserAssignedSalaUuids();
+        if (assignedSalas && assignedSalas.length > 0) {
+          headers['x-user-salas'] = assignedSalas.join(',');
+          qUrl += `&user_sala_ids=${encodeURIComponent(assignedSalas.join(','))}`;
+        }
       }
 
       const res = await fetch(toBackendUrl(qUrl), { headers });
