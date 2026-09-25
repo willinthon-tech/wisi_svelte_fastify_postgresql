@@ -6852,6 +6852,18 @@ export function buildMaquinasConditions(params = {}) {
 }
 
 export async function getMaquinasModel(params = {}) {
+  const reporteId = params.maquinas_reportes || params.masquinas_reportes || params.reporte_uuid || params.reporte;
+  if (reporteId) {
+    try {
+      const rep = await getMaquinasReporteByUuidModel(reporteId);
+      if (rep && rep.filtros) {
+        params = { ...rep.filtros, ...params };
+      }
+    } catch (e) {
+      console.warn('Error resolviendo maquinas_reportes en getMaquinasModel:', e);
+    }
+  }
+
   const page = Math.max(1, Number(params.page) || 1);
   const hasLimit = params.limit !== undefined && String(params.limit).toLowerCase() !== 'all' && Number(params.limit) > 0;
   const limit = hasLimit ? Number(params.limit) : 10;
@@ -7006,6 +7018,18 @@ export async function getMaquinasModel(params = {}) {
 }
 
 export async function getMaquinasFilterOptionsModel(options = {}) {
+  const reporteId = options.maquinas_reportes || options.masquinas_reportes || options.reporte_uuid || options.reporte;
+  if (reporteId) {
+    try {
+      const rep = await getMaquinasReporteByUuidModel(reporteId);
+      if (rep && rep.filtros) {
+        options = { ...rep.filtros, ...options };
+      }
+    } catch (e) {
+      console.warn('Error resolviendo maquinas_reportes en getMaquinasFilterOptionsModel:', e);
+    }
+  }
+
   if (!isPgConnected || !sql) {
     return {
       success: true,
@@ -7124,22 +7148,54 @@ export async function getMaquinasFilterOptionsModel(options = {}) {
           .filter(r => r.count > 0 || active.has(r.uuid));
       })(),
 
-      // 5. Juegos
+      // 5. Juegos (Catálogo de juegos_maquinas)
       (async () => {
         const conds = buildMaquinasConditions({ ...options, skipJuegos: true });
         const where = conds.length > 0 ? sql`WHERE ${conds.reduce((a, b) => sql`${a} AND ${b}`)}` : sql``;
-        const res = await sql`
-          SELECT j.uuid, j.uuid AS id, j.nombre, COUNT(DISTINCT m.uuid)::int AS count
+
+        const allJuegos = await sql`
+          SELECT j.uuid, j.uuid AS id, j.nombre 
+          FROM juegos_maquinas j 
+          WHERE COALESCE(j.is_deleted, false) = false
+          ORDER BY j.nombre ASC
+        `.catch(() => []);
+
+        const countsRes = await sql`
+          SELECT j.uuid, COUNT(DISTINCT m.uuid)::int AS count
           ${fromJoin}
           ${where}
           AND j.uuid IS NOT NULL
-          GROUP BY j.uuid, j.nombre
-          ORDER BY j.nombre ASC
+          GROUP BY j.uuid
         `.catch(() => []);
+        const countMap = new Map((countsRes || []).map(r => [r.uuid, r.count]));
         const active = new Set(toUuidArray(options.juegoIds || options.juegoUuids));
-        return (res || [])
-          .map(r => ({ id: r.uuid, uuid: r.uuid, nombre: toTitleCase(r.nombre), count: r.count }))
-          .filter(r => r.count > 0 || active.has(r.uuid));
+
+        const hasOtherFilters = Boolean(
+          (options.userSalaIds && options.userSalaIds.length > 0) ||
+          (options.salaIds && options.salaIds.length > 0) ||
+          (options.grupoIds && options.grupoIds.length > 0) ||
+          (options.marcaIds && options.marcaIds.length > 0) ||
+          (options.modeloIds && options.modeloIds.length > 0) ||
+          (options.estadoIds && options.estadoIds.length > 0) ||
+          (options.sociedadIds && options.sociedadIds.length > 0) ||
+          (options.valorIds && options.valorIds.length > 0) ||
+          (options.tipoIds && options.tipoIds.length > 0) ||
+          (options.modoIds && options.modoIds.length > 0) ||
+          (options.legalIds && options.legalIds.length > 0) ||
+          (options.rangoIds && options.rangoIds.length > 0) ||
+          (options.searchNombre && String(options.searchNombre).trim()) ||
+          (options.searchSerial && String(options.searchSerial).trim()) ||
+          (options.search && String(options.search).trim())
+        );
+
+        return (allJuegos || [])
+          .map(j => ({
+            id: j.uuid,
+            uuid: j.uuid,
+            nombre: toTitleCase(j.nombre),
+            count: countMap.get(j.uuid) || 0
+          }))
+          .filter(r => hasOtherFilters ? (r.count > 0 || active.has(r.uuid)) : true);
       })(),
 
       // 6. Grupos de Sala
@@ -7654,6 +7710,114 @@ export async function updateMaquinaModel(id, data) {
 export async function deleteMaquinaModel(id) {
   return await deleteEntityDynamic('maquinas', 'máquina', id);
 }
+
+// ==========================================
+// --- MÁQUINAS: REPORTES COMPARTIBLES ---
+// ==========================================
+
+export function normalizeMaquinasReporteFiltros(filtros = {}) {
+  const parseList = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return [...new Set(val.map(String).map(s => s.trim()).filter(Boolean))].sort();
+    return [...new Set(String(val).split(',').map(s => s.trim()).filter(Boolean))].sort();
+  };
+
+  const cleanStr = (val) => (val !== undefined && val !== null ? String(val).trim().toLowerCase() : '');
+
+  return {
+    estado_ids: parseList(filtros.estado_ids || filtros.estadoIds),
+    grupo_ids: parseList(filtros.grupo_ids || filtros.grupoIds || filtros.grupo_sala_ids),
+    juego_ids: parseList(filtros.juego_ids || filtros.juegoIds),
+    legal_ids: parseList(filtros.legal_ids || filtros.legalIds),
+    marca_ids: parseList(filtros.marca_ids || filtros.marcaIds),
+    modelo_ids: parseList(filtros.modelo_ids || filtros.modeloIds),
+    modo_ids: parseList(filtros.modo_ids || filtros.modoIds),
+    rango_ids: parseList(filtros.rango_ids || filtros.rangoIds || filtros.rango_uuids || filtros.rangos),
+    sala_ids: parseList(filtros.sala_ids || filtros.salaIds),
+    search: cleanStr(filtros.search),
+    search_nombre: cleanStr(filtros.search_nombre || filtros.searchNombre),
+    search_serial: cleanStr(filtros.search_serial || filtros.searchSerial),
+    sociedad_ids: parseList(filtros.sociedad_ids || filtros.sociedadIds),
+    tipo_ids: parseList(filtros.tipo_ids || filtros.tipoIds),
+    user_sala_ids: parseList(filtros.user_sala_ids || filtros.userSalaIds),
+    valor_ids: parseList(filtros.valor_ids || filtros.valorIds)
+  };
+}
+
+export function computeMaquinasFiltrosHash(normalized) {
+  return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
+}
+
+export async function saveMaquinasReporteModel({ subtipo = 'simple', filtros = {} } = {}) {
+  const normalized = normalizeMaquinasReporteFiltros(filtros);
+  const hash = computeMaquinasFiltrosHash(normalized);
+  const targetSubtipo = String(subtipo || 'simple').trim().toLowerCase();
+
+  if (!isPgConnected || !sql) {
+    if (!inMemoryData.maquinas_reportes) inMemoryData.maquinas_reportes = [];
+    const exists = inMemoryData.maquinas_reportes.find(r => r.filtros_hash === hash);
+    if (exists) return { ...exists, is_new: false };
+    const newUuid = crypto.randomUUID();
+    const item = {
+      uuid: newUuid,
+      id: newUuid,
+      subtipo: targetSubtipo,
+      filtros: normalized,
+      filtros_hash: hash,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_new: true
+    };
+    inMemoryData.maquinas_reportes.push(item);
+    return item;
+  }
+
+  try {
+    const existing = await sql`
+      SELECT uuid, uuid AS id, subtipo, filtros, filtros_hash, created_at, updated_at
+      FROM maquinas_reportes
+      WHERE filtros_hash = ${hash}
+      LIMIT 1;
+    `;
+    if (existing && existing.length > 0) {
+      return { ...existing[0], is_new: false };
+    }
+
+    const inserted = await sql`
+      INSERT INTO maquinas_reportes (subtipo, filtros, filtros_hash)
+      VALUES (${targetSubtipo}, ${sql.json(normalized)}, ${hash})
+      RETURNING uuid, uuid AS id, subtipo, filtros, filtros_hash, created_at, updated_at;
+    `;
+    return { ...inserted[0], is_new: true };
+  } catch (err) {
+    console.error('Error en saveMaquinasReporteModel:', err);
+    throw err;
+  }
+}
+
+export async function getMaquinasReporteByUuidModel(uuid) {
+  if (!uuid) return null;
+  const targetUuid = String(uuid).trim();
+
+  if (!isPgConnected || !sql) {
+    const list = inMemoryData.maquinas_reportes || [];
+    return list.find(r => r.uuid === targetUuid || r.id === targetUuid) || null;
+  }
+
+  try {
+    const res = await sql`
+      SELECT uuid, uuid AS id, subtipo, filtros, filtros_hash, created_at, updated_at
+      FROM maquinas_reportes
+      WHERE uuid = ${targetUuid}::uuid
+      LIMIT 1;
+    `;
+    return res[0] || null;
+  } catch (err) {
+    console.error('Error en getMaquinasReporteByUuidModel:', err);
+    return null;
+  }
+}
+
 
 
 // ==========================================

@@ -57,6 +57,20 @@ export async function initDb() {
     await sql`SET TIME ZONE 'UTC';`;
     await sql`SELECT 1;`;
 
+    // Garantizar existencia de tabla de reportes compartibles de máquinas
+    await sql`
+      CREATE TABLE IF NOT EXISTS maquinas_reportes (
+        uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        subtipo VARCHAR(50) DEFAULT 'simple',
+        filtros JSONB NOT NULL DEFAULT '{}'::jsonb,
+        filtros_hash VARCHAR(64) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_maquinas_reportes_hash ON maquinas_reportes (filtros_hash);`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_maquinas_reportes_uuid ON maquinas_reportes (uuid);`;
+
     isPgConnected = true;
     console.log(`\x1b[32m[CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {

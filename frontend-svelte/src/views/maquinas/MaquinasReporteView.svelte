@@ -5,7 +5,7 @@
   import { saveOrShareFile } from '../../utils/fileSaver.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
-  import { toBackendUrl } from '../../config/api.config.js';
+  import { getPublicWebUrl, toBackendUrl } from '../../config/api.config.js';
 
   export let isPublic = false;
   export let subtipo = 'simple';
@@ -13,6 +13,7 @@
   let items = [];
   let isLoading = true;
   let isGeneratingPdf = false;
+  let isSavingReporte = false;
   let printableAreaEl;
   let generadoEn = '';
   let activeTab = subtipo || 'simple'; // 'simple' | 'sociedad' | 'salas' | 'galpones' | 'tipo' | 'marcas'
@@ -25,6 +26,7 @@
   let detalleModalData = null; // { title, marcasModelos: [], juegos: [], estados: [], valores: [] }
 
   let queryString = '';
+  let currentReporteUuid = null;
 
   onMount(async () => {
     generadoEn = new Date().toLocaleString('es-ES', {
@@ -53,6 +55,12 @@
       }
     }
 
+    const searchParams = new URLSearchParams(queryString);
+    const repUuid = searchParams.get('maquinas_reportes') || searchParams.get('masquinas_reportes') || searchParams.get('reporte_uuid') || searchParams.get('reporte');
+    if (repUuid) {
+      currentReporteUuid = repUuid;
+    }
+
     // Determine active tab from route
     const cleanHash = hash.replace(/^#\/?/, '').split('?')[0];
     if (cleanHash.includes('/simple')) {
@@ -75,7 +83,8 @@
   async function loadData() {
     isLoading = true;
     try {
-      const url = toBackendUrl(`/api/master/maquinas?limit=10000&${queryString}`);
+      const q = currentReporteUuid ? `maquinas_reportes=${encodeURIComponent(currentReporteUuid)}` : queryString;
+      const url = toBackendUrl(`/api/master/maquinas?limit=10000&${q}`);
       const res = await fetch(url);
       const json = await res.json();
       if (json && json.success) {
@@ -94,7 +103,8 @@
   function handleTabChange(tab) {
     activeTab = tab;
     const basePrefix = isPublic ? 'reportes/maquinas/vista' : 'maquinas/maquinas/vista';
-    const newRoute = `${basePrefix}/${tab}${queryString ? '?' + queryString : ''}`;
+    const qStr = currentReporteUuid ? `maquinas_reportes=${encodeURIComponent(currentReporteUuid)}` : queryString;
+    const newRoute = `${basePrefix}/${tab}${qStr ? '?' + qStr : ''}`;
     window.location.hash = `#/${newRoute}`;
   }
 
@@ -107,9 +117,58 @@
   }
 
   async function handleCompartir() {
-    const origin = window.location.origin;
-    const shareUrl = `${origin}/#/reportes/maquinas/vista/${activeTab}${queryString ? '?' + queryString : ''}`;
+    if (isSavingReporte) return;
+    isSavingReporte = true;
+
     try {
+      let reporteUuid = currentReporteUuid;
+
+      if (!reporteUuid) {
+        // Extraer los filtros del queryString actual para guardarlos de forma deduplicada
+        const searchParams = new URLSearchParams(queryString);
+        const filtros = {
+          search_nombre: searchParams.get('search_nombre') || '',
+          search_serial: searchParams.get('search_serial') || '',
+          search: searchParams.get('search') || '',
+          user_sala_ids: searchParams.get('user_sala_ids') || '',
+          grupo_ids: searchParams.get('grupo_ids') || '',
+          sala_ids: searchParams.get('sala_ids') || '',
+          marca_ids: searchParams.get('marca_ids') || '',
+          modelo_ids: searchParams.get('modelo_ids') || '',
+          juego_ids: searchParams.get('juego_ids') || '',
+          estado_ids: searchParams.get('estado_ids') || '',
+          sociedad_ids: searchParams.get('sociedad_ids') || '',
+          valor_ids: searchParams.get('valor_ids') || '',
+          tipo_ids: searchParams.get('tipo_ids') || '',
+          modo_ids: searchParams.get('modo_ids') || '',
+          legal_ids: searchParams.get('legal_ids') || '',
+          rango_ids: searchParams.get('rango_ids') || ''
+        };
+
+        const res = await fetch(toBackendUrl('/api/master/maquinas-reportes'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subtipo: activeTab, filtros })
+        });
+        const json = await res.json();
+        if (json && json.success && json.data && json.data.uuid) {
+          reporteUuid = json.data.uuid;
+          currentReporteUuid = reporteUuid;
+        }
+      }
+
+      // Si tenemos reporteUuid, construir URL corta; si falló la API, fallback
+      const basePrefix = isPublic ? 'reportes/maquinas/vista' : 'maquinas/maquinas/vista';
+      let shareUrl = '';
+      if (reporteUuid) {
+        shareUrl = getPublicWebUrl(`/#/reportes/maquinas/vista/${activeTab}?maquinas_reportes=${reporteUuid}`);
+        // Actualizar hash en la barra de navegación para que se vea limpio y corto
+        queryString = `maquinas_reportes=${reporteUuid}`;
+        window.location.hash = `#/${basePrefix}/${activeTab}?${queryString}`;
+      } else {
+        shareUrl = getPublicWebUrl(`/#/reportes/maquinas/vista/${activeTab}${queryString ? '?' + queryString : ''}`);
+      }
+
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
       } else {
@@ -122,7 +181,11 @@
       }
       triggerToast('Enlace público copiado al portapapeles', 'success');
     } catch (e) {
-      prompt('Copia el enlace del reporte:', shareUrl);
+      console.warn('Error al compartir reporte de máquinas:', e);
+      const fallbackUrl = getPublicWebUrl(`/#/reportes/maquinas/vista/${activeTab}${queryString ? '?' + queryString : ''}`);
+      prompt('Copia el enlace del reporte:', fallbackUrl);
+    } finally {
+      isSavingReporte = false;
     }
   }
 

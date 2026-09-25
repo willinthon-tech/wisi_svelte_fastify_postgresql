@@ -32,6 +32,7 @@ import {
   getExcepcionesModel, createExcepcionModel, updateExcepcionModel, deleteExcepcionModel,
   getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel,
   getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel,
+  saveMaquinasReporteModel, getMaquinasReporteByUuidModel,
   getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
   getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel,
   getLibroDropMesasModel, createLibroDropMesaModel, deleteLibroDropMesaModel,
@@ -1762,6 +1763,7 @@ export async function getMaquinas(request, reply) {
       searchSerial: q.search_serial || q.searchSerial,
       sortBy: q.sortBy || q.sort_by,
       sortDir: q.sortDir || q.sort_order,
+      maquinas_reportes: q.maquinas_reportes || q.masquinas_reportes || q.reporte_uuid || q.reporte,
       userSalaIds,
       salaIds,
       grupoIds,
@@ -1787,6 +1789,7 @@ export async function getMaquinasFilterOptions(request, reply) {
     const q = request.query || {};
 
     const res = await getMaquinasFilterOptionsModel({
+      maquinas_reportes: q.maquinas_reportes || q.masquinas_reportes || q.reporte_uuid || q.reporte,
       userSalaIds: parseIds(q.user_sala_ids),
       salaIds: parseIds(q.sala_ids),
       grupoIds: parseIds(q.grupo_ids),
@@ -1848,6 +1851,32 @@ export async function deleteMaquina(request, reply) {
     return reply.send(res);
   } catch (err) {
     return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function saveMaquinasReporte(request, reply) {
+  try {
+    const { subtipo, filtros } = request.body || {};
+    const result = await saveMaquinasReporteModel({ subtipo, filtros });
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    console.error('Error en saveMaquinasReporte controller:', err);
+    return reply.status(500).send({ success: false, error: err.message || 'Error al guardar reporte de máquinas' });
+  }
+}
+
+export async function getMaquinasReporte(request, reply) {
+  try {
+    const { id, uuid } = request.params || {};
+    const targetUuid = id || uuid;
+    const result = await getMaquinasReporteByUuidModel(targetUuid);
+    if (!result) {
+      return reply.status(404).send({ success: false, error: 'Reporte de máquinas no encontrado' });
+    }
+    return reply.send({ success: true, data: result });
+  } catch (err) {
+    console.error('Error en getMaquinasReporte controller:', err);
+    return reply.status(500).send({ success: false, error: err.message || 'Error al consultar reporte de máquinas' });
   }
 }
 

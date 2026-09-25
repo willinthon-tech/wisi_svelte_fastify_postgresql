@@ -89,15 +89,20 @@ export function getCloudBaseUrl() {
 export function getPublicWebUrl(path = '') {
   let base = CLOUD_SERVER_ORIGIN;
   if (typeof window !== 'undefined') {
-    const savedCustomUrl = localStorage.getItem('wisi_custom_cloud_url');
+    const savedCustomUrl = localStorage.getItem('wisi_custom_cloud_url') || localStorage.getItem('wisi_app_domain');
     if (savedCustomUrl && savedCustomUrl.trim().startsWith('http')) {
       base = savedCustomUrl.trim().replace(/\/+$/, '');
+    } else if (savedCustomUrl && savedCustomUrl.trim()) {
+      base = `https://${savedCustomUrl.trim().replace(/\/+$/, '')}`;
     } else if (!isTauriApp()) {
       const { hostname, origin } = window.location;
       if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.includes('tauri')) {
         base = origin;
       }
     }
+  }
+  if (!base || base.includes('tauri.localhost') || base.includes('tauri:')) {
+    base = 'https://wisi.space';
   }
   const cleanPath = path ? (path.startsWith('/') ? path : `/${path}`) : '';
   return `${base}${cleanPath}`;

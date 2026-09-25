@@ -25,7 +25,20 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
-  import { masterSalasStore, masterMaquinasStore, masterRangosStore, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { 
+    masterSalasStore, 
+    masterMaquinasStore, 
+    masterRangosStore, 
+    masterJuegosMaquinasStore,
+    masterEstadosStore,
+    masterSociedadesStore,
+    masterValoresStore,
+    masterModelosStore,
+    masterTiposStore,
+    masterModosStore,
+    masterLegalStore,
+    loadMasterStoresFromBackend 
+  } from '../../controllers/master.store.js';
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { getLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
@@ -392,6 +405,132 @@
     nombre: r.nombre
   }));
 
+  $: juegosOptions = ($masterJuegosMaquinasStore && $masterJuegosMaquinasStore.length > 0
+    ? $masterJuegosMaquinasStore
+    : (filterOptions.juegos || [])
+  ).map(j => ({
+    uuid: j.uuid,
+    id: j.uuid || j.id,
+    nombre: j.nombre
+  }));
+
+  $: estadosOptions = ($masterEstadosStore && $masterEstadosStore.length > 0
+    ? $masterEstadosStore
+    : (filterOptions.estados || [])
+  ).map(e => ({
+    uuid: e.uuid,
+    id: e.uuid || e.id,
+    nombre: e.nombre
+  }));
+
+  $: sociedadesOptions = ($masterSociedadesStore && $masterSociedadesStore.length > 0
+    ? $masterSociedadesStore
+    : (filterOptions.sociedades || [])
+  ).map(s => ({
+    uuid: s.uuid,
+    id: s.uuid || s.id,
+    nombre: s.nombre
+  }));
+
+  $: valoresOptions = ($masterValoresStore && $masterValoresStore.length > 0
+    ? $masterValoresStore
+    : (filterOptions.valores || [])
+  ).map(v => ({
+    uuid: v.uuid,
+    id: v.uuid || v.id,
+    nombre: v.nombre
+  }));
+
+  $: tiposOptions = ($masterTiposStore && $masterTiposStore.length > 0
+    ? $masterTiposStore
+    : (filterOptions.tipos || [])
+  ).map(t => ({
+    uuid: t.uuid,
+    id: t.uuid || t.id,
+    nombre: t.nombre
+  }));
+
+  $: modosOptions = ($masterModosStore && $masterModosStore.length > 0
+    ? $masterModosStore
+    : (filterOptions.modos || [])
+  ).map(m => ({
+    uuid: m.uuid,
+    id: m.uuid || m.id,
+    nombre: m.nombre
+  }));
+
+  $: legalesOptions = ($masterLegalStore && $masterLegalStore.length > 0
+    ? $masterLegalStore
+    : (filterOptions.legales || [])
+  ).map(l => ({
+    uuid: l.uuid,
+    id: l.uuid || l.id,
+    nombre: l.nombre
+  }));
+
+  $: juegosFilterOptions = (filterOptions.juegos && filterOptions.juegos.length > 0)
+    ? filterOptions.juegos
+    : juegosOptions;
+
+  function hydrateItemNames(item) {
+    if (!item) return item;
+    const hydrated = { ...item };
+    if (!hydrated.juego_nombre && (hydrated.juego_uuid || hydrated.juego_id)) {
+      const jId = String(hydrated.juego_uuid || hydrated.juego_id);
+      const match = ($masterJuegosMaquinasStore || []).find(j => String(j.uuid || j.id) === jId) ||
+                    (filterOptions.juegos || []).find(j => String(j.uuid || j.id) === jId);
+      if (match) hydrated.juego_nombre = match.nombre;
+    }
+    if (!hydrated.sala_nombre && (hydrated.sala_uuid || hydrated.sala_id)) {
+      const sId = String(hydrated.sala_uuid || hydrated.sala_id);
+      const match = ($masterSalasStore || []).find(s => String(s.uuid || s.id) === sId);
+      if (match) hydrated.sala_nombre = match.nombre;
+    }
+    if (!hydrated.modelo_nombre && (hydrated.modelo_uuid || hydrated.modelo_id)) {
+      const mId = String(hydrated.modelo_uuid || hydrated.modelo_id);
+      const match = ($masterModelosStore || []).find(m => String(m.uuid || m.id) === mId);
+      if (match) hydrated.modelo_nombre = match.nombre;
+    }
+    if (!hydrated.estado_nombre && (hydrated.estado_uuid || hydrated.estado_id)) {
+      const eId = String(hydrated.estado_uuid || hydrated.estado_id);
+      const match = ($masterEstadosStore || []).find(e => String(e.uuid || e.id) === eId);
+      if (match) hydrated.estado_nombre = match.nombre;
+    }
+    if (!hydrated.sociedad_nombre && (hydrated.sociedad_uuid || hydrated.sociedad_id)) {
+      const sId = String(hydrated.sociedad_uuid || hydrated.sociedad_id);
+      const match = ($masterSociedadesStore || []).find(s => String(s.uuid || s.id) === sId);
+      if (match) hydrated.sociedad_nombre = match.nombre;
+    }
+    if (!hydrated.valor_nombre && (hydrated.valor_uuid || hydrated.valor_id)) {
+      const vId = String(hydrated.valor_uuid || hydrated.valor_id);
+      const match = ($masterValoresStore || []).find(v => String(v.uuid || v.id) === vId);
+      if (match) hydrated.valor_nombre = match.nombre;
+    }
+    if (!hydrated.tipo_nombre && (hydrated.tipo_uuid || hydrated.tipo_id)) {
+      const tId = String(hydrated.tipo_uuid || hydrated.tipo_id);
+      const match = ($masterTiposStore || []).find(t => String(t.uuid || t.id) === tId);
+      if (match) hydrated.tipo_nombre = match.nombre;
+    }
+    if (!hydrated.modo_nombre && (hydrated.modo_uuid || hydrated.modo_id)) {
+      const mId = String(hydrated.modo_uuid || hydrated.modo_id);
+      const match = ($masterModosStore || []).find(m => String(m.uuid || m.id) === mId);
+      if (match) hydrated.modo_nombre = match.nombre;
+    }
+    if (!hydrated.legal_nombre && (hydrated.legal_uuid || hydrated.legal_id)) {
+      const lId = String(hydrated.legal_uuid || hydrated.legal_id);
+      const match = ($masterLegalStore || []).find(l => String(l.uuid || l.id) === lId);
+      if (match) hydrated.legal_nombre = match.nombre;
+    }
+    if (!hydrated.rango_nombre && (hydrated.rango_uuid || hydrated.rango_id)) {
+      const rId = String(hydrated.rango_uuid || hydrated.rango_id);
+      const match = ($masterRangosStore || []).find(r => String(r.uuid || r.id) === rId);
+      if (match) hydrated.rango_nombre = match.nombre;
+    }
+    return hydrated;
+  }
+
+  $: displayItems = (items || []).map(hydrateItemNames);
+
   // Distribuciones reactivas para panel de badges (Data Filtrada) - Ordenadas de MAYOR a MENOR
   $: distribucionTipos = (filterOptions.tipos || [])
     .filter(t => Number(t.count) > 0)
@@ -442,7 +581,41 @@
     handleFilterChange();
   }
 
-  function irAReporte(subtipo) {
+  async function irAReporte(subtipo) {
+    const filtros = {
+      search_nombre: searchNombre.trim(),
+      search_serial: searchSerial.trim(),
+      search: searchQuery.trim(),
+      user_sala_ids: assignedSalaIds,
+      grupo_ids: selectedGrupos,
+      sala_ids: selectedSalas,
+      marca_ids: selectedMarcas,
+      modelo_ids: selectedModelos,
+      juego_ids: selectedJuegos,
+      estado_ids: selectedEstados,
+      sociedad_ids: selectedSociedades,
+      valor_ids: selectedValores,
+      tipo_ids: selectedTipos,
+      modo_ids: selectedModos,
+      legal_ids: selectedLegales,
+      rango_ids: selectedRangos
+    };
+
+    try {
+      const res = await fetch('/api/master/maquinas-reportes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subtipo, filtros })
+      });
+      const json = await res.json();
+      if (json && json.success && json.data && json.data.uuid) {
+        navigateToRoute(`maquinas/maquinas/vista/${subtipo}?maquinas_reportes=${json.data.uuid}`);
+        return;
+      }
+    } catch (e) {
+      console.warn('Fallback a query string para reporte de máquinas:', e);
+    }
+
     const q = new URLSearchParams();
     if (searchNombre.trim()) q.set("search_nombre", searchNombre.trim());
     if (searchSerial.trim()) q.set("search_serial", searchSerial.trim());
@@ -476,13 +649,13 @@
     { key: 'sala_nombre', keyId: 'sala_uuid', label: 'SALA', sortable: true, editable: true, type: 'select', options: userSalasForCreate },
     { key: 'marca_nombre', label: 'MARCA', sortable: true, editable: false },
     { key: 'modelo_nombre', keyId: 'modelo_uuid', label: 'MODELO', sortable: true, editable: true, type: 'select', options: modelosForCreate },
-    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'JUEGO', sortable: true, editable: true, type: 'select', options: filterOptions.juegos || [] },
-    { key: 'estado_nombre', keyId: 'estado_uuid', label: 'ESTADO', sortable: true, editable: true, type: 'select', options: filterOptions.estados || [] },
-    { key: 'sociedad_nombre', keyId: 'sociedad_uuid', label: 'SOCIEDAD', sortable: true, editable: true, type: 'select', options: filterOptions.sociedades || [] },
-    { key: 'valor_nombre', keyId: 'valor_uuid', label: 'VALOR', sortable: true, editable: true, type: 'select', options: filterOptions.valores || [] },
-    { key: 'tipo_nombre', keyId: 'tipo_uuid', label: 'TIPO', sortable: true, editable: true, type: 'select', options: filterOptions.tipos || [] },
-    { key: 'modo_nombre', keyId: 'modo_uuid', label: 'MODO', sortable: true, editable: true, type: 'select', options: filterOptions.modos || [] },
-    { key: 'legal_nombre', keyId: 'legal_uuid', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: filterOptions.legales || [] },
+    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'JUEGO', sortable: true, editable: true, type: 'select', options: juegosOptions },
+    { key: 'estado_nombre', keyId: 'estado_uuid', label: 'ESTADO', sortable: true, editable: true, type: 'select', options: estadosOptions },
+    { key: 'sociedad_nombre', keyId: 'sociedad_uuid', label: 'SOCIEDAD', sortable: true, editable: true, type: 'select', options: sociedadesOptions },
+    { key: 'valor_nombre', keyId: 'valor_uuid', label: 'VALOR', sortable: true, editable: true, type: 'select', options: valoresOptions },
+    { key: 'tipo_nombre', keyId: 'tipo_uuid', label: 'TIPO', sortable: true, editable: true, type: 'select', options: tiposOptions },
+    { key: 'modo_nombre', keyId: 'modo_uuid', label: 'MODO', sortable: true, editable: true, type: 'select', options: modosOptions },
+    { key: 'legal_nombre', keyId: 'legal_uuid', label: 'LEGAL', sortable: true, editable: true, type: 'select', options: legalesOptions },
     { key: 'rango_nombre', keyId: 'rango_uuid', label: 'RANGO', sortable: true, editable: true, type: 'select', options: rangosOptions }
   ];
 
@@ -498,29 +671,29 @@
     {
       type: 'row',
       fields: [
-        { key: 'juego_uuid', label: 'Juego', type: 'select', options: filterOptions.juegos || [], required: false },
-        { key: 'estado_uuid', label: 'Estado', type: 'select', options: filterOptions.estados || [], required: false }
+        { key: 'juego_uuid', label: 'Juego', type: 'select', options: juegosOptions, required: false },
+        { key: 'estado_uuid', label: 'Estado', type: 'select', options: estadosOptions, required: false }
       ]
     },
     {
       type: 'row',
       fields: [
-        { key: 'sociedad_uuid', label: 'Sociedad', type: 'select', options: filterOptions.sociedades || [], required: false },
-        { key: 'valor_uuid', label: 'Valor', type: 'select', options: filterOptions.valores || [], required: false }
+        { key: 'sociedad_uuid', label: 'Sociedad', type: 'select', options: sociedadesOptions, required: false },
+        { key: 'valor_uuid', label: 'Valor', type: 'select', options: valoresOptions, required: false }
       ]
     },
     {
       type: 'row',
       fields: [
         { key: 'modelo_uuid', label: 'Modelo', type: 'select', options: modelosForCreate, required: false },
-        { key: 'tipo_uuid', label: 'Tipo', type: 'select', options: filterOptions.tipos || [], required: false }
+        { key: 'tipo_uuid', label: 'Tipo', type: 'select', options: tiposOptions, required: false }
       ]
     },
     {
       type: 'row',
       fields: [
-        { key: 'modo_uuid', label: 'Modo', type: 'select', options: filterOptions.modos || [], required: false },
-        { key: 'legal_uuid', label: 'Legal', type: 'select', options: filterOptions.legales || [], required: false }
+        { key: 'modo_uuid', label: 'Modo', type: 'select', options: modosOptions, required: false },
+        { key: 'legal_uuid', label: 'Legal', type: 'select', options: legalesOptions, required: false }
       ]
     },
     {
@@ -548,6 +721,42 @@
       if (draft[`${f}_uuid`] && !draft[`${f}_id`]) draft[`${f}_id`] = draft[`${f}_uuid`];
     });
 
+    if (draft.juego_uuid) {
+      const matched = juegosOptions.find(j => String(j.uuid || j.id) === String(draft.juego_uuid));
+      if (matched) draft.juego_nombre = matched.nombre;
+    }
+    if (draft.sala_uuid) {
+      const matched = userSalasForCreate.find(s => String(s.uuid || s.id) === String(draft.sala_uuid));
+      if (matched) draft.sala_nombre = matched.nombre;
+    }
+    if (draft.modelo_uuid) {
+      const matched = modelosForCreate.find(m => String(m.uuid || m.id) === String(draft.modelo_uuid));
+      if (matched) draft.modelo_nombre = matched.nombre;
+    }
+    if (draft.estado_uuid) {
+      const matched = estadosOptions.find(e => String(e.uuid || e.id) === String(draft.estado_uuid));
+      if (matched) draft.estado_nombre = matched.nombre;
+    }
+    if (draft.sociedad_uuid) {
+      const matched = sociedadesOptions.find(s => String(s.uuid || s.id) === String(draft.sociedad_uuid));
+      if (matched) draft.sociedad_nombre = matched.nombre;
+    }
+    if (draft.valor_uuid) {
+      const matched = valoresOptions.find(v => String(v.uuid || v.id) === String(draft.valor_uuid));
+      if (matched) draft.valor_nombre = matched.nombre;
+    }
+    if (draft.tipo_uuid) {
+      const matched = tiposOptions.find(t => String(t.uuid || t.id) === String(draft.tipo_uuid));
+      if (matched) draft.tipo_nombre = matched.nombre;
+    }
+    if (draft.modo_uuid) {
+      const matched = modosOptions.find(m => String(m.uuid || m.id) === String(draft.modo_uuid));
+      if (matched) draft.modo_nombre = matched.nombre;
+    }
+    if (draft.legal_uuid) {
+      const matched = legalesOptions.find(l => String(l.uuid || l.id) === String(draft.legal_uuid));
+      if (matched) draft.legal_nombre = matched.nombre;
+    }
     if (draft.rango_uuid) {
       const matchedRango = rangosOptions.find(r => String(r.uuid || r.id) === String(draft.rango_uuid));
       if (matchedRango) {
@@ -623,12 +832,82 @@
       if (payload[`${f}_uuid`] && !payload[`${f}_id`]) payload[`${f}_id`] = payload[`${f}_uuid`];
     });
 
+    if (payload.juego_uuid !== undefined) {
+      if (payload.juego_uuid) {
+        const matched = juegosOptions.find(j => String(j.uuid || j.id) === String(payload.juego_uuid));
+        payload.juego_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.juego_nombre = null;
+      }
+    }
+    if (payload.sala_uuid !== undefined) {
+      if (payload.sala_uuid) {
+        const matched = userSalasForCreate.find(s => String(s.uuid || s.id) === String(payload.sala_uuid));
+        payload.sala_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.sala_nombre = null;
+      }
+    }
+    if (payload.modelo_uuid !== undefined) {
+      if (payload.modelo_uuid) {
+        const matched = modelosForCreate.find(m => String(m.uuid || m.id) === String(payload.modelo_uuid));
+        payload.modelo_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.modelo_nombre = null;
+      }
+    }
+    if (payload.estado_uuid !== undefined) {
+      if (payload.estado_uuid) {
+        const matched = estadosOptions.find(e => String(e.uuid || e.id) === String(payload.estado_uuid));
+        payload.estado_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.estado_nombre = null;
+      }
+    }
+    if (payload.sociedad_uuid !== undefined) {
+      if (payload.sociedad_uuid) {
+        const matched = sociedadesOptions.find(s => String(s.uuid || s.id) === String(payload.sociedad_uuid));
+        payload.sociedad_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.sociedad_nombre = null;
+      }
+    }
+    if (payload.valor_uuid !== undefined) {
+      if (payload.valor_uuid) {
+        const matched = valoresOptions.find(v => String(v.uuid || v.id) === String(payload.valor_uuid));
+        payload.valor_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.valor_nombre = null;
+      }
+    }
+    if (payload.tipo_uuid !== undefined) {
+      if (payload.tipo_uuid) {
+        const matched = tiposOptions.find(t => String(t.uuid || t.id) === String(payload.tipo_uuid));
+        payload.tipo_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.tipo_nombre = null;
+      }
+    }
+    if (payload.modo_uuid !== undefined) {
+      if (payload.modo_uuid) {
+        const matched = modosOptions.find(m => String(m.uuid || m.id) === String(payload.modo_uuid));
+        payload.modo_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.modo_nombre = null;
+      }
+    }
+    if (payload.legal_uuid !== undefined) {
+      if (payload.legal_uuid) {
+        const matched = legalesOptions.find(l => String(l.uuid || l.id) === String(payload.legal_uuid));
+        payload.legal_nombre = matched ? matched.nombre : null;
+      } else {
+        payload.legal_nombre = null;
+      }
+    }
     if (payload.rango_uuid !== undefined) {
       if (payload.rango_uuid) {
         const matchedRango = rangosOptions.find(r => String(r.uuid || r.id) === String(payload.rango_uuid));
-        if (matchedRango) {
-          payload.rango_nombre = matchedRango.nombre;
-        }
+        payload.rango_nombre = matchedRango ? matchedRango.nombre : null;
       } else {
         payload.rango_nombre = null;
       }
@@ -792,8 +1071,8 @@
 </script>
 
 <PaginatedDataTable 
-  {items}
-  existingItems={items}
+  items={displayItems}
+  existingItems={displayItems}
   {totalCount}
   {currentPage}
   {pageSize}
@@ -871,7 +1150,7 @@
         <SmartMultiSelect
           id="filter-maquinas-juegos"
           label="JUEGO"
-          options={filterOptions.juegos}
+          options={juegosFilterOptions}
           bind:selectedValues={selectedJuegos}
           on:change={handleFilterChange}
         />

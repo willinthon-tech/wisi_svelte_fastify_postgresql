@@ -32,6 +32,7 @@ import {
   getExcepciones, createExcepcion, updateExcepcion, deleteExcepcion,
   getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria,
   getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina,
+  saveMaquinasReporte, getMaquinasReporte,
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
   getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
@@ -538,6 +539,13 @@ export default async function masterRoutes(fastify, options) {
   fastify.put('/api/master/maquinas/:id', updateMaquina);
   fastify.delete('/master/maquinas/:id', deleteMaquina);
   fastify.delete('/api/master/maquinas/:id', deleteMaquina);
+
+  // Máquinas: Reportes compartibles y persistencia de filtros
+  fastify.post('/master/maquinas-reportes', saveMaquinasReporte);
+  fastify.post('/api/master/maquinas-reportes', saveMaquinasReporte);
+  fastify.get('/master/maquinas-reportes/:id', getMaquinasReporte);
+  fastify.get('/api/master/maquinas-reportes/:id', getMaquinasReporte);
+
 
 
 

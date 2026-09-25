@@ -104,7 +104,7 @@ async function main() {
     { table: 'feriados', col: 'sala_uuid', parent: 'salas', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'sala_id' },
     { table: 'maquinas', col: 'sala_uuid', parent: 'salas', parentCol: 'uuid', onDel: 'CASCADE', oldIdCol: 'sala_id' },
     { table: 'maquinas', col: 'estado_uuid', parent: 'estados', parentCol: 'uuid', onDel: 'SET NULL', oldIdCol: 'estado_id' },
-    { table: 'maquinas', col: 'juego_uuid', parent: 'juegos', parentCol: 'uuid', onDel: 'SET NULL', oldIdCol: 'juego_id' },
+    { table: 'maquinas', col: 'juego_uuid', parent: 'juegos_maquinas', parentCol: 'uuid', onDel: 'SET NULL', oldIdCol: 'juego_id' },
     { table: 'maquinas', col: 'legal_uuid', parent: 'legal', parentCol: 'uuid', onDel: 'SET NULL', oldIdCol: 'legal_id' },
     { table: 'maquinas', col: 'modelo_uuid', parent: 'modelos', parentCol: 'uuid', onDel: 'SET NULL', oldIdCol: 'modelo_id' },
     { table: 'maquinas', col: 'modo_uuid', parent: 'modos', parentCol: 'uuid', onDel: 'SET NULL', oldIdCol: 'modo_id' },
