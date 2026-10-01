@@ -3,8 +3,7 @@
   import { triggerToast } from "../../controllers/ui.store.js";
   import { currentUserStore } from "../../controllers/auth.store.js";
   import { masterSalasStore, masterMesasStore } from "../../controllers/master.store.js";
-  import { getCecomIaEventos, marcarEventoAtendido } from "../../services/cecomVideo.service.js";
-  import { emitIaEvent } from "../../services/cecomIaBackground.service.js";
+  import { getCecomIaEventos, getMesasConCamaras, marcarEventoAtendido } from "../../services/cecomVideo.service.js";
 
   // Filtros
   let selectedSalaUuid = "all";
@@ -26,8 +25,10 @@
   // Modal Detalle
   let selectedNovedadDetail = null;
 
+  let mesasConCamaras = [];
+  let isLoadingMesas = false;
+
   $: salas = $masterSalasStore || [];
-  $: mesas = ($masterMesasStore || []).filter(m => (m.active ?? 1) === 1);
 
   // Métricas calculadas sobre la lista actual
   $: totalNovedades = novedadesList.length;
@@ -41,6 +42,7 @@
     fechaDesde = today;
     fechaHasta = today;
 
+    await loadMesasConCamaras();
     await loadNovedades();
 
     // Auto-refresco en segundo plano cada 5 segundos
@@ -52,6 +54,29 @@
   onDestroy(() => {
     if (refreshTimer) clearInterval(refreshTimer);
   });
+
+  async function loadMesasConCamaras() {
+    isLoadingMesas = true;
+    try {
+      const res = await getMesasConCamaras({ sala_uuid: selectedSalaUuid });
+      if (res && res.success && Array.isArray(res.data)) {
+        mesasConCamaras = res.data;
+      } else {
+        mesasConCamaras = [];
+      }
+    } catch (e) {
+      mesasConCamaras = [];
+    } finally {
+      isLoadingMesas = false;
+    }
+  }
+
+  async function onSalaChange() {
+    selectedMesaUuid = "all";
+    currentPage = 1;
+    await loadMesasConCamaras();
+    await loadNovedades();
+  }
 
   async function loadNovedades(showLoading = true) {
     if (showLoading) isLoading = true;
@@ -188,10 +213,20 @@
     <div class="filter-row">
       <div class="filter-group">
         <label for="sala-nov-filter">Sala:</label>
-        <select id="sala-nov-filter" bind:value={selectedSalaUuid} on:change={() => { currentPage = 1; loadNovedades(); }}>
+        <select id="sala-nov-filter" bind:value={selectedSalaUuid} on:change={onSalaChange}>
           <option value="all">Todas las Salas</option>
           {#each salas as s}
             <option value={s.uuid || s.id}>{s.nombre}</option>
+          {/each}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="mesa-nov-filter">Mesa Asociada:</label>
+        <select id="mesa-nov-filter" bind:value={selectedMesaUuid} on:change={() => { currentPage = 1; loadNovedades(); }}>
+          <option value="all">Todas ({mesasConCamaras.length})</option>
+          {#each mesasConCamaras as m}
+            <option value={m.mesa_uuid || m.uuid || m.id}>{m.mesa_nombre || m.nombre}</option>
           {/each}
         </select>
       </div>

@@ -1,6 +1,6 @@
 [package]
 name = "wisi-space"
-version = "17.0.0"
+version = "18.0.0"
 description = "Wisi Space Desktop Application"
 authors = ["Wisi Space"]
 license = "MIT"

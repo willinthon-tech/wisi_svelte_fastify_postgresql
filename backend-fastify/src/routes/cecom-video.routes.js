@@ -6,10 +6,12 @@ import {
   syncCanalesDispositivo,
   getCamaras,
   getMesasCamaras,
+  getMesasConCamaras,
   setMesaCamaras,
   getCecomIaEventos,
   createCecomIaEvento,
-  marcarEventoAtendido
+  marcarEventoAtendido,
+  clearCecomIaEventos
 } from '../controllers/cecom-video.controller.js';
 
 export default async function cecomVideoRoutes(fastify, options) {
@@ -24,12 +26,14 @@ export default async function cecomVideoRoutes(fastify, options) {
   fastify.get('/api/cecom/camaras', getCamaras);
 
   // Asociación Mesas <-> Cámaras (para IA de Mesas)
+  fastify.get('/api/cecom/mesas-con-camaras', getMesasConCamaras);
   fastify.get('/api/cecom/mesas/:mesaUuid/camaras', getMesasCamaras);
   fastify.post('/api/cecom/mesas/:mesaUuid/camaras', setMesaCamaras);
 
   // Eventos de IA (Tiempo Real y Novedades)
   fastify.get('/api/cecom/ia-eventos', getCecomIaEventos);
   fastify.post('/api/cecom/ia-eventos', createCecomIaEvento);
+  fastify.delete('/api/cecom/ia-eventos', clearCecomIaEventos);
   fastify.put('/api/cecom/ia-eventos/:uuid/atendido', marcarEventoAtendido);
 }
 

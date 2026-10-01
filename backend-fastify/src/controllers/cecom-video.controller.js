@@ -6,10 +6,12 @@ import {
   syncCanalesDispositivoModel,
   getCamarasModel,
   getMesasCamarasModel,
+  getMesasConCamarasModel,
   setMesaCamarasModel,
   getCecomIaEventosModel,
   createCecomIaEventoModel,
-  marcarEventoAtendidoModel
+  marcarEventoAtendidoModel,
+  clearCecomIaEventosModel
 } from '../models/cecom-video.model.js';
 
 export async function getDispositivosCamaras(request, reply) {
@@ -134,6 +136,27 @@ export async function marcarEventoAtendido(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function getMesasConCamaras(request, reply) {
+  try {
+    const result = await getMesasConCamarasModel(request.query || {});
+    return reply.send(result);
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+export async function clearCecomIaEventos(request, reply) {
+  try {
+    const { sala_uuid } = request.query || {};
+    const result = await clearCecomIaEventosModel(sala_uuid);
+    return reply.send(result);
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
   }
 }
 

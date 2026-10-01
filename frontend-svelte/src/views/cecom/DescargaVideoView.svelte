@@ -10,9 +10,7 @@
     listenDownloadProgress, 
     openMediaFile, 
     showInFolder, 
-    openFolder,
-    promptSaveVideoDialog,
-    promptSelectFolderDialog
+    promptSaveVideoDialog
   } from "../../services/tauriVideo.service.js";
 
   let salas = [];
@@ -44,7 +42,6 @@
   let sdkPath = "";
   let sdkAvailable = false;
   let unlistenProgress = null;
-  let alwaysPromptSave = true;
 
   // Cola de descargas activas en sesión
   let downloadQueue = [];
@@ -64,7 +61,6 @@
         targetVideosDir = localStorage.getItem("cecom_custom_videos_dir") || paths.dest_dir || "";
         sdkPath = localStorage.getItem("cecom_custom_sdk_path") || paths.sdk_converter_path || "";
         sdkAvailable = paths.sdk_available || !!sdkPath;
-        alwaysPromptSave = localStorage.getItem("cecom_always_prompt_save") !== "false";
       }
 
       unlistenProgress = await listenDownloadProgress((payload) => {
@@ -229,25 +225,22 @@
       suggested = `${targetVideosDir}\\${defaultFilename}`;
     }
 
-    let chosenPath = suggested;
-    if (alwaysPromptSave) {
-      try {
-        chosenPath = await promptSaveVideoDialog(suggested);
-      } catch (e) {
-        console.error("Error abriendo diálogo de guardado:", e);
-      }
+    let chosenPath = null;
+    try {
+      chosenPath = await promptSaveVideoDialog(suggested);
+    } catch (e) {
+      console.error("Error abriendo diálogo de guardado:", e);
+    }
 
-      if (!chosenPath) {
-        // El usuario canceló la ventana de guardar de Windows
-        return;
-      }
+    if (!chosenPath) {
+      // El usuario canceló la ventana de guardar de Windows
+      return;
     }
 
     const lastSlash = Math.max(chosenPath.lastIndexOf('\\'), chosenPath.lastIndexOf('/'));
     if (lastSlash > 0) {
-      const parentDir = chosenPath.substring(0, lastSlash);
-      targetVideosDir = parentDir;
-      localStorage.setItem("cecom_custom_videos_dir", parentDir);
+      targetVideosDir = chosenPath.substring(0, lastSlash);
+      localStorage.setItem("cecom_custom_videos_dir", targetVideosDir);
     }
 
     const finalFilename = chosenPath.split(/[\\/]/).pop() || defaultFilename;
@@ -332,34 +325,6 @@
       }
     }
   }
-
-  async function handleOpenTargetFolder() {
-    if (targetVideosDir) {
-      try {
-        await openFolder(targetVideosDir);
-      } catch (err) {
-        triggerToast(`Error al abrir carpeta: ${err}`, "error");
-      }
-    }
-  }
-
-  async function handleChangeTargetFolder() {
-    if (!isTauriWindows()) {
-      triggerToast("La selección de carpeta requiere ejecutar la app en Windows.", "warning");
-      return;
-    }
-    try {
-      const selected = await promptSelectFolderDialog(targetVideosDir || "C:\\");
-      if (selected) {
-        targetVideosDir = selected;
-        localStorage.setItem("cecom_custom_videos_dir", selected);
-        triggerToast(`Carpeta de destino actualizada: ${selected}`, "success");
-      }
-    } catch (err) {
-      console.error("Error al seleccionar carpeta:", err);
-      triggerToast(`Error al seleccionar carpeta: ${err}`, "error");
-    }
-  }
 </script>
 
 <div class="descarga-container">
@@ -387,8 +352,7 @@
     <!-- Panel Izquierdo: Configuración de la Solicitud -->
     <div class="card config-card">
       <h2 class="card-title">
-        <span class="material-icons-round">tune</span>
-        Parámetros de Extracción
+        ⚙️ Parámetros de Extracción
       </h2>
 
       <!-- 1. Selección de Sala y Grabador -->
@@ -491,29 +455,6 @@
         </div>
       </div>
 
-      <!-- 5. Destino de Guardado Local -->
-      {#if isTauriWindows()}
-        <div class="dest-config-panel">
-          <div class="dest-config-header">
-            <span class="dest-config-label">📁 Carpeta Local de Guardado:</span>
-            <button type="button" class="btn-dest-change" on:click={handleChangeTargetFolder}>
-              Seleccionar Carpeta...
-            </button>
-          </div>
-          <div class="dest-config-path font-mono" title={targetVideosDir}>
-            {targetVideosDir || "C:\\Users\\Public\\Downloads\\Wisi_Cecom_Videos"}
-          </div>
-          <label class="dest-checkbox-row">
-            <input 
-              type="checkbox" 
-              bind:checked={alwaysPromptSave} 
-              on:change={() => localStorage.setItem("cecom_always_prompt_save", String(alwaysPromptSave))} 
-            />
-            <span>Preguntar dónde guardar y confirmar nombre en cada descarga (Ventana "Guardar como...")</span>
-          </label>
-        </div>
-      {/if}
-
       <!-- Botón de Descarga Primario -->
       <div class="action-footer">
         <button
@@ -522,8 +463,7 @@
           on:click={handleStartDownload}
           disabled={!selectedDeviceUuid || !selectedCamaraUuid}
         >
-          <span class="material-icons-round">file_download</span>
-          Iniciar Descarga Inmediata (MP4 Remux)
+          📥 Iniciar Descarga Inmediata (MP4 Remux)
         </button>
       </div>
     </div>
@@ -531,8 +471,7 @@
     <!-- Panel Derecho: RTSP & Información del Canal Seleccionado -->
     <div class="card info-card">
       <h2 class="card-title">
-        <span class="material-icons-round">videocam</span>
-        Detalle Técnico y Streaming en Vivo
+        📹 Detalle Técnico y Streaming en Vivo
       </h2>
 
       {#if currentDevice && currentCamara}
@@ -589,8 +528,7 @@
   <div class="card queue-card">
     <div class="queue-header">
       <h2 class="card-title" style="margin: 0;">
-        <span class="material-icons-round">format_list_bulleted</span>
-        Cola de Descargas de la Sesión ({downloadQueue.length})
+        📋 Cola de Descargas de la Sesión ({downloadQueue.length})
       </h2>
       {#if downloadQueue.length > 0}
         <button type="button" class="btn-clear" on:click={() => (downloadQueue = [])}>
@@ -598,27 +536,6 @@
         </button>
       {/if}
     </div>
-
-    <!-- Barra de Estado de Almacenamiento Local -->
-    {#if isTauriWindows()}
-      <div class="storage-info-bar">
-        <div class="storage-meta">
-          <span class="storage-icon">💾</span>
-          <div>
-            <div class="storage-title">Carpeta Local de Destino:</div>
-            <div class="storage-path font-mono">{targetVideosDir || "C:\\Users\\Public\\Downloads\\Wisi_Cecom_Videos"}</div>
-          </div>
-        </div>
-        <div class="storage-actions">
-          <button type="button" class="btn-storage-change" on:click={handleChangeTargetFolder}>
-            📁 Cambiar Carpeta
-          </button>
-          <button type="button" class="btn-storage-open" on:click={handleOpenTargetFolder}>
-            📂 Abrir Carpeta de Videos
-          </button>
-        </div>
-      </div>
-    {/if}
 
     {#if downloadQueue.length === 0}
       <div class="empty-queue">

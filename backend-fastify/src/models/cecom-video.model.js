@@ -347,6 +347,33 @@ export async function getMesasCamarasModel(mesaUuid) {
   return { success: true, data: rows };
 }
 
+export async function getMesasConCamarasModel(params = {}) {
+  if (!isPgConnected || !sql) return { success: true, data: [] };
+  const { sala_uuid } = params;
+  const rows = await sql`
+    SELECT DISTINCT
+      m.uuid,
+      m.uuid AS id,
+      m.nombre,
+      m.nombre AS mesa_nombre,
+      m.sala_uuid,
+      s.nombre AS sala_nombre,
+      m.juego_uuid,
+      j.nombre AS juego_nombre,
+      COUNT(mc.camara_uuid) AS total_camaras
+    FROM mesas m
+    JOIN mesas_camaras mc ON m.uuid = mc.mesa_uuid AND mc.is_deleted = false AND mc.active = 1
+    JOIN camaras c ON mc.camara_uuid = c.uuid AND c.is_deleted = false
+    LEFT JOIN salas s ON m.sala_uuid = s.uuid
+    LEFT JOIN juegos j ON m.juego_uuid = j.uuid
+    WHERE m.is_deleted = false
+      ${sala_uuid && isUuid(sala_uuid) ? sql`AND m.sala_uuid = ${sala_uuid}::uuid` : sql``}
+    GROUP BY m.uuid, m.nombre, m.sala_uuid, s.nombre, m.juego_uuid, j.nombre
+    ORDER BY m.nombre ASC
+  `;
+  return { success: true, data: rows };
+}
+
 export async function setMesaCamarasModel(mesaUuid, camarasList = []) {
   if (!isPgConnected || !sql) throw new Error('Base de datos no disponible');
   if (!mesaUuid || !isUuid(mesaUuid)) throw new Error('UUID de mesa inválido');
@@ -531,5 +558,15 @@ export async function marcarEventoAtendidoModel(uuid, atendido_por = '') {
   `;
 
   return { success: true, data: rows[0] || null };
+}
+
+export async function clearCecomIaEventosModel(salaUuid = null) {
+  if (!isPgConnected || !sql) throw new Error('Base de datos no disponible');
+  if (salaUuid && isUuid(salaUuid)) {
+    await sql`DELETE FROM cecom_ia_eventos WHERE sala_uuid = ${salaUuid}::uuid`;
+  } else {
+    await sql`DELETE FROM cecom_ia_eventos WHERE true`;
+  }
+  return { success: true, message: 'Eventos eliminados correctamente' };
 }
 

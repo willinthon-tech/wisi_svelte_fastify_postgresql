@@ -2,12 +2,11 @@
   import { onMount, onDestroy } from "svelte";
   import { triggerToast } from "../../controllers/ui.store.js";
   import { masterSalasStore, masterMesasStore, masterJuegosStore } from "../../controllers/master.store.js";
-  import { getCecomIaEventos } from "../../services/cecomVideo.service.js";
+  import { getCecomIaEventos, getMesasConCamaras, clearCecomIaEventos } from "../../services/cecomVideo.service.js";
   import {
     mesasLiveStatusStore,
     cecomIaLiveEventsStore,
-    initCecomIaBackgroundWorker,
-    emitIaEvent
+    initCecomIaBackgroundWorker
   } from "../../services/cecomIaBackground.service.js";
 
   // Filtros
@@ -29,23 +28,22 @@
   // Modal Detalle
   let selectedEventDetail = null;
 
+  let mesasConCamaras = [];
+  let isLoadingMesas = false;
+
   $: salas = $masterSalasStore || [];
-  $: mesas = ($masterMesasStore || []).filter(m => (m.active ?? 1) === 1);
   $: liveMesasMap = $mesasLiveStatusStore || {};
 
-  // Lista de mesas con su estado en vivo para los Badges superiores
+  // Lista de mesas para Badges: ÚNICAMENTE mesas asociadas a cámaras
   $: liveMesasBadges = (() => {
-    let list = mesas;
-    if (selectedSalaUuid && selectedSalaUuid !== "all") {
-      list = list.filter(m => String(m.sala_uuid || m.sala_id) === String(selectedSalaUuid));
-    }
-    return list.map(m => {
-      const mId = m.uuid || m.id;
+    return mesasConCamaras.map(m => {
+      const mId = m.mesa_uuid || m.uuid || m.id;
       const live = liveMesasMap[mId] || null;
       return {
         uuid: mId,
-        nombre: m.nombre,
+        nombre: m.mesa_nombre || m.nombre,
         juego: m.juego_nombre || "Mesa de Juego",
+        total_camaras: m.total_camaras || 1,
         ultimo_evento: live?.ultimo_evento || "EN ESPERA",
         descripcion: live?.descripcion || "Mesa activa en monitoreo",
         hora: live?.hora || "",
@@ -64,6 +62,7 @@
     fechaDesde = today;
     fechaHasta = today;
 
+    await loadMesasConCamaras();
     await loadEvents();
 
     // Auto-actualizar vista periódicamente cada 4 segundos
@@ -104,21 +103,61 @@
     }
   }
 
+  async function loadMesasConCamaras() {
+    isLoadingMesas = true;
+    try {
+      const res = await getMesasConCamaras({ sala_uuid: selectedSalaUuid });
+      if (res && res.success && Array.isArray(res.data)) {
+        mesasConCamaras = res.data;
+      } else {
+        mesasConCamaras = [];
+      }
+    } catch (err) {
+      console.warn("No se pudieron cargar mesas con cámaras:", err);
+      mesasConCamaras = [];
+    } finally {
+      isLoadingMesas = false;
+    }
+  }
+
+  async function onSalaChange() {
+    selectedMesaUuid = "all";
+    currentPage = 1;
+    await loadMesasConCamaras();
+    await loadEvents();
+  }
+
   function filterByBadgeMesa(mesaUuid) {
     if (selectedMesaUuid === mesaUuid) {
       selectedMesaUuid = "all";
       triggerToast("Filtro de mesa desactivado", "info");
     } else {
       selectedMesaUuid = mesaUuid;
-      const m = mesas.find(x => String(x.uuid || x.id) === String(mesaUuid));
-      triggerToast(`Filtrando por mesa: ${m?.nombre || 'Mesa'}`, "info");
+      const m = mesasConCamaras.find(x => String(x.mesa_uuid || x.uuid || x.id) === String(mesaUuid));
+      triggerToast(`Filtrando por mesa: ${m?.mesa_nombre || m?.nombre || 'Mesa'}`, "info");
     }
     currentPage = 1;
     loadEvents();
   }
 
-  // Filtrado y paginación en frontend
-  $: filteredEvents = eventsList;
+  async function handleClearEvents() {
+    if (!confirm("¿Deseas vaciar todos los registros de prueba y eventos de IA?")) return;
+    try {
+      await clearCecomIaEventos({ sala_uuid: selectedSalaUuid });
+      eventsList = [];
+      triggerToast("Registros vaciados correctamente", "success");
+    } catch (err) {
+      console.error("Error al vaciar eventos:", err);
+      triggerToast(`Error al vaciar eventos: ${err.message}`, "error");
+    }
+  }
+
+  // Filtrar para mostrar ÚNICAMENTE eventos de mesas asociadas a cámaras
+  $: mesasConCamarasIds = new Set(mesasConCamaras.map(m => String(m.mesa_uuid || m.uuid || m.id)));
+  $: filteredEvents = eventsList.filter(ev => {
+    const mId = String(ev.mesa_uuid || ev.mesa_id || "");
+    return mesasConCamarasIds.has(mId);
+  });
   $: totalPages = Math.ceil(filteredEvents.length / pageSize) || 1;
   $: paginatedEvents = filteredEvents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -159,15 +198,18 @@
   <div class="badges-section">
     <div class="badges-header">
       <h2 class="section-title">
-        <span class="material-icons-round">grid_view</span>
-        Estado en Vivo por Mesa ({liveMesasBadges.length})
+        🟢 Mesas Asociadas a Cámaras ({liveMesasBadges.length})
       </h2>
-      <span class="badges-hint">Haz clic en una mesa para filtrar rápidamente el registro histórico</span>
+      <span class="badges-hint">Solo se auditan mesas que tengan cámaras vinculadas en CECOM</span>
     </div>
 
-    {#if liveMesasBadges.length === 0}
+    {#if isLoadingMesas}
       <div class="empty-badges">
-        No hay mesas activas para mostrar en la sala seleccionada.
+        ⏳ Cargando mesas asociadas...
+      </div>
+    {:else if liveMesasBadges.length === 0}
+      <div class="empty-badges">
+        ℹ️ No hay mesas asociadas a cámaras en esta sala. Para auditar jugadas en vivo, primero vincula las cámaras a las mesas en <strong>Administración &gt; Mesas y Cámaras</strong>.
       </div>
     {:else}
       <div class="badges-grid">
@@ -184,7 +226,7 @@
               <span class="mesa-title">{badge.nombre}</span>
               <span class="status-indicator-dot"></span>
             </div>
-            <div class="badge-game">{badge.juego}</div>
+            <div class="badge-game font-mono">{badge.juego} • 📷 {badge.total_camaras} cam</div>
             <div class="badge-event font-mono">
               {badge.ultimo_evento}
             </div>
@@ -205,10 +247,20 @@
     <div class="filter-row">
       <div class="filter-group">
         <label for="sala-filter">Sala:</label>
-        <select id="sala-filter" bind:value={selectedSalaUuid} on:change={() => { currentPage = 1; loadEvents(); }}>
+        <select id="sala-filter" bind:value={selectedSalaUuid} on:change={onSalaChange}>
           <option value="all">Todas las Salas</option>
           {#each salas as s}
             <option value={s.uuid || s.id}>{s.nombre}</option>
+          {/each}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="mesa-filter">Mesa Asociada:</label>
+        <select id="mesa-filter" bind:value={selectedMesaUuid} on:change={() => { currentPage = 1; loadEvents(); }}>
+          <option value="all">Todas ({mesasConCamaras.length})</option>
+          {#each mesasConCamaras as m}
+            <option value={m.mesa_uuid || m.uuid || m.id}>{m.mesa_nombre || m.nombre}</option>
           {/each}
         </select>
       </div>
@@ -252,14 +304,20 @@
   <div class="datatable-card">
     <div class="table-header-bar">
       <div class="th-title">
-        <span class="material-icons-round">table_rows</span>
-        Registro de Jugadas y Eventos en Tiempo Real ({filteredEvents.length} registros)
+        📊 Registro de Jugadas y Eventos en Tiempo Real ({filteredEvents.length} registros)
       </div>
-      {#if selectedMesaUuid !== 'all'}
-        <button type="button" class="btn-reset-filter" on:click={() => { selectedMesaUuid = 'all'; loadEvents(); }}>
-          ✕ Quitar filtro de mesa
-        </button>
-      {/if}
+      <div class="header-right-actions">
+        {#if filteredEvents.length > 0}
+          <button type="button" class="btn-clear-test" on:click={handleClearEvents} title="Vaciar registros">
+            🗑️ Limpiar Registros
+          </button>
+        {/if}
+        {#if selectedMesaUuid !== 'all'}
+          <button type="button" class="btn-reset-filter" on:click={() => { selectedMesaUuid = 'all'; loadEvents(); }}>
+            ✕ Quitar filtro de mesa
+          </button>
+        {/if}
+      </div>
     </div>
 
     {#if isLoading && eventsList.length === 0}
@@ -677,6 +735,29 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .header-right-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-clear-test {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #b91c1c;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-clear-test:hover {
+    background: #fecaca;
+    border-color: #ef4444;
   }
 
   .btn-reset-filter {

@@ -5,20 +5,21 @@
  */
 
 import { callLocalIsapi, isTauriWindows } from './tauriIsapi.service.js';
-
-const API_BASE = '/api/cecom';
+import { getCloudBaseUrl } from '../config/api.config.js';
 
 /**
  * Normaliza las peticiones a la API
  */
 async function apiRequest(endpoint, method = 'GET', body = null) {
+  const baseUrl = getCloudBaseUrl();
   const options = {
     method,
     headers: { 'Content-Type': 'application/json' }
   };
   if (body) options.body = JSON.stringify(body);
 
-  const res = await fetch(`${API_BASE}${endpoint}`, options);
+  const url = `${baseUrl.replace(/\/+$/, '')}/api/cecom${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const res = await fetch(url, options);
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data?.error || `Error ${res.status}: ${res.statusText}`);
@@ -75,12 +76,26 @@ export async function getCamaras(params = {}) {
 // ASOCIACIÓN MESAS <-> CÁMARAS (PARA IA DE MESAS)
 // ====================================================================
 
+export async function getMesasConCamaras(params = {}) {
+  const query = new URLSearchParams();
+  if (params.sala_uuid && params.sala_uuid !== 'all') query.append('sala_uuid', params.sala_uuid);
+  const qs = query.toString();
+  return await apiRequest(`/mesas-con-camaras${qs ? `?${qs}` : ''}`);
+}
+
 export async function getMesaCamaras(mesaUuid) {
   return await apiRequest(`/mesas/${mesaUuid}/camaras`);
 }
 
 export async function setMesaCamaras(mesaUuid, camaras) {
   return await apiRequest(`/mesas/${mesaUuid}/camaras`, 'POST', { camaras });
+}
+
+export async function clearCecomIaEventos(params = {}) {
+  const query = new URLSearchParams();
+  if (params.sala_uuid && params.sala_uuid !== 'all') query.append('sala_uuid', params.sala_uuid);
+  const qs = query.toString();
+  return await apiRequest(`/ia-eventos${qs ? `?${qs}` : ''}`, 'DELETE');
 }
 
 // ====================================================================
