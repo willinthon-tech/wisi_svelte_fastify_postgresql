@@ -60,12 +60,12 @@ export function initCecomIaBackgroundWorker() {
     pollRecentEvents();
   }, 5000);
 
-  // 2. Monitoreo en tiempo real de movimiento/juego e IA YOLO
+  // 2. Monitoreo en tiempo real de movimiento/juego e IA YOLO (Muestreo ultrarrápido a 600ms)
   sampleLiveMesasMotion();
   if (motionInterval) clearInterval(motionInterval);
   motionInterval = setInterval(() => {
     sampleLiveMesasMotion();
-  }, 2500);
+  }, 600);
 }
 
 /**

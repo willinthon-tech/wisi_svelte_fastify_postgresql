@@ -371,7 +371,7 @@
                     <div class="cards-strip poker-cards-strip">
                       {#if badge.dealer_cards && badge.dealer_cards.length > 0}
                         {#each badge.dealer_cards as c}
-                          <span class="card-chip poker" class:back-chip={c.val.includes('BACK')} title="Confianza: {Math.round((c.conf || 0.8) * 100)}%">
+                          <span class="card-chip poker" class:back-chip={c.val.includes('BACK')} title="{c.val}">
                             {c.val}
                           </span>
                         {/each}
@@ -405,16 +405,16 @@
               {:else}
                 <!-- TABLERO BACCARAT / GENERAL -->
                 <div class="ia-live-scoreboard">
-                  <!-- Lado Punto -->
-                  <div class="score-side punto" class:winner={badge.ganador === 'PUNTO'}>
+                  <!-- Lado Banca (Izquierda según visualización de la cámara) -->
+                  <div class="score-side banca" class:winner={badge.ganador === 'BANCA'}>
                     <div class="side-header">
-                      <span class="side-lbl">PUNTO</span>
-                      <span class="side-score">{badge.scoreP}</span>
+                      <span class="side-lbl">BANCA</span>
+                      <span class="side-score">{badge.scoreB}</span>
                     </div>
                     <div class="cards-strip">
-                      {#if badge.punto && badge.punto.length > 0}
-                        {#each badge.punto as c}
-                          <span class="card-chip punto" title="Confianza: {Math.round((c.conf || 0.8) * 100)}%">{c.val}</span>
+                      {#if badge.banca && badge.banca.length > 0}
+                        {#each badge.banca as c}
+                          <span class="card-chip banca" title="{c.val}">{c.val}</span>
                         {/each}
                       {:else}
                         <span class="no-cards">-</span>
@@ -430,16 +430,16 @@
                     {/if}
                   </div>
 
-                  <!-- Lado Banca -->
-                  <div class="score-side banca" class:winner={badge.ganador === 'BANCA'}>
+                  <!-- Lado Punto (Derecha según visualización de la cámara) -->
+                  <div class="score-side punto" class:winner={badge.ganador === 'PUNTO'}>
                     <div class="side-header">
-                      <span class="side-lbl">BANCA</span>
-                      <span class="side-score">{badge.scoreB}</span>
+                      <span class="side-lbl">PUNTO</span>
+                      <span class="side-score">{badge.scoreP}</span>
                     </div>
                     <div class="cards-strip">
-                      {#if badge.banca && badge.banca.length > 0}
-                        {#each badge.banca as c}
-                          <span class="card-chip banca" title="Confianza: {Math.round((c.conf || 0.8) * 100)}%">{c.val}</span>
+                      {#if badge.punto && badge.punto.length > 0}
+                        {#each badge.punto as c}
+                          <span class="card-chip punto" title="{c.val}">{c.val}</span>
                         {/each}
                       {:else}
                         <span class="no-cards">-</span>
@@ -459,6 +459,21 @@
                   {:else}
                     ⏱️ EN ESPERA DE JUGADA
                   {/if}
+                </div>
+
+                <!-- Puestos de la Mesa (1 al 7) -->
+                <div class="ia-puestos-strip">
+                  {#each [1, 2, 3, 5, 6, 7] as p}
+                    <span
+                      class="ia-puesto-tag"
+                      class:p-banca={badge.ganador === 'BANCA'}
+                      class:p-punto={badge.ganador === 'PUNTO'}
+                      class:p-tie={badge.ganador === 'EMPATE (TIE)'}
+                      title="Puesto {p}: {badge.ganador === 'BANCA' ? 'Banca Gana (1:1 -5%)' : (badge.ganador === 'PUNTO' ? 'Punto Gana (1:1)' : (badge.ganador === 'EMPATE (TIE)' ? 'Tie (8:1)' : 'En juego'))}"
+                    >
+                      P{p}
+                    </span>
+                  {/each}
                 </div>
               {/if}
             {:else}
@@ -740,7 +755,7 @@
                   {#if viewingAiMesa.dealer_cards && viewingAiMesa.dealer_cards.length > 0}
                     {#each viewingAiMesa.dealer_cards as c}
                       <span class="chip-detail poker" class:is-back={c.val.includes('BACK')}>
-                        {c.val} <small>({Math.round((c.conf || 0.8) * 100)}%)</small>
+                        {c.val}
                       </span>
                     {/each}
                   {:else}
@@ -781,15 +796,16 @@
                 </div>
               </div>
             {:else}
-              <!-- Marcador Principal Baccarat -->
+              <!-- Marcador Principal Baccarat (BANCA A LA IZQUIERDA Y PUNTO A LA DERECHA COMO EN CÁMARA) -->
               <div class="vision-score-box">
-                <div class="v-side punto" class:winner={viewingAiMesa.ganador === 'PUNTO'}>
-                  <span class="v-lbl">PUNTO</span>
-                  <span class="v-val">{viewingAiMesa.scoreP ?? 0}</span>
+                <!-- Lado BANCA (Izquierda según vista física de la cámara) -->
+                <div class="v-side banca" class:winner={viewingAiMesa.ganador === 'BANCA'}>
+                  <span class="v-lbl">BANCA</span>
+                  <span class="v-val">{viewingAiMesa.scoreB ?? 0}</span>
                   <div class="v-cards">
-                    {#if viewingAiMesa.punto && viewingAiMesa.punto.length > 0}
-                      {#each viewingAiMesa.punto as c}
-                        <span class="chip-detail punto">{c.val} <small>({Math.round((c.conf || 0.8) * 100)}%)</small></span>
+                    {#if viewingAiMesa.banca && viewingAiMesa.banca.length > 0}
+                      {#each viewingAiMesa.banca as c}
+                        <span class="chip-detail banca">{c.val}</span>
                       {/each}
                     {:else}
                       <span class="empty-detail">Sin cartas</span>
@@ -804,13 +820,14 @@
                   {/if}
                 </div>
 
-                <div class="v-side banca" class:winner={viewingAiMesa.ganador === 'BANCA'}>
-                  <span class="v-lbl">BANCA</span>
-                  <span class="v-val">{viewingAiMesa.scoreB ?? 0}</span>
+                <!-- Lado PUNTO (Derecha según vista física de la cámara) -->
+                <div class="v-side punto" class:winner={viewingAiMesa.ganador === 'PUNTO'}>
+                  <span class="v-lbl">PUNTO</span>
+                  <span class="v-val">{viewingAiMesa.scoreP ?? 0}</span>
                   <div class="v-cards">
-                    {#if viewingAiMesa.banca && viewingAiMesa.banca.length > 0}
-                      {#each viewingAiMesa.banca as c}
-                        <span class="chip-detail banca">{c.val} <small>({Math.round((c.conf || 0.8) * 100)}%)</small></span>
+                    {#if viewingAiMesa.punto && viewingAiMesa.punto.length > 0}
+                      {#each viewingAiMesa.punto as c}
+                        <span class="chip-detail punto">{c.val}</span>
                       {/each}
                     {:else}
                       <span class="empty-detail">Sin cartas</span>
@@ -822,10 +839,55 @@
               <!-- Ganador / Estado Baccarat -->
               <div class="vision-status-banner" class:banca={viewingAiMesa.ganador === 'BANCA'} class:punto={viewingAiMesa.ganador === 'PUNTO'}>
                 {#if viewingAiMesa.ganador && viewingAiMesa.ganador !== 'ESPERANDO'}
-                  🏆 GANADOR: {viewingAiMesa.ganador} (Punto {viewingAiMesa.scoreP} - Banca {viewingAiMesa.scoreB})
+                  🏆 GANADOR: {viewingAiMesa.ganador} (Banca {viewingAiMesa.scoreB} - Punto {viewingAiMesa.scoreP})
                 {:else}
                   🔄 Estado: {viewingAiMesa.estado_mesa || 'ESPERANDO'}
                 {/if}
+              </div>
+
+              <!-- Auditoría de Puestos de la Mesa (1 al 7) -->
+              <div class="vision-puestos-box">
+                <div class="puestos-header">
+                  <span class="box-title">🪑 Auditoría de Puestos en Mesa (1 - 7)</span>
+                  <span class="puestos-legend">
+                    {#if viewingAiMesa.ganador === 'BANCA'}
+                      🔴 Apuestas a BANCA cobran 1:1 (-5% comisión) | PUNTO pierde
+                    {:else if viewingAiMesa.ganador === 'PUNTO'}
+                      🔵 Apuestas a PUNTO cobran 1:1 | BANCA pierde
+                    {:else if viewingAiMesa.ganador === 'EMPATE (TIE)'}
+                      🟢 Apuestas a TIE pagan 8:1 | Punto y Banca devueltos (Push)
+                    {:else}
+                      ⏳ Ronda viva | Evaluando puestos
+                    {/if}
+                  </span>
+                </div>
+                <div class="puestos-grid">
+                  {#each [1, 2, 3, 5, 6, 7] as p}
+                    <div
+                      class="puesto-seat-card"
+                      class:seat-banca={viewingAiMesa.ganador === 'BANCA'}
+                      class:seat-punto={viewingAiMesa.ganador === 'PUNTO'}
+                      class:seat-tie={viewingAiMesa.ganador === 'EMPATE (TIE)'}
+                    >
+                      <span class="seat-num">PUESTO {p}</span>
+                      <div class="seat-outcome">
+                        {#if viewingAiMesa.ganador === 'BANCA'}
+                          <span class="seat-badge banca">GANA BANCA</span>
+                          <span class="seat-sub">1:1 (-5%)</span>
+                        {:else if viewingAiMesa.ganador === 'PUNTO'}
+                          <span class="seat-badge punto">GANA PUNTO</span>
+                          <span class="seat-sub">1:1</span>
+                        {:else if viewingAiMesa.ganador === 'EMPATE (TIE)'}
+                          <span class="seat-badge tie">EMPATE</span>
+                          <span class="seat-sub">8:1 / Push</span>
+                        {:else}
+                          <span class="seat-badge wait">EN JUEGO</span>
+                          <span class="seat-sub">Apuesta</span>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
               </div>
 
               <!-- Desglose Técnico de Reglas de Juego Baccarat -->
@@ -1758,6 +1820,161 @@
     border: 1px solid #bbf7d0;
     border-radius: 8px;
     padding: 12px;
+  }
+
+  /* Puestos Strip en Badge Card */
+  .ia-puestos-strip {
+    display: flex;
+    justify-content: space-between;
+    gap: 3px;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+  }
+
+  .ia-puesto-tag {
+    font-size: 8.5px;
+    font-weight: 800;
+    padding: 2px 3px;
+    border-radius: 3px;
+    background: #1e293b;
+    color: #94a3b8;
+    text-align: center;
+    flex: 1;
+    transition: all 0.2s ease;
+  }
+
+  .ia-puesto-tag.p-banca {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    font-weight: 900;
+  }
+
+  .ia-puesto-tag.p-punto {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    font-weight: 900;
+  }
+
+  .ia-puesto-tag.p-tie {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+    font-weight: 900;
+  }
+
+  /* Puestos Box en Modal */
+  .vision-puestos-box {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid #334155;
+  }
+
+  .puestos-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .puestos-header .box-title {
+    color: #f8fafc;
+    margin-bottom: 0;
+  }
+
+  .puestos-legend {
+    font-size: 11px;
+    font-weight: 700;
+    color: #cbd5e1;
+  }
+
+  .puestos-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+  }
+
+  .puesto-seat-card {
+    background: #1e293b;
+    border-radius: 6px;
+    padding: 6px 4px;
+    text-align: center;
+    border: 1px solid #334155;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: all 0.2s ease;
+  }
+
+  .seat-num {
+    font-size: 9.5px;
+    font-weight: 900;
+    color: #94a3b8;
+    letter-spacing: 0.5px;
+  }
+
+  .seat-outcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .seat-badge {
+    font-size: 8.5px;
+    font-weight: 800;
+    padding: 2px 4px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .seat-badge.banca {
+    background: #dc2626;
+    color: #ffffff;
+  }
+
+  .seat-badge.punto {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .seat-badge.tie {
+    background: #16a34a;
+    color: #ffffff;
+  }
+
+  .seat-badge.wait {
+    background: rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+  }
+
+  .seat-sub {
+    font-size: 8px;
+    color: #64748b;
+    display: block;
+    margin-top: 1px;
+    font-weight: 600;
+  }
+
+  .puesto-seat-card.seat-banca {
+    border-color: #dc2626;
+    background: rgba(220, 38, 38, 0.12);
+  }
+
+  .puesto-seat-card.seat-punto {
+    border-color: #2563eb;
+    background: rgba(37, 99, 235, 0.12);
+  }
+
+  .puesto-seat-card.seat-tie {
+    border-color: #16a34a;
+    background: rgba(22, 163, 74, 0.12);
   }
 
   .feedback-title {

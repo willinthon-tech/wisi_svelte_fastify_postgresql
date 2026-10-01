@@ -70,8 +70,12 @@ def calcular_valor_carta_baccarat(val_str):
 
 def motor_baccarat(punto_cards, banca_cards):
     """
-    Reglas oficiales de Punto y Banca / Baccarat internacional
+    Reglas oficiales de Punto y Banca / Baccarat internacional.
+    En Baccarat NUNCA puede haber más de 3 cartas por bando (máximo 6 cartas en total).
     """
+    punto_cards = punto_cards[:3]
+    banca_cards = banca_cards[:3]
+
     def sum_bac(cards):
         tot = 0
         for c in cards:
@@ -94,8 +98,8 @@ def motor_baccarat(punto_cards, banca_cards):
             "descripcion": "Repartiendo cartas iniciales"
         }
 
-    # Natural 8 o 9 (No se piden más cartas)
-    if sP >= 8 or sB >= 8:
+    # Natural 8 o 9 (Se termina de inmediato, ninguna mano pide 3ra carta)
+    if (nP == 2 and nB == 2) and (sP >= 8 or sB >= 8):
         ganador = "BANCA" if sB > sP else ("PUNTO" if sP > sB else "EMPATE (TIE)")
         return {
             "win": ganador,
@@ -103,7 +107,14 @@ def motor_baccarat(punto_cards, banca_cards):
             "scoreB": sB,
             "listo": True,
             "natural": True,
-            "descripcion": f"Natural ({sP} a {sB})"
+            "descripcion": f"Natural ({sB} a {sP})",
+            "puestos_detalle": {
+                "ganador": ganador,
+                "puestos": [1, 2, 3, 5, 6, 7],
+                "banca_resultado": "GANA (Pago 1:1, comisión 5%)" if ganador == "BANCA" else ("EMPATE / PUSH" if "EMPATE" in ganador else "PIERDE"),
+                "punto_resultado": "GANA (Pago 1:1)" if ganador == "PUNTO" else ("EMPATE / PUSH" if "EMPATE" in ganador else "PIERDE"),
+                "tie_resultado": "GANA (Pago 8:1)" if "EMPATE" in ganador else "PIERDE"
+            }
         }
 
     pideP = False
@@ -145,7 +156,14 @@ def motor_baccarat(punto_cards, banca_cards):
         "scoreB": sB,
         "listo": terminado,
         "natural": False,
-        "descripcion": f"Punto: {sP} vs Banca: {sB}"
+        "descripcion": f"Banca: {sB} vs Punto: {sP}",
+        "puestos_detalle": {
+            "ganador": ganador,
+            "puestos": [1, 2, 3, 5, 6, 7],
+            "banca_resultado": "GANA (Pago 1:1, comisión 5%)" if ganador == "BANCA" else ("EMPATE / PUSH" if "EMPATE" in ganador else "PIERDE"),
+            "punto_resultado": "GANA (Pago 1:1)" if ganador == "PUNTO" else ("EMPATE / PUSH" if "EMPATE" in ganador else "PIERDE"),
+            "tie_resultado": "GANA (Pago 8:1)" if "EMPATE" in ganador else "PIERDE"
+        }
     }
 
 def motor_blackjack(jugador_cards, dealer_cards):
@@ -397,13 +415,31 @@ def ai_inference_loop():
                         "conf": conf
                     })
 
-                raw_cards.sort(key=lambda c: c['cx'])
+                # Filtrar cajas duplicadas que correspondan a la misma carta física
+                filtered_cards = []
+                for c in sorted(raw_cards, key=lambda x: x['conf'], reverse=True):
+                    overlap = False
+                    for fc in filtered_cards:
+                        dist = ((c['cx'] - fc['cx'])**2 + (c['cy'] - fc['cy'])**2)**0.5
+                        if dist < 32:
+                            overlap = True
+                            break
+                    if not overlap:
+                        filtered_cards.append(c)
+
+                filtered_cards.sort(key=lambda c: c['cx'])
+                raw_cards = filtered_cards
                 count = len(raw_cards)
                 detections = []
                 estado_mesa = "NORMAL"
 
                 if count == 0:
                     estado_mesa = "ESPERANDO"
+                    punto_list = []
+                    banca_list = []
+                elif count > 6 and tipo_juego == 'BACCARAT':
+                    # En Baccarat NUNCA puede haber más de 6 cartas en total (3 Punto + 3 Banca)
+                    estado_mesa = "BARAJO"
                     punto_list = []
                     banca_list = []
                 elif count >= 8 and tipo_juego != 'POKER_CARIBENO':
@@ -414,22 +450,62 @@ def ai_inference_loop():
                     gaps = [raw_cards[i+1]['cx'] - raw_cards[i]['cx'] for i in range(count - 1)]
                     max_gap = max(gaps) if gaps else 0
 
-                    if count > 1 and max_gap < 20:
+                    if count > 1 and max_gap < 18:
                         estado_mesa = "RECOGIENDO"
                     elif count < (5 if tipo_juego == 'POKER_CARIBENO' else 4):
                         estado_mesa = "REPARTIENDO"
                     else:
                         estado_mesa = "NORMAL"
 
-                    m_gap = -1
-                    idx_divisor = max(1, count // 2)
-                    for i, g in enumerate(gaps):
-                        if g > m_gap:
-                            m_gap = g
-                            idx_divisor = i + 1
+                    if tipo_juego == 'BACCARAT':
+                        # REGLA OFICIAL DE BACCARAT:
+                        # En la cámara, las cartas de BANCA se sitúan a la izquierda (menor cx) y PUNTO a la derecha (mayor cx).
+                        # NUNCA JAMÁS Banca o Punto pueden tener 4 cartas. Máximo 3 cartas por bando.
+                        if count == 1:
+                            banca_list = raw_cards
+                            punto_list = []
+                        elif count == 2:
+                            banca_list = [raw_cards[0]]
+                            punto_list = [raw_cards[1]]
+                        elif count == 3:
+                            if len(gaps) >= 2 and gaps[0] > gaps[1]:
+                                banca_list = [raw_cards[0]]
+                                punto_list = raw_cards[1:3]
+                            else:
+                                banca_list = raw_cards[0:2]
+                                punto_list = [raw_cards[2]]
+                        elif count == 4:
+                            banca_list = raw_cards[:2]
+                            punto_list = raw_cards[2:4]
+                        elif count == 5:
+                            # 2 Banca / 3 Punto, o 3 Banca / 2 Punto. NUNCA 4!
+                            g2 = gaps[1] if len(gaps) > 1 else 0
+                            g3 = gaps[2] if len(gaps) > 2 else 0
+                            if g3 > g2:
+                                banca_list = raw_cards[:3]
+                                punto_list = raw_cards[3:5]
+                            else:
+                                banca_list = raw_cards[:2]
+                                punto_list = raw_cards[2:5]
+                        elif count == 6:
+                            banca_list = raw_cards[:3]
+                            punto_list = raw_cards[3:6]
+                        else:
+                            banca_list = raw_cards[:3]
+                            punto_list = raw_cards[3:6]
 
-                    banca_list = raw_cards[:idx_divisor]
-                    punto_list = raw_cards[idx_divisor:]
+                        banca_list = banca_list[:3]
+                        punto_list = punto_list[:3]
+                    else:
+                        m_gap = -1
+                        idx_divisor = max(1, count // 2)
+                        for i, g in enumerate(gaps):
+                            if g > m_gap:
+                                m_gap = g
+                                idx_divisor = i + 1
+
+                        banca_list = raw_cards[:idx_divisor]
+                        punto_list = raw_cards[idx_divisor:]
 
                 # Ejecutar motor de reglas según juego
                 if tipo_juego == 'POKER_CARIBENO':
@@ -490,7 +566,7 @@ def ai_inference_loop():
                     resultado = motor_baccarat(punto_list, banca_list)
                     det_p_str = ', '.join([c['val'] for c in punto_list])
                     det_b_str = ', '.join([c['val'] for c in banca_list])
-                    detalle_mano = f"P:[{det_p_str}] B:[{det_b_str}]"
+                    detalle_mano = f"B:[{det_b_str}] P:[{det_p_str}]"
                     for c in banca_list:
                         detections.append({**c, "zone": "banca"})
                     for c in punto_list:
@@ -529,10 +605,12 @@ def ai_inference_loop():
                         color = (0, 255, 0)
 
                     cv2.rectangle(img_plot, (x1, y1), (x2, y2), color, 3)
-                    label = f"{det['val']} ({det['conf']})"
-                    (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
-                    cv2.rectangle(img_plot, (x1, y1 - h - 12), (x1 + w, y1), color, -1)
-                    cv2.putText(img_plot, label, (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+                    # Quitar porcentaje como solicitó el usuario: solo nombre limpio de la carta (sin porcentajes)
+                    label = str(det['val']).strip()
+                    (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.85, 2)
+                    top_y = max(h + 12, y1)
+                    cv2.rectangle(img_plot, (x1, top_y - h - 10), (x1 + w + 8, top_y), color, -1)
+                    cv2.putText(img_plot, label, (x1 + 4, top_y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 0, 0), 2)
 
                 # Convertir imagen a base64 ligera para transmisión
                 _, buf = cv2.imencode('.jpg', img_plot, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
@@ -555,7 +633,7 @@ def ai_inference_loop():
             except Exception as e:
                 print(f"❌ Error en inferencia de mesa {mesa_uuid}: {e}")
 
-        time.sleep(0.4)
+        time.sleep(0.06)
 
 def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego_label='Baccarat'):
     """
@@ -617,12 +695,12 @@ def sync_to_cloud_worker():
                 payload = { "mesas": live_results }
                 for ep in endpoints:
                     try:
-                        requests.post(ep, json=payload, timeout=2.5)
+                        requests.post(ep, json=payload, timeout=1.5)
                     except Exception:
                         pass
         except Exception:
             pass
-        time.sleep(1.2)
+        time.sleep(0.35)
 
 # ====================================================================
 # RUTAS DE API FLASK Y CONTROLADORES CORS
