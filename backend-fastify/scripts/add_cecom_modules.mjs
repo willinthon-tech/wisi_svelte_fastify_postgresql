@@ -1,16 +1,23 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 import postgres from 'postgres';
 
 async function addModules() {
   const sql = postgres({
-    host: 'localhost',
-    port: 5432,
-    database: 'wisi',
-    username: 'root',
-    password: 'S0p0rt3R0y4l-2025'
+    host: process.env.PGHOST || 'localhost',
+    port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
+    database: process.env.PGDATABASE || 'wisi',
+    username: process.env.PGUSER || 'root',
+    password: process.env.PGPASSWORD || 'S0p0rt3R0y4l-2025'
   });
 
   try {
-    const pageRows = await sql`SELECT uuid FROM paginas WHERE nombre = 'CECOM' LIMIT 1`;
+    const pageRows = await sql`SELECT uuid FROM paginas WHERE UPPER(TRIM(nombre)) = 'CECOM' LIMIT 1`;
     if (pageRows.length === 0) {
       console.log('No se encontró la página CECOM');
       return;
