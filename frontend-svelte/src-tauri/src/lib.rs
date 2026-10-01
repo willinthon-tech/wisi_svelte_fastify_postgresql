@@ -532,10 +532,19 @@ async fn start_cecom_video_download(
         });
       }
       Ok(s) => {
+        // Garantizar que nunca quede un archivo corrupto o de 0 bytes en disco
+        if Path::new(&final_dest_clone).exists() {
+          if let Ok(meta) = std::fs::metadata(&final_dest_clone) {
+            if meta.len() == 0 {
+              let _ = std::fs::remove_file(&final_dest_clone);
+            }
+          }
+        }
+
         let err_msg = if let Some(e) = captured_error {
           e
         } else if !file_exists || file_size == 0 {
-          "El grabador no generó el archivo de video (posiblemente no hay video grabado en ese rango de horas o el grabador no está accesible en esta red)".to_string()
+          "El grabador no encontró video en ese canal para la fecha y rango de horas seleccionadas (NET_DVR_NORECORD).".to_string()
         } else {
           format!("El proceso finalizó con código {}", s)
         };
@@ -549,6 +558,9 @@ async fn start_cecom_video_download(
         });
       }
       Err(e) => {
+        if Path::new(&final_dest_clone).exists() {
+          let _ = std::fs::remove_file(&final_dest_clone);
+        }
         let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
           task_id: task_id_clone,
           percent: 0,

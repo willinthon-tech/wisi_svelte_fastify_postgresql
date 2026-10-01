@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { triggerToast } from "../../controllers/ui.store.js";
   import { masterSalasStore, masterMesasStore, masterJuegosStore } from "../../controllers/master.store.js";
-  import { getCecomIaEventos, getMesasConCamaras, clearCecomIaEventos } from "../../services/cecomVideo.service.js";
+  import { getCecomIaEventos, getMesasConCamaras, getMesaCamaras, clearCecomIaEventos } from "../../services/cecomVideo.service.js";
   import {
     mesasLiveStatusStore,
     cecomIaLiveEventsStore,
@@ -31,6 +31,15 @@
   let mesasConCamaras = [];
   let isLoadingMesas = false;
 
+  function getLocalDateStr(offsetDays = 0) {
+    const d = new Date();
+    if (offsetDays !== 0) d.setDate(d.getDate() + offsetDays);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
   $: salas = $masterSalasStore || [];
   $: liveMesasMap = $mesasLiveStatusStore || {};
 
@@ -57,8 +66,8 @@
     // Iniciar worker de fondo si aún no corre
     initCecomIaBackgroundWorker();
 
-    // Fecha por defecto: hoy
-    const today = new Date().toISOString().split("T")[0];
+    // Fecha por defecto: hoy en hora local (evita bug de UTC +1 día)
+    const today = getLocalDateStr();
     fechaDesde = today;
     fechaHasta = today;
 
@@ -106,14 +115,52 @@
   async function loadMesasConCamaras() {
     isLoadingMesas = true;
     try {
+      // 1. Probar ruta centralizada backend
       const res = await getMesasConCamaras({ sala_uuid: selectedSalaUuid });
-      if (res && res.success && Array.isArray(res.data)) {
+      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
         mesasConCamaras = res.data;
-      } else {
-        mesasConCamaras = [];
+        return;
       }
     } catch (err) {
-      console.warn("No se pudieron cargar mesas con cámaras:", err);
+      console.debug("Endpoint centralizado /mesas-con-camaras no disponible, ejecutando sincronización fallback:", err);
+    }
+
+    // 2. Fallback de alta resiliencia: resolver mesas y cámaras directamente desde la base de datos
+    try {
+      const allMesas = $masterMesasStore || [];
+      const candidateMesas = allMesas.filter(m => {
+        if (!selectedSalaUuid || selectedSalaUuid === "all") return true;
+        return String(m.sala_uuid || "") === String(selectedSalaUuid);
+      });
+
+      const resolved = [];
+      await Promise.all(
+        candidateMesas.map(async (m) => {
+          try {
+            const camRes = await getMesaCamaras(m.uuid || m.id);
+            if (camRes && camRes.success && Array.isArray(camRes.data) && camRes.data.length > 0) {
+              resolved.push({
+                mesa_uuid: m.uuid || m.id,
+                uuid: m.uuid || m.id,
+                id: m.uuid || m.id,
+                nombre: m.nombre,
+                mesa_nombre: m.nombre,
+                sala_uuid: m.sala_uuid,
+                juego_nombre: m.juego_nombre || m.juego || "Mesa de Juego",
+                total_camaras: camRes.data.length,
+                camaras: camRes.data
+              });
+            }
+          } catch (e) {
+            // Ignorar errores en mesas individuales
+          }
+        })
+      );
+
+      resolved.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+      mesasConCamaras = resolved;
+    } catch (err) {
+      console.error("Error en fallback de mesas asociadas:", err);
       mesasConCamaras = [];
     } finally {
       isLoadingMesas = false;

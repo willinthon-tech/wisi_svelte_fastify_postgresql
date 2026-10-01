@@ -20,8 +20,9 @@
   let camaras = [];
   let selectedCamaraUuid = "";
 
-  function getLocalDateStr() {
+  function getLocalDateStr(offsetDays = 0) {
     const d = new Date();
+    if (offsetDays !== 0) d.setDate(d.getDate() + offsetDays);
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -199,6 +200,12 @@
 
     if (!fecha || !horaInicio || !horaFin) {
       triggerToast("Especifica la fecha y el rango de horas", "warning");
+      return;
+    }
+
+    const todayLocal = getLocalDateStr();
+    if (fecha > todayLocal) {
+      triggerToast("La fecha seleccionada no puede ser futura. El grabador solo almacena video hasta el presente.", "warning");
       return;
     }
 
@@ -411,8 +418,14 @@
       <!-- 3. Rango de Fecha y Hora -->
       <div class="form-row">
         <div class="form-group flex-1">
-          <label for="fecha-input" class="form-label">Fecha del Evento</label>
-          <input id="fecha-input" type="date" class="form-input" bind:value={fecha} />
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="fecha-input" class="form-label" style="margin: 0;">Fecha del Evento</label>
+            <div style="display: flex; gap: 4px;">
+              <button type="button" class="btn-chip" style="padding: 2px 7px; font-size: 11px;" on:click={() => fecha = getLocalDateStr()}>Hoy</button>
+              <button type="button" class="btn-chip" style="padding: 2px 7px; font-size: 11px;" on:click={() => fecha = getLocalDateStr(-1)}>Ayer</button>
+            </div>
+          </div>
+          <input id="fecha-input" type="date" class="form-input" bind:value={fecha} max={getLocalDateStr()} />
         </div>
 
         <div class="form-group flex-1">

@@ -300,6 +300,7 @@ namespace WisiCecomDownloader
             {
                 string desc = GetErrorDescription(lastErr);
                 Console.WriteLine(string.Format("DOWNLOAD_ERROR:{0}:{1}", lastErr, desc));
+                try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
                 NET_DVR_Logout(userId);
                 NET_DVR_Cleanup();
                 return 3;
@@ -311,6 +312,8 @@ namespace WisiCecomDownloader
 
             int downloadPos = 0;
             int stallCount = 0;
+            long lastSize = 0;
+            int sizeSameCount = 0;
 
             while (downloadPos < 100)
             {
@@ -322,15 +325,39 @@ namespace WisiCecomDownloader
 
                     downloadPos = currentPos;
                     Console.WriteLine(string.Format("PROGRESS:{0}", downloadPos));
+
+                    // Si ya superó el 98% y el archivo en disco existe y tiene tamaño real
+                    if (downloadPos >= 98 && File.Exists(outputPath))
+                    {
+                        try
+                        {
+                            long curSize = new FileInfo(outputPath).Length;
+                            if (curSize > 0)
+                            {
+                                if (curSize == lastSize) sizeSameCount++;
+                                else { lastSize = curSize; sizeSameCount = 0; }
+
+                                // Si tras alcanzar 98%+ el archivo ya no crece por 2 segundos o llegó a 100%, está listo
+                                if (sizeSameCount >= 2 || downloadPos == 100)
+                                {
+                                    downloadPos = 100;
+                                    Console.WriteLine("PROGRESS:100");
+                                    break;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
                 }
                 else if (currentPos > 100)
                 {
                     string errDesc = "Fallo durante la transmision";
-                    if (currentPos == 101) errDesc = "No se encontraron datos en el disco del grabador para este intervalo (NET_DVR_NORECORD)";
+                    if (currentPos == 101) errDesc = "No se encontraron datos en el disco del grabador para este intervalo (NET_DVR_NORECORD). Verifique que la fecha y hora contengan grabaciones y que la camara este grabando.";
                     else if (currentPos == 102) errDesc = "Desconexion de red o falla de comunicacion durante la extraccion";
                     else if (currentPos == 103) errDesc = "Error en el disco duro o almacenamiento del grabador";
                     else if (currentPos == 104) errDesc = "El archivo solicitado excede el limite de tamano del grabador";
                     else if (currentPos == 105) errDesc = "Espacio insuficiente en el disco local de la PC";
+                    else if (currentPos == 200) errDesc = "No hay grabaciones disponibles en el disco del grabador para este canal en la fecha y horas indicadas.";
                     Console.WriteLine(string.Format("DOWNLOAD_ERROR:{0}:{1}", currentPos, errDesc));
                     break;
                 }
@@ -343,10 +370,24 @@ namespace WisiCecomDownloader
 
                 if (downloadPos >= 100) break;
 
-                // Timeout si se congela por mas de 45 segundos
-                if (stallCount > 45)
+                // Timeout si se congela
+                if (stallCount > 25)
                 {
-                    Console.WriteLine("DOWNLOAD_TIMEOUT: El grabador dejo de enviar paquetes durante 45 segundos.");
+                    // Si el archivo ya tiene datos reales y alcanzó al menos 95%, consolidarlo como éxito
+                    if (downloadPos >= 95 && File.Exists(outputPath))
+                    {
+                        try
+                        {
+                            if (new FileInfo(outputPath).Length > 0)
+                            {
+                                downloadPos = 100;
+                                Console.WriteLine("PROGRESS:100");
+                                break;
+                            }
+                        }
+                        catch { }
+                    }
+                    Console.WriteLine("DOWNLOAD_TIMEOUT: El grabador dejo de enviar paquetes durante 25 segundos.");
                     break;
                 }
 
@@ -357,27 +398,37 @@ namespace WisiCecomDownloader
             NET_DVR_Logout(userId);
             NET_DVR_Cleanup();
 
-            if (downloadPos >= 100)
+            if (downloadPos >= 98 && File.Exists(outputPath))
             {
-                if (File.Exists(outputPath) && new FileInfo(outputPath).Length > 0)
+                long fileSize = 0;
+                try { fileSize = new FileInfo(outputPath).Length; } catch { }
+
+                if (fileSize > 0)
                 {
-                    long fileSize = new FileInfo(outputPath).Length;
+                    Console.WriteLine("PROGRESS:100");
                     Console.WriteLine("CONV_PROGRESS:100");
                     Console.WriteLine(string.Format("SUCCESS:{0}:{1}", outputPath, fileSize));
                     Console.WriteLine(string.Format("EXITO: {0}", outputPath));
                     return 0;
                 }
-                else
+            }
+
+            // LIMPIEZA GARANTIZADA: NUNCA DEJAR ARCHIVOS DE 0 BYTES EN DISCO
+            try
+            {
+                if (File.Exists(outputPath))
                 {
-                    Console.WriteLine("FILE_MISSING: La descarga indico 100% pero el archivo no se pudo consolidar en disco.");
-                    return 4;
+                    File.Delete(outputPath);
+                    Console.WriteLine(string.Format("CLEANUP: Archivo vacio o corrupto de 0 bytes eliminado de disco ({0})", outputPath));
                 }
             }
-            else
+            catch (Exception ex)
             {
-                Console.WriteLine(string.Format("DOWNLOAD_INCOMPLETE: Descarga finalizo en {0}%", downloadPos));
-                return 5;
+                Console.WriteLine(string.Format("CLEANUP_WARN: No se pudo eliminar archivo fallido: {0}", ex.Message));
             }
+
+            Console.WriteLine(string.Format("DOWNLOAD_INCOMPLETE: Descarga no pudo completarse (finalizo en {0}% sin video)", downloadPos));
+            return 5;
         }
     }
 }

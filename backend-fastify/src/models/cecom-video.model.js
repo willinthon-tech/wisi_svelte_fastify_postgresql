@@ -362,7 +362,7 @@ export async function getMesasConCamarasModel(params = {}) {
       j.nombre AS juego_nombre,
       COUNT(mc.camara_uuid) AS total_camaras
     FROM mesas m
-    JOIN mesas_camaras mc ON m.uuid = mc.mesa_uuid AND mc.is_deleted = false AND mc.active = 1
+    JOIN mesas_camaras mc ON m.uuid = mc.mesa_uuid AND mc.is_deleted = false
     JOIN camaras c ON mc.camara_uuid = c.uuid AND c.is_deleted = false
     LEFT JOIN salas s ON m.sala_uuid = s.uuid
     LEFT JOIN juegos j ON m.juego_uuid = j.uuid
