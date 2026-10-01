@@ -69,17 +69,22 @@
     isLoadingMesas = true;
     try {
       // 1. Probar ruta centralizada backend
-      const res = await getMesasConCamaras({ sala_uuid: selectedSalaUuid });
-      if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
-        mesasConCamaras = res.data;
+      let loadedFromCentral = false;
+      try {
+        const res = await getMesasConCamaras({ sala_uuid: selectedSalaUuid });
+        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
+          mesasConCamaras = res.data;
+          loadedFromCentral = true;
+        }
+      } catch (err) {
+        console.debug("Endpoint centralizado /mesas-con-camaras no disponible, ejecutando sincronización fallback:", err);
+      }
+
+      if (loadedFromCentral) {
         return;
       }
-    } catch (e) {
-      console.debug("Endpoint centralizado /mesas-con-camaras no disponible, ejecutando sincronización fallback:", e);
-    }
 
-    // 2. Fallback de alta resiliencia: resolver mesas y cámaras directamente desde la base de datos
-    try {
+      // 2. Fallback de alta resiliencia: resolver mesas y cámaras directamente desde la base de datos
       const allMesas = $masterMesasStore || [];
       const candidateMesas = allMesas.filter(m => {
         if (!selectedSalaUuid || selectedSalaUuid === "all") return true;
@@ -113,7 +118,7 @@
       resolved.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
       mesasConCamaras = resolved;
     } catch (err) {
-      console.error("Error en fallback de mesas asociadas:", err);
+      console.error("Error cargando mesas asociadas:", err);
       mesasConCamaras = [];
     } finally {
       isLoadingMesas = false;
