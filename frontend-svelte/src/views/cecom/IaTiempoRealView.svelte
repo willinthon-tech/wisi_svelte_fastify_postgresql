@@ -129,57 +129,6 @@
   function closeDetailModal() {
     selectedEventDetail = null;
   }
-
-  // Generador de simulación rápida en vivo para pruebas
-  async function triggerTestJugada() {
-    if (mesas.length === 0) {
-      triggerToast("No hay mesas registradas para simular eventos", "warning");
-      return;
-    }
-
-    const m = mesas[Math.floor(Math.random() * mesas.length)];
-    const salaId = m.sala_uuid || (salas[0]?.uuid || salas[0]?.id);
-
-    const testTypes = [
-      {
-        juego: "BACCARAT",
-        tipo: "JUGADA",
-        desc: "Mano finalizada: PUNTO 8 vs BANCA 6 (Punto Natural gana)",
-        meta: { punto: 8, banca: 6, ganador: "PUNTO", cartas_punto: ["9♠", "9♦"], cartas_banca: ["10♣", "6♥"] }
-      },
-      {
-        juego: "BLACKJACK",
-        tipo: "JUGADA",
-        desc: "Mano finalizada: Dealer 17 (se planta) vs Jugador 20 (Gana Jugador)",
-        meta: { dealer: 17, jugador: 20, resultado: "JUGADOR_GANA", cartas_dealer: ["10♠", "7♥"] }
-      },
-      {
-        juego: "RULETA",
-        tipo: "JUGADA",
-        desc: "Dolly detectado en casilla #23 ROJO (2da Docena / Impares)",
-        meta: { numero: 23, color: "ROJO", docena: "2da", paridad: "IMPAR" }
-      }
-    ];
-
-    const pick = testTypes[Math.floor(Math.random() * testTypes.length)];
-
-    try {
-      await emitIaEvent({
-        sala_uuid: salaId,
-        mesa_uuid: m.uuid || m.id,
-        juego_nombre: pick.juego,
-        tipo_evento: pick.tipo,
-        descripcion: pick.desc,
-        metadata: pick.meta,
-        es_novedad: false,
-        nivel_alerta: "INFO"
-      });
-      triggerToast("✅ Nueva jugada registrada por la IA en tiempo real", "success");
-      await loadEvents(false);
-    } catch (e) {
-      triggerToast(`Error al simular jugada: ${e.message}`, "error");
-    }
-  }
 </script>
 
 <div class="ia-tr-container">
@@ -199,8 +148,9 @@
         <span class="dot"></span>
         Sondeo Activo en Segundo Plano
       </span>
-      <button type="button" class="btn-test" on:click={triggerTestJugada}>
-        🎲 Simular Jugada en Vivo
+      <button type="button" class="btn-refresh" on:click={() => loadEvents(false)} title="Actualizar eventos">
+        <span class="material-icons-round" style="font-size: 16px;">refresh</span>
+        Actualizar
       </button>
     </div>
   </div>
@@ -506,7 +456,10 @@
     100% { transform: scale(0.95); opacity: 0.8; }
   }
 
-  .btn-test {
+  .btn-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 8px 14px;
     background: #f1f5f9;
     border: 1px solid #cbd5e1;
@@ -518,7 +471,7 @@
     transition: all 0.15s ease;
   }
 
-  .btn-test:hover {
+  .btn-refresh:hover {
     background: #2563eb;
     color: #ffffff;
     border-color: #2563eb;

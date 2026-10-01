@@ -118,46 +118,6 @@
   $: totalPages = Math.ceil(filteredNovedades.length / pageSize) || 1;
   $: paginatedNovedades = filteredNovedades.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Simulación de prueba rápida de Drop o Maldón
-  async function triggerSimulacion(tipo) {
-    if (mesas.length === 0) {
-      triggerToast("No hay mesas registradas para simular eventos", "warning");
-      return;
-    }
-
-    const m = mesas[Math.floor(Math.random() * mesas.length)];
-    const salaId = m.sala_uuid || (salas[0]?.uuid || salas[0]?.id);
-
-    let eventData = {
-      sala_uuid: salaId,
-      mesa_uuid: m.uuid || m.id,
-      juego_nombre: m.juego_nombre || "RULETA",
-      tipo_evento: tipo,
-      es_novedad: true,
-      nivel_alerta: tipo === "MALDON" ? "CRITICAL" : tipo === "DROP" ? "INFO" : "WARN",
-      descripcion: "",
-      metadata: {}
-    };
-
-    if (tipo === "DROP") {
-      eventData.descripcion = "Buzón de Drop: Inserción de efectivo / billetes detectada en la mesa.";
-      eventData.metadata = { tipo: "EFECTIVO", entradas_acumuladas: 1 };
-    } else if (tipo === "MALDON") {
-      eventData.descripcion = "¡Alerta de Maldón!: Apuesta tardía detectada sobre el paño tras anuncio 'No va más'.";
-      eventData.metadata = { sector: "DOCENA_2", segundo_post_bloqueo: 2.4 };
-    } else if (tipo === "CAMBIO_BARAJO") {
-      eventData.descripcion = "Cambio de Barajo: Finalización de zapato de cartas y barajeo de nuevo mazo.";
-      eventData.metadata = { estado: "BARAJANDO", cartas_restantes: 0 };
-    }
-
-    try {
-      await emitIaEvent(eventData);
-      triggerToast(`✅ Novedad de tipo [${tipo}] registrada en segundo plano`, "success");
-      await loadNovedades(false);
-    } catch (e) {
-      triggerToast(`Error al simular: ${e.message}`, "error");
-    }
-  }
 </script>
 
 <div class="ia-nov-container">
@@ -173,14 +133,9 @@
       </div>
     </div>
     <div class="header-actions">
-      <button type="button" class="btn-sim green" on:click={() => triggerSimulacion('DROP')}>
-        + Simular Drop
-      </button>
-      <button type="button" class="btn-sim red" on:click={() => triggerSimulacion('MALDON')}>
-        + Simular Maldón
-      </button>
-      <button type="button" class="btn-sim amber" on:click={() => triggerSimulacion('CAMBIO_BARAJO')}>
-        + Simular Barajo
+      <button type="button" class="btn-refresh" on:click={() => loadNovedades(false)} title="Actualizar novedades">
+        <span class="material-icons-round" style="font-size: 16px;">refresh</span>
+        Actualizar
       </button>
     </div>
   </div>
@@ -489,18 +444,26 @@
     flex-wrap: wrap;
   }
 
-  .btn-sim {
-    padding: 7px 12px;
-    border-radius: 6px;
-    font-size: 12px;
+  .btn-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #334155;
+    border-radius: 8px;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
-    border: 1px solid transparent;
+    transition: all 0.15s ease;
   }
 
-  .btn-sim.green { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
-  .btn-sim.red { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-  .btn-sim.amber { background: #fffbeb; color: #d97706; border-color: #fde68a; }
+  .btn-refresh:hover {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+  }
 
   /* Metrics Grid */
   .metrics-grid {

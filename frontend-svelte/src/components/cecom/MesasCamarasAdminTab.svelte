@@ -91,25 +91,61 @@
     }
   }
 
-  function isCameraAssigned(camaraUuid) {
-    return assignedCameras.some((c) => String(c.camara_uuid) === String(camaraUuid));
+  function getCamSignature(c) {
+    if (!c) return "";
+    const dev = String(c.dispositivo_nombre || "").trim().toLowerCase();
+    const ch = Number(c.numero_canal);
+    return dev && !isNaN(ch) ? `${dev}::${ch}` : "";
+  }
+
+  function getCamUuid(c) {
+    if (!c) return "";
+    return String(c.camara_uuid || c.uuid || c.id || "").trim();
+  }
+
+  // Set reactivo de UUIDs y firmas de canal para reactividad inmediata garantizada en Svelte
+  $: assignedKeysSet = new Set(
+    assignedCameras.flatMap((c) => {
+      const keys = [];
+      const u = getCamUuid(c);
+      if (u) keys.push(u);
+      const sig = getCamSignature(c);
+      if (sig) keys.push(sig);
+      return keys;
+    })
+  );
+
+  function isCamAssigned(cam, keysSet) {
+    if (!cam || !keysSet) return false;
+    const u = getCamUuid(cam);
+    if (u && keysSet.has(u)) return true;
+    const sig = getCamSignature(cam);
+    if (sig && keysSet.has(sig)) return true;
+    return false;
   }
 
   function toggleCamera(cam) {
-    const camUuid = cam.uuid || cam.id;
-    const exists = isCameraAssigned(camUuid);
+    const camUuid = getCamUuid(cam);
+    const sig = getCamSignature(cam);
+    const exists = isCamAssigned(cam, assignedKeysSet);
 
     if (exists) {
-      assignedCameras = assignedCameras.filter((c) => String(c.camara_uuid) !== String(camUuid));
+      assignedCameras = assignedCameras.filter((c) => {
+        const cUid = getCamUuid(c);
+        const cSig = getCamSignature(c);
+        if (camUuid && cUid && cUid === camUuid) return false;
+        if (sig && cSig && cSig === sig) return false;
+        return true;
+      });
     } else {
       assignedCameras = [
         ...assignedCameras,
         {
-          camara_uuid: camUuid,
+          camara_uuid: camUuid || cam.uuid || cam.id,
           rol: "AUDITORIA_COMPLETA",
-          nombre: cam.nombre,
-          dispositivo_nombre: cam.dispositivo_nombre,
-          numero_canal: cam.numero_canal
+          nombre: cam.nombre || `Canal ${cam.numero_canal}`,
+          dispositivo_nombre: cam.dispositivo_nombre || "Grabador",
+          numero_canal: Number(cam.numero_canal)
         }
       ];
     }
@@ -239,7 +275,7 @@
           </div>
         {:else}
           <div style="display: flex; flex-direction: column; gap: 10px;">
-            {#each assignedCameras as item (item.camara_uuid)}
+            {#each assignedCameras as item (item.camara_uuid || `${item.dispositivo_nombre}_${item.numero_canal}`)}
               <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
                   <div>
@@ -252,7 +288,7 @@
                   </div>
 
                   <button
-                    on:click={() => toggleCamera({ uuid: item.camara_uuid })}
+                    on:click={() => toggleCamera(item)}
                     type="button"
                     style="padding: 4px 8px; background: #fee2e2; border: 1px solid #fecaca; color: #dc2626; border-radius: 6px; font-size: 11px; font-weight: 800; cursor: pointer;"
                   >
@@ -296,29 +332,29 @@
           </div>
         {:else}
           <div style="display: flex; flex-direction: column; gap: 8px; max-height: 480px; overflow-y: auto; padding-right: 4px;">
-            {#each availableCameras as cam (cam.uuid || cam.id)}
-              {@const isAssigned = isCameraAssigned(cam.uuid || cam.id)}
+            {#each availableCameras as cam (cam.uuid || cam.id || `${cam.dispositivo_nombre}_${cam.numero_canal}`)}
+              {@const isAssigned = isCamAssigned(cam, assignedKeysSet)}
 
               <button
                 type="button"
                 on:click={() => toggleCamera(cam)}
-                style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: {isAssigned ? '#eff6ff' : '#f8fafc'}; border: 1px solid {isAssigned ? '#3b82f6' : '#e2e8f0'}; border-radius: 8px; cursor: pointer; text-align: left; transition: all 0.15s ease;"
+                style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: {isAssigned ? '#eff6ff' : '#f8fafc'}; border: 1.5px solid {isAssigned ? '#2563eb' : '#cbd5e1'}; border-radius: 8px; cursor: pointer; text-align: left; transition: all 0.15s ease;"
               >
                 <div style="display: flex; align-items: center; gap: 10px;">
-                  <span class="material-icons" style="font-size: 20px; color: {isAssigned ? '#2563eb' : '#94a3b8'};">
+                  <span class="material-icons" style="font-size: 22px; color: {isAssigned ? '#2563eb' : '#94a3b8'};">
                     {isAssigned ? "check_box" : "check_box_outline_blank"}
                   </span>
                   <div>
-                    <div style="font-size: 13px; font-weight: 700; color: #0f172a;">
-                      {cam.nombre}
+                    <div style="font-size: 13px; font-weight: {isAssigned ? '800' : '700'}; color: {isAssigned ? '#1d4ed8' : '#0f172a'};">
+                      {cam.nombre || `Canal ${cam.numero_canal}`}
                     </div>
                     <div style="font-size: 11px; color: #64748b;">
-                      {cam.dispositivo_nombre} • CH {cam.numero_canal}
+                      {cam.dispositivo_nombre || "Grabador"} • CH {cam.numero_canal}
                     </div>
                   </div>
                 </div>
 
-                <span style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: {isAssigned ? '#dbeafe' : '#e2e8f0'}; color: {isAssigned ? '#1d4ed8' : '#475569'};">
+                <span style="font-size: 10.5px; font-weight: 800; padding: 3px 8px; border-radius: 12px; text-transform: uppercase; background: {isAssigned ? '#dbeafe' : '#e2e8f0'}; color: {isAssigned ? '#1d4ed8' : '#475569'};">
                   {isAssigned ? "Asignada" : "Disponible"}
                 </span>
               </button>

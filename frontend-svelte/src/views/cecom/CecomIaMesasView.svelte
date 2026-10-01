@@ -187,22 +187,6 @@
       triggerToast("Jugada auditada exitosamente. Sin irregularidades.", "success");
     }, 600);
   }
-
-  function simulateMaldon() {
-    const timeStr = new Date().toLocaleTimeString();
-    let logItem = {
-      time: timeStr,
-      mesa: availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaUuid))?.nombre || "Mesa",
-      game: currentGameType,
-      result: "ANOMALÍA DETECTADA",
-      status: "MALDÓN",
-      maldon: currentGameType === "RULETA" 
-        ? "Apuesta colocada tras 'No va más' (Movimiento tardío en Paño)"
-        : "Violación de regla: Reparto fuera de tableau oficial"
-    };
-    auditLogs = [logItem, ...auditLogs];
-    triggerToast(`⚠️ ALERTA CECOM: ${logItem.maldon}`, "error");
-  }
 </script>
 
 <div class="ia-mesas-container">
@@ -345,9 +329,6 @@
           {:else}
             <span>📸 Capturar & Auditar Jugada</span>
           {/if}
-        </button>
-        <button type="button" class="btn-sim-maldon" on:click={simulateMaldon}>
-          ⚠️ Simular Alerta Maldón
         </button>
       </div>
     </div>
