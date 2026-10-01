@@ -87,7 +87,113 @@ export function stopCecomIaBackgroundWorker() {
 }
 
 /**
- * Muestrea fotogramas de las cámaras asignadas a las mesas para detectar jugadas en vivo
+/**
+ * Sincroniza las mesas con cámaras con el Motor de IA Python (YOLO)
+ */
+async function syncMesasWithAiEngine() {
+  if (cachedMesas.length === 0) return;
+  try {
+    const payload = cachedMesas.map(m => ({
+      uuid: m.mesa_uuid || m.uuid || m.id,
+      nombre: m.mesa_nombre || m.nombre,
+      juego_nombre: m.juego_nombre || 'Baccarat',
+      dispositivo_ip: m.dispositivo_ip,
+      numero_canal: m.numero_canal,
+      dispositivo_usuario: m.dispositivo_usuario || 'admin',
+      dispositivo_clave: m.dispositivo_clave || '',
+      sala_uuid: m.sala_uuid
+    }));
+
+    await fetch('http://127.0.0.1:5005/sync_mesas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mesas: payload }),
+      signal: AbortSignal.timeout(2500)
+    });
+  } catch (err) {
+    // Motor IA aún levantándose o fuera de línea
+  }
+}
+
+/**
+ * Procesa los datos en vivo emitidos por el Motor YOLO Python
+ */
+function processAiEngineResults(aiData, now) {
+  mesasLiveStatusStore.update(map => {
+    const next = { ...map };
+    for (const [mId, liveAi] of Object.entries(aiData)) {
+      const mesa = cachedMesas.find(x => String(x.mesa_uuid || x.uuid || x.id) === String(mId));
+      const hasCards = (liveAi.punto && liveAi.punto.length > 0) || (liveAi.banca && liveAi.banca.length > 0);
+      const isMoving = hasCards || liveAi.estado_mesa === 'REPARTIENDO' || liveAi.estado_mesa === 'NORMAL';
+
+      let badgeEvento = 'EN ESPERA';
+      if (liveAi.ganador && liveAi.ganador !== 'ESPERANDO') {
+        badgeEvento = `${liveAi.ganador} GANA`;
+      } else if (liveAi.estado_mesa) {
+        badgeEvento = liveAi.estado_mesa;
+      }
+
+      let desc = liveAi.detalle || 'Mesa en monitoreo continuo';
+      if (liveAi.resultado && liveAi.resultado.descripcion) {
+        desc = `${liveAi.resultado.descripcion} | ${liveAi.detalle}`;
+      }
+
+      next[mId] = {
+        mesa_uuid: mId,
+        mesa_nombre: mesa?.mesa_nombre || liveAi.mesa_nombre || 'Mesa',
+        juego_nombre: mesa?.juego_nombre || liveAi.juego || 'Baccarat',
+        ultimo_evento: badgeEvento,
+        descripcion: desc,
+        nivel_alerta: 'INFO',
+        es_novedad: false,
+        is_moving: isMoving,
+        hora: liveAi.hora || new Date().toLocaleTimeString(),
+        // DATOS REALES DE YOLO Y REGLAS DE CASINO:
+        ai_active: true,
+        scoreP: liveAi.scoreP ?? 0,
+        scoreB: liveAi.scoreB ?? 0,
+        ganador: liveAi.ganador || 'ESPERANDO',
+        punto: liveAi.punto || [],
+        banca: liveAi.banca || [],
+        detalle: liveAi.detalle || '',
+        estado_mesa: liveAi.estado_mesa || 'ESPERANDO',
+        resultado: liveAi.resultado || {},
+        image_b64: liveAi.image_b64 || '',
+        timestamp: liveAi.timestamp || (now / 1000)
+      };
+
+      // Registro automático en BD de Wisi cuando concluye la mano
+      if (liveAi.resultado?.listo && isMoving) {
+        const lastEmit = lastDbEmitTimeMap[mId] || 0;
+        if (now - lastEmit > 30000) {
+          lastDbEmitTimeMap[mId] = now;
+          emitIaEvent({
+            sala_uuid: mesa?.sala_uuid,
+            mesa_uuid: mId,
+            mesa_nombre: mesa?.mesa_nombre || liveAi.mesa_nombre,
+            juego_nombre: mesa?.juego_nombre || liveAi.juego,
+            tipo_evento: 'JUGADA',
+            descripcion: `${liveAi.ganador} (${liveAi.scoreP} a ${liveAi.scoreB}) • ${liveAi.detalle}`,
+            nivel_alerta: 'INFO',
+            es_novedad: false,
+            metadata: {
+              scoreP: liveAi.scoreP,
+              scoreB: liveAi.scoreB,
+              ganador: liveAi.ganador,
+              punto: liveAi.punto,
+              banca: liveAi.banca,
+              detalle: liveAi.detalle
+            }
+          }).catch(err => console.debug('[CECOM IA] Error registrando jugada en BD:', err.message));
+        }
+      }
+    }
+    return next;
+  });
+}
+
+/**
+ * Muestrea fotogramas y consulta el Motor YOLO de IA
  */
 async function sampleLiveMesasMotion() {
   if (!isTauriWindows()) return;
@@ -100,6 +206,7 @@ async function sampleLiveMesasMotion() {
       if (res && res.success && Array.isArray(res.data)) {
         cachedMesas = res.data;
         lastMesaFetchTime = now;
+        syncMesasWithAiEngine();
       }
     } catch (e) {
       console.debug('[CECOM IA Live] Error al refrescar mesas:', e.message);
@@ -108,7 +215,21 @@ async function sampleLiveMesasMotion() {
 
   if (cachedMesas.length === 0) return;
 
-  // Evaluar movimiento en cada mesa asociada
+  // 1. INTENTO PRIMARIO: Consultar el Motor de IA Python (YOLO + Reglas de Casino)
+  try {
+    const aiRes = await fetch('http://127.0.0.1:5005/all_mesas', { signal: AbortSignal.timeout(1800) });
+    if (aiRes.ok) {
+      const aiData = await aiRes.json();
+      if (aiData && typeof aiData === 'object' && Object.keys(aiData).length > 0) {
+        processAiEngineResults(aiData, now);
+        return; // Éxito con Motor de IA YOLO real
+      }
+    }
+  } catch (errAi) {
+    // Si el motor Python no responde, fallback suave a ISAPI local
+  }
+
+  // 2. FALLBACK SECUNDARIO: Detección por sensor de movimiento ISAPI (si el motor Python estuviera apagado)
   for (const mesa of cachedMesas) {
     const mesaUuid = mesa.mesa_uuid || mesa.uuid || mesa.id;
     const ip = mesa.dispositivo_ip;
@@ -119,7 +240,6 @@ async function sampleLiveMesasMotion() {
     if (!mesaUuid || !ip || isNaN(canal)) continue;
 
     try {
-      // Solicitar captura instantánea al canal del grabador
       const resPic = await callLocalIsapi(
         ip,
         `/ISAPI/Streaming/channels/${canal}01/picture`,
@@ -138,8 +258,6 @@ async function sampleLiveMesasMotion() {
         if (prev) {
           const lenDiff = Math.abs(currentLen - prev.len);
           const hashDiff = currentHash !== prev.hash;
-
-          // Se detecta movimiento en el paño cuando el tamaño de la trama JPEG o la muestra de bytes fluctúan
           const isMoving = lenDiff > 80 || (hashDiff && lenDiff > 30);
 
           if (isMoving) {
@@ -152,7 +270,6 @@ async function sampleLiveMesasMotion() {
               lastMoveTime: now
             };
 
-            // Actualizar badge en tiempo real inmediatamente
             mesasLiveStatusStore.update(map => ({
               ...map,
               [mesaUuid]: {
@@ -164,32 +281,14 @@ async function sampleLiveMesasMotion() {
                 nivel_alerta: 'INFO',
                 es_novedad: false,
                 is_moving: true,
+                ai_active: false,
                 hora: new Date().toLocaleTimeString()
               }
             }));
-
-            // Si el movimiento es sostenido (más de 2 ciclos = ~5 segundos de juego),
-            // y no se ha emitido un registro a BD en los últimos 35 segundos para esta mesa:
-            const lastEmit = lastDbEmitTimeMap[mesaUuid] || 0;
-            if ((prev.consecutiveMoves || 0) >= 2 && now - lastEmit > 35000) {
-              lastDbEmitTimeMap[mesaUuid] = now;
-              emitIaEvent({
-                sala_uuid: mesa.sala_uuid,
-                mesa_uuid: mesaUuid,
-                mesa_nombre: mesa.mesa_nombre,
-                juego_nombre: mesa.juego_nombre,
-                tipo_evento: 'JUGADA',
-                descripcion: `Mano en juego registrada por sensor de video (${mesa.camara_nombre || `Canal ${canal}`})`,
-                nivel_alerta: 'INFO',
-                es_novedad: false
-              }).catch(err => console.debug('[CECOM IA] Error emitiendo evento:', err.message));
-            }
           } else {
-            // Sin movimiento en este ciclo
             if (!idleStartTimeMap[mesaUuid]) {
               idleStartTimeMap[mesaUuid] = now;
             }
-
             frameHistoryMap[mesaUuid] = {
               len: currentLen,
               hash: currentHash,
@@ -198,7 +297,6 @@ async function sampleLiveMesasMotion() {
               lastMoveTime: prev.lastMoveTime || now
             };
 
-            // Si lleva más de 10 segundos sin movimiento, pasar a "EN ESPERA"
             const idleDuration = now - idleStartTimeMap[mesaUuid];
             if (idleDuration >= 10000) {
               mesasLiveStatusStore.update(map => {
@@ -217,7 +315,6 @@ async function sampleLiveMesasMotion() {
             }
           }
         } else {
-          // Primer frame de referencia
           frameHistoryMap[mesaUuid] = {
             len: currentLen,
             hash: currentHash,

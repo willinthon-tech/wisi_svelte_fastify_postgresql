@@ -43,6 +43,18 @@
   $: salas = $masterSalasStore || [];
   $: liveMesasMap = $mesasLiveStatusStore || {};
 
+  // Modal de Visor de Visión Artificial en Vivo
+  let viewingAiMesa = null;
+  let isSavingFeedback = false;
+
+  function openAiVisionModal(badge) {
+    viewingAiMesa = badge;
+  }
+
+  function closeAiVisionModal() {
+    viewingAiMesa = null;
+  }
+
   // Lista de mesas para Badges: ÚNICAMENTE mesas asociadas a cámaras
   $: liveMesasBadges = (() => {
     return mesasConCamaras.map(m => {
@@ -59,10 +71,51 @@
         hora: live?.hora || "",
         es_novedad: live?.es_novedad || false,
         nivel_alerta: live?.nivel_alerta || "INFO",
-        is_moving: isMoving
+        is_moving: isMoving,
+        // DATOS EN VIVO IA (YOLO + REGLAS DE CASINO)
+        ai_active: live?.ai_active || false,
+        scoreP: live?.scoreP ?? 0,
+        scoreB: live?.scoreB ?? 0,
+        ganador: live?.ganador || 'ESPERANDO',
+        punto: live?.punto || [],
+        banca: live?.banca || [],
+        detalle: live?.detalle || '',
+        estado_mesa: live?.estado_mesa || 'ESPERANDO',
+        resultado: live?.resultado || {},
+        image_b64: live?.image_b64 || ''
       };
     });
   })();
+
+  $: if (viewingAiMesa) {
+    const updated = liveMesasBadges.find(b => b.uuid === viewingAiMesa.uuid);
+    if (updated) viewingAiMesa = updated;
+  }
+
+  async function handleOperatorFeedback(mesaUuid) {
+    if (!mesaUuid) return;
+    isSavingFeedback = true;
+    try {
+      const res = await fetch('http://127.0.0.1:5005/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mesa_uuid: mesaUuid,
+          nota: 'Guardado manual por auditor para reentrenamiento activo',
+          operador: 'Auditor CECOM'
+        })
+      });
+      if (res.ok) {
+        triggerToast('Muestra guardada para aprendizaje activo en dataset IA', 'success');
+      } else {
+        triggerToast('No se pudo guardar la muestra en el motor IA', 'error');
+      }
+    } catch (e) {
+      triggerToast(`Error conectando con Motor IA: ${e.message}`, 'error');
+    } finally {
+      isSavingFeedback = false;
+    }
+  }
 
   onMount(async () => {
     // Iniciar worker de fondo si aún no corre
@@ -269,33 +322,111 @@
       <div class="badges-grid">
         {#each liveMesasBadges as badge (badge.uuid)}
           {@const isSelected = selectedMesaUuid === badge.uuid}
-          <button
-            type="button"
+          <div
             class="mesa-badge-card"
             class:selected={isSelected}
             class:is-active-playing={badge.is_moving}
             class:has-alert={badge.nivel_alerta === 'WARN' || badge.nivel_alerta === 'CRITICAL'}
-            on:click={() => filterByBadgeMesa(badge.uuid)}
           >
             <div class="badge-top">
-              <span class="mesa-title">{badge.nombre}</span>
-              <span class="status-indicator-dot" class:pulse={badge.is_moving} class:idle={!badge.is_moving}></span>
+              <div class="mesa-title-wrap">
+                <span class="mesa-title">{badge.nombre}</span>
+                <span class="badge-game font-mono">{badge.juego}</span>
+              </div>
+              <span class="status-indicator-dot" class:pulse={badge.is_moving} class:idle={!badge.is_moving} title={badge.is_moving ? "Actividad en paño detectada" : "En espera"}></span>
             </div>
-            <div class="badge-game font-mono">{badge.juego} • 📷 {badge.total_camaras} cam</div>
-            <div class="badge-event font-mono" class:is-playing={badge.is_moving}>
-              {#if badge.is_moving}
-                ⚡ {badge.ultimo_evento}
-              {:else}
-                {badge.ultimo_evento}
-              {/if}
-            </div>
-            <div class="badge-desc" title={badge.descripcion}>
-              {badge.descripcion}
-            </div>
-            {#if badge.hora}
-              <div class="badge-time">Último: {badge.hora}</div>
+
+            <!-- TABLERO EN VIVO DE IA (SI HAY DETECCIÓN ACTIVA DE CARTAS) -->
+            {#if badge.ai_active}
+              <div class="ia-live-scoreboard">
+                <!-- Lado Punto -->
+                <div class="score-side punto" class:winner={badge.ganador === 'PUNTO'}>
+                  <div class="side-header">
+                    <span class="side-lbl">PUNTO</span>
+                    <span class="side-score">{badge.scoreP}</span>
+                  </div>
+                  <div class="cards-strip">
+                    {#if badge.punto && badge.punto.length > 0}
+                      {#each badge.punto as c}
+                        <span class="card-chip punto" title="Confianza: {Math.round(c.conf * 100)}%">{c.val}</span>
+                      {/each}
+                    {:else}
+                      <span class="no-cards">-</span>
+                    {/if}
+                  </div>
+                </div>
+
+                <!-- Separador VS -->
+                <div class="score-vs">
+                  <span class="vs-text">VS</span>
+                  {#if badge.resultado?.natural}
+                    <span class="natural-tag">NATURAL</span>
+                  {/if}
+                </div>
+
+                <!-- Lado Banca -->
+                <div class="score-side banca" class:winner={badge.ganador === 'BANCA'}>
+                  <div class="side-header">
+                    <span class="side-lbl">BANCA</span>
+                    <span class="side-score">{badge.scoreB}</span>
+                  </div>
+                  <div class="cards-strip">
+                    {#if badge.banca && badge.banca.length > 0}
+                      {#each badge.banca as c}
+                        <span class="card-chip banca" title="Confianza: {Math.round(c.conf * 100)}%">{c.val}</span>
+                      {/each}
+                    {:else}
+                      <span class="no-cards">-</span>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+
+              <!-- BANNER DE GANADOR / ESTADO DE IA -->
+              <div class="ia-winner-banner" class:banca-win={badge.ganador === 'BANCA'} class:punto-win={badge.ganador === 'PUNTO'} class:tie-win={badge.ganador === 'EMPATE (TIE)'}>
+                {#if badge.ganador && badge.ganador !== 'ESPERANDO'}
+                  🏆 {badge.ganador} GANA
+                {:else if badge.estado_mesa === 'REPARTIENDO'}
+                  🃏 REPARTIENDO CARTAS...
+                {:else if badge.estado_mesa === 'BARAJO'}
+                  🔀 BARAJO EN MESA
+                {:else}
+                  ⏱️ EN ESPERA DE JUGADA
+                {/if}
+              </div>
+            {:else}
+              <div class="badge-event font-mono" class:is-playing={badge.is_moving}>
+                {#if badge.is_moving}
+                  ⚡ {badge.ultimo_evento}
+                {:else}
+                  {badge.ultimo_evento}
+                {/if}
+              </div>
+              <div class="badge-desc" title={badge.descripcion}>
+                {badge.descripcion}
+              </div>
             {/if}
-          </button>
+
+            <!-- MINIATURA EN VIVO CON RECTÁNGULOS DE DETECCIÓN YOLO -->
+            {#if badge.image_b64}
+              <div class="mini-yolo-preview" on:click={() => openAiVisionModal(badge)} title="Clic para ampliar visor IA en vivo">
+                <img src="data:image/jpeg;base64,{badge.image_b64}" alt="IA Live Feed {badge.nombre}" />
+                <span class="yolo-live-tag">🔴 IA YOLO LIVE</span>
+              </div>
+            {/if}
+
+            <div class="badge-card-footer">
+              <span class="badge-time">📷 {badge.total_camaras} cam {badge.hora ? `• ${badge.hora}` : ''}</span>
+              <div class="card-btn-actions">
+                <button type="button" class="btn-card-action primary" on:click={() => openAiVisionModal(badge)} title="Abrir Visor de Visión Artificial en pantalla grande">
+                  👁️ Visor IA
+                </button>
+                <button type="button" class="btn-card-action filter" class:active={isSelected} on:click={() => filterByBadgeMesa(badge.uuid)} title="Filtrar eventos de esta mesa">
+                  {isSelected ? '✕' : '📊'}
+                </button>
+              </div>
+            </div>
+          </div>
         {/each}
       </div>
     {/if}
@@ -488,6 +619,123 @@
       </div>
     </div>
   {/if}
+
+  <!-- MODAL: Visor de Visión Artificial en Vivo (YOLO + Baccarat Rules) -->
+  {#if viewingAiMesa}
+    <div class="modal-backdrop" on:click={closeAiVisionModal}>
+      <div class="modal-card yolo-vision-modal" on:click|stopPropagation>
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="badge-pulse-online">● LIVE IA</span>
+            <h3 class="modal-title">Visor IA en Vivo: {viewingAiMesa.nombre} ({viewingAiMesa.juego})</h3>
+          </div>
+          <button type="button" class="btn-close" on:click={closeAiVisionModal}>✕</button>
+        </div>
+
+        <div class="modal-body yolo-modal-body">
+          <!-- STREAM EN VIVO ANOTADO POR YOLO -->
+          <div class="yolo-stream-container">
+            {#if viewingAiMesa.image_b64}
+              <img
+                src="data:image/jpeg;base64,{viewingAiMesa.image_b64}"
+                alt="Flujo de Video IA {viewingAiMesa.nombre}"
+                class="yolo-live-img"
+              />
+            {:else}
+              <div class="no-stream-box">
+                <span>Conectando con cámara física en LAN...</span>
+              </div>
+            {/if}
+            <div class="stream-overlay-badge">
+              <span>Resolución: 4MP (2560x1440) • YOLO best.pt (14 Clases)</span>
+            </div>
+          </div>
+
+          <!-- PANEL LATERAL DE RESULTADOS Y REGLAS EN TIEMPO REAL -->
+          <div class="yolo-details-side">
+            <!-- Marcador Principal -->
+            <div class="vision-score-box">
+              <div class="v-side punto" class:winner={viewingAiMesa.ganador === 'PUNTO'}>
+                <span class="v-lbl">PUNTO</span>
+                <span class="v-val">{viewingAiMesa.scoreP ?? 0}</span>
+                <div class="v-cards">
+                  {#if viewingAiMesa.punto && viewingAiMesa.punto.length > 0}
+                    {#each viewingAiMesa.punto as c}
+                      <span class="chip-detail punto">{c.val} <small>({Math.round(c.conf * 100)}%)</small></span>
+                    {/each}
+                  {:else}
+                    <span class="empty-detail">Sin cartas</span>
+                  {/if}
+                </div>
+              </div>
+
+              <div class="v-divider">
+                <span>VS</span>
+                {#if viewingAiMesa.resultado?.natural}
+                  <span class="v-natural">NATURAL</span>
+                {/if}
+              </div>
+
+              <div class="v-side banca" class:winner={viewingAiMesa.ganador === 'BANCA'}>
+                <span class="v-lbl">BANCA</span>
+                <span class="v-val">{viewingAiMesa.scoreB ?? 0}</span>
+                <div class="v-cards">
+                  {#if viewingAiMesa.banca && viewingAiMesa.banca.length > 0}
+                    {#each viewingAiMesa.banca as c}
+                      <span class="chip-detail banca">{c.val} <small>({Math.round(c.conf * 100)}%)</small></span>
+                    {/each}
+                  {:else}
+                    <span class="empty-detail">Sin cartas</span>
+                  {/if}
+                </div>
+              </div>
+            </div>
+
+            <!-- Ganador / Estado -->
+            <div class="vision-status-banner" class:banca={viewingAiMesa.ganador === 'BANCA'} class:punto={viewingAiMesa.ganador === 'PUNTO'}>
+              {#if viewingAiMesa.ganador && viewingAiMesa.ganador !== 'ESPERANDO'}
+                🏆 GANADOR: {viewingAiMesa.ganador} (Punto {viewingAiMesa.scoreP} - Banca {viewingAiMesa.scoreB})
+              {:else}
+                🔄 Estado: {viewingAiMesa.estado_mesa || 'ESPERANDO'}
+              {/if}
+            </div>
+
+            <!-- Desglose Técnico de Reglas de Juego -->
+            <div class="vision-rules-box">
+              <span class="box-title">📋 Reglas de Juego Evaluadas</span>
+              <p class="rules-desc">
+                {#if viewingAiMesa.resultado?.descripcion}
+                  {viewingAiMesa.resultado.descripcion}
+                {:else}
+                  Auditoría en curso según reglas oficiales de Baccarat (Tercera carta, Natural 8/9).
+                {/if}
+              </p>
+              <div class="rules-meta">
+                <span>Cartas en mesa: {(viewingAiMesa.punto?.length || 0) + (viewingAiMesa.banca?.length || 0)}</span>
+                <span>Mano terminada: {viewingAiMesa.resultado?.listo ? 'SÍ' : 'EN PROCESO'}</span>
+              </div>
+            </div>
+
+            <!-- Botón de Aprendizaje Activo -->
+            <div class="feedback-box">
+              <span class="feedback-title">🧠 Aprendizaje Continuo (Active Learning)</span>
+              <p class="feedback-desc">
+                Si alguna carta tiene baja visibilidad o requiere reentrenamiento, guarda este fotograma en el dataset del modelo:
+              </p>
+              <button
+                type="button"
+                class="btn-feedback"
+                disabled={isSavingFeedback}
+                on:click={() => handleOperatorFeedback(viewingAiMesa.uuid)}
+              >
+                {isSavingFeedback ? '⏳ Guardando...' : '🎓 Guardar Muestra para Reentrenamiento'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -636,43 +884,48 @@
 
   .badges-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
   }
 
   .mesa-badge-card {
     background: #f8fafc;
     border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    padding: 12px 14px;
-    cursor: pointer;
+    border-radius: 12px;
+    padding: 14px;
     text-align: left;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
   }
 
   .mesa-badge-card:hover {
-    border-color: #2563eb;
-    background: #eff6ff;
-    transform: translateY(-2px);
+    border-color: #93c5fd;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
   }
 
   .mesa-badge-card.selected {
     border-color: #2563eb;
-    background: #dbeafe;
+    background: #eff6ff;
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.4);
   }
 
   .badge-top {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+  }
+
+  .mesa-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .mesa-title {
-    font-size: 13.5px;
+    font-size: 14.5px;
     font-weight: 800;
     color: #0f172a;
   }
@@ -680,12 +933,12 @@
   .mesa-badge-card.is-active-playing {
     border-color: #10b981;
     background: #f0fdf4;
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
   }
 
   .status-indicator-dot {
-    width: 9px;
-    height: 9px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: #10b981;
     transition: all 0.3s ease;
@@ -722,6 +975,230 @@
     font-weight: 700;
   }
 
+  /* Scoreboard IA */
+  .ia-live-scoreboard {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 4px 0;
+  }
+
+  .score-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+
+  .score-side.punto {
+    color: #93c5fd;
+  }
+
+  .score-side.banca {
+    color: #fca5a5;
+  }
+
+  .score-side.winner {
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+  }
+
+  .side-header {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    align-items: baseline;
+  }
+
+  .side-lbl {
+    font-size: 9.5px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    opacity: 0.85;
+  }
+
+  .side-score {
+    font-size: 19px;
+    font-weight: 900;
+    font-family: monospace;
+    line-height: 1;
+  }
+
+  .cards-strip {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 5px;
+    min-height: 24px;
+    align-items: center;
+  }
+
+  .card-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 24px;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 900;
+    font-family: monospace;
+    background: #ffffff;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  .card-chip.punto {
+    border-top: 3px solid #2563eb;
+  }
+
+  .card-chip.banca {
+    border-top: 3px solid #dc2626;
+  }
+
+  .no-cards {
+    font-size: 11px;
+    color: #475569;
+  }
+
+  .score-vs {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #94a3b8;
+  }
+
+  .vs-text {
+    font-size: 10px;
+    font-weight: 900;
+    opacity: 0.6;
+  }
+
+  .natural-tag {
+    font-size: 8px;
+    font-weight: 900;
+    background: #f59e0b;
+    color: #78350f;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-top: 2px;
+  }
+
+  /* Banner de Ganador */
+  .ia-winner-banner {
+    font-size: 11px;
+    font-weight: 900;
+    text-align: center;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    color: #334155;
+    margin: 2px 0;
+  }
+
+  .ia-winner-banner.punto-win {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+
+  .ia-winner-banner.banca-win {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+
+  .ia-winner-banner.tie-win {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+
+  /* Mini Preview YOLO */
+  .mini-yolo-preview {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    margin-top: 4px;
+    border: 1px solid #cbd5e1;
+    max-height: 110px;
+    background: #000;
+  }
+
+  .mini-yolo-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .yolo-live-tag {
+    position: absolute;
+    bottom: 4px;
+    right: 6px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #ffffff;
+    font-size: 8.5px;
+    font-weight: 800;
+    padding: 2px 5px;
+    border-radius: 4px;
+    backdrop-filter: blur(2px);
+  }
+
+  .badge-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .card-btn-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .btn-card-action {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 5px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-card-action:hover {
+    background: #f1f5f9;
+  }
+
+  .btn-card-action.primary {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+  }
+
+  .btn-card-action.primary:hover {
+    background: #1d4ed8;
+  }
+
+  .btn-card-action.filter.active {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+  }
+
   .badge-event {
     font-size: 11px;
     font-weight: 800;
@@ -750,9 +1227,278 @@
   }
 
   .badge-time {
-    font-size: 10.5px;
+    font-size: 10px;
     color: #94a3b8;
-    margin-top: 4px;
+  }
+
+  /* Modal de Visor de Visión Artificial */
+  .yolo-vision-modal {
+    max-width: 1120px;
+    width: 95vw;
+  }
+
+  .badge-pulse-online {
+    color: #10b981;
+    font-weight: 800;
+    font-size: 11px;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+
+  .modal-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .yolo-modal-body {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .yolo-modal-body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .yolo-stream-container {
+    position: relative;
+    background: #020617;
+    border-radius: 10px;
+    overflow: hidden;
+    min-height: 420px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #1e293b;
+  }
+
+  .yolo-live-img {
+    width: 100%;
+    height: auto;
+    max-height: 520px;
+    display: block;
+    object-fit: contain;
+  }
+
+  .no-stream-box {
+    color: #94a3b8;
+    font-size: 13px;
+  }
+
+  .stream-overlay-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    color: #38bdf8;
+    font-size: 10.5px;
+    font-weight: 700;
+    font-family: monospace;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+  }
+
+  .yolo-details-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .vision-score-box {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 14px;
+    color: #ffffff;
+  }
+
+  .v-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px;
+    border-radius: 8px;
+  }
+
+  .v-side.punto { color: #93c5fa; }
+  .v-side.banca { color: #fca5a5; }
+
+  .v-side.winner {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
+  }
+
+  .v-lbl {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }
+
+  .v-val {
+    font-size: 26px;
+    font-weight: 900;
+    font-family: monospace;
+    line-height: 1.1;
+  }
+
+  .v-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    justify-content: center;
+  }
+
+  .chip-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 12px;
+    font-weight: 900;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #0f172a;
+  }
+
+  .chip-detail small {
+    font-size: 9px;
+    opacity: 0.7;
+    font-weight: 600;
+  }
+
+  .chip-detail.punto { border-left: 3px solid #2563eb; }
+  .chip-detail.banca { border-left: 3px solid #dc2626; }
+
+  .empty-detail {
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  .v-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #94a3b8;
+    font-weight: 900;
+    font-size: 12px;
+  }
+
+  .v-natural {
+    font-size: 8px;
+    background: #f59e0b;
+    color: #78350f;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-top: 3px;
+  }
+
+  .vision-status-banner {
+    font-size: 13.5px;
+    font-weight: 800;
+    text-align: center;
+    padding: 10px;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #0f172a;
+    border: 1px solid #cbd5e1;
+  }
+
+  .vision-status-banner.punto {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+  }
+
+  .vision-status-banner.banca {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+  }
+
+  .vision-rules-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .box-title {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    color: #1e293b;
+    margin-bottom: 4px;
+  }
+
+  .rules-desc {
+    margin: 0;
+    font-size: 12.5px;
+    color: #334155;
+    line-height: 1.4;
+  }
+
+  .rules-meta {
+    display: flex;
+    gap: 14px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 600;
+  }
+
+  .feedback-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .feedback-title {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    color: #166534;
+    margin-bottom: 4px;
+  }
+
+  .feedback-desc {
+    margin: 0 0 10px 0;
+    font-size: 11.5px;
+    color: #334155;
+    line-height: 1.35;
+  }
+
+  .btn-feedback {
+    background: #059669;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.15s ease;
+  }
+
+  .btn-feedback:hover {
+    background: #047857;
+  }
+
+  .btn-feedback:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   /* Filters */

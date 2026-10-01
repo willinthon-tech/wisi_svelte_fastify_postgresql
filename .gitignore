@@ -36,6 +36,13 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
+# Modelos de Inteligencia Artificial y Datasets (archivos pesados > 100MB)
+*.pt
+ai-engine/models/*.pt
+ai-engine/data_aprendizaje/
+ai-engine/.venv/
+*.mp4
+
 # Archivos del sistema y de editores
 .DS_Store
 Thumbs.db
