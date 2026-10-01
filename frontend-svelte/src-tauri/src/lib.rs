@@ -1,5 +1,11 @@
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader};
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct IsapiResponse {
@@ -260,6 +266,278 @@ fn save_file_to_downloads(app_handle: tauri::AppHandle, file_name: String, bytes
   Ok(file_path.to_string_lossy().to_string())
 }
 
+#[derive(Clone, serde::Serialize)]
+pub struct CecomDownloadProgress {
+  pub task_id: String,
+  pub percent: u32,
+  pub stage: String,
+  pub status: String, // "downloading", "completed", "error"
+  pub output_file: String,
+  pub error: Option<String>,
+}
+
+#[tauri::command]
+fn get_cecom_default_paths(app_handle: tauri::AppHandle) -> serde_json::Value {
+  let download_dir = app_handle.path().download_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Downloads"));
+  let video_dir = app_handle.path().video_dir().unwrap_or_else(|_| download_dir.clone());
+  let target_dir = video_dir.join("Wisi_Cecom_Videos");
+  if !target_dir.exists() {
+    let _ = std::fs::create_dir_all(&target_dir);
+  }
+
+  let sdk_candidates = [
+    PathBuf::from(r"C:\Users\antho\Downloads\Videos Cecom\sdk_hikvision\Converter.exe"),
+    PathBuf::from(r"C:\wisi\sdk_hikvision\Converter.exe"),
+    PathBuf::from(r"C:\sdk_hikvision\Converter.exe"),
+  ];
+
+  let mut detected_sdk = String::new();
+  for cand in &sdk_candidates {
+    if cand.exists() {
+      detected_sdk = cand.to_string_lossy().to_string();
+      break;
+    }
+  }
+
+  serde_json::json!({
+    "dest_dir": target_dir.to_string_lossy().to_string(),
+    "sdk_converter_path": detected_sdk,
+    "sdk_available": !detected_sdk.is_empty(),
+  })
+}
+
+#[tauri::command]
+fn open_media_file(file_path: String) -> Result<(), String> {
+  let p = Path::new(&file_path);
+  if !p.exists() {
+    return Err(format!("El archivo no existe en el disco: {}", file_path));
+  }
+  open::that(&file_path).map_err(|e| format!("Error abriendo video: {}", e))
+}
+
+#[tauri::command]
+fn show_in_folder(file_path: String) -> Result<(), String> {
+  #[cfg(target_os = "windows")]
+  {
+    use std::process::Command;
+    let _ = Command::new("explorer")
+      .args(["/select,", &file_path])
+      .spawn();
+    Ok(())
+  }
+  #[cfg(not(target_os = "windows"))]
+  {
+    if let Some(parent) = Path::new(&file_path).parent() {
+      open::that(parent).map_err(|e| format!("Error abriendo carpeta: {}", e))?;
+    }
+    Ok(())
+  }
+}
+
+#[tauri::command]
+fn open_folder(folder_path: String) -> Result<(), String> {
+  open::that(&folder_path).map_err(|e| format!("Error abriendo carpeta: {}", e))
+}
+
+#[tauri::command]
+async fn start_cecom_video_download(
+  app_handle: tauri::AppHandle,
+  task_id: String,
+  ip: String,
+  usuario: String,
+  clave: String,
+  canal: String,
+  inicio_str: String,
+  fin_str: String,
+  output_filename: String,
+  custom_sdk_path: Option<String>,
+  custom_dest_dir: Option<String>,
+  modo: Option<String>,
+) -> Result<String, String> {
+  let sdk_candidates = [
+    custom_sdk_path.unwrap_or_default(),
+    r"C:\Users\antho\Downloads\Videos Cecom\sdk_hikvision\Converter.exe".to_string(),
+    r"C:\wisi\sdk_hikvision\Converter.exe".to_string(),
+    r"C:\sdk_hikvision\Converter.exe".to_string(),
+  ];
+
+  let mut exe_path: Option<PathBuf> = None;
+  for cand in &sdk_candidates {
+    if !cand.is_empty() {
+      let p = PathBuf::from(cand);
+      if p.exists() {
+        exe_path = Some(p);
+        break;
+      }
+    }
+  }
+
+  let exe_path = exe_path.ok_or_else(|| {
+    "No se encontró 'Converter.exe' de la SDK Hikvision. Verifique que exista en 'C:\\Users\\antho\\Downloads\\Videos Cecom\\sdk_hikvision\\Converter.exe'".to_string()
+  })?;
+
+  let exe_dir = exe_path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+
+  let dest_dir = if let Some(d) = custom_dest_dir {
+    if !d.trim().is_empty() {
+      PathBuf::from(d)
+    } else {
+      let base = app_handle.path().video_dir().unwrap_or_else(|_| app_handle.path().download_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Downloads")));
+      base.join("Wisi_Cecom_Videos")
+    }
+  } else {
+    let base = app_handle.path().video_dir().unwrap_or_else(|_| app_handle.path().download_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Downloads")));
+    base.join("Wisi_Cecom_Videos")
+  };
+
+  if !dest_dir.exists() {
+    let _ = std::fs::create_dir_all(&dest_dir);
+  }
+
+  let final_file_path = dest_dir.join(&output_filename);
+  let final_file_str = final_file_path.to_string_lossy().to_string();
+
+  let mut args = vec![
+    ip,
+    usuario,
+    clave,
+    canal,
+    inicio_str,
+    fin_str,
+    final_file_str.clone(),
+  ];
+
+  if let Some(m) = modo {
+    if m == "f" {
+      args.push("f".to_string());
+    }
+  }
+
+  let app_clone = app_handle.clone();
+  let task_id_clone = task_id.clone();
+  let final_dest_clone = final_file_str.clone();
+
+  std::thread::spawn(move || {
+    let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
+      task_id: task_id_clone.clone(),
+      percent: 5,
+      stage: "[1/3] Conectando con grabador...".to_string(),
+      status: "downloading".to_string(),
+      output_file: final_dest_clone.clone(),
+      error: None,
+    });
+
+    let mut cmd = Command::new(&exe_path);
+    cmd.current_dir(&exe_dir);
+    cmd.args(&args);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let mut child = match cmd.spawn() {
+      Ok(c) => c,
+      Err(e) => {
+        let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
+          task_id: task_id_clone,
+          percent: 0,
+          stage: "Error de ejecución".to_string(),
+          status: "error".to_string(),
+          output_file: final_dest_clone,
+          error: Some(format!("Fallo al iniciar Converter.exe: {}", e)),
+        });
+        return;
+      }
+    };
+
+    if let Some(stdout) = child.stdout.take() {
+      let reader = BufReader::new(stdout);
+      for line_res in reader.lines() {
+        if let Ok(line) = line_res {
+          let trimmed = line.trim();
+          if trimmed.starts_with("PROGRESS:") {
+            if let Some(num_str) = trimmed.split(':').nth(1) {
+              if let Ok(val) = num_str.trim().parse::<u32>() {
+                let scaled = (val * 70) / 100;
+                let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
+                  task_id: task_id_clone.clone(),
+                  percent: scaled,
+                  stage: format!("[1/2] Descargando desde NVR/DVR: {}%", val),
+                  status: "downloading".to_string(),
+                  output_file: final_dest_clone.clone(),
+                  error: None,
+                });
+              }
+            }
+          } else if trimmed.starts_with("CONV_PROGRESS:") {
+            if let Some(num_str) = trimmed.split(':').nth(1) {
+              if let Ok(val) = num_str.trim().parse::<u32>() {
+                let scaled = 70 + (val * 29) / 100;
+                let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
+                  task_id: task_id_clone.clone(),
+                  percent: scaled,
+                  stage: format!("[2/2] Remuxing a MP4 nativo: {}%", val),
+                  status: "downloading".to_string(),
+                  output_file: final_dest_clone.clone(),
+                  error: None,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    let status = child.wait();
+    let file_exists = Path::new(&final_dest_clone).exists();
+    let file_size = if file_exists {
+      std::fs::metadata(&final_dest_clone).map(|m| m.len()).unwrap_or(0)
+    } else {
+      0
+    };
+
+    match status {
+      Ok(s) if s.success() && file_exists && file_size > 0 => {
+        let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
+          task_id: task_id_clone,
+          percent: 100,
+          stage: "Completado (MP4 Listo en disco)".to_string(),
+          status: "completed".to_string(),
+          output_file: final_dest_clone,
+          error: None,
+        });
+      }
+      Ok(s) => {
+        let err_msg = if !file_exists || file_size == 0 {
+          "El proceso terminó pero no se generó el archivo MP4 (posiblemente no hay video grabado en ese rango de horas o el grabador no está accesible en esta red)".to_string()
+        } else {
+          format!("Converter.exe terminó con código {}", s)
+        };
+        let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
+          task_id: task_id_clone,
+          percent: 0,
+          stage: "Descarga Fallida".to_string(),
+          status: "error".to_string(),
+          output_file: final_dest_clone,
+          error: Some(err_msg),
+        });
+      }
+      Err(e) => {
+        let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
+          task_id: task_id_clone,
+          percent: 0,
+          stage: "Error en SDK".to_string(),
+          status: "error".to_string(),
+          output_file: final_dest_clone,
+          error: Some(format!("Error esperando Converter.exe: {}", e)),
+        });
+      }
+    }
+  });
+
+  Ok(final_file_str)
+}
+
 #[tauri::command]
 fn open_in_browser(url: String) -> Result<(), String> {
   open::that(&url).map_err(|e| format!("Error al abrir navegador: {}", e))
@@ -283,7 +561,12 @@ pub fn run() {
       save_file_to_downloads,
       open_in_browser,
       isapi_request,
-      ping_device
+      ping_device,
+      get_cecom_default_paths,
+      start_cecom_video_download,
+      open_media_file,
+      show_in_folder,
+      open_folder
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

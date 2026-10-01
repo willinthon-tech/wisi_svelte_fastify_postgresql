@@ -1,9 +1,17 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { triggerToast } from "../../controllers/ui.store.js";
   import { masterSalasStore } from "../../controllers/master.store.js";
   import { getDispositivosCamaras, getCamaras } from "../../services/cecomVideo.service.js";
   import { isTauriWindows } from "../../services/tauriIsapi.service.js";
+  import { 
+    getCecomDefaultPaths, 
+    startCecomVideoDownload, 
+    listenDownloadProgress, 
+    openMediaFile, 
+    showInFolder, 
+    openFolder 
+  } from "../../services/tauriVideo.service.js";
 
   let salas = [];
   let selectedSalaUuid = "";
@@ -20,7 +28,12 @@
 
   let isLoadingDispositivos = false;
   let isLoadingCamaras = false;
-  let isDownloading = false;
+
+  // Rutas locales de Windows para CECOM
+  let targetVideosDir = "";
+  let sdkPath = "";
+  let sdkAvailable = false;
+  let unlistenProgress = null;
 
   // Cola de descargas activas en sesión
   let downloadQueue = [];
@@ -31,6 +44,48 @@
     if (salas.length > 0) {
       selectedSalaUuid = salas[0].uuid || salas[0].id;
       await onSalaChange();
+    }
+
+    // Inicializar rutas y escucha nativa en Windows
+    if (isTauriWindows()) {
+      const paths = await getCecomDefaultPaths();
+      if (paths) {
+        targetVideosDir = localStorage.getItem("cecom_custom_videos_dir") || paths.dest_dir || "";
+        sdkPath = localStorage.getItem("cecom_custom_sdk_path") || paths.sdk_converter_path || "";
+        sdkAvailable = paths.sdk_available || !!sdkPath;
+      }
+
+      unlistenProgress = await listenDownloadProgress((payload) => {
+        downloadQueue = downloadQueue.map(item => {
+          if (item.id === payload.task_id) {
+            const isDone = payload.status === "completed";
+            const isErr = payload.status === "error";
+            return {
+              ...item,
+              progress: payload.percent,
+              status: payload.stage,
+              outputPath: payload.output_file || item.outputPath,
+              canOpen: isDone,
+              isError: isErr,
+              errorMsg: payload.error || null
+            };
+          }
+          return item;
+        });
+
+        if (payload.status === "completed") {
+          triggerToast(`✅ Video descargado y guardado en disco: ${payload.output_file}`, "success");
+        } else if (payload.status === "error") {
+          triggerToast(`❌ Error en grabador/descarga: ${payload.error || "Fallo en extracción"}`, "error");
+        }
+      });
+    }
+  });
+
+  onDestroy(() => {
+    if (unlistenProgress) {
+      unlistenProgress();
+      unlistenProgress = null;
     }
   });
 
@@ -150,9 +205,10 @@
     const hEndClean = horaFin.replace(/:/g, "");
 
     const filename = `${salaNombre}_${devNombre}_${camNombre}_${fClean}_${hStartClean}-${hEndClean}_${streamType.toUpperCase()}.mp4`;
+    const taskId = "DL-" + Date.now().toString().slice(-6);
 
     const downloadItem = {
-      id: "DL-" + Date.now().toString().slice(-6),
+      id: taskId,
       filename,
       device: dev.nombre,
       ip: dev.ip_local,
@@ -161,45 +217,90 @@
       fecha,
       rango: `${horaInicio} a ${horaFin}`,
       streamType: streamType === "main" ? "Principal (Full HD/4K)" : "Secundario (Rápido)",
-      status: "Iniciando...",
+      status: "Conectando con el grabador por SDK...",
       progress: 5,
       createdAt: new Date().toLocaleTimeString(),
-      canOpen: false
+      canOpen: false,
+      isError: false,
+      errorMsg: null,
+      outputPath: ""
     };
 
     downloadQueue = [downloadItem, ...downloadQueue];
-    triggerToast(`Descarga agregada a la cola: ${filename}`, "info");
 
-    // Proceso de descarga sin re-encoding pesado (Copia directa de flujo de video)
-    simulateDownloadProcess(downloadItem.id);
-  }
+    if (!isTauriWindows()) {
+      triggerToast("La descarga nativa por SDK requiere ejecutar la app en Windows.", "warning");
+      return;
+    }
 
-  function simulateDownloadProcess(id) {
-    let p = 10;
-    const interval = setInterval(() => {
-      p += 15;
-      downloadQueue = downloadQueue.map(item => {
-        if (item.id === id) {
-          if (p >= 100) {
-            clearInterval(interval);
-            return {
-              ...item,
-              progress: 100,
-              status: "Completado (MP4 Listo)",
-              canOpen: true
-            };
-          }
-          let statusText = "Descargando flujo nativo H.264/H.265...";
-          if (p > 70) statusText = "Remuxing instantáneo a contenedor MP4...";
-          return { ...item, progress: p, status: statusText };
-        }
-        return item;
+    // Formatear fechas para Converter.exe de Hikvision: YYYY,M,D,H,m,s
+    const [startH, startM, startS] = horaInicio.split(":").map(Number);
+    const [endH, endM, endS] = horaFin.split(":").map(Number);
+    const [fYear, fMonth, fDay] = fecha.split("-").map(Number);
+
+    const inicioStr = `${fYear},${fMonth},${fDay},${startH},${startM},${startS || 0}`;
+    const finStr = `${fYear},${fMonth},${fDay},${endH},${endM},${endS || 0}`;
+
+    try {
+      triggerToast(`Iniciando extracción de video: ${filename}`, "info");
+      const outPath = await startCecomVideoDownload({
+        taskId,
+        ip: dev.ip_local,
+        usuario: dev.usuario || "admin",
+        clave: dev.clave || "",
+        canal: cam.numero_canal,
+        inicioStr,
+        finStr,
+        outputFilename: filename,
+        customSdkPath: sdkPath || null,
+        customDestDir: targetVideosDir || null,
+        modo: streamType === "sub" ? "f" : null
       });
-    }, 800);
+
+      downloadQueue = downloadQueue.map(i => i.id === taskId ? { ...i, outputPath: outPath } : i);
+    } catch (err) {
+      console.error("Error al iniciar descarga nativa:", err);
+      downloadQueue = downloadQueue.map(i => i.id === taskId ? { 
+        ...i, 
+        progress: 0, 
+        status: "Fallo al iniciar", 
+        isError: true, 
+        errorMsg: err.message || String(err) 
+      } : i);
+      triggerToast(`Error al iniciar descarga: ${err.message || err}`, "error");
+    }
   }
 
-  function openFileLocation(item) {
-    triggerToast(`Archivo disponible en la carpeta de descargas: ${item.filename}`, "success");
+  async function openFileLocation(item) {
+    if (item.outputPath) {
+      try {
+        await openMediaFile(item.outputPath);
+      } catch (err) {
+        triggerToast(`Error al abrir video: ${err}`, "error");
+      }
+    } else {
+      triggerToast(`Archivo: ${item.filename}`, "info");
+    }
+  }
+
+  async function openFileInExplorer(item) {
+    if (item.outputPath) {
+      try {
+        await showInFolder(item.outputPath);
+      } catch (err) {
+        triggerToast(`Error al abrir carpeta: ${err}`, "error");
+      }
+    }
+  }
+
+  async function handleOpenTargetFolder() {
+    if (targetVideosDir) {
+      try {
+        await openFolder(targetVideosDir);
+      } catch (err) {
+        triggerToast(`Error al abrir carpeta: ${err}`, "error");
+      }
+    }
   }
 </script>
 
@@ -417,6 +518,24 @@
       {/if}
     </div>
 
+    <!-- Barra de Estado de Almacenamiento Local -->
+    {#if isTauriWindows()}
+      <div class="storage-info-bar">
+        <div class="storage-meta">
+          <span class="storage-icon">💾</span>
+          <div>
+            <div class="storage-title">Carpeta Local de Destino:</div>
+            <div class="storage-path font-mono">{targetVideosDir || "C:\\Users\\Public\\Downloads\\Wisi_Cecom_Videos"}</div>
+          </div>
+        </div>
+        <div class="storage-actions">
+          <button type="button" class="btn-storage-open" on:click={handleOpenTargetFolder}>
+            📂 Abrir Carpeta de Videos
+          </button>
+        </div>
+      </div>
+    {/if}
+
     {#if downloadQueue.length === 0}
       <div class="empty-queue">
         <span>📁</span>
@@ -425,9 +544,9 @@
     {:else}
       <div class="queue-list">
         {#each downloadQueue as item (item.id)}
-          <div class="queue-item">
+          <div class="queue-item" class:item-error={item.isError}>
             <div class="item-left">
-              <span class="file-icon">🎬</span>
+              <span class="file-icon">{item.isError ? '⚠️' : '🎬'}</span>
               <div>
                 <div class="item-name font-mono">{item.filename}</div>
                 <div class="item-meta">
@@ -436,21 +555,42 @@
                   <span>{item.fecha} [{item.rango}]</span> • 
                   <span>{item.streamType}</span>
                 </div>
+                {#if item.outputPath}
+                  <div class="item-filepath font-mono">
+                    📍 {item.outputPath}
+                  </div>
+                {/if}
+                {#if item.isError && item.errorMsg}
+                  <div class="item-error-msg">
+                    ❌ {item.errorMsg}
+                  </div>
+                {/if}
               </div>
             </div>
 
             <div class="item-right">
-              <div class="progress-container">
-                <div class="progress-bar" style="width: {item.progress}%;"></div>
-              </div>
+              {#if !item.isError}
+                <div class="progress-container">
+                  <div class="progress-bar" style="width: {item.progress}%;"></div>
+                </div>
+              {/if}
               <div class="progress-status">
-                <span class="status-badge" class:done={item.progress === 100}>{item.status}</span>
-                <span class="percent font-mono">{item.progress}%</span>
+                <span class="status-badge" class:done={item.progress === 100} class:error={item.isError}>
+                  {item.status}
+                </span>
+                {#if !item.isError}
+                  <span class="percent font-mono">{item.progress}%</span>
+                {/if}
               </div>
               {#if item.canOpen}
-                <button type="button" class="btn-open-file" on:click={() => openFileLocation(item)}>
-                  📂 Abrir MP4
-                </button>
+                <div class="actions-group">
+                  <button type="button" class="btn-open-file" on:click={() => openFileLocation(item)}>
+                    ▶️ Abrir MP4
+                  </button>
+                  <button type="button" class="btn-open-folder" on:click={() => openFileInExplorer(item)}>
+                    📂 Ver en Carpeta
+                  </button>
+                </div>
               {/if}
             </div>
           </div>
@@ -952,9 +1092,88 @@
     color: #059669;
   }
 
+  .status-badge.error {
+    color: #dc2626;
+  }
+
+  .storage-info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .storage-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .storage-icon {
+    font-size: 20px;
+  }
+
+  .storage-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+  }
+
+  .storage-path {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    word-break: break-all;
+  }
+
+  .btn-storage-open {
+    padding: 6px 12px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1e293b;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-storage-open:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+  }
+
+  .item-filepath {
+    font-size: 11px;
+    color: #0284c7;
+    margin-top: 4px;
+    word-break: break-all;
+  }
+
+  .item-error-msg {
+    font-size: 11.5px;
+    color: #dc2626;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+
+  .actions-group {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+
   .btn-open-file {
-    align-self: flex-end;
-    padding: 5px 12px;
+    padding: 6px 12px;
     background: #059669;
     color: #ffffff;
     border: none;
@@ -962,6 +1181,26 @@
     font-size: 11.5px;
     font-weight: 700;
     cursor: pointer;
-    margin-top: 4px;
+    transition: background 0.15s;
+  }
+
+  .btn-open-file:hover {
+    background: #047857;
+  }
+
+  .btn-open-folder {
+    padding: 6px 12px;
+    background: #2563eb;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-open-folder:hover {
+    background: #1d4ed8;
   }
 </style>
