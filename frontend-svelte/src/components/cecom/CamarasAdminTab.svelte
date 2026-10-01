@@ -8,7 +8,8 @@
     deleteDispositivoCamara,
     syncCanalesDispositivo,
     getCamaras,
-    localScanGrabadorChannels
+    localScanGrabadorChannels,
+    diagnosticarPuertosGrabadorIsapi
   } from "../../services/cecomVideo.service.js";
   import { isTauriWindows } from "../../services/tauriIsapi.service.js";
 
@@ -24,6 +25,10 @@
   let isEditing = false;
   let currentUuid = null;
   let isSubmitting = false;
+
+  // Diagnóstico ISAPI de puertos físicos
+  let isVerifyingPorts = false;
+  let verifiedPortsResult = null;
 
   let form = {
     nombre: "",
@@ -75,6 +80,8 @@
   function openCreateModal() {
     isEditing = false;
     currentUuid = null;
+    verifiedPortsResult = null;
+    isVerifyingPorts = false;
     form = {
       nombre: "",
       sala_uuid: salas.length > 0 ? (salas[0].uuid || salas[0].id) : "",
@@ -93,6 +100,8 @@
   function openEditModal(dev) {
     isEditing = true;
     currentUuid = dev.uuid || dev.id;
+    verifiedPortsResult = null;
+    isVerifyingPorts = false;
     form = {
       nombre: dev.nombre || "",
       sala_uuid: dev.sala_uuid || "",
@@ -112,6 +121,37 @@
     isModalOpen = false;
     isEditing = false;
     currentUuid = null;
+    verifiedPortsResult = null;
+    isVerifyingPorts = false;
+  }
+
+  async function verificarPuertosFormulario() {
+    if (!form.ip_local.trim()) {
+      triggerToast("Ingrese la IP local del dispositivo para verificar sus puertos", "warning");
+      return;
+    }
+    if (!isTauriWindows()) {
+      triggerToast("La verificación directa ISAPI solo funciona desde la app de Windows en la sala", "info");
+      return;
+    }
+
+    isVerifyingPorts = true;
+    try {
+      triggerToast(`🔍 Conectando por ISAPI a ${form.ip_local} para verificar puertos físicos...`, "info");
+      const diag = await diagnosticarPuertosGrabadorIsapi(form.ip_local, form.usuario, form.clave);
+      if (diag && diag.total_puertos > 0) {
+        verifiedPortsResult = diag;
+        form.canales_totales = diag.total_puertos;
+        triggerToast(`✅ ${diag.puertos_activos} puertos físicos con video activo detectados (${diag.puertos_deshabilitados} deshabilitados/sin señal)`, "success");
+      } else {
+        triggerToast(`No se detectaron puertos abiertos en ${form.ip_local}. Verifique IP, credenciales y que el DVR esté encendido.`, "warning");
+      }
+    } catch (err) {
+      console.error("Error al verificar puertos ISAPI:", err);
+      triggerToast(`Error al verificar puertos en ${form.ip_local}: ${err.message}`, "error");
+    } finally {
+      isVerifyingPorts = false;
+    }
   }
 
   async function handleSubmit() {
@@ -130,18 +170,23 @@
 
     isSubmitting = true;
     try {
+      let savedDevUuid = currentUuid;
       if (isEditing) {
         await updateDispositivoCamara(currentUuid, form);
         triggerToast("Grabador / Cámara actualizado exitosamente", "success");
       } else {
         const created = await createDispositivoCamara(form);
+        savedDevUuid = created?.data?.uuid;
         triggerToast("Grabador / Cámara registrado exitosamente", "success");
-        
-        // Si se registró en la app de Windows, intentar auto-escaneo inmediato
-        if (isTauriWindows() && form.tipo !== "CAMARA_IP" && created?.data?.uuid) {
-          scanChannels(created.data, true);
-        }
       }
+
+      // Si se verificaron puertos físicos en el modal, sincronizarlos inmediatamente
+      if (savedDevUuid && verifiedPortsResult?.canales?.length > 0) {
+        await syncCanalesDispositivo(savedDevUuid, verifiedPortsResult.canales);
+      } else if (isTauriWindows() && form.tipo !== "CAMARA_IP" && savedDevUuid) {
+        await scanChannels({ uuid: savedDevUuid, ...form }, true);
+      }
+
       closeModal();
       await loadDispositivos();
     } catch (err) {
@@ -461,13 +506,14 @@
               {:else}
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;">
                   {#each channels as cam (cam.uuid || cam.id)}
-                    <div style="padding: 10px 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    {@const isActivo = cam.active === 1 || cam.active === true || cam.active === undefined}
+                    <div style="padding: 10px 14px; background: #ffffff; border: 1px solid {isActivo ? '#e2e8f0' : '#fecaca'}; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                       <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 12px; font-weight: 800; color: #2563eb; background: #eff6ff; padding: 2px 7px; border-radius: 6px; font-family: monospace;">
+                        <span style="font-size: 12px; font-weight: 800; color: {isActivo ? '#2563eb' : '#94a3b8'}; background: {isActivo ? '#eff6ff' : '#f1f5f9'}; padding: 2px 7px; border-radius: 6px; font-family: monospace;">
                           CH {cam.numero_canal}
                         </span>
                         <div>
-                          <div style="font-size: 13px; font-weight: 700; color: #0f172a;">
+                          <div style="font-size: 13px; font-weight: 700; color: {isActivo ? '#0f172a' : '#64748b'};">
                             {cam.nombre}
                           </div>
                           {#if cam.ip_origen}
@@ -478,9 +524,14 @@
                         </div>
                       </div>
 
-                      <span style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: {cam.tipo === 'IP' ? '#ecfdf5' : '#f1f5f9'}; color: {cam.tipo === 'IP' ? '#059669' : '#475569'};">
-                        {cam.tipo}
-                      </span>
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 9.5px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: {isActivo ? '#ecfdf5' : '#fef2f2'}; color: {isActivo ? '#059669' : '#dc2626'}; border: 1px solid {isActivo ? '#a7f3d0' : '#fecaca'};">
+                          {isActivo ? 'Señal Activa' : 'Deshabilitado'}
+                        </span>
+                        <span style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: {cam.tipo === 'IP' ? '#eff6ff' : '#f8fafc'}; color: {cam.tipo === 'IP' ? '#2563eb' : '#64748b'};">
+                          {cam.tipo}
+                        </span>
+                      </div>
                     </div>
                   {/each}
                 </div>
@@ -654,6 +705,67 @@
               />
             </label>
           </div>
+        </div>
+
+        <!-- Diagnóstico y Verificación de Puertos Físicos ISAPI -->
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="material-icons" style="font-size: 18px; color: #0284c7;">cable</span>
+              <span style="font-size: 11.5px; font-weight: 800; color: #1e293b; text-transform: uppercase;">
+                Diagnóstico ISAPI de Puertos Físicos
+              </span>
+            </div>
+            <button
+              type="button"
+              on:click={verificarPuertosFormulario}
+              disabled={isVerifyingPorts || !form.ip_local.trim()}
+              style="padding: 5px 12px; font-size: 11.5px; font-weight: 700; border-radius: 6px; background: #0284c7; color: white; border: none; cursor: pointer; display: flex; align-items: center; gap: 5px;"
+              title="Comprobar en el DVR cuáles canales físicos tienen señal activa vs deshabilitados"
+            >
+              {#if isVerifyingPorts}
+                <span class="material-icons" style="font-size: 14px; animation: spin 1s infinite linear;">sync</span>
+                Verificando...
+              {:else}
+                <span class="material-icons" style="font-size: 14px;">travel_explore</span>
+                Verificar Puertos en Vivo
+              {/if}
+            </button>
+          </div>
+
+          {#if verifiedPortsResult}
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; font-size: 12px;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <span style="color: #16a34a; font-weight: 800;">
+                  🟢 {verifiedPortsResult.puertos_activos} con Video
+                </span>
+                <span style="color: #dc2626; font-weight: 800;">
+                  🔴 {verifiedPortsResult.puertos_deshabilitados} Deshabilitados
+                </span>
+                <span style="color: #64748b; font-weight: 600;">
+                  (Total: {verifiedPortsResult.total_puertos} puertos físicos)
+                </span>
+              </div>
+
+              <!-- Vista previa rápida de puertos físicos detectados -->
+              <div style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-size: 11px;">
+                {#each verifiedPortsResult.canales as ch}
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 2px 6px; border-radius: 4px; background: {ch.activo ? '#f0fdf4' : '#fef2f2'}; border: 1px solid {ch.activo ? '#bbf7d0' : '#fecaca'};">
+                    <span style="font-weight: 700; color: #1e293b;">
+                      Canal {ch.numero_canal}: {ch.nombre}
+                    </span>
+                    <span style="font-weight: 800; font-size: 9.5px; color: {ch.activo ? '#15803d' : '#b91c1c'};">
+                      {ch.activo ? (ch.resolucion || 'SEÑAL OK') : 'DESHABILITADO / SIN SEÑAL'}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {:else}
+            <div style="font-size: 11px; color: #64748b; line-height: 1.4;">
+              💡 Haz clic en <strong>Verificar Puertos en Vivo</strong> para consultar por ISAPI al DVR y detectar puertos físicos desconectados o sin video antes de guardar.
+            </div>
+          {/if}
         </div>
 
         <!-- Footer Botones -->

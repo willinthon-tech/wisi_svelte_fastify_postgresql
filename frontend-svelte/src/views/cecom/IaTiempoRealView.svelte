@@ -48,6 +48,7 @@
     return mesasConCamaras.map(m => {
       const mId = m.mesa_uuid || m.uuid || m.id;
       const live = liveMesasMap[mId] || null;
+      const isMoving = Boolean(live?.is_moving || live?.ultimo_evento === 'JUGADA' || live?.ultimo_evento === 'JUGANDO - MANO EN PROCESO');
       return {
         uuid: mId,
         nombre: m.mesa_nombre || m.nombre,
@@ -57,7 +58,8 @@
         descripcion: live?.descripcion || "Mesa activa en monitoreo",
         hora: live?.hora || "",
         es_novedad: live?.es_novedad || false,
-        nivel_alerta: live?.nivel_alerta || "INFO"
+        nivel_alerta: live?.nivel_alerta || "INFO",
+        is_moving: isMoving
       };
     });
   })();
@@ -271,16 +273,21 @@
             type="button"
             class="mesa-badge-card"
             class:selected={isSelected}
+            class:is-active-playing={badge.is_moving}
             class:has-alert={badge.nivel_alerta === 'WARN' || badge.nivel_alerta === 'CRITICAL'}
             on:click={() => filterByBadgeMesa(badge.uuid)}
           >
             <div class="badge-top">
               <span class="mesa-title">{badge.nombre}</span>
-              <span class="status-indicator-dot"></span>
+              <span class="status-indicator-dot" class:pulse={badge.is_moving} class:idle={!badge.is_moving}></span>
             </div>
             <div class="badge-game font-mono">{badge.juego} • 📷 {badge.total_camaras} cam</div>
-            <div class="badge-event font-mono">
-              {badge.ultimo_evento}
+            <div class="badge-event font-mono" class:is-playing={badge.is_moving}>
+              {#if badge.is_moving}
+                ⚡ {badge.ultimo_evento}
+              {:else}
+                {badge.ultimo_evento}
+              {/if}
             </div>
             <div class="badge-desc" title={badge.descripcion}>
               {badge.descripcion}
@@ -670,11 +677,43 @@
     color: #0f172a;
   }
 
+  .mesa-badge-card.is-active-playing {
+    border-color: #10b981;
+    background: #f0fdf4;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+  }
+
   .status-indicator-dot {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: #10b981;
+    transition: all 0.3s ease;
+  }
+
+  .status-indicator-dot.pulse {
+    background: #10b981;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: pulse-green-dot 1.5s infinite;
+  }
+
+  .status-indicator-dot.idle {
+    background: #94a3b8;
+  }
+
+  @keyframes pulse-green-dot {
+    0% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+      transform: scale(1.15);
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+    100% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
   }
 
   .badge-game {
@@ -692,6 +731,14 @@
     border-radius: 4px;
     display: inline-block;
     margin: 4px 0 2px 0;
+    transition: all 0.2s ease;
+  }
+
+  .badge-event.is-playing {
+    color: #15803d;
+    background: #dcfce7;
+    border: 1px solid #bbf7d0;
+    font-weight: 900;
   }
 
   .badge-desc {

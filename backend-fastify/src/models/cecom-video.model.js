@@ -207,6 +207,7 @@ export async function syncCanalesDispositivoModel(dispositivoCamaraUuid, canales
     const tipo = cleanStr(c.tipo).toUpperCase() || 'IP';
     const ipOrigen = cleanStr(c.ip_origen || c.ipOrigen);
     const audioHabilitado = Boolean(c.audio_habilitado || (c.Audio && String(c.Audio).toLowerCase().includes('habilitado')));
+    const esActivo = (c.activo === false || c.habilitado === false) ? 0 : 1;
 
     await sql`
       INSERT INTO camaras (
@@ -214,7 +215,7 @@ export async function syncCanalesDispositivoModel(dispositivoCamaraUuid, canales
         ip_origen, audio_habilitado, active, is_deleted, created_at, updated_at
       ) VALUES (
         ${dispositivoCamaraUuid}::uuid, ${salaUuid}::uuid, ${canalNum}, ${nombre}, ${tipo},
-        ${ipOrigen || null}, ${audioHabilitado}, 1, false, NOW(), NOW()
+        ${ipOrigen || null}, ${audioHabilitado}, ${esActivo}, false, NOW(), NOW()
       )
       ON CONFLICT (dispositivo_camara_uuid, numero_canal) 
       DO UPDATE SET
@@ -222,6 +223,7 @@ export async function syncCanalesDispositivoModel(dispositivoCamaraUuid, canales
         tipo = EXCLUDED.tipo,
         ip_origen = COALESCE(EXCLUDED.ip_origen, camaras.ip_origen),
         audio_habilitado = EXCLUDED.audio_habilitado,
+        active = EXCLUDED.active,
         is_deleted = false,
         deleted_at = NULL,
         updated_at = NOW()
@@ -351,7 +353,7 @@ export async function getMesasConCamarasModel(params = {}) {
   if (!isPgConnected || !sql) return { success: true, data: [] };
   const { sala_uuid } = params;
   const rows = await sql`
-    SELECT DISTINCT
+    SELECT DISTINCT ON (m.uuid)
       m.uuid,
       m.uuid AS id,
       m.nombre,
@@ -360,16 +362,22 @@ export async function getMesasConCamarasModel(params = {}) {
       s.nombre AS sala_nombre,
       m.juego_uuid,
       j.nombre AS juego_nombre,
-      COUNT(mc.camara_uuid) AS total_camaras
+      c.numero_canal,
+      c.nombre AS camara_nombre,
+      d.ip_local AS dispositivo_ip,
+      d.puerto_rtsp,
+      d.usuario AS dispositivo_usuario,
+      d.clave AS dispositivo_clave,
+      (SELECT COUNT(mc2.camara_uuid) FROM mesas_camaras mc2 WHERE mc2.mesa_uuid = m.uuid AND mc2.is_deleted = false) AS total_camaras
     FROM mesas m
     JOIN mesas_camaras mc ON m.uuid = mc.mesa_uuid AND mc.is_deleted = false
     JOIN camaras c ON mc.camara_uuid = c.uuid AND c.is_deleted = false
+    JOIN dispositivos_camaras d ON c.dispositivo_camara_uuid = d.uuid
     LEFT JOIN salas s ON m.sala_uuid = s.uuid
     LEFT JOIN juegos j ON m.juego_uuid = j.uuid
     WHERE m.is_deleted = false
       ${sala_uuid && isUuid(sala_uuid) ? sql`AND m.sala_uuid = ${sala_uuid}::uuid` : sql``}
-    GROUP BY m.uuid, m.nombre, m.sala_uuid, s.nombre, m.juego_uuid, j.nombre
-    ORDER BY m.nombre ASC
+    ORDER BY m.uuid, m.nombre ASC
   `;
   return { success: true, data: rows };
 }

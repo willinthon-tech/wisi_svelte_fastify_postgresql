@@ -51,9 +51,10 @@
     }
 
     try {
-      const res = await getCamaras({ sala_uuid: selectedSalaUuid });
+      const res = await getCamaras({ sala_uuid: selectedSalaUuid, active: 1 });
       if (res && res.success) {
-        availableCameras = res.data || [];
+        // Excluir cualquier canal que esté marcado como inactivo o deshabilitado
+        availableCameras = (res.data || []).filter(c => c.active === 1 || c.active === true || c.active === undefined);
       }
     } catch (err) {
       console.error("Error cargando cámaras disponibles:", err);

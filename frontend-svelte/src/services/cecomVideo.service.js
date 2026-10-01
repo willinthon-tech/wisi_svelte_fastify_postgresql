@@ -104,6 +104,7 @@ export async function clearCecomIaEventos(params = {}) {
 
 /**
  * Escanea los canales reales de un NVR/DVR directamente desde la red local
+ * y verifica puertos físicos habilitados vs deshabilitados vía ISAPI
  */
 export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clave = '') {
   if (!isTauriWindows()) {
@@ -127,25 +128,29 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
 
     if (resProxies && resProxies.ok && resProxies.data) {
       const xmlStr = String(resProxies.data);
-      // Extraer canales InputProxyChannel mediante regex simple y veloz sin requerir xml2js pesado en navegador
       const channelBlocks = xmlStr.match(/<InputProxyChannel[\s\S]*?<\/InputProxyChannel>/gi) || [];
 
       for (const block of channelBlocks) {
         const idMatch = block.match(/<id>(\d+)<\/id>/i);
         const nameMatch = block.match(/<name>(.*?)<\/name>/i);
         const ipMatch = block.match(/<ipAddress>(.*?)<\/ipAddress>/i);
+        const onlineMatch = block.match(/<online>(.*?)<\/online>/i);
 
         if (idMatch) {
           const idCanal = parseInt(idMatch[1]);
           const nombre = nameMatch ? nameMatch[1].trim() : `Cámara IP ${idCanal}`;
           const ipOrigen = ipMatch ? ipMatch[1].trim() : '';
+          const isOnline = onlineMatch ? onlineMatch[1].trim().toLowerCase() === 'true' : true;
 
           canalesEncontrados.push({
             numero_canal: idCanal,
             nombre: nombre || `Cámara ${idCanal}`,
             tipo: 'IP',
             ip_origen: ipOrigen,
-            audio_habilitado: false
+            audio_habilitado: false,
+            activo: isOnline,
+            habilitado: isOnline,
+            estado: isOnline ? 'ACTIVO' : 'DESCONECTADO'
           });
         }
       }
@@ -154,7 +159,7 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
     console.log('No se obtuvieron canales InputProxy (posible DVR analógico puro):', e.message);
   }
 
-  // 2. Intentar obtener canales de video analógicos estándar (DVRs)
+  // 2. Intentar obtener canales de video analógicos estándar (DVRs físicos)
   try {
     const resAnalog = await callLocalIsapi(
       ipLocal,
@@ -173,9 +178,20 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
       for (const block of videoBlocks) {
         const idMatch = block.match(/<id>(\d+)<\/id>/i);
         const nameMatch = block.match(/<name>(.*?)<\/name>/i);
+        const videoEnabledMatch = block.match(/<videoInputEnabled>(.*?)<\/videoInputEnabled>/i);
+        const resDescMatch = block.match(/<resDesc>(.*?)<\/resDesc>/i);
+        const formatMatch = block.match(/<videoFormat>(.*?)<\/videoFormat>/i);
 
         if (idMatch) {
           const idCanal = parseInt(idMatch[1]);
+          const videoEnabledStr = (videoEnabledMatch ? videoEnabledMatch[1].trim() : '').toLowerCase();
+          const resDesc = resDescMatch ? resDescMatch[1].trim() : '';
+          const videoFormat = formatMatch ? formatMatch[1].trim() : '';
+
+          // Un puerto físico está deshabilitado si videoInputEnabled es 'false' o la resolución es 'NO VIDEO'
+          const isNoVideo = resDesc.toUpperCase().includes('NO VIDEO') || videoFormat.toUpperCase() === 'NO_VIDEO';
+          const isEnabled = videoEnabledStr !== 'false' && !isNoVideo;
+
           // Evitar duplicar si ya vino en InputProxy
           if (!canalesEncontrados.some(c => c.numero_canal === idCanal)) {
             const nombre = nameMatch ? nameMatch[1].trim() : `Cámara Analógica ${idCanal}`;
@@ -184,7 +200,11 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
               nombre: nombre || `Cámara ${idCanal}`,
               tipo: 'ANALOGICA',
               ip_origen: null,
-              audio_habilitado: false
+              audio_habilitado: false,
+              resolucion: resDesc || videoFormat || '',
+              activo: isEnabled,
+              habilitado: isEnabled,
+              estado: isEnabled ? `ACTIVO (${resDesc || 'SEÑAL OK'})` : 'DESHABILITADO / SIN SEÑAL'
             });
           }
         }
@@ -197,6 +217,25 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
   // Ordenar por número de canal ascendente
   canalesEncontrados.sort((a, b) => a.numero_canal - b.numero_canal);
   return canalesEncontrados;
+}
+
+/**
+ * Diagnóstico completo ISAPI de puertos físicos de un DVR/NVR
+ */
+export async function diagnosticarPuertosGrabadorIsapi(ipLocal, usuario = 'admin', clave = '') {
+  const canales = await localScanGrabadorChannels(ipLocal, usuario, clave);
+  const activos = canales.filter(c => c.activo);
+  const deshabilitados = canales.filter(c => !c.activo);
+
+  return {
+    success: true,
+    total_puertos: canales.length,
+    puertos_activos: activos.length,
+    puertos_deshabilitados: deshabilitados.length,
+    canales,
+    activos,
+    deshabilitados
+  };
 }
 
 // ====================================================================
