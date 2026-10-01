@@ -36,6 +36,11 @@
   import ClientesView from "./views/cecom/ClientesView.svelte";
   import LlavesView from "./views/cecom/LlavesView.svelte";
   import LlavesBorradasView from "./views/cecom/LlavesBorradasView.svelte";
+  import DescargaVideoView from "./views/cecom/DescargaVideoView.svelte";
+  import IaTiempoRealView from "./views/cecom/IaTiempoRealView.svelte";
+  import IaNovedadesView from "./views/cecom/IaNovedadesView.svelte";
+  import CecomIaMesasView from "./views/cecom/CecomIaMesasView.svelte";
+  import { initCecomIaBackgroundWorker } from "./services/cecomIaBackground.service.js";
 
   // Import RRHH Views
   import MarcajesView, { persistentMarcajesFilters, forceReloadMarcajesStore } from "./views/rrhh/MarcajesView.svelte";
@@ -471,6 +476,10 @@
     if (tab === "profile") return "Perfil de Usuario";
     if (tab === "auth") return "Autenticación";
     if (tab === "settings") return "Diagnóstico del Sistema";
+    if (tab === "cecom/descargas-video" || tab === "descargas-video") return "DESCARGAS DE VIDEO";
+    if (tab === "cecom/ia-tiempo-real" || tab === "ia-tiempo-real") return "IA TIEMPO REAL";
+    if (tab === "cecom/ia-novedades" || tab === "ia-novedades") return "IA NOVEDADES";
+    if (tab === "cecom/ia-mesas" || tab === "ia-mesas") return "AUDITOR IA - MESAS EN VIVO";
     if (tab === "cecom/clientes" || tab === "clientes") return "CLIENTES";
     if (tab === "configuracion/tipo-clientes" || tab === "tipo-clientes") return "TIPO CLIENTES";
     if (tab === "configuracion/metodos-pago" || tab === "metodos-pago") return "MÉTODOS DE PAGO";
@@ -521,6 +530,7 @@
 
   onMount(async () => {
     initRouter();
+    initCecomIaBackgroundWorker();
     await checkAppVersionOnStartup();
     await loadUserSession();
     await refreshData();
@@ -1021,6 +1031,14 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
+        {:else if $currentRouteStore === "cecom/descargas-video" || $currentRouteStore === "descargas-video"}
+          <DescargaVideoView />
+        {:else if $currentRouteStore === "cecom/ia-tiempo-real" || $currentRouteStore === "ia-tiempo-real"}
+          <IaTiempoRealView />
+        {:else if $currentRouteStore === "cecom/ia-novedades" || $currentRouteStore === "ia-novedades"}
+          <IaNovedadesView />
+        {:else if $currentRouteStore === "cecom/ia-mesas" || $currentRouteStore === "ia-mesas"}
+          <CecomIaMesasView />
 
           <!-- RRHH Module Views -->
         {:else if $currentRouteStore === "rrhh/marcajes" || $currentRouteStore === "marcajes"}

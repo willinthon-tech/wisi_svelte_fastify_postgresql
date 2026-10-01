@@ -20,6 +20,7 @@ backend-fastify/empleados/*
 backend-fastify/cache_thumbs/
 backend-fastify/cache_thumbs/*
 backend-fastify/scratch/
+scratch/
 
 # Archivos de compilación / dist / build
 frontend-svelte/dist/

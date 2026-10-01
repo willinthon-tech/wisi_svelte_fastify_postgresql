@@ -41,6 +41,8 @@
     toBackendUrl,
   } from "../config/api.config.js";
   import { handleDownloadApp } from "../utils/download.utils.js";
+  import CamarasAdminTab from "../components/cecom/CamarasAdminTab.svelte";
+  import MesasCamarasAdminTab from "../components/cecom/MesasCamarasAdminTab.svelte";
 
   // Tab order: Salas -> Páginas -> Módulos -> Dispositivos -> Usuarios -> Permisos y Asignaciones -> Ajustes de Sistema
   let activeTab = "salas";
@@ -1762,6 +1764,40 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       Descargas ({$masterDescargasStore.length})
     </button>
 
+    <button
+      on:click={() => {
+        activeTab = "camaras";
+        searchQuery = "";
+        editingInlineId = null;
+      }}
+      type="button"
+      style="padding: 10px 18px; border-radius: 8px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; background: {activeTab ===
+      'camaras'
+        ? '#2563eb'
+        : '#1e293b'}; color: {activeTab === 'camaras'
+        ? '#ffffff'
+        : '#94a3b8'};"
+    >
+      📹 Grabadores / Cámaras
+    </button>
+
+    <button
+      on:click={() => {
+        activeTab = "mesas_camaras";
+        searchQuery = "";
+        editingInlineId = null;
+      }}
+      type="button"
+      style="padding: 10px 18px; border-radius: 8px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; background: {activeTab ===
+      'mesas_camaras'
+        ? '#2563eb'
+        : '#1e293b'}; color: {activeTab === 'mesas_camaras'
+        ? '#ffffff'
+        : '#94a3b8'};"
+    >
+      🎰 Mesas & Cámaras (IA)
+    </button>
+
     <!-- Tab del Agente WISI Sync (Oculta temporalmente para el modo Nube Directa, conservada para el futuro) -->
     <!--
     <button 
@@ -2707,6 +2743,10 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         </button>
       </div>
     </div>
+  {:else if activeTab === "camaras"}
+    <CamarasAdminTab salas={$masterSalasStore} />
+  {:else if activeTab === "mesas_camaras"}
+    <MesasCamarasAdminTab salas={$masterSalasStore} />
   {:else}
     <!-- Table Container Card for Other 5 Entities -->
     <div
