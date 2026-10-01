@@ -11,7 +11,8 @@
     openMediaFile, 
     showInFolder, 
     openFolder,
-    promptSaveVideoDialog
+    promptSaveVideoDialog,
+    promptSelectFolderDialog
   } from "../../services/tauriVideo.service.js";
 
   let salas = [];
@@ -21,8 +22,16 @@
   let camaras = [];
   let selectedCamaraUuid = "";
 
+  function getLocalDateStr() {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   // Parámetros de descarga
-  let fecha = new Date().toISOString().split("T")[0];
+  let fecha = getLocalDateStr();
   let horaInicio = "12:00:00";
   let horaFin = "12:30:00";
   let streamType = "main"; // main (Principal 1080p/4K) o sub (Secundario rápido)
@@ -35,6 +44,7 @@
   let sdkPath = "";
   let sdkAvailable = false;
   let unlistenProgress = null;
+  let alwaysPromptSave = true;
 
   // Cola de descargas activas en sesión
   let downloadQueue = [];
@@ -54,6 +64,7 @@
         targetVideosDir = localStorage.getItem("cecom_custom_videos_dir") || paths.dest_dir || "";
         sdkPath = localStorage.getItem("cecom_custom_sdk_path") || paths.sdk_converter_path || "";
         sdkAvailable = paths.sdk_available || !!sdkPath;
+        alwaysPromptSave = localStorage.getItem("cecom_always_prompt_save") !== "false";
       }
 
       unlistenProgress = await listenDownloadProgress((payload) => {
@@ -160,7 +171,7 @@
     const startStr = startDate.toTimeString().split(" ")[0];
     horaInicio = startStr;
     horaFin = endStr;
-    fecha = now.toISOString().split("T")[0];
+    fecha = getLocalDateStr();
     triggerToast(`Rango fijado: últimos ${minutes} minutos`, "info");
   }
 
@@ -213,16 +224,30 @@
     }
 
     // Ventana nativa de Windows para elegir dónde guardar ("¿Dónde quieres guardarlo?")
-    let chosenPath = null;
-    try {
-      chosenPath = await promptSaveVideoDialog(defaultFilename);
-    } catch (e) {
-      console.error("Error abriendo diálogo de guardado:", e);
+    let suggested = defaultFilename;
+    if (targetVideosDir) {
+      suggested = `${targetVideosDir}\\${defaultFilename}`;
     }
 
-    if (!chosenPath) {
-      // El usuario canceló la ventana de guardar de Windows
-      return;
+    let chosenPath = suggested;
+    if (alwaysPromptSave) {
+      try {
+        chosenPath = await promptSaveVideoDialog(suggested);
+      } catch (e) {
+        console.error("Error abriendo diálogo de guardado:", e);
+      }
+
+      if (!chosenPath) {
+        // El usuario canceló la ventana de guardar de Windows
+        return;
+      }
+    }
+
+    const lastSlash = Math.max(chosenPath.lastIndexOf('\\'), chosenPath.lastIndexOf('/'));
+    if (lastSlash > 0) {
+      const parentDir = chosenPath.substring(0, lastSlash);
+      targetVideosDir = parentDir;
+      localStorage.setItem("cecom_custom_videos_dir", parentDir);
     }
 
     const finalFilename = chosenPath.split(/[\\/]/).pop() || defaultFilename;
@@ -315,6 +340,24 @@
       } catch (err) {
         triggerToast(`Error al abrir carpeta: ${err}`, "error");
       }
+    }
+  }
+
+  async function handleChangeTargetFolder() {
+    if (!isTauriWindows()) {
+      triggerToast("La selección de carpeta requiere ejecutar la app en Windows.", "warning");
+      return;
+    }
+    try {
+      const selected = await promptSelectFolderDialog(targetVideosDir || "C:\\");
+      if (selected) {
+        targetVideosDir = selected;
+        localStorage.setItem("cecom_custom_videos_dir", selected);
+        triggerToast(`Carpeta de destino actualizada: ${selected}`, "success");
+      }
+    } catch (err) {
+      console.error("Error al seleccionar carpeta:", err);
+      triggerToast(`Error al seleccionar carpeta: ${err}`, "error");
     }
   }
 </script>
@@ -448,6 +491,29 @@
         </div>
       </div>
 
+      <!-- 5. Destino de Guardado Local -->
+      {#if isTauriWindows()}
+        <div class="dest-config-panel">
+          <div class="dest-config-header">
+            <span class="dest-config-label">📁 Carpeta Local de Guardado:</span>
+            <button type="button" class="btn-dest-change" on:click={handleChangeTargetFolder}>
+              Seleccionar Carpeta...
+            </button>
+          </div>
+          <div class="dest-config-path font-mono" title={targetVideosDir}>
+            {targetVideosDir || "C:\\Users\\Public\\Downloads\\Wisi_Cecom_Videos"}
+          </div>
+          <label class="dest-checkbox-row">
+            <input 
+              type="checkbox" 
+              bind:checked={alwaysPromptSave} 
+              on:change={() => localStorage.setItem("cecom_always_prompt_save", String(alwaysPromptSave))} 
+            />
+            <span>Preguntar dónde guardar y confirmar nombre en cada descarga (Ventana "Guardar como...")</span>
+          </label>
+        </div>
+      {/if}
+
       <!-- Botón de Descarga Primario -->
       <div class="action-footer">
         <button
@@ -544,6 +610,9 @@
           </div>
         </div>
         <div class="storage-actions">
+          <button type="button" class="btn-storage-change" on:click={handleChangeTargetFolder}>
+            📁 Cambiar Carpeta
+          </button>
           <button type="button" class="btn-storage-open" on:click={handleOpenTargetFolder}>
             📂 Abrir Carpeta de Videos
           </button>
@@ -1163,6 +1232,98 @@
   .btn-storage-open:hover {
     background: #f8fafc;
     border-color: #94a3b8;
+  }
+
+  .storage-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-storage-change {
+    padding: 6px 12px;
+    background: #eff6ff;
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1d4ed8;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-storage-change:hover {
+    background: #dbeafe;
+    border-color: #3b82f6;
+  }
+
+  .dest-config-panel {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dest-config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .dest-config-label {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+  }
+
+  .btn-dest-change {
+    padding: 4px 10px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #2563eb;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-dest-change:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+  }
+
+  .dest-config-path {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+    background: #ffffff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px dashed #cbd5e1;
+    word-break: break-all;
+  }
+
+  .dest-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    color: #475569;
+    cursor: pointer;
+    user-select: none;
+    margin-top: 2px;
+  }
+
+  .dest-checkbox-row input {
+    cursor: pointer;
   }
 
   .item-filepath {

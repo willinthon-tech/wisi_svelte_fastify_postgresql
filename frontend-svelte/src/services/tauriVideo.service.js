@@ -107,6 +107,21 @@ export async function promptSaveVideoDialog(defaultName) {
 }
 
 /**
+ * Abre el diálogo nativo de Windows para seleccionar una carpeta de destino
+ */
+export async function promptSelectFolderDialog() {
+  if (!isTauriWindows()) return null;
+  const invoke = await getInvoke();
+  if (!invoke) return null;
+  try {
+    return await invoke('prompt_select_folder_dialog');
+  } catch (e) {
+    console.error('Error abriendo selector de carpeta nativo:', e);
+    return null;
+  }
+}
+
+/**
  * Inicia la descarga nativa con el módulo interno de la SDK de Hikvision
  */
 export async function startCecomVideoDownload({

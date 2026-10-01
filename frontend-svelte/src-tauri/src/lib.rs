@@ -315,6 +315,14 @@ fn prompt_save_video_dialog(default_name: String) -> Option<String> {
 }
 
 #[tauri::command]
+fn prompt_select_folder_dialog() -> Option<String> {
+  rfd::FileDialog::new()
+    .set_title("Seleccionar Carpeta para Guardar Videos de CECOM")
+    .pick_folder()
+    .map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn get_cecom_default_paths(app_handle: tauri::AppHandle) -> serde_json::Value {
   let download_dir = app_handle.path().download_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Downloads"));
   let video_dir = app_handle.path().video_dir().unwrap_or_else(|_| download_dir.clone());
@@ -461,6 +469,8 @@ async fn start_cecom_video_download(
       }
     };
 
+    let mut captured_error: Option<String> = None;
+
     if let Some(stdout) = child.stdout.take() {
       let reader = BufReader::new(stdout);
       for line_res in reader.lines() {
@@ -469,31 +479,34 @@ async fn start_cecom_video_download(
           if trimmed.starts_with("PROGRESS:") {
             if let Some(num_str) = trimmed.split(':').nth(1) {
               if let Ok(val) = num_str.trim().parse::<u32>() {
-                let scaled = (val * 70) / 100;
                 let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
                   task_id: task_id_clone.clone(),
-                  percent: scaled,
-                  stage: format!("[1/2] Descargando desde NVR/DVR: {}%", val),
+                  percent: val,
+                  stage: format!("Extrayendo video desde grabador: {}%", val),
                   status: "downloading".to_string(),
                   output_file: final_dest_clone.clone(),
                   error: None,
                 });
               }
             }
-          } else if trimmed.starts_with("CONV_PROGRESS:") {
-            if let Some(num_str) = trimmed.split(':').nth(1) {
-              if let Ok(val) = num_str.trim().parse::<u32>() {
-                let scaled = 70 + (val * 29) / 100;
-                let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
-                  task_id: task_id_clone.clone(),
-                  percent: scaled,
-                  stage: format!("[2/2] Remuxing a MP4 nativo: {}%", val),
-                  status: "downloading".to_string(),
-                  output_file: final_dest_clone.clone(),
-                  error: None,
-                });
+          } else if trimmed.starts_with("LOGIN_ERROR:") 
+            || trimmed.starts_with("DOWNLOAD_ERROR:") 
+            || trimmed.starts_with("DOWNLOAD_POS_ERROR:") 
+            || trimmed.starts_with("DOWNLOAD_TIMEOUT:")
+            || trimmed.starts_with("FILE_MISSING:")
+            || trimmed.starts_with("DOWNLOAD_INCOMPLETE:")
+            || trimmed.starts_with("ERROR:") {
+            let msg = if let Some(first_idx) = trimmed.find(':') {
+              let rest = trimmed[first_idx + 1..].trim();
+              if let Some(second_idx) = rest.find(':') {
+                rest[second_idx + 1..].trim().to_string()
+              } else {
+                rest.to_string()
               }
-            }
+            } else {
+              trimmed.to_string()
+            };
+            captured_error = Some(msg);
           }
         }
       }
@@ -512,17 +525,19 @@ async fn start_cecom_video_download(
         let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
           task_id: task_id_clone,
           percent: 100,
-          stage: "Completado (MP4 Listo en disco)".to_string(),
+          stage: "Completado (Video MP4 Listo)".to_string(),
           status: "completed".to_string(),
           output_file: final_dest_clone,
           error: None,
         });
       }
       Ok(s) => {
-        let err_msg = if !file_exists || file_size == 0 {
-          "El proceso terminó pero no se generó el archivo MP4 (posiblemente no hay video grabado en ese rango de horas o el grabador no está accesible en esta red)".to_string()
+        let err_msg = if let Some(e) = captured_error {
+          e
+        } else if !file_exists || file_size == 0 {
+          "El grabador no generó el archivo de video (posiblemente no hay video grabado en ese rango de horas o el grabador no está accesible en esta red)".to_string()
         } else {
-          format!("Converter.exe terminó con código {}", s)
+          format!("El proceso finalizó con código {}", s)
         };
         let _ = app_clone.emit("cecom_download_progress", CecomDownloadProgress {
           task_id: task_id_clone,
@@ -575,6 +590,7 @@ pub fn run() {
       ping_device,
       get_cecom_default_paths,
       prompt_save_video_dialog,
+      prompt_select_folder_dialog,
       start_cecom_video_download,
       open_media_file,
       show_in_folder,
