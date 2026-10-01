@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Wisi Space",
-  "version": "15.0.0",
+  "version": "16.0.0",
   "identifier": "com.wisi.space",
   "build": {
     "beforeBuildCommand": "npm run build",
@@ -28,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "sdk_hikvision/**/*"
+    ],
     "copyright": "Copyright © 2026 Wisi Space",
     "shortDescription": "Wisi Space Desktop",
     "icon": [

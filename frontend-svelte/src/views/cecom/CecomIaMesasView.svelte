@@ -14,9 +14,7 @@
   let isAuditing = false;
   let auditLogs = [];
   let isEventDrivenActive = true;
-  let simulatedFrameCount = 142;
 
-  // Detección simulada para demostración interactiva
   let currentGameType = "BACCARAT"; // BACCARAT, BLACKJACK, POKER_CARIBENO, TEXAS_BONUS, RULETA
 
   // Estado de Baccarat
@@ -155,7 +153,6 @@
 
   function handleTriggerAudit() {
     isAuditing = true;
-    simulatedFrameCount += 1;
     triggerToast("Analizando paño estabilizado con IA...", "info");
 
     setTimeout(() => {
@@ -280,7 +277,7 @@
           <span class="material-icons-round">visibility</span>
           Visión Computacional Cenital
         </h3>
-        <span class="fps-badge">Event-Triggered • Frame #{simulatedFrameCount}</span>
+        <span class="fps-badge">Monitoreo en Vivo • Red LAN</span>
       </div>
 
       <div class="canvas-feed">

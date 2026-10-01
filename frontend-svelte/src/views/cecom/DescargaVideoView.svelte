@@ -10,7 +10,8 @@
     listenDownloadProgress, 
     openMediaFile, 
     showInFolder, 
-    openFolder 
+    openFolder,
+    promptSaveVideoDialog
   } from "../../services/tauriVideo.service.js";
 
   let salas = [];
@@ -204,12 +205,32 @@
     const hStartClean = horaInicio.replace(/:/g, "");
     const hEndClean = horaFin.replace(/:/g, "");
 
-    const filename = `${salaNombre}_${devNombre}_${camNombre}_${fClean}_${hStartClean}-${hEndClean}_${streamType.toUpperCase()}.mp4`;
+    const defaultFilename = `${salaNombre}_${devNombre}_${camNombre}_${fClean}_${hStartClean}-${hEndClean}.mp4`;
+
+    if (!isTauriWindows()) {
+      triggerToast("La descarga nativa por SDK requiere ejecutar la app en Windows.", "warning");
+      return;
+    }
+
+    // Ventana nativa de Windows para elegir dónde guardar ("¿Dónde quieres guardarlo?")
+    let chosenPath = null;
+    try {
+      chosenPath = await promptSaveVideoDialog(defaultFilename);
+    } catch (e) {
+      console.error("Error abriendo diálogo de guardado:", e);
+    }
+
+    if (!chosenPath) {
+      // El usuario canceló la ventana de guardar de Windows
+      return;
+    }
+
+    const finalFilename = chosenPath.split(/[\\/]/).pop() || defaultFilename;
     const taskId = "DL-" + Date.now().toString().slice(-6);
 
     const downloadItem = {
       id: taskId,
-      filename,
+      filename: finalFilename,
       device: dev.nombre,
       ip: dev.ip_local,
       canal: cam.numero_canal,
@@ -223,15 +244,10 @@
       canOpen: false,
       isError: false,
       errorMsg: null,
-      outputPath: ""
+      outputPath: chosenPath
     };
 
     downloadQueue = [downloadItem, ...downloadQueue];
-
-    if (!isTauriWindows()) {
-      triggerToast("La descarga nativa por SDK requiere ejecutar la app en Windows.", "warning");
-      return;
-    }
 
     // Formatear fechas para Converter.exe de Hikvision: YYYY,M,D,H,m,s
     const [startH, startM, startS] = horaInicio.split(":").map(Number);
@@ -242,7 +258,7 @@
     const finStr = `${fYear},${fMonth},${fDay},${endH},${endM},${endS || 0}`;
 
     try {
-      triggerToast(`Iniciando extracción de video: ${filename}`, "info");
+      triggerToast(`Iniciando extracción de video: ${finalFilename}`, "info");
       const outPath = await startCecomVideoDownload({
         taskId,
         ip: dev.ip_local,
@@ -251,13 +267,12 @@
         canal: cam.numero_canal,
         inicioStr,
         finStr,
-        outputFilename: filename,
-        customSdkPath: sdkPath || null,
-        customDestDir: targetVideosDir || null,
+        outputFilename: finalFilename,
+        destinationPath: chosenPath,
         modo: streamType === "sub" ? "f" : null
       });
 
-      downloadQueue = downloadQueue.map(i => i.id === taskId ? { ...i, outputPath: outPath } : i);
+      downloadQueue = downloadQueue.map(i => i.id === taskId ? { ...i, outputPath: outPath || chosenPath } : i);
     } catch (err) {
       console.error("Error al iniciar descarga nativa:", err);
       downloadQueue = downloadQueue.map(i => i.id === taskId ? { 

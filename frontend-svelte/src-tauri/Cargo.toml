@@ -1,6 +1,6 @@
 [package]
 name = "wisi-space"
-version = "15.0.0"
+version = "16.0.0"
 description = "Wisi Space Desktop Application"
 authors = ["Wisi Space"]
 license = "MIT"
@@ -27,3 +27,4 @@ tauri-plugin-notification = "2"
 open = "5.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "default-tls"] }
 md5 = "0.7"
+rfd = "0.17.2"

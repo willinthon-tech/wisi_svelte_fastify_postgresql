@@ -276,6 +276,44 @@ pub struct CecomDownloadProgress {
   pub error: Option<String>,
 }
 
+fn get_internal_converter_exe(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+  // 1. En recursos empaquetados de Tauri (en Windows instalado)
+  if let Ok(res_dir) = app_handle.path().resource_dir() {
+    let cand = res_dir.join("sdk_hikvision").join("Converter.exe");
+    if cand.exists() {
+      return Some(cand);
+    }
+  }
+
+  // 2. Al lado del ejecutable .exe de la app
+  if let Ok(exe_path) = std::env::current_exe() {
+    if let Some(parent) = exe_path.parent() {
+      let cand = parent.join("sdk_hikvision").join("Converter.exe");
+      if cand.exists() {
+        return Some(cand);
+      }
+    }
+  }
+
+  // 3. Carpeta integrada en el workspace del proyecto
+  let dev_cand = PathBuf::from(r"C:\new_wisi\frontend-svelte\src-tauri\sdk_hikvision\Converter.exe");
+  if dev_cand.exists() {
+    return Some(dev_cand);
+  }
+
+  None
+}
+
+#[tauri::command]
+fn prompt_save_video_dialog(default_name: String) -> Option<String> {
+  rfd::FileDialog::new()
+    .set_title("Guardar Video de CECOM")
+    .set_file_name(&default_name)
+    .add_filter("Video MP4 (*.mp4)", &["mp4"])
+    .save_file()
+    .map(|p| p.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn get_cecom_default_paths(app_handle: tauri::AppHandle) -> serde_json::Value {
   let download_dir = app_handle.path().download_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Downloads"));
@@ -285,19 +323,9 @@ fn get_cecom_default_paths(app_handle: tauri::AppHandle) -> serde_json::Value {
     let _ = std::fs::create_dir_all(&target_dir);
   }
 
-  let sdk_candidates = [
-    PathBuf::from(r"C:\Users\antho\Downloads\Videos Cecom\sdk_hikvision\Converter.exe"),
-    PathBuf::from(r"C:\wisi\sdk_hikvision\Converter.exe"),
-    PathBuf::from(r"C:\sdk_hikvision\Converter.exe"),
-  ];
-
-  let mut detected_sdk = String::new();
-  for cand in &sdk_candidates {
-    if cand.exists() {
-      detected_sdk = cand.to_string_lossy().to_string();
-      break;
-    }
-  }
+  let detected_sdk = get_internal_converter_exe(&app_handle)
+    .map(|p| p.to_string_lossy().to_string())
+    .unwrap_or_default();
 
   serde_json::json!({
     "dest_dir": target_dir.to_string_lossy().to_string(),
@@ -350,51 +378,34 @@ async fn start_cecom_video_download(
   inicio_str: String,
   fin_str: String,
   output_filename: String,
-  custom_sdk_path: Option<String>,
-  custom_dest_dir: Option<String>,
+  destination_path: Option<String>,
   modo: Option<String>,
 ) -> Result<String, String> {
-  let sdk_candidates = [
-    custom_sdk_path.unwrap_or_default(),
-    r"C:\Users\antho\Downloads\Videos Cecom\sdk_hikvision\Converter.exe".to_string(),
-    r"C:\wisi\sdk_hikvision\Converter.exe".to_string(),
-    r"C:\sdk_hikvision\Converter.exe".to_string(),
-  ];
-
-  let mut exe_path: Option<PathBuf> = None;
-  for cand in &sdk_candidates {
-    if !cand.is_empty() {
-      let p = PathBuf::from(cand);
-      if p.exists() {
-        exe_path = Some(p);
-        break;
-      }
-    }
-  }
-
-  let exe_path = exe_path.ok_or_else(|| {
-    "No se encontró 'Converter.exe' de la SDK Hikvision. Verifique que exista en 'C:\\Users\\antho\\Downloads\\Videos Cecom\\sdk_hikvision\\Converter.exe'".to_string()
+  let exe_path = get_internal_converter_exe(&app_handle).ok_or_else(|| {
+    "El módulo interno de descarga Hikvision (Converter.exe) no está presente en el paquete de la aplicación.".to_string()
   })?;
 
   let exe_dir = exe_path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
 
-  let dest_dir = if let Some(d) = custom_dest_dir {
-    if !d.trim().is_empty() {
-      PathBuf::from(d)
+  // Si el usuario seleccionó la ruta con el diálogo nativo de Windows (Guardar como...):
+  let final_file_path = if let Some(dp) = destination_path {
+    if !dp.trim().is_empty() {
+      PathBuf::from(dp)
     } else {
       let base = app_handle.path().video_dir().unwrap_or_else(|_| app_handle.path().download_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Downloads")));
-      base.join("Wisi_Cecom_Videos")
+      base.join("Wisi_Cecom_Videos").join(&output_filename)
     }
   } else {
     let base = app_handle.path().video_dir().unwrap_or_else(|_| app_handle.path().download_dir().unwrap_or_else(|_| PathBuf::from(r"C:\Users\Public\Downloads")));
-    base.join("Wisi_Cecom_Videos")
+    base.join("Wisi_Cecom_Videos").join(&output_filename)
   };
 
-  if !dest_dir.exists() {
-    let _ = std::fs::create_dir_all(&dest_dir);
+  if let Some(parent) = final_file_path.parent() {
+    if !parent.exists() {
+      let _ = std::fs::create_dir_all(parent);
+    }
   }
 
-  let final_file_path = dest_dir.join(&output_filename);
   let final_file_str = final_file_path.to_string_lossy().to_string();
 
   let mut args = vec![
@@ -563,6 +574,7 @@ pub fn run() {
       isapi_request,
       ping_device,
       get_cecom_default_paths,
+      prompt_save_video_dialog,
       start_cecom_video_download,
       open_media_file,
       show_in_folder,

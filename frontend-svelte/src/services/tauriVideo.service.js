@@ -92,7 +92,22 @@ export async function listenDownloadProgress(callback) {
 }
 
 /**
- * Inicia la descarga nativa con el Converter.exe de la SDK de Hikvision
+ * Abre el diálogo nativo de Windows (Guardar como...) para que el usuario elija dónde guardar el video
+ */
+export async function promptSaveVideoDialog(defaultName) {
+  if (!isTauriWindows()) return null;
+  const invoke = await getInvoke();
+  if (!invoke) return null;
+  try {
+    return await invoke('prompt_save_video_dialog', { defaultName: defaultName || 'video.mp4' });
+  } catch (e) {
+    console.error('Error abriendo diálogo de guardado nativo:', e);
+    return null;
+  }
+}
+
+/**
+ * Inicia la descarga nativa con el módulo interno de la SDK de Hikvision
  */
 export async function startCecomVideoDownload({
   taskId,
@@ -103,8 +118,7 @@ export async function startCecomVideoDownload({
   inicioStr,
   finStr,
   outputFilename,
-  customSdkPath,
-  customDestDir,
+  destinationPath,
   modo
 }) {
   if (!isTauriWindows()) {
@@ -124,8 +138,7 @@ export async function startCecomVideoDownload({
     inicioStr,
     finStr,
     outputFilename,
-    customSdkPath: customSdkPath || null,
-    customDestDir: customDestDir || null,
+    destinationPath: destinationPath || null,
     modo: modo || null
   });
 }
