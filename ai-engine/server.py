@@ -40,8 +40,11 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"🚀 Dispositivo de inferencia IA: {device.upper()}")
 model = YOLO(MODEL_PATH)
 
-# Configuración backend Wisi
-WISI_API_URL = os.environ.get('WISI_API_URL', 'http://127.0.0.1:3030/api/cecom')
+# Configuración backend Wisi (Producción y Local)
+WISI_API_URLS = [
+    os.environ.get('WISI_API_URL', 'https://wisi.space/api/cecom'),
+    'http://127.0.0.1:3030/api/cecom'
+]
 
 # Almacenes de streaming en vivo
 mesas_config = {}       # { mesa_uuid: { ip, canal, usuario, clave, juego, nombre } }
@@ -191,6 +194,120 @@ def motor_blackjack(jugador_cards, dealer_cards):
         "descripcion": f"Jugador: {sJ} vs Dealer: {sD}"
     }
 
+def resolve_game_type(mesa_nombre, juego_nombre):
+    """
+    Resuelve con precisión el juego analizando tanto el nombre de la mesa (ej: PK 3, PB 1)
+    como la categoría asignada, evitando que mesas de Poker Caribeño se confundan con Baccarat.
+    """
+    txt = f"{mesa_nombre or ''} {juego_nombre or ''}".upper()
+    if any(k in txt for k in ['PK', 'POKER', 'CARIBE', 'STUD']):
+        return 'POKER_CARIBENO'
+    if any(k in txt for k in ['PB', 'BACCARAT', 'PUNTO', 'BANCA']):
+        return 'BACCARAT'
+    if any(k in txt for k in ['BJ', 'BLACKJACK', '21']):
+        return 'BLACKJACK'
+    if any(k in txt for k in ['TX', 'TEXAS', 'HOLDEM']):
+        return 'TEXAS_BONUS'
+    if any(k in txt for k in ['RA', 'RULETA', 'ROULETTE']):
+        return 'RULETA'
+    return 'BACCARAT'
+
+def motor_poker_caribeno(cards):
+    """
+    Reglas oficiales de Poker Caribeño (Caribbean Stud Poker).
+    Evalúa las 5 cartas de la Casa y la regla de calificación:
+    La Casa sólo califica con As-Rey o una jugada superior (Par, Trío, etc.).
+    """
+    card_ranks = {
+        '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
+        'J': 11, 'Q': 12, 'K': 13, 'AS': 14, 'A': 14
+    }
+
+    up_cards = [c for c in cards if 'BACK' not in str(c.get('val', '')).upper()]
+    back_count = sum(1 for c in cards if 'BACK' in str(c.get('val', '')).upper())
+
+    if len(cards) < 5 or back_count > 0:
+        up_vals = [c.get('val') for c in up_cards]
+        return {
+            "win": "REPARTIENDO",
+            "califica": None,
+            "jugada": f"Dealer muestra: {', '.join(up_vals)}" if up_vals else "Cartas en proceso",
+            "listo": False,
+            "descripcion": f"Repartiendo ({len(up_cards)} descubiertas, {back_count} cubiertas)"
+        }
+
+    ranks = []
+    for c in cards:
+        v = str(c.get('val', '')).strip().upper()
+        r = card_ranks.get(v)
+        if not r:
+            digits = ''.join(ch for ch in v if ch.isdigit())
+            r = int(digits) if digits else 0
+        if r > 0:
+            ranks.append(r)
+
+    ranks.sort(reverse=True)
+    if len(ranks) < 5:
+        return {
+            "win": "MANO_EN_PROCESO",
+            "califica": False,
+            "jugada": "Alineando cartas del Dealer",
+            "listo": False,
+            "descripcion": f"{len(ranks)} de 5 cartas identificadas"
+        }
+
+    counts = {}
+    for r in ranks:
+        counts[r] = counts.get(r, 0) + 1
+
+    freqs = sorted(counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
+    rank_names = {14: 'As', 13: 'K', 12: 'Q', 11: 'J', 10: '10', 9: '9', 8: '8', 7: '7', 6: '6', 5: '5', 4: '4', 3: '3', 2: '2'}
+
+    is_straight = False
+    if len(set(ranks)) == 5:
+        if ranks[0] - ranks[4] == 4 or ranks == [14, 5, 4, 3, 2]:
+            is_straight = True
+
+    jugada = ""
+    califica = False
+
+    if freqs[0][1] == 4:
+        jugada = f"Poker de {rank_names.get(freqs[0][0])}"
+        califica = True
+    elif freqs[0][1] == 3 and freqs[1][1] == 2:
+        jugada = f"Full House ({rank_names.get(freqs[0][0])} y {rank_names.get(freqs[1][0])})"
+        califica = True
+    elif is_straight:
+        jugada = f"Escalera al {rank_names.get(ranks[0])}"
+        califica = True
+    elif freqs[0][1] == 3:
+        jugada = f"Trío de {rank_names.get(freqs[0][0])}"
+        califica = True
+    elif freqs[0][1] == 2 and freqs[1][1] == 2:
+        jugada = f"Doble Par ({rank_names.get(freqs[0][0])} y {rank_names.get(freqs[1][0])})"
+        califica = True
+    elif freqs[0][1] == 2:
+        jugada = f"Par de {rank_names.get(freqs[0][0])}"
+        califica = True
+    else:
+        has_ace = 14 in ranks
+        has_king = 13 in ranks
+        if has_ace and has_king:
+            jugada = f"As y Rey ({rank_names.get(ranks[2])} kicker)"
+            califica = True
+        else:
+            jugada = f"{rank_names.get(ranks[0])} Mayor"
+            califica = False
+
+    estado_ganador = "CASA CALIFICA" if califica else "CASA NO CALIFICA"
+    return {
+        "win": estado_ganador,
+        "califica": califica,
+        "jugada": jugada,
+        "listo": True,
+        "descripcion": f"{estado_ganador}: {jugada}"
+    }
+
 # ====================================================================
 # WORKER RTSP MULTIHILO POR CÁMARA
 # ====================================================================
@@ -203,7 +320,6 @@ def stream_worker(mesa_uuid, url_rtsp):
     consecutive_failures = 0
 
     while True:
-        # Verificar si la mesa sigue configurada
         if mesa_uuid not in mesas_config:
             cap.release()
             break
@@ -252,6 +368,9 @@ def ai_inference_loop():
                 continue
 
             try:
+                # Determinar juego exacto de la mesa
+                tipo_juego = resolve_game_type(cfg.get('nombre'), cfg.get('juego'))
+
                 # Inferencia con YOLO (imgsz=1280 para máxima resolución y detección nítida de cartas)
                 results = model(frame, verbose=False, conf=0.35, iou=0.25, imgsz=1280)
 
@@ -263,7 +382,6 @@ def ai_inference_loop():
                     name = model.names[cls_id].upper()
                     conf = round(float(box.conf[0]), 2)
 
-                    # Si la confianza es dudosa (35% a 65%), marcar para aprendizaje activo
                     if 0.35 <= conf <= 0.65:
                         guardar_por_duda = True
 
@@ -279,7 +397,6 @@ def ai_inference_loop():
                         "conf": conf
                     })
 
-                # Ordenar cartas de izquierda a derecha por posición horizontal (cx)
                 raw_cards.sort(key=lambda c: c['cx'])
                 count = len(raw_cards)
                 detections = []
@@ -289,7 +406,7 @@ def ai_inference_loop():
                     estado_mesa = "ESPERANDO"
                     punto_list = []
                     banca_list = []
-                elif count >= 8:
+                elif count >= 8 and tipo_juego != 'POKER_CARIBENO':
                     estado_mesa = "BARAJO"
                     punto_list = []
                     banca_list = []
@@ -299,12 +416,11 @@ def ai_inference_loop():
 
                     if count > 1 and max_gap < 20:
                         estado_mesa = "RECOGIENDO"
-                    elif count < 4:
+                    elif count < (5 if tipo_juego == 'POKER_CARIBENO' else 4):
                         estado_mesa = "REPARTIENDO"
                     else:
                         estado_mesa = "NORMAL"
 
-                    # Separación de zonas (Banca / Punto)
                     m_gap = -1
                     idx_divisor = max(1, count // 2)
                     for i, g in enumerate(gaps):
@@ -315,29 +431,113 @@ def ai_inference_loop():
                     banca_list = raw_cards[:idx_divisor]
                     punto_list = raw_cards[idx_divisor:]
 
+                # Ejecutar motor de reglas según juego
+                if tipo_juego == 'POKER_CARIBENO':
+                    juego_label = "Poker Caribeño"
+                    resultado = motor_poker_caribeno(raw_cards)
+                    detalle_mano = resultado.get('jugada', '')
+                    for c in raw_cards:
+                        detections.append({**c, "zone": "dealer"})
+
+                    live_results[mesa_uuid] = {
+                        "mesa_uuid": mesa_uuid,
+                        "mesa_nombre": cfg.get('nombre'),
+                        "juego": juego_label,
+                        "juego_tipo": "POKER_CARIBENO",
+                        "estado_mesa": estado_mesa,
+                        "resultado": resultado,
+                        "dealer_cards": raw_cards,
+                        "dealer_jugada": resultado.get('jugada'),
+                        "califica": resultado.get('califica'),
+                        "detalle": detalle_mano,
+                        "ganador": resultado.get('win', 'ESPERANDO'),
+                        "scoreP": 0,
+                        "scoreB": 0,
+                        "punto": [],
+                        "banca": [],
+                        "image_b64": "",
+                        "timestamp": time.time(),
+                        "hora": datetime.now().strftime("%H:%M:%S")
+                    }
+                elif tipo_juego == 'BLACKJACK':
+                    juego_label = "Blackjack"
+                    resultado = motor_blackjack(punto_list, banca_list)
+                    detalle_mano = f"J:[{', '.join([c['val'] for c in punto_list])}] D:[{', '.join([c['val'] for c in banca_list])}]"
+                    for c in banca_list:
+                        detections.append({**c, "zone": "dealer"})
+                    for c in punto_list:
+                        detections.append({**c, "zone": "jugador"})
+
+                    live_results[mesa_uuid] = {
+                        "mesa_uuid": mesa_uuid,
+                        "mesa_nombre": cfg.get('nombre'),
+                        "juego": juego_label,
+                        "juego_tipo": "BLACKJACK",
+                        "estado_mesa": estado_mesa,
+                        "resultado": resultado,
+                        "punto": punto_list,
+                        "banca": banca_list,
+                        "detalle": detalle_mano,
+                        "scoreP": resultado.get('scoreP', 0),
+                        "scoreB": resultado.get('scoreB', 0),
+                        "ganador": resultado.get('win', 'JUGANDO'),
+                        "image_b64": "",
+                        "timestamp": time.time(),
+                        "hora": datetime.now().strftime("%H:%M:%S")
+                    }
+                else: # BACCARAT
+                    juego_label = "Baccarat"
+                    resultado = motor_baccarat(punto_list, banca_list)
+                    det_p_str = ', '.join([c['val'] for c in punto_list])
+                    det_b_str = ', '.join([c['val'] for c in banca_list])
+                    detalle_mano = f"P:[{det_p_str}] B:[{det_b_str}]"
                     for c in banca_list:
                         detections.append({**c, "zone": "banca"})
                     for c in punto_list:
                         detections.append({**c, "zone": "punto"})
 
-                # Ejecutar motor de reglas según juego de la mesa
-                juego = (cfg.get('juego') or 'baccarat').lower()
-                if 'black' in juego:
-                    resultado = motor_blackjack(punto_list, banca_list)
-                else:
-                    resultado = motor_baccarat(punto_list, banca_list)
+                    live_results[mesa_uuid] = {
+                        "mesa_uuid": mesa_uuid,
+                        "mesa_nombre": cfg.get('nombre'),
+                        "juego": juego_label,
+                        "juego_tipo": "BACCARAT",
+                        "estado_mesa": estado_mesa,
+                        "resultado": resultado,
+                        "punto": punto_list,
+                        "banca": banca_list,
+                        "detalle": detalle_mano,
+                        "scoreP": resultado.get('scoreP', 0),
+                        "scoreB": resultado.get('scoreB', 0),
+                        "ganador": resultado.get('win', 'ESPERANDO'),
+                        "image_b64": "",
+                        "timestamp": time.time(),
+                        "hora": datetime.now().strftime("%H:%M:%S")
+                    }
 
                 # Generar snapshot con cajas delimitadoras dibujadas
                 img_plot = frame.copy()
                 for det in detections:
                     x1, y1, x2, y2 = det['box']
-                    color = (0, 255, 255) if det['zone'] == "banca" else (255, 100, 0)
-                    cv2.rectangle(img_plot, (x1, y1), (x2, y2), color, 3)
+                    zone = det.get('zone', '')
+                    if zone == "banca":
+                        color = (0, 0, 255) # Rojo Banca
+                    elif zone == "punto":
+                        color = (255, 120, 0) # Azul Punto
+                    elif zone == "dealer":
+                        color = (0, 215, 255) # Oro Casa / Dealer
+                    else:
+                        color = (0, 255, 0)
 
+                    cv2.rectangle(img_plot, (x1, y1), (x2, y2), color, 3)
                     label = f"{det['val']} ({det['conf']})"
                     (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
                     cv2.rectangle(img_plot, (x1, y1 - h - 12), (x1 + w, y1), color, -1)
                     cv2.putText(img_plot, label, (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+
+                # Convertir imagen a base64 ligera para transmisión
+                _, buf = cv2.imencode('.jpg', img_plot, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+                b64_img = base64.b64encode(buf).decode('utf-8')
+                live_results[mesa_uuid]["image_b64"] = b64_img
 
                 # Guardar frame para aprendizaje activo si hubo duda o baja confianza
                 if guardar_por_duda and count > 0:
@@ -345,72 +545,84 @@ def ai_inference_loop():
                     duda_path = os.path.join(AUTO_TRAIN_DIR, f"duda_{ts}_{mesa_uuid[:6]}.jpg")
                     cv2.imwrite(duda_path, frame)
 
-                # Convertir imagen a base64 ligera para transmisión
-                _, buf = cv2.imencode('.jpg', img_plot, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-                b64_img = base64.b64encode(buf).decode('utf-8')
-
-                det_p_str = ', '.join([c['val'] for c in punto_list])
-                det_b_str = ', '.join([c['val'] for c in banca_list])
-                detalle_mano = f"P:[{det_p_str}] B:[{det_b_str}]"
-
-                # Guardar estado vivo en memoria
-                live_results[mesa_uuid] = {
-                    "mesa_uuid": mesa_uuid,
-                    "mesa_nombre": cfg.get('nombre'),
-                    "juego": cfg.get('juego'),
-                    "estado_mesa": estado_mesa,
-                    "resultado": resultado,
-                    "punto": punto_list,
-                    "banca": banca_list,
-                    "detalle": detalle_mano,
-                    "scoreP": resultado.get('scoreP', 0),
-                    "scoreB": resultado.get('scoreB', 0),
-                    "ganador": resultado.get('win', 'ESPERANDO'),
-                    "image_b64": b64_img,
-                    "timestamp": time.time(),
-                    "hora": datetime.now().strftime("%H:%M:%S")
-                }
-
                 # Auto-guardado en base de datos si la mano está lista y no se ha guardado
-                if resultado.get('listo') and estado_mesa == 'NORMAL' and (punto_list or banca_list):
+                if resultado.get('listo') and estado_mesa == 'NORMAL' and raw_cards:
                     ultimo = historial_guardado.get(mesa_uuid)
                     if detalle_mano != ultimo:
                         historial_guardado[mesa_uuid] = detalle_mano
-                        enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img)
+                        enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego_label)
 
             except Exception as e:
                 print(f"❌ Error en inferencia de mesa {mesa_uuid}: {e}")
 
         time.sleep(0.4)
 
-def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img):
+def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego_label='Baccarat'):
     """
     Envía la jugada analizada con Inteligencia Artificial a la base de datos de Wisi
     """
     try:
+        if juego_label == "Poker Caribeño":
+            desc = f"Poker Caribeño - {resultado.get('win')}: {detalle_mano}"
+        elif juego_label == "Blackjack":
+            desc = f"Blackjack - {resultado.get('win')} | {detalle_mano}"
+        else:
+            desc = f"{resultado.get('win')} ({resultado.get('scoreP')} a {resultado.get('scoreB')}) | {detalle_mano}"
+
         payload = {
             "sala_uuid": cfg.get('sala_uuid'),
             "mesa_uuid": mesa_uuid,
             "mesa_nombre": cfg.get('nombre'),
-            "juego_nombre": cfg.get('juego'),
+            "juego_nombre": juego_label,
             "tipo_evento": "JUGADA",
-            "descripcion": f"{resultado.get('win')} ({resultado.get('scoreP')} a {resultado.get('scoreB')}) | {detalle_mano}",
+            "descripcion": desc,
             "nivel_alerta": "INFO",
             "es_novedad": False,
             "detalles": {
-                "score_punto": resultado.get('scoreP'),
-                "score_banca": resultado.get('scoreB'),
+                "score_punto": resultado.get('scoreP', 0),
+                "score_banca": resultado.get('scoreB', 0),
                 "ganador": resultado.get('win'),
+                "califica": resultado.get('califica'),
+                "dealer_jugada": resultado.get('jugada'),
                 "detalle_cartas": detalle_mano,
                 "natural": resultado.get('natural', False),
                 "imagen_captura": f"data:image/jpeg;base64,{b64_img[:500]}..." # truncada en BD por tamaño
             }
         }
-        res = requests.post(f"{WISI_API_URL}/ia-eventos", json=payload, timeout=5)
-        if res.status_code in [200, 201]:
-            print(f"✅ [IA Wisi] Jugada registrada en mesa {cfg.get('nombre')}: {resultado.get('win')} ({resultado.get('scoreP')} a {resultado.get('scoreB')})")
+        for api_url in WISI_API_URLS:
+            try:
+                res = requests.post(f"{api_url}/ia-eventos", json=payload, timeout=4)
+                if res.status_code in [200, 201]:
+                    print(f"✅ [IA Wisi] Jugada registrada en {api_url} para mesa {cfg.get('nombre')}: {desc}")
+                    break
+            except Exception:
+                pass
     except Exception as err:
-        print(f"⚠️ Error enviando evento a Wisi Fastify: {err}")
+        print(f"⚠️ Error procesando evento Wisi: {err}")
+
+def sync_to_cloud_worker():
+    """
+    Sincroniza continuamente los resultados de detección IA en tiempo real hacia el backend central de Wisi.
+    Esto permite que cualquier usuario o máquina cliente con la app de Windows pueda ver la detección
+    de cartas, jugadas y streaming aunque no tenga Python ni el modelo ejecutándose localmente.
+    """
+    print("🌐 [Cloud Sync] Iniciando sincronización de IA hacia el backend central...")
+    endpoints = [
+        "https://wisi.space/api/cecom/ia-live-sync",
+        "http://127.0.0.1:3030/api/cecom/ia-live-sync"
+    ]
+    while True:
+        try:
+            if live_results:
+                payload = { "mesas": live_results }
+                for ep in endpoints:
+                    try:
+                        requests.post(ep, json=payload, timeout=2.5)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        time.sleep(1.2)
 
 # ====================================================================
 # RUTAS DE API FLASK Y CONTROLADORES CORS
@@ -533,16 +745,21 @@ def actualizar_mesas(mesas_list):
             threading.Thread(target=stream_worker, args=(uuid, url_rtsp), daemon=True).start()
 
 def cargar_mesas_desde_fastify():
-    try:
-        r = requests.get(f"{WISI_API_URL}/mesas-con-camaras", timeout=5)
-        if r.status_code == 200:
-            data = r.json().get('data', [])
-            print(f"📥 [Wisi Config] {len(data)} mesas con cámaras obtenidas del backend")
-            actualizar_mesas(data)
-    except Exception as e:
-        print(f"⚠️ No se pudo sincronizar automáticamente con backend Wisi: {e}")
+    for api_url in WISI_API_URLS:
+        try:
+            r = requests.get(f"{api_url}/mesas-con-camaras", timeout=5)
+            if r.status_code == 200:
+                data = r.json().get('data', [])
+                if data:
+                    print(f"📥 [Wisi Config] {len(data)} mesas con cámaras obtenidas de {api_url}")
+                    actualizar_mesas(data)
+                    return
+        except Exception:
+            pass
+    print("⚠️ No se pudo sincronizar automáticamente con backend Wisi en ninguna URL")
 
 if __name__ == '__main__':
     cargar_mesas_desde_fastify()
     threading.Thread(target=ai_inference_loop, daemon=True).start()
+    threading.Thread(target=sync_to_cloud_worker, daemon=True).start()
     app.run(host='0.0.0.0', port=5005, threaded=True)

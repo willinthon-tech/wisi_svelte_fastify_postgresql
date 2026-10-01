@@ -61,10 +61,19 @@
       const mId = m.mesa_uuid || m.uuid || m.id;
       const live = liveMesasMap[mId] || null;
       const isMoving = Boolean(live?.is_moving || live?.ultimo_evento === 'JUGADA' || live?.ultimo_evento === 'JUGANDO - MANO EN PROCESO');
+
+      let juegoTipo = live?.juego_tipo;
+      if (!juegoTipo) {
+        const txt = `${m.mesa_nombre || m.nombre || ''} ${m.juego_nombre || ''}`.toUpperCase();
+        if (txt.includes('PK') || txt.includes('POKER') || txt.includes('STUD')) juegoTipo = 'POKER_CARIBENO';
+        else if (txt.includes('BJ') || txt.includes('BLACKJACK')) juegoTipo = 'BLACKJACK';
+        else juegoTipo = 'BACCARAT';
+      }
+
       return {
         uuid: mId,
         nombre: m.mesa_nombre || m.nombre,
-        juego: m.juego_nombre || "Mesa de Juego",
+        juego: m.juego_nombre || (juegoTipo === 'POKER_CARIBENO' ? 'Poker Caribeño' : "Baccarat"),
         total_camaras: m.total_camaras || 1,
         ultimo_evento: live?.ultimo_evento || "EN ESPERA",
         descripcion: live?.descripcion || "Mesa activa en monitoreo",
@@ -74,11 +83,15 @@
         is_moving: isMoving,
         // DATOS EN VIVO IA (YOLO + REGLAS DE CASINO)
         ai_active: live?.ai_active || false,
+        juego_tipo: juegoTipo,
         scoreP: live?.scoreP ?? 0,
         scoreB: live?.scoreB ?? 0,
         ganador: live?.ganador || 'ESPERANDO',
         punto: live?.punto || [],
         banca: live?.banca || [],
+        dealer_cards: live?.dealer_cards || (juegoTipo === 'POKER_CARIBENO' ? (live?.punto?.concat(live?.banca || []) || []) : []),
+        dealer_jugada: live?.dealer_jugada || '',
+        califica: live?.califica,
         detalle: live?.detalle || '',
         estado_mesa: live?.estado_mesa || 'ESPERANDO',
         resultado: live?.resultado || {},
@@ -338,62 +351,116 @@
 
             <!-- TABLERO EN VIVO DE IA (SI HAY DETECCIÓN ACTIVA DE CARTAS) -->
             {#if badge.ai_active}
-              <div class="ia-live-scoreboard">
-                <!-- Lado Punto -->
-                <div class="score-side punto" class:winner={badge.ganador === 'PUNTO'}>
-                  <div class="side-header">
-                    <span class="side-lbl">PUNTO</span>
-                    <span class="side-score">{badge.scoreP}</span>
-                  </div>
-                  <div class="cards-strip">
-                    {#if badge.punto && badge.punto.length > 0}
-                      {#each badge.punto as c}
-                        <span class="card-chip punto" title="Confianza: {Math.round(c.conf * 100)}%">{c.val}</span>
-                      {/each}
-                    {:else}
-                      <span class="no-cards">-</span>
-                    {/if}
+              {#if badge.juego_tipo === 'POKER_CARIBENO'}
+                <!-- TABLERO POKER CARIBEÑO (DEALER 5 CARTAS + REGLAS CALIFICA/NO CALIFICA) -->
+                <div class="ia-live-pokerboard">
+                  <div class="poker-dealer-card" class:califica-ok={badge.califica === true} class:no-califica-ok={badge.califica === false}>
+                    <div class="poker-card-top">
+                      <span class="poker-title-lbl">CASA / DEALER (5 CARTAS)</span>
+                      <span class="poker-qual-badge" class:is-califica={badge.califica === true} class:is-no-califica={badge.califica === false}>
+                        {#if badge.califica === true}
+                          🟢 CALIFICA
+                        {:else if badge.califica === false}
+                          🔴 NO CALIFICA
+                        {:else}
+                          ⏳ {badge.ganador || 'REPARTIENDO'}
+                        {/if}
+                      </span>
+                    </div>
+
+                    <div class="cards-strip poker-cards-strip">
+                      {#if badge.dealer_cards && badge.dealer_cards.length > 0}
+                        {#each badge.dealer_cards as c}
+                          <span class="card-chip poker" class:back-chip={c.val.includes('BACK')} title="Confianza: {Math.round((c.conf || 0.8) * 100)}%">
+                            {c.val}
+                          </span>
+                        {/each}
+                      {:else}
+                        <span class="no-cards">Repartiendo mano de la Casa...</span>
+                      {/if}
+                    </div>
+
+                    <div class="poker-hand-desc">
+                      {#if badge.dealer_jugada}
+                        🃏 {badge.dealer_jugada}
+                      {:else}
+                        <span class="text-muted">{badge.detalle || 'Evaluando 5 cartas...'}</span>
+                      {/if}
+                    </div>
                   </div>
                 </div>
 
-                <!-- Separador VS -->
-                <div class="score-vs">
-                  <span class="vs-text">VS</span>
-                  {#if badge.resultado?.natural}
-                    <span class="natural-tag">NATURAL</span>
+                <!-- BANNER DE ESTADO POKER -->
+                <div class="ia-winner-banner" class:poker-califica={badge.califica === true} class:poker-no-califica={badge.califica === false}>
+                  {#if badge.califica === true}
+                    🏆 CASA CALIFICA: {badge.dealer_jugada || 'Mano válida'}
+                  {:else if badge.califica === false}
+                    ⚠️ CASA NO CALIFICA (Menor a As-Rey) • Ante Paga 1:1
+                  {:else if badge.estado_mesa === 'REPARTIENDO'}
+                    🃏 REPARTIENDO CARTAS...
+                  {:else}
+                    ⏱️ {badge.ganador || 'EN ESPERA DE JUGADA'}
                   {/if}
                 </div>
-
-                <!-- Lado Banca -->
-                <div class="score-side banca" class:winner={badge.ganador === 'BANCA'}>
-                  <div class="side-header">
-                    <span class="side-lbl">BANCA</span>
-                    <span class="side-score">{badge.scoreB}</span>
+              {:else}
+                <!-- TABLERO BACCARAT / GENERAL -->
+                <div class="ia-live-scoreboard">
+                  <!-- Lado Punto -->
+                  <div class="score-side punto" class:winner={badge.ganador === 'PUNTO'}>
+                    <div class="side-header">
+                      <span class="side-lbl">PUNTO</span>
+                      <span class="side-score">{badge.scoreP}</span>
+                    </div>
+                    <div class="cards-strip">
+                      {#if badge.punto && badge.punto.length > 0}
+                        {#each badge.punto as c}
+                          <span class="card-chip punto" title="Confianza: {Math.round((c.conf || 0.8) * 100)}%">{c.val}</span>
+                        {/each}
+                      {:else}
+                        <span class="no-cards">-</span>
+                      {/if}
+                    </div>
                   </div>
-                  <div class="cards-strip">
-                    {#if badge.banca && badge.banca.length > 0}
-                      {#each badge.banca as c}
-                        <span class="card-chip banca" title="Confianza: {Math.round(c.conf * 100)}%">{c.val}</span>
-                      {/each}
-                    {:else}
-                      <span class="no-cards">-</span>
+
+                  <!-- Separador VS -->
+                  <div class="score-vs">
+                    <span class="vs-text">VS</span>
+                    {#if badge.resultado?.natural}
+                      <span class="natural-tag">NATURAL</span>
                     {/if}
                   </div>
-                </div>
-              </div>
 
-              <!-- BANNER DE GANADOR / ESTADO DE IA -->
-              <div class="ia-winner-banner" class:banca-win={badge.ganador === 'BANCA'} class:punto-win={badge.ganador === 'PUNTO'} class:tie-win={badge.ganador === 'EMPATE (TIE)'}>
-                {#if badge.ganador && badge.ganador !== 'ESPERANDO'}
-                  🏆 {badge.ganador} GANA
-                {:else if badge.estado_mesa === 'REPARTIENDO'}
-                  🃏 REPARTIENDO CARTAS...
-                {:else if badge.estado_mesa === 'BARAJO'}
-                  🔀 BARAJO EN MESA
-                {:else}
-                  ⏱️ EN ESPERA DE JUGADA
-                {/if}
-              </div>
+                  <!-- Lado Banca -->
+                  <div class="score-side banca" class:winner={badge.ganador === 'BANCA'}>
+                    <div class="side-header">
+                      <span class="side-lbl">BANCA</span>
+                      <span class="side-score">{badge.scoreB}</span>
+                    </div>
+                    <div class="cards-strip">
+                      {#if badge.banca && badge.banca.length > 0}
+                        {#each badge.banca as c}
+                          <span class="card-chip banca" title="Confianza: {Math.round((c.conf || 0.8) * 100)}%">{c.val}</span>
+                        {/each}
+                      {:else}
+                        <span class="no-cards">-</span>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BANNER DE GANADOR / ESTADO DE IA -->
+                <div class="ia-winner-banner" class:banca-win={badge.ganador === 'BANCA'} class:punto-win={badge.ganador === 'PUNTO'} class:tie-win={badge.ganador === 'EMPATE (TIE)'}>
+                  {#if badge.ganador && badge.ganador !== 'ESPERANDO'}
+                    🏆 {badge.ganador} GANA
+                  {:else if badge.estado_mesa === 'REPARTIENDO'}
+                    🃏 REPARTIENDO CARTAS...
+                  {:else if badge.estado_mesa === 'BARAJO'}
+                    🔀 BARAJO EN MESA
+                  {:else}
+                    ⏱️ EN ESPERA DE JUGADA
+                  {/if}
+                </div>
+              {/if}
             {:else}
               <div class="badge-event font-mono" class:is-playing={badge.is_moving}>
                 {#if badge.is_moving}
@@ -653,68 +720,130 @@
 
           <!-- PANEL LATERAL DE RESULTADOS Y REGLAS EN TIEMPO REAL -->
           <div class="yolo-details-side">
-            <!-- Marcador Principal -->
-            <div class="vision-score-box">
-              <div class="v-side punto" class:winner={viewingAiMesa.ganador === 'PUNTO'}>
-                <span class="v-lbl">PUNTO</span>
-                <span class="v-val">{viewingAiMesa.scoreP ?? 0}</span>
-                <div class="v-cards">
-                  {#if viewingAiMesa.punto && viewingAiMesa.punto.length > 0}
-                    {#each viewingAiMesa.punto as c}
-                      <span class="chip-detail punto">{c.val} <small>({Math.round(c.conf * 100)}%)</small></span>
+            {#if viewingAiMesa.juego_tipo === 'POKER_CARIBENO'}
+              <!-- MARCADOR POKER CARIBEÑO (CASA / DEALER 5 CARTAS) -->
+              <div class="vision-poker-box">
+                <div class="v-poker-top">
+                  <span class="v-poker-title">CASA / DEALER (5 CARTAS)</span>
+                  <span class="v-poker-badge" class:v-califica={viewingAiMesa.califica === true} class:v-no-califica={viewingAiMesa.califica === false}>
+                    {#if viewingAiMesa.califica === true}
+                      🟢 CALIFICA
+                    {:else if viewingAiMesa.califica === false}
+                      🔴 NO CALIFICA
+                    {:else}
+                      ⏳ {viewingAiMesa.ganador || 'EN EVALUACIÓN'}
+                    {/if}
+                  </span>
+                </div>
+
+                <div class="v-cards v-poker-cards">
+                  {#if viewingAiMesa.dealer_cards && viewingAiMesa.dealer_cards.length > 0}
+                    {#each viewingAiMesa.dealer_cards as c}
+                      <span class="chip-detail poker" class:is-back={c.val.includes('BACK')}>
+                        {c.val} <small>({Math.round((c.conf || 0.8) * 100)}%)</small>
+                      </span>
                     {/each}
                   {:else}
-                    <span class="empty-detail">Sin cartas</span>
+                    <span class="empty-detail">Repartiendo mano de la Casa...</span>
                   {/if}
+                </div>
+
+                <div class="v-poker-jugada">
+                  <span class="v-poker-jugada-lbl">Mano Reconocida:</span>
+                  <span class="v-poker-jugada-val font-mono">{viewingAiMesa.dealer_jugada || viewingAiMesa.detalle || 'Evaluando 5 cartas...'}</span>
                 </div>
               </div>
 
-              <div class="v-divider">
-                <span>VS</span>
-                {#if viewingAiMesa.resultado?.natural}
-                  <span class="v-natural">NATURAL</span>
-                {/if}
-              </div>
-
-              <div class="v-side banca" class:winner={viewingAiMesa.ganador === 'BANCA'}>
-                <span class="v-lbl">BANCA</span>
-                <span class="v-val">{viewingAiMesa.scoreB ?? 0}</span>
-                <div class="v-cards">
-                  {#if viewingAiMesa.banca && viewingAiMesa.banca.length > 0}
-                    {#each viewingAiMesa.banca as c}
-                      <span class="chip-detail banca">{c.val} <small>({Math.round(c.conf * 100)}%)</small></span>
-                    {/each}
-                  {:else}
-                    <span class="empty-detail">Sin cartas</span>
-                  {/if}
-                </div>
-              </div>
-            </div>
-
-            <!-- Ganador / Estado -->
-            <div class="vision-status-banner" class:banca={viewingAiMesa.ganador === 'BANCA'} class:punto={viewingAiMesa.ganador === 'PUNTO'}>
-              {#if viewingAiMesa.ganador && viewingAiMesa.ganador !== 'ESPERANDO'}
-                🏆 GANADOR: {viewingAiMesa.ganador} (Punto {viewingAiMesa.scoreP} - Banca {viewingAiMesa.scoreB})
-              {:else}
-                🔄 Estado: {viewingAiMesa.estado_mesa || 'ESPERANDO'}
-              {/if}
-            </div>
-
-            <!-- Desglose Técnico de Reglas de Juego -->
-            <div class="vision-rules-box">
-              <span class="box-title">📋 Reglas de Juego Evaluadas</span>
-              <p class="rules-desc">
-                {#if viewingAiMesa.resultado?.descripcion}
-                  {viewingAiMesa.resultado.descripcion}
+              <!-- Banner de Estado Poker -->
+              <div class="vision-status-banner" class:banca={viewingAiMesa.califica === true} class:punto={viewingAiMesa.califica === false}>
+                {#if viewingAiMesa.califica === true}
+                  🏆 CASA CALIFICA: {viewingAiMesa.dealer_jugada || 'Mano válida'} • Se comparan apuestas de jugadores
+                {:else if viewingAiMesa.califica === false}
+                  ⚠️ CASA NO CALIFICA (Menor a As-Rey) • El Ante paga 1 a 1, la apuesta se empata (Push)
                 {:else}
-                  Auditoría en curso según reglas oficiales de Baccarat (Tercera carta, Natural 8/9).
+                  🔄 Estado: {viewingAiMesa.ganador || viewingAiMesa.estado_mesa || 'ESPERANDO'}
                 {/if}
-              </p>
-              <div class="rules-meta">
-                <span>Cartas en mesa: {(viewingAiMesa.punto?.length || 0) + (viewingAiMesa.banca?.length || 0)}</span>
-                <span>Mano terminada: {viewingAiMesa.resultado?.listo ? 'SÍ' : 'EN PROCESO'}</span>
               </div>
-            </div>
+
+              <!-- Desglose Técnico de Reglas de Juego Poker -->
+              <div class="vision-rules-box">
+                <span class="box-title">📋 Reglas de Poker Caribeño Evaluadas</span>
+                <p class="rules-desc">
+                  {#if viewingAiMesa.resultado?.descripcion}
+                    {viewingAiMesa.resultado.descripcion}
+                  {:else}
+                    La Casa califica únicamente con <strong>As y Rey (A-K)</strong> o combinación superior. Si la casa no califica, los jugadores ganan el Ante 1:1 automáticamente.
+                  {/if}
+                </p>
+                <div class="rules-meta">
+                  <span>Cartas Casa: {viewingAiMesa.dealer_cards?.length || 0} de 5</span>
+                  <span>Calificación: {viewingAiMesa.califica === true ? 'SÍ (VÁLIDA)' : (viewingAiMesa.califica === false ? 'NO CALIFICA' : 'EN EVALUACIÓN')}</span>
+                </div>
+              </div>
+            {:else}
+              <!-- Marcador Principal Baccarat -->
+              <div class="vision-score-box">
+                <div class="v-side punto" class:winner={viewingAiMesa.ganador === 'PUNTO'}>
+                  <span class="v-lbl">PUNTO</span>
+                  <span class="v-val">{viewingAiMesa.scoreP ?? 0}</span>
+                  <div class="v-cards">
+                    {#if viewingAiMesa.punto && viewingAiMesa.punto.length > 0}
+                      {#each viewingAiMesa.punto as c}
+                        <span class="chip-detail punto">{c.val} <small>({Math.round((c.conf || 0.8) * 100)}%)</small></span>
+                      {/each}
+                    {:else}
+                      <span class="empty-detail">Sin cartas</span>
+                    {/if}
+                  </div>
+                </div>
+
+                <div class="v-divider">
+                  <span>VS</span>
+                  {#if viewingAiMesa.resultado?.natural}
+                    <span class="v-natural">NATURAL</span>
+                  {/if}
+                </div>
+
+                <div class="v-side banca" class:winner={viewingAiMesa.ganador === 'BANCA'}>
+                  <span class="v-lbl">BANCA</span>
+                  <span class="v-val">{viewingAiMesa.scoreB ?? 0}</span>
+                  <div class="v-cards">
+                    {#if viewingAiMesa.banca && viewingAiMesa.banca.length > 0}
+                      {#each viewingAiMesa.banca as c}
+                        <span class="chip-detail banca">{c.val} <small>({Math.round((c.conf || 0.8) * 100)}%)</small></span>
+                      {/each}
+                    {:else}
+                      <span class="empty-detail">Sin cartas</span>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Ganador / Estado Baccarat -->
+              <div class="vision-status-banner" class:banca={viewingAiMesa.ganador === 'BANCA'} class:punto={viewingAiMesa.ganador === 'PUNTO'}>
+                {#if viewingAiMesa.ganador && viewingAiMesa.ganador !== 'ESPERANDO'}
+                  🏆 GANADOR: {viewingAiMesa.ganador} (Punto {viewingAiMesa.scoreP} - Banca {viewingAiMesa.scoreB})
+                {:else}
+                  🔄 Estado: {viewingAiMesa.estado_mesa || 'ESPERANDO'}
+                {/if}
+              </div>
+
+              <!-- Desglose Técnico de Reglas de Juego Baccarat -->
+              <div class="vision-rules-box">
+                <span class="box-title">📋 Reglas de Baccarat Evaluadas</span>
+                <p class="rules-desc">
+                  {#if viewingAiMesa.resultado?.descripcion}
+                    {viewingAiMesa.resultado.descripcion}
+                  {:else}
+                    Auditoría en curso según reglas oficiales de Baccarat (Tercera carta, Natural 8/9).
+                  {/if}
+                </p>
+                <div class="rules-meta">
+                  <span>Cartas en mesa: {(viewingAiMesa.punto?.length || 0) + (viewingAiMesa.banca?.length || 0)}</span>
+                  <span>Mano terminada: {viewingAiMesa.resultado?.listo ? 'SÍ' : 'EN PROCESO'}</span>
+                </div>
+              </div>
+            {/if}
 
             <!-- Botón de Aprendizaje Activo -->
             <div class="feedback-box">
@@ -1089,6 +1218,173 @@
     padding: 1px 4px;
     border-radius: 3px;
     margin-top: 2px;
+  }
+
+  /* Tablero Poker Caribeño */
+  .ia-live-pokerboard {
+    margin: 4px 0;
+  }
+
+  .poker-dealer-card {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top: 3px solid #eab308;
+  }
+
+  .poker-dealer-card.califica-ok {
+    border-top-color: #10b981;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
+  }
+
+  .poker-dealer-card.no-califica-ok {
+    border-top-color: #ef4444;
+  }
+
+  .poker-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .poker-title-lbl {
+    font-size: 10px;
+    font-weight: 900;
+    color: #fef08a;
+    letter-spacing: 0.5px;
+  }
+
+  .poker-qual-badge {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+  }
+
+  .poker-qual-badge.is-califica {
+    background: #10b981;
+    color: #ffffff;
+  }
+
+  .poker-qual-badge.is-no-califica {
+    background: #ef4444;
+    color: #ffffff;
+  }
+
+  .poker-cards-strip {
+    justify-content: center;
+  }
+
+  .card-chip.poker {
+    border-top: 3px solid #eab308;
+  }
+
+  .card-chip.back-chip {
+    background: #334155;
+    color: #94a3b8;
+    border-top-color: #64748b;
+  }
+
+  .poker-hand-desc {
+    font-size: 11px;
+    font-weight: 800;
+    color: #38bdf8;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 3px 6px;
+    border-radius: 4px;
+  }
+
+  .ia-winner-banner.poker-califica {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+
+  .ia-winner-banner.poker-no-califica {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  /* Modal Poker Caribeño */
+  .vision-poker-box {
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 14px;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-left: 4px solid #eab308;
+  }
+
+  .v-poker-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .v-poker-title {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #fef08a;
+  }
+
+  .v-poker-badge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+  }
+
+  .v-poker-badge.v-califica {
+    background: #10b981;
+    color: #ffffff;
+  }
+
+  .v-poker-badge.v-no-califica {
+    background: #ef4444;
+    color: #ffffff;
+  }
+
+  .v-poker-cards {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .chip-detail.poker {
+    border-left: 3px solid #eab308;
+  }
+
+  .v-poker-jugada {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 6px 10px;
+    border-radius: 6px;
+  }
+
+  .v-poker-jugada-lbl {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 700;
+  }
+
+  .v-poker-jugada-val {
+    font-size: 13px;
+    font-weight: 800;
+    color: #38bdf8;
   }
 
   /* Banner de Ganador */

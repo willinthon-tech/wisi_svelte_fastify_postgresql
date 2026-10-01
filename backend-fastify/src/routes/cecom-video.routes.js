@@ -11,7 +11,9 @@ import {
   getCecomIaEventos,
   createCecomIaEvento,
   marcarEventoAtendido,
-  clearCecomIaEventos
+  clearCecomIaEventos,
+  syncIaLiveStatus,
+  getIaLiveStatus
 } from '../controllers/cecom-video.controller.js';
 
 export default async function cecomVideoRoutes(fastify, options) {
@@ -35,5 +37,9 @@ export default async function cecomVideoRoutes(fastify, options) {
   fastify.post('/api/cecom/ia-eventos', createCecomIaEvento);
   fastify.delete('/api/cecom/ia-eventos', clearCecomIaEventos);
   fastify.put('/api/cecom/ia-eventos/:uuid/atendido', marcarEventoAtendido);
+
+  // Estado Centralizado de IA en Vivo (disponible para todas las PCs y clientes)
+  fastify.post('/api/cecom/ia-live-sync', syncIaLiveStatus);
+  fastify.get('/api/cecom/ia-live-status', getIaLiveStatus);
 }
 

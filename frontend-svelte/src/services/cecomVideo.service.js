@@ -266,3 +266,12 @@ export async function marcarEventoAtendido(uuid, atendido_por = '') {
   return await apiRequest(`/ia-eventos/${uuid}/atendido`, 'PUT', { atendido_por });
 }
 
+export async function getCecomIaLiveStatus() {
+  return await apiRequest('/ia-live-status');
+}
+
+export async function syncCecomIaLiveStatus(mesas) {
+  return await apiRequest('/ia-live-sync', 'POST', { mesas });
+}
+
+

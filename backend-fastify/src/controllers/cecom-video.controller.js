@@ -160,3 +160,37 @@ export async function clearCecomIaEventos(request, reply) {
   }
 }
 
+// ====================================================================
+// ESTADO DE IA EN VIVO (CENTRALIZADO PARA TODAS LAS PCS Y DISPOSITIVOS)
+// ====================================================================
+const globalLiveIaMesas = {};
+
+export async function syncIaLiveStatus(request, reply) {
+  try {
+    const { mesas } = request.body || {};
+    if (mesas && typeof mesas === 'object') {
+      for (const [mId, data] of Object.entries(mesas)) {
+        globalLiveIaMesas[mId] = {
+          ...globalLiveIaMesas[mId],
+          ...data,
+          last_update: Date.now()
+        };
+      }
+    }
+    return reply.send({ success: true, count: Object.keys(globalLiveIaMesas).length });
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function getIaLiveStatus(request, reply) {
+  try {
+    return reply.send({ success: true, data: globalLiveIaMesas, count: Object.keys(globalLiveIaMesas).length });
+  } catch (err) {
+    request.log.error(err);
+    return reply.status(500).send({ success: false, error: err.message });
+  }
+}
+
+

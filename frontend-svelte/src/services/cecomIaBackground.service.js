@@ -8,7 +8,7 @@
  */
 
 import { writable } from 'svelte/store';
-import { getCecomIaEventos, createCecomIaEvento, getMesasConCamaras } from './cecomVideo.service.js';
+import { getCecomIaEventos, createCecomIaEvento, getMesasConCamaras, getCecomIaLiveStatus } from './cecomVideo.service.js';
 import { callLocalIsapi, isTauriWindows } from './tauriIsapi.service.js';
 
 // Estado en tiempo real de cada mesa (para badges superiores de estado en vivo)
@@ -60,14 +60,12 @@ export function initCecomIaBackgroundWorker() {
     pollRecentEvents();
   }, 5000);
 
-  // 2. Monitoreo en tiempo real de movimiento/juego de cámaras físicas (exclusivo Windows Tauri)
-  if (isTauriWindows()) {
+  // 2. Monitoreo en tiempo real de movimiento/juego e IA YOLO
+  sampleLiveMesasMotion();
+  if (motionInterval) clearInterval(motionInterval);
+  motionInterval = setInterval(() => {
     sampleLiveMesasMotion();
-    if (motionInterval) clearInterval(motionInterval);
-    motionInterval = setInterval(() => {
-      sampleLiveMesasMotion();
-    }, 2500);
-  }
+  }, 2500);
 }
 
 /**
@@ -123,12 +121,22 @@ function processAiEngineResults(aiData, now) {
     const next = { ...map };
     for (const [mId, liveAi] of Object.entries(aiData)) {
       const mesa = cachedMesas.find(x => String(x.mesa_uuid || x.uuid || x.id) === String(mId));
-      const hasCards = (liveAi.punto && liveAi.punto.length > 0) || (liveAi.banca && liveAi.banca.length > 0);
+      const hasCards = (liveAi.punto && liveAi.punto.length > 0) ||
+                       (liveAi.banca && liveAi.banca.length > 0) ||
+                       (liveAi.dealer_cards && liveAi.dealer_cards.length > 0);
       const isMoving = hasCards || liveAi.estado_mesa === 'REPARTIENDO' || liveAi.estado_mesa === 'NORMAL';
+
+      let juegoTipo = liveAi.juego_tipo;
+      if (!juegoTipo) {
+        const txt = `${mesa?.mesa_nombre || liveAi.mesa_nombre || ''} ${mesa?.juego_nombre || liveAi.juego || ''}`.toUpperCase();
+        if (txt.includes('PK') || txt.includes('POKER') || txt.includes('STUD')) juegoTipo = 'POKER_CARIBENO';
+        else if (txt.includes('BJ') || txt.includes('BLACKJACK')) juegoTipo = 'BLACKJACK';
+        else juegoTipo = 'BACCARAT';
+      }
 
       let badgeEvento = 'EN ESPERA';
       if (liveAi.ganador && liveAi.ganador !== 'ESPERANDO') {
-        badgeEvento = `${liveAi.ganador} GANA`;
+        badgeEvento = juegoTipo === 'POKER_CARIBENO' ? liveAi.ganador : `${liveAi.ganador} GANA`;
       } else if (liveAi.estado_mesa) {
         badgeEvento = liveAi.estado_mesa;
       }
@@ -141,7 +149,7 @@ function processAiEngineResults(aiData, now) {
       next[mId] = {
         mesa_uuid: mId,
         mesa_nombre: mesa?.mesa_nombre || liveAi.mesa_nombre || 'Mesa',
-        juego_nombre: mesa?.juego_nombre || liveAi.juego || 'Baccarat',
+        juego_nombre: mesa?.juego_nombre || liveAi.juego || (juegoTipo === 'POKER_CARIBENO' ? 'Poker Caribeño' : 'Baccarat'),
         ultimo_evento: badgeEvento,
         descripcion: desc,
         nivel_alerta: 'INFO',
@@ -150,11 +158,15 @@ function processAiEngineResults(aiData, now) {
         hora: liveAi.hora || new Date().toLocaleTimeString(),
         // DATOS REALES DE YOLO Y REGLAS DE CASINO:
         ai_active: true,
+        juego_tipo: juegoTipo,
         scoreP: liveAi.scoreP ?? 0,
         scoreB: liveAi.scoreB ?? 0,
         ganador: liveAi.ganador || 'ESPERANDO',
         punto: liveAi.punto || [],
         banca: liveAi.banca || [],
+        dealer_cards: liveAi.dealer_cards || (juegoTipo === 'POKER_CARIBENO' ? (liveAi.punto?.concat(liveAi.banca || []) || []) : []),
+        dealer_jugada: liveAi.dealer_jugada || '',
+        califica: liveAi.califica,
         detalle: liveAi.detalle || '',
         estado_mesa: liveAi.estado_mesa || 'ESPERANDO',
         resultado: liveAi.resultado || {},
@@ -173,10 +185,15 @@ function processAiEngineResults(aiData, now) {
             mesa_nombre: mesa?.mesa_nombre || liveAi.mesa_nombre,
             juego_nombre: mesa?.juego_nombre || liveAi.juego,
             tipo_evento: 'JUGADA',
-            descripcion: `${liveAi.ganador} (${liveAi.scoreP} a ${liveAi.scoreB}) • ${liveAi.detalle}`,
+            descripcion: juegoTipo === 'POKER_CARIBENO'
+              ? `Poker Caribeño - ${liveAi.ganador}: ${liveAi.dealer_jugada || liveAi.detalle}`
+              : `${liveAi.ganador} (${liveAi.scoreP} a ${liveAi.scoreB}) • ${liveAi.detalle}`,
             nivel_alerta: 'INFO',
             es_novedad: false,
             metadata: {
+              juego_tipo: juegoTipo,
+              califica: liveAi.califica,
+              dealer_jugada: liveAi.dealer_jugada,
               scoreP: liveAi.scoreP,
               scoreB: liveAi.scoreB,
               ganador: liveAi.ganador,
@@ -196,8 +213,6 @@ function processAiEngineResults(aiData, now) {
  * Muestrea fotogramas y consulta el Motor YOLO de IA
  */
 async function sampleLiveMesasMotion() {
-  if (!isTauriWindows()) return;
-
   const now = Date.now();
   // Refrescar lista de mesas con cámaras cada 20 segundos
   if (now - lastMesaFetchTime > 20000 || cachedMesas.length === 0) {
@@ -215,21 +230,36 @@ async function sampleLiveMesasMotion() {
 
   if (cachedMesas.length === 0) return;
 
-  // 1. INTENTO PRIMARIO: Consultar el Motor de IA Python (YOLO + Reglas de Casino)
+  // 1. INTENTO PRIMARIO: Consultar el Motor de IA Python Local (YOLO en 127.0.0.1:5005)
   try {
-    const aiRes = await fetch('http://127.0.0.1:5005/all_mesas', { signal: AbortSignal.timeout(1800) });
+    const aiRes = await fetch('http://127.0.0.1:5005/all_mesas', { signal: AbortSignal.timeout(1200) });
     if (aiRes.ok) {
       const aiData = await aiRes.json();
       if (aiData && typeof aiData === 'object' && Object.keys(aiData).length > 0) {
         processAiEngineResults(aiData, now);
-        return; // Éxito con Motor de IA YOLO real
+        return; // Éxito con Motor de IA YOLO local
       }
     }
   } catch (errAi) {
-    // Si el motor Python no responde, fallback suave a ISAPI local
+    // Si no hay motor Python local, procedemos a consultar el Hub central de Wisi
   }
 
-  // 2. FALLBACK SECUNDARIO: Detección por sensor de movimiento ISAPI (si el motor Python estuviera apagado)
+  // 2. INTENTO SECUNDARIO (MULTI-PC): Consultar el estado sincronizado de IA en el backend central (wisi.space)
+  // Esto permite que CUALQUIER PC que instale la versión de Windows vea las cartas, jugadas y streaming
+  // aunque el motor Python esté corriendo en otra máquina de la red.
+  try {
+    const hubRes = await getCecomIaLiveStatus();
+    if (hubRes && hubRes.success && hubRes.data && Object.keys(hubRes.data).length > 0) {
+      processAiEngineResults(hubRes.data, now);
+      return; // Éxito con datos transmitidos por el backend central
+    }
+  } catch (errHub) {
+    // Backend central no disponible o sin sincronización aún
+  }
+
+  if (!isTauriWindows()) return;
+
+  // 3. FALLBACK TERCIARIO: Detección por sensor de movimiento ISAPI (si el motor Python estuviera apagado)
   for (const mesa of cachedMesas) {
     const mesaUuid = mesa.mesa_uuid || mesa.uuid || mesa.id;
     const ip = mesa.dispositivo_ip;
