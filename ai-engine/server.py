@@ -291,20 +291,46 @@ def motor_blackjack(jugador_cards, dealer_cards):
 
 def resolve_game_type(mesa_nombre, juego_nombre):
     """
-    Resuelve con precisión el juego analizando tanto el nombre de la mesa (ej: PK 3, PB 1)
-    como la categoría asignada, evitando que mesas de Poker Caribeño se confundan con Baccarat.
+    Resuelve con precisión el juego analizando tanto el nombre de la mesa (ej: TXB 1, RA 1, PK 3, PB 1)
+    como la categoría asignada en base de datos.
     """
-    txt = f"{mesa_nombre or ''} {juego_nombre or ''}".upper()
-    if any(k in txt for k in ['PK', 'POKER', 'CARIBE', 'STUD']):
-        return 'POKER_CARIBENO'
-    if any(k in txt for k in ['PB', 'BACCARAT', 'PUNTO', 'BANCA']):
-        return 'BACCARAT'
-    if any(k in txt for k in ['BJ', 'BLACKJACK', '21']):
-        return 'BLACKJACK'
-    if any(k in txt for k in ['TX', 'TEXAS', 'HOLDEM']):
-        return 'TEXAS_BONUS'
-    if any(k in txt for k in ['RA', 'RULETA', 'ROULETTE']):
+    m_name = (mesa_nombre or '').upper().strip()
+    j_name = (juego_nombre or '').upper().strip()
+    txt = f"{m_name} {j_name}"
+
+    # 1. Ruleta Americana (RA 1, RA 2, RULETA, ROULETTE)
+    if m_name.startswith('RA') or m_name.startswith('RT') or any(k in txt for k in ['RULETA', 'ROULETTE']):
         return 'RULETA'
+
+    # 2. Texas Hold'em Bonus (TXB 1, TX 1, TEXAS, HOLDEM, BONUS) - ¡NO confundir con Poker Caribeño!
+    if m_name.startswith('TX') or m_name.startswith('TB') or any(k in txt for k in ['TEXAS', 'HOLDEM', 'TXB']):
+        return 'TEXAS_BONUS'
+    if 'BONUS' in txt and not any(k in txt for k in ['BACCARAT', 'PB']):
+        return 'TEXAS_BONUS'
+
+    # 3. Poker Caribeño (PK 3, POKER, CARIBE, STUD) - Sólo si no es Texas
+    if m_name.startswith('PK') or any(k in txt for k in ['CARIBE', 'STUD']):
+        return 'POKER_CARIBENO'
+    if 'POKER' in txt and not any(k in txt for k in ['TEXAS', 'HOLDEM', 'TXB']):
+        return 'POKER_CARIBENO'
+
+    # 4. Blackjack (BJ 1, BLACKJACK, 21)
+    if m_name.startswith('BJ') or any(k in txt for k in ['BLACKJACK', '21']):
+        return 'BLACKJACK'
+
+    # 5. Baccarat (PB 1, PB 2, BACCARAT, PUNTO, BANCA)
+    if m_name.startswith('PB') or any(k in txt for k in ['BACCARAT', 'PUNTO', 'BANCA']):
+        return 'BACCARAT'
+
+    # Fallback por nombre configurado explícito
+    if 'RULETA' in j_name or 'ROULETTE' in j_name:
+        return 'RULETA'
+    if 'TEXAS' in j_name or 'BONUS' in j_name:
+        return 'TEXAS_BONUS'
+    if 'POKER' in j_name or 'CARIBE' in j_name:
+        return 'POKER_CARIBENO'
+    if 'BLACKJACK' in j_name:
+        return 'BLACKJACK'
     return 'BACCARAT'
 
 def motor_poker_caribeno(cards):
@@ -445,6 +471,160 @@ def motor_poker_caribeno(cards):
         "listo": True,
         "tipo_evento": "JUGADA",
         "descripcion": f"{estado_ganador}: {jugada} ({pago})"
+    }
+
+def motor_texas_bonus(cards):
+    """
+    Reglas oficiales de Texas Hold'em Bonus:
+    - Evalúa las cartas comunitarias (Flop, Turn, River) y de jugadores/dealer.
+    - Croupier califica con al menos UN PAR:
+      'ANTE EMPUJA SI EL CROUPIER TIENE MENOS DE UN PAR'
+    - Tabla de Pagos de Bonus TRIPS en paño:
+      Escalera Real (50:1), Escalera de Color (40:1), Póker (30:1),
+      Full House (8:1), Color (7:1), Escalera (4:1), Trío (3:1)
+    """
+    if len(cards) == 0:
+        return {
+            "win": "SIN JUGADA",
+            "califica": None,
+            "jugada": "",
+            "listo": False,
+            "tipo_evento": "JUGADA",
+            "descripcion": "Mesa despejada (Sin jugada activa)"
+        }
+
+    parsed = [parse_card_info(c.get('val')) for c in cards]
+    up_cards = [c for c in parsed if not c['is_back']]
+
+    if len(up_cards) < 2:
+        return {
+            "win": "REPARTIENDO",
+            "califica": None,
+            "jugada": "Iniciando mano",
+            "listo": False,
+            "tipo_evento": "JUGADA",
+            "descripcion": f"Repartiendo cartas iniciales ({len(cards)} en paño)"
+        }
+
+    import itertools
+    rank_names = {14: 'As', 13: 'K', 12: 'Q', 11: 'J', 10: '10', 9: '9', 8: '8', 7: '7', 6: '6', 5: '5', 4: '4', 3: '3', 2: '2'}
+
+    # Si hay entre 2 y 4 cartas: fase inicial
+    if len(up_cards) < 5:
+        ranks = sorted([c['rank_num'] for c in up_cards if c['rank_num'] > 0], reverse=True)
+        counts = {}
+        for r in ranks: counts[r] = counts.get(r, 0) + 1
+        freqs = sorted(counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
+        has_pair = freqs and freqs[0][1] >= 2
+        jugada_parcial = f"Par de {rank_names.get(freqs[0][0])}" if has_pair else f"{rank_names.get(ranks[0]) if ranks else ''} Mayor"
+        return {
+            "win": "REPARTIENDO",
+            "califica": has_pair,
+            "jugada": jugada_parcial,
+            "listo": False,
+            "tipo_evento": "JUGADA",
+            "descripcion": f"Fase de apuestas ({len(up_cards)} cartas descubiertas)"
+        }
+
+    # Con 5 o más cartas (hasta 7)
+    comb_source = up_cards[:7]
+    best_score = (-1,)
+    best_jugada = ""
+    best_pago = ""
+    best_califica = False
+
+    for comb in itertools.combinations(comb_source, min(5, len(comb_source))):
+        c_ranks = sorted([c['rank_num'] for c in comb if c['rank_num'] > 0], reverse=True)
+        c_suits = [c['suit'] for c in comb if c['suit'] is not None]
+        if len(c_ranks) < 5:
+            continue
+        c_counts = {}
+        for r in c_ranks: c_counts[r] = c_counts.get(r, 0) + 1
+        c_freqs = sorted(c_counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
+
+        is_flush = (len(c_suits) == 5 and len(set(c_suits)) == 1)
+        is_straight = False
+        if len(set(c_ranks)) == 5:
+            if c_ranks[0] - c_ranks[4] == 4: is_straight = True
+            elif c_ranks == [14, 5, 4, 3, 2]: is_straight = True
+
+        score = (0,)
+        jugada = ""
+        pago = ""
+        califica = True
+
+        if is_flush and is_straight and c_ranks[0] == 14 and c_ranks[1] == 13:
+            score = (9, 14)
+            jugada = "Flor Imperial (Royal Flush)"
+            pago = "Trips: 50:1"
+        elif is_flush and is_straight:
+            score = (8, c_ranks[0])
+            jugada = f"Escalera de Color al {rank_names.get(c_ranks[0])}"
+            pago = "Trips: 40:1"
+        elif c_freqs[0][1] == 4:
+            score = (7, c_freqs[0][0], c_freqs[1][0])
+            jugada = f"Póker de {rank_names.get(c_freqs[0][0])}"
+            pago = "Trips: 30:1"
+        elif c_freqs[0][1] == 3 and c_freqs[1][1] == 2:
+            score = (6, c_freqs[0][0], c_freqs[1][0])
+            jugada = f"Full House ({rank_names.get(c_freqs[0][0])} y {rank_names.get(c_freqs[1][0])})"
+            pago = "Trips: 8:1"
+        elif is_flush:
+            score = (5, c_ranks)
+            jugada = f"Color (Flush al {rank_names.get(c_ranks[0])})"
+            pago = "Trips: 7:1"
+        elif is_straight:
+            score = (4, c_ranks[0])
+            jugada = f"Escalera al {rank_names.get(c_ranks[0])}"
+            pago = "Trips: 4:1"
+        elif c_freqs[0][1] == 3:
+            score = (3, c_freqs[0][0], [x[0] for x in c_freqs[1:]])
+            jugada = f"Trío de {rank_names.get(c_freqs[0][0])}"
+            pago = "Trips: 3:1"
+        elif c_freqs[0][1] == 2 and c_freqs[1][1] == 2:
+            score = (2, c_freqs[0][0], c_freqs[1][0], c_freqs[2][0])
+            jugada = f"Doble Par ({rank_names.get(c_freqs[0][0])} y {rank_names.get(c_freqs[1][0])})"
+        elif c_freqs[0][1] == 2:
+            score = (1, c_freqs[0][0], [x[0] for x in c_freqs[1:]])
+            jugada = f"Par de {rank_names.get(c_freqs[0][0])}"
+        else:
+            score = (0, c_ranks)
+            jugada = f"{rank_names.get(c_ranks[0])} Mayor"
+            califica = False  # Ante empuja si croupier < 1 par
+
+        if score > best_score:
+            best_score = score
+            best_jugada = jugada
+            best_pago = pago
+            best_califica = califica
+
+    if not best_jugada:
+        best_jugada = "Evaluando mesa"
+        best_califica = False
+
+    estado_win = "CALIFICA (≥ 1 PAR)" if best_califica else "NO CALIFICA (< 1 PAR • ANTE EMPUJA)"
+    return {
+        "win": estado_win,
+        "califica": best_califica,
+        "jugada": best_jugada,
+        "pago": best_pago,
+        "listo": len(up_cards) >= 5,
+        "tipo_evento": "JUGADA",
+        "descripcion": f"{best_jugada} • {estado_win} {f'({best_pago})' if best_pago else ''}"
+    }
+
+def motor_ruleta():
+    """
+    Ruleta Americana (American Roulette con 0, 00 y 36 números).
+    No utiliza cartas. Monitorea actividad de paño y cilindro.
+    """
+    return {
+        "win": "SIN JUGADA",
+        "califica": None,
+        "jugada": "Ruleta Americana",
+        "listo": False,
+        "tipo_evento": "MONITOREO",
+        "descripcion": "Cilindro y paño de Ruleta Americana activo"
     }
 
 # ====================================================================
@@ -678,6 +858,56 @@ def ai_inference_loop():
                         "califica": resultado.get('califica'),
                         "detalle": detalle_mano,
                         "ganador": resultado.get('win', 'ESPERANDO'),
+                        "scoreP": 0,
+                        "scoreB": 0,
+                        "punto": [],
+                        "banca": [],
+                        "image_b64": "",
+                        "timestamp": time.time(),
+                        "hora": datetime.now().strftime("%H:%M:%S")
+                    }
+                elif tipo_juego == 'TEXAS_BONUS':
+                    juego_label = "Texas Bonus"
+                    resultado = motor_texas_bonus(raw_cards)
+                    detalle_mano = resultado.get('jugada', '')
+                    for c in raw_cards:
+                        detections.append({**c, "zone": "dealer"})
+
+                    live_results[mesa_uuid] = {
+                        "mesa_uuid": mesa_uuid,
+                        "mesa_nombre": cfg.get('nombre'),
+                        "juego": juego_label,
+                        "juego_tipo": "TEXAS_BONUS",
+                        "estado_mesa": estado_mesa,
+                        "resultado": resultado,
+                        "dealer_cards": raw_cards,
+                        "dealer_jugada": resultado.get('jugada'),
+                        "califica": resultado.get('califica'),
+                        "detalle": resultado.get('descripcion'),
+                        "ganador": resultado.get('win', 'SIN JUGADA'),
+                        "scoreP": 0,
+                        "scoreB": 0,
+                        "punto": [],
+                        "banca": [],
+                        "image_b64": "",
+                        "timestamp": time.time(),
+                        "hora": datetime.now().strftime("%H:%M:%S")
+                    }
+                elif tipo_juego == 'RULETA':
+                    juego_label = "Ruleta Americana"
+                    resultado = motor_ruleta()
+                    live_results[mesa_uuid] = {
+                        "mesa_uuid": mesa_uuid,
+                        "mesa_nombre": cfg.get('nombre'),
+                        "juego": juego_label,
+                        "juego_tipo": "RULETA",
+                        "estado_mesa": "ESPERA",
+                        "resultado": resultado,
+                        "dealer_cards": [],
+                        "dealer_jugada": "Ruleta Americana (0, 00, 1-36)",
+                        "califica": None,
+                        "detalle": "Mesa de Ruleta Americana",
+                        "ganador": "SIN JUGADA",
                         "scoreP": 0,
                         "scoreB": 0,
                         "punto": [],

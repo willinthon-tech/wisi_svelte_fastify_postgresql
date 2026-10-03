@@ -58,10 +58,34 @@
     const s1 = clean(j1);
     const s2 = clean(j2);
     if (s1 === s2) return true;
-    if ((s1.includes("baccarat") || s1.includes("punto") || s1.includes("pb")) && (s2.includes("baccarat") || s2.includes("punto") || s2.includes("pb"))) return true;
-    if (s1.includes("poker") && s2.includes("poker")) return true;
-    if (s1.includes("blackjack") && s2.includes("blackjack")) return true;
-    if (s1.includes("ruleta") && s2.includes("ruleta")) return true;
+
+    // Texas Bonus (distinto de Poker Caribeño)
+    const isTx1 = s1.includes("texas") || s1.includes("holdem") || s1.includes("txb") || (s1.includes("bonus") && !s1.includes("baccarat"));
+    const isTx2 = s2.includes("texas") || s2.includes("holdem") || s2.includes("txb") || (s2.includes("bonus") && !s2.includes("baccarat"));
+    if (isTx1 && isTx2) return true;
+    if (isTx1 !== isTx2 && (isTx1 || isTx2)) return false;
+
+    // Ruleta Americana
+    const isRuleta1 = s1.includes("ruleta") || s1.includes("roulette") || s1 === "ra" || s1.startsWith("ra ") || s1.startsWith("ra1") || s1.includes("americana");
+    const isRuleta2 = s2.includes("ruleta") || s2.includes("roulette") || s2 === "ra" || s2.startsWith("ra ") || s2.startsWith("ra1") || s2.includes("americana");
+    if (isRuleta1 && isRuleta2) return true;
+    if (isRuleta1 !== isRuleta2 && (isRuleta1 || isRuleta2)) return false;
+
+    // Poker Caribeño (solo si no es Texas)
+    const isPoker1 = s1.includes("poker") || s1.includes("caribe") || s1.includes("stud") || s1.startsWith("pk");
+    const isPoker2 = s2.includes("poker") || s2.includes("caribe") || s2.includes("stud") || s2.startsWith("pk");
+    if (isPoker1 && isPoker2) return true;
+
+    // Blackjack
+    const isBj1 = s1.includes("blackjack") || s1.includes("21") || s1.startsWith("bj");
+    const isBj2 = s2.includes("blackjack") || s2.includes("21") || s2.startsWith("bj");
+    if (isBj1 && isBj2) return true;
+
+    // Baccarat
+    const isBac1 = s1.includes("baccarat") || s1.includes("punto") || s1.startsWith("pb") || s1.includes("banca");
+    const isBac2 = s2.includes("baccarat") || s2.includes("punto") || s2.startsWith("pb") || s2.includes("banca");
+    if (isBac1 && isBac2) return true;
+
     return false;
   }
 
@@ -181,25 +205,47 @@
       const userConfigJuego = (m.juego_nombre && m.juego_nombre.trim()) ? m.juego_nombre.trim() : 'General';
 
       // 2. Lo que la IA detecta en el paño según cámaras / prefijo de mesa / modelo de visión
-      const mesaTxt = `${m.mesa_nombre || m.nombre || ''}`.toUpperCase();
+      const mesaTxt = `${m.mesa_nombre || m.nombre || ''}`.toUpperCase().trim();
+      const cfgTxt = `${userConfigJuego}`.toUpperCase().trim();
       let juegoDetectadoIa = 'Baccarat';
       let juegoTipo = live?.juego_tipo;
 
-      if (mesaTxt.startsWith('PK') || mesaTxt.includes('POKER') || mesaTxt.includes('STUD')) {
-        juegoDetectadoIa = 'Poker Caribeño';
-        if (!juegoTipo) juegoTipo = 'POKER_CARIBENO';
-      } else if (mesaTxt.startsWith('BJ') || mesaTxt.includes('BLACKJACK')) {
-        juegoDetectadoIa = 'Blackjack';
-        if (!juegoTipo) juegoTipo = 'BLACKJACK';
-      } else if (mesaTxt.startsWith('RT') || mesaTxt.includes('RULETA')) {
+      // 1. Ruleta Americana (RA 1, RA 2, RULETA, ROULETTE)
+      if (mesaTxt.startsWith('RA') || mesaTxt.startsWith('RT') || mesaTxt.includes('RULETA') || mesaTxt.includes('ROULETTE') || cfgTxt.includes('RULETA') || cfgTxt.includes('ROULETTE')) {
         juegoDetectadoIa = 'Ruleta Americana';
         if (!juegoTipo) juegoTipo = 'RULETA';
+      }
+      // 2. Texas Hold'em Bonus (TXB 1, TX 1, TEXAS, HOLDEM, BONUS)
+      else if (mesaTxt.startsWith('TX') || mesaTxt.startsWith('TB') || mesaTxt.includes('TEXAS') || mesaTxt.includes('HOLDEM') || cfgTxt.includes('TEXAS') || cfgTxt.includes('HOLDEM') || (cfgTxt.includes('BONUS') && !cfgTxt.includes('BACCARAT'))) {
+        juegoDetectadoIa = 'Texas Bonus';
+        if (!juegoTipo) juegoTipo = 'TEXAS_BONUS';
+      }
+      // 3. Poker Caribeño (PK 3, POKER, CARIBE, STUD) - NO confundir con Texas
+      else if (mesaTxt.startsWith('PK') || mesaTxt.includes('CARIBE') || mesaTxt.includes('STUD') || cfgTxt.includes('CARIBE') || (cfgTxt.includes('POKER') && !cfgTxt.includes('TEXAS'))) {
+        juegoDetectadoIa = 'Poker Caribeño';
+        if (!juegoTipo) juegoTipo = 'POKER_CARIBENO';
+      }
+      // 4. Blackjack (BJ 1, BLACKJACK, 21)
+      else if (mesaTxt.startsWith('BJ') || mesaTxt.includes('BLACKJACK') || cfgTxt.includes('BLACKJACK')) {
+        juegoDetectadoIa = 'Blackjack';
+        if (!juegoTipo) juegoTipo = 'BLACKJACK';
+      }
+      // 5. Baccarat (PB 1, PB 2, BACCARAT, PUNTO, BANCA)
+      else if (mesaTxt.startsWith('PB') || mesaTxt.includes('BACCARAT') || mesaTxt.includes('PUNTO') || cfgTxt.includes('BACCARAT')) {
+        juegoDetectadoIa = 'Baccarat';
+        if (!juegoTipo) juegoTipo = 'BACCARAT';
       } else {
         juegoDetectadoIa = 'Baccarat';
         if (!juegoTipo) juegoTipo = 'BACCARAT';
       }
 
-      if (live?.juego_tipo === 'POKER_CARIBENO') {
+      if (live?.juego_tipo === 'RULETA') {
+        juegoDetectadoIa = 'Ruleta Americana';
+        juegoTipo = 'RULETA';
+      } else if (live?.juego_tipo === 'TEXAS_BONUS') {
+        juegoDetectadoIa = 'Texas Bonus';
+        juegoTipo = 'TEXAS_BONUS';
+      } else if (live?.juego_tipo === 'POKER_CARIBENO') {
         juegoDetectadoIa = 'Poker Caribeño';
         juegoTipo = 'POKER_CARIBENO';
       } else if (live?.juego_tipo === 'BLACKJACK') {
@@ -227,9 +273,12 @@
       let ultimoEvento = 'SIN JUGADA (EN ESPERA)';
       let descripcion = 'Mesa despejada - En espera';
 
-      if (hasCards) {
+      if (juegoTipo === 'RULETA') {
+        ultimoEvento = 'CILINDRO / PAÑO ACTIVO';
+        descripcion = 'Mesa de Ruleta Americana activa (0, 00, 1-36)';
+      } else if (hasCards) {
         if (live?.ganador && live.ganador !== 'ESPERANDO' && live.ganador !== 'SIN JUGADA') {
-          ultimoEvento = juegoTipo === 'POKER_CARIBENO' ? live.ganador : `${live.ganador} GANA`;
+          ultimoEvento = (juegoTipo === 'POKER_CARIBENO' || juegoTipo === 'TEXAS_BONUS') ? live.ganador : `${live.ganador} GANA`;
         } else if (live?.estado_mesa === 'REPARTIENDO') {
           ultimoEvento = 'REPARTIENDO CARTAS...';
         } else {
@@ -636,8 +685,72 @@
             </div>
 
             <!-- SECTOR DEL JUEGO / DE LA MANO (REGLAS CASINO) -->
-            {#if badge.has_cards}
-              {#if badge.juego_tipo === 'POKER_CARIBENO'}
+            {#if badge.juego_tipo === 'RULETA'}
+              <!-- TABLERO RULETA AMERICANA -->
+              <div class="ia-ruleta-card">
+                <div class="ruleta-card-top">
+                  <span class="ruleta-title-lbl">🎡 RULETA AMERICANA</span>
+                  <span class="ruleta-status-badge">🟢 MESA ACTIVA</span>
+                </div>
+                <div class="ruleta-body-info">
+                  <span class="ruleta-wheel-icon">🎰</span>
+                  <div class="ruleta-text-wrap">
+                    <span class="ruleta-main-txt">Doble Cero (0, 00) • 36 Números</span>
+                    <span class="ruleta-sub-txt">Monitoreo activo de cilindro y apuestas en paño</span>
+                  </div>
+                </div>
+              </div>
+            {:else if badge.has_cards}
+              {#if badge.juego_tipo === 'TEXAS_BONUS'}
+                <!-- TABLERO TEXAS BONUS (COMUNITARIAS FLOP/TURN/RIVER + REGLA CROUPIER ≥ 1 PAR) -->
+                <div class="ia-live-pokerboard texas">
+                  <div class="poker-dealer-card texas" class:califica-ok={badge.califica === true} class:no-califica-ok={badge.califica === false}>
+                    <div class="poker-card-top">
+                      <span class="poker-title-lbl">TEXAS BONUS • CARTAS EN PAÑO</span>
+                      <span class="poker-qual-badge" class:is-califica={badge.califica === true} class:is-no-califica={badge.califica === false}>
+                        {#if badge.califica === true}
+                          🟢 CROUPIER CALIFICA (≥ 1 PAR)
+                        {:else if badge.califica === false}
+                          ⚠️ ANTE EMPUJA (&lt; 1 PAR)
+                        {:else}
+                          ⏳ REPARTIENDO
+                        {/if}
+                      </span>
+                    </div>
+
+                    <div class="cards-strip poker-cards-strip">
+                      {#if badge.dealer_cards && badge.dealer_cards.length > 0}
+                        {#each badge.dealer_cards.slice(0, 7) as c}
+                          <span class="card-chip poker texas" class:back-chip={c.val.includes('BACK')} title="{c.val}">
+                            {c.val}
+                          </span>
+                        {/each}
+                      {:else}
+                        <span class="no-cards">Repartiendo mano de Texas Bonus...</span>
+                      {/if}
+                    </div>
+
+                    <div class="poker-hand-desc">
+                      {#if badge.dealer_jugada}
+                        🃏 {badge.dealer_jugada}
+                      {:else}
+                        <span class="text-muted">{badge.detalle || 'Evaluando paño...'}</span>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BANNER DE ESTADO TEXAS BONUS -->
+                <div class="ia-winner-banner" class:poker-califica={badge.califica === true} class:poker-no-califica={badge.califica === false}>
+                  {#if badge.califica === true}
+                    🏆 {badge.dealer_jugada || 'Mano válida'} • Croupier Califica
+                  {:else if badge.califica === false}
+                    ⚠️ ANTE EMPUJA • Croupier Menor a un Par
+                  {:else}
+                    🃏 REPARTIENDO CARTAS...
+                  {/if}
+                </div>
+              {:else if badge.juego_tipo === 'POKER_CARIBENO'}
                 <!-- TABLERO POKER CARIBEÑO (DEALER 5 CARTAS + REGLAS CALIFICA/NO CALIFICA) -->
                 <div class="ia-live-pokerboard">
                   <div class="poker-dealer-card" class:califica-ok={badge.califica === true} class:no-califica-ok={badge.califica === false}>
@@ -1669,6 +1782,79 @@
     flex-direction: column;
     gap: 6px;
     border-top: 3px solid #eab308;
+  }
+
+  .poker-dealer-card.texas {
+    border-top-color: #f97316;
+  }
+
+  .card-chip.poker.texas {
+    border-top: 3px solid #f97316;
+  }
+
+  /* Tarjeta Ruleta Americana */
+  .ia-ruleta-card {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 4px 0;
+    border-top: 3px solid #10b981;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ruleta-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .ruleta-title-lbl {
+    font-size: 11px;
+    font-weight: 900;
+    color: #6ee7b7;
+    letter-spacing: 0.5px;
+  }
+
+  .ruleta-status-badge {
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .ruleta-body-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 6px 8px;
+    border-radius: 6px;
+  }
+
+  .ruleta-wheel-icon {
+    font-size: 22px;
+  }
+
+  .ruleta-text-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ruleta-main-txt {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #ffffff;
+  }
+
+  .ruleta-sub-txt {
+    font-size: 9.5px;
+    color: #94a3b8;
   }
 
   .poker-dealer-card.califica-ok {

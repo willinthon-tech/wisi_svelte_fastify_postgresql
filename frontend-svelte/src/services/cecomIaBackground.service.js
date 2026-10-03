@@ -129,33 +129,49 @@ function processAiEngineResults(aiData, now) {
       let juegoTipo = liveAi.juego_tipo;
       if (!juegoTipo) {
         const txt = `${mesa?.mesa_nombre || liveAi.mesa_nombre || ''} ${mesa?.juego_nombre || liveAi.juego || ''}`.toUpperCase();
-        if (txt.includes('PK') || txt.includes('POKER') || txt.includes('STUD')) juegoTipo = 'POKER_CARIBENO';
+        if (txt.includes('RA') || txt.includes('RT') || txt.includes('RULETA') || txt.includes('ROULETTE')) juegoTipo = 'RULETA';
+        else if (txt.includes('TX') || txt.includes('TB') || txt.includes('TEXAS') || txt.includes('HOLDEM') || txt.includes('BONUS')) juegoTipo = 'TEXAS_BONUS';
+        else if (txt.includes('PK') || txt.includes('CARIBE') || txt.includes('STUD')) juegoTipo = 'POKER_CARIBENO';
+        else if (txt.includes('POKER') && !txt.includes('TEXAS')) juegoTipo = 'POKER_CARIBENO';
         else if (txt.includes('BJ') || txt.includes('BLACKJACK')) juegoTipo = 'BLACKJACK';
         else juegoTipo = 'BACCARAT';
       }
 
       let badgeEvento = 'SIN JUGADA (EN ESPERA)';
-      if (!hasCards && (liveAi.estado_mesa === 'ESPERANDO' || liveAi.estado_mesa === 'SIN JUGADA' || liveAi.ganador === 'SIN JUGADA' || liveAi.ganador === 'ESPERANDO')) {
+      if (juegoTipo === 'RULETA') {
+        badgeEvento = 'CILINDRO / PAÑO ACTIVO';
+      } else if (!hasCards && (liveAi.estado_mesa === 'ESPERANDO' || liveAi.estado_mesa === 'SIN JUGADA' || liveAi.ganador === 'SIN JUGADA' || liveAi.ganador === 'ESPERANDO')) {
         badgeEvento = 'SIN JUGADA (EN ESPERA)';
       } else if (liveAi.ganador && liveAi.ganador !== 'ESPERANDO' && liveAi.ganador !== 'SIN JUGADA') {
-        badgeEvento = juegoTipo === 'POKER_CARIBENO' ? liveAi.ganador : `${liveAi.ganador} GANA`;
+        badgeEvento = (juegoTipo === 'POKER_CARIBENO' || juegoTipo === 'TEXAS_BONUS') ? liveAi.ganador : `${liveAi.ganador} GANA`;
       } else if (liveAi.estado_mesa === 'REPARTIENDO') {
         badgeEvento = 'REPARTIENDO CARTAS...';
       } else {
         badgeEvento = liveAi.estado_mesa || 'SIN JUGADA (EN ESPERA)';
       }
 
-      let desc = liveAi.detalle || 'Mesa despejada (En espera)';
-      if (!hasCards) {
+      let desc = liveAi.detalle || (juegoTipo === 'RULETA' ? 'Ruleta Americana (0, 00, 1-36)' : 'Mesa despejada (En espera)');
+      if (juegoTipo === 'RULETA') {
+        desc = 'Mesa de Ruleta Americana activa (0, 00, 1-36)';
+      } else if (!hasCards) {
         desc = 'Mesa despejada - Sin jugada activa en paño';
       } else if (liveAi.resultado && liveAi.resultado.descripcion) {
         desc = `${liveAi.resultado.descripcion} | ${liveAi.detalle}`;
       }
 
+      let resolvedJuegoNombre = mesa?.juego_nombre || liveAi.juego;
+      if (!resolvedJuegoNombre || resolvedJuegoNombre === 'General') {
+        if (juegoTipo === 'TEXAS_BONUS') resolvedJuegoNombre = 'Texas Bonus';
+        else if (juegoTipo === 'RULETA') resolvedJuegoNombre = 'Ruleta Americana';
+        else if (juegoTipo === 'POKER_CARIBENO') resolvedJuegoNombre = 'Poker Caribeño';
+        else if (juegoTipo === 'BLACKJACK') resolvedJuegoNombre = 'Blackjack';
+        else resolvedJuegoNombre = 'Baccarat';
+      }
+
       next[mId] = {
         mesa_uuid: mId,
         mesa_nombre: mesa?.mesa_nombre || liveAi.mesa_nombre || 'Mesa',
-        juego_nombre: mesa?.juego_nombre || liveAi.juego || (juegoTipo === 'POKER_CARIBENO' ? 'Poker Caribeño' : 'Baccarat'),
+        juego_nombre: resolvedJuegoNombre,
         ultimo_evento: badgeEvento,
         descripcion: desc,
         nivel_alerta: 'INFO',
@@ -170,7 +186,7 @@ function processAiEngineResults(aiData, now) {
         ganador: liveAi.ganador || 'SIN JUGADA',
         punto: liveAi.punto || [],
         banca: liveAi.banca || [],
-        dealer_cards: liveAi.dealer_cards || (juegoTipo === 'POKER_CARIBENO' ? (liveAi.punto?.concat(liveAi.banca || []) || []) : []),
+        dealer_cards: liveAi.dealer_cards || ((juegoTipo === 'POKER_CARIBENO' || juegoTipo === 'TEXAS_BONUS') ? (liveAi.punto?.concat(liveAi.banca || []) || []) : []),
         dealer_jugada: liveAi.dealer_jugada || '',
         califica: liveAi.califica,
         detalle: liveAi.detalle || '',
