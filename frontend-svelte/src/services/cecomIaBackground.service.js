@@ -137,8 +137,12 @@ function processAiEngineResults(aiData, now) {
         else juegoTipo = 'BACCARAT';
       }
 
+      const isBanca = Boolean(liveAi.is_presentando_banca || liveAi.estado_mesa === 'PRESENTANDO_BANCA' || liveAi.ganador === 'PRESENTANDO BANCA');
+
       let badgeEvento = 'SIN JUGADA (EN ESPERA)';
-      if (juegoTipo === 'RULETA') {
+      if (isBanca) {
+        badgeEvento = '🟡 PRESENTANDO BANCA';
+      } else if (juegoTipo === 'RULETA') {
         badgeEvento = 'CILINDRO / PAÑO ACTIVO';
       } else if (!hasCards && (liveAi.estado_mesa === 'ESPERANDO' || liveAi.estado_mesa === 'SIN JUGADA' || liveAi.ganador === 'SIN JUGADA' || liveAi.ganador === 'ESPERANDO')) {
         badgeEvento = 'SIN JUGADA (EN ESPERA)';
@@ -151,7 +155,9 @@ function processAiEngineResults(aiData, now) {
       }
 
       let desc = liveAi.detalle || (juegoTipo === 'RULETA' ? 'Ruleta Americana (0, 00, 1-36)' : 'Mesa despejada (En espera)');
-      if (juegoTipo === 'RULETA') {
+      if (isBanca) {
+        desc = liveAi.detalle || 'Presentación de banca (Conteo e inventario de fichas en paño)';
+      } else if (juegoTipo === 'RULETA') {
         desc = 'Mesa de Ruleta Americana activa (0, 00, 1-36)';
       } else if (!hasCards) {
         desc = 'Mesa despejada - Sin jugada activa en paño';
@@ -181,6 +187,8 @@ function processAiEngineResults(aiData, now) {
         // DATOS REALES DE YOLO Y REGLAS DE CASINO:
         ai_active: true,
         juego_tipo: juegoTipo,
+        is_presentando_banca: isBanca,
+        banca_stacks: liveAi.banca_stacks || 0,
         scoreP: liveAi.scoreP ?? 0,
         scoreB: liveAi.scoreB ?? 0,
         ganador: liveAi.ganador || 'SIN JUGADA',

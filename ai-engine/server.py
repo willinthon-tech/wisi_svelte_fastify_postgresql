@@ -713,6 +713,80 @@ def stream_worker(mesa_uuid, url_rtsp):
 # BUCLE DE INFERENCIA CONTINUA IA + REGLAS DE JUEGO
 # ====================================================================
 
+# ====================================================================
+# DETECCIÓN DE PRESENTACIÓN DE BANCA (ARQUEO / INVENTARIO DE FICHAS)
+# ====================================================================
+
+banca_presentation_memory = {}
+
+def detectar_fichas_banca(frame, tipo_juego='BACCARAT'):
+    """
+    Detecta si el croupier está presentando banca (sacando fichas del chipletero
+    y colocándolas en el paño en columnas/pilas para verificación y conteo).
+    """
+    if frame is None or frame.size == 0:
+        return False, []
+
+    h, w = frame.shape[:2]
+
+    # Zona de presentación (delante del chipletero, parte inferior central en mesas de cartas)
+    if tipo_juego == 'RULETA':
+        y1, y2 = int(0.20 * h), int(0.75 * h)
+        x1, x2 = int(0.20 * w), int(0.80 * w)
+    else:
+        y1, y2 = int(0.48 * h), int(0.82 * h)
+        x1, x2 = int(0.22 * w), int(0.78 * w)
+
+    roi = frame[y1:y2, x1:x2]
+    if roi.size == 0:
+        return False, []
+
+    # Normalizar ROI para análisis invariante a resolución
+    target_w = 400
+    target_h = max(20, int(roi.shape[0] * (400 / max(1, roi.shape[1]))))
+    roi_norm = cv2.resize(roi, (target_w, target_h), interpolation=cv2.INTER_AREA)
+
+    gray = cv2.cvtColor(roi_norm, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    # Filtro Sobel para capturar estrías de fichas apiladas
+    grad_x = cv2.Sobel(blurred, cv2.CV_16S, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(blurred, cv2.CV_16S, 0, 1, ksize=3)
+    abs_grad_x = cv2.convertScaleAbs(grad_x)
+    abs_grad_y = cv2.convertScaleAbs(grad_y)
+    grad = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
+
+    _, thresh = cv2.threshold(grad, 45, 255, cv2.THRESH_BINARY)
+    kernel_stack = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 5))
+    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_stack)
+
+    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    scale_x = roi.shape[1] / target_w
+    scale_y = roi.shape[0] / target_h
+
+    detected_stacks = []
+    for cnt in contours:
+        bx, by, bw, bh = cv2.boundingRect(cnt)
+        if 10 <= bw <= 75 and 12 <= bh <= 110:
+            crop_grad = grad[by:by+bh, bx:bx+bw]
+            if crop_grad.size > 0 and np.mean(crop_grad > 35) > 0.12:
+                orig_x1 = x1 + int(bx * scale_x)
+                orig_y1 = y1 + int(by * scale_y)
+                orig_x2 = x1 + int((bx + bw) * scale_x)
+                orig_y2 = y1 + int((by + bh) * scale_y)
+                detected_stacks.append([orig_x1, orig_y1, orig_x2, orig_y2])
+
+    clean_boxes = []
+    for b in detected_stacks:
+        cx = (b[0] + b[2]) / 2
+        cy = (b[1] + b[3]) / 2
+        if not any(abs(cx - (cb[0]+cb[2])/2) < (orig_x2-orig_x1)*0.7 and abs(cy - (cb[1]+cb[3])/2) < (orig_y2-orig_y1)*0.7 for cb in clean_boxes):
+            clean_boxes.append(b)
+
+    is_presentando = len(clean_boxes) >= 2
+    return is_presentando, clean_boxes
+
 mesa_round_memory = {}
 
 def ai_inference_loop():
@@ -730,8 +804,18 @@ def ai_inference_loop():
                 # Determinar juego exacto de la mesa
                 tipo_juego = resolve_game_type(cfg.get('nombre'), cfg.get('juego'))
 
-                # Inferencia con YOLO (imgsz=1280 para máxima resolución y detección nítida de cartas)
-                results = model(frame, verbose=False, conf=0.35, iou=0.25, imgsz=1280)
+                # Normalización inteligente de resolución para máxima velocidad en CPU:
+                # La imagen original 'frame' se preserva intacta para visualización y aprendizaje activo,
+                # mientras que la inferencia YOLO se escala a 1280px para respuesta ultrarrápida.
+                h_f, w_f = frame.shape[:2]
+                if w_f > 1280:
+                    infer_scale = 1280.0 / w_f
+                    infer_frame = cv2.resize(frame, (1280, int(h_f * infer_scale)), interpolation=cv2.INTER_AREA)
+                    results = model(infer_frame, verbose=False, conf=0.35, iou=0.25, imgsz=640)
+                    box_scale = 1.0 / infer_scale
+                else:
+                    results = model(frame, verbose=False, conf=0.35, iou=0.25, imgsz=640)
+                    box_scale = 1.0
 
                 raw_cards = []
                 guardar_por_duda = False
@@ -744,7 +828,7 @@ def ai_inference_loop():
                     if 0.35 <= conf <= 0.65:
                         guardar_por_duda = True
 
-                    x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+                    x1, y1, x2, y2 = [int(v * box_scale) for v in box.xyxy[0].tolist()]
                     cx = (x1 + x2) / 2
                     cy = (y1 + y2) / 2
 
@@ -802,8 +886,14 @@ def ai_inference_loop():
                     else:
                         mesa_round_memory.pop(mesa_uuid, None)
 
+                is_presentando_banca = False
+                chip_boxes = []
                 if count == 0:
-                    estado_mesa = "SIN JUGADA"
+                    is_presentando_banca, chip_boxes = detectar_fichas_banca(frame, tipo_juego)
+                    if is_presentando_banca:
+                        estado_mesa = "PRESENTANDO_BANCA"
+                    else:
+                        estado_mesa = "SIN JUGADA"
                     punto_list = []
                     banca_list = []
                 elif count > 6 and tipo_juego == 'BACCARAT':
@@ -1031,8 +1121,31 @@ def ai_inference_loop():
                     cv2.rectangle(img_plot, (x1, top_y - h - 10), (x1 + w + 8, top_y), color, -1)
                     cv2.putText(img_plot, label, (x1 + 4, top_y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 0, 0), 2)
 
-                # Convertir imagen a base64 ligera para transmisión
-                _, buf = cv2.imencode('.jpg', img_plot, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+                # Si se detectó presentación de banca, actualizar estado e ilustrar en video
+                live_results[mesa_uuid]["is_presentando_banca"] = is_presentando_banca
+                live_results[mesa_uuid]["banca_stacks"] = len(chip_boxes)
+                if is_presentando_banca:
+                    live_results[mesa_uuid]["estado_mesa"] = "PRESENTANDO_BANCA"
+                    live_results[mesa_uuid]["ganador"] = "PRESENTANDO BANCA"
+                    live_results[mesa_uuid]["detalle"] = f"Inicio de presentación de banca ({len(chip_boxes)} pilas de fichas en paño)"
+
+                    if chip_boxes:
+                        for b in chip_boxes:
+                            bx1, by1, bx2, by2 = b
+                            cv2.rectangle(img_plot, (bx1, by1), (bx2, by2), (0, 215, 255), 2)
+                        min_bx = min(b[0] for b in chip_boxes)
+                        min_by = min(b[1] for b in chip_boxes)
+                        max_bx = max(b[2] for b in chip_boxes)
+                        cv2.rectangle(img_plot, (min_bx - 4, max(0, min_by - 28)), (max_bx + 4, max(0, min_by - 2)), (0, 215, 255), -1)
+                        cv2.putText(img_plot, "PRESENTANDO BANCA", (min_bx + 4, max(18, min_by - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+
+                # Generar vista previa optimizada para la interfaz (alta resolución interna, ~25KB para 0 lag)
+                hp, wp = img_plot.shape[:2]
+                target_prev_w = 480
+                target_prev_h = max(10, int(hp * (target_prev_w / max(1, wp))))
+                img_preview = cv2.resize(img_plot, (target_prev_w, target_prev_h), interpolation=cv2.INTER_AREA)
+
+                _, buf = cv2.imencode('.jpg', img_preview, [int(cv2.IMWRITE_JPEG_QUALITY), 62])
                 b64_img = base64.b64encode(buf).decode('utf-8')
                 live_results[mesa_uuid]["image_b64"] = b64_img
 
@@ -1048,6 +1161,34 @@ def ai_inference_loop():
                     if detalle_mano != ultimo:
                         historial_guardado[mesa_uuid] = detalle_mano
                         enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego_label)
+
+                # Control y registro automático de eventos de Presentación de Banca
+                b_mem = banca_presentation_memory.get(mesa_uuid)
+                if is_presentando_banca:
+                    if not b_mem or not b_mem.get('active'):
+                        banca_presentation_memory[mesa_uuid] = {
+                            'active': True,
+                            'start_time': now_ts,
+                            'last_seen': now_ts
+                        }
+                        enviar_evento_a_wisi(mesa_uuid, cfg, {
+                            'tipo_evento': 'PRESENTACION_BANCA',
+                            'win': 'INICIO PRESENTACIÓN DE BANCA',
+                            'es_novedad': False,
+                            'nivel_alerta': 'INFO'
+                        }, f"Inicio de presentación de banca ({len(chip_boxes)} columnas/pilas de fichas en paño)", b64_img, juego_label)
+                    else:
+                        b_mem['last_seen'] = now_ts
+                else:
+                    if b_mem and b_mem.get('active'):
+                        if now_ts - b_mem.get('last_seen', 0) > 4.5:
+                            b_mem['active'] = False
+                            enviar_evento_a_wisi(mesa_uuid, cfg, {
+                                'tipo_evento': 'PRESENTACION_BANCA',
+                                'win': 'FINALIZACIÓN PRESENTACIÓN DE BANCA',
+                                'es_novedad': False,
+                                'nivel_alerta': 'INFO'
+                            }, "Finalización de presentación de banca (Fichas resguardadas en chipletero)", b64_img, juego_label)
 
             except Exception as e:
                 print(f"❌ Error en inferencia de mesa {mesa_uuid}: {e}")
@@ -1256,17 +1397,19 @@ def actualizar_mesas(mesas_list):
             threading.Thread(target=stream_worker, args=(uuid, url_rtsp), daemon=True).start()
 
 def cargar_mesas_desde_fastify():
-    for api_url in WISI_API_URLS:
-        try:
-            r = requests.get(f"{api_url}/mesas-con-camaras", timeout=5)
-            if r.status_code == 200:
-                data = r.json().get('data', [])
-                if data:
-                    print(f"📥 [Wisi Config] {len(data)} mesas con cámaras obtenidas de {api_url}")
-                    actualizar_mesas(data)
-                    return
-        except Exception:
-            pass
+    for intento in range(3):
+        for api_url in WISI_API_URLS:
+            try:
+                r = requests.get(f"{api_url}/mesas-con-camaras", timeout=8)
+                if r.status_code == 200:
+                    data = r.json().get('data', [])
+                    if data:
+                        print(f"📥 [Wisi Config] {len(data)} mesas con cámaras obtenidas de {api_url}")
+                        actualizar_mesas(data)
+                        return
+            except Exception:
+                pass
+        time.sleep(1)
     print("⚠️ No se pudo sincronizar automáticamente con backend Wisi en ninguna URL")
 
 if __name__ == '__main__':

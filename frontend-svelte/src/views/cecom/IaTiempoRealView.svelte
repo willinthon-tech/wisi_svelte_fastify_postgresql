@@ -651,7 +651,13 @@
                   loading="eager"
                 />
                 <span class="cctv-live-tag">
-                  <span class="live-dot-red"></span> {badge.has_cards ? '🔴 JUGADA EN CURSO' : '🟢 MESA DESPEJADA'}
+                  {#if badge.has_cards}
+                    <span class="live-dot-red"></span> 🔴 JUGADA EN CURSO
+                  {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
+                    <span class="live-dot-amber"></span> 🟡 PRESENTANDO BANCA
+                  {:else}
+                    <span class="live-dot-green"></span> 🟢 MESA DESPEJADA
+                  {/if}
                 </span>
               {:else}
                 <div class="card-cctv-placeholder">
@@ -846,6 +852,14 @@
                   {/each}
                 </div>
               {/if}
+            {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
+              <!-- PRESENTANDO BANCA -->
+              <div class="presentando-banca-box">
+                <span class="presentando-banca-badge">🟡 PRESENTANDO BANCA</span>
+                <span class="presentando-banca-hint">
+                  {badge.descripcion || badge.detalle || 'Inicio de presentación de banca • Conteo e inventario de fichas'}
+                </span>
+              </div>
             {:else}
               <!-- SIN JUGADA (EN ESPERA) -->
               <div class="sin-jugada-box">
@@ -2066,7 +2080,27 @@
     animation: blink-dot-red 1.2s infinite ease-in-out;
   }
 
+  .live-dot-amber {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #eab308;
+    animation: blink-dot-amber 1.2s infinite ease-in-out;
+  }
+
+  .live-dot-green {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+  }
+
   @keyframes blink-dot-red {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.85); }
+  }
+
+  @keyframes blink-dot-amber {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.3; transform: scale(0.85); }
   }
@@ -2113,6 +2147,35 @@
     font-size: 10px;
     color: #94a3b8;
     font-weight: 500;
+  }
+
+  /* Estado Presentando Banca */
+  .presentando-banca-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 10px;
+    background: #fefce8;
+    border: 1px solid #fef08a;
+    border-radius: 8px;
+    margin: 4px 0;
+    text-align: center;
+    gap: 3px;
+    box-shadow: 0 2px 4px rgba(234, 179, 8, 0.08);
+  }
+
+  .presentando-banca-badge {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #a16207;
+    letter-spacing: 0.3px;
+  }
+
+  .presentando-banca-hint {
+    font-size: 10px;
+    color: #ca8a04;
+    font-weight: 600;
   }
 
   /* Footer Limpio y Elegante */
