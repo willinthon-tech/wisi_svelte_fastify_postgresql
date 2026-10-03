@@ -155,14 +155,26 @@ def motor_baccarat(punto_cards, banca_cards):
     nP = len(punto_cards)
     nB = len(banca_cards)
 
+    if nP == 0 and nB == 0:
+        return {
+            "win": "SIN JUGADA",
+            "scoreP": 0,
+            "scoreB": 0,
+            "listo": False,
+            "natural": False,
+            "tipo_evento": "JUGADA",
+            "descripcion": "Mesa despejada (Sin jugada activa)"
+        }
+
     if nP < 2 or nB < 2:
         return {
-            "win": "ESPERANDO",
+            "win": "REPARTIENDO",
             "scoreP": sP,
             "scoreB": sB,
             "listo": False,
+            "natural": False,
             "tipo_evento": "JUGADA",
-            "descripcion": "Repartiendo cartas iniciales"
+            "descripcion": f"Repartiendo cartas ({nP} Punto, {nB} Banca)"
         }
 
     # Natural 8 o 9 (Se termina de inmediato, ninguna mano pide 3ra carta)
@@ -314,6 +326,16 @@ def motor_poker_caribeno(cards):
     parsed = [parse_card_info(c.get('val')) for c in cards]
     up_cards = [c for c in parsed if not c['is_back']]
     back_cards = [c for c in parsed if c['is_back']]
+
+    if len(cards) == 0:
+        return {
+            "win": "SIN JUGADA",
+            "califica": None,
+            "jugada": "",
+            "listo": False,
+            "tipo_evento": "JUGADA",
+            "descripcion": "Mesa despejada (Sin jugada activa)"
+        }
 
     if len(cards) < 5 or len(back_cards) > 0:
         up_display = [c['display'] for c in up_cards]
@@ -473,6 +495,8 @@ def stream_worker(mesa_uuid, url_rtsp):
 # BUCLE DE INFERENCIA CONTINUA IA + REGLAS DE JUEGO
 # ====================================================================
 
+mesa_round_memory = {}
+
 def ai_inference_loop():
     print("🧠 [AI Inference Loop] Iniciando análisis continuo de mesas...")
     while True:
@@ -532,8 +556,36 @@ def ai_inference_loop():
                 detections = []
                 estado_mesa = "NORMAL"
 
+                now_ts = time.time()
+                mem = mesa_round_memory.get(mesa_uuid)
+
+                if count > 0:
+                    if not mem or (now_ts - mem.get('last_seen', 0) > 4.5):
+                        mesa_round_memory[mesa_uuid] = {
+                            'cards': raw_cards,
+                            'last_seen': now_ts,
+                            'count': count
+                        }
+                    else:
+                        # Si antes teníamos más cartas y de repente disminuyó (ej: brazo del dealer tapando),
+                        # retenemos las cartas anteriores durante hasta 3.5 segundos
+                        if count < mem.get('count', 0) and (now_ts - mem.get('last_seen', 0) < 3.5):
+                            raw_cards = mem['cards']
+                            count = len(raw_cards)
+                        else:
+                            mem['cards'] = raw_cards
+                            mem['count'] = count
+                            mem['last_seen'] = now_ts
+                else:
+                    # count == 0
+                    if mem and (now_ts - mem.get('last_seen', 0) < 3.5):
+                        raw_cards = mem['cards']
+                        count = len(raw_cards)
+                    else:
+                        mesa_round_memory.pop(mesa_uuid, None)
+
                 if count == 0:
-                    estado_mesa = "ESPERANDO"
+                    estado_mesa = "SIN JUGADA"
                     punto_list = []
                     banca_list = []
                 elif count > 6 and tipo_juego == 'BACCARAT':

@@ -124,7 +124,7 @@ function processAiEngineResults(aiData, now) {
       const hasCards = (liveAi.punto && liveAi.punto.length > 0) ||
                        (liveAi.banca && liveAi.banca.length > 0) ||
                        (liveAi.dealer_cards && liveAi.dealer_cards.length > 0);
-      const isMoving = hasCards || liveAi.estado_mesa === 'REPARTIENDO' || liveAi.estado_mesa === 'NORMAL';
+      const isMoving = hasCards && (liveAi.estado_mesa === 'REPARTIENDO' || liveAi.estado_mesa === 'NORMAL');
 
       let juegoTipo = liveAi.juego_tipo;
       if (!juegoTipo) {
@@ -134,15 +134,21 @@ function processAiEngineResults(aiData, now) {
         else juegoTipo = 'BACCARAT';
       }
 
-      let badgeEvento = 'EN ESPERA';
-      if (liveAi.ganador && liveAi.ganador !== 'ESPERANDO') {
+      let badgeEvento = 'SIN JUGADA (EN ESPERA)';
+      if (!hasCards && (liveAi.estado_mesa === 'ESPERANDO' || liveAi.estado_mesa === 'SIN JUGADA' || liveAi.ganador === 'SIN JUGADA' || liveAi.ganador === 'ESPERANDO')) {
+        badgeEvento = 'SIN JUGADA (EN ESPERA)';
+      } else if (liveAi.ganador && liveAi.ganador !== 'ESPERANDO' && liveAi.ganador !== 'SIN JUGADA') {
         badgeEvento = juegoTipo === 'POKER_CARIBENO' ? liveAi.ganador : `${liveAi.ganador} GANA`;
-      } else if (liveAi.estado_mesa) {
-        badgeEvento = liveAi.estado_mesa;
+      } else if (liveAi.estado_mesa === 'REPARTIENDO') {
+        badgeEvento = 'REPARTIENDO CARTAS...';
+      } else {
+        badgeEvento = liveAi.estado_mesa || 'SIN JUGADA (EN ESPERA)';
       }
 
-      let desc = liveAi.detalle || 'Mesa en monitoreo continuo';
-      if (liveAi.resultado && liveAi.resultado.descripcion) {
+      let desc = liveAi.detalle || 'Mesa despejada (En espera)';
+      if (!hasCards) {
+        desc = 'Mesa despejada - Sin jugada activa en paño';
+      } else if (liveAi.resultado && liveAi.resultado.descripcion) {
         desc = `${liveAi.resultado.descripcion} | ${liveAi.detalle}`;
       }
 
@@ -161,14 +167,14 @@ function processAiEngineResults(aiData, now) {
         juego_tipo: juegoTipo,
         scoreP: liveAi.scoreP ?? 0,
         scoreB: liveAi.scoreB ?? 0,
-        ganador: liveAi.ganador || 'ESPERANDO',
+        ganador: liveAi.ganador || 'SIN JUGADA',
         punto: liveAi.punto || [],
         banca: liveAi.banca || [],
         dealer_cards: liveAi.dealer_cards || (juegoTipo === 'POKER_CARIBENO' ? (liveAi.punto?.concat(liveAi.banca || []) || []) : []),
         dealer_jugada: liveAi.dealer_jugada || '',
         califica: liveAi.califica,
         detalle: liveAi.detalle || '',
-        estado_mesa: liveAi.estado_mesa || 'ESPERANDO',
+        estado_mesa: liveAi.estado_mesa || 'SIN JUGADA',
         resultado: liveAi.resultado || {},
         image_b64: liveAi.image_b64 || '',
         timestamp: liveAi.timestamp || (now / 1000)
@@ -232,7 +238,7 @@ async function sampleLiveMesasMotion() {
 
   // 1. INTENTO PRIMARIO: Consultar el Motor de IA Python Local (YOLO en 127.0.0.1:5005)
   try {
-    const aiRes = await fetch('http://127.0.0.1:5005/all_mesas', { signal: AbortSignal.timeout(1200) });
+    const aiRes = await fetch('http://127.0.0.1:5005/all_mesas', { signal: AbortSignal.timeout(3500) });
     if (aiRes.ok) {
       const aiData = await aiRes.json();
       if (aiData && typeof aiData === 'object' && Object.keys(aiData).length > 0) {
@@ -245,8 +251,6 @@ async function sampleLiveMesasMotion() {
   }
 
   // 2. INTENTO SECUNDARIO (MULTI-PC): Consultar el estado sincronizado de IA en el backend central (wisi.space)
-  // Esto permite que CUALQUIER PC que instale la versión de Windows vea las cartas, jugadas y streaming
-  // aunque el motor Python esté corriendo en otra máquina de la red.
   try {
     const hubRes = await getCecomIaLiveStatus();
     if (hubRes && hubRes.success && hubRes.data && Object.keys(hubRes.data).length > 0) {
@@ -259,104 +263,30 @@ async function sampleLiveMesasMotion() {
 
   if (!isTauriWindows()) return;
 
-  // 3. FALLBACK TERCIARIO: Detección por sensor de movimiento ISAPI (si el motor Python estuviera apagado)
+  // 3. FALLBACK TERCIARIO: En caso de no haber conexión con el motor, mantener estado en espera sin falsos positivos
   for (const mesa of cachedMesas) {
     const mesaUuid = mesa.mesa_uuid || mesa.uuid || mesa.id;
-    const ip = mesa.dispositivo_ip;
     const canal = parseInt(mesa.numero_canal);
-    const user = mesa.dispositivo_usuario || 'admin';
-    const clave = mesa.dispositivo_clave || '';
 
-    if (!mesaUuid || !ip || isNaN(canal)) continue;
-
-    try {
-      const resPic = await callLocalIsapi(
-        ip,
-        `/ISAPI/Streaming/channels/${canal}01/picture`,
-        'GET',
-        null,
-        user,
-        clave,
-        3
-      );
-
-      if (resPic && resPic.ok && resPic.data) {
-        const currentLen = resPic.data.length;
-        const currentHash = getFrameSampleHash(resPic.data);
-        const prev = frameHistoryMap[mesaUuid];
-
-        if (prev) {
-          const lenDiff = Math.abs(currentLen - prev.len);
-          const hashDiff = currentHash !== prev.hash;
-          const isMoving = lenDiff > 80 || (hashDiff && lenDiff > 30);
-
-          if (isMoving) {
-            idleStartTimeMap[mesaUuid] = null;
-            frameHistoryMap[mesaUuid] = {
-              len: currentLen,
-              hash: currentHash,
-              isMoving: true,
-              consecutiveMoves: (prev.consecutiveMoves || 0) + 1,
-              lastMoveTime: now
-            };
-
-            mesasLiveStatusStore.update(map => ({
-              ...map,
-              [mesaUuid]: {
-                mesa_uuid: mesaUuid,
-                mesa_nombre: mesa.mesa_nombre || 'Mesa',
-                juego_nombre: mesa.juego_nombre || 'Juego',
-                ultimo_evento: 'JUGANDO - MANO EN PROCESO',
-                descripcion: `Movimiento continuo detectado en paño (${mesa.camara_nombre || `Canal ${canal}`})`,
-                nivel_alerta: 'INFO',
-                es_novedad: false,
-                is_moving: true,
-                ai_active: false,
-                hora: new Date().toLocaleTimeString()
-              }
-            }));
-          } else {
-            if (!idleStartTimeMap[mesaUuid]) {
-              idleStartTimeMap[mesaUuid] = now;
-            }
-            frameHistoryMap[mesaUuid] = {
-              len: currentLen,
-              hash: currentHash,
-              isMoving: false,
-              consecutiveMoves: 0,
-              lastMoveTime: prev.lastMoveTime || now
-            };
-
-            const idleDuration = now - idleStartTimeMap[mesaUuid];
-            if (idleDuration >= 10000) {
-              mesasLiveStatusStore.update(map => {
-                const curr = map[mesaUuid];
-                if (!curr || !curr.is_moving) return map;
-                return {
-                  ...map,
-                  [mesaUuid]: {
-                    ...curr,
-                    ultimo_evento: 'EN ESPERA',
-                    descripcion: 'Mesa despejada - En espera de próxima mano',
-                    is_moving: false
-                  }
-                };
-              });
-            }
-          }
-        } else {
-          frameHistoryMap[mesaUuid] = {
-            len: currentLen,
-            hash: currentHash,
-            isMoving: false,
-            consecutiveMoves: 0,
-            lastMoveTime: now
-          };
+    mesasLiveStatusStore.update(map => {
+      const curr = map[mesaUuid];
+      if (curr && curr.image_b64) return map; // Preservar si ya tiene imagen IA
+      return {
+        ...map,
+        [mesaUuid]: {
+          mesa_uuid: mesaUuid,
+          mesa_nombre: mesa.mesa_nombre || 'Mesa',
+          juego_nombre: mesa.juego_nombre || 'Juego',
+          ultimo_evento: 'SIN JUGADA (EN ESPERA)',
+          descripcion: `Mesa despejada (Canal ${canal || 1}) - En espera de jugada`,
+          nivel_alerta: 'INFO',
+          es_novedad: false,
+          is_moving: false,
+          ai_active: true,
+          hora: new Date().toLocaleTimeString()
         }
-      }
-    } catch (e) {
-      console.debug(`[CECOM IA Live] Error en captura de canal ${canal} (${ip}):`, e.message);
-    }
+      };
+    });
   }
 }
 
@@ -375,7 +305,7 @@ async function pollRecentEvents() {
         for (const ev of res.data) {
           const mId = ev.mesa_uuid || ev.mesa_id;
           if (!mId) continue;
-          if (!statusMap[mId] || (!statusMap[mId].is_moving && statusMap[mId].ultimo_evento !== 'JUGANDO - MANO EN PROCESO')) {
+          if (!statusMap[mId] || !statusMap[mId].image_b64) {
             statusMap[mId] = {
               mesa_uuid: mId,
               mesa_nombre: ev.mesa_nombre || statusMap[mId]?.mesa_nombre || 'Mesa',

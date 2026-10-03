@@ -176,7 +176,6 @@
     return mesasConCamaras.map(m => {
       const mId = m.mesa_uuid || m.uuid || m.id;
       const live = liveMesasMap[mId] || null;
-      const isMoving = Boolean(live?.is_moving || live?.ultimo_evento === 'JUGADA' || live?.ultimo_evento === 'JUGANDO - MANO EN PROCESO');
 
       // 1. Nombre tal y como está en la base de datos (lo que el usuario configuró)
       const userConfigJuego = (m.juego_nombre && m.juego_nombre.trim()) ? m.juego_nombre.trim() : 'General';
@@ -218,6 +217,27 @@
       const verificadoIa = !isGeneral && isMatch;
       const motivoDiscrepancia = isGeneral ? 'CONFIG_GENERAL' : 'MISMATCH';
 
+      const hasCards = Boolean(
+        (live?.punto && live.punto.length > 0) ||
+        (live?.banca && live.banca.length > 0) ||
+        (live?.dealer_cards && live.dealer_cards.length > 0)
+      );
+      const isMoving = hasCards;
+
+      let ultimoEvento = 'SIN JUGADA (EN ESPERA)';
+      let descripcion = 'Mesa despejada - En espera';
+
+      if (hasCards) {
+        if (live?.ganador && live.ganador !== 'ESPERANDO' && live.ganador !== 'SIN JUGADA') {
+          ultimoEvento = juegoTipo === 'POKER_CARIBENO' ? live.ganador : `${live.ganador} GANA`;
+        } else if (live?.estado_mesa === 'REPARTIENDO') {
+          ultimoEvento = 'REPARTIENDO CARTAS...';
+        } else {
+          ultimoEvento = 'RONDA EN PROCESO';
+        }
+        descripcion = live?.descripcion || 'Jugada activa en paño';
+      }
+
       return {
         uuid: mId,
         nombre: m.mesa_nombre || m.nombre,
@@ -227,25 +247,28 @@
         verificado_ia: verificadoIa,
         motivo_discrepancia: motivoDiscrepancia,
         total_camaras: m.total_camaras || 1,
-        ultimo_evento: live?.ultimo_evento || "EN ESPERA",
-        descripcion: live?.descripcion || "Mesa activa en monitoreo",
+        canal: m.numero_canal,
+        camara_nombre: m.camara_nombre,
+        ultimo_evento: ultimoEvento,
+        descripcion: descripcion,
         hora: live?.hora || "",
         es_novedad: live?.es_novedad || false,
         nivel_alerta: live?.nivel_alerta || "INFO",
         is_moving: isMoving,
+        has_cards: hasCards,
         // DATOS EN VIVO IA (YOLO + REGLAS DE CASINO)
-        ai_active: live?.ai_active || false,
+        ai_active: true,
         juego_tipo: juegoTipo,
         scoreP: live?.scoreP ?? 0,
         scoreB: live?.scoreB ?? 0,
-        ganador: live?.ganador || 'ESPERANDO',
+        ganador: live?.ganador || 'SIN JUGADA',
         punto: live?.punto || [],
         banca: live?.banca || [],
         dealer_cards: live?.dealer_cards || (juegoTipo === 'POKER_CARIBENO' ? (live?.punto?.concat(live?.banca || []) || []) : []),
         dealer_jugada: live?.dealer_jugada || '',
         califica: live?.califica,
         detalle: live?.detalle || '',
-        estado_mesa: live?.estado_mesa || 'ESPERANDO',
+        estado_mesa: live?.estado_mesa || 'SIN JUGADA',
         resultado: live?.resultado || {},
         image_b64: live?.image_b64 || ''
       };
@@ -516,13 +539,12 @@
     {:else}
       <div class="badges-grid">
         {#each liveMesasBadges as badge (badge.uuid)}
-          {@const isSelected = selectedMesaUuid === badge.uuid}
           <div
             class="mesa-badge-card"
-            class:selected={isSelected}
-            class:is-active-playing={badge.is_moving}
+            class:is-active-playing={badge.has_cards && badge.is_moving}
             class:has-alert={badge.nivel_alerta === 'WARN' || badge.nivel_alerta === 'CRITICAL'}
           >
+            <!-- CABECERA: TÍTULO, VERIFICACIÓN Y JUEGO ASIGNADO -->
             <div class="badge-top">
               <div class="mesa-title-wrap">
                 <div class="mesa-title-row">
@@ -552,7 +574,12 @@
                   </button>
                 </div>
               </div>
-              <span class="status-indicator-dot" class:pulse={badge.is_moving} class:idle={!badge.is_moving} title={badge.is_moving ? "Actividad en paño detectada" : "En espera"}></span>
+              <span
+                class="status-indicator-dot"
+                class:pulse={badge.has_cards && badge.is_moving}
+                class:idle={!badge.has_cards || !badge.is_moving}
+                title={badge.has_cards ? "Jugada activa en paño" : "Sin jugada (en espera)"}
+              ></span>
             </div>
 
             <!-- BANNER DE DOBLE VERIFICACIÓN (CROSS-CHECK) -->
@@ -588,8 +615,28 @@
               </div>
             {/if}
 
-            <!-- TABLERO EN VIVO DE IA (SI HAY DETECCIÓN ACTIVA DE CARTAS) -->
-            {#if badge.ai_active}
+            <!-- CAMARITA EN VIVO DIRECTA ("LA CAMARITA CHIQUITICA" CON IA YOLO) -->
+            <div class="card-cctv-container">
+              {#if badge.image_b64}
+                <img
+                  src="data:image/jpeg;base64,{badge.image_b64}"
+                  alt="Feed CCTV {badge.nombre}"
+                  class="card-cctv-img"
+                  loading="eager"
+                />
+                <span class="cctv-live-tag">
+                  <span class="live-dot-red"></span> {badge.has_cards ? '🔴 JUGADA EN CURSO' : '🟢 MESA DESPEJADA'}
+                </span>
+              {:else}
+                <div class="card-cctv-placeholder">
+                  <span class="cctv-placeholder-spin">📹</span>
+                  <span>Conectando feed de mesa...</span>
+                </div>
+              {/if}
+            </div>
+
+            <!-- SECTOR DEL JUEGO / DE LA MANO (REGLAS CASINO) -->
+            {#if badge.has_cards}
               {#if badge.juego_tipo === 'POKER_CARIBENO'}
                 <!-- TABLERO POKER CARIBEÑO (DEALER 5 CARTAS + REGLAS CALIFICA/NO CALIFICA) -->
                 <div class="ia-live-pokerboard">
@@ -602,14 +649,14 @@
                         {:else if badge.califica === false}
                           🔴 NO CALIFICA
                         {:else}
-                          ⏳ {badge.ganador || 'REPARTIENDO'}
+                          ⏳ REPARTIENDO
                         {/if}
                       </span>
                     </div>
 
                     <div class="cards-strip poker-cards-strip">
                       {#if badge.dealer_cards && badge.dealer_cards.length > 0}
-                        {#each badge.dealer_cards as c}
+                        {#each badge.dealer_cards.slice(0, 5) as c}
                           <span class="card-chip poker" class:back-chip={c.val.includes('BACK')} title="{c.val}">
                             {c.val}
                           </span>
@@ -635,24 +682,22 @@
                     🏆 CASA CALIFICA: {badge.dealer_jugada || 'Mano válida'}
                   {:else if badge.califica === false}
                     ⚠️ CASA NO CALIFICA (Menor a As-Rey) • Ante Paga 1:1
-                  {:else if badge.estado_mesa === 'REPARTIENDO'}
-                    🃏 REPARTIENDO CARTAS...
                   {:else}
-                    ⏱️ {badge.ganador || 'EN ESPERA DE JUGADA'}
+                    🃏 REPARTIENDO CARTAS...
                   {/if}
                 </div>
               {:else}
-                <!-- TABLERO BACCARAT / GENERAL -->
+                <!-- TABLERO BACCARAT (MÁXIMO 3 CARTAS POR LADO SEGÚN REGLAMENTO) -->
                 <div class="ia-live-scoreboard">
-                  <!-- Lado Banca (Izquierda según visualización de la cámara) -->
+                  <!-- Lado Banca (Máximo 3 cartas) -->
                   <div class="score-side banca" class:winner={badge.ganador === 'BANCA'}>
                     <div class="side-header">
-                      <span class="side-lbl">BANCA</span>
+                      <span class="side-lbl">BANCA ({Math.min(badge.banca?.length || 0, 3)}/3)</span>
                       <span class="side-score">{badge.scoreB}</span>
                     </div>
                     <div class="cards-strip">
                       {#if badge.banca && badge.banca.length > 0}
-                        {#each badge.banca as c}
+                        {#each badge.banca.slice(0, 3) as c}
                           <span class="card-chip banca" title="{c.val}">{c.val}</span>
                         {/each}
                       {:else}
@@ -669,15 +714,15 @@
                     {/if}
                   </div>
 
-                  <!-- Lado Punto (Derecha según visualización de la cámara) -->
+                  <!-- Lado Punto (Máximo 3 cartas) -->
                   <div class="score-side punto" class:winner={badge.ganador === 'PUNTO'}>
                     <div class="side-header">
-                      <span class="side-lbl">PUNTO</span>
+                      <span class="side-lbl">PUNTO ({Math.min(badge.punto?.length || 0, 3)}/3)</span>
                       <span class="side-score">{badge.scoreP}</span>
                     </div>
                     <div class="cards-strip">
                       {#if badge.punto && badge.punto.length > 0}
-                        {#each badge.punto as c}
+                        {#each badge.punto.slice(0, 3) as c}
                           <span class="card-chip punto" title="{c.val}">{c.val}</span>
                         {/each}
                       {:else}
@@ -687,16 +732,12 @@
                   </div>
                 </div>
 
-                <!-- BANNER DE GANADOR / ESTADO DE IA -->
+                <!-- BANNER DE GANADOR BACCARAT -->
                 <div class="ia-winner-banner" class:banca-win={badge.ganador === 'BANCA'} class:punto-win={badge.ganador === 'PUNTO'} class:tie-win={badge.ganador === 'EMPATE (TIE)'}>
-                  {#if badge.ganador && badge.ganador !== 'ESPERANDO'}
+                  {#if badge.ganador && badge.ganador !== 'SIN JUGADA' && badge.ganador !== 'ESPERANDO'}
                     🏆 {badge.ganador} GANA
-                  {:else if badge.estado_mesa === 'REPARTIENDO'}
-                    🃏 REPARTIENDO CARTAS...
-                  {:else if badge.estado_mesa === 'BARAJO'}
-                    🔀 BARAJO EN MESA
                   {:else}
-                    ⏱️ EN ESPERA DE JUGADA
+                    🃏 REPARTIENDO CARTAS...
                   {/if}
                 </div>
 
@@ -708,7 +749,7 @@
                       class:p-banca={badge.ganador === 'BANCA'}
                       class:p-punto={badge.ganador === 'PUNTO'}
                       class:p-tie={badge.ganador === 'EMPATE (TIE)'}
-                      title="Puesto {p}: {badge.ganador === 'BANCA' ? 'Banca Gana (1:1 -5%)' : (badge.ganador === 'PUNTO' ? 'Punto Gana (1:1)' : (badge.ganador === 'EMPATE (TIE)' ? 'Tie (8:1)' : 'En juego'))}"
+                      title="Puesto {p}"
                     >
                       P{p}
                     </span>
@@ -716,36 +757,17 @@
                 </div>
               {/if}
             {:else}
-              <div class="badge-event font-mono" class:is-playing={badge.is_moving}>
-                {#if badge.is_moving}
-                  ⚡ {badge.ultimo_evento}
-                {:else}
-                  {badge.ultimo_evento}
-                {/if}
-              </div>
-              <div class="badge-desc" title={badge.descripcion}>
-                {badge.descripcion}
+              <!-- SIN JUGADA (EN ESPERA) -->
+              <div class="sin-jugada-box">
+                <span class="sin-jugada-badge">⏸️ SIN JUGADA (EN ESPERA)</span>
+                <span class="sin-jugada-hint">Mesa despejada • Esperando inicio de mano</span>
               </div>
             {/if}
 
-            <!-- MINIATURA EN VIVO CON RECTÁNGULOS DE DETECCIÓN YOLO -->
-            {#if badge.image_b64}
-              <div class="mini-yolo-preview" on:click={() => openAiVisionModal(badge)} title="Clic para ampliar visor IA en vivo">
-                <img src="data:image/jpeg;base64,{badge.image_b64}" alt="IA Live Feed {badge.nombre}" />
-                <span class="yolo-live-tag">🔴 IA YOLO LIVE</span>
-              </div>
-            {/if}
-
-            <div class="badge-card-footer">
-              <span class="badge-time">📷 {badge.total_camaras} cam {badge.hora ? `• ${badge.hora}` : ''}</span>
-              <div class="card-btn-actions">
-                <button type="button" class="btn-card-action primary" on:click={() => openAiVisionModal(badge)} title="Abrir Visor de Visión Artificial en pantalla grande">
-                  👁️ Visor IA
-                </button>
-                <button type="button" class="btn-card-action filter" class:active={isSelected} on:click={() => filterByBadgeMesa(badge.uuid)} title="Filtrar eventos de esta mesa">
-                  {isSelected ? '✕' : '📊'}
-                </button>
-              </div>
+            <!-- FOOTER LIMPIO (SIN MODAL, SIN BOTONES EXTRA) -->
+            <div class="badge-card-footer clean">
+              <span class="badge-cam-info">📷 {badge.camara_nombre || `Canal ${badge.canal || 1}`}</span>
+              <span class="badge-time-info">🕒 {badge.hora || 'En vivo'}</span>
             </div>
           </div>
         {/each}
@@ -1427,8 +1449,8 @@
 
   .badges-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 16px;
   }
 
   .mesa-badge-card {
@@ -1831,82 +1853,124 @@
     border: 1px solid #bbf7d0;
   }
 
-  /* Mini Preview YOLO */
-  .mini-yolo-preview {
+  /* Cámara CCTV Embebida Directa en Cada Cuadro */
+  .card-cctv-container {
     position: relative;
-    border-radius: 6px;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #020617;
+    border-radius: 8px;
     overflow: hidden;
-    cursor: pointer;
-    margin-top: 4px;
-    border: 1px solid #cbd5e1;
-    max-height: 110px;
-    background: #000;
+    margin: 4px 0 6px 0;
+    border: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.6);
   }
 
-  .mini-yolo-preview img {
+  .card-cctv-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
   }
 
-  .yolo-live-tag {
+  .cctv-live-tag {
     position: absolute;
-    bottom: 4px;
-    right: 6px;
-    background: rgba(0, 0, 0, 0.75);
-    color: #ffffff;
-    font-size: 8.5px;
+    top: 6px;
+    left: 6px;
+    background: rgba(15, 23, 42, 0.82);
+    color: #38bdf8;
+    font-size: 9.5px;
     font-weight: 800;
-    padding: 2px 5px;
+    font-family: monospace;
+    padding: 3px 8px;
     border-radius: 4px;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    display: flex;
+    align-items: center;
+    gap: 5px;
     backdrop-filter: blur(2px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   }
 
-  .badge-card-footer {
+  .live-dot-red {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: blink-dot-red 1.2s infinite ease-in-out;
+  }
+
+  @keyframes blink-dot-red {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.85); }
+  }
+
+  .card-cctv-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #94a3b8;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .cctv-placeholder-spin {
+    font-size: 20px;
+    opacity: 0.8;
+  }
+
+  /* Estado Sin Jugada (En Espera) */
+  .sin-jugada-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 10px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    margin: 4px 0;
+    text-align: center;
+    gap: 3px;
+  }
+
+  .sin-jugada-badge {
+    font-size: 11px;
+    font-weight: 800;
+    color: #475569;
+    letter-spacing: 0.3px;
+  }
+
+  .sin-jugada-hint {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  /* Footer Limpio y Elegante */
+  .badge-card-footer.clean {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 6px;
+    margin-top: 4px;
     padding-top: 6px;
     border-top: 1px solid #e2e8f0;
-  }
-
-  .card-btn-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  .btn-card-action {
     font-size: 11px;
-    font-weight: 700;
-    padding: 4px 8px;
-    border-radius: 5px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    color: #334155;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    font-weight: 600;
   }
 
-  .btn-card-action:hover {
-    background: #f1f5f9;
+  .badge-cam-info {
+    color: #475569;
   }
 
-  .btn-card-action.primary {
-    background: #2563eb;
-    color: #ffffff;
-    border-color: #2563eb;
-  }
-
-  .btn-card-action.primary:hover {
-    background: #1d4ed8;
-  }
-
-  .btn-card-action.filter.active {
-    background: #0f172a;
-    color: #ffffff;
-    border-color: #0f172a;
+  .badge-time-info {
+    color: #94a3b8;
+    font-family: monospace;
   }
 
   .badge-event {
