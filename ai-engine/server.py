@@ -1254,6 +1254,13 @@ def ai_inference_loop():
                 b64_img = base64.b64encode(buf).decode('utf-8')
                 live_results[mesa_uuid]["image_b64"] = b64_img
 
+                # Generar snapshot de auditoría con alta fidelidad para el archivo permanente de mesas_ia
+                target_evid_w = min(1024, wp)
+                target_evid_h = max(10, int(hp * (target_evid_w / max(1, wp))))
+                img_evidence = cv2.resize(img_plot, (target_evid_w, target_evid_h), interpolation=cv2.INTER_AREA) if wp > 1024 else img_plot
+                _, buf_evid = cv2.imencode('.jpg', img_evidence, [int(cv2.IMWRITE_JPEG_QUALITY), 78])
+                b64_evidence = base64.b64encode(buf_evid).decode('utf-8')
+
                 # Guardar frame para aprendizaje activo si hubo duda o baja confianza
                 if guardar_por_duda and count > 0:
                     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1265,7 +1272,7 @@ def ai_inference_loop():
                     ultimo = historial_guardado.get(mesa_uuid)
                     if detalle_mano != ultimo:
                         historial_guardado[mesa_uuid] = detalle_mano
-                        enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego_label)
+                        enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_evidence, juego_label)
 
                 # Control y registro automático de eventos de Presentación de Banca
                 b_mem = banca_presentation_memory.get(mesa_uuid)
@@ -1281,7 +1288,7 @@ def ai_inference_loop():
                             'win': 'INICIO PRESENTACIÓN DE BANCA',
                             'es_novedad': False,
                             'nivel_alerta': 'INFO'
-                        }, f"Inicio de presentación de banca ({len(chip_boxes)} columnas/pilas de fichas en paño)", b64_img, juego_label)
+                        }, f"Inicio de presentación de banca ({len(chip_boxes)} columnas/pilas de fichas en paño)", b64_evidence, juego_label)
                     else:
                         b_mem['last_seen'] = now_ts
                 else:
@@ -1293,7 +1300,7 @@ def ai_inference_loop():
                                 'win': 'FINALIZACIÓN PRESENTACIÓN DE BANCA',
                                 'es_novedad': False,
                                 'nivel_alerta': 'INFO'
-                            }, "Finalización de presentación de banca (Fichas resguardadas en chipletero)", b64_img, juego_label)
+                            }, "Finalización de presentación de banca (Fichas resguardadas en chipletero)", b64_evidence, juego_label)
 
                 # Control y registro automático de Presentación de Cartas
                 c_mem = cartas_presentation_memory.get(mesa_uuid)
@@ -1309,7 +1316,7 @@ def ai_inference_loop():
                             'win': 'INICIO PRESENTACIÓN DE CARTAS',
                             'es_novedad': False,
                             'nivel_alerta': 'INFO'
-                        }, "Inicio de presentación de cartas (Verificación de naipes / mazo completo en paño)", b64_img, juego_label)
+                        }, "Inicio de presentación de cartas (Verificación de naipes / mazo completo en paño)", b64_evidence, juego_label)
                     else:
                         c_mem['last_seen'] = now_ts
                 else:
@@ -1321,7 +1328,7 @@ def ai_inference_loop():
                                 'win': 'FINALIZACIÓN PRESENTACIÓN DE CARTAS',
                                 'es_novedad': False,
                                 'nivel_alerta': 'INFO'
-                            }, "Finalización de presentación de cartas (Naipes recogidos del paño)", b64_img, juego_label)
+                            }, "Finalización de presentación de cartas (Naipes recogidos del paño)", b64_evidence, juego_label)
 
                 # Control y registro automático de Barajo de Cartas
                 bar_mem = barajo_memory.get(mesa_uuid)
@@ -1337,7 +1344,7 @@ def ai_inference_loop():
                             'win': 'INICIO BARAJO DE CARTAS',
                             'es_novedad': False,
                             'nivel_alerta': 'INFO'
-                        }, "Inicio de barajo de cartas (Mezcla y lavado de naipes boca abajo)", b64_img, juego_label)
+                        }, "Inicio de barajo de cartas (Mezcla y lavado de naipes boca abajo)", b64_evidence, juego_label)
                     else:
                         bar_mem['last_seen'] = now_ts
                 else:
@@ -1349,7 +1356,7 @@ def ai_inference_loop():
                                 'win': 'FINALIZACIÓN BARAJO DE CARTAS',
                                 'es_novedad': False,
                                 'nivel_alerta': 'INFO'
-                            }, "Finalización de barajo de cartas (Baraja cuadrada e ingresada al sabot)", b64_img, juego_label)
+                            }, "Finalización de barajo de cartas (Baraja cuadrada e ingresada al sabot)", b64_evidence, juego_label)
 
             except Exception as e:
                 print(f"❌ Error en inferencia de mesa {mesa_uuid}: {e}")
@@ -1359,6 +1366,7 @@ def ai_inference_loop():
 def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego_label='Baccarat'):
     """
     Envía la jugada analizada con Inteligencia Artificial a la base de datos de Wisi
+    y archiva la captura de evidencia visual con sus recuadros en la carpeta mesas_ia.
     """
     try:
         if juego_label == "Poker Caribeño":
@@ -1372,6 +1380,40 @@ def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego
         es_nov = resultado.get('es_novedad', False)
         nivel_al = resultado.get('nivel_alerta', 'INFO')
 
+        # Intentar guardado directo a disco si la carpeta mesas_ia está accesible localmente
+        local_filename = None
+        candidate_mesas_dirs = [
+            os.path.join(BASE_DIR, '..', 'backend-fastify', 'mesas_ia'),
+            os.path.join(BASE_DIR, '..', 'mesas_ia'),
+            '/var/www/wisi/backend-fastify/mesas_ia',
+            '/var/www/wisi/mesas_ia'
+        ]
+        target_dir = None
+        for d in candidate_mesas_dirs:
+            if os.path.exists(d):
+                target_dir = d
+                break
+
+        if not target_dir:
+            parent_bf = os.path.join(BASE_DIR, '..', 'backend-fastify')
+            if os.path.exists(parent_bf):
+                target_dir = os.path.join(parent_bf, 'mesas_ia')
+                os.makedirs(target_dir, exist_ok=True)
+
+        if target_dir and b64_img:
+            try:
+                import re
+                clean_m = re.sub(r'[^a-zA-Z0-9_-]', '', str(mesa_uuid or 'mesa'))[:8]
+                ts_ms = int(time.time() * 1000)
+                rand_s = hex(int(time.time() * 1000) % 100000)[2:]
+                local_filename = f"evento_{clean_m}_{ts_ms}_{rand_s}.jpg"
+                save_fpath = os.path.join(target_dir, local_filename)
+                with open(save_fpath, 'wb') as f_out:
+                    f_out.write(base64.b64decode(b64_img))
+            except Exception as e_save:
+                print(f"⚠️ Error guardando snapshot local en {target_dir}: {e_save}")
+                local_filename = None
+
         payload = {
             "sala_uuid": cfg.get('sala_uuid'),
             "mesa_uuid": mesa_uuid,
@@ -1381,6 +1423,8 @@ def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego
             "descripcion": desc,
             "nivel_alerta": nivel_al,
             "es_novedad": es_nov,
+            "foto": local_filename,
+            "imagen_base64": b64_img,
             "detalles": {
                 "score_punto": resultado.get('scoreP', 0),
                 "score_banca": resultado.get('scoreB', 0),
@@ -1389,14 +1433,15 @@ def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego
                 "dealer_jugada": resultado.get('jugada'),
                 "detalle_cartas": detalle_mano,
                 "natural": resultado.get('natural', False),
-                "imagen_captura": f"data:image/jpeg;base64,{b64_img[:500]}..." # truncada en BD por tamaño
+                "foto": local_filename
             }
         }
         for api_url in WISI_API_URLS:
             try:
-                res = requests.post(f"{api_url}/ia-eventos", json=payload, timeout=4)
+                res = requests.post(f"{api_url}/ia-eventos", json=payload, timeout=5)
                 if res.status_code in [200, 201]:
-                    print(f"✅ [IA Wisi] Evento ({tipo_ev}) registrado en {api_url} para mesa {cfg.get('nombre')}: {desc}")
+                    foto_log = f" [Foto: {local_filename}]" if local_filename else ""
+                    print(f"✅ [IA Wisi] Evento ({tipo_ev}) registrado en {api_url} para mesa {cfg.get('nombre')}: {desc}{foto_log}")
                     break
             except Exception:
                 pass

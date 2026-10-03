@@ -17,6 +17,9 @@ backend-fastify/attlogs/
 backend-fastify/attlogs/*
 backend-fastify/empleados/
 backend-fastify/empleados/*
+backend-fastify/clientes/*
+backend-fastify/mesas_ia/*
+!backend-fastify/mesas_ia/.gitkeep
 backend-fastify/cache_thumbs/
 backend-fastify/cache_thumbs/*
 backend-fastify/scratch/

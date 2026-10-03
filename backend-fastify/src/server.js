@@ -213,7 +213,8 @@ async function startServer() {
       const isClienteReq = req.url.includes('/clientes');
       const isEmpleadoReq = req.url.includes('/empleados');
       const isAttlogReq = req.url.includes('/attlogs');
-      const prefix = isClienteReq ? 'cliente' : (isEmpleadoReq ? 'empleado' : (isAttlogReq ? 'attlog' : 'misc'));
+      const isMesasIaReq = req.url.includes('/mesas_ia');
+      const prefix = isClienteReq ? 'cliente' : (isEmpleadoReq ? 'empleado' : (isAttlogReq ? 'attlog' : (isMesasIaReq ? 'mesas_ia' : 'misc')));
 
       const baseName = path.basename(foundPath, path.extname(foundPath));
       let cacheExt = isPng ? '.png' : '.jpg';
@@ -300,7 +301,17 @@ async function startServer() {
       const isAttlogReq = req.url.includes('/attlogs');
       const isEmpleadoReq = req.url.includes('/empleados');
       const isClienteReq = req.url.includes('/clientes');
-      const searchDirs = isAttlogReq
+      const isMesasIaReq = req.url.includes('/mesas_ia');
+      const searchDirs = isMesasIaReq
+        ? [
+            path.join(process.cwd(), 'mesas_ia'),
+            path.join(process.cwd(), 'backend-fastify', 'mesas_ia'),
+            path.resolve(__dirname, '../mesas_ia'),
+            path.resolve(__dirname, '../../mesas_ia'),
+            '/var/www/wisi/backend-fastify/mesas_ia',
+            '/var/www/wisi/mesas_ia'
+          ]
+        : isAttlogReq
         ? [path.join(process.cwd(), 'attlogs'), path.join(process.cwd(), 'photos')]
         : isEmpleadoReq
           ? [
@@ -321,6 +332,7 @@ async function startServer() {
                 '/var/www/wisi/clientes'
               ]
             : [
+                path.join(process.cwd(), 'mesas_ia'),
                 path.join(process.cwd(), 'attlogs'),
                 path.join(process.cwd(), 'empleados'),
                 path.resolve(__dirname, '../empleados'),
@@ -492,12 +504,16 @@ async function startServer() {
     fastify.get('/api/attlogs/photo/:id', servePhotoWithFallback);
     fastify.get('/salas/:filename', serveSalaLogoWithFallback);
     fastify.get('/api/salas/:filename', serveSalaLogoWithFallback);
+    fastify.get('/mesas_ia/:filename', servePhotoWithFallback);
+    fastify.get('/api/mesas_ia/:filename', servePhotoWithFallback);
 
-    // Asegurar existencia de directorio de clientes para fotos
+    // Asegurar existencia de directorios de clientes y mesas_ia para fotos
     try {
       const fsModule = await import('fs');
       const clientesDir = path.join(process.cwd(), 'clientes');
       if (!fsModule.existsSync(clientesDir)) fsModule.mkdirSync(clientesDir, { recursive: true });
+      const mesasIaDir = path.join(process.cwd(), 'mesas_ia');
+      if (!fsModule.existsSync(mesasIaDir)) fsModule.mkdirSync(mesasIaDir, { recursive: true });
     } catch (e) {}
 
     const serveDownloadFile = async (req, reply) => {
@@ -568,6 +584,8 @@ async function startServer() {
     fastify.options('/api/clientes/:filename', handleStaticOptions);
     fastify.options('/attlogs/:filename', handleStaticOptions);
     fastify.options('/api/attlogs/:filename', handleStaticOptions);
+    fastify.options('/mesas_ia/:filename', handleStaticOptions);
+    fastify.options('/api/mesas_ia/:filename', handleStaticOptions);
     fastify.options('/salas/:filename', handleStaticOptions);
     fastify.options('/api/salas/:filename', handleStaticOptions);
     fastify.options('/downloads/:filename', handleStaticOptions);

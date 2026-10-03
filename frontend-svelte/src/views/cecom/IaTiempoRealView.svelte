@@ -3,6 +3,7 @@
   import { triggerToast } from "../../controllers/ui.store.js";
   import { masterSalasStore, masterMesasStore, masterJuegosStore } from "../../controllers/master.store.js";
   import { getCecomIaEventos, getMesasConCamaras, getMesaCamaras, clearCecomIaEventos } from "../../services/cecomVideo.service.js";
+  import { getSafeUrl } from "../../config/api.config.js";
   import {
     mesasLiveStatusStore,
     cecomIaLiveEventsStore,
@@ -38,6 +39,22 @@
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
+  }
+
+  function getEvidenceUrl(item) {
+    if (!item) return '';
+    const foto = item.foto_url || item.foto || item.metadata?.foto_url || item.metadata?.foto;
+    if (foto) {
+      if (foto.startsWith('http://') || foto.startsWith('https://')) return getSafeUrl(foto);
+      if (foto.startsWith('/api/')) return getSafeUrl(foto);
+      if (foto.startsWith('/mesas_ia/')) return getSafeUrl(foto);
+      return getSafeUrl(`/api/mesas_ia/${foto}`);
+    }
+    const b64 = item.metadata?.imagen_captura || item.metadata?.foto_base64 || item.imagen_base64;
+    if (b64 && b64.length > 100 && !b64.endsWith('...')) {
+      return b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+    }
+    return '';
   }
 
   $: salas = $masterSalasStore || [];
@@ -1190,6 +1207,24 @@
             <span class="dt-lbl">Descripción:</span>
             <span class="dt-val">{selectedEventDetail.descripcion}</span>
           </div>
+
+          <!-- CAPTURA / EVIDENCIA VISUAL EN EL MOMENTO DEL REGISTRO -->
+          {#if getEvidenceUrl(selectedEventDetail)}
+            <div class="evidence-snapshot-card">
+              <div class="evidence-header">
+                <span class="evidence-badge">📸 CAPTURA VISUAL DE LA JUGADA (IA EN VIVO)</span>
+                <span class="evidence-sub">Momento exacto con detección y auditoría</span>
+              </div>
+              <div class="evidence-img-wrap">
+                <img
+                  src={getEvidenceUrl(selectedEventDetail)}
+                  alt="Captura IA {selectedEventDetail.mesa_nombre}"
+                  class="evidence-img"
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          {/if}
 
           <div class="metadata-box">
             <span class="meta-title">Metadatos de Detección (Cartas / Puntuación / Casilla):</span>
@@ -3519,5 +3554,55 @@
 
   .btn-dv-preselect:hover {
     background: #b45309;
+  }
+
+  /* Captura y Evidencia Visual IA en Modal */
+  .evidence-snapshot-card {
+    margin: 16px 0;
+    background: #0f172a;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #1e293b;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  }
+
+  .evidence-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .evidence-badge {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #38bdf8;
+    letter-spacing: 0.5px;
+  }
+
+  .evidence-sub {
+    font-size: 10.5px;
+    color: #94a3b8;
+  }
+
+  .evidence-img-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #020617;
+    padding: 8px;
+    max-height: 480px;
+  }
+
+  .evidence-img {
+    max-width: 100%;
+    max-height: 460px;
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
   }
 </style>

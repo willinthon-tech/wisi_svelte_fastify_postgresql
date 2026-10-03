@@ -154,14 +154,16 @@ export function toBackendUrl(path, options = {}) {
                         u.pathname.startsWith('/attlogs/') || 
                         u.pathname.startsWith('/empleados/') || 
                         u.pathname.startsWith('/clientes/') || 
-                        u.pathname.startsWith('/salas/');
+                        u.pathname.startsWith('/salas/') ||
+                        u.pathname.startsWith('/mesas_ia/');
       if (isApiPath) {
         normalized = `${base}${u.pathname}${u.search}`;
         normalized = normalized
           .replace('/attlogs/', '/api/attlogs/')
           .replace('/empleados/', '/api/empleados/')
           .replace('/clientes/', '/api/clientes/')
-          .replace('/salas/', '/api/salas/');
+          .replace('/salas/', '/api/salas/')
+          .replace('/mesas_ia/', '/api/mesas_ia/');
       } else {
         return clean;
       }
@@ -180,6 +182,8 @@ export function toBackendUrl(path, options = {}) {
       normalized = `/api${normalized}`;
     } else if (normalized.startsWith('/salas/') && !normalized.startsWith('/api/salas/')) {
       normalized = `/api${normalized}`;
+    } else if (normalized.startsWith('/mesas_ia/') && !normalized.startsWith('/api/mesas_ia/')) {
+      normalized = `/api${normalized}`;
     }
 
     normalized = `${base}${normalized}`;
@@ -187,7 +191,7 @@ export function toBackendUrl(path, options = {}) {
 
   // Adjuntar parámetros de optimización para fotos de empleados, clientes o marcajes
   if (options && typeof options === 'object') {
-    const isImageRoute = normalized.includes('/empleados/') || normalized.includes('/attlogs/') || normalized.includes('/clientes/');
+    const isImageRoute = normalized.includes('/empleados/') || normalized.includes('/attlogs/') || normalized.includes('/clientes/') || normalized.includes('/mesas_ia/');
     if (isImageRoute) {
       try {
         const urlObj = new URL(normalized);
@@ -234,6 +238,8 @@ export function toBackendPreviewUrl(path) {
 export function toBackendOriginalUrl(path) {
   return toBackendUrl(path, { original: true });
 }
+
+export const getSafeUrl = toBackendUrl;
 
 /**
  * Resuelve la URL absoluta al backend para la fotografía de un empleado.
@@ -409,6 +415,7 @@ export const ENDPOINTS = {
   HORARIOS: `${CLOUD_BASE_URL}/api/horarios`,
   MAQUINAS: `${CLOUD_BASE_URL}/api/maquinas`,
   MESAS: `${CLOUD_BASE_URL}/api/mesas`,
+  MESAS_IA: `${CLOUD_BASE_URL}/api/mesas_ia`,
   LLAVES: `${CLOUD_BASE_URL}/api/llaves`
 };
 

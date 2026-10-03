@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS cecom_ia_eventos (
     juego_nombre VARCHAR(100),
     tipo_evento VARCHAR(50) NOT NULL, -- 'JUGADA', 'DROP', 'MALDON', 'CAMBIO_BARAJO', 'ANOMALIA'
     descripcion TEXT NOT NULL,
+    foto TEXT DEFAULT NULL,
     metadata JSONB DEFAULT '{}',
     es_novedad BOOLEAN NOT NULL DEFAULT false,
     nivel_alerta VARCHAR(20) NOT NULL DEFAULT 'INFO', -- 'INFO', 'WARN', 'CRITICAL'
@@ -92,6 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_cecom_ia_eventos_mesa ON cecom_ia_eventos(mesa_uu
 CREATE INDEX IF NOT EXISTS idx_cecom_ia_eventos_tipo ON cecom_ia_eventos(tipo_evento);
 CREATE INDEX IF NOT EXISTS idx_cecom_ia_eventos_novedad ON cecom_ia_eventos(es_novedad) WHERE is_deleted = false;
 CREATE INDEX IF NOT EXISTS idx_cecom_ia_eventos_created ON cecom_ia_eventos(created_at DESC);
+ALTER TABLE cecom_ia_eventos ADD COLUMN IF NOT EXISTS foto TEXT DEFAULT NULL;
 
 -- 5. Registro Histórico de Jugadas en Tiempo Real (IA Tiempo Real)
 CREATE TABLE IF NOT EXISTS cecom_ia_jugadas (

@@ -1,4 +1,10 @@
 import { isPgConnected, sql, inMemoryData } from '../config/db.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function isUuid(val) {
   return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
@@ -492,6 +498,13 @@ export async function getCecomIaEventosModel(params = {}) {
       e.juego_nombre,
       e.tipo_evento,
       e.descripcion,
+      e.foto,
+      CASE 
+        WHEN e.foto IS NOT NULL AND e.foto != '' THEN '/api/mesas_ia/' || e.foto 
+        WHEN e.metadata->>'foto_url' IS NOT NULL AND e.metadata->>'foto_url' != '' THEN e.metadata->>'foto_url'
+        WHEN e.metadata->>'foto' IS NOT NULL AND e.metadata->>'foto' != '' THEN '/api/mesas_ia/' || (e.metadata->>'foto')
+        ELSE '' 
+      END AS foto_url,
       COALESCE(e.metadata, '{}'::jsonb) AS metadata,
       e.es_novedad,
       e.nivel_alerta,
@@ -511,17 +524,70 @@ export async function getCecomIaEventosModel(params = {}) {
   return { success: true, data: rows };
 }
 
+function saveBase64ToMesasIa(rawBase64, mesaUuid = '') {
+  if (!rawBase64 || typeof rawBase64 !== 'string') return null;
+  if (!rawBase64.includes('base64,') && !rawBase64.startsWith('/9j/') && !rawBase64.startsWith('iVBORw0KGgo')) {
+    if (rawBase64.endsWith('.jpg') || rawBase64.endsWith('.png') || rawBase64.endsWith('.webp')) {
+      return path.basename(rawBase64);
+    }
+    return null;
+  }
+
+  try {
+    const cleanB64 = rawBase64.replace(/^data:image\/[a-z]+;base64,/, '').trim();
+    if (cleanB64.length < 50) return null;
+    const buffer = Buffer.from(cleanB64, 'base64');
+    if (buffer.length < 100) return null;
+
+    const candidateDirs = [
+      path.join(process.cwd(), 'mesas_ia'),
+      path.join(process.cwd(), 'backend-fastify', 'mesas_ia'),
+      path.resolve(__dirname, '../mesas_ia'),
+      path.resolve(__dirname, '../../mesas_ia'),
+      '/var/www/wisi/backend-fastify/mesas_ia',
+      '/var/www/wisi/mesas_ia'
+    ];
+
+    let targetDir = candidateDirs[0];
+    for (const d of candidateDirs) {
+      if (fs.existsSync(d)) {
+        targetDir = d;
+        break;
+      }
+    }
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const timestamp = Date.now();
+    const cleanMesa = String(mesaUuid || 'mesa').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 8);
+    const rand = Math.random().toString(36).substring(2, 7);
+    const filename = `evento_${cleanMesa}_${timestamp}_${rand}.jpg`;
+    const fullPath = path.join(targetDir, filename);
+
+    fs.writeFileSync(fullPath, buffer);
+    return filename;
+  } catch (err) {
+    console.error('Error guardando imagen en mesas_ia:', err);
+    return null;
+  }
+}
+
 export async function createCecomIaEventoModel(data = {}) {
   if (!isPgConnected || !sql) throw new Error('Base de datos no disponible');
 
-  const {
+  let {
     sala_uuid,
     mesa_uuid,
     camara_uuid,
     juego_nombre = '',
     tipo_evento = 'JUGADA',
     descripcion = '',
+    foto = null,
     metadata = {},
+    detalles = {},
+    imagen_base64 = null,
+    foto_base64 = null,
     es_novedad = false,
     nivel_alerta = 'INFO'
   } = data;
@@ -532,10 +598,29 @@ export async function createCecomIaEventoModel(data = {}) {
   const validCamaraUuid = (camara_uuid && isUuid(camara_uuid)) ? camara_uuid : null;
   const isNov = es_novedad || ['DROP', 'MALDON', 'CAMBIO_BARAJO', 'ANOMALIA'].includes(String(tipo_evento).toUpperCase());
 
+  if (detalles && typeof detalles === 'object' && Object.keys(detalles).length > 0) {
+    metadata = { ...detalles, ...metadata };
+  }
+
+  // Guardar snapshot visual enviado por IA en la carpeta /mesas_ia
+  const rawImage = imagen_base64 || foto_base64 || metadata?.imagen_captura || metadata?.foto_base64 || null;
+  let savedFoto = (foto && typeof foto === 'string' && !foto.includes('base64,')) ? path.basename(foto) : null;
+  if (!savedFoto && rawImage) {
+    savedFoto = saveBase64ToMesasIa(rawImage, mesa_uuid);
+  }
+
+  if (savedFoto) {
+    if (!metadata || typeof metadata !== 'object') metadata = {};
+    metadata.foto = savedFoto;
+    metadata.foto_url = `/api/mesas_ia/${savedFoto}`;
+    if (metadata.imagen_captura) delete metadata.imagen_captura;
+    if (metadata.foto_base64) delete metadata.foto_base64;
+  }
+
   const rows = await sql`
     INSERT INTO cecom_ia_eventos (
       sala_uuid, mesa_uuid, camara_uuid, juego_nombre, tipo_evento,
-      descripcion, metadata, es_novedad, nivel_alerta, created_at, updated_at
+      descripcion, foto, metadata, es_novedad, nivel_alerta, created_at, updated_at
     ) VALUES (
       ${sala_uuid}::uuid,
       ${mesa_uuid}::uuid,
@@ -543,6 +628,7 @@ export async function createCecomIaEventoModel(data = {}) {
       ${cleanStr(juego_nombre)},
       ${cleanStr(tipo_evento).toUpperCase()},
       ${cleanStr(descripcion)},
+      ${savedFoto ? cleanStr(savedFoto) : null},
       ${metadata}::jsonb,
       ${isNov},
       ${cleanStr(nivel_alerta).toUpperCase() || 'INFO'},
