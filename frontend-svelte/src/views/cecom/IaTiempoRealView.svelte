@@ -651,8 +651,12 @@
                   loading="eager"
                 />
                 <span class="cctv-live-tag">
-                  {#if badge.has_cards}
+                  {#if badge.has_cards && !badge.is_presentando_cartas && !badge.is_barajo_cartas}
                     <span class="live-dot-red"></span> 🔴 JUGADA EN CURSO
+                  {:else if badge.is_presentando_cartas || badge.estado_mesa === 'PRESENTANDO_CARTAS'}
+                    <span class="live-dot-blue"></span> 🔵 PRESENTANDO CARTAS
+                  {:else if badge.is_barajo_cartas || badge.estado_mesa === 'BARAJO_CARTAS'}
+                    <span class="live-dot-purple"></span> 🟣 BARAJO DE CARTAS
                   {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
                     <span class="live-dot-amber"></span> 🟡 PRESENTANDO BANCA
                   {:else}
@@ -852,6 +856,22 @@
                   {/each}
                 </div>
               {/if}
+            {:else if badge.is_presentando_cartas || badge.estado_mesa === 'PRESENTANDO_CARTAS'}
+              <!-- PRESENTANDO CARTAS -->
+              <div class="presentando-cartas-box">
+                <span class="presentando-cartas-badge">🔵 PRESENTANDO CARTAS</span>
+                <span class="presentando-cartas-hint">
+                  {badge.descripcion || badge.detalle || 'Inicio de presentación de cartas • Mazo completo boca arriba'}
+                </span>
+              </div>
+            {:else if badge.is_barajo_cartas || badge.estado_mesa === 'BARAJO_CARTAS'}
+              <!-- BARAJO DE CARTAS -->
+              <div class="barajo-cartas-box">
+                <span class="barajo-cartas-badge">🟣 BARAJO DE CARTAS</span>
+                <span class="barajo-cartas-hint">
+                  {badge.descripcion || badge.detalle || 'Mezcla y lavado de naipes boca abajo'}
+                </span>
+              </div>
             {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
               <!-- PRESENTANDO BANCA -->
               <div class="presentando-banca-box">
@@ -2088,6 +2108,22 @@
     animation: blink-dot-amber 1.2s infinite ease-in-out;
   }
 
+  .live-dot-blue {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3b82f6;
+    animation: blink-dot-blue 1.2s infinite ease-in-out;
+  }
+
+  .live-dot-purple {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #a855f7;
+    animation: blink-dot-purple 1.2s infinite ease-in-out;
+  }
+
   .live-dot-green {
     width: 7px;
     height: 7px;
@@ -2101,6 +2137,16 @@
   }
 
   @keyframes blink-dot-amber {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.85); }
+  }
+
+  @keyframes blink-dot-blue {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.85); }
+  }
+
+  @keyframes blink-dot-purple {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.3; transform: scale(0.85); }
   }
@@ -2175,6 +2221,64 @@
   .presentando-banca-hint {
     font-size: 10px;
     color: #ca8a04;
+    font-weight: 600;
+  }
+
+  /* Estado Presentando Cartas (Mazo Completo) */
+  .presentando-cartas-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    margin: 4px 0;
+    text-align: center;
+    gap: 3px;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.08);
+  }
+
+  .presentando-cartas-badge {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #1d4ed8;
+    letter-spacing: 0.3px;
+  }
+
+  .presentando-cartas-hint {
+    font-size: 10px;
+    color: #2563eb;
+    font-weight: 600;
+  }
+
+  /* Estado Barajo de Cartas */
+  .barajo-cartas-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 10px;
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    border-radius: 8px;
+    margin: 4px 0;
+    text-align: center;
+    gap: 3px;
+    box-shadow: 0 2px 4px rgba(168, 85, 247, 0.08);
+  }
+
+  .barajo-cartas-badge {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #7e22ce;
+    letter-spacing: 0.3px;
+  }
+
+  .barajo-cartas-hint {
+    font-size: 10px;
+    color: #9333ea;
     font-weight: 600;
   }
 

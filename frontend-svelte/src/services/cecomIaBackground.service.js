@@ -137,10 +137,16 @@ function processAiEngineResults(aiData, now) {
         else juegoTipo = 'BACCARAT';
       }
 
+      const isCartas = Boolean(liveAi.is_presentando_cartas || liveAi.estado_mesa === 'PRESENTANDO_CARTAS' || liveAi.ganador === 'PRESENTANDO CARTAS');
+      const isBarajo = Boolean(liveAi.is_barajo_cartas || liveAi.estado_mesa === 'BARAJO_CARTAS' || liveAi.ganador === 'BARAJO DE CARTAS');
       const isBanca = Boolean(liveAi.is_presentando_banca || liveAi.estado_mesa === 'PRESENTANDO_BANCA' || liveAi.ganador === 'PRESENTANDO BANCA');
 
       let badgeEvento = 'SIN JUGADA (EN ESPERA)';
-      if (isBanca) {
+      if (isCartas) {
+        badgeEvento = '🔵 PRESENTANDO CARTAS';
+      } else if (isBarajo) {
+        badgeEvento = '🟣 BARAJO DE CARTAS';
+      } else if (isBanca) {
         badgeEvento = '🟡 PRESENTANDO BANCA';
       } else if (juegoTipo === 'RULETA') {
         badgeEvento = 'CILINDRO / PAÑO ACTIVO';
@@ -155,7 +161,11 @@ function processAiEngineResults(aiData, now) {
       }
 
       let desc = liveAi.detalle || (juegoTipo === 'RULETA' ? 'Ruleta Americana (0, 00, 1-36)' : 'Mesa despejada (En espera)');
-      if (isBanca) {
+      if (isCartas) {
+        desc = liveAi.detalle || 'Presentación de cartas (Verificación de mazo completo en paño)';
+      } else if (isBarajo) {
+        desc = liveAi.detalle || 'Barajo de cartas (Mezcla y lavado de naipes boca abajo)';
+      } else if (isBanca) {
         desc = liveAi.detalle || 'Presentación de banca (Conteo e inventario de fichas en paño)';
       } else if (juegoTipo === 'RULETA') {
         desc = 'Mesa de Ruleta Americana activa (0, 00, 1-36)';
@@ -187,6 +197,8 @@ function processAiEngineResults(aiData, now) {
         // DATOS REALES DE YOLO Y REGLAS DE CASINO:
         ai_active: true,
         juego_tipo: juegoTipo,
+        is_presentando_cartas: isCartas,
+        is_barajo_cartas: isBarajo,
         is_presentando_banca: isBanca,
         banca_stacks: liveAi.banca_stacks || 0,
         scoreP: liveAi.scoreP ?? 0,

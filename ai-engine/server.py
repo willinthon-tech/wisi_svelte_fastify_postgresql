@@ -787,6 +787,81 @@ def detectar_fichas_banca(frame, tipo_juego='BACCARAT'):
     is_presentando = len(clean_boxes) >= 2
     return is_presentando, clean_boxes
 
+cartas_presentation_memory = {}
+barajo_memory = {}
+
+def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None):
+    """
+    Detecta los estados operativos de mesa:
+    1. PRESENTANDO CARTAS: Naipes extendidos en abanicos/cintas BOCA ARRIBA para verificar mazo completo.
+    2. BARAJO DE CARTAS: Naipes esparcidos BOCA ABAJO por toda la mesa para mezcla/lavado.
+    """
+    if frame is None or frame.size == 0 or tipo_juego == 'RULETA':
+        return False, False, []
+
+    h, w = frame.shape[:2]
+    # Área del paño de juego donde se extienden o barajan las cartas
+    y1, y2 = int(0.18 * h), int(0.72 * h)
+    x1, x2 = int(0.12 * w), int(0.88 * w)
+    felt = frame[y1:y2, x1:x2]
+    if felt.size == 0:
+        return False, False, []
+
+    norm_w = 640
+    norm_h = max(20, int(felt.shape[0] * (640 / max(1, felt.shape[1]))))
+    felt_norm = cv2.resize(felt, (norm_w, norm_h), interpolation=cv2.INTER_AREA)
+
+    # 1. Análisis de blanco (Naipes boca arriba)
+    hsv = cv2.cvtColor(felt_norm, cv2.COLOR_BGR2HSV)
+    white_mask = (hsv[:,:,1] < 60) & (hsv[:,:,2] > 130)
+    white_pct = np.mean(white_mask) * 100
+
+    # 2. Bordes dentro de la zona blanca
+    gray = cv2.cvtColor(felt_norm, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 30, 90)
+    card_edges = (edges > 0) & white_mask
+
+    # 3. Detectar cintas continuas de cartas (abanicos de cartas boca arriba)
+    kernel_ribbon = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 7))
+    closed_white = cv2.morphologyEx(white_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel_ribbon)
+    contours, _ = cv2.findContours(closed_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    scale_x = felt.shape[1] / norm_w
+    scale_y = felt.shape[0] / norm_h
+    felt_area = norm_w * norm_h
+
+    ribbon_boxes = []
+    total_ribbon_area = 0
+
+    for cnt in contours:
+        bx, by, bw, bh = cv2.boundingRect(cnt)
+        area = bw * bh
+        # Cinta ancha (más del 20% del ancho del paño) o área amplia
+        if (bw > norm_w * 0.20 or area > felt_area * 0.035) and bh > 12:
+            crop_edges = card_edges[by:by+bh, bx:bx+bw]
+            edge_dens = np.mean(crop_edges) if crop_edges.size > 0 else 0
+            if edge_dens > 0.02:
+                orig_x1 = x1 + int(bx * scale_x)
+                orig_y1 = y1 + int(by * scale_y)
+                orig_x2 = x1 + int((bx + bw) * scale_x)
+                orig_y2 = y1 + int((by + bh) * scale_y)
+                ribbon_boxes.append([orig_x1, orig_y1, orig_x2, orig_y2])
+                total_ribbon_area += area
+
+    is_presentando_cartas = False
+    if len(ribbon_boxes) >= 1 and (total_ribbon_area > felt_area * 0.04 or white_pct > 18.0):
+        is_presentando_cartas = True
+
+    # 4. Análisis de BARAJO (cartas boca abajo esparcidas por la mesa)
+    is_barajo = False
+    if not is_presentando_cartas:
+        if yolo_cards:
+            back_count = sum(1 for c in yolo_cards if 'BACK' in str(c.get('val', '')).upper())
+            if back_count >= 3:
+                is_barajo = True
+
+    return is_presentando_cartas, is_barajo, ribbon_boxes
+
 mesa_round_memory = {}
 
 def ai_inference_loop():
@@ -888,21 +963,27 @@ def ai_inference_loop():
 
                 is_presentando_banca = False
                 chip_boxes = []
-                if count == 0:
+                is_presentando_cartas = False
+                is_barajo_cartas = False
+                ribbon_boxes = []
+
+                # Evaluar estados operativos de mesa (Presentación de cartas boca arriba o Barajo boca abajo)
+                is_presentando_cartas, is_barajo_cartas, ribbon_boxes = detectar_presentacion_o_barajo(frame, tipo_juego, raw_cards)
+
+                if is_presentando_cartas:
+                    estado_mesa = "PRESENTANDO_CARTAS"
+                    punto_list = []
+                    banca_list = []
+                elif is_barajo_cartas or (count > 6 and tipo_juego == 'BACCARAT') or (count >= 8 and tipo_juego != 'POKER_CARIBENO'):
+                    estado_mesa = "BARAJO_CARTAS"
+                    punto_list = []
+                    banca_list = []
+                elif count == 0:
                     is_presentando_banca, chip_boxes = detectar_fichas_banca(frame, tipo_juego)
                     if is_presentando_banca:
                         estado_mesa = "PRESENTANDO_BANCA"
                     else:
                         estado_mesa = "SIN JUGADA"
-                    punto_list = []
-                    banca_list = []
-                elif count > 6 and tipo_juego == 'BACCARAT':
-                    # En Baccarat NUNCA puede haber más de 6 cartas en total (3 Punto + 3 Banca)
-                    estado_mesa = "BARAJO"
-                    punto_list = []
-                    banca_list = []
-                elif count >= 8 and tipo_juego != 'POKER_CARIBENO':
-                    estado_mesa = "BARAJO"
                     punto_list = []
                     banca_list = []
                 else:
@@ -1121,10 +1202,34 @@ def ai_inference_loop():
                     cv2.rectangle(img_plot, (x1, top_y - h - 10), (x1 + w + 8, top_y), color, -1)
                     cv2.putText(img_plot, label, (x1 + 4, top_y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 0, 0), 2)
 
-                # Si se detectó presentación de banca, actualizar estado e ilustrar en video
+                # Estados operativos de presentación de cartas, barajo y banca
+                live_results[mesa_uuid]["is_presentando_cartas"] = is_presentando_cartas
+                live_results[mesa_uuid]["is_barajo_cartas"] = (estado_mesa == "BARAJO_CARTAS")
                 live_results[mesa_uuid]["is_presentando_banca"] = is_presentando_banca
                 live_results[mesa_uuid]["banca_stacks"] = len(chip_boxes)
-                if is_presentando_banca:
+
+                if is_presentando_cartas:
+                    live_results[mesa_uuid]["estado_mesa"] = "PRESENTANDO_CARTAS"
+                    live_results[mesa_uuid]["ganador"] = "PRESENTANDO CARTAS"
+                    live_results[mesa_uuid]["detalle"] = "Inicio de presentación de cartas (Verificación de mazo completo en paño)"
+
+                    if ribbon_boxes:
+                        for rb in ribbon_boxes:
+                            rx1, ry1, rx2, ry2 = rb
+                            cv2.rectangle(img_plot, (rx1, ry1), (rx2, ry2), (255, 200, 0), 2)
+                        m_rx = min(b[0] for b in ribbon_boxes)
+                        m_ry = min(b[1] for b in ribbon_boxes)
+                        m_rx2 = max(b[2] for b in ribbon_boxes)
+                        cv2.rectangle(img_plot, (m_rx - 4, max(0, m_ry - 28)), (m_rx2 + 4, max(0, m_ry - 2)), (255, 200, 0), -1)
+                        cv2.putText(img_plot, "PRESENTANDO CARTAS (MAZO COMPLETO)", (m_rx + 4, max(18, m_ry - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+
+                elif estado_mesa == "BARAJO_CARTAS":
+                    live_results[mesa_uuid]["estado_mesa"] = "BARAJO_CARTAS"
+                    live_results[mesa_uuid]["ganador"] = "BARAJO DE CARTAS"
+                    live_results[mesa_uuid]["detalle"] = "Barajo de cartas (Mezcla y lavado de naipes boca abajo)"
+                    cv2.putText(img_plot, "BARAJO DE CARTAS", (int(img_plot.shape[1] * 0.25), int(img_plot.shape[0] * 0.5)), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (255, 0, 255), 3)
+
+                elif is_presentando_banca:
                     live_results[mesa_uuid]["estado_mesa"] = "PRESENTANDO_BANCA"
                     live_results[mesa_uuid]["ganador"] = "PRESENTANDO BANCA"
                     live_results[mesa_uuid]["detalle"] = f"Inicio de presentación de banca ({len(chip_boxes)} pilas de fichas en paño)"
@@ -1189,6 +1294,62 @@ def ai_inference_loop():
                                 'es_novedad': False,
                                 'nivel_alerta': 'INFO'
                             }, "Finalización de presentación de banca (Fichas resguardadas en chipletero)", b64_img, juego_label)
+
+                # Control y registro automático de Presentación de Cartas
+                c_mem = cartas_presentation_memory.get(mesa_uuid)
+                if is_presentando_cartas:
+                    if not c_mem or not c_mem.get('active'):
+                        cartas_presentation_memory[mesa_uuid] = {
+                            'active': True,
+                            'start_time': now_ts,
+                            'last_seen': now_ts
+                        }
+                        enviar_evento_a_wisi(mesa_uuid, cfg, {
+                            'tipo_evento': 'PRESENTACION_CARTAS',
+                            'win': 'INICIO PRESENTACIÓN DE CARTAS',
+                            'es_novedad': False,
+                            'nivel_alerta': 'INFO'
+                        }, "Inicio de presentación de cartas (Verificación de naipes / mazo completo en paño)", b64_img, juego_label)
+                    else:
+                        c_mem['last_seen'] = now_ts
+                else:
+                    if c_mem and c_mem.get('active'):
+                        if now_ts - c_mem.get('last_seen', 0) > 4.5:
+                            c_mem['active'] = False
+                            enviar_evento_a_wisi(mesa_uuid, cfg, {
+                                'tipo_evento': 'PRESENTACION_CARTAS',
+                                'win': 'FINALIZACIÓN PRESENTACIÓN DE CARTAS',
+                                'es_novedad': False,
+                                'nivel_alerta': 'INFO'
+                            }, "Finalización de presentación de cartas (Naipes recogidos del paño)", b64_img, juego_label)
+
+                # Control y registro automático de Barajo de Cartas
+                bar_mem = barajo_memory.get(mesa_uuid)
+                if estado_mesa == "BARAJO_CARTAS":
+                    if not bar_mem or not bar_mem.get('active'):
+                        barajo_memory[mesa_uuid] = {
+                            'active': True,
+                            'start_time': now_ts,
+                            'last_seen': now_ts
+                        }
+                        enviar_evento_a_wisi(mesa_uuid, cfg, {
+                            'tipo_evento': 'BARAJO_CARTAS',
+                            'win': 'INICIO BARAJO DE CARTAS',
+                            'es_novedad': False,
+                            'nivel_alerta': 'INFO'
+                        }, "Inicio de barajo de cartas (Mezcla y lavado de naipes boca abajo)", b64_img, juego_label)
+                    else:
+                        bar_mem['last_seen'] = now_ts
+                else:
+                    if bar_mem and bar_mem.get('active'):
+                        if now_ts - bar_mem.get('last_seen', 0) > 4.5:
+                            bar_mem['active'] = False
+                            enviar_evento_a_wisi(mesa_uuid, cfg, {
+                                'tipo_evento': 'BARAJO_CARTAS',
+                                'win': 'FINALIZACIÓN BARAJO DE CARTAS',
+                                'es_novedad': False,
+                                'nivel_alerta': 'INFO'
+                            }, "Finalización de barajo de cartas (Baraja cuadrada e ingresada al sabot)", b64_img, juego_label)
 
             except Exception as e:
                 print(f"❌ Error en inferencia de mesa {mesa_uuid}: {e}")
