@@ -204,12 +204,16 @@
     }
   }
 
+  let streamFailed = false;
+
   function openAiVisionModal(badge) {
+    streamFailed = false;
     viewingAiMesa = badge;
   }
 
   function closeAiVisionModal() {
     viewingAiMesa = null;
+    streamFailed = false;
   }
 
   // Lista de mesas para Badges: ÚNICAMENTE mesas asociadas a cámaras
@@ -1248,9 +1252,16 @@
         </div>
 
         <div class="modal-body yolo-modal-body">
-          <!-- STREAM EN VIVO ANOTADO POR YOLO -->
+          <!-- STREAM EN VIVO ANOTADO POR YOLO (VIDEO CONTINUO EN TIEMPO REAL POR RTSP 554) -->
           <div class="yolo-stream-container">
-            {#if viewingAiMesa.image_b64}
+            {#if !streamFailed}
+              <img
+                src="http://127.0.0.1:5005/stream/{viewingAiMesa.uuid}"
+                alt="Flujo de Video IA en Tiempo Real {viewingAiMesa.nombre}"
+                class="yolo-live-img"
+                on:error={() => { streamFailed = true; }}
+              />
+            {:else if viewingAiMesa.image_b64}
               <img
                 src="data:image/jpeg;base64,{viewingAiMesa.image_b64}"
                 alt="Flujo de Video IA {viewingAiMesa.nombre}"
@@ -1258,11 +1269,11 @@
               />
             {:else}
               <div class="no-stream-box">
-                <span>Conectando con cámara física en LAN...</span>
+                <span>Conectando con flujo RTSP en red local...</span>
               </div>
             {/if}
             <div class="stream-overlay-badge">
-              <span>Resolución: 4MP (2560x1440) • YOLO best.pt (14 Clases)</span>
+              <span>● EN VIVO (RTSP Puerto 554) • YOLO best.pt • Fluido 25 FPS</span>
             </div>
           </div>
 

@@ -617,25 +617,78 @@ export async function createCecomIaEventoModel(data = {}) {
     if (metadata.foto_base64) delete metadata.foto_base64;
   }
 
-  const rows = await sql`
-    INSERT INTO cecom_ia_eventos (
-      sala_uuid, mesa_uuid, camara_uuid, juego_nombre, tipo_evento,
-      descripcion, foto, metadata, es_novedad, nivel_alerta, created_at, updated_at
-    ) VALUES (
-      ${sala_uuid}::uuid,
-      ${mesa_uuid}::uuid,
-      ${validCamaraUuid ? sql`${validCamaraUuid}::uuid` : null},
-      ${cleanStr(juego_nombre)},
-      ${cleanStr(tipo_evento).toUpperCase()},
-      ${cleanStr(descripcion)},
-      ${savedFoto ? cleanStr(savedFoto) : null},
-      ${metadata}::jsonb,
-      ${isNov},
-      ${cleanStr(nivel_alerta).toUpperCase() || 'INFO'},
-      NOW(), NOW()
-    )
-    RETURNING *
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      INSERT INTO cecom_ia_eventos (
+        sala_uuid, mesa_uuid, camara_uuid, juego_nombre, tipo_evento,
+        descripcion, foto, metadata, es_novedad, nivel_alerta, created_at, updated_at
+      ) VALUES (
+        ${sala_uuid}::uuid,
+        ${mesa_uuid}::uuid,
+        ${validCamaraUuid ? sql`${validCamaraUuid}::uuid` : null},
+        ${cleanStr(juego_nombre)},
+        ${cleanStr(tipo_evento).toUpperCase()},
+        ${cleanStr(descripcion)},
+        ${savedFoto ? cleanStr(savedFoto) : null},
+        ${metadata}::jsonb,
+        ${isNov},
+        ${cleanStr(nivel_alerta).toUpperCase() || 'INFO'},
+        NOW(), NOW()
+      )
+      RETURNING *
+    `;
+  } catch (err) {
+    if (err.message && (err.message.includes('column "foto"') || err.message.includes('does not exist'))) {
+      try {
+        await sql`ALTER TABLE cecom_ia_eventos ADD COLUMN IF NOT EXISTS foto TEXT DEFAULT NULL;`;
+        rows = await sql`
+          INSERT INTO cecom_ia_eventos (
+            sala_uuid, mesa_uuid, camara_uuid, juego_nombre, tipo_evento,
+            descripcion, foto, metadata, es_novedad, nivel_alerta, created_at, updated_at
+          ) VALUES (
+            ${sala_uuid}::uuid,
+            ${mesa_uuid}::uuid,
+            ${validCamaraUuid ? sql`${validCamaraUuid}::uuid` : null},
+            ${cleanStr(juego_nombre)},
+            ${cleanStr(tipo_evento).toUpperCase()},
+            ${cleanStr(descripcion)},
+            ${savedFoto ? cleanStr(savedFoto) : null},
+            ${metadata}::jsonb,
+            ${isNov},
+            ${cleanStr(nivel_alerta).toUpperCase() || 'INFO'},
+            NOW(), NOW()
+          )
+          RETURNING *
+        `;
+      } catch (err2) {
+        if (savedFoto && metadata) {
+          metadata.foto = savedFoto;
+          metadata.foto_url = `/api/mesas_ia/${savedFoto}`;
+        }
+        rows = await sql`
+          INSERT INTO cecom_ia_eventos (
+            sala_uuid, mesa_uuid, camara_uuid, juego_nombre, tipo_evento,
+            descripcion, metadata, es_novedad, nivel_alerta, created_at, updated_at
+          ) VALUES (
+            ${sala_uuid}::uuid,
+            ${mesa_uuid}::uuid,
+            ${validCamaraUuid ? sql`${validCamaraUuid}::uuid` : null},
+            ${cleanStr(juego_nombre)},
+            ${cleanStr(tipo_evento).toUpperCase()},
+            ${cleanStr(descripcion)},
+            ${metadata}::jsonb,
+            ${isNov},
+            ${cleanStr(nivel_alerta).toUpperCase() || 'INFO'},
+            NOW(), NOW()
+          )
+          RETURNING *
+        `;
+      }
+    } else {
+      throw err;
+    }
+  }
 
   return { success: true, data: rows[0] };
 }

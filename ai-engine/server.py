@@ -6,6 +6,10 @@ calcula scores en tiempo real y guarda eventos con aprendizaje activo.
 
 import os
 import sys
+
+# Forzar RTSP TCP en puerto 554 para máxima estabilidad y cero congelamiento de paquetes en red local
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;500000"
+
 import time
 import base64
 import json
@@ -50,6 +54,7 @@ WISI_API_URLS = [
 # Almacenes de streaming en vivo
 mesas_config = {}       # { mesa_uuid: { ip, canal, usuario, clave, juego, nombre } }
 frames_actuales = {}    # { mesa_uuid: frame }
+live_jpeg_buffers = {}  # { mesa_uuid: bytes_jpeg } para streaming MJPEG fluido en vivo
 estado_stream = {}      # { mesa_uuid: 'activo' | 'conectando' | 'error' }
 live_results = {}       # { mesa_uuid: { estado, ganador, scoreP, scoreB, punto, banca, ... } }
 historial_guardado = {} # { mesa_uuid: ultimo_detalle }
@@ -646,16 +651,31 @@ def fetch_isapi_frame(ip, canal, usuario, clave):
     return None
 
 def stream_worker(mesa_uuid, url_rtsp):
-    print(f"📹 [Stream Worker] Conectando a {mesa_uuid}: {url_rtsp}")
+    print(f"📹 [Stream Worker RTSP 554] Iniciando flujo continuo en {mesa_uuid}: {url_rtsp}")
     cap = None
-    try:
-        cap = cv2.VideoCapture(url_rtsp)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    except Exception:
-        pass
-
     consecutive_failures = 0
-    use_isapi_mode = False
+    last_reconnect_attempt = 0
+
+    def conectar_rtsp():
+        nonlocal cap, consecutive_failures, last_reconnect_attempt
+        if cap:
+            try: cap.release()
+            except Exception: pass
+            cap = None
+        try:
+            c = cv2.VideoCapture(url_rtsp, cv2.CAP_FFMPEG)
+            c.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            if c.isOpened():
+                cap = c
+                consecutive_failures = 0
+                last_reconnect_attempt = time.time()
+                estado_stream[mesa_uuid] = 'activo'
+                return True
+        except Exception as e_c:
+            print(f"⚠️ [Stream Worker] Error abriendo RTSP {mesa_uuid}: {e_c}")
+        return False
+
+    conectar_rtsp()
 
     while True:
         if mesa_uuid not in mesas_config:
@@ -673,41 +693,38 @@ def stream_worker(mesa_uuid, url_rtsp):
         frame = None
         ret = False
 
-        if not use_isapi_mode:
-            if cap and cap.isOpened():
-                try:
-                    ret, frame = cap.read()
-                except Exception:
-                    ret = False
-
-        if not ret or frame is None or frame.size == 0:
-            consecutive_failures += 1
-            # Fallback inmediato a captura ISAPI si RTSP falla o da timeout (ej: H.265 / HEVC)
-            if consecutive_failures >= 3 and ip and canal:
-                snap = fetch_isapi_frame(ip, canal, usuario, clave)
-                if snap is not None and snap.size > 0:
-                    frame = snap
-                    ret = True
-                    use_isapi_mode = True
-                    consecutive_failures = 0
-
-            if consecutive_failures >= 30:
-                if cap:
-                    try: cap.release()
-                    except Exception: pass
-                time.sleep(1)
-                try:
-                    cap = cv2.VideoCapture(url_rtsp)
-                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                except Exception:
-                    pass
-                consecutive_failures = 0
+        if cap and cap.isOpened():
+            try:
+                ret, frame = cap.read()
+            except Exception:
+                ret = False
 
         if ret and frame is not None and frame.size > 0:
+            consecutive_failures = 0
             frames_actuales[mesa_uuid] = frame
             estado_stream[mesa_uuid] = 'activo'
+            # Ritmo fluido de streaming nativo (~25-30 fps)
+            time.sleep(0.015)
+        else:
+            consecutive_failures += 1
 
-        time.sleep(0.18 if use_isapi_mode else 0.03)
+            # Si el stream RTSP parpadea o pierde señal temporalmente,
+            # obtenemos un frame ISAPI de respaldo temporal para no dejar la pantalla en negro
+            if consecutive_failures >= 4 and ip and canal:
+                snap = fetch_isapi_frame(ip, canal, usuario, clave)
+                if snap is not None and snap.size > 0:
+                    frames_actuales[mesa_uuid] = snap
+                    estado_stream[mesa_uuid] = 'activo'
+
+            # Reconexión automática de RTSP nativo (Puerto 554)
+            now = time.time()
+            if (consecutive_failures >= 10 or not cap or not cap.isOpened()) and (now - last_reconnect_attempt > 3.0):
+                print(f"🔄 [Stream Worker] Reestableciendo flujo RTSP nativo (Puerto 554) para {cfg.get('nombre', mesa_uuid)}...")
+                conectar_rtsp()
+                last_reconnect_attempt = now
+                consecutive_failures = 0
+
+            time.sleep(0.08)
 
 # ====================================================================
 # BUCLE DE INFERENCIA CONTINUA IA + REGLAS DE JUEGO
@@ -879,18 +896,15 @@ def ai_inference_loop():
                 # Determinar juego exacto de la mesa
                 tipo_juego = resolve_game_type(cfg.get('nombre'), cfg.get('juego'))
 
-                # Normalización inteligente de resolución para máxima velocidad en CPU:
+                # Normalización inteligente de resolución:
                 # La imagen original 'frame' se preserva intacta para visualización y aprendizaje activo,
-                # mientras que la inferencia YOLO se escala a 1280px para respuesta ultrarrápida.
+                # mientras que la inferencia YOLO se escala a 960px para máxima agilidad en tiempo real.
                 h_f, w_f = frame.shape[:2]
-                if w_f > 1280:
-                    infer_scale = 1280.0 / w_f
-                    infer_frame = cv2.resize(frame, (1280, int(h_f * infer_scale)), interpolation=cv2.INTER_AREA)
-                    results = model(infer_frame, verbose=False, conf=0.35, iou=0.25, imgsz=640)
-                    box_scale = 1.0 / infer_scale
-                else:
-                    results = model(frame, verbose=False, conf=0.35, iou=0.25, imgsz=640)
-                    box_scale = 1.0
+                infer_target_w = 960 if w_f > 960 else w_f
+                infer_scale = infer_target_w / float(w_f)
+                infer_frame = cv2.resize(frame, (infer_target_w, int(h_f * infer_scale)), interpolation=cv2.INTER_LINEAR)
+                results = model(infer_frame, verbose=False, conf=0.30, iou=0.25, imgsz=640)
+                box_scale = 1.0 / infer_scale
 
                 raw_cards = []
                 guardar_por_duda = False
@@ -1244,14 +1258,16 @@ def ai_inference_loop():
                         cv2.rectangle(img_plot, (min_bx - 4, max(0, min_by - 28)), (max_bx + 4, max(0, min_by - 2)), (0, 215, 255), -1)
                         cv2.putText(img_plot, "PRESENTANDO BANCA", (min_bx + 4, max(18, min_by - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
 
-                # Generar vista previa optimizada para la interfaz (alta resolución interna, ~25KB para 0 lag)
+                # Generar vista previa optimizada para la interfaz y streaming MJPEG continuo
                 hp, wp = img_plot.shape[:2]
-                target_prev_w = 480
+                target_prev_w = 640 if wp > 640 else wp
                 target_prev_h = max(10, int(hp * (target_prev_w / max(1, wp))))
-                img_preview = cv2.resize(img_plot, (target_prev_w, target_prev_h), interpolation=cv2.INTER_AREA)
+                img_preview = cv2.resize(img_plot, (target_prev_w, target_prev_h), interpolation=cv2.INTER_LINEAR)
 
-                _, buf = cv2.imencode('.jpg', img_preview, [int(cv2.IMWRITE_JPEG_QUALITY), 62])
-                b64_img = base64.b64encode(buf).decode('utf-8')
+                _, buf = cv2.imencode('.jpg', img_preview, [int(cv2.IMWRITE_JPEG_QUALITY), 68])
+                jpeg_bytes = buf.tobytes()
+                live_jpeg_buffers[mesa_uuid] = jpeg_bytes
+                b64_img = base64.b64encode(jpeg_bytes).decode('utf-8')
                 live_results[mesa_uuid]["image_b64"] = b64_img
 
                 # Generar snapshot de auditoría con alta fidelidad para el archivo permanente de mesas_ia
@@ -1268,7 +1284,7 @@ def ai_inference_loop():
                     cv2.imwrite(duda_path, frame)
 
                 # Auto-guardado en base de datos si la mano está lista y no se ha guardado
-                if resultado.get('listo') and estado_mesa == 'NORMAL' and raw_cards:
+                if resultado.get('listo') and raw_cards and estado_mesa not in ['RECOGIENDO', 'BARAJO_CARTAS', 'PRESENTANDO_CARTAS']:
                     ultimo = historial_guardado.get(mesa_uuid)
                     if detalle_mano != ultimo:
                         historial_guardado[mesa_uuid] = detalle_mano
@@ -1443,7 +1459,9 @@ def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego
                     foto_log = f" [Foto: {local_filename}]" if local_filename else ""
                     print(f"✅ [IA Wisi] Evento ({tipo_ev}) registrado en {api_url} para mesa {cfg.get('nombre')}: {desc}{foto_log}")
                     break
-            except Exception:
+                else:
+                    print(f"⚠️ [IA Wisi {res.status_code}] Backend {api_url} rechazó evento de {cfg.get('nombre')}: {res.text}")
+            except Exception as e_post:
                 pass
     except Exception as err:
         print(f"⚠️ Error procesando evento Wisi: {err}")
@@ -1533,19 +1551,53 @@ def get_all_mesas():
 @app.route('/stream/<mesa_uuid>')
 def stream_mjpeg(mesa_uuid):
     """
-    Emite un flujo continuo MJPEG con las cajas delimitadoras de YOLO y datos de la jugada
+    Emite un flujo continuo MJPEG de alta velocidad con las cajas delimitadoras de YOLO y datos de la jugada
+    """
+    def generate():
+        last_bytes = None
+        while True:
+            # 1. Prioridad: Fotograma enriquecido con IA y anotaciones de juego
+            buf = live_jpeg_buffers.get(mesa_uuid)
+            if buf:
+                last_bytes = buf
+            elif not last_bytes:
+                # 2. Respaldo: Fotograma crudo en vivo de la cámara
+                raw = frames_actuales.get(mesa_uuid)
+                if raw is not None and raw.size > 0:
+                    try:
+                        h, w = raw.shape[:2]
+                        scale = 640.0 / w if w > 640 else 1.0
+                        frame_small = cv2.resize(raw, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else raw
+                        _, encoded = cv2.imencode('.jpg', frame_small, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                        last_bytes = encoded.tobytes()
+                    except Exception:
+                        pass
+
+            if last_bytes:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + last_bytes + b'\r\n')
+            time.sleep(0.04) # ~25 FPS fluid streaming
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/stream_raw/<mesa_uuid>')
+def stream_raw_mjpeg(mesa_uuid):
+    """
+    Emite el flujo de video en vivo crudo directo de la cámara (sin anotaciones IA)
     """
     def generate():
         while True:
-            res = live_results.get(mesa_uuid)
-            if res and res.get('image_b64'):
+            raw = frames_actuales.get(mesa_uuid)
+            if raw is not None and raw.size > 0:
                 try:
-                    img_bytes = base64.b64decode(res['image_b64'])
+                    h, w = raw.shape[:2]
+                    scale = 800.0 / w if w > 800 else 1.0
+                    frame_small = cv2.resize(raw, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else raw
+                    _, encoded = cv2.imencode('.jpg', frame_small, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
                     yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
+                           b'Content-Type: image/jpeg\r\n\r\n' + encoded.tobytes() + b'\r\n')
                 except Exception:
                     pass
-            time.sleep(0.08)
+            time.sleep(0.04)
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/feedback', methods=['POST'])

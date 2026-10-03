@@ -71,6 +71,36 @@ export async function initDb() {
     await sql`CREATE INDEX IF NOT EXISTS idx_maquinas_reportes_hash ON maquinas_reportes (filtros_hash);`;
     await sql`CREATE INDEX IF NOT EXISTS idx_maquinas_reportes_uuid ON maquinas_reportes (uuid);`;
 
+    // Garantizar tablas y columnas de auditoría CECOM IA
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS cecom_ia_eventos (
+          uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          sala_uuid UUID NOT NULL,
+          mesa_uuid UUID NOT NULL,
+          camara_uuid UUID,
+          juego_nombre VARCHAR(100),
+          tipo_evento VARCHAR(50) NOT NULL,
+          descripcion TEXT NOT NULL,
+          foto TEXT DEFAULT NULL,
+          metadata JSONB DEFAULT '{}',
+          es_novedad BOOLEAN NOT NULL DEFAULT false,
+          nivel_alerta VARCHAR(20) NOT NULL DEFAULT 'INFO',
+          atendido BOOLEAN NOT NULL DEFAULT false,
+          atendido_por VARCHAR(150),
+          active INT NOT NULL DEFAULT 1,
+          is_deleted BOOLEAN NOT NULL DEFAULT false,
+          deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+      await sql`ALTER TABLE cecom_ia_eventos ADD COLUMN IF NOT EXISTS foto TEXT DEFAULT NULL;`;
+      await sql`ALTER TABLE cecom_ia_eventos ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';`;
+    } catch (eMig) {
+      console.warn('Advertencia migrando cecom_ia_eventos:', eMig.message);
+    }
+
     isPgConnected = true;
     console.log(`\x1b[32m[CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {

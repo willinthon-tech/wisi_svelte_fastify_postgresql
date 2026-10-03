@@ -41,5 +41,42 @@ export default async function cecomVideoRoutes(fastify, options) {
   // Estado Centralizado de IA en Vivo (disponible para todas las PCs y clientes)
   fastify.post('/api/cecom/ia-live-sync', syncIaLiveStatus);
   fastify.get('/api/cecom/ia-live-status', getIaLiveStatus);
+
+  // Verificación y migración bajo demanda de tablas y columnas CECOM IA
+  fastify.all('/api/cecom/run-migration', async (request, reply) => {
+    try {
+      const { sql, isPgConnected } = await import('../config/db.js');
+      if (!isPgConnected || !sql) {
+        return reply.status(500).send({ success: false, error: 'Base de datos no conectada' });
+      }
+      await sql`
+        CREATE TABLE IF NOT EXISTS cecom_ia_eventos (
+          uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          sala_uuid UUID NOT NULL,
+          mesa_uuid UUID NOT NULL,
+          camara_uuid UUID,
+          juego_nombre VARCHAR(100),
+          tipo_evento VARCHAR(50) NOT NULL,
+          descripcion TEXT NOT NULL,
+          foto TEXT DEFAULT NULL,
+          metadata JSONB DEFAULT '{}',
+          es_novedad BOOLEAN NOT NULL DEFAULT false,
+          nivel_alerta VARCHAR(20) NOT NULL DEFAULT 'INFO',
+          atendido BOOLEAN NOT NULL DEFAULT false,
+          atendido_por VARCHAR(150),
+          active INT NOT NULL DEFAULT 1,
+          is_deleted BOOLEAN NOT NULL DEFAULT false,
+          deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `;
+      await sql`ALTER TABLE cecom_ia_eventos ADD COLUMN IF NOT EXISTS foto TEXT DEFAULT NULL;`;
+      await sql`ALTER TABLE cecom_ia_eventos ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';`;
+      return reply.send({ success: true, message: 'Migración de tablas y columnas CECOM IA ejecutada con éxito' });
+    } catch (err) {
+      return reply.status(500).send({ success: false, error: err.message });
+    }
+  });
 }
 
