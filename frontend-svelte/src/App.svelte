@@ -448,6 +448,12 @@
     "cortes",
     "rrhh/cortes/calculos",
     "cortes/calculos",
+    "cecom/ia-tiempo-real",
+    "ia-tiempo-real",
+    "cecom/ia-novedades",
+    "ia-novedades",
+    "cecom/ia-mesas",
+    "ia-mesas",
   ];
 
   $: activeTabStore.set($currentRouteStore);

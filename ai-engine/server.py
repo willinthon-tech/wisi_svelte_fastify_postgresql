@@ -14,6 +14,7 @@ from datetime import datetime
 import cv2
 import numpy as np
 import requests
+from requests.auth import HTTPDigestAuth
 from flask import Flask, jsonify, Response, request
 from ultralytics import YOLO
 import torch
@@ -631,45 +632,82 @@ def motor_ruleta():
 # WORKER RTSP MULTIHILO POR CÁMARA
 # ====================================================================
 
+def fetch_isapi_frame(ip, canal, usuario, clave):
+    try:
+        url = f"http://{ip}/ISAPI/Streaming/channels/{canal}01/picture"
+        r = requests.get(url, auth=HTTPDigestAuth(usuario, clave), timeout=1.8)
+        if r.status_code == 200 and len(r.content) > 1000:
+            arr = np.frombuffer(r.content, np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is not None and img.size > 0:
+                return img
+    except Exception:
+        pass
+    return None
+
 def stream_worker(mesa_uuid, url_rtsp):
-    print(f"📹 [RTSP Worker] Conectando a {mesa_uuid}: {url_rtsp}")
-    cap = cv2.VideoCapture(url_rtsp)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    print(f"📹 [Stream Worker] Conectando a {mesa_uuid}: {url_rtsp}")
+    cap = None
+    try:
+        cap = cv2.VideoCapture(url_rtsp)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    except Exception:
+        pass
 
     consecutive_failures = 0
+    use_isapi_mode = False
 
     while True:
         if mesa_uuid not in mesas_config:
-            cap.release()
+            if cap:
+                try: cap.release()
+                except Exception: pass
             break
 
-        if not cap.isOpened():
-            estado_stream[mesa_uuid] = 'error'
-            time.sleep(4)
-            cap = cv2.VideoCapture(url_rtsp)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            consecutive_failures = 0
-            continue
+        cfg = mesas_config.get(mesa_uuid, {})
+        ip = cfg.get('ip')
+        canal = cfg.get('canal')
+        usuario = cfg.get('usuario') or 'admin'
+        clave = cfg.get('clave') or ''
 
-        ret, frame = cap.read()
+        frame = None
+        ret = False
+
+        if not use_isapi_mode:
+            if cap and cap.isOpened():
+                try:
+                    ret, frame = cap.read()
+                except Exception:
+                    ret = False
+
+        if not ret or frame is None or frame.size == 0:
+            consecutive_failures += 1
+            # Fallback inmediato a captura ISAPI si RTSP falla o da timeout (ej: H.265 / HEVC)
+            if consecutive_failures >= 3 and ip and canal:
+                snap = fetch_isapi_frame(ip, canal, usuario, clave)
+                if snap is not None and snap.size > 0:
+                    frame = snap
+                    ret = True
+                    use_isapi_mode = True
+                    consecutive_failures = 0
+
+            if consecutive_failures >= 30:
+                if cap:
+                    try: cap.release()
+                    except Exception: pass
+                time.sleep(1)
+                try:
+                    cap = cv2.VideoCapture(url_rtsp)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                except Exception:
+                    pass
+                consecutive_failures = 0
+
         if ret and frame is not None and frame.size > 0:
             frames_actuales[mesa_uuid] = frame
             estado_stream[mesa_uuid] = 'activo'
-            consecutive_failures = 0
-        else:
-            consecutive_failures += 1
-            if consecutive_failures >= 40:
-                estado_stream[mesa_uuid] = 'error'
-                cap.release()
-                time.sleep(2)
-                cap = cv2.VideoCapture(url_rtsp)
-                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                consecutive_failures = 0
-            else:
-                time.sleep(0.02)
-                continue
 
-        time.sleep(0.03)
+        time.sleep(0.18 if use_isapi_mode else 0.03)
 
 # ====================================================================
 # BUCLE DE INFERENCIA CONTINUA IA + REGLAS DE JUEGO

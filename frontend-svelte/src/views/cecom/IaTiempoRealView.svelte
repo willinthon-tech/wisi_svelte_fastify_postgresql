@@ -545,29 +545,6 @@
 </script>
 
 <div class="ia-tr-container">
-  <!-- Header Principal -->
-  <div class="view-header">
-    <div class="header-left">
-      <div class="icon-badge">⚡</div>
-      <div>
-        <h1 class="header-title">IA Tiempo Real - Auditoría de Mesas</h1>
-        <p class="header-subtitle">
-          Monitoreo continuo en segundo plano de jugadas, manos y eventos en vivo de todas las mesas de juego.
-        </p>
-      </div>
-    </div>
-    <div class="header-actions">
-      <span class="pulse-live">
-        <span class="dot"></span>
-        Sondeo Activo en Segundo Plano
-      </span>
-      <button type="button" class="btn-refresh" on:click={() => loadEvents(false)} title="Actualizar eventos">
-        <span class="material-icons-round" style="font-size: 16px;">refresh</span>
-        Actualizar
-      </button>
-    </div>
-  </div>
-
   <!-- SECCIÓN 1: Badges en Tiempo Real de las Mesas -->
   <div class="badges-section">
     <div class="badges-header">
