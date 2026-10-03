@@ -1033,10 +1033,8 @@
           />
         {:else if $currentRouteStore === "cecom/descargas-video" || $currentRouteStore === "descargas-video"}
           <DescargaVideoView />
-        {:else if $currentRouteStore === "cecom/ia-tiempo-real" || $currentRouteStore === "ia-tiempo-real"}
+        {:else if $currentRouteStore === "cecom/ia-tiempo-real" || $currentRouteStore === "ia-tiempo-real" || $currentRouteStore === "cecom/ia-novedades" || $currentRouteStore === "ia-novedades"}
           <IaTiempoRealView />
-        {:else if $currentRouteStore === "cecom/ia-novedades" || $currentRouteStore === "ia-novedades"}
-          <IaNovedadesView />
         {:else if $currentRouteStore === "cecom/ia-mesas" || $currentRouteStore === "ia-mesas"}
           <CecomIaMesasView />
 

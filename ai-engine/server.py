@@ -57,16 +57,81 @@ historial_guardado = {} # { mesa_uuid: ultimo_detalle }
 # MOTORES DE REGLAS DE CASINO (BACCARAT, BLACKJACK, POKER)
 # ====================================================================
 
-def calcular_valor_carta_baccarat(val_str):
-    v = str(val_str).strip().upper()
-    if 'BACK' in v:
-        return None
-    if any(x in v for x in ['10', 'J', 'Q', 'K', '0']):
-        return 0
-    if 'AS' in v or v == 'A':
-        return 1
-    digits = ''.join(c for c in v if c.isdigit())
-    return int(digits) if digits else 0
+def parse_card_info(val_str):
+    """
+    Parsea universalmente cualquier detección de carta:
+    - 52 cartas con palo ej: '10H', 'AS', 'KD', '7C', 'QC'
+    - 14 clases básicas ej: '10', 'AS', 'K', '7'
+    - Carta boca abajo: 'BACK'
+    """
+    raw = str(val_str or '').strip().upper()
+    if not raw or 'BACK' in raw:
+        return {
+            'raw': raw or 'BACK',
+            'is_back': True,
+            'rank_str': 'BACK',
+            'rank_num': 0,
+            'suit': None,
+            'suit_symbol': '',
+            'baccarat_val': None,
+            'blackjack_val': None,
+            'display': '🂠 [CUBIERTA]'
+        }
+
+    suit = None
+    suit_symbol = ''
+    # Si termina en C (Trébol), D (Diamante), H (Corazón), S (Pica)
+    if len(raw) >= 2 and raw[-1] in ['C', 'D', 'H', 'S']:
+        suit = raw[-1]
+        suit_symbol = {'C': '♣', 'D': '♦', 'H': '♥', 'S': '♠'}.get(suit, '')
+        core = raw[:-1]
+    else:
+        core = raw
+
+    if core in ['A', 'AS']:
+        rank_str = 'A'
+        rank_num = 14
+        baccarat_val = 1
+        blackjack_val = 11
+    elif core == 'K':
+        rank_str = 'K'
+        rank_num = 13
+        baccarat_val = 0
+        blackjack_val = 10
+    elif core == 'Q':
+        rank_str = 'Q'
+        rank_num = 12
+        baccarat_val = 0
+        blackjack_val = 10
+    elif core == 'J':
+        rank_str = 'J'
+        rank_num = 11
+        baccarat_val = 0
+        blackjack_val = 10
+    elif core == '10':
+        rank_str = '10'
+        rank_num = 10
+        baccarat_val = 0
+        blackjack_val = 10
+    else:
+        digits = ''.join(c for c in core if c.isdigit())
+        num = int(digits) if digits else 0
+        rank_str = str(num) if num else core
+        rank_num = num
+        baccarat_val = num % 10
+        blackjack_val = num
+
+    return {
+        'raw': raw,
+        'is_back': False,
+        'rank_str': rank_str,
+        'rank_num': rank_num,
+        'suit': suit,
+        'suit_symbol': suit_symbol,
+        'baccarat_val': baccarat_val,
+        'blackjack_val': blackjack_val,
+        'display': f"{rank_str}{suit_symbol}"
+    }
 
 def motor_baccarat(punto_cards, banca_cards):
     """
@@ -79,9 +144,10 @@ def motor_baccarat(punto_cards, banca_cards):
     def sum_bac(cards):
         tot = 0
         for c in cards:
-            val = calcular_valor_carta_baccarat(c.get('val', ''))
-            if val is not None:
-                tot += val
+            parsed = parse_card_info(c.get('val', ''))
+            v = parsed.get('baccarat_val')
+            if v is not None:
+                tot += v
         return tot % 10
 
     sP = sum_bac(punto_cards)
@@ -95,6 +161,7 @@ def motor_baccarat(punto_cards, banca_cards):
             "scoreP": sP,
             "scoreB": sB,
             "listo": False,
+            "tipo_evento": "JUGADA",
             "descripcion": "Repartiendo cartas iniciales"
         }
 
@@ -107,6 +174,7 @@ def motor_baccarat(punto_cards, banca_cards):
             "scoreB": sB,
             "listo": True,
             "natural": True,
+            "tipo_evento": "JUGADA",
             "descripcion": f"Natural ({sB} a {sP})",
             "puestos_detalle": {
                 "ganador": ganador,
@@ -126,14 +194,11 @@ def motor_baccarat(punto_cards, banca_cards):
 
     # Regla de Banca
     if not pideP:
-        # Si Punto se planta (6-7), Banca pide con 0-5 y planta con 6-7
         if sB <= 5:
             pideB = True
     elif nP >= 3:
-        # Si Punto pidió una 3ra carta, se evalúa el valor de esa 3ra carta
-        v3P = calcular_valor_carta_baccarat(punto_cards[2].get('val', ''))
-        if v3P is None:
-            v3P = 0
+        p3 = parse_card_info(punto_cards[2].get('val', ''))
+        v3P = p3.get('baccarat_val', 0)
         if sB <= 2:
             pideB = True
         elif sB == 3 and v3P != 8:
@@ -156,6 +221,7 @@ def motor_baccarat(punto_cards, banca_cards):
         "scoreB": sB,
         "listo": terminado,
         "natural": False,
+        "tipo_evento": "JUGADA",
         "descripcion": f"Banca: {sB} vs Punto: {sP}",
         "puestos_detalle": {
             "ganador": ganador,
@@ -171,14 +237,12 @@ def motor_blackjack(jugador_cards, dealer_cards):
         tot = 0
         aces = 0
         for c in cards:
-            v = str(c.get('val', '')).strip().upper()
-            if any(x in v for x in ['10', 'J', 'Q', 'K']):
-                tot += 10
-            elif 'AS' in v or v == 'A':
+            parsed = parse_card_info(c.get('val', ''))
+            v = parsed.get('blackjack_val')
+            if v == 11:
                 aces += 1
-            else:
-                digits = ''.join(ch for ch in v if ch.isdigit())
-                tot += int(digits) if digits else 0
+            elif v is not None:
+                tot += v
         for _ in range(aces):
             if tot + 11 <= 21:
                 tot += 11
@@ -209,6 +273,7 @@ def motor_blackjack(jugador_cards, dealer_cards):
         "scoreP": sJ,
         "scoreB": sD,
         "listo": terminado,
+        "tipo_evento": "JUGADA",
         "descripcion": f"Jugador: {sJ} vs Dealer: {sD}"
     }
 
@@ -233,97 +298,131 @@ def resolve_game_type(mesa_nombre, juego_nombre):
 def motor_poker_caribeno(cards):
     """
     Reglas oficiales de Poker Caribeño (Caribbean Stud Poker).
-    Evalúa las 5 cartas de la Casa y la regla de calificación:
-    La Casa sólo califica con As-Rey o una jugada superior (Par, Trío, etc.).
+    Evalúa las 5 cartas de la Casa (Dealer) con Rango y Figura (Palo/Pinta):
+      - Flor Imperial (Royal Flush): 100:1
+      - Escalera de Color (Straight Flush): 50:1
+      - Poker (Four of a Kind): 20:1
+      - Full House: 7:1
+      - Color (Flush): 5:1
+      - Escalera (Straight): 4:1
+      - Trío (Three of a Kind): 3:1
+      - Doble Par (Two Pair): 2:1
+      - Par (One Pair): 1:1
+      - As y Rey (Calificación mínima): 1:1
+      - Menor a As-Rey: NO CALIFICA (Paga Ante 1:1, Subida Push)
     """
-    card_ranks = {
-        '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
-        'J': 11, 'Q': 12, 'K': 13, 'AS': 14, 'A': 14
-    }
+    parsed = [parse_card_info(c.get('val')) for c in cards]
+    up_cards = [c for c in parsed if not c['is_back']]
+    back_cards = [c for c in parsed if c['is_back']]
 
-    up_cards = [c for c in cards if 'BACK' not in str(c.get('val', '')).upper()]
-    back_count = sum(1 for c in cards if 'BACK' in str(c.get('val', '')).upper())
-
-    if len(cards) < 5 or back_count > 0:
-        up_vals = [c.get('val') for c in up_cards]
+    if len(cards) < 5 or len(back_cards) > 0:
+        up_display = [c['display'] for c in up_cards]
         return {
             "win": "REPARTIENDO",
             "califica": None,
-            "jugada": f"Dealer muestra: {', '.join(up_vals)}" if up_vals else "Cartas en proceso",
+            "jugada": f"Dealer muestra: {', '.join(up_display)}" if up_display else "Cartas en proceso",
             "listo": False,
-            "descripcion": f"Repartiendo ({len(up_cards)} descubiertas, {back_count} cubiertas)"
+            "tipo_evento": "JUGADA",
+            "descripcion": f"Repartiendo ({len(up_cards)} descubiertas, {len(back_cards)} cubiertas)"
         }
 
-    ranks = []
-    for c in cards:
-        v = str(c.get('val', '')).strip().upper()
-        r = card_ranks.get(v)
-        if not r:
-            digits = ''.join(ch for ch in v if ch.isdigit())
-            r = int(digits) if digits else 0
-        if r > 0:
-            ranks.append(r)
+    ranks = [c['rank_num'] for c in up_cards if c['rank_num'] > 0]
+    suits = [c['suit'] for c in up_cards if c['suit'] is not None]
 
-    ranks.sort(reverse=True)
     if len(ranks) < 5:
         return {
             "win": "MANO_EN_PROCESO",
             "califica": False,
             "jugada": "Alineando cartas del Dealer",
             "listo": False,
+            "tipo_evento": "JUGADA",
             "descripcion": f"{len(ranks)} de 5 cartas identificadas"
         }
 
+    ranks.sort(reverse=True)
     counts = {}
     for r in ranks:
         counts[r] = counts.get(r, 0) + 1
-
     freqs = sorted(counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
+
     rank_names = {14: 'As', 13: 'K', 12: 'Q', 11: 'J', 10: '10', 9: '9', 8: '8', 7: '7', 6: '6', 5: '5', 4: '4', 3: '3', 2: '2'}
 
+    # ¿Es color? (5 cartas con palo conocido y todas del mismo palo)
+    is_flush = (len(suits) == 5 and len(set(suits)) == 1)
+
+    # ¿Es escalera?
     is_straight = False
     if len(set(ranks)) == 5:
-        if ranks[0] - ranks[4] == 4 or ranks == [14, 5, 4, 3, 2]:
+        if ranks[0] - ranks[4] == 4:
+            is_straight = True
+        elif ranks == [14, 5, 4, 3, 2]: # Escalera rueda (Wheel A-2-3-4-5)
             is_straight = True
 
     jugada = ""
     califica = False
+    pago = ""
 
-    if freqs[0][1] == 4:
-        jugada = f"Poker de {rank_names.get(freqs[0][0])}"
+    # Jerarquía estricta de Poker Caribeño
+    if is_flush and is_straight and ranks[0] == 14 and ranks[1] == 13:
+        suit_sym = up_cards[0].get('suit_symbol', '')
+        jugada = f"Flor Imperial {suit_sym} (Royal Flush)"
         califica = True
+        pago = "Paga 100:1"
+    elif is_flush and is_straight:
+        suit_sym = up_cards[0].get('suit_symbol', '')
+        jugada = f"Escalera de Color {suit_sym} al {rank_names.get(ranks[0])}"
+        califica = True
+        pago = "Paga 50:1"
+    elif freqs[0][1] == 4:
+        jugada = f"Póker de {rank_names.get(freqs[0][0])}"
+        califica = True
+        pago = "Paga 20:1"
     elif freqs[0][1] == 3 and freqs[1][1] == 2:
         jugada = f"Full House ({rank_names.get(freqs[0][0])} y {rank_names.get(freqs[1][0])})"
         califica = True
+        pago = "Paga 7:1"
+    elif is_flush:
+        suit_sym = up_cards[0].get('suit_symbol', '')
+        jugada = f"Color {suit_sym} (Flush al {rank_names.get(ranks[0])})"
+        califica = True
+        pago = "Paga 5:1"
     elif is_straight:
         jugada = f"Escalera al {rank_names.get(ranks[0])}"
         califica = True
+        pago = "Paga 4:1"
     elif freqs[0][1] == 3:
         jugada = f"Trío de {rank_names.get(freqs[0][0])}"
         califica = True
+        pago = "Paga 3:1"
     elif freqs[0][1] == 2 and freqs[1][1] == 2:
         jugada = f"Doble Par ({rank_names.get(freqs[0][0])} y {rank_names.get(freqs[1][0])})"
         califica = True
+        pago = "Paga 2:1"
     elif freqs[0][1] == 2:
         jugada = f"Par de {rank_names.get(freqs[0][0])}"
         califica = True
+        pago = "Paga 1:1"
     else:
         has_ace = 14 in ranks
         has_king = 13 in ranks
         if has_ace and has_king:
             jugada = f"As y Rey ({rank_names.get(ranks[2])} kicker)"
             califica = True
+            pago = "Paga 1:1"
         else:
             jugada = f"{rank_names.get(ranks[0])} Mayor"
             califica = False
+            pago = "No Califica (Paga Ante 1:1)"
 
     estado_ganador = "CASA CALIFICA" if califica else "CASA NO CALIFICA"
     return {
         "win": estado_ganador,
         "califica": califica,
         "jugada": jugada,
+        "pago": pago,
         "listo": True,
-        "descripcion": f"{estado_ganador}: {jugada}"
+        "tipo_evento": "JUGADA",
+        "descripcion": f"{estado_ganador}: {jugada} ({pago})"
     }
 
 # ====================================================================
@@ -647,15 +746,19 @@ def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego
         else:
             desc = f"{resultado.get('win')} ({resultado.get('scoreP')} a {resultado.get('scoreB')}) | {detalle_mano}"
 
+        tipo_ev = resultado.get('tipo_evento', 'JUGADA')
+        es_nov = resultado.get('es_novedad', False)
+        nivel_al = resultado.get('nivel_alerta', 'INFO')
+
         payload = {
             "sala_uuid": cfg.get('sala_uuid'),
             "mesa_uuid": mesa_uuid,
             "mesa_nombre": cfg.get('nombre'),
             "juego_nombre": juego_label,
-            "tipo_evento": "JUGADA",
+            "tipo_evento": tipo_ev,
             "descripcion": desc,
-            "nivel_alerta": "INFO",
-            "es_novedad": False,
+            "nivel_alerta": nivel_al,
+            "es_novedad": es_nov,
             "detalles": {
                 "score_punto": resultado.get('scoreP', 0),
                 "score_banca": resultado.get('scoreB', 0),
@@ -671,12 +774,22 @@ def enviar_evento_a_wisi(mesa_uuid, cfg, resultado, detalle_mano, b64_img, juego
             try:
                 res = requests.post(f"{api_url}/ia-eventos", json=payload, timeout=4)
                 if res.status_code in [200, 201]:
-                    print(f"✅ [IA Wisi] Jugada registrada en {api_url} para mesa {cfg.get('nombre')}: {desc}")
+                    print(f"✅ [IA Wisi] Evento ({tipo_ev}) registrado en {api_url} para mesa {cfg.get('nombre')}: {desc}")
                     break
             except Exception:
                 pass
     except Exception as err:
         print(f"⚠️ Error procesando evento Wisi: {err}")
+
+@app.route('/mesas/<mesa_uuid>/configurar', methods=['POST'])
+def configurar_juego_mesa(mesa_uuid):
+    data = request.get_json(force=True, silent=True) or {}
+    nuevo_juego = data.get('juego')
+    if mesa_uuid in mesas_config and nuevo_juego:
+        mesas_config[mesa_uuid]['juego'] = nuevo_juego
+        print(f"🔄 [Wisi Config] Juego de mesa {mesas_config[mesa_uuid].get('nombre')} actualizado a: {nuevo_juego}")
+        return jsonify({"success": True, "mesa_uuid": mesa_uuid, "juego": nuevo_juego})
+    return jsonify({"success": False, "error": "Mesa no encontrada"}), 404
 
 def sync_to_cloud_worker():
     """

@@ -66,11 +66,15 @@
         return perms.includes('VER');
       });
 
-      // Deduplicar estrictamente por ruta única dentro de la sección
+      // Deduplicar estrictamente por ruta única dentro de la sección y omitir IA Novedades (unificado en IA Tiempo Real)
       const seenRoutes = new Set();
       const uniqueModulos = [];
       for (const m of visibleModulos) {
         const cleanRoute = (m.ruta || '').trim();
+        const normName = (m.nombre || '').trim().toUpperCase();
+        if (cleanRoute.includes('ia-novedades') || normName.includes('IA NOVEDADES')) {
+          continue;
+        }
         if (cleanRoute && !seenRoutes.has(cleanRoute)) {
           seenRoutes.add(cleanRoute);
           uniqueModulos.push(m);

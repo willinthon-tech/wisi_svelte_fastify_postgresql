@@ -41,6 +41,8 @@ pnpm-debug.log*
 ai-engine/models/*.pt
 ai-engine/data_aprendizaje/
 ai-engine/.venv/
+__pycache__/
+*.pyc
 *.mp4
 
 # Archivos del sistema y de editores

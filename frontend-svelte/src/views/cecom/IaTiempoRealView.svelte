@@ -47,6 +47,122 @@
   let viewingAiMesa = null;
   let isSavingFeedback = false;
 
+  let selectedTipoRegistro = "all"; // 'all' | 'JUGADA' | 'ERROR_MESA'
+  let editingMesaJuego = null;
+  let selectedNewJuegoUuid = "";
+  let isSavingJuego = false;
+
+  function matchJuegos(j1, j2) {
+    if (!j1 || !j2) return false;
+    const clean = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/;/g, "n").trim();
+    const s1 = clean(j1);
+    const s2 = clean(j2);
+    if (s1 === s2) return true;
+    if ((s1.includes("baccarat") || s1.includes("punto") || s1.includes("pb")) && (s2.includes("baccarat") || s2.includes("punto") || s2.includes("pb"))) return true;
+    if (s1.includes("poker") && s2.includes("poker")) return true;
+    if (s1.includes("blackjack") && s2.includes("blackjack")) return true;
+    if (s1.includes("ruleta") && s2.includes("ruleta")) return true;
+    return false;
+  }
+
+  function openChangeGameModal(badge) {
+    editingMesaJuego = badge;
+    const currentM = ($masterMesasStore || []).find(m => String(m.uuid || m.id) === String(badge.uuid));
+    selectedNewJuegoUuid = currentM?.juego_uuid || "";
+    if ((!selectedNewJuegoUuid || badge.tiene_discrepancia) && badge.juego_detectado_ia) {
+      const matchJ = ($masterJuegosStore || []).find(j => matchJuegos(j.nombre, badge.juego_detectado_ia));
+      if (matchJ) selectedNewJuegoUuid = matchJ.uuid || matchJ.id;
+    }
+  }
+
+  function closeChangeGameModal() {
+    editingMesaJuego = null;
+    selectedNewJuegoUuid = "";
+  }
+
+  async function autoFixMesaJuego(badge) {
+    if (!badge || isSavingJuego) return;
+    const detectedName = badge.juego_detectado_ia || 'Baccarat';
+
+    let targetJuego = ($masterJuegosStore || []).find(j => matchJuegos(j.nombre, detectedName));
+
+    if (!targetJuego) {
+      try {
+        const res = await fetch('https://wisi.space/api/master/juegos');
+        const d = await res.json();
+        if (d && Array.isArray(d.data)) {
+          masterJuegosStore.set(d.data);
+          targetJuego = d.data.find(j => matchJuegos(j.nombre, detectedName));
+        }
+      } catch (e) {}
+    }
+
+    if (!targetJuego) {
+      triggerToast(`No se encontró el juego "${detectedName}" en el catálogo. Puedes seleccionarlo manualmente.`, 'warning');
+      openChangeGameModal(badge);
+      return;
+    }
+
+    selectedNewJuegoUuid = targetJuego.uuid || targetJuego.id;
+    editingMesaJuego = badge;
+    await handleSaveMesaJuego();
+  }
+
+  async function handleSaveMesaJuego() {
+    if (!editingMesaJuego || !selectedNewJuegoUuid) return;
+    isSavingJuego = true;
+    try {
+      const targetJuego = ($masterJuegosStore || []).find(j => String(j.uuid || j.id) === String(selectedNewJuegoUuid));
+      const juegoNombre = targetJuego?.nombre || "Baccarat";
+
+      // 1. Actualizar en backend Fastify / PostgreSQL
+      const endpoints = [
+        `https://wisi.space/api/master/mesas/${editingMesaJuego.uuid}`,
+        `http://127.0.0.1:3030/api/master/mesas/${editingMesaJuego.uuid}`
+      ];
+      for (const ep of endpoints) {
+        try {
+          await fetch(ep, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ juego_uuid: selectedNewJuegoUuid })
+          });
+        } catch (e) {}
+      }
+
+      // 2. Notificar motor IA Python
+      try {
+        await fetch(`http://127.0.0.1:5005/mesas/${editingMesaJuego.uuid}/configurar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ juego: juegoNombre })
+        });
+      } catch (e) {}
+
+      // 3. Actualizar stores reactivos locales
+      masterMesasStore.update(list => list.map(m => {
+        if (String(m.uuid || m.id) === String(editingMesaJuego.uuid)) {
+          return { ...m, juego_uuid: selectedNewJuegoUuid, juego_nombre: juegoNombre };
+        }
+        return m;
+      }));
+
+      mesasConCamaras = mesasConCamaras.map(m => {
+        if (String(m.mesa_uuid || m.uuid || m.id) === String(editingMesaJuego.uuid)) {
+          return { ...m, juego_uuid: selectedNewJuegoUuid, juego_nombre: juegoNombre };
+        }
+        return m;
+      });
+
+      triggerToast(`✅ Mesa ${editingMesaJuego.nombre} verificada y configurada como: ${juegoNombre}`, 'success');
+      closeChangeGameModal();
+    } catch (err) {
+      triggerToast(`Error al guardar juego: ${err.message}`, 'error');
+    } finally {
+      isSavingJuego = false;
+    }
+  }
+
   function openAiVisionModal(badge) {
     viewingAiMesa = badge;
   }
@@ -62,18 +178,54 @@
       const live = liveMesasMap[mId] || null;
       const isMoving = Boolean(live?.is_moving || live?.ultimo_evento === 'JUGADA' || live?.ultimo_evento === 'JUGANDO - MANO EN PROCESO');
 
+      // 1. Nombre tal y como está en la base de datos (lo que el usuario configuró)
+      const userConfigJuego = (m.juego_nombre && m.juego_nombre.trim()) ? m.juego_nombre.trim() : 'General';
+
+      // 2. Lo que la IA detecta en el paño según cámaras / prefijo de mesa / modelo de visión
+      const mesaTxt = `${m.mesa_nombre || m.nombre || ''}`.toUpperCase();
+      let juegoDetectadoIa = 'Baccarat';
       let juegoTipo = live?.juego_tipo;
-      if (!juegoTipo) {
-        const txt = `${m.mesa_nombre || m.nombre || ''} ${m.juego_nombre || ''}`.toUpperCase();
-        if (txt.includes('PK') || txt.includes('POKER') || txt.includes('STUD')) juegoTipo = 'POKER_CARIBENO';
-        else if (txt.includes('BJ') || txt.includes('BLACKJACK')) juegoTipo = 'BLACKJACK';
-        else juegoTipo = 'BACCARAT';
+
+      if (mesaTxt.startsWith('PK') || mesaTxt.includes('POKER') || mesaTxt.includes('STUD')) {
+        juegoDetectadoIa = 'Poker Caribeño';
+        if (!juegoTipo) juegoTipo = 'POKER_CARIBENO';
+      } else if (mesaTxt.startsWith('BJ') || mesaTxt.includes('BLACKJACK')) {
+        juegoDetectadoIa = 'Blackjack';
+        if (!juegoTipo) juegoTipo = 'BLACKJACK';
+      } else if (mesaTxt.startsWith('RT') || mesaTxt.includes('RULETA')) {
+        juegoDetectadoIa = 'Ruleta Americana';
+        if (!juegoTipo) juegoTipo = 'RULETA';
+      } else {
+        juegoDetectadoIa = 'Baccarat';
+        if (!juegoTipo) juegoTipo = 'BACCARAT';
       }
+
+      if (live?.juego_tipo === 'POKER_CARIBENO') {
+        juegoDetectadoIa = 'Poker Caribeño';
+        juegoTipo = 'POKER_CARIBENO';
+      } else if (live?.juego_tipo === 'BLACKJACK') {
+        juegoDetectadoIa = 'Blackjack';
+        juegoTipo = 'BLACKJACK';
+      } else if (live?.juego_tipo === 'BACCARAT') {
+        juegoDetectadoIa = 'Baccarat';
+        juegoTipo = 'BACCARAT';
+      }
+
+      // 3. Doble Verificación:
+      const isGeneral = userConfigJuego.toUpperCase() === 'GENERAL';
+      const isMatch = matchJuegos(userConfigJuego, juegoDetectadoIa);
+      const tieneDiscrepancia = isGeneral || !isMatch;
+      const verificadoIa = !isGeneral && isMatch;
+      const motivoDiscrepancia = isGeneral ? 'CONFIG_GENERAL' : 'MISMATCH';
 
       return {
         uuid: mId,
         nombre: m.mesa_nombre || m.nombre,
-        juego: m.juego_nombre || (juegoTipo === 'POKER_CARIBENO' ? 'Poker Caribeño' : "Baccarat"),
+        juego: userConfigJuego,
+        juego_detectado_ia: juegoDetectadoIa,
+        tiene_discrepancia: tieneDiscrepancia,
+        verificado_ia: verificadoIa,
+        motivo_discrepancia: motivoDiscrepancia,
         total_camaras: m.total_camaras || 1,
         ultimo_evento: live?.ultimo_evento || "EN ESPERA",
         descripcion: live?.descripcion || "Mesa activa en monitoreo",
@@ -138,6 +290,17 @@
     const today = getLocalDateStr();
     fechaDesde = today;
     fechaHasta = today;
+
+    // Precargar catálogo de juegos para Doble Verificación
+    if (!$masterJuegosStore || $masterJuegosStore.length === 0) {
+      try {
+        const rj = await fetch('https://wisi.space/api/master/juegos');
+        const dj = await rj.json();
+        if (dj && Array.isArray(dj.data)) {
+          masterJuegosStore.set(dj.data);
+        }
+      } catch (e) {}
+    }
 
     await loadMesasConCamaras();
     await loadEvents();
@@ -274,9 +437,28 @@
 
   // Filtrar para mostrar ÚNICAMENTE eventos de mesas asociadas a cámaras
   $: mesasConCamarasIds = new Set(mesasConCamaras.map(m => String(m.mesa_uuid || m.uuid || m.id)));
+
+  $: jugadasValidasCount = eventsList.filter(ev => {
+    const mId = String(ev.mesa_uuid || ev.mesa_id || "");
+    return mesasConCamarasIds.has(mId) && ev.tipo_evento === 'JUGADA' && !ev.es_novedad;
+  }).length;
+
+  $: erroresMesaCount = eventsList.filter(ev => {
+    const mId = String(ev.mesa_uuid || ev.mesa_id || "");
+    return mesasConCamarasIds.has(mId) && (ev.tipo_evento === 'ERROR_MESA' || ev.es_novedad || ev.nivel_alerta === 'WARN' || ev.nivel_alerta === 'CRITICAL');
+  }).length;
+
   $: filteredEvents = eventsList.filter(ev => {
     const mId = String(ev.mesa_uuid || ev.mesa_id || "");
-    return mesasConCamarasIds.has(mId);
+    if (!mesasConCamarasIds.has(mId)) return false;
+
+    if (selectedTipoRegistro === 'JUGADA') {
+      return ev.tipo_evento === 'JUGADA' && !ev.es_novedad;
+    }
+    if (selectedTipoRegistro === 'ERROR_MESA') {
+      return ev.tipo_evento === 'ERROR_MESA' || ev.es_novedad || ev.nivel_alerta === 'WARN' || ev.nivel_alerta === 'CRITICAL';
+    }
+    return true;
   });
   $: totalPages = Math.ceil(filteredEvents.length / pageSize) || 1;
   $: paginatedEvents = filteredEvents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -343,11 +525,68 @@
           >
             <div class="badge-top">
               <div class="mesa-title-wrap">
-                <span class="mesa-title">{badge.nombre}</span>
-                <span class="badge-game font-mono">{badge.juego}</span>
+                <div class="mesa-title-row">
+                  <span class="mesa-title">{badge.nombre}</span>
+                  {#if badge.verificado_ia}
+                    <span class="dv-status-pill ok" title="Configuración de juego coincide al 100% con la visión de la IA">
+                      ✅ Verificado
+                    </span>
+                  {:else if badge.tiene_discrepancia}
+                    <span class="dv-status-pill warn" title="Discrepancia entre la configuración de mesa y lo detectado por IA">
+                      ⚠️ Doble Verificación
+                    </span>
+                  {/if}
+                </div>
+                <div class="mesa-game-row">
+                  <button
+                    type="button"
+                    class="badge-game-btn"
+                    class:is-general={badge.juego.toUpperCase() === 'GENERAL'}
+                    class:pk={badge.juego_tipo === 'POKER_CARIBENO'}
+                    class:bj={badge.juego_tipo === 'BLACKJACK'}
+                    class:pb={badge.juego_tipo === 'BACCARAT'}
+                    on:click|stopPropagation={() => openChangeGameModal(badge)}
+                    title="Clic para cambiar manualmente el juego asignado a esta mesa"
+                  >
+                    Juego: <strong>{badge.juego}</strong> ✏️
+                  </button>
+                </div>
               </div>
               <span class="status-indicator-dot" class:pulse={badge.is_moving} class:idle={!badge.is_moving} title={badge.is_moving ? "Actividad en paño detectada" : "En espera"}></span>
             </div>
+
+            <!-- BANNER DE DOBLE VERIFICACIÓN (CROSS-CHECK) -->
+            {#if badge.tiene_discrepancia}
+              <div class="dv-alert-banner">
+                <div class="dv-alert-header">
+                  <span class="dv-warn-icon">⚠️</span>
+                  <span class="dv-warn-title">Doble Verificación</span>
+                </div>
+                <div class="dv-alert-msg">
+                  {#if badge.motivo_discrepancia === 'CONFIG_GENERAL'}
+                    Mesa en <strong>"General"</strong> • La IA detecta <strong>{badge.juego_detectado_ia}</strong>
+                  {:else}
+                    Configurada como <strong>"{badge.juego}"</strong> • IA detecta <strong>{badge.juego_detectado_ia}</strong>
+                  {/if}
+                </div>
+                <div class="dv-alert-actions">
+                  <button
+                    type="button"
+                    class="btn-dv-fix"
+                    disabled={isSavingJuego}
+                    on:click|stopPropagation={() => autoFixMesaJuego(badge)}
+                    title="Actualizar base de datos y modelo IA a {badge.juego_detectado_ia}"
+                  >
+                    ⚡ Corregir a {badge.juego_detectado_ia}
+                  </button>
+                </div>
+              </div>
+            {:else if badge.verificado_ia}
+              <div class="dv-verified-banner">
+                <span class="dv-ok-icon">✅</span>
+                <span class="dv-ok-msg">Mesa verificada por IA: <strong>{badge.juego}</strong></span>
+              </div>
+            {/if}
 
             <!-- TABLERO EN VIVO DE IA (SI HAY DETECCIÓN ACTIVA DE CARTAS) -->
             {#if badge.ai_active}
@@ -550,6 +789,15 @@
       </div>
 
       <div class="filter-group">
+        <label for="tipo-filter">Tipo de Registro:</label>
+        <select id="tipo-filter" bind:value={selectedTipoRegistro} on:change={() => { currentPage = 1; }}>
+          <option value="all">Todos los Registros</option>
+          <option value="JUGADA">✅ Solo Jugadas Válidas</option>
+          <option value="ERROR_MESA">⚠️ Solo Errores de Mesa</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
         <label for="fecha-desde">Fecha Desde:</label>
         <input id="fecha-desde" type="date" bind:value={fechaDesde} on:change={() => { currentPage = 1; loadEvents(); }} />
       </div>
@@ -575,8 +823,36 @@
   <!-- SECCIÓN 3: DataTable Histórico de Tiempo Real -->
   <div class="datatable-card">
     <div class="table-header-bar">
-      <div class="th-title">
-        📊 Registro de Jugadas y Eventos en Tiempo Real ({filteredEvents.length} registros)
+      <div class="th-title-wrap">
+        <div class="th-title">
+          📊 Registro Unificado de Mesas en Vivo ({filteredEvents.length} registros)
+        </div>
+        <div class="table-tabs">
+          <button
+            type="button"
+            class="tab-btn"
+            class:active={selectedTipoRegistro === 'all'}
+            on:click={() => { selectedTipoRegistro = 'all'; currentPage = 1; }}
+          >
+            📋 Todos ({eventsList.filter(ev => mesasConCamarasIds.has(String(ev.mesa_uuid || ev.mesa_id || ''))).length})
+          </button>
+          <button
+            type="button"
+            class="tab-btn ok"
+            class:active={selectedTipoRegistro === 'JUGADA'}
+            on:click={() => { selectedTipoRegistro = 'JUGADA'; currentPage = 1; }}
+          >
+            ✅ Jugadas Válidas ({jugadasValidasCount})
+          </button>
+          <button
+            type="button"
+            class="tab-btn err"
+            class:active={selectedTipoRegistro === 'ERROR_MESA'}
+            on:click={() => { selectedTipoRegistro = 'ERROR_MESA'; currentPage = 1; }}
+          >
+            ⚠️ Errores de Mesa ({erroresMesaCount})
+          </button>
+        </div>
       </div>
       <div class="header-right-actions">
         {#if filteredEvents.length > 0}
@@ -611,29 +887,37 @@
               <th>Sala</th>
               <th>Mesa</th>
               <th>Juego</th>
-              <th>Tipo Evento</th>
-              <th>Descripción de la Jugada</th>
-              <th>Estado</th>
+              <th>Tipo de Registro</th>
+              <th>Descripción de la Jugada / Incidencia</th>
+              <th>Auditoría IA</th>
               <th>Acción</th>
             </tr>
           </thead>
           <tbody>
             {#each paginatedEvents as ev (ev.uuid || ev.id)}
-              <tr>
+              <tr class:is-error-row={ev.tipo_evento === 'ERROR_MESA' || ev.es_novedad}>
                 <td class="font-mono text-muted">
                   {new Date(ev.created_at).toLocaleDateString()} {new Date(ev.created_at).toLocaleTimeString()}
                 </td>
                 <td>{ev.sala_nombre || "Sala"}</td>
                 <td><strong class="mesa-name">{ev.mesa_nombre || "Mesa"}</strong></td>
-                <td><span class="game-tag">{ev.juego_nombre || "JUEGO"}</span></td>
                 <td>
-                  <span class="event-type-badge font-mono" class:jugada={ev.tipo_evento === 'JUGADA'}>
-                    {ev.tipo_evento}
+                  <span class="game-tag" class:tag-poker={ev.juego_nombre?.includes('Poker')} class:tag-bj={ev.juego_nombre?.includes('Blackjack')}>
+                    {ev.juego_nombre || "Mesa"}
                   </span>
+                </td>
+                <td>
+                  {#if ev.tipo_evento === 'ERROR_MESA' || ev.es_novedad || ev.nivel_alerta === 'WARN' || ev.nivel_alerta === 'CRITICAL'}
+                    <span class="event-type-badge error font-mono">⚠️ Error de Mesa</span>
+                  {:else}
+                    <span class="event-type-badge ok font-mono">✅ Jugada Válida</span>
+                  {/if}
                 </td>
                 <td class="event-desc">{ev.descripcion}</td>
                 <td>
-                  <span class="status-pill info">Registrado</span>
+                  <span class="status-pill" class:pill-warn={ev.es_novedad || ev.tipo_evento === 'ERROR_MESA'} class:info={!ev.es_novedad && ev.tipo_evento !== 'ERROR_MESA'}>
+                    {ev.es_novedad ? '⚠️ Revisar' : '✅ Correcto'}
+                  </span>
                 </td>
                 <td>
                   <button type="button" class="btn-view" on:click={() => openDetailModal(ev)}>
@@ -662,6 +946,74 @@
       </div>
     {/if}
   </div>
+
+  <!-- MODAL: Configurar Juego de Mesa Oficial -->
+  {#if editingMesaJuego}
+    <div class="modal-backdrop" on:click={closeChangeGameModal}>
+      <div class="modal-card modal-change-game" on:click|stopPropagation>
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="game-icon-tag">🎲</span>
+            <h3 class="modal-title">Configurar Juego para {editingMesaJuego.nombre}</h3>
+          </div>
+          <button type="button" class="btn-close" on:click={closeChangeGameModal}>✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Banner de Doble Verificación en el Modal -->
+          <div class="dv-modal-hint-box" class:alert-box={editingMesaJuego.tiene_discrepancia} class:ok-box={editingMesaJuego.verificado_ia}>
+            {#if editingMesaJuego.tiene_discrepancia}
+              <div class="dv-modal-header">
+                <span class="dv-modal-icon">⚠️</span>
+                <strong>Doble Verificación CECOM / IA:</strong>
+              </div>
+              <p class="dv-modal-text">
+                Actualmente la mesa está configurada como <em>"{editingMesaJuego.juego}"</em>, pero la IA detecta que el paño corresponde a <strong>{editingMesaJuego.juego_detectado_ia}</strong>.
+              </p>
+              <button
+                type="button"
+                class="btn-dv-preselect"
+                on:click={() => {
+                  const target = ($masterJuegosStore || []).find(j => matchJuegos(j.nombre, editingMesaJuego.juego_detectado_ia));
+                  if (target) selectedNewJuegoUuid = target.uuid || target.id;
+                }}
+              >
+                ⚡ Pre-seleccionar detección IA: {editingMesaJuego.juego_detectado_ia}
+              </button>
+            {:else}
+              <div class="dv-modal-header">
+                <span class="dv-modal-icon">✅</span>
+                <strong>Doble Verificación Conforme:</strong>
+              </div>
+              <p class="dv-modal-text">
+                El juego configurado (<em>{editingMesaJuego.juego}</em>) coincide con la detección visual de las cámaras en vivo.
+              </p>
+            {/if}
+          </div>
+
+          <div class="form-group mt-4">
+            <label for="select-juego-mesa">Juego Oficial de Casino:</label>
+            <select id="select-juego-mesa" class="game-select" bind:value={selectedNewJuegoUuid}>
+              <option value="" disabled>-- Selecciona el juego --</option>
+              {#each ($masterJuegosStore || []) as j}
+                <option value={j.uuid || j.id}>
+                  {j.nombre} {matchJuegos(j.nombre, editingMesaJuego.juego_detectado_ia) ? '⭐ (Detectado por IA)' : ''}
+                </option>
+              {/each}
+            </select>
+          </div>
+
+          <div class="modal-actions-bar mt-6">
+            <button type="button" class="btn-secondary" on:click={closeChangeGameModal} disabled={isSavingJuego}>
+              Cancelar
+            </button>
+            <button type="button" class="btn-primary" on:click={handleSaveMesaJuego} disabled={isSavingJuego || !selectedNewJuegoUuid}>
+              {isSavingJuego ? 'Guardando...' : '💾 Guardar y Aplicar Reglas'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <!-- MODAL: Detalle del Evento -->
   {#if selectedEventDetail}
@@ -2340,5 +2692,438 @@
 
   .font-mono {
     font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+
+  /* BOTÓN INTERACTIVO DE JUEGO EN TARJETA DE MESA */
+  .badge-game-btn {
+    background: rgba(30, 41, 59, 0.08);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    color: #475569;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  .badge-game-btn:hover {
+    background: #3b82f6;
+    color: #ffffff;
+    border-color: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+  }
+  .badge-game-btn.pk {
+    background: rgba(168, 85, 247, 0.12);
+    color: #9333ea;
+    border-color: rgba(168, 85, 247, 0.3);
+  }
+  .badge-game-btn.pk:hover {
+    background: #9333ea;
+    color: #ffffff;
+  }
+  .badge-game-btn.pb {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+  .badge-game-btn.pb:hover {
+    background: #2563eb;
+    color: #ffffff;
+  }
+  .badge-game-btn.bj {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+  .badge-game-btn.bj:hover {
+    background: #059669;
+    color: #ffffff;
+  }
+
+  /* PESTAÑAS DE REGISTRO EN LA TABLA */
+  .th-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .table-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .tab-btn {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .tab-btn:hover {
+    background: #e2e8f0;
+  }
+  .tab-btn.active {
+    background: #1e293b;
+    color: #ffffff;
+    border-color: #1e293b;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  .tab-btn.ok.active {
+    background: #10b981;
+    border-color: #059669;
+  }
+  .tab-btn.err.active {
+    background: #f59e0b;
+    border-color: #d97706;
+  }
+
+  /* ESTILOS DE FILAS Y BADGES DE TABLA */
+  .event-type-badge.ok {
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .event-type-badge.error {
+    background: rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .is-error-row {
+    background-color: rgba(254, 242, 242, 0.6) !important;
+  }
+  .is-error-row:hover {
+    background-color: rgba(254, 226, 226, 0.8) !important;
+  }
+  .status-pill.pill-warn {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  .game-tag.tag-poker {
+    background: #f3e8ff;
+    color: #7e22ce;
+    border: 1px solid #d8b4fe;
+  }
+  .game-tag.tag-bj {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+  }
+
+  /* MODAL CAMBIO DE JUEGO */
+  .modal-change-game {
+    max-width: 460px;
+    width: 90%;
+  }
+  .modal-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .game-icon-tag {
+    font-size: 20px;
+  }
+  .modal-hint {
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .game-select {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1.5px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+    outline: none;
+    margin-top: 6px;
+  }
+  .game-select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+  .modal-actions-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .btn-primary {
+    background: #3b82f6;
+    color: #ffffff;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #2563eb;
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-secondary:hover {
+    background: #e2e8f0;
+  }
+
+  /* Doble Verificación Styles */
+  .mesa-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .dv-status-pill {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 999px;
+    letter-spacing: 0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .dv-status-pill.ok {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+  }
+
+  .dv-status-pill.warn {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fcd34d;
+    animation: dv-pulse 2s infinite ease-in-out;
+  }
+
+  @keyframes dv-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.85; transform: scale(0.98); }
+  }
+
+  .mesa-game-row {
+    display: flex;
+    align-items: center;
+    margin-top: 3px;
+  }
+
+  .badge-game-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #3b82f6;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .badge-game-btn:hover {
+    background: #dbeafe;
+    border-color: #3b82f6;
+  }
+
+  .badge-game-btn.is-general {
+    color: #b45309;
+    background: #fffbeb;
+    border-color: #fde68a;
+  }
+
+  .badge-game-btn.pk {
+    color: #7c3aed;
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+  }
+
+  .badge-game-btn.bj {
+    color: #0d9488;
+    background: #f0fdfa;
+    border-color: #99f6e4;
+  }
+
+  .badge-game-btn.pb {
+    color: #2563eb;
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .mesa-badge-card.has-discrepancy {
+    border-color: #f59e0b;
+    background: #fffdfa;
+  }
+
+  .mesa-badge-card.is-verified {
+    border-color: #cbd5e1;
+  }
+
+  .dv-alert-banner {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 4px 0 2px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .dv-alert-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #92400e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .dv-alert-msg {
+    font-size: 11.5px;
+    color: #78350f;
+    line-height: 1.35;
+  }
+
+  .dv-alert-msg strong {
+    color: #b45309;
+  }
+
+  .dv-alert-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .btn-dv-fix {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    background: #d97706;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(217, 119, 6, 0.3);
+    transition: all 0.15s ease;
+  }
+
+  .btn-dv-fix:hover:not(:disabled) {
+    background: #b45309;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(217, 119, 6, 0.4);
+  }
+
+  .btn-dv-fix:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .dv-verified-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    padding: 5px 8px;
+    margin: 3px 0 1px 0;
+    font-size: 11px;
+    color: #166534;
+  }
+
+  .dv-ok-msg strong {
+    color: #15803d;
+  }
+
+  /* Modal Doble Verificación Box */
+  .dv-modal-hint-box {
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dv-modal-hint-box.alert-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+  }
+
+  .dv-modal-hint-box.ok-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+  }
+
+  .dv-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 800;
+    font-size: 13px;
+  }
+
+  .dv-modal-text {
+    margin: 0;
+  }
+
+  .btn-dv-preselect {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #d97706;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-dv-preselect:hover {
+    background: #b45309;
   }
 </style>
