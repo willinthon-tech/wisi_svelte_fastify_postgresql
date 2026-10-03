@@ -22,6 +22,8 @@ backend-fastify/mesas_ia/*
 !backend-fastify/mesas_ia/.gitkeep
 backend-fastify/cache_thumbs/
 backend-fastify/cache_thumbs/*
+backend-fastify/downloads/app-wisi-windows-*.exe
+backend-fastify/downloads/app-wisi-android-*.apk
 backend-fastify/scratch/
 scratch/
 

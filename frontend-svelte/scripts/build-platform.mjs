@@ -192,6 +192,15 @@ if (buildWindows) {
       const sizeMb = (fs.statSync(destExePath).size / (1024 * 1024)).toFixed(2);
       console.log(`\n🎉 ✔ INSTALADOR WINDOWS COPIADO:`);
       console.log(`   -> ${destExePath} (${sizeMb} MB)`);
+
+      const downloadsDir = path.join(projectRootDir, 'backend-fastify', 'downloads');
+      if (fs.existsSync(downloadsDir)) {
+        try {
+          fs.copyFileSync(generatedExe, path.join(downloadsDir, destExeName));
+          fs.copyFileSync(generatedExe, path.join(downloadsDir, 'app-wisi.exe'));
+          console.log(`   -> Sincronizado en ${downloadsDir}/app-wisi.exe`);
+        } catch (_) {}
+      }
     } else {
       console.warn('⚠️ No se encontró el archivo .exe en src-tauri/target/release/bundle/nsis/');
     }
