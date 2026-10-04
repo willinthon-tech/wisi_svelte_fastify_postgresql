@@ -855,68 +855,30 @@ def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None
     if frame is None or frame.size == 0 or tipo_juego == 'RULETA':
         return False, False, []
 
-    # Si hay cartas detectadas en una mano normal de juego (1 a 7 cartas), NUNCA es presentación de mazo
-    if yolo_cards and 1 <= len(yolo_cards) <= 7:
+    # REGLA FUNDAMENTAL:
+    # Una presentación de baraja completa (ribbon spread) o un barajo (wash / scramble)
+    # involucra docenas de cartas en el paño. NUNCA ocurre en una mesa despejada (0 cartas)
+    # ni en una mano activa normal (1 a 7 cartas).
+    card_count = len(yolo_cards) if yolo_cards else 0
+    if card_count < 8:
         return False, False, []
 
-    h, w = frame.shape[:2]
-    # Área del paño de juego donde se extienden o barajan las cartas
-    y1, y2 = int(0.20 * h), int(0.70 * h)
-    x1, x2 = int(0.15 * w), int(0.85 * w)
-    felt = frame[y1:y2, x1:x2]
-    if felt.size == 0:
-        return False, False, []
+    # 1. Si la gran mayoría son cartas boca abajo ('BACK'), es un barajo / mezcla:
+    back_count = sum(1 for c in yolo_cards if 'BACK' in str(c.get('val', '')).upper())
+    if back_count >= 6 or (back_count / max(1, card_count)) >= 0.5:
+        return False, True, []
 
-    norm_w = 640
-    norm_h = max(20, int(felt.shape[0] * (640 / max(1, felt.shape[1]))))
-    felt_norm = cv2.resize(felt, (norm_w, norm_h), interpolation=cv2.INTER_AREA)
+    # 2. Si hay 8 o más cartas y están boca arriba distribuidas horizontalmente a lo largo de la mesa:
+    xs = [c['cx'] for c in yolo_cards]
+    min_x, max_x = min(xs), max(xs)
+    w_span = max_x - min_x
+    frame_w = frame.shape[1]
 
-    # 1. Análisis de blanco estricto
-    hsv = cv2.cvtColor(felt_norm, cv2.COLOR_BGR2HSV)
-    white_mask = (hsv[:,:,1] < 45) & (hsv[:,:,2] > 185)
+    # Si las cartas cubren más del 40% del ancho del fotograma y hay al menos 8 cartas descubiertas:
+    if w_span > frame_w * 0.40 and card_count >= 8:
+        return True, False, []
 
-    # 2. Bordes dentro de la zona blanca
-    gray = cv2.cvtColor(felt_norm, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 50, 150)
-    card_edges = (edges > 0) & white_mask
-
-    # 3. Detectar cinta continua que cubra más del 50% del ancho del paño
-    kernel_ribbon = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 9))
-    closed_white = cv2.morphologyEx(white_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel_ribbon)
-    contours, _ = cv2.findContours(closed_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    scale_x = felt.shape[1] / norm_w
-    scale_y = felt.shape[0] / norm_h
-    felt_area = norm_w * norm_h
-
-    ribbon_boxes = []
-    total_ribbon_area = 0
-
-    for cnt in contours:
-        bx, by, bw, bh = cv2.boundingRect(cnt)
-        area = bw * bh
-        # Abanico real de mazo completo: ancho superior al 50% del paño y área amplia
-        if bw > norm_w * 0.50 and bh > 18 and area > felt_area * 0.08:
-            crop_edges = card_edges[by:by+bh, bx:bx+bw]
-            edge_dens = np.mean(crop_edges) if crop_edges.size > 0 else 0
-            if edge_dens > 0.04:
-                orig_x1 = x1 + int(bx * scale_x)
-                orig_y1 = y1 + int(by * scale_y)
-                orig_x2 = x1 + int((bx + bw) * scale_x)
-                orig_y2 = y1 + int((by + bh) * scale_y)
-                ribbon_boxes.append([orig_x1, orig_y1, orig_x2, orig_y2])
-                total_ribbon_area += area
-
-    is_presentando_cartas = len(ribbon_boxes) >= 1
-
-    # 4. Análisis de BARAJO (cartas boca abajo esparcidas por la mesa)
-    is_barajo = False
-    if not is_presentando_cartas and yolo_cards:
-        back_count = sum(1 for c in yolo_cards if 'BACK' in str(c.get('val', '')).upper())
-        if back_count >= 6: # Solo si hay 6 o más cartas cubiertas dispersas
-            is_barajo = True
-
-    return is_presentando_cartas, is_barajo, ribbon_boxes
+    return False, False, []
 
 mesa_round_memory = {}
 
@@ -944,11 +906,11 @@ def ai_inference_loop():
                 tipo_juego = resolve_game_type(cfg.get('nombre'), cfg.get('juego'))
 
                 h_f, w_f = frame.shape[:2]
-                infer_target_w = 640 if w_f > 640 else w_f
+                infer_target_w = 800 if w_f > 800 else w_f
                 infer_scale = infer_target_w / float(w_f)
                 infer_frame = cv2.resize(frame, (infer_target_w, int(h_f * infer_scale)), interpolation=cv2.INTER_LINEAR)
                 with torch.inference_mode():
-                    results = model(infer_frame, verbose=False, conf=0.22, iou=0.25, imgsz=384)
+                    results = model(infer_frame, verbose=False, conf=0.22, iou=0.25, imgsz=512)
                 box_scale = 1.0 / infer_scale
 
                 raw_cards = []
@@ -1611,6 +1573,14 @@ def stream_mjpeg(mesa_uuid):
     def generate():
         while True:
             buf = live_jpeg_buffers.get(mesa_uuid)
+            if not buf:
+                raw = frames_actuales.get(mesa_uuid)
+                if raw is not None and raw.size > 0:
+                    try:
+                        _, b = cv2.imencode('.jpg', raw, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                        buf = b.tobytes()
+                    except Exception:
+                        pass
             if buf:
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + buf + b'\r\n')

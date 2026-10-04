@@ -43,7 +43,13 @@
 
   function getStreamUrl(uuid) {
     if (!uuid) return '';
-    const host = (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost') ? window.location.hostname : '127.0.0.1';
+    let host = '127.0.0.1';
+    if (typeof window !== 'undefined' && window.location.hostname) {
+      const h = window.location.hostname;
+      if (h !== 'localhost' && h !== '127.0.0.1' && !h.includes('tauri')) {
+        host = h;
+      }
+    }
     return `http://${host}:5005/stream/${uuid}`;
   }
 
@@ -679,6 +685,9 @@
                   if (badge.image_b64) {
                     e.currentTarget.src = `data:image/jpeg;base64,${badge.image_b64}`;
                   }
+                  setTimeout(() => {
+                    if (e.currentTarget) e.currentTarget.src = getStreamUrl(badge.uuid);
+                  }, 2500);
                 }}
               />
               <span class="cctv-live-tag">
