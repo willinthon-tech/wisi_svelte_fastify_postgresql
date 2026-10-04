@@ -43,6 +43,8 @@ if not os.path.exists(MODEL_PATH):
 print(f"📦 Cargando modelo YOLO desde: {MODEL_PATH}")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"🚀 Dispositivo de inferencia IA: {device.upper()}")
+if device == 'cpu':
+    torch.set_num_threads(8)
 model = YOLO(MODEL_PATH)
 
 # Configuración backend Wisi (Producción y Local)
@@ -55,6 +57,7 @@ WISI_API_URLS = [
 mesas_config = {}       # { mesa_uuid: { ip, canal, usuario, clave, juego, nombre } }
 frames_actuales = {}    # { mesa_uuid: frame }
 live_jpeg_buffers = {}  # { mesa_uuid: bytes_jpeg } para streaming MJPEG fluido en vivo
+live_annotations = {}   # { mesa_uuid: { cards, ribbons, chips, estado, resultado } }
 estado_stream = {}      # { mesa_uuid: 'activo' | 'conectando' | 'error' }
 live_results = {}       # { mesa_uuid: { estado, ganador, scoreP, scoreB, punto, banca, ... } }
 historial_guardado = {} # { mesa_uuid: ultimo_detalle }
@@ -703,6 +706,38 @@ def stream_worker(mesa_uuid, url_rtsp):
             consecutive_failures = 0
             frames_actuales[mesa_uuid] = frame
             estado_stream[mesa_uuid] = 'activo'
+
+            # Generar fotograma continuo en vivo (~25 FPS) para MJPEG con overlay IA en tiempo real
+            try:
+                hp, wp = frame.shape[:2]
+                scale_prev = 640.0 / wp if wp > 640 else 1.0
+                disp_frame = cv2.resize(frame, (int(wp * scale_prev), int(hp * scale_prev)), interpolation=cv2.INTER_LINEAR) if scale_prev < 1.0 else frame.copy()
+
+                ann = live_annotations.get(mesa_uuid)
+                if ann:
+                    for c in ann.get('cards', []):
+                        b = [int(v * scale_prev) for v in c.get('box', [])]
+                        if len(b) == 4:
+                            is_p = 'PUNTO' in str(c.get('val', '')).upper() or 'RED' in str(c.get('val', '')).upper()
+                            col = (0, 0, 255) if is_p else (255, 0, 0)
+                            cv2.rectangle(disp_frame, (b[0], b[1]), (b[2], b[3]), col, 2)
+                            cv2.putText(disp_frame, str(c.get('val', '')), (b[0], max(14, b[1] - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, col, 2)
+
+                    for rb in ann.get('ribbons', []):
+                        r_box = [int(v * scale_prev) for v in rb]
+                        if len(r_box) == 4:
+                            cv2.rectangle(disp_frame, (r_box[0], r_box[1]), (r_box[2], r_box[3]), (255, 200, 0), 2)
+
+                    for cb in ann.get('chips', []):
+                        c_box = [int(v * scale_prev) for v in cb]
+                        if len(c_box) == 4:
+                            cv2.rectangle(disp_frame, (c_box[0], c_box[1]), (c_box[2], c_box[3]), (0, 215, 255), 2)
+
+                _, buf = cv2.imencode('.jpg', disp_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                live_jpeg_buffers[mesa_uuid] = buf.tobytes()
+            except Exception:
+                pass
+
             # Ritmo fluido de streaming nativo (~25-30 fps)
             time.sleep(0.015)
         else:
@@ -900,10 +935,11 @@ def ai_inference_loop():
                 # La imagen original 'frame' se preserva intacta para visualización y aprendizaje activo,
                 # mientras que la inferencia YOLO se escala a 960px para máxima agilidad en tiempo real.
                 h_f, w_f = frame.shape[:2]
-                infer_target_w = 960 if w_f > 960 else w_f
+                infer_target_w = 640 if w_f > 640 else w_f
                 infer_scale = infer_target_w / float(w_f)
                 infer_frame = cv2.resize(frame, (infer_target_w, int(h_f * infer_scale)), interpolation=cv2.INTER_LINEAR)
-                results = model(infer_frame, verbose=False, conf=0.30, iou=0.25, imgsz=640)
+                with torch.inference_mode():
+                    results = model(infer_frame, verbose=False, conf=0.22, iou=0.25, imgsz=384)
                 box_scale = 1.0 / infer_scale
 
                 raw_cards = []
@@ -951,7 +987,7 @@ def ai_inference_loop():
                 mem = mesa_round_memory.get(mesa_uuid)
 
                 if count > 0:
-                    if not mem or (now_ts - mem.get('last_seen', 0) > 4.5):
+                    if not mem or (now_ts - mem.get('last_seen', 0) > 5.5):
                         mesa_round_memory[mesa_uuid] = {
                             'cards': raw_cards,
                             'last_seen': now_ts,
@@ -959,8 +995,8 @@ def ai_inference_loop():
                         }
                     else:
                         # Si antes teníamos más cartas y de repente disminuyó (ej: brazo del dealer tapando),
-                        # retenemos las cartas anteriores durante hasta 3.5 segundos
-                        if count < mem.get('count', 0) and (now_ts - mem.get('last_seen', 0) < 3.5):
+                        # retenemos las cartas anteriores durante hasta 5.0 segundos
+                        if count < mem.get('count', 0) and (now_ts - mem.get('last_seen', 0) < 5.0):
                             raw_cards = mem['cards']
                             count = len(raw_cards)
                         else:
@@ -969,7 +1005,7 @@ def ai_inference_loop():
                             mem['last_seen'] = now_ts
                 else:
                     # count == 0
-                    if mem and (now_ts - mem.get('last_seen', 0) < 3.5):
+                    if mem and (now_ts - mem.get('last_seen', 0) < 5.0):
                         raw_cards = mem['cards']
                         count = len(raw_cards)
                     else:
@@ -1267,8 +1303,16 @@ def ai_inference_loop():
                 _, buf = cv2.imencode('.jpg', img_preview, [int(cv2.IMWRITE_JPEG_QUALITY), 68])
                 jpeg_bytes = buf.tobytes()
                 live_jpeg_buffers[mesa_uuid] = jpeg_bytes
-                b64_img = base64.b64encode(jpeg_bytes).decode('utf-8')
                 live_results[mesa_uuid]["image_b64"] = b64_img
+
+                # Actualizar anotaciones vivas para el motor de streaming continuo a 25 FPS
+                live_annotations[mesa_uuid] = {
+                    "cards": raw_cards,
+                    "ribbons": ribbon_boxes if is_presentando_cartas else [],
+                    "chips": chip_boxes if is_presentando_banca else [],
+                    "estado_mesa": estado_mesa,
+                    "resultado": resultado
+                }
 
                 # Generar snapshot de auditoría con alta fidelidad para el archivo permanente de mesas_ia
                 target_evid_w = min(1024, wp)
@@ -1554,29 +1598,12 @@ def stream_mjpeg(mesa_uuid):
     Emite un flujo continuo MJPEG de alta velocidad con las cajas delimitadoras de YOLO y datos de la jugada
     """
     def generate():
-        last_bytes = None
         while True:
-            # 1. Prioridad: Fotograma enriquecido con IA y anotaciones de juego
             buf = live_jpeg_buffers.get(mesa_uuid)
             if buf:
-                last_bytes = buf
-            elif not last_bytes:
-                # 2. Respaldo: Fotograma crudo en vivo de la cámara
-                raw = frames_actuales.get(mesa_uuid)
-                if raw is not None and raw.size > 0:
-                    try:
-                        h, w = raw.shape[:2]
-                        scale = 640.0 / w if w > 640 else 1.0
-                        frame_small = cv2.resize(raw, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_LINEAR) if scale < 1.0 else raw
-                        _, encoded = cv2.imencode('.jpg', frame_small, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
-                        last_bytes = encoded.tobytes()
-                    except Exception:
-                        pass
-
-            if last_bytes:
                 yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + last_bytes + b'\r\n')
-            time.sleep(0.04) # ~25 FPS fluid streaming
+                       b'Content-Type: image/jpeg\r\n\r\n' + buf + b'\r\n')
+            time.sleep(0.035) # ~28 FPS streaming continuo nativo
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/stream_raw/<mesa_uuid>')

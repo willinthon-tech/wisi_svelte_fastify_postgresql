@@ -41,6 +41,12 @@
     return `${year}-${month}-${day}`;
   }
 
+  function getStreamUrl(uuid) {
+    if (!uuid) return '';
+    const host = (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost') ? window.location.hostname : '127.0.0.1';
+    return `http://${host}:5005/stream/${uuid}`;
+  }
+
   function getEvidenceUrl(item) {
     if (!item) return '';
     const foto = item.foto_url || item.foto || item.metadata?.foto_url || item.metadata?.foto;
@@ -664,32 +670,30 @@
 
             <!-- CAMARITA EN VIVO DIRECTA ("LA CAMARITA CHIQUITICA" CON IA YOLO) -->
             <div class="card-cctv-container">
-              {#if badge.image_b64}
-                <img
-                  src="data:image/jpeg;base64,{badge.image_b64}"
-                  alt="Feed CCTV {badge.nombre}"
-                  class="card-cctv-img"
-                  loading="eager"
-                />
-                <span class="cctv-live-tag">
-                  {#if badge.has_cards && !badge.is_presentando_cartas && !badge.is_barajo_cartas}
-                    <span class="live-dot-red"></span> 🔴 JUGADA EN CURSO
-                  {:else if badge.is_presentando_cartas || badge.estado_mesa === 'PRESENTANDO_CARTAS'}
-                    <span class="live-dot-blue"></span> 🔵 PRESENTANDO CARTAS
-                  {:else if badge.is_barajo_cartas || badge.estado_mesa === 'BARAJO_CARTAS'}
-                    <span class="live-dot-purple"></span> 🟣 BARAJO DE CARTAS
-                  {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
-                    <span class="live-dot-amber"></span> 🟡 PRESENTANDO BANCA
-                  {:else}
-                    <span class="live-dot-green"></span> 🟢 MESA DESPEJADA
-                  {/if}
-                </span>
-              {:else}
-                <div class="card-cctv-placeholder">
-                  <span class="cctv-placeholder-spin">📹</span>
-                  <span>Conectando feed de mesa...</span>
-                </div>
-              {/if}
+              <img
+                src={getStreamUrl(badge.uuid)}
+                alt="Feed CCTV {badge.nombre}"
+                class="card-cctv-img"
+                loading="lazy"
+                on:error={(e) => {
+                  if (badge.image_b64) {
+                    e.currentTarget.src = `data:image/jpeg;base64,${badge.image_b64}`;
+                  }
+                }}
+              />
+              <span class="cctv-live-tag">
+                {#if badge.has_cards && !badge.is_presentando_cartas && !badge.is_barajo_cartas}
+                  <span class="live-dot-red"></span> 🔴 JUGADA EN CURSO
+                {:else if badge.is_presentando_cartas || badge.estado_mesa === 'PRESENTANDO_CARTAS'}
+                  <span class="live-dot-blue"></span> 🔵 PRESENTANDO CARTAS
+                {:else if badge.is_barajo_cartas || badge.estado_mesa === 'BARAJO_CARTAS'}
+                  <span class="live-dot-purple"></span> 🟣 BARAJO DE CARTAS
+                {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
+                  <span class="live-dot-amber"></span> 🟡 PRESENTANDO BANCA
+                {:else}
+                  <span class="live-dot-green"></span> 🟢 MESA DESPEJADA
+                {/if}
+              </span>
             </div>
 
             <!-- SECTOR DEL JUEGO / DE LA MANO (REGLAS CASINO) -->
@@ -1256,7 +1260,7 @@
           <div class="yolo-stream-container">
             {#if !streamFailed}
               <img
-                src="http://127.0.0.1:5005/stream/{viewingAiMesa.uuid}"
+                src={getStreamUrl(viewingAiMesa.uuid)}
                 alt="Flujo de Video IA en Tiempo Real {viewingAiMesa.nombre}"
                 class="yolo-live-img"
                 on:error={() => { streamFailed = true; }}
