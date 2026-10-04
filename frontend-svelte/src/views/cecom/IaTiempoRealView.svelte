@@ -312,6 +312,8 @@
       } else if (hasCards) {
         if (live?.ganador === 'REPARTIENDO' || live?.estado_mesa === 'REPARTIENDO') {
           ultimoEvento = 'REPARTIENDO CARTAS...';
+        } else if (live?.ganador === 'LIGANDO') {
+          ultimoEvento = '🂠 LIGANDO CARTAS...';
         } else if (live?.ganador === 'JUGANDO' || live?.estado_mesa === 'NORMAL') {
           ultimoEvento = 'JUGADA EN CURSO';
         } else if (live?.ganador && live.ganador !== 'ESPERANDO' && live.ganador !== 'SIN JUGADA') {
@@ -910,7 +912,9 @@
                     <div class="cards-strip">
                       {#if badge.banca && badge.banca.length > 0}
                         {#each badge.banca.slice(0, 3) as c}
-                          <span class="card-chip banca" title="{c.val}">{c.val}</span>
+                          <span class="card-chip banca" class:back-chip={c.val.includes('BACK')} title="{c.val}">
+                            {c.val.includes('BACK') ? '🂠' : c.val}
+                          </span>
                         {/each}
                       {:else}
                         <span class="no-cards">-</span>
@@ -935,7 +939,9 @@
                     <div class="cards-strip">
                       {#if badge.punto && badge.punto.length > 0}
                         {#each badge.punto.slice(0, 3) as c}
-                          <span class="card-chip punto" title="{c.val}">{c.val}</span>
+                          <span class="card-chip punto" class:back-chip={c.val.includes('BACK')} title="{c.val}">
+                            {c.val.includes('BACK') ? '🂠' : c.val}
+                          </span>
                         {/each}
                       {:else}
                         <span class="no-cards">-</span>
@@ -952,8 +958,12 @@
                     🏆 PUNTO GANA ({badge.scoreP} a {badge.scoreB})
                   {:else if badge.ganador === 'EMPATE (TIE)'}
                     🏆 EMPATE (TIE) ({badge.scoreB} - {badge.scoreP})
-                  {:else}
+                  {:else if badge.ganador === 'LIGANDO'}
+                    🂠 LIGANDO CARTAS...
+                  {:else if badge.ganador === 'REPARTIENDO'}
                     🃏 REPARTIENDO CARTAS...
+                  {:else}
+                    🃏 JUGADA EN CURSO...
                   {/if}
                 </div>
 
@@ -1970,6 +1980,13 @@
 
   .card-chip.banca {
     border-top: 3px solid #dc2626;
+  }
+
+  .card-chip.back-chip {
+    background: #1e293b;
+    color: #94a3b8;
+    border: 1px dashed #64748b;
+    border-top: 3px solid #64748b;
   }
 
   .no-cards {

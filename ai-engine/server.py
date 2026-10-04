@@ -175,6 +175,19 @@ def motor_baccarat(punto_cards, banca_cards):
             "descripcion": "Mesa despejada (Sin jugada activa)"
         }
 
+    # Verificar si alguna carta aún está boca abajo (cliente ligando o squeeze)
+    has_back = any(parse_card_info(c.get('val', '')).get('is_back') for c in (punto_cards + banca_cards))
+    if has_back:
+        return {
+            "win": "LIGANDO",
+            "scoreP": sP,
+            "scoreB": sB,
+            "listo": False,
+            "natural": False,
+            "tipo_evento": "JUGADA",
+            "descripcion": f"Ligando cartas ({nP} Punto, {nB} Banca descubiertas)"
+        }
+
     if nP < 2 or nB < 2:
         return {
             "win": "REPARTIENDO",
@@ -186,7 +199,7 @@ def motor_baccarat(punto_cards, banca_cards):
             "descripcion": f"Repartiendo cartas ({nP} Punto, {nB} Banca)"
         }
 
-    # Natural 8 o 9 (Se termina de inmediato, ninguna mano pide 3ra carta)
+    # Natural 8 o 9 (Termina de inmediato al recibir 2 cartas cada lado)
     if (nP == 2 and nB == 2) and (sP >= 8 or sB >= 8):
         ganador = "BANCA" if sB > sP else ("PUNTO" if sP > sB else "EMPATE (TIE)")
         return {
@@ -206,20 +219,16 @@ def motor_baccarat(punto_cards, banca_cards):
             }
         }
 
-    pideP = False
+    pideP = (sP <= 5)
     pideB = False
 
-    # Regla de Punto: Pide con 0-5, Planta con 6-7
-    if sP <= 5:
-        pideP = True
-
-    # Regla de Banca
+    # Regla de Tercera Carta Oficial de Baccarat
     if not pideP:
         if sB <= 5:
             pideB = True
     elif nP >= 3:
         p3 = parse_card_info(punto_cards[2].get('val', ''))
-        v3P = p3.get('baccarat_val', 0)
+        v3P = p3.get('baccarat_val', 0) if p3.get('baccarat_val') is not None else 0
         if sB <= 2:
             pideB = True
         elif sB == 3 and v3P != 8:
@@ -233,7 +242,11 @@ def motor_baccarat(punto_cards, banca_cards):
 
     esperaP = 3 if pideP else 2
     esperaB = 3 if pideB else 2
-    terminado = (nP == esperaP) and (nB == esperaB)
+    terminado = (nP >= esperaP) and (nB >= esperaB)
+
+    # Si ambas manos ya tienen 2 cartas y ambas plantan (ej: 6 y 7, o 6 y 6)
+    if (nP == 2 and nB == 2) and (not pideP and not pideB):
+        terminado = True
 
     ganador = "BANCA" if sB > sP else ("PUNTO" if sP > sB else "EMPATE (TIE)")
     return {
@@ -873,7 +886,17 @@ def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None
 
     return False, False, []
 
+def calc_box_iou(box1, box2):
+    x1, y1 = max(box1[0], box2[0]), max(box1[1], box2[1])
+    x2, y2 = min(box1[2], box2[2]), min(box1[3], box2[3])
+    inter = max(0, x2 - x1) * max(0, y2 - y1)
+    a1 = max(0, box1[2] - box1[0]) * max(0, box1[3] - box1[1])
+    a2 = max(0, box2[2] - box2[0]) * max(0, box2[3] - box2[1])
+    u = a1 + a2 - inter
+    return inter / float(u) if u > 0 else 0.0
+
 mesa_round_memory = {}
+mesa_hand_stability = {}
 
 def ai_inference_loop():
     print("🧠 [AI Inference Loop] Iniciando análisis continuo de mesas...")
@@ -903,7 +926,7 @@ def ai_inference_loop():
                 infer_scale = infer_target_w / float(w_f)
                 infer_frame = cv2.resize(frame, (infer_target_w, int(h_f * infer_scale)), interpolation=cv2.INTER_LINEAR)
                 with torch.inference_mode():
-                    results = model(infer_frame, verbose=False, conf=0.32, iou=0.25, imgsz=640)
+                    results = model(infer_frame, verbose=False, conf=0.18, iou=0.50, imgsz=640)
                 box_scale = 1.0 / infer_scale
 
                 raw_cards = []
@@ -914,12 +937,16 @@ def ai_inference_loop():
                     name = model.names[cls_id].upper()
                     conf = round(float(box.conf[0]), 2)
 
-                    if 0.35 <= conf <= 0.65:
+                    if 0.20 <= conf <= 0.50:
                         guardar_por_duda = True
 
                     x1, y1, x2, y2 = [int(v * box_scale) for v in box.xyxy[0].tolist()]
                     cx = (x1 + x2) / 2
                     cy = (y1 + y2) / 2
+
+                    # Filtro ROI: cartas deben estar dentro del tapete de juego
+                    if not (0.15 * h_f < cy < 0.88 * h_f and 0.10 * w_f < cx < 0.90 * w_f):
+                        continue
 
                     raw_cards.append({
                         "val": name,
@@ -930,13 +957,16 @@ def ai_inference_loop():
                         "conf": conf
                     })
 
-                # Filtrar cajas duplicadas que correspondan a la misma carta física
+                # Deduplicación basada en IoU real (no suprime cartas contiguas lado a lado)
                 filtered_cards = []
                 for c in sorted(raw_cards, key=lambda x: x['conf'], reverse=True):
                     overlap = False
                     for fc in filtered_cards:
-                        dist = ((c['cx'] - fc['cx'])**2 + (c['cy'] - fc['cy'])**2)**0.5
-                        if dist < 32:
+                        iou = calc_box_iou(c['box'], fc['box'])
+                        center_dist = ((c['cx'] - fc['cx'])**2 + (c['cy'] - fc['cy'])**2)**0.5
+                        # Dos cartas distintas pegadas lado a lado tienen IoU ~ 0.05 y dist ~ 18-28px.
+                        # Solo es duplicado si comparten la misma área física (IoU > 0.55) o sus centros son casi idénticos (< 10px).
+                        if iou > 0.55 or center_dist < 10:
                             overlap = True
                             break
                     if not overlap:
@@ -952,7 +982,7 @@ def ai_inference_loop():
                 mem = mesa_round_memory.get(mesa_uuid)
 
                 if count > 0:
-                    if not mem or (now_ts - mem.get('last_seen', 0) > 5.5):
+                    if not mem or (now_ts - mem.get('last_seen', 0) > 4.0):
                         mesa_round_memory[mesa_uuid] = {
                             'cards': raw_cards,
                             'last_seen': now_ts,
@@ -960,8 +990,8 @@ def ai_inference_loop():
                         }
                     else:
                         # Si antes teníamos más cartas y de repente disminuyó (ej: brazo del dealer tapando),
-                        # retenemos las cartas anteriores durante hasta 5.0 segundos
-                        if count < mem.get('count', 0) and (now_ts - mem.get('last_seen', 0) < 5.0):
+                        # retenemos las cartas anteriores durante hasta 2.5 segundos
+                        if count < mem.get('count', 0) and (now_ts - mem.get('last_seen', 0) < 2.5):
                             raw_cards = mem['cards']
                             count = len(raw_cards)
                         else:
@@ -969,12 +999,13 @@ def ai_inference_loop():
                             mem['count'] = count
                             mem['last_seen'] = now_ts
                 else:
-                    # count == 0
-                    if mem and (now_ts - mem.get('last_seen', 0) < 5.0):
+                    # count == 0: Si la mesa se despejó, limpiar en 1.5s
+                    if mem and (now_ts - mem.get('last_seen', 0) < 1.5):
                         raw_cards = mem['cards']
                         count = len(raw_cards)
                     else:
                         mesa_round_memory.pop(mesa_uuid, None)
+                        mesa_hand_stability.pop(mesa_uuid, None)
 
                 is_presentando_banca = False
                 chip_boxes = []
@@ -1009,38 +1040,57 @@ def ai_inference_loop():
                         estado_mesa = "NORMAL"
 
                     if tipo_juego == 'BACCARAT':
-                        # REGLA OFICIAL DE BACCARAT:
+                        # Partición Dinámica e Inteligente de Baccarat:
                         # En la cámara, las cartas de BANCA se sitúan a la izquierda (menor cx) y PUNTO a la derecha (mayor cx).
                         # NUNCA JAMÁS Banca o Punto pueden tener 4 cartas. Máximo 3 cartas por bando.
-                        if count == 1:
-                            banca_list = raw_cards
+                        cx_mid = w_f * 0.50
+                        if count == 0:
+                            banca_list = []
                             punto_list = []
+                        elif count == 1:
+                            if raw_cards[0]['cx'] < cx_mid:
+                                banca_list = [raw_cards[0]]
+                                punto_list = []
+                            else:
+                                banca_list = []
+                                punto_list = [raw_cards[0]]
                         elif count == 2:
-                            banca_list = [raw_cards[0]]
-                            punto_list = [raw_cards[1]]
+                            if raw_cards[1]['cx'] < cx_mid - 25:
+                                banca_list = raw_cards
+                                punto_list = []
+                            elif raw_cards[0]['cx'] > cx_mid + 25:
+                                banca_list = []
+                                punto_list = raw_cards
+                            else:
+                                banca_list = [raw_cards[0]]
+                                punto_list = [raw_cards[1]]
                         elif count == 3:
-                            if len(gaps) >= 2 and gaps[0] > gaps[1]:
+                            g0 = gaps[0] if len(gaps) > 0 else 0
+                            g1 = gaps[1] if len(gaps) > 1 else 0
+                            if g0 > g1:
                                 banca_list = [raw_cards[0]]
                                 punto_list = raw_cards[1:3]
                             else:
                                 banca_list = raw_cards[0:2]
                                 punto_list = [raw_cards[2]]
                         elif count == 4:
-                            banca_list = raw_cards[:2]
-                            punto_list = raw_cards[2:4]
+                            best_k = 2
+                            best_score = (gaps[1] if len(gaps) > 1 else 0) + 20
+                            if len(gaps) > 0 and gaps[0] > best_score:
+                                best_k = 1
+                            if len(gaps) > 2 and gaps[2] > best_score:
+                                best_k = 3
+                            banca_list = raw_cards[:best_k]
+                            punto_list = raw_cards[best_k:4]
                         elif count == 5:
-                            # 2 Banca / 3 Punto, o 3 Banca / 2 Punto. NUNCA 4!
-                            g2 = gaps[1] if len(gaps) > 1 else 0
-                            g3 = gaps[2] if len(gaps) > 2 else 0
-                            if g3 > g2:
-                                banca_list = raw_cards[:3]
-                                punto_list = raw_cards[3:5]
-                            else:
+                            g1 = gaps[1] if len(gaps) > 1 else 0
+                            g2 = gaps[2] if len(gaps) > 2 else 0
+                            if g1 > g2:
                                 banca_list = raw_cards[:2]
                                 punto_list = raw_cards[2:5]
-                        elif count == 6:
-                            banca_list = raw_cards[:3]
-                            punto_list = raw_cards[3:6]
+                            else:
+                                banca_list = raw_cards[:3]
+                                punto_list = raw_cards[3:5]
                         else:
                             banca_list = raw_cards[:3]
                             punto_list = raw_cards[3:6]
@@ -1169,6 +1219,19 @@ def ai_inference_loop():
                 else: # BACCARAT
                     juego_label = "Baccarat"
                     resultado = motor_baccarat(punto_list, banca_list)
+
+                    # Estabilidad de cartas y auto-cierre garantizado de mano:
+                    # Si ambas manos tienen al menos 2 cartas descubiertas (sin BACK) y permanecen
+                    # estables por >= 2.0 segundos, la mano se concluye (listo = True) para registro inmediato
+                    has_back = any(parse_card_info(c.get('val', '')).get('is_back') for c in (punto_list + banca_list))
+                    card_sig = (tuple(c['val'] for c in punto_list), tuple(c['val'] for c in banca_list))
+                    stab = mesa_hand_stability.get(mesa_uuid)
+                    if stab and stab.get('sig') == card_sig:
+                        if (now_ts - stab.get('since', now_ts) >= 2.0) and len(punto_list) >= 2 and len(banca_list) >= 2 and not has_back:
+                            resultado['listo'] = True
+                    else:
+                        mesa_hand_stability[mesa_uuid] = {'sig': card_sig, 'since': now_ts}
+
                     det_p_str = ', '.join([c['val'] for c in punto_list])
                     det_b_str = ', '.join([c['val'] for c in banca_list])
                     detalle_mano = f"B:[{det_b_str}] P:[{det_p_str}]"
@@ -1661,6 +1724,23 @@ def actualizar_mesas(mesas_list):
             estado_stream[uuid] = 'conectando'
             threading.Thread(target=stream_worker, args=(uuid, url_rtsp), daemon=True).start()
 
+def sync_mesas_worker():
+    while True:
+        try:
+            for api_url in WISI_API_URLS:
+                try:
+                    r = requests.get(f"{api_url}/mesas-con-camaras", timeout=8)
+                    if r.status_code == 200:
+                        data = r.json().get('data', [])
+                        if data:
+                            actualizar_mesas(data)
+                            break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        time.sleep(25)
+
 def cargar_mesas_desde_fastify():
     for intento in range(3):
         for api_url in WISI_API_URLS:
@@ -1679,6 +1759,7 @@ def cargar_mesas_desde_fastify():
 
 if __name__ == '__main__':
     cargar_mesas_desde_fastify()
+    threading.Thread(target=sync_mesas_worker, daemon=True).start()
     threading.Thread(target=ai_inference_loop, daemon=True).start()
     threading.Thread(target=sync_to_cloud_worker, daemon=True).start()
     app.run(host='0.0.0.0', port=5005, threaded=True)
