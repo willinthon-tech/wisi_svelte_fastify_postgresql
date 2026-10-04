@@ -895,6 +895,21 @@ def calc_box_iou(box1, box2):
     u = a1 + a2 - inter
     return inter / float(u) if u > 0 else 0.0
 
+def deduplicate_boxes(cards_list):
+    filtered = []
+    for c in sorted(cards_list, key=lambda x: x['conf'], reverse=True):
+        overlap = False
+        for fc in filtered:
+            iou = calc_box_iou(c['box'], fc['box'])
+            center_dist = ((c['cx'] - fc['cx'])**2 + (c['cy'] - fc['cy'])**2)**0.5
+            if iou > 0.55 or center_dist < 10:
+                overlap = True
+                break
+        if not overlap:
+            filtered.append(c)
+    filtered.sort(key=lambda c: c['cx'])
+    return filtered
+
 mesa_round_memory = {}
 mesa_hand_stability = {}
 
@@ -957,23 +972,44 @@ def ai_inference_loop():
                         "conf": conf
                     })
 
-                # Deduplicación basada en IoU real (no suprime cartas contiguas lado a lado)
-                filtered_cards = []
-                for c in sorted(raw_cards, key=lambda x: x['conf'], reverse=True):
-                    overlap = False
-                    for fc in filtered_cards:
-                        iou = calc_box_iou(c['box'], fc['box'])
-                        center_dist = ((c['cx'] - fc['cx'])**2 + (c['cy'] - fc['cy'])**2)**0.5
-                        # Dos cartas distintas pegadas lado a lado tienen IoU ~ 0.05 y dist ~ 18-28px.
-                        # Solo es duplicado si comparten la misma área física (IoU > 0.55) o sus centros son casi idénticos (< 10px).
-                        if iou > 0.55 or center_dist < 10:
-                            overlap = True
-                            break
-                    if not overlap:
-                        filtered_cards.append(c)
+                # Deduplicación inicial de detecciones nativas
+                raw_cards = deduplicate_boxes(raw_cards)
 
-                filtered_cards.sort(key=lambda c: c['cx'])
-                raw_cards = filtered_cards
+                # Paso 2 (Auto-Recuperación de Cartas Descoloridas / Destellos de Luz en Paño):
+                # Si hay cartas en mesa pero faltan naipes (ej. tercera carta con reflejo o desenfoque),
+                # aplicamos realce adaptativo de contraste YCrCb-CLAHE para extraerla con alta fidelidad.
+                if tipo_juego == 'BACCARAT' and (0 < len(raw_cards) < 6):
+                    try:
+                        ycrcb = cv2.cvtColor(infer_frame, cv2.COLOR_BGR2YCrCb)
+                        y_ch, cr_ch, cb_ch = cv2.split(ycrcb)
+                        clahe_op = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+                        y_enh = clahe_op.apply(y_ch)
+                        infer_enh = cv2.cvtColor(cv2.merge((y_enh, cr_ch, cb_ch)), cv2.COLOR_YCrCb2BGR)
+                        with torch.inference_mode():
+                            results_enh = model(infer_enh, verbose=False, conf=0.18, iou=0.50, imgsz=640)
+
+                        for box in results_enh[0].boxes:
+                            cls_id = int(box.cls[0])
+                            name = model.names[cls_id].upper()
+                            conf = round(float(box.conf[0]), 2)
+                            x1, y1, x2, y2 = [int(v * box_scale) for v in box.xyxy[0].tolist()]
+                            cx = (x1 + x2) / 2
+                            cy = (y1 + y2) / 2
+                            if not (0.15 * h_f < cy < 0.88 * h_f and 0.10 * w_f < cx < 0.90 * w_f):
+                                continue
+
+                            raw_cards.append({
+                                "val": name,
+                                "box": [x1, y1, x2, y2],
+                                "norm_box": [x1 / float(w_f), y1 / float(h_f), x2 / float(w_f), y2 / float(h_f)],
+                                "cx": cx,
+                                "cy": cy,
+                                "conf": conf
+                            })
+                        raw_cards = deduplicate_boxes(raw_cards)
+                    except Exception:
+                        pass
+
                 count = len(raw_cards)
                 detections = []
                 estado_mesa = "NORMAL"
