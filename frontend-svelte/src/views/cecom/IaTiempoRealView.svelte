@@ -310,10 +310,18 @@
         ultimoEvento = 'CILINDRO / PAÑO ACTIVO';
         descripcion = 'Mesa de Ruleta Americana activa (0, 00, 1-36)';
       } else if (hasCards) {
-        if (live?.ganador && live.ganador !== 'ESPERANDO' && live.ganador !== 'SIN JUGADA') {
-          ultimoEvento = (juegoTipo === 'POKER_CARIBENO' || juegoTipo === 'TEXAS_BONUS') ? live.ganador : `${live.ganador} GANA`;
-        } else if (live?.estado_mesa === 'REPARTIENDO') {
+        if (live?.ganador === 'REPARTIENDO' || live?.estado_mesa === 'REPARTIENDO') {
           ultimoEvento = 'REPARTIENDO CARTAS...';
+        } else if (live?.ganador === 'JUGANDO' || live?.estado_mesa === 'NORMAL') {
+          ultimoEvento = 'JUGADA EN CURSO';
+        } else if (live?.ganador && live.ganador !== 'ESPERANDO' && live.ganador !== 'SIN JUGADA') {
+          if (juegoTipo === 'POKER_CARIBENO' || juegoTipo === 'TEXAS_BONUS') {
+            ultimoEvento = live.ganador;
+          } else if (live.ganador === 'EMPATE (TIE)' || live.ganador === 'EMPATE') {
+            ultimoEvento = 'EMPATE (TIE)';
+          } else {
+            ultimoEvento = `${live.ganador} GANA`;
+          }
         } else {
           ultimoEvento = 'RONDA EN PROCESO';
         }
@@ -697,7 +705,7 @@
                   <span class="live-dot-blue"></span> 🔵 PRESENTANDO CARTAS
                 {:else if badge.is_barajo_cartas || badge.estado_mesa === 'BARAJO_CARTAS'}
                   <span class="live-dot-purple"></span> 🟣 BARAJO DE CARTAS
-                {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
+                {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA'}
                   <span class="live-dot-amber"></span> 🟡 PRESENTANDO BANCA
                 {:else}
                   <span class="live-dot-green"></span> 🟢 MESA DESPEJADA
@@ -820,6 +828,76 @@
                     🃏 REPARTIENDO CARTAS...
                   {/if}
                 </div>
+              {:else if badge.juego_tipo === 'BLACKJACK'}
+                <!-- TABLERO BLACKJACK (DEALER VS JUGADOR) -->
+                <div class="ia-live-scoreboard blackjack">
+                  <!-- Lado DEALER / CASA (Plantado ≥ 17) -->
+                  <div class="score-side banca bj-dealer" class:winner={badge.ganador && badge.ganador.includes('DEALER GANA')}>
+                    <div class="side-header">
+                      <span class="side-lbl">🎩 DEALER ({badge.dealer_cards?.length || badge.banca?.length || 0})</span>
+                      <span class="side-score" class:bj-bust={(badge.score_dealer || badge.scoreB || 0) > 21}>
+                        {(badge.score_dealer || badge.scoreB || 0) > 21 ? 'PASÓ' : (badge.score_dealer || badge.scoreB || 0)}
+                      </span>
+                    </div>
+                    <div class="cards-strip">
+                      {#if (badge.dealer_cards && badge.dealer_cards.length > 0) || (badge.banca && badge.banca.length > 0)}
+                        {#each (badge.dealer_cards || badge.banca) as c}
+                          <span class="card-chip dealer-chip" title="{c.val}">{c.val}</span>
+                        {/each}
+                      {:else}
+                        <span class="no-cards">-</span>
+                      {/if}
+                    </div>
+                  </div>
+
+                  <!-- Separador VS -->
+                  <div class="score-vs">
+                    <span class="vs-text">VS</span>
+                    {#if (badge.score_dealer === 21 && (badge.dealer_cards?.length || 0) === 2) || (badge.score_jugador === 21 && (badge.jugador_cards?.length || 0) === 2)}
+                      <span class="natural-tag bj">BJ 21</span>
+                    {/if}
+                  </div>
+
+                  <!-- Lado JUGADOR -->
+                  <div class="score-side punto bj-player" class:winner={badge.ganador && badge.ganador.includes('JUGADOR GANA')}>
+                    <div class="side-header">
+                      <span class="side-lbl">👤 JUGADOR ({badge.jugador_cards?.length || badge.punto?.length || 0})</span>
+                      <span class="side-score" class:bj-bust={(badge.score_jugador || badge.scoreP || 0) > 21}>
+                        {(badge.score_jugador || badge.scoreP || 0) > 21 ? 'PASÓ' : (badge.score_jugador || badge.scoreP || 0)}
+                      </span>
+                    </div>
+                    <div class="cards-strip">
+                      {#if (badge.jugador_cards && badge.jugador_cards.length > 0) || (badge.punto && badge.punto.length > 0)}
+                        {#each (badge.jugador_cards || badge.punto) as c}
+                          <span class="card-chip player-chip" title="{c.val}">{c.val}</span>
+                        {/each}
+                      {:else}
+                        <span class="no-cards">-</span>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BANNER DE GANADOR / ESTADO BLACKJACK -->
+                <div class="ia-winner-banner"
+                  class:banca-win={badge.ganador && badge.ganador.includes('DEALER GANA')}
+                  class:punto-win={badge.ganador && badge.ganador.includes('JUGADOR GANA')}
+                  class:tie-win={badge.ganador === 'EMPATE'}
+                >
+                  {#if badge.ganador === 'DEALER GANA'}
+                    🏆 DEALER GANA (CASA)
+                  {:else if badge.ganador === 'JUGADOR GANA'}
+                    🏆 JUGADOR GANA
+                  {:else if badge.ganador === 'DEALER GANA (JUGADOR SE PASO)'}
+                    💥 JUGADOR SE PASÓ (>21) • DEALER GANA
+                  {:else if badge.ganador === 'JUGADOR GANA (DEALER SE PASO)'}
+                    💥 DEALER SE PASÓ (>21) • JUGADOR GANA
+                  {:else if badge.ganador === 'EMPATE'}
+                    🤝 EMPATE (PUSH)
+                  {:else}
+                    🃏 JUGADA EN CURSO (REPARTIENDO)...
+                  {/if}
+                </div>
               {:else}
                 <!-- TABLERO BACCARAT (MÁXIMO 3 CARTAS POR LADO SEGÚN REGLAMENTO) -->
                 <div class="ia-live-scoreboard">
@@ -868,8 +946,12 @@
 
                 <!-- BANNER DE GANADOR BACCARAT -->
                 <div class="ia-winner-banner" class:banca-win={badge.ganador === 'BANCA'} class:punto-win={badge.ganador === 'PUNTO'} class:tie-win={badge.ganador === 'EMPATE (TIE)'}>
-                  {#if badge.ganador && badge.ganador !== 'SIN JUGADA' && badge.ganador !== 'ESPERANDO'}
-                    🏆 {badge.ganador} GANA
+                  {#if badge.ganador === 'BANCA'}
+                    🏆 BANCA GANA ({badge.scoreB} a {badge.scoreP})
+                  {:else if badge.ganador === 'PUNTO'}
+                    🏆 PUNTO GANA ({badge.scoreP} a {badge.scoreB})
+                  {:else if badge.ganador === 'EMPATE (TIE)'}
+                    🏆 EMPATE (TIE) ({badge.scoreB} - {badge.scoreP})
                   {:else}
                     🃏 REPARTIENDO CARTAS...
                   {/if}
@@ -906,7 +988,7 @@
                   {badge.descripcion || badge.detalle || 'Mezcla y lavado de naipes boca abajo'}
                 </span>
               </div>
-            {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA' || badge.ultimo_evento?.includes('BANCA')}
+            {:else if badge.is_presentando_banca || badge.estado_mesa === 'PRESENTANDO_BANCA'}
               <!-- PRESENTANDO BANCA -->
               <div class="presentando-banca-box">
                 <span class="presentando-banca-badge">🟡 PRESENTANDO BANCA</span>
@@ -1352,6 +1434,79 @@
                   <span>Calificación: {viewingAiMesa.califica === true ? 'SÍ (VÁLIDA)' : (viewingAiMesa.califica === false ? 'NO CALIFICA' : 'EN EVALUACIÓN')}</span>
                 </div>
               </div>
+            {:else if viewingAiMesa.juego_tipo === 'BLACKJACK'}
+              <!-- MARCADOR PRINCIPAL BLACKJACK (DEALER VS JUGADOR) -->
+              <div class="vision-score-box blackjack">
+                <!-- Lado DEALER / CASA (Izquierda) -->
+                <div class="v-side banca bj-dealer" class:winner={viewingAiMesa.ganador && viewingAiMesa.ganador.includes('DEALER GANA')}>
+                  <span class="v-lbl">🎩 CASA / DEALER</span>
+                  <span class="v-val">{(viewingAiMesa.score_dealer || viewingAiMesa.scoreB || 0) > 21 ? 'PASÓ' : (viewingAiMesa.score_dealer || viewingAiMesa.scoreB || 0)}</span>
+                  <div class="v-cards">
+                    {#if (viewingAiMesa.dealer_cards && viewingAiMesa.dealer_cards.length > 0) || (viewingAiMesa.banca && viewingAiMesa.banca.length > 0)}
+                      {#each (viewingAiMesa.dealer_cards || viewingAiMesa.banca) as c}
+                        <span class="chip-detail banca">{c.val}</span>
+                      {/each}
+                    {:else}
+                      <span class="empty-detail">Sin cartas</span>
+                    {/if}
+                  </div>
+                </div>
+
+                <div class="v-divider">
+                  <span>VS</span>
+                  {#if (viewingAiMesa.score_dealer === 21 && (viewingAiMesa.dealer_cards?.length || 0) === 2) || (viewingAiMesa.score_jugador === 21 && (viewingAiMesa.jugador_cards?.length || 0) === 2)}
+                    <span class="v-natural">BJ 21</span>
+                  {/if}
+                </div>
+
+                <!-- Lado JUGADOR (Derecha) -->
+                <div class="v-side punto bj-player" class:winner={viewingAiMesa.ganador && viewingAiMesa.ganador.includes('JUGADOR GANA')}>
+                  <span class="v-lbl">👤 JUGADOR</span>
+                  <span class="v-val">{(viewingAiMesa.score_jugador || viewingAiMesa.scoreP || 0) > 21 ? 'PASÓ' : (viewingAiMesa.score_jugador || viewingAiMesa.scoreP || 0)}</span>
+                  <div class="v-cards">
+                    {#if (viewingAiMesa.jugador_cards && viewingAiMesa.jugador_cards.length > 0) || (viewingAiMesa.punto && viewingAiMesa.punto.length > 0)}
+                      {#each (viewingAiMesa.jugador_cards || viewingAiMesa.punto) as c}
+                        <span class="chip-detail punto">{c.val}</span>
+                      {/each}
+                    {:else}
+                      <span class="empty-detail">Sin cartas</span>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Banner de Estado Blackjack -->
+              <div class="vision-status-banner"
+                class:banca={viewingAiMesa.ganador && viewingAiMesa.ganador.includes('DEALER GANA')}
+                class:punto={viewingAiMesa.ganador && viewingAiMesa.ganador.includes('JUGADOR GANA')}
+              >
+                {#if viewingAiMesa.ganador === 'DEALER GANA'}
+                  🏆 DEALER GANA (CASA)
+                {:else if viewingAiMesa.ganador === 'JUGADOR GANA'}
+                  🏆 JUGADOR GANA
+                {:else if viewingAiMesa.ganador === 'DEALER GANA (JUGADOR SE PASO)'}
+                  💥 JUGADOR SE PASÓ (>21) • DEALER GANA
+                {:else if viewingAiMesa.ganador === 'JUGADOR GANA (DEALER SE PASO)'}
+                  💥 DEALER SE PASÓ (>21) • JUGADOR GANA
+                {:else if viewingAiMesa.ganador === 'EMPATE'}
+                  🤝 EMPATE (PUSH)
+                {:else}
+                  🔄 JUGANDO EN CURSO • Repartiendo cartas
+                {/if}
+              </div>
+
+              <!-- Desglose Técnico de Reglas Blackjack -->
+              <div class="vision-rules-box">
+                <span class="box-title">📋 Reglas Oficiales de BlackJack 21</span>
+                <p class="rules-desc">
+                  El Dealer se planta obligatoriamente en 17 o más y pide con 16 o menos. As vale 1 u 11. Figuras (J, Q, K) valen 10. Si alguna mano supera 21 se pasa (Bust).
+                </p>
+                <div class="rules-meta">
+                  <span>Score Dealer: {viewingAiMesa.score_dealer || viewingAiMesa.scoreB || 0}</span>
+                  <span>Score Jugador: {viewingAiMesa.score_jugador || viewingAiMesa.scoreP || 0}</span>
+                  <span>Estado: {viewingAiMesa.ganador || 'JUGANDO'}</span>
+                </div>
+              </div>
             {:else}
               <!-- Marcador Principal Baccarat (BANCA A LA IZQUIERDA Y PUNTO A LA DERECHA COMO EN CÁMARA) -->
               <div class="vision-score-box">
@@ -1395,8 +1550,14 @@
 
               <!-- Ganador / Estado Baccarat -->
               <div class="vision-status-banner" class:banca={viewingAiMesa.ganador === 'BANCA'} class:punto={viewingAiMesa.ganador === 'PUNTO'}>
-                {#if viewingAiMesa.ganador && viewingAiMesa.ganador !== 'ESPERANDO'}
-                  🏆 GANADOR: {viewingAiMesa.ganador} (Banca {viewingAiMesa.scoreB} - Punto {viewingAiMesa.scoreP})
+                {#if viewingAiMesa.ganador === 'BANCA'}
+                  🏆 GANADOR: BANCA (Banca {viewingAiMesa.scoreB} - Punto {viewingAiMesa.scoreP})
+                {:else if viewingAiMesa.ganador === 'PUNTO'}
+                  🏆 GANADOR: PUNTO (Punto {viewingAiMesa.scoreP} - Banca {viewingAiMesa.scoreB})
+                {:else if viewingAiMesa.ganador === 'EMPATE (TIE)'}
+                  🏆 EMPATE (TIE) ({viewingAiMesa.scoreB} - {viewingAiMesa.scoreP})
+                {:else if viewingAiMesa.ganador === 'REPARTIENDO'}
+                  🃏 REPARTIENDO CARTAS (ESPERANDO 2DA Y 3RA CARTA)...
                 {:else}
                   🔄 Estado: {viewingAiMesa.estado_mesa || 'ESPERANDO'}
                 {/if}
@@ -1974,6 +2135,28 @@
 
   .card-chip.poker {
     border-top: 3px solid #eab308;
+  }
+
+  .card-chip.dealer-chip {
+    border-top: 3px solid #eab308;
+    background: #ffffff;
+    color: #0f172a;
+  }
+
+  .card-chip.player-chip {
+    border-top: 3px solid #38bdf8;
+    background: #ffffff;
+    color: #0f172a;
+  }
+
+  .natural-tag.bj {
+    background: #f59e0b;
+    color: #78350f;
+  }
+
+  .side-score.bj-bust {
+    color: #ef4444;
+    font-size: 13px;
   }
 
   .card-chip.back-chip {

@@ -271,6 +271,16 @@ def motor_blackjack(jugador_cards, dealer_cards):
                 tot += 1
         return tot
 
+    if not jugador_cards and not dealer_cards:
+        return {
+            "win": "SIN JUGADA",
+            "scoreP": 0,
+            "scoreB": 0,
+            "listo": False,
+            "tipo_evento": "JUGADA",
+            "descripcion": "Mesa despejada (Sin jugada activa)"
+        }
+
     sJ = sum_bj(jugador_cards)
     sD = sum_bj(dealer_cards)
     terminado = sJ > 21 or (sD >= 17 and len(jugador_cards) >= 2)
@@ -710,34 +720,62 @@ def stream_worker(mesa_uuid, url_rtsp):
             # Generar fotograma continuo en vivo (~25 FPS) para MJPEG con overlay IA en tiempo real
             try:
                 hp, wp = frame.shape[:2]
-                scale_prev = 640.0 / wp if wp > 640 else 1.0
-                disp_frame = cv2.resize(frame, (int(wp * scale_prev), int(hp * scale_prev)), interpolation=cv2.INTER_LINEAR) if scale_prev < 1.0 else frame.copy()
+                # Escalado a alta definición para dibujo nítido de cajas y etiquetas
+                target_w = 704
+                target_h = max(10, int(hp * (target_w / float(wp))))
+                disp_frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
 
                 ann = live_annotations.get(mesa_uuid)
                 if ann:
-                    for c in ann.get('cards', []):
+                    cards = ann.get('cards', [])
+                    for c in cards:
                         if c.get('norm_box'):
                             nb = c['norm_box']
-                            b = [int(nb[0] * disp_frame.shape[1]), int(nb[1] * disp_frame.shape[0]), int(nb[2] * disp_frame.shape[1]), int(nb[3] * disp_frame.shape[0])]
+                            b = [int(nb[0] * target_w), int(nb[1] * target_h), int(nb[2] * target_w), int(nb[3] * target_h)]
                         else:
-                            b = [int(v * scale_prev) for v in c.get('box', [])]
+                            b = [int(v * (target_w / float(wp))) for v in c.get('box', [])]
+
                         if len(b) == 4:
-                            is_p = 'PUNTO' in str(c.get('val', '')).upper() or 'RED' in str(c.get('val', '')).upper()
-                            col = (0, 0, 255) if is_p else (255, 0, 0)
+                            val_str = str(c.get('val', '')).strip()
+                            zone = c.get('zone', '')
+                            # Color por zona / rol
+                            if zone == 'banca':
+                                col = (60, 60, 255) # Rojo Banca
+                            elif zone == 'punto':
+                                col = (255, 170, 0) # Cyan Punto
+                            elif zone == 'dealer':
+                                col = (0, 215, 255) # Oro Dealer
+                            else:
+                                col = (0, 255, 120) # Verde Jugador / Mano
+
+                            # Caja delimitadora con esquinas nítidas
                             cv2.rectangle(disp_frame, (b[0], b[1]), (b[2], b[3]), col, 2)
-                            cv2.putText(disp_frame, str(c.get('val', '')), (b[0], max(14, b[1] - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, col, 2)
 
+                            # Badge relleno con texto de alta legibilidad
+                            font = cv2.FONT_HERSHEY_SIMPLEX
+                            f_scale = 0.65
+                            f_thick = 2
+                            (tw, th), _ = cv2.getTextSize(val_str, font, f_scale, f_thick)
+                            badge_y2 = max(th + 8, b[1])
+                            badge_y1 = badge_y2 - th - 8
+                            cv2.rectangle(disp_frame, (b[0], badge_y1), (b[0] + tw + 10, badge_y2), col, -1)
+                            cv2.putText(disp_frame, val_str, (b[0] + 5, badge_y2 - 5), font, f_scale, (0, 0, 0), f_thick, cv2.LINE_AA)
+
+                    # Si hay cintas de cartas desplegadas (Presentación de Mazo)
                     for rb in ann.get('ribbons', []):
-                        r_box = [int(v * scale_prev) for v in rb]
-                        if len(r_box) == 4:
-                            cv2.rectangle(disp_frame, (r_box[0], r_box[1]), (r_box[2], r_box[3]), (255, 200, 0), 2)
+                        r_norm = [int(rb[0] * (target_w / float(wp))), int(rb[1] * (target_h / float(hp))),
+                                  int(rb[2] * (target_w / float(wp))), int(rb[3] * (target_h / float(hp)))]
+                        cv2.rectangle(disp_frame, (r_norm[0], r_norm[1]), (r_norm[2], r_norm[3]), (255, 200, 0), 2)
+                        cv2.putText(disp_frame, "CARTAS DESPLEGADAS", (r_norm[0] + 6, max(22, r_norm[1] - 6)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 200, 0), 2, cv2.LINE_AA)
 
+                    # Si hay presentación de fichas de banca
                     for cb in ann.get('chips', []):
-                        c_box = [int(v * scale_prev) for v in cb]
-                        if len(c_box) == 4:
-                            cv2.rectangle(disp_frame, (c_box[0], c_box[1]), (c_box[2], c_box[3]), (0, 215, 255), 2)
+                        c_norm = [int(cb[0] * (target_w / float(wp))), int(cb[1] * (target_h / float(hp))),
+                                  int(cb[2] * (target_w / float(wp))), int(cb[3] * (target_h / float(hp)))]
+                        cv2.rectangle(disp_frame, (c_norm[0], c_norm[1]), (c_norm[2], c_norm[3]), (0, 215, 255), 2)
 
-                _, buf = cv2.imencode('.jpg', disp_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                _, buf = cv2.imencode('.jpg', disp_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 live_jpeg_buffers[mesa_uuid] = buf.tobytes()
             except Exception:
                 pass
@@ -777,71 +815,10 @@ banca_presentation_memory = {}
 
 def detectar_fichas_banca(frame, tipo_juego='BACCARAT'):
     """
-    Detecta si el croupier está presentando banca (sacando fichas del chipletero
-    y colocándolas en el paño en columnas/pilas para verificación y conteo).
+    Retorna False para evitar falsos positivos de líneas y tapete en mesas vacías.
+    Las mesas vacías se reportan limpiamente como SIN JUGADA (EN ESPERA).
     """
-    if frame is None or frame.size == 0:
-        return False, []
-
-    h, w = frame.shape[:2]
-
-    # Zona de presentación (delante del chipletero, parte inferior central en mesas de cartas)
-    if tipo_juego == 'RULETA':
-        y1, y2 = int(0.20 * h), int(0.75 * h)
-        x1, x2 = int(0.20 * w), int(0.80 * w)
-    else:
-        y1, y2 = int(0.48 * h), int(0.82 * h)
-        x1, x2 = int(0.22 * w), int(0.78 * w)
-
-    roi = frame[y1:y2, x1:x2]
-    if roi.size == 0:
-        return False, []
-
-    # Normalizar ROI para análisis invariante a resolución
-    target_w = 400
-    target_h = max(20, int(roi.shape[0] * (400 / max(1, roi.shape[1]))))
-    roi_norm = cv2.resize(roi, (target_w, target_h), interpolation=cv2.INTER_AREA)
-
-    gray = cv2.cvtColor(roi_norm, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # Filtro Sobel para capturar estrías de fichas apiladas
-    grad_x = cv2.Sobel(blurred, cv2.CV_16S, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(blurred, cv2.CV_16S, 0, 1, ksize=3)
-    abs_grad_x = cv2.convertScaleAbs(grad_x)
-    abs_grad_y = cv2.convertScaleAbs(grad_y)
-    grad = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
-
-    _, thresh = cv2.threshold(grad, 45, 255, cv2.THRESH_BINARY)
-    kernel_stack = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 5))
-    closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_stack)
-
-    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    scale_x = roi.shape[1] / target_w
-    scale_y = roi.shape[0] / target_h
-
-    detected_stacks = []
-    for cnt in contours:
-        bx, by, bw, bh = cv2.boundingRect(cnt)
-        if 10 <= bw <= 75 and 12 <= bh <= 110:
-            crop_grad = grad[by:by+bh, bx:bx+bw]
-            if crop_grad.size > 0 and np.mean(crop_grad > 35) > 0.12:
-                orig_x1 = x1 + int(bx * scale_x)
-                orig_y1 = y1 + int(by * scale_y)
-                orig_x2 = x1 + int((bx + bw) * scale_x)
-                orig_y2 = y1 + int((by + bh) * scale_y)
-                detected_stacks.append([orig_x1, orig_y1, orig_x2, orig_y2])
-
-    clean_boxes = []
-    for b in detected_stacks:
-        cx = (b[0] + b[2]) / 2
-        cy = (b[1] + b[3]) / 2
-        if not any(abs(cx - (cb[0]+cb[2])/2) < (orig_x2-orig_x1)*0.7 and abs(cy - (cb[1]+cb[3])/2) < (orig_y2-orig_y1)*0.7 for cb in clean_boxes):
-            clean_boxes.append(b)
-
-    is_presentando = len(clean_boxes) >= 2
-    return is_presentando, clean_boxes
+    return False, []
 
 cartas_presentation_memory = {}
 barajo_memory = {}
@@ -855,28 +832,44 @@ def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None
     if frame is None or frame.size == 0 or tipo_juego == 'RULETA':
         return False, False, []
 
-    # REGLA FUNDAMENTAL:
-    # Una presentación de baraja completa (ribbon spread) o un barajo (wash / scramble)
-    # involucra docenas de cartas en el paño. NUNCA ocurre en una mesa despejada (0 cartas)
-    # ni en una mano activa normal (1 a 7 cartas).
+    h, w = frame.shape[:2]
     card_count = len(yolo_cards) if yolo_cards else 0
-    if card_count < 8:
+
+    # 1. Si YOLO detectó 8 o más cartas físicas dispersas:
+    if card_count >= 8:
+        back_count = sum(1 for c in yolo_cards if 'BACK' in str(c.get('val', '')).upper())
+        if back_count >= 6 or (back_count / max(1, card_count)) >= 0.5:
+            return False, True, []
+        xs = [c['cx'] for c in yolo_cards]
+        w_span = max(xs) - min(xs)
+        if w_span > w * 0.40:
+            return True, False, []
+
+    # 2. Análisis del paño para abanicos/cintas de barajas completas (cuando 6-8 mazos están desplegados):
+    # En este estado los naipes se solapan continuamente formando cintas semicirculares con >11% de blanco y gran anchura
+    y1, y2 = int(0.20 * h), int(0.75 * h)
+    x1, x2 = int(0.15 * w), int(0.85 * w)
+    felt = frame[y1:y2, x1:x2]
+    if felt.size == 0:
         return False, False, []
 
-    # 1. Si la gran mayoría son cartas boca abajo ('BACK'), es un barajo / mezcla:
-    back_count = sum(1 for c in yolo_cards if 'BACK' in str(c.get('val', '')).upper())
-    if back_count >= 6 or (back_count / max(1, card_count)) >= 0.5:
-        return False, True, []
+    hsv = cv2.cvtColor(felt, cv2.COLOR_BGR2HSV)
+    white_mask = (hsv[:,:,1] < 65) & (hsv[:,:,2] > 160)
+    white_pct = np.mean(white_mask) * 100
 
-    # 2. Si hay 8 o más cartas y están boca arriba distribuidas horizontalmente a lo largo de la mesa:
-    xs = [c['cx'] for c in yolo_cards]
-    min_x, max_x = min(xs), max(xs)
-    w_span = max_x - min_x
-    frame_w = frame.shape[1]
-
-    # Si las cartas cubren más del 40% del ancho del fotograma y hay al menos 8 cartas descubiertas:
-    if w_span > frame_w * 0.40 and card_count >= 8:
-        return True, False, []
+    if white_pct >= 11.0:
+        kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 5))
+        closed = cv2.morphologyEx(white_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel_h)
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        felt_w = felt.shape[1]
+        for cnt in contours:
+            bx, by, bw, bh = cv2.boundingRect(cnt)
+            if (bw / float(felt_w)) >= 0.60 and bh >= 20:
+                orig_x1 = x1 + bx
+                orig_y1 = y1 + by
+                orig_x2 = x1 + bx + bw
+                orig_y2 = y1 + by + bh
+                return True, False, [[orig_x1, orig_y1, orig_x2, orig_y2]]
 
     return False, False, []
 
@@ -910,7 +903,7 @@ def ai_inference_loop():
                 infer_scale = infer_target_w / float(w_f)
                 infer_frame = cv2.resize(frame, (infer_target_w, int(h_f * infer_scale)), interpolation=cv2.INTER_LINEAR)
                 with torch.inference_mode():
-                    results = model(infer_frame, verbose=False, conf=0.22, iou=0.25, imgsz=512)
+                    results = model(infer_frame, verbose=False, conf=0.32, iou=0.25, imgsz=640)
                 box_scale = 1.0 / infer_scale
 
                 raw_cards = []
@@ -1001,11 +994,7 @@ def ai_inference_loop():
                     punto_list = []
                     banca_list = []
                 elif count == 0:
-                    is_presentando_banca, chip_boxes = detectar_fichas_banca(frame, tipo_juego)
-                    if is_presentando_banca:
-                        estado_mesa = "PRESENTANDO_BANCA"
-                    else:
-                        estado_mesa = "SIN JUGADA"
+                    estado_mesa = "SIN JUGADA"
                     punto_list = []
                     banca_list = []
                 else:
@@ -1165,9 +1154,13 @@ def ai_inference_loop():
                         "resultado": resultado,
                         "punto": punto_list,
                         "banca": banca_list,
+                        "jugador_cards": punto_list,
+                        "dealer_cards": banca_list,
                         "detalle": detalle_mano,
                         "scoreP": resultado.get('scoreP', 0),
                         "scoreB": resultado.get('scoreB', 0),
+                        "score_jugador": resultado.get('scoreP', 0),
+                        "score_dealer": resultado.get('scoreB', 0),
                         "ganador": resultado.get('win', 'JUGANDO'),
                         "image_b64": "",
                         "timestamp": time.time(),
@@ -1208,21 +1201,26 @@ def ai_inference_loop():
                     x1, y1, x2, y2 = det['box']
                     zone = det.get('zone', '')
                     if zone == "banca":
-                        color = (0, 0, 255) # Rojo Banca
+                        color = (60, 60, 255) # Coral Red Banca
                     elif zone == "punto":
-                        color = (255, 120, 0) # Azul Punto
+                        color = (255, 170, 0) # Cyan Punto
                     elif zone == "dealer":
                         color = (0, 215, 255) # Oro Casa / Dealer
+                    elif zone == "jugador":
+                        color = (0, 255, 120) # Verde Jugador BJ
                     else:
-                        color = (0, 255, 0)
+                        color = (0, 255, 120)
 
                     cv2.rectangle(img_plot, (x1, y1), (x2, y2), color, 3)
-                    # Quitar porcentaje como solicitó el usuario: solo nombre limpio de la carta (sin porcentajes)
+                    # Nombre limpio de la carta con badge pill de alta legibilidad
                     label = str(det['val']).strip()
-                    (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.85, 2)
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    f_scale = 0.85
+                    f_thick = 2
+                    (w, h), _ = cv2.getTextSize(label, font, f_scale, f_thick)
                     top_y = max(h + 12, y1)
-                    cv2.rectangle(img_plot, (x1, top_y - h - 10), (x1 + w + 8, top_y), color, -1)
-                    cv2.putText(img_plot, label, (x1 + 4, top_y - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 0, 0), 2)
+                    cv2.rectangle(img_plot, (x1, top_y - h - 10), (x1 + w + 10, top_y), color, -1)
+                    cv2.putText(img_plot, label, (x1 + 5, top_y - 5), font, f_scale, (0, 0, 0), f_thick, cv2.LINE_AA)
 
                 # Estados operativos de presentación de cartas, barajo y banca
                 live_results[mesa_uuid]["is_presentando_cartas"] = is_presentando_cartas
@@ -1243,13 +1241,13 @@ def ai_inference_loop():
                         m_ry = min(b[1] for b in ribbon_boxes)
                         m_rx2 = max(b[2] for b in ribbon_boxes)
                         cv2.rectangle(img_plot, (m_rx - 4, max(0, m_ry - 28)), (m_rx2 + 4, max(0, m_ry - 2)), (255, 200, 0), -1)
-                        cv2.putText(img_plot, "PRESENTANDO CARTAS (MAZO COMPLETO)", (m_rx + 4, max(18, m_ry - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+                        cv2.putText(img_plot, "PRESENTANDO CARTAS (MAZO COMPLETO)", (m_rx + 4, max(18, m_ry - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2, cv2.LINE_AA)
 
                 elif estado_mesa == "BARAJO_CARTAS":
                     live_results[mesa_uuid]["estado_mesa"] = "BARAJO_CARTAS"
                     live_results[mesa_uuid]["ganador"] = "BARAJO DE CARTAS"
                     live_results[mesa_uuid]["detalle"] = "Barajo de cartas (Mezcla y lavado de naipes boca abajo)"
-                    cv2.putText(img_plot, "BARAJO DE CARTAS", (int(img_plot.shape[1] * 0.25), int(img_plot.shape[0] * 0.5)), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (255, 0, 255), 3)
+                    cv2.putText(img_plot, "BARAJO DE CARTAS", (int(img_plot.shape[1] * 0.25), int(img_plot.shape[0] * 0.5)), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (255, 0, 255), 3, cv2.LINE_AA)
 
                 elif is_presentando_banca:
                     live_results[mesa_uuid]["estado_mesa"] = "PRESENTANDO_BANCA"
@@ -1264,23 +1262,24 @@ def ai_inference_loop():
                         min_by = min(b[1] for b in chip_boxes)
                         max_bx = max(b[2] for b in chip_boxes)
                         cv2.rectangle(img_plot, (min_bx - 4, max(0, min_by - 28)), (max_bx + 4, max(0, min_by - 2)), (0, 215, 255), -1)
-                        cv2.putText(img_plot, "PRESENTANDO BANCA", (min_bx + 4, max(18, min_by - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+                        cv2.putText(img_plot, "PRESENTANDO BANCA", (min_bx + 4, max(18, min_by - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2, cv2.LINE_AA)
 
                 # Generar vista previa optimizada para la interfaz y streaming MJPEG continuo
                 hp, wp = img_plot.shape[:2]
-                target_prev_w = 640 if wp > 640 else wp
+                target_prev_w = 704 if wp > 704 else wp
                 target_prev_h = max(10, int(hp * (target_prev_w / max(1, wp))))
-                img_preview = cv2.resize(img_plot, (target_prev_w, target_prev_h), interpolation=cv2.INTER_LINEAR)
+                img_preview = cv2.resize(img_plot, (target_prev_w, target_prev_h), interpolation=cv2.INTER_CUBIC)
 
-                _, buf = cv2.imencode('.jpg', img_preview, [int(cv2.IMWRITE_JPEG_QUALITY), 68])
+                _, buf = cv2.imencode('.jpg', img_preview, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 jpeg_bytes = buf.tobytes()
-                live_jpeg_buffers[mesa_uuid] = jpeg_bytes
+                if mesa_uuid not in live_jpeg_buffers:
+                    live_jpeg_buffers[mesa_uuid] = jpeg_bytes
                 b64_img = base64.b64encode(jpeg_bytes).decode('utf-8')
                 live_results[mesa_uuid]["image_b64"] = b64_img
 
                 # Actualizar anotaciones vivas para el motor de streaming continuo a 25 FPS
                 live_annotations[mesa_uuid] = {
-                    "cards": raw_cards,
+                    "cards": detections if detections else raw_cards,
                     "ribbons": ribbon_boxes if is_presentando_cartas else [],
                     "chips": chip_boxes if is_presentando_banca else [],
                     "estado_mesa": estado_mesa,

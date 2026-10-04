@@ -152,10 +152,18 @@ function processAiEngineResults(aiData, now) {
         badgeEvento = 'CILINDRO / PAÑO ACTIVO';
       } else if (!hasCards && (liveAi.estado_mesa === 'ESPERANDO' || liveAi.estado_mesa === 'SIN JUGADA' || liveAi.ganador === 'SIN JUGADA' || liveAi.ganador === 'ESPERANDO')) {
         badgeEvento = 'SIN JUGADA (EN ESPERA)';
-      } else if (liveAi.ganador && liveAi.ganador !== 'ESPERANDO' && liveAi.ganador !== 'SIN JUGADA') {
-        badgeEvento = (juegoTipo === 'POKER_CARIBENO' || juegoTipo === 'TEXAS_BONUS') ? liveAi.ganador : `${liveAi.ganador} GANA`;
-      } else if (liveAi.estado_mesa === 'REPARTIENDO') {
+      } else if (liveAi.ganador === 'REPARTIENDO' || liveAi.estado_mesa === 'REPARTIENDO') {
         badgeEvento = 'REPARTIENDO CARTAS...';
+      } else if (liveAi.ganador === 'JUGANDO' || liveAi.estado_mesa === 'NORMAL') {
+        badgeEvento = 'JUGADA EN CURSO';
+      } else if (liveAi.ganador && liveAi.ganador !== 'ESPERANDO' && liveAi.ganador !== 'SIN JUGADA') {
+        if (juegoTipo === 'POKER_CARIBENO' || juegoTipo === 'TEXAS_BONUS') {
+          badgeEvento = liveAi.ganador;
+        } else if (liveAi.ganador === 'EMPATE (TIE)' || liveAi.ganador === 'EMPATE') {
+          badgeEvento = 'EMPATE (TIE)';
+        } else {
+          badgeEvento = `${liveAi.ganador} GANA`;
+        }
       } else {
         badgeEvento = liveAi.estado_mesa || 'SIN JUGADA (EN ESPERA)';
       }
