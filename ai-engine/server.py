@@ -716,7 +716,11 @@ def stream_worker(mesa_uuid, url_rtsp):
                 ann = live_annotations.get(mesa_uuid)
                 if ann:
                     for c in ann.get('cards', []):
-                        b = [int(v * scale_prev) for v in c.get('box', [])]
+                        if c.get('norm_box'):
+                            nb = c['norm_box']
+                            b = [int(nb[0] * disp_frame.shape[1]), int(nb[1] * disp_frame.shape[0]), int(nb[2] * disp_frame.shape[1]), int(nb[3] * disp_frame.shape[0])]
+                        else:
+                            b = [int(v * scale_prev) for v in c.get('box', [])]
                         if len(b) == 4:
                             is_p = 'PUNTO' in str(c.get('val', '')).upper() or 'RED' in str(c.get('val', '')).upper()
                             col = (0, 0, 255) if is_p else (255, 0, 0)
@@ -851,10 +855,14 @@ def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None
     if frame is None or frame.size == 0 or tipo_juego == 'RULETA':
         return False, False, []
 
+    # Si hay cartas detectadas en una mano normal de juego (1 a 7 cartas), NUNCA es presentación de mazo
+    if yolo_cards and 1 <= len(yolo_cards) <= 7:
+        return False, False, []
+
     h, w = frame.shape[:2]
     # Área del paño de juego donde se extienden o barajan las cartas
-    y1, y2 = int(0.18 * h), int(0.72 * h)
-    x1, x2 = int(0.12 * w), int(0.88 * w)
+    y1, y2 = int(0.20 * h), int(0.70 * h)
+    x1, x2 = int(0.15 * w), int(0.85 * w)
     felt = frame[y1:y2, x1:x2]
     if felt.size == 0:
         return False, False, []
@@ -863,18 +871,17 @@ def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None
     norm_h = max(20, int(felt.shape[0] * (640 / max(1, felt.shape[1]))))
     felt_norm = cv2.resize(felt, (norm_w, norm_h), interpolation=cv2.INTER_AREA)
 
-    # 1. Análisis de blanco (Naipes boca arriba)
+    # 1. Análisis de blanco estricto
     hsv = cv2.cvtColor(felt_norm, cv2.COLOR_BGR2HSV)
-    white_mask = (hsv[:,:,1] < 60) & (hsv[:,:,2] > 130)
-    white_pct = np.mean(white_mask) * 100
+    white_mask = (hsv[:,:,1] < 45) & (hsv[:,:,2] > 185)
 
     # 2. Bordes dentro de la zona blanca
     gray = cv2.cvtColor(felt_norm, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 30, 90)
+    edges = cv2.Canny(gray, 50, 150)
     card_edges = (edges > 0) & white_mask
 
-    # 3. Detectar cintas continuas de cartas (abanicos de cartas boca arriba)
-    kernel_ribbon = cv2.getStructuringElement(cv2.MORPH_RECT, (21, 7))
+    # 3. Detectar cinta continua que cubra más del 50% del ancho del paño
+    kernel_ribbon = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 9))
     closed_white = cv2.morphologyEx(white_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel_ribbon)
     contours, _ = cv2.findContours(closed_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -888,11 +895,11 @@ def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None
     for cnt in contours:
         bx, by, bw, bh = cv2.boundingRect(cnt)
         area = bw * bh
-        # Cinta ancha (más del 20% del ancho del paño) o área amplia
-        if (bw > norm_w * 0.20 or area > felt_area * 0.035) and bh > 12:
+        # Abanico real de mazo completo: ancho superior al 50% del paño y área amplia
+        if bw > norm_w * 0.50 and bh > 18 and area > felt_area * 0.08:
             crop_edges = card_edges[by:by+bh, bx:bx+bw]
             edge_dens = np.mean(crop_edges) if crop_edges.size > 0 else 0
-            if edge_dens > 0.02:
+            if edge_dens > 0.04:
                 orig_x1 = x1 + int(bx * scale_x)
                 orig_y1 = y1 + int(by * scale_y)
                 orig_x2 = x1 + int((bx + bw) * scale_x)
@@ -900,17 +907,14 @@ def detectar_presentacion_o_barajo(frame, tipo_juego='BACCARAT', yolo_cards=None
                 ribbon_boxes.append([orig_x1, orig_y1, orig_x2, orig_y2])
                 total_ribbon_area += area
 
-    is_presentando_cartas = False
-    if len(ribbon_boxes) >= 1 and (total_ribbon_area > felt_area * 0.04 or white_pct > 18.0):
-        is_presentando_cartas = True
+    is_presentando_cartas = len(ribbon_boxes) >= 1
 
     # 4. Análisis de BARAJO (cartas boca abajo esparcidas por la mesa)
     is_barajo = False
-    if not is_presentando_cartas:
-        if yolo_cards:
-            back_count = sum(1 for c in yolo_cards if 'BACK' in str(c.get('val', '')).upper())
-            if back_count >= 3:
-                is_barajo = True
+    if not is_presentando_cartas and yolo_cards:
+        back_count = sum(1 for c in yolo_cards if 'BACK' in str(c.get('val', '')).upper())
+        if back_count >= 6: # Solo si hay 6 o más cartas cubiertas dispersas
+            is_barajo = True
 
     return is_presentando_cartas, is_barajo, ribbon_boxes
 
@@ -923,7 +927,15 @@ def ai_inference_loop():
             if estado_stream.get(mesa_uuid) != 'activo':
                 continue
 
-            frame = frames_actuales.get(mesa_uuid)
+            ip = cfg.get('ip')
+            canal = cfg.get('canal')
+            usuario = cfg.get('usuario') or 'admin'
+            clave = cfg.get('clave') or ''
+
+            frame_sub = frames_actuales.get(mesa_uuid)
+            frame_hd = fetch_isapi_frame(ip, canal, usuario, clave) if (ip and canal) else None
+            frame = frame_hd if (frame_hd is not None and frame_hd.size > 0) else frame_sub
+
             if frame is None:
                 continue
 
@@ -931,9 +943,6 @@ def ai_inference_loop():
                 # Determinar juego exacto de la mesa
                 tipo_juego = resolve_game_type(cfg.get('nombre'), cfg.get('juego'))
 
-                # Normalización inteligente de resolución:
-                # La imagen original 'frame' se preserva intacta para visualización y aprendizaje activo,
-                # mientras que la inferencia YOLO se escala a 960px para máxima agilidad en tiempo real.
                 h_f, w_f = frame.shape[:2]
                 infer_target_w = 640 if w_f > 640 else w_f
                 infer_scale = infer_target_w / float(w_f)
@@ -960,6 +969,7 @@ def ai_inference_loop():
                     raw_cards.append({
                         "val": name,
                         "box": [x1, y1, x2, y2],
+                        "norm_box": [x1 / float(w_f), y1 / float(h_f), x2 / float(w_f), y2 / float(h_f)],
                         "cx": cx,
                         "cy": cy,
                         "conf": conf
@@ -1303,6 +1313,7 @@ def ai_inference_loop():
                 _, buf = cv2.imencode('.jpg', img_preview, [int(cv2.IMWRITE_JPEG_QUALITY), 68])
                 jpeg_bytes = buf.tobytes()
                 live_jpeg_buffers[mesa_uuid] = jpeg_bytes
+                b64_img = base64.b64encode(jpeg_bytes).decode('utf-8')
                 live_results[mesa_uuid]["image_b64"] = b64_img
 
                 # Actualizar anotaciones vivas para el motor de streaming continuo a 25 FPS
@@ -1675,9 +1686,9 @@ def actualizar_mesas(mesas_list):
             "sala_uuid": sala_uuid
         }
 
-        # Iniciar thread RTSP si no existe
+        # Iniciar thread RTSP si no existe (usando SUBSTREAM {canal}02 para visualización ultra-fluida sin lag)
         if uuid not in estado_stream:
-            url_rtsp = f"rtsp://{usuario}:{clave}@{ip}:554/Streaming/Channels/{canal}01"
+            url_rtsp = f"rtsp://{usuario}:{clave}@{ip}:554/Streaming/Channels/{canal}02"
             estado_stream[uuid] = 'conectando'
             threading.Thread(target=stream_worker, args=(uuid, url_rtsp), daemon=True).start()
 
