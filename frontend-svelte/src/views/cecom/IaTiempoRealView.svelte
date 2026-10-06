@@ -82,6 +82,23 @@
         method: 'POST',
         signal: AbortSignal.timeout(3000)
       });
+      // Traer snapshot inmediato y refrescar base64 en store
+      const snapRes = await fetch(`http://127.0.0.1:5005/snapshot/${mesaUuid}?t=${Date.now()}`);
+      if (snapRes.ok) {
+        const blob = await snapRes.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const resStr = String(reader.result || '');
+          const b64 = resStr.includes(',') ? resStr.split(',')[1] : resStr;
+          if (b64) {
+            mesasLiveStatusStore.update(m => ({
+              ...m,
+              [mesaUuid]: { ...(m[mesaUuid] || {}), image_b64: b64 }
+            }));
+          }
+        };
+        reader.readAsDataURL(blob);
+      }
     } catch (e) {
       console.warn('Aviso reconexión motor local:', e.message);
     }
@@ -726,17 +743,25 @@
 
             <!-- CAMARITA EN VIVO DIRECTA ("LA CAMARITA CHIQUITICA" CON IA YOLO) -->
             <div class="card-cctv-container">
-              <img
-                src={getStreamUrl(badge.uuid)}
-                alt="Feed CCTV {badge.nombre}"
-                class="card-cctv-img"
-                loading="lazy"
-                on:error={(e) => {
-                  if (badge.image_b64) {
-                    e.currentTarget.src = `data:image/jpeg;base64,${badge.image_b64}`;
-                  }
-                }}
-              />
+              {#if badge.image_b64}
+                <img
+                  src="data:image/jpeg;base64,{badge.image_b64}"
+                  alt="Feed CCTV {badge.nombre}"
+                  class="card-cctv-img"
+                />
+              {:else}
+                <img
+                  src={getSnapshotUrl(badge.uuid)}
+                  alt="Feed CCTV {badge.nombre}"
+                  class="card-cctv-img"
+                  loading="lazy"
+                  on:error={(e) => {
+                    if (badge.image_b64) {
+                      e.currentTarget.src = `data:image/jpeg;base64,${badge.image_b64}`;
+                    }
+                  }}
+                />
+              {/if}
               <span class="cctv-live-tag">
                 {#if badge.has_cards && !badge.is_presentando_cartas && !badge.is_barajo_cartas}
                   <span class="live-dot-red"></span> 🔴 JUGADA EN CURSO
