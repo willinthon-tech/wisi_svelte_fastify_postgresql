@@ -581,6 +581,99 @@ fn open_in_browser(url: String) -> Result<(), String> {
   open::that(&url).map_err(|e| format!("Error al abrir navegador: {}", e))
 }
 
+fn ensure_ai_engine_running() {
+  std::thread::spawn(|| {
+    // 1. Verificar si el puerto 5005 ya está activo
+    if let Ok(addr) = "127.0.0.1:5005".parse::<std::net::SocketAddr>() {
+      if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok() {
+        println!("✅ [AI Engine] Motor de IA ya está activo en puerto 5005");
+        return;
+      }
+    }
+
+    println!("🚀 [AI Engine] Motor no detectado en puerto 5005. Arrancando internamente en segundo plano...");
+
+    // Candidatos para python.exe
+    let candidate_pythons = [
+      PathBuf::from(r"C:\Users\antho\Downloads\ia_wisi_space\.venv\Scripts\python.exe"),
+      PathBuf::from(r"C:\new_wisi\ai-engine\.venv\Scripts\python.exe"),
+      PathBuf::from(r"C:\new_wisi\.venv\Scripts\python.exe"),
+    ];
+
+    let mut found_python = None;
+    for p in &candidate_pythons {
+      if p.exists() {
+        found_python = Some(p.clone());
+        break;
+      }
+    }
+
+    let python_bin = found_python.unwrap_or_else(|| PathBuf::from("python"));
+
+    // Candidatos para server.py
+    let mut candidate_scripts = vec![
+      PathBuf::from(r"C:\new_wisi\ai-engine\server.py"),
+      PathBuf::from(r"ai-engine\server.py"),
+    ];
+
+    if let Ok(exe) = std::env::current_exe() {
+      if let Some(parent) = exe.parent() {
+        candidate_scripts.push(parent.join("ai-engine").join("server.py"));
+        candidate_scripts.push(parent.join("resources").join("ai-engine").join("server.py"));
+      }
+    }
+
+    let mut found_script = None;
+    for s in &candidate_scripts {
+      if s.exists() {
+        found_script = Some(s.clone());
+        break;
+      }
+    }
+
+    let script_path = found_script.unwrap_or_else(|| PathBuf::from(r"C:\new_wisi\ai-engine\server.py"));
+    let working_dir = script_path.parent().unwrap_or(Path::new("."));
+
+    println!("▶ [AI Engine] Lanzando {:?} con script {:?}", python_bin, script_path);
+
+    let mut cmd = Command::new(&python_bin);
+    cmd.arg(&script_path);
+    cmd.current_dir(working_dir);
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+
+    #[cfg(target_os = "windows")]
+    {
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
+      cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    match cmd.spawn() {
+      Ok(child) => {
+        println!("✔ [AI Engine] Motor iniciado automáticamente con PID: {}", child.id());
+      }
+      Err(e) => {
+        eprintln!("⚠️ [AI Engine] No se pudo iniciar automáticamente: {}", e);
+      }
+    }
+  });
+}
+
+#[tauri::command]
+fn start_ai_engine() -> Result<bool, String> {
+  ensure_ai_engine_running();
+  Ok(true)
+}
+
+#[tauri::command]
+fn is_ai_engine_running() -> bool {
+  if let Ok(addr) = "127.0.0.1:5005".parse::<std::net::SocketAddr>() {
+    std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(400)).is_ok()
+  } else {
+    false
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -593,6 +686,8 @@ pub fn run() {
             .build(),
         )?;
       }
+      // Arrancar motor de IA internamente de forma automática en Windows
+      ensure_ai_engine_running();
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -606,7 +701,9 @@ pub fn run() {
       start_cecom_video_download,
       open_media_file,
       show_in_folder,
-      open_folder
+      open_folder,
+      start_ai_engine,
+      is_ai_engine_running
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

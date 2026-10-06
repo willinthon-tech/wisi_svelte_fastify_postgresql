@@ -100,6 +100,22 @@ try {
   console.warn('Advertencia al actualizar tauri.conf.json:', e.message);
 }
 
+// 3.1 Sincronizar ai-engine en src-tauri/ai-engine para empaquetado en instalador
+try {
+  const tauriAiEngineDir = path.join(frontendDir, 'src-tauri', 'ai-engine');
+  const rootAiEngineDir = path.join(projectRootDir, 'ai-engine');
+  if (fs.existsSync(rootAiEngineDir)) {
+    fs.mkdirSync(tauriAiEngineDir, { recursive: true });
+    fs.copyFileSync(path.join(rootAiEngineDir, 'server.py'), path.join(tauriAiEngineDir, 'server.py'));
+    if (fs.existsSync(path.join(rootAiEngineDir, 'iniciar_ia_casino.bat'))) {
+      fs.copyFileSync(path.join(rootAiEngineDir, 'iniciar_ia_casino.bat'), path.join(tauriAiEngineDir, 'iniciar_ia_casino.bat'));
+    }
+    console.log('✔ ai-engine empaquetado para instalador en src-tauri/ai-engine');
+  }
+} catch (e) {
+  console.warn('Advertencia empaquetando ai-engine:', e.message);
+}
+
 // 4. Sincronizar frontend-svelte/src-tauri/Cargo.toml
 const cargoTomlPath = path.join(frontendDir, 'src-tauri', 'Cargo.toml');
 try {

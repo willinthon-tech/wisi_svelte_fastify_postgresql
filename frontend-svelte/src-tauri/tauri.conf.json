@@ -29,7 +29,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "sdk_hikvision/**/*"
+      "sdk_hikvision/**/*",
+      "ai-engine/**/*"
     ],
     "copyright": "Copyright © 2026 Wisi Space",
     "shortDescription": "Wisi Space Desktop",

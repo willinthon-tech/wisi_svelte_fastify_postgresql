@@ -44,13 +44,19 @@
   let refreshingMesaMap = {};
   let feedCacheBusterMap = {};
 
-  function getStreamUrl(uuid) {
+  function getStreamUrl(uuid, index = 0) {
     if (!uuid) return '';
     let host = '127.0.0.1';
     if (typeof window !== 'undefined' && window.location.hostname) {
       const h = window.location.hostname;
       if (h !== 'localhost' && h !== '127.0.0.1' && !h.includes('tauri')) {
         host = h;
+      } else {
+        // En Windows / red local, distribuimos las mesas entre 127.0.0.1 .. 127.0.0.20
+        // Esto evita el límite de 6 sockets de HTTP/1.1 del navegador y permite que TODAS
+        // las mesas reproduzcan video continuo a 25 FPS sin congelarse jamás.
+        const slot = ((index || 0) % 18) + 1;
+        host = `127.0.0.${slot}`;
       }
     }
     const buster = feedCacheBusterMap[uuid] ? `?t=${feedCacheBusterMap[uuid]}` : '';
@@ -664,7 +670,7 @@
       </div>
     {:else}
       <div class="badges-grid">
-        {#each liveMesasBadges as badge (badge.uuid)}
+        {#each liveMesasBadges as badge, i (badge.uuid)}
           <div
             class="mesa-badge-card"
             class:is-active-playing={badge.has_cards && badge.is_moving}
@@ -741,27 +747,19 @@
               </div>
             {/if}
 
-            <!-- CAMARITA EN VIVO DIRECTA ("LA CAMARITA CHIQUITICA" CON IA YOLO) -->
+            <!-- CAMARITA EN VIVO DIRECTA ("LA CAMARITA CHIQUITICA" CON STREAMING REAL 25 FPS) -->
             <div class="card-cctv-container">
-              {#if badge.image_b64}
-                <img
-                  src="data:image/jpeg;base64,{badge.image_b64}"
-                  alt="Feed CCTV {badge.nombre}"
-                  class="card-cctv-img"
-                />
-              {:else}
-                <img
-                  src={getSnapshotUrl(badge.uuid)}
-                  alt="Feed CCTV {badge.nombre}"
-                  class="card-cctv-img"
-                  loading="lazy"
-                  on:error={(e) => {
-                    if (badge.image_b64) {
-                      e.currentTarget.src = `data:image/jpeg;base64,${badge.image_b64}`;
-                    }
-                  }}
-                />
-              {/if}
+              <img
+                src={getStreamUrl(badge.uuid, i)}
+                alt="Feed CCTV {badge.nombre}"
+                class="card-cctv-img"
+                loading="lazy"
+                on:error={(e) => {
+                  if (badge.image_b64) {
+                    e.currentTarget.src = `data:image/jpeg;base64,${badge.image_b64}`;
+                  }
+                }}
+              />
               <span class="cctv-live-tag">
                 {#if badge.has_cards && !badge.is_presentando_cartas && !badge.is_barajo_cartas}
                   <span class="live-dot-red"></span> 🔴 JUGADA EN CURSO
