@@ -110,6 +110,14 @@ try {
     if (fs.existsSync(path.join(rootAiEngineDir, 'iniciar_ia_casino.bat'))) {
       fs.copyFileSync(path.join(rootAiEngineDir, 'iniciar_ia_casino.bat'), path.join(tauriAiEngineDir, 'iniciar_ia_casino.bat'));
     }
+    const rootGlyphsDir = path.join(rootAiEngineDir, 'models', 'learned_glyphs');
+    const tauriGlyphsDir = path.join(tauriAiEngineDir, 'models', 'learned_glyphs');
+    if (fs.existsSync(rootGlyphsDir)) {
+      fs.mkdirSync(tauriGlyphsDir, { recursive: true });
+      for (const gf of fs.readdirSync(rootGlyphsDir)) {
+        fs.copyFileSync(path.join(rootGlyphsDir, gf), path.join(tauriGlyphsDir, gf));
+      }
+    }
     console.log('✔ ai-engine empaquetado para instalador en src-tauri/ai-engine');
   }
 } catch (e) {

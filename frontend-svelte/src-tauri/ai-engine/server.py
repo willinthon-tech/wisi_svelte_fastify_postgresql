@@ -30,8 +30,10 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 AUTO_TRAIN_DIR = os.path.join(BASE_DIR, 'data_aprendizaje')
+LEARNED_GLYPHS_DIR = os.path.join(MODELS_DIR, 'learned_glyphs')
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(AUTO_TRAIN_DIR, exist_ok=True)
+os.makedirs(LEARNED_GLYPHS_DIR, exist_ok=True)
 
 # Buscar modelo best.pt
 MODEL_PATH = os.path.join(MODELS_DIR, 'best.pt')
@@ -130,6 +132,256 @@ def calcular_puestos_mesa(w_f, tipo_juego='BACCARAT'):
             "orden_pago": num_p - i       # N..1 Derecha a Izquierda
         })
     return puestos
+
+# ====================================================================
+# MOTOR DE APRENDIZAJE ACTIVO, DESAMBIGUACIÓN Y ESTABILIZACIÓN DE CARTAS
+# ====================================================================
+
+def extract_rank_glyph(card_bgr):
+    """Extrae y normaliza el glifo de índice (32x48) de la esquina superior izquierda."""
+    if card_bgr is None or card_bgr.size == 0:
+        return None
+    h, w = card_bgr.shape[:2]
+    crop = card_bgr[int(h * 0.03):int(h * 0.30), int(w * 0.04):int(w * 0.32)]
+    if crop.size == 0:
+        return None
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(4, 4))
+    gray = clahe.apply(gray)
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                   cv2.THRESH_BINARY_INV, 15, 6)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    return cv2.resize(cleaned, (32, 48), interpolation=cv2.INTER_AREA)
+
+def count_card_pips(card_bgr):
+    """Cuenta pips (símbolos de palos) en el área central de la carta mediante Otsu adaptativo."""
+    if card_bgr is None or card_bgr.size == 0:
+        return 0
+    h, w = card_bgr.shape[:2]
+    center = card_bgr[int(h * 0.12):int(h * 0.88), int(w * 0.12):int(w * 0.88)]
+    if center.size == 0:
+        return 0
+    gray = cv2.cvtColor(center, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (3, 3), 0)
+    _, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    contours, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    min_area = (h * w) * 0.0015
+    max_area = (h * w) * 0.08
+    valid = [c for c in contours if min_area < cv2.contourArea(c) < max_area]
+    return len(valid)
+
+class CardRankVerifier:
+    """
+    Verificador Inteligente de Rango y Aprendizaje Activo:
+    - Aprende automáticamente las fuentes/cartas reales de cada cámara en vivo
+    - Resuelve pares de confusión críticos: 5 vs AS, 2 vs 4, 5 vs 7, 10 vs 7
+    - Realiza matching multiescala con plantillas aprendidas
+    """
+    def __init__(self, templates_dir):
+        self.templates_dir = templates_dir
+        os.makedirs(templates_dir, exist_ok=True)
+        self.learned_templates = {}
+        self.load_templates()
+
+    def load_templates(self):
+        self.learned_templates = {}
+        if not os.path.exists(self.templates_dir):
+            return
+        for f in os.listdir(self.templates_dir):
+            if f.endswith('.png') or f.endswith('.jpg'):
+                parts = f.replace('.png', '').replace('.jpg', '').split('_')
+                if len(parts) >= 2 and parts[0] == 'glyph':
+                    rank = parts[1].upper()
+                    img = cv2.imread(os.path.join(self.templates_dir, f), cv2.IMREAD_GRAYSCALE)
+                    if img is not None:
+                        self.learned_templates.setdefault(rank, []).append(img)
+        total = sum(len(v) for v in self.learned_templates.values())
+        print(f"📚 [CardRankVerifier] {total} plantillas de naipes cargadas ({len(self.learned_templates)} rangos).")
+
+    def auto_learn(self, card_bgr, rank, conf):
+        """Aprende de forma autónoma durante el juego en vivo si la detección es sólida (>= 0.85)."""
+        if card_bgr is None or conf < 0.85 or rank in ['BACK', '']:
+            return
+        rank = rank.upper()
+        existing = self.learned_templates.get(rank, [])
+        if len(existing) >= 6:
+            return
+        glyph = extract_rank_glyph(card_bgr)
+        if glyph is None:
+            return
+        filename = f"glyph_{rank.lower()}_{int(time.time()*1000)%100000}.png"
+        filepath = os.path.join(self.templates_dir, filename)
+        cv2.imwrite(filepath, glyph)
+        self.learned_templates.setdefault(rank, []).append(glyph)
+
+    def verify_and_disambiguate(self, card_bgr, raw_rank, conf):
+        raw_rank = raw_rank.upper()
+        if raw_rank in ['BACK', ''] or card_bgr is None or card_bgr.size == 0:
+            return raw_rank, conf
+
+        glyph = extract_rank_glyph(card_bgr)
+        if glyph is None:
+            return raw_rank, conf
+
+        # 1. Matching con biblioteca de aprendizaje activo
+        best_match_rank = None
+        best_match_score = -1.0
+        for r, tmpls in self.learned_templates.items():
+            for t in tmpls:
+                res = cv2.matchTemplate(glyph, t, cv2.TM_CCOEFF_NORMED)
+                score = float(res[0][0])
+                if score > best_match_score:
+                    best_match_score = score
+                    best_match_rank = r
+
+        if best_match_score >= 0.80 and best_match_rank is not None:
+            return best_match_rank, max(conf, round(best_match_score, 2))
+
+        # 2. Análisis topológico y pips interiores para desambiguación precisa
+        pips = count_card_pips(card_bgr)
+        h_g, w_g = glyph.shape
+        base_strip = glyph[int(h_g * 0.78):, :]
+        base_span = np.sum(np.any(base_strip > 128, axis=0)) / float(w_g)
+
+        # Caso A: 5 vs AS (un As tiene 1 solo pip central, el 5 tiene 5 pips)
+        if raw_rank in ['5', 'AS', 'A']:
+            if pips >= 4:
+                return '5', max(conf, 0.78)
+            elif pips <= 2:
+                return 'AS', max(conf, 0.78)
+
+        # Caso B: 2 vs 4 (el 2 tiene base inferior horizontal > 48%; el 4 tiene tallo vertical derecho)
+        if raw_rank in ['2', '4']:
+            if base_span > 0.48 or (1 <= pips <= 3):
+                return '2', max(conf, 0.78)
+            elif base_span < 0.35 or pips >= 4:
+                return '4', max(conf, 0.78)
+
+        # Caso C: 5 vs 7 (el 5 tiene bucle inferior izquierdo; el 7 es diagonal simple sin bucle)
+        if raw_rank in ['5', '7']:
+            bot_left = glyph[int(h_g * 0.60):, :w_g // 2]
+            if np.mean(bot_left > 128) > 0.08 or (4 <= pips <= 6):
+                return '5', max(conf, 0.78)
+            elif pips >= 7:
+                return '7', max(conf, 0.78)
+
+        # Caso D: 10 vs 7 (un 10 tiene 2 caracteres '1' y '0', ancho total > 62% o >= 9 pips)
+        if raw_rank in ['7', '10']:
+            span = np.sum(np.any(glyph > 128, axis=0)) / float(w_g)
+            if span > 0.62 or pips >= 8:
+                return '10', max(conf, 0.82)
+
+        return raw_rank, conf
+
+class MesaTemporalCardStabilizer:
+    """
+    Rastreador Temporal de Cartas por Mesa:
+    - Agrupa observaciones por proximidad geométrica (dx, dy)
+    - Vota por mayoría ponderada de confianza a lo largo de fotogramas
+    - Elimina parpadeos momentáneos por reflejos de luz o manos de clientes
+    """
+    def __init__(self):
+        self.tracks = {}
+
+    def update(self, mesa_uuid, detected_cards, now_ts):
+        mesa_tracks = self.tracks.setdefault(mesa_uuid, [])
+        # Purgar tracks expirados (> 2.5s)
+        mesa_tracks = [t for t in mesa_tracks if (now_ts - t['last_seen']) < 2.5]
+
+        updated_cards = []
+        for c in detected_cards:
+            cx, cy = c['cx'], c['cy']
+            val = c['val']
+            conf = c['conf']
+
+            best_track = None
+            min_dist = 60.0
+            for t in mesa_tracks:
+                dist = np.hypot(t['cx'] - cx, t['cy'] - cy)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_track = t
+
+            if best_track is not None:
+                best_track['cx'] = cx
+                best_track['cy'] = cy
+                best_track['box'] = c['box']
+                best_track['last_seen'] = now_ts
+                best_track['history'].append((val, conf))
+                if len(best_track['history']) > 8:
+                    best_track['history'].pop(0)
+
+                votes = {}
+                for v_name, v_conf in best_track['history']:
+                    votes[v_name] = votes.get(v_name, 0.0) + v_conf
+                stable_val = max(votes.items(), key=lambda x: x[1])[0]
+                best_track['stable_rank'] = stable_val
+
+                c_copy = dict(c)
+                c_copy['val'] = stable_val
+                updated_cards.append(c_copy)
+            else:
+                new_track = {
+                    'cx': cx,
+                    'cy': cy,
+                    'box': c['box'],
+                    'history': [(val, conf)],
+                    'stable_rank': val,
+                    'last_seen': now_ts
+                }
+                mesa_tracks.append(new_track)
+                updated_cards.append(c)
+
+        self.tracks[mesa_uuid] = mesa_tracks
+        return updated_cards
+
+def partition_baccarat_hands(raw_cards, w_f):
+    """
+    Partición Espacial Dinámica e Inteligente para Baccarat (Punto y Banca):
+    - BANCA se ubica a la izquierda (menor cx).
+    - PUNTO se ubica a la derecha (mayor cx).
+    - Utiliza agrupamiento espacial 1D (clustering por distancia entre naipes).
+    - Si solo hay 1 grupo (ej: 2 cartas en Punto o 2 cartas en Banca), asigna TODO el grupo al lado correspondiente.
+      NUNCA JAMÁS divide arbitrariamente una sola mano de 2 cartas entre Banca y Punto.
+    - Máximo 3 cartas por bando (reglas oficiales de Baccarat).
+    """
+    count = len(raw_cards)
+    if count == 0:
+        return [], []
+
+    cards_sorted = sorted(raw_cards, key=lambda c: c['cx'])
+    divider_x = w_f * 0.475
+
+    if count >= 6:
+        return cards_sorted[:3], cards_sorted[3:6]
+
+    intra_hand_threshold = 0.058 * w_f
+    clusters = []
+    curr_cluster = [cards_sorted[0]]
+    for i in range(1, count):
+        gap = cards_sorted[i]['cx'] - cards_sorted[i-1]['cx']
+        if gap < intra_hand_threshold:
+            curr_cluster.append(cards_sorted[i])
+        else:
+            clusters.append(curr_cluster)
+            curr_cluster = [cards_sorted[i]]
+    clusters.append(curr_cluster)
+
+    banca = []
+    punto = []
+
+    for cluster in clusters:
+        cluster_cx = sum(c['cx'] for c in cluster) / float(len(cluster))
+        if cluster_cx < divider_x:
+            banca.extend(cluster)
+        else:
+            punto.extend(cluster)
+
+    return banca[:3], punto[:3]
+
+card_rank_verifier = CardRankVerifier(LEARNED_GLYPHS_DIR)
+card_temporal_stabilizer = MesaTemporalCardStabilizer()
 
 # ====================================================================
 # MOTORES DE REGLAS DE CASINO (BACCARAT, BLACKJACK, POKER)
@@ -1044,12 +1296,12 @@ def ai_inference_loop():
                 crop_filtrado = preprocesar_filtro_mesa(crop_roi)
                 h_c, w_c = crop_filtrado.shape[:2]
 
-                target_w = min(1120, max(640, w_c))
+                target_w = min(1440, max(800, w_c))
                 infer_scale = target_w / float(w_c)
                 infer_frame = cv2.resize(crop_filtrado, (target_w, int(h_c * infer_scale)), interpolation=cv2.INTER_LINEAR)
 
                 with torch.inference_mode():
-                    results = model(infer_frame, verbose=False, conf=0.18, iou=0.45, imgsz=640)
+                    results = model(infer_frame, verbose=False, conf=0.18, iou=0.45, imgsz=960)
 
                 box_scale = 1.0 / infer_scale
                 raw_cards = []
@@ -1060,29 +1312,37 @@ def ai_inference_loop():
                     name = model.names[cls_id].upper()
                     conf = round(float(box.conf[0]), 2)
 
-                    if 0.20 <= conf <= 0.45:
-                        guardar_por_duda = True
-
                     bx1, by1, bx2, by2 = [int(v * box_scale) for v in box.xyxy[0].tolist()]
                     # Mapeo a coordenadas globales absolutas del frame completo
-                    x1 = crop_x1 + bx1
-                    y1 = crop_y1 + by1
-                    x2 = crop_x1 + bx2
-                    y2 = crop_y1 + by2
-                    cx = (x1 + x2) / 2
-                    cy = (y1 + y2) / 2
+                    gx1 = max(0, min(w_f - 1, crop_x1 + bx1))
+                    gy1 = max(0, min(h_f - 1, crop_y1 + by1))
+                    gx2 = max(0, min(w_f, crop_x1 + bx2))
+                    gy2 = max(0, min(h_f, crop_y1 + by2))
+                    cx = (gx1 + gx2) / 2
+                    cy = (gy1 + gy2) / 2
+
+                    # Desambiguación y verificación de rango por aprendizaje activo y topología
+                    card_crop = frame[gy1:gy2, gx1:gx2]
+                    v_name, v_conf = card_rank_verifier.verify_and_disambiguate(card_crop, name, conf)
+                    if v_conf >= 0.85 and v_name not in ['BACK', '']:
+                        card_rank_verifier.auto_learn(card_crop, v_name, v_conf)
+
+                    if 0.20 <= v_conf <= 0.45:
+                        guardar_por_duda = True
 
                     raw_cards.append({
-                        "val": name,
-                        "box": [x1, y1, x2, y2],
-                        "norm_box": [x1 / float(w_f), y1 / float(h_f), x2 / float(w_f), y2 / float(h_f)],
+                        "val": v_name,
+                        "box": [gx1, gy1, gx2, gy2],
+                        "norm_box": [gx1 / float(w_f), gy1 / float(h_f), gx2 / float(w_f), gy2 / float(h_f)],
                         "cx": cx,
                         "cy": cy,
-                        "conf": conf
+                        "conf": v_conf
                     })
 
-                # Deduplicación inicial de detecciones nativas
+                # Deduplicación de detecciones nativas y estabilización temporal
                 raw_cards = deduplicate_boxes(raw_cards)
+                now_ts = time.time()
+                raw_cards = card_temporal_stabilizer.update(mesa_uuid, raw_cards, now_ts)
 
                 count = len(raw_cards)
                 detections = []
@@ -1154,63 +1414,7 @@ def ai_inference_loop():
                         estado_mesa = "NORMAL"
 
                     if tipo_juego == 'BACCARAT':
-                        # Partición Dinámica e Inteligente de Baccarat:
-                        # En la cámara, las cartas de BANCA se sitúan a la izquierda (menor cx) y PUNTO a la derecha (mayor cx).
-                        # NUNCA JAMÁS Banca o Punto pueden tener 4 cartas. Máximo 3 cartas por bando.
-                        cx_mid = w_f * 0.50
-                        if count == 0:
-                            banca_list = []
-                            punto_list = []
-                        elif count == 1:
-                            if raw_cards[0]['cx'] < cx_mid:
-                                banca_list = [raw_cards[0]]
-                                punto_list = []
-                            else:
-                                banca_list = []
-                                punto_list = [raw_cards[0]]
-                        elif count == 2:
-                            if raw_cards[1]['cx'] < cx_mid - 25:
-                                banca_list = raw_cards
-                                punto_list = []
-                            elif raw_cards[0]['cx'] > cx_mid + 25:
-                                banca_list = []
-                                punto_list = raw_cards
-                            else:
-                                banca_list = [raw_cards[0]]
-                                punto_list = [raw_cards[1]]
-                        elif count == 3:
-                            g0 = gaps[0] if len(gaps) > 0 else 0
-                            g1 = gaps[1] if len(gaps) > 1 else 0
-                            if g0 > g1:
-                                banca_list = [raw_cards[0]]
-                                punto_list = raw_cards[1:3]
-                            else:
-                                banca_list = raw_cards[0:2]
-                                punto_list = [raw_cards[2]]
-                        elif count == 4:
-                            best_k = 2
-                            best_score = (gaps[1] if len(gaps) > 1 else 0) + 20
-                            if len(gaps) > 0 and gaps[0] > best_score:
-                                best_k = 1
-                            if len(gaps) > 2 and gaps[2] > best_score:
-                                best_k = 3
-                            banca_list = raw_cards[:best_k]
-                            punto_list = raw_cards[best_k:4]
-                        elif count == 5:
-                            g1 = gaps[1] if len(gaps) > 1 else 0
-                            g2 = gaps[2] if len(gaps) > 2 else 0
-                            if g1 > g2:
-                                banca_list = raw_cards[:2]
-                                punto_list = raw_cards[2:5]
-                            else:
-                                banca_list = raw_cards[:3]
-                                punto_list = raw_cards[3:5]
-                        else:
-                            banca_list = raw_cards[:3]
-                            punto_list = raw_cards[3:6]
-
-                        banca_list = banca_list[:3]
-                        punto_list = punto_list[:3]
+                        banca_list, punto_list = partition_baccarat_hands(raw_cards, w_f)
                     else:
                         m_gap = -1
                         idx_divisor = max(1, count // 2)
