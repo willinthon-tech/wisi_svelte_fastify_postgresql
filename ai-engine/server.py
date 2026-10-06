@@ -59,8 +59,77 @@ frames_actuales = {}    # { mesa_uuid: frame }
 live_jpeg_buffers = {}  # { mesa_uuid: bytes_jpeg } para streaming MJPEG fluido en vivo
 live_annotations = {}   # { mesa_uuid: { cards, ribbons, chips, estado, resultado } }
 estado_stream = {}      # { mesa_uuid: 'activo' | 'conectando' | 'error' }
+reconnect_requests = set()
+mesa_completed_rounds = {} # { mesa_uuid: { resultado, detalle, listo, saved, ready_time } }
 live_results = {}       # { mesa_uuid: { estado, ganador, scoreP, scoreB, punto, banca, ... } }
 historial_guardado = {} # { mesa_uuid: ultimo_detalle }
+
+def make_placeholder_frame(mesa_nombre="Mesa", mensaje="Sincronizando cámara..."):
+    """
+    Genera un fotograma nítido de respaldo en memoria para evitar pantallas negras o flujos corruptos.
+    """
+    img = np.zeros((360, 640, 3), dtype=np.uint8)
+    img[:] = (20, 24, 30) # Fondo oscuro moderno
+    cv2.rectangle(img, (12, 12), (628, 348), (40, 50, 65), 2)
+    # Badge superior
+    cv2.rectangle(img, (20, 20), (230, 52), (38, 166, 154), -1)
+    cv2.putText(img, "WISI AI CASINO VISION", (28, 42), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 2, cv2.LINE_AA)
+    # Nombre de mesa
+    cv2.putText(img, str(mesa_nombre).upper(), (30, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.95, (255, 255, 255), 2, cv2.LINE_AA)
+    # Mensaje de estado
+    cv2.putText(img, str(mensaje), (30, 175), cv2.FONT_HERSHEY_SIMPLEX, 0.70, (0, 215, 255), 2, cv2.LINE_AA)
+    # Indicador de red
+    cv2.putText(img, "Transmisión Substream • Red LAN • Puerto 554 / ISAPI", (30, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (148, 163, 184), 1, cv2.LINE_AA)
+    cv2.putText(img, "Presione 🔄 Refrescar si la cámara tarda en sincronizar", (30, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 116, 139), 1, cv2.LINE_AA)
+    _, b = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+    return b.tobytes()
+
+def preprocesar_filtro_mesa(crop_bgr):
+    """
+    Aplica una máscara de filtros adaptativos en OpenCV:
+    - Realza el contraste de cartas blancas sobre el paño
+    - Mitiga destellos de lámparas cenitales mediante CLAHE en luminancia (LAB)
+    - Destaca números y palos descoloridos
+    """
+    if crop_bgr is None or crop_bgr.size == 0:
+        return crop_bgr
+    try:
+        lab = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2LAB)
+        l_ch, a_ch, b_ch = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        l_eq = clahe.apply(l_ch)
+        enhanced = cv2.cvtColor(cv2.merge((l_eq, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
+        return enhanced
+    except Exception:
+        return crop_bgr
+
+def calcular_puestos_mesa(w_f, tipo_juego='BACCARAT'):
+    """
+    Mapeo geométrico de los puestos en mesa de cartas:
+    - Puestos 1 al N ordenados de IZQUIERDA A DERECHA.
+    - Secuencia de pago y liquidación de croupier: de DERECHA A IZQUIERDA (N -> 1).
+    """
+    if tipo_juego == 'BACCARAT':
+        puestos_labels = [1, 2, 3, 5, 6, 7]
+    else:
+        puestos_labels = [1, 2, 3, 4, 5, 6, 7]
+
+    num_p = len(puestos_labels)
+    step = (w_f * 0.76) / float(num_p)
+    puestos = []
+    start_x = w_f * 0.12
+    for i, p_num in enumerate(puestos_labels):
+        x_min = start_x + i * step
+        x_max = x_min + step
+        puestos.append({
+            "puesto": p_num,
+            "x_min": x_min,
+            "x_max": x_max,
+            "cx": (x_min + x_max) / 2,
+            "orden_reparto": i + 1,       # 1..N Izquierda a Derecha
+            "orden_pago": num_p - i       # N..1 Derecha a Izquierda
+        })
+    return puestos
 
 # ====================================================================
 # MOTORES DE REGLAS DE CASINO (BACCARAT, BLACKJACK, POKER)
@@ -677,6 +746,10 @@ def fetch_isapi_frame(ip, canal, usuario, clave):
     return None
 
 def stream_worker(mesa_uuid, url_rtsp):
+    cfg_init = mesas_config.get(mesa_uuid, {})
+    m_name = cfg_init.get('nombre', 'Mesa')
+    if mesa_uuid not in live_jpeg_buffers:
+        live_jpeg_buffers[mesa_uuid] = make_placeholder_frame(m_name, "Iniciando señal...")
     print(f"📹 [Stream Worker RTSP 554] Iniciando flujo continuo en {mesa_uuid}: {url_rtsp}")
     cap = None
     consecutive_failures = 0
@@ -710,6 +783,15 @@ def stream_worker(mesa_uuid, url_rtsp):
                 except Exception: pass
             break
 
+        # Atención inmediata a solicitud de refresco manual
+        if mesa_uuid in reconnect_requests:
+            reconnect_requests.discard(mesa_uuid)
+            print(f"🔄 [Stream Worker] Reconexión manual forzada para {m_name}...")
+            live_jpeg_buffers[mesa_uuid] = make_placeholder_frame(m_name, "Reconectando cámara...")
+            conectar_rtsp()
+            time.sleep(0.1)
+            continue
+
         cfg = mesas_config.get(mesa_uuid, {})
         ip = cfg.get('ip')
         canal = cfg.get('canal')
@@ -733,7 +815,6 @@ def stream_worker(mesa_uuid, url_rtsp):
             # Generar fotograma continuo en vivo (~25 FPS) para MJPEG con overlay IA en tiempo real
             try:
                 hp, wp = frame.shape[:2]
-                # Escalado a alta definición para dibujo nítido de cajas y etiquetas
                 target_w = 704
                 target_h = max(10, int(hp * (target_w / float(wp))))
                 disp_frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
@@ -761,10 +842,8 @@ def stream_worker(mesa_uuid, url_rtsp):
                             else:
                                 col = (0, 255, 120) # Verde Jugador / Mano
 
-                            # Caja delimitadora con esquinas nítidas
                             cv2.rectangle(disp_frame, (b[0], b[1]), (b[2], b[3]), col, 2)
 
-                            # Badge relleno con texto de alta legibilidad
                             font = cv2.FONT_HERSHEY_SIMPLEX
                             f_scale = 0.65
                             f_thick = 2
@@ -788,25 +867,31 @@ def stream_worker(mesa_uuid, url_rtsp):
                                   int(cb[2] * (target_w / float(wp))), int(cb[3] * (target_h / float(hp)))]
                         cv2.rectangle(disp_frame, (c_norm[0], c_norm[1]), (c_norm[2], c_norm[3]), (0, 215, 255), 2)
 
+                    # Indicador de estado LIGANDO (Squeeze de cartas)
+                    if ann.get('estado_mesa') == 'LIGANDO_CARTAS':
+                        cv2.rectangle(disp_frame, (int(target_w * 0.25), 10), (int(target_w * 0.75), 42), (255, 170, 0), -1)
+                        cv2.putText(disp_frame, "LIGANDO CARTAS (CLIENTE SQUEEZE)", (int(target_w * 0.26), 33),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 0, 0), 2, cv2.LINE_AA)
+
+                # Indicador inferior sutil de puestos y pagos (Puestos 1..N de Izquierda a Derecha, Pagos <-- Derecha a Izquierda)
+                cv2.putText(disp_frame, "PUESTOS 1-7  |  PAGOS: 7 -> 1 <--", (15, target_h - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 200, 220), 1, cv2.LINE_AA)
+
                 _, buf = cv2.imencode('.jpg', disp_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 live_jpeg_buffers[mesa_uuid] = buf.tobytes()
             except Exception:
                 pass
 
-            # Ritmo fluido de streaming nativo (~25-30 fps)
             time.sleep(0.015)
         else:
             consecutive_failures += 1
 
-            # Si el stream RTSP parpadea o pierde señal temporalmente,
-            # obtenemos un frame ISAPI de respaldo temporal para no dejar la pantalla en negro
             if consecutive_failures >= 4 and ip and canal:
                 snap = fetch_isapi_frame(ip, canal, usuario, clave)
                 if snap is not None and snap.size > 0:
                     frames_actuales[mesa_uuid] = snap
                     estado_stream[mesa_uuid] = 'activo'
 
-            # Reconexión automática de RTSP nativo (Puerto 554)
             now = time.time()
             if (consecutive_failures >= 10 or not cap or not cap.isOpened()) and (now - last_reconnect_attempt > 3.0):
                 print(f"🔄 [Stream Worker] Reestableciendo flujo RTSP nativo (Puerto 554) para {cfg.get('nombre', mesa_uuid)}...")
@@ -937,13 +1022,36 @@ def ai_inference_loop():
                 tipo_juego = resolve_game_type(cfg.get('nombre'), cfg.get('juego'))
 
                 h_f, w_f = frame.shape[:2]
-                infer_target_w = 800 if w_f > 800 else w_f
-                infer_scale = infer_target_w / float(w_f)
-                infer_frame = cv2.resize(frame, (infer_target_w, int(h_f * infer_scale)), interpolation=cv2.INTER_LINEAR)
-                with torch.inference_mode():
-                    results = model(infer_frame, verbose=False, conf=0.18, iou=0.50, imgsz=640)
-                box_scale = 1.0 / infer_scale
 
+                # 1. CENTRADO DE MESA POR SOFTWARE (ZOOM DIGITAL 1.8X - 2.5X EN EL PAÑO DE CARTAS)
+                # En lugar de enviar la vista gran angular completa (con techos, dealer y piso),
+                # centramos y recortamos el área activa de juego donde se sitúan las cartas.
+                if tipo_juego in ['BACCARAT', 'BLACKJACK', 'POKER_CARIBENO', 'TEXAS_BONUS']:
+                    crop_y1 = int(0.14 * h_f)
+                    crop_y2 = int(0.82 * h_f)
+                    crop_x1 = int(0.10 * w_f)
+                    crop_x2 = int(0.90 * w_f)
+                else:
+                    crop_y1, crop_y2, crop_x1, crop_x2 = 0, h_f, 0, w_f
+
+                crop_roi = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                if crop_roi is None or crop_roi.size == 0:
+                    crop_roi = frame
+                    crop_y1, crop_y2, crop_x1, crop_x2 = 0, h_f, 0, w_f
+
+                # 2. MÁSCARA DE FILTRO ADAPTATIVO (CLAHE EN ESPACIO LAB)
+                # Resalta el blanco de naipes, números y palos (♠ ♥ ♦ ♣) mitigando reflejos de luces
+                crop_filtrado = preprocesar_filtro_mesa(crop_roi)
+                h_c, w_c = crop_filtrado.shape[:2]
+
+                target_w = min(1120, max(640, w_c))
+                infer_scale = target_w / float(w_c)
+                infer_frame = cv2.resize(crop_filtrado, (target_w, int(h_c * infer_scale)), interpolation=cv2.INTER_LINEAR)
+
+                with torch.inference_mode():
+                    results = model(infer_frame, verbose=False, conf=0.18, iou=0.45, imgsz=640)
+
+                box_scale = 1.0 / infer_scale
                 raw_cards = []
                 guardar_por_duda = False
 
@@ -952,16 +1060,17 @@ def ai_inference_loop():
                     name = model.names[cls_id].upper()
                     conf = round(float(box.conf[0]), 2)
 
-                    if 0.20 <= conf <= 0.50:
+                    if 0.20 <= conf <= 0.45:
                         guardar_por_duda = True
 
-                    x1, y1, x2, y2 = [int(v * box_scale) for v in box.xyxy[0].tolist()]
+                    bx1, by1, bx2, by2 = [int(v * box_scale) for v in box.xyxy[0].tolist()]
+                    # Mapeo a coordenadas globales absolutas del frame completo
+                    x1 = crop_x1 + bx1
+                    y1 = crop_y1 + by1
+                    x2 = crop_x1 + bx2
+                    y2 = crop_y1 + by2
                     cx = (x1 + x2) / 2
                     cy = (y1 + y2) / 2
-
-                    # Filtro ROI: cartas deben estar dentro del tapete de juego
-                    if not (0.15 * h_f < cy < 0.88 * h_f and 0.10 * w_f < cx < 0.90 * w_f):
-                        continue
 
                     raw_cards.append({
                         "val": name,
@@ -974,41 +1083,6 @@ def ai_inference_loop():
 
                 # Deduplicación inicial de detecciones nativas
                 raw_cards = deduplicate_boxes(raw_cards)
-
-                # Paso 2 (Auto-Recuperación de Cartas Descoloridas / Destellos de Luz en Paño):
-                # Si hay cartas en mesa pero faltan naipes (ej. tercera carta con reflejo o desenfoque),
-                # aplicamos realce adaptativo de contraste YCrCb-CLAHE para extraerla con alta fidelidad.
-                if tipo_juego == 'BACCARAT' and (0 < len(raw_cards) < 6):
-                    try:
-                        ycrcb = cv2.cvtColor(infer_frame, cv2.COLOR_BGR2YCrCb)
-                        y_ch, cr_ch, cb_ch = cv2.split(ycrcb)
-                        clahe_op = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
-                        y_enh = clahe_op.apply(y_ch)
-                        infer_enh = cv2.cvtColor(cv2.merge((y_enh, cr_ch, cb_ch)), cv2.COLOR_YCrCb2BGR)
-                        with torch.inference_mode():
-                            results_enh = model(infer_enh, verbose=False, conf=0.18, iou=0.50, imgsz=640)
-
-                        for box in results_enh[0].boxes:
-                            cls_id = int(box.cls[0])
-                            name = model.names[cls_id].upper()
-                            conf = round(float(box.conf[0]), 2)
-                            x1, y1, x2, y2 = [int(v * box_scale) for v in box.xyxy[0].tolist()]
-                            cx = (x1 + x2) / 2
-                            cy = (y1 + y2) / 2
-                            if not (0.15 * h_f < cy < 0.88 * h_f and 0.10 * w_f < cx < 0.90 * w_f):
-                                continue
-
-                            raw_cards.append({
-                                "val": name,
-                                "box": [x1, y1, x2, y2],
-                                "norm_box": [x1 / float(w_f), y1 / float(h_f), x2 / float(w_f), y2 / float(h_f)],
-                                "cx": cx,
-                                "cy": cy,
-                                "conf": conf
-                            })
-                        raw_cards = deduplicate_boxes(raw_cards)
-                    except Exception:
-                        pass
 
                 count = len(raw_cards)
                 detections = []
@@ -1068,8 +1142,12 @@ def ai_inference_loop():
                     gaps = [raw_cards[i+1]['cx'] - raw_cards[i]['cx'] for i in range(count - 1)]
                     max_gap = max(gaps) if gaps else 0
 
+                    has_back_detected = any('BACK' in str(c.get('val', '')).upper() for c in raw_cards)
+
                     if count > 1 and max_gap < 18:
                         estado_mesa = "RECOGIENDO"
+                    elif has_back_detected and count >= 2 and tipo_juego == 'BACCARAT':
+                        estado_mesa = "LIGANDO_CARTAS"
                     elif count < (5 if tipo_juego == 'POKER_CARIBENO' else 4):
                         estado_mesa = "REPARTIENDO"
                     else:
@@ -1256,17 +1334,26 @@ def ai_inference_loop():
                     juego_label = "Baccarat"
                     resultado = motor_baccarat(punto_list, banca_list)
 
-                    # Estabilidad de cartas y auto-cierre garantizado de mano:
-                    # Si ambas manos tienen al menos 2 cartas descubiertas (sin BACK) y permanecen
-                    # estables por >= 2.0 segundos, la mano se concluye (listo = True) para registro inmediato
+                    # Estabilidad inteligente y auto-cierre garantizado de mano:
+                    nP, nB = len(punto_list), len(banca_list)
                     has_back = any(parse_card_info(c.get('val', '')).get('is_back') for c in (punto_list + banca_list))
-                    card_sig = (tuple(c['val'] for c in punto_list), tuple(c['val'] for c in banca_list))
-                    stab = mesa_hand_stability.get(mesa_uuid)
-                    if stab and stab.get('sig') == card_sig:
-                        if (now_ts - stab.get('since', now_ts) >= 2.0) and len(punto_list) >= 2 and len(banca_list) >= 2 and not has_back:
+
+                    if has_back or estado_mesa == 'LIGANDO_CARTAS':
+                        resultado['win'] = 'LIGANDO CARTAS'
+                        resultado['listo'] = False
+                    elif nP >= 2 and nB >= 2 and not has_back:
+                        # 1. Si es Natural 8 o 9, o si el motor ya lo dio por terminado por reglas oficiales
+                        if resultado.get('natural') or resultado.get('listo'):
                             resultado['listo'] = True
-                    else:
-                        mesa_hand_stability[mesa_uuid] = {'sig': card_sig, 'since': now_ts}
+                        else:
+                            # 2. Estabilidad por puntaje (Score Punto, Score Banca, nP, nB) durante 0.8s
+                            score_sig = (resultado.get('scoreP', 0), resultado.get('scoreB', 0), nP, nB)
+                            stab = mesa_hand_stability.get(mesa_uuid)
+                            if stab and stab.get('sig') == score_sig:
+                                if (now_ts - stab.get('since', now_ts) >= 0.8):
+                                    resultado['listo'] = True
+                            else:
+                                mesa_hand_stability[mesa_uuid] = {'sig': score_sig, 'since': now_ts}
 
                     det_p_str = ', '.join([c['val'] for c in punto_list])
                     det_b_str = ', '.join([c['val'] for c in banca_list])
@@ -1398,8 +1485,8 @@ def ai_inference_loop():
                     duda_path = os.path.join(AUTO_TRAIN_DIR, f"duda_{ts}_{mesa_uuid[:6]}.jpg")
                     cv2.imwrite(duda_path, frame)
 
-                # Auto-guardado en base de datos si la mano está lista y no se ha guardado
-                if resultado.get('listo') and raw_cards and estado_mesa not in ['RECOGIENDO', 'BARAJO_CARTAS', 'PRESENTANDO_CARTAS']:
+                # Auto-guardado garantizado en base de datos si la mano está lista y no se ha guardado
+                if resultado.get('listo') and raw_cards and estado_mesa not in ['BARAJO_CARTAS', 'PRESENTANDO_CARTAS']:
                     ultimo = historial_guardado.get(mesa_uuid)
                     if detalle_mano != ultimo:
                         historial_guardado[mesa_uuid] = detalle_mano
@@ -1672,18 +1759,35 @@ def stream_mjpeg(mesa_uuid):
         while True:
             buf = live_jpeg_buffers.get(mesa_uuid)
             if not buf:
-                raw = frames_actuales.get(mesa_uuid)
-                if raw is not None and raw.size > 0:
-                    try:
-                        _, b = cv2.imencode('.jpg', raw, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
-                        buf = b.tobytes()
-                    except Exception:
-                        pass
-            if buf:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + buf + b'\r\n')
-            time.sleep(0.035) # ~28 FPS streaming continuo nativo
+                cfg = mesas_config.get(mesa_uuid, {})
+                buf = make_placeholder_frame(cfg.get('nombre', 'Mesa'), "Conectando señal...")
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buf + b'\r\n')
+            time.sleep(0.04) # ~25 FPS streaming continuo fluido
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/snapshot/<mesa_uuid>')
+def get_snapshot(mesa_uuid):
+    """
+    Retorna un fotograma JPEG único optimizado (ideal para carga ligera de la cuadrícula general sin agotar sockets)
+    """
+    buf = live_jpeg_buffers.get(mesa_uuid)
+    if not buf:
+        cfg = mesas_config.get(mesa_uuid, {})
+        buf = make_placeholder_frame(cfg.get('nombre', 'Mesa'), "Conectando señal...")
+    return Response(buf, mimetype='image/jpeg', headers={'Cache-Control': 'no-cache, no-store, must-revalidate'})
+
+@app.route('/mesa/<mesa_uuid>/reconectar', methods=['POST'])
+def reconectar_mesa_endpoint(mesa_uuid):
+    """
+    Fuerza la reconexión inmediata del canal RTSP/ISAPI para la mesa indicada
+    """
+    reconnect_requests.add(mesa_uuid)
+    cfg = mesas_config.get(mesa_uuid, {})
+    m_name = cfg.get('nombre', 'Mesa')
+    live_jpeg_buffers[mesa_uuid] = make_placeholder_frame(m_name, "Reconectando cámara...")
+    estado_stream[mesa_uuid] = 'reconectando'
+    return jsonify({"success": True, "mesa_uuid": mesa_uuid, "mensaje": f"Reconexión solicitada para {m_name}"})
 
 @app.route('/stream_raw/<mesa_uuid>')
 def stream_raw_mjpeg(mesa_uuid):
@@ -1753,6 +1857,10 @@ def actualizar_mesas(mesas_list):
             "nombre": nombre,
             "sala_uuid": sala_uuid
         }
+
+        # Inicializar fotograma de respaldo inmediato para evitar pantalla en negro o flujos vacíos
+        if uuid not in live_jpeg_buffers:
+            live_jpeg_buffers[uuid] = make_placeholder_frame(nombre, "Sincronizando canal de video...")
 
         # Iniciar thread RTSP si no existe (usando SUBSTREAM {canal}02 para visualización ultra-fluida sin lag)
         if uuid not in estado_stream:

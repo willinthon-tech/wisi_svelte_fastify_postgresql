@@ -592,8 +592,25 @@ export async function createCecomIaEventoModel(data = {}) {
     nivel_alerta = 'INFO'
   } = data;
 
-  if (!sala_uuid || !isUuid(sala_uuid)) throw new Error('UUID de sala inválido');
   if (!mesa_uuid || !isUuid(mesa_uuid)) throw new Error('UUID de mesa inválido');
+
+  if (!sala_uuid || !isUuid(sala_uuid)) {
+    try {
+      const mesaRow = await sql`SELECT sala_uuid FROM mesas WHERE uuid = ${mesa_uuid}::uuid LIMIT 1`;
+      if (mesaRow && mesaRow[0] && mesaRow[0].sala_uuid) {
+        sala_uuid = mesaRow[0].sala_uuid;
+      } else {
+        const defaultSala = await sql`SELECT uuid FROM salas WHERE is_deleted = false AND active = 1 ORDER BY created_at ASC LIMIT 1`;
+        if (defaultSala && defaultSala[0]) {
+          sala_uuid = defaultSala[0].uuid;
+        }
+      }
+    } catch (eResolve) {
+      console.warn('Advertencia resolviendo sala_uuid para evento IA:', eResolve.message);
+    }
+  }
+
+  if (!sala_uuid || !isUuid(sala_uuid)) throw new Error('UUID de sala inválido');
 
   const validCamaraUuid = (camara_uuid && isUuid(camara_uuid)) ? camara_uuid : null;
   const isNov = es_novedad || ['DROP', 'MALDON', 'CAMBIO_BARAJO', 'ANOMALIA'].includes(String(tipo_evento).toUpperCase());

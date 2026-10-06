@@ -41,6 +41,9 @@
     return `${year}-${month}-${day}`;
   }
 
+  let refreshingMesaMap = {};
+  let feedCacheBusterMap = {};
+
   function getStreamUrl(uuid) {
     if (!uuid) return '';
     let host = '127.0.0.1';
@@ -50,7 +53,44 @@
         host = h;
       }
     }
-    return `http://${host}:5005/stream/${uuid}`;
+    const buster = feedCacheBusterMap[uuid] ? `?t=${feedCacheBusterMap[uuid]}` : '';
+    return `http://${host}:5005/stream/${uuid}${buster}`;
+  }
+
+  function getSnapshotUrl(uuid) {
+    if (!uuid) return '';
+    let host = '127.0.0.1';
+    if (typeof window !== 'undefined' && window.location.hostname) {
+      const h = window.location.hostname;
+      if (h !== 'localhost' && h !== '127.0.0.1' && !h.includes('tauri')) {
+        host = h;
+      }
+    }
+    const buster = feedCacheBusterMap[uuid] ? `?t=${feedCacheBusterMap[uuid]}` : '';
+    return `http://${host}:5005/snapshot/${uuid}${buster}`;
+  }
+
+  async function refrescarFeedMesa(mesaUuid, mesaNombre = 'Mesa') {
+    if (!mesaUuid) return;
+    refreshingMesaMap = { ...refreshingMesaMap, [mesaUuid]: true };
+    feedCacheBusterMap = { ...feedCacheBusterMap, [mesaUuid]: Date.now() };
+
+    triggerToast(`Reconectando cámara de ${mesaNombre}...`, 'info');
+
+    try {
+      await fetch(`http://127.0.0.1:5005/mesa/${mesaUuid}/reconectar`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(3000)
+      });
+    } catch (e) {
+      console.warn('Aviso reconexión motor local:', e.message);
+    }
+
+    setTimeout(() => {
+      feedCacheBusterMap = { ...feedCacheBusterMap, [mesaUuid]: Date.now() };
+      refreshingMesaMap = { ...refreshingMesaMap, [mesaUuid]: false };
+      triggerToast(`✅ Señal de video refrescada para ${mesaNombre}`, 'success');
+    }, 1200);
   }
 
   function getEvidenceUrl(item) {
@@ -695,14 +735,13 @@
                   if (badge.image_b64) {
                     e.currentTarget.src = `data:image/jpeg;base64,${badge.image_b64}`;
                   }
-                  setTimeout(() => {
-                    if (e.currentTarget) e.currentTarget.src = getStreamUrl(badge.uuid);
-                  }, 2500);
                 }}
               />
               <span class="cctv-live-tag">
                 {#if badge.has_cards && !badge.is_presentando_cartas && !badge.is_barajo_cartas}
                   <span class="live-dot-red"></span> 🔴 JUGADA EN CURSO
+                {:else if badge.estado_mesa === 'LIGANDO_CARTAS' || badge.ganador === 'LIGANDO CARTAS'}
+                  <span class="live-dot-blue"></span> 🔵 LIGANDO CARTAS (CLIENTE)
                 {:else if badge.is_presentando_cartas || badge.estado_mesa === 'PRESENTANDO_CARTAS'}
                   <span class="live-dot-blue"></span> 🔵 PRESENTANDO CARTAS
                 {:else if badge.is_barajo_cartas || badge.estado_mesa === 'BARAJO_CARTAS'}
@@ -713,6 +752,17 @@
                   <span class="live-dot-green"></span> 🟢 MESA DESPEJADA
                 {/if}
               </span>
+
+              <!-- BOTÓN MANUAL DE REFRESCO DE CÁMARA (POR CAJITA) -->
+              <button
+                type="button"
+                class="cctv-refresh-btn"
+                class:spinning={refreshingMesaMap[badge.uuid]}
+                on:click|stopPropagation={() => refrescarFeedMesa(badge.uuid, badge.nombre)}
+                title="Refrescar señal de video y reconectar cámara de {badge.nombre}"
+              >
+                <span class="refresh-sym">🔄</span>
+              </button>
             </div>
 
             <!-- SECTOR DEL JUEGO / DE LA MANO (REGLAS CASINO) -->
@@ -958,8 +1008,8 @@
                     🏆 PUNTO GANA ({badge.scoreP} a {badge.scoreB})
                   {:else if badge.ganador === 'EMPATE (TIE)'}
                     🏆 EMPATE (TIE) ({badge.scoreB} - {badge.scoreP})
-                  {:else if badge.ganador === 'LIGANDO'}
-                    🂠 LIGANDO CARTAS...
+                  {:else if badge.ganador === 'LIGANDO' || badge.estado_mesa === 'LIGANDO_CARTAS'}
+                    🂠 LIGANDO CARTAS (CLIENTE EN SQUEEZE)...
                   {:else if badge.ganador === 'REPARTIENDO'}
                     🃏 REPARTIENDO CARTAS...
                   {:else}
@@ -969,6 +1019,7 @@
 
                 <!-- Puestos de la Mesa (1 al 7) -->
                 <div class="ia-puestos-strip">
+                  <span class="puestos-hint">Puestos (Pagos: 7 ➔ 1)</span>
                   {#each [1, 2, 3, 5, 6, 7] as p}
                     <span
                       class="ia-puesto-tag"
@@ -1380,6 +1431,20 @@
             <div class="stream-overlay-badge">
               <span>● EN VIVO (RTSP Puerto 554) • YOLO best.pt • Fluido 25 FPS</span>
             </div>
+
+            <!-- BOTÓN MANUAL DE REFRESCO DE CÁMARA (MODAL) -->
+            <button
+              type="button"
+              class="cctv-refresh-btn cctv-modal-refresh-btn"
+              class:spinning={refreshingMesaMap[viewingAiMesa.uuid]}
+              on:click|stopPropagation={() => {
+                streamFailed = false;
+                refrescarFeedMesa(viewingAiMesa.uuid, viewingAiMesa.nombre);
+              }}
+              title="Refrescar señal y reconectar cámara de {viewingAiMesa.nombre}"
+            >
+              <span class="refresh-sym">🔄</span>
+            </button>
           </div>
 
           <!-- PANEL LATERAL DE RESULTADOS Y REGLAS EN TIEMPO REAL -->
@@ -2426,6 +2491,64 @@
     opacity: 0.8;
   }
 
+  /* Botón de Refresco Manual de Cámara (Por Cuadro y Modal) */
+  .cctv-refresh-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(15, 23, 42, 0.80);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    color: #e2e8f0;
+    backdrop-filter: blur(4px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
+    padding: 0;
+    outline: none;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  }
+
+  .cctv-refresh-btn:hover {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: #38bdf8;
+    color: #38bdf8;
+    transform: scale(1.08);
+  }
+
+  .cctv-refresh-btn:active {
+    transform: scale(0.94);
+  }
+
+  .cctv-refresh-btn.spinning,
+  .cctv-refresh-btn.spinning .refresh-sym {
+    animation: cctv-spin 0.85s linear infinite;
+    pointer-events: none;
+    border-color: #38bdf8;
+    color: #38bdf8;
+  }
+
+  .cctv-modal-refresh-btn {
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+  }
+
+  @keyframes cctv-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
   /* Estado Sin Jugada (En Espera) */
   .sin-jugada-box {
     display: flex;
@@ -2830,11 +2953,22 @@
   /* Puestos Strip en Badge Card */
   .ia-puestos-strip {
     display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 3px;
     margin-top: 4px;
     padding-top: 4px;
     border-top: 1px dashed rgba(255, 255, 255, 0.15);
+  }
+
+  .puestos-hint {
+    font-size: 8px;
+    color: #94a3b8;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    margin-right: 3px;
   }
 
   .ia-puesto-tag {
