@@ -170,7 +170,7 @@ export async function localGetDeviceUsers(host, username = 'admin', password = '
       position += 1;
     }
 
-    if (currentMatches === 0 || currentMatches < maxResults || (totalMatches > 0 && allUsers.length >= totalMatches) || (Array.isArray(users) && users.length === 0)) {
+    if (currentMatches === 0 || (Array.isArray(users) && users.length === 0) || (totalMatches > 0 && allUsers.length >= totalMatches)) {
       hasMore = false;
     }
   }
@@ -196,17 +196,16 @@ export async function localAddUser(host, username = 'admin', password = '', empl
 
   let body;
   if (isPanel) {
-    const panelEmployeeNo = generarCardNoDesdeCedula(rawCedula) || rawCedula.replace(/\D/g, '');
     body = {
       UserInfo: {
-        employeeNo: String(panelEmployeeNo),
+        employeeNo: rawCedula,
         name: nombre,
         userType: "normal",
         closeDelayEnabled: false,
         Valid: {
           enable: true,
-          beginTime,
-          endTime,
+          beginTime: "2024-01-01T00:00:00",
+          endTime: "2035-12-31T23:59:59",
           timeType: "local"
         },
         belongGroup: "",

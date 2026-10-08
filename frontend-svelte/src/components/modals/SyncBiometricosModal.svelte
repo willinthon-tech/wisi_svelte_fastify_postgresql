@@ -837,6 +837,8 @@
         // Construir URL pública garantizada de foto (usando wisi.space)
         const photoUrl = emp.photoUrl || (emp.foto ? (emp.foto.startsWith('http') ? emp.foto : `https://wisi.space${emp.foto.startsWith('/') ? '' : '/'}${emp.foto}`) : '');
 
+        let empUpdated = false;
+
         // 1. Biométrico local
         if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
           try {
@@ -848,7 +850,7 @@
             if (photoUrl) {
               await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, photoUrl);
             }
-            successCount++;
+            empUpdated = true;
           } catch (e) {
             console.warn(`Error actualizando ${emp.nombre} en biométrico:`, e.message);
           }
@@ -858,13 +860,18 @@
         if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
-            const panelEmployeeNo = generarCardNoDesdeCedula(emp.cedula);
-            if (panelEmployeeNo) {
-              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, panelEmployeeNo);
+            const cardNo = generarCardNoDesdeCedula(emp.cedula);
+            if (cardNo) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
             }
+            empUpdated = true;
           } catch (e) {
             console.warn(`Error actualizando ${emp.nombre} en panel:`, e.message);
           }
+        }
+
+        if (empUpdated) {
+          successCount++;
         }
 
         // Reflejar cambio inmediato en el objeto local en memoria
@@ -950,9 +957,9 @@
         if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
-            const panelEmployeeNo = generarCardNoDesdeCedula(emp.cedula);
-            if (panelEmployeeNo) {
-              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, panelEmployeeNo);
+            const cardNo = generarCardNoDesdeCedula(emp.cedula);
+            if (cardNo) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
             }
             addedOk = true;
           } catch (e) {
