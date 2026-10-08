@@ -182,7 +182,8 @@ export async function localGetDeviceUsers(host, username = 'admin', password = '
  * Agrega o actualiza un empleado en el biométrico o panel
  */
 export async function localAddUser(host, username = 'admin', password = '', employeeData, isPanel = false) {
-  const rawCedula = String(employeeData.cedula || employeeData.employeeNo || '').trim().toUpperCase();
+  const explicitNo = employeeData.employeeNo ? String(employeeData.employeeNo).trim() : '';
+  const rawCedula = explicitNo || String(employeeData.cedula || '').trim().toUpperCase();
   const nombre = String(employeeData.nombre || employeeData.name || '').trim();
   const gender = (employeeData.sexo || '').toLowerCase().includes('fem') ? 'female' : 'male';
 
@@ -196,7 +197,7 @@ export async function localAddUser(host, username = 'admin', password = '', empl
 
   let body;
   if (isPanel) {
-    const panelEmpNo = generarCardNoDesdeCedula(rawCedula) || rawCedula;
+    const panelEmpNo = explicitNo || (generarCardNoDesdeCedula(rawCedula) || rawCedula);
     body = {
       UserInfo: {
         employeeNo: panelEmpNo,
@@ -245,6 +246,20 @@ export async function localAddUser(host, username = 'admin', password = '', empl
     };
   }
 
+  // 1. Intentar primero UserInfo/Modify (Hikvision requiere Modify cuando el usuario ya existe)
+  let modRes = null;
+  try {
+    modRes = await callLocalIsapi(host, '/ISAPI/AccessControl/UserInfo/Modify?format=json', 'PUT', body, username, password, 10);
+    let parsedMod = null;
+    try {
+      parsedMod = typeof modRes?.data === 'string' ? JSON.parse(modRes.data) : modRes?.data;
+    } catch (_) {}
+    if (modRes?.ok && (parsedMod?.statusCode === 1 || parsedMod?.subStatusCode === 'ok')) {
+      return modRes;
+    }
+  } catch (e) {}
+
+  // 2. Si falló Modify (usuario nuevo no registrado), usar UserInfo/SetUp
   const res = await callLocalIsapi(host, '/ISAPI/AccessControl/UserInfo/SetUp?format=json', 'PUT', body, username, password, 10);
   return res;
 }

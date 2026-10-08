@@ -402,30 +402,71 @@
       const exactCedula = String(emp.cedula || '').trim().toUpperCase();
       const variants = getCedulaVariants(emp.cedula).map(v => v.toUpperCase());
 
-      // 1. Cotejo contra el biométrico: marcar TODOS los índices que coincidan
-      let bioUser = null;
+      // 1. Cotejo contra el biométrico con priorización estricta:
+      // Prioridad 1 (100): Coincidencia exacta de cédula oficial (ej: "V20783422")
+      // Prioridad 2 (80): Coincidencia case-insensitive exacta (ej: "v20783422")
+      // Prioridad 3 (50): Variante numérica / solo dígitos (ej: "20783422")
+      let bestBioUser = null;
+      let bestBioIndex = -1;
+      let bestBioScore = 0;
+
       (bioUsers || []).forEach((u, idx) => {
-        const uNo = String(u.employeeNo || '').trim().toUpperCase();
-        if (uNo === exactCedula || variants.includes(uNo)) {
-          matchedBioIndices.add(idx);
-          if (!bioUser) bioUser = u;
+        const rawNo = String(u.employeeNo || '').trim();
+        const uNoUpper = rawNo.toUpperCase();
+        let score = 0;
+
+        if (rawNo === emp.cedula) {
+          score = 100;
+        } else if (uNoUpper === exactCedula) {
+          score = 80;
+        } else if (variants.includes(uNoUpper) || uNoUpper.replace(/\D/g, '') === exactCedula.replace(/\D/g, '')) {
+          score = 50;
+        }
+
+        if (score > bestBioScore) {
+          bestBioScore = score;
+          bestBioUser = u;
+          bestBioIndex = idx;
         }
       });
+
+      if (bestBioIndex !== -1) {
+        matchedBioIndices.add(bestBioIndex);
+      }
+      const bioUser = bestBioUser;
 
       // 2. Cotejo contra el panel (si aplica):
       // El panel se verifica buscando la V que es 1 y la E que es 2 (ej: V20783422 -> 120783422)
       // El resto de números en el panel son registros manuales/sobrantes que no corresponden al sistema.
-      let panelUser = null;
+      let bestPanelUser = null;
+      let bestPanelIndex = -1;
+      let bestPanelScore = 0;
+
       if (hasPanel && Array.isArray(panelUsers)) {
         const expectedPanelNo = generarCardNoDesdeCedula(emp.cedula);
         panelUsers.forEach((u, idx) => {
-          const uNo = String(u.employeeNo || '').trim().toUpperCase();
-          if (uNo === expectedPanelNo || uNo === exactCedula) {
-            matchedPanelIndices.add(idx);
-            if (!panelUser) panelUser = u;
+          const rawNo = String(u.employeeNo || '').trim();
+          const uNoUpper = rawNo.toUpperCase();
+          let score = 0;
+
+          if (rawNo === expectedPanelNo) {
+            score = 100;
+          } else if (uNoUpper === exactCedula) {
+            score = 60;
+          }
+
+          if (score > bestPanelScore) {
+            bestPanelScore = score;
+            bestPanelUser = u;
+            bestPanelIndex = idx;
           }
         });
       }
+
+      if (bestPanelIndex !== -1) {
+        matchedPanelIndices.add(bestPanelIndex);
+      }
+      const panelUser = bestPanelUser;
 
       const hasOnBio = bioUser !== null;
       const hasOnPanel = panelUser !== null;
@@ -830,6 +871,17 @@
         if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
           try {
             await localAddUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp, false);
+
+            const lowerCed = String(emp.cedula || '').trim().toLowerCase();
+            if (lowerCed && lowerCed !== emp.cedula) {
+              try {
+                await localAddUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, {
+                  ...emp,
+                  employeeNo: lowerCed
+                }, false);
+              } catch (e) {}
+            }
+
             const digitsOnly = String(emp.cedula || '').replace(/\D/g, '');
             if (digitsOnly && digitsOnly !== emp.cedula) {
               try {
@@ -843,6 +895,11 @@
             const cardNo = generarCardNoDesdeCedula(emp.cedula);
             if (cardNo) {
               await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
+              if (lowerCed && lowerCed !== emp.cedula) {
+                try {
+                  await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, lowerCed, cardNo);
+                } catch (e) {}
+              }
               if (digitsOnly && digitsOnly !== emp.cedula) {
                 try {
                   await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, digitsOnly, cardNo);
@@ -851,6 +908,11 @@
             }
             if (photoUrl) {
               await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, photoUrl);
+              if (lowerCed && lowerCed !== emp.cedula) {
+                try {
+                  await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, lowerCed, emp.nombre, emp.sexo, photoUrl);
+                } catch (e) {}
+              }
               if (digitsOnly && digitsOnly !== emp.cedula) {
                 try {
                   await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, digitsOnly, emp.nombre, emp.sexo, photoUrl);

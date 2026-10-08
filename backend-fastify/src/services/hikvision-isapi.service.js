@@ -302,7 +302,8 @@ export function getCedulaVariants(raw) {
  * Agrega o actualiza un usuario en el biométrico o panel
  */
 export async function addUserToDevice(ipHost, username, password, employeeData, isPanel = false) {
-  const rawCedula = String(employeeData.cedula || employeeData.employeeNo || '').trim().toUpperCase();
+  const explicitNo = employeeData.employeeNo ? String(employeeData.employeeNo).trim() : '';
+  const rawCedula = explicitNo || String(employeeData.cedula || '').trim().toUpperCase();
   const nombre = String(employeeData.nombre || employeeData.name || '').trim();
   const gender = (employeeData.sexo || '').toLowerCase().includes('fem') ? 'female' : 'male';
 
@@ -322,7 +323,7 @@ export async function addUserToDevice(ipHost, username, password, employeeData, 
   if (isPanel) {
     // Para paneles: los paneles Hikvision requieren identificador numérico sin letras
     // Se utiliza 1 para V y 2 para E (generarCardNoDesdeCedula)
-    const panelEmployeeNo = generarCardNoDesdeCedula(rawCedula) || rawCedula.replace(/\D/g, '');
+    const panelEmployeeNo = explicitNo || (generarCardNoDesdeCedula(rawCedula) || rawCedula.replace(/\D/g, ''));
     body = {
       UserInfo: {
         employeeNo: panelEmployeeNo,
@@ -371,6 +372,16 @@ export async function addUserToDevice(ipHost, username, password, employeeData, 
     };
   }
 
+  // Intentar primero Modify (si el usuario ya existe en el equipo, Hikvision requiere Modify en vez de SetUp)
+  try {
+    const modRes = await executeIsapiCall(ipHost, '/ISAPI/AccessControl/UserInfo/Modify?format=json', 'PUT', body, username, password);
+    const isModOk = (modRes.ok || modRes.status === 200) && (!modRes.data?.statusCode || modRes.data.statusCode === 1);
+    if (isModOk) {
+      return modRes;
+    }
+  } catch (e) {}
+
+  // Si no existía o falló Modify, usar SetUp para crearlo
   const res = await executeIsapiCall(ipHost, '/ISAPI/AccessControl/UserInfo/SetUp?format=json', 'PUT', body, username, password);
   return res;
 }
