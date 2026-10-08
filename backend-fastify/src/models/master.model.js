@@ -488,22 +488,35 @@ export async function getDispositivosModel(salaId = null, salaIds = null) {
 }
 
 export async function createDispositivoModel(data) {
-  const ipPanelVal = data.ip_panel || data.ip_panel_remoto || '';
+  const ipPanelVal = (data.ip_panel || data.ip_panel_remoto || '').trim();
   const rawSala = data.sala_uuid || data.sala_id;
   if (!rawSala) throw new Error('Debe seleccionar una sala para el dispositivo');
-  const isSalaU = isUuid(rawSala);
-  const salaUuid = isSalaU ? String(rawSala).trim() : null;
+  
+  let salaUuid = null;
+  if (isUuid(rawSala)) {
+    salaUuid = String(rawSala).trim();
+  } else if (isPgConnected && sql) {
+    const sRows = await sql`SELECT uuid FROM salas WHERE uuid::text = ${String(rawSala)} OR id::text = ${String(rawSala)} LIMIT 1`;
+    if (sRows.length > 0) salaUuid = sRows[0].uuid;
+  }
+  if (!salaUuid) throw new Error('La sala seleccionada es inválida o no existe en la base de datos');
+
+  const devUuid = (data.uuid && isUuid(data.uuid)) ? String(data.uuid).trim() : null;
 
   if (isPgConnected && sql) {
-    const rows = await sql`
-      INSERT INTO dispositivos (nombre, sala_uuid, ip_local, ip_remota, ip_panel, usuario, clave)
-      VALUES (${data.nombre}, ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`}, ${data.ip_local}, ${data.ip_remota}, ${ipPanelVal}, ${data.usuario || 'admin'}, ${data.clave || '123456'})
+    const rows = devUuid ? await sql`
+      INSERT INTO dispositivos (uuid, nombre, sala_uuid, ip_local, ip_panel, usuario, clave)
+      VALUES (${devUuid}::uuid, ${data.nombre || ''}, ${salaUuid}::uuid, ${data.ip_local || ''}, ${ipPanelVal}, ${data.usuario || 'admin'}, ${data.clave || '123456'})
+      RETURNING *, uuid AS id, sala_uuid AS sala_id, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto
+    ` : await sql`
+      INSERT INTO dispositivos (nombre, sala_uuid, ip_local, ip_panel, usuario, clave)
+      VALUES (${data.nombre || ''}, ${salaUuid}::uuid, ${data.ip_local || ''}, ${ipPanelVal}, ${data.usuario || 'admin'}, ${data.clave || '123456'})
       RETURNING *, uuid AS id, sala_uuid AS sala_id, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto
     `;
     return rows[0];
   } else {
     const nextId = inMemoryData.dispositivos.length > 0 ? Math.max(...inMemoryData.dispositivos.map(d => d.id)) + 1 : 1;
-    const newDispositivo = { id: nextId, uuid: `dev-${Date.now()}`, ...data, ip_panel: ipPanelVal, ip_panel_remoto: ipPanelVal };
+    const newDispositivo = { id: nextId, uuid: devUuid || `dev-${Date.now()}`, ...data, sala_uuid: salaUuid, sala_id: salaUuid, ip_panel: ipPanelVal, ip_panel_remoto: ipPanelVal };
     inMemoryData.dispositivos.unshift(newDispositivo);
     return newDispositivo;
   }
@@ -528,20 +541,30 @@ export async function getDispositivoByIdModel(id) {
 export async function updateDispositivoModel(id, data) {
   if (!id) throw new Error('ID inválido');
   const isU = isUuid(id);
-  const ipPanelVal = data.ip_panel || data.ip_panel_remoto || '';
+  const ipPanelVal = data.ip_panel !== undefined ? (data.ip_panel || data.ip_panel_remoto || '') : undefined;
   const rawSala = data.sala_uuid !== undefined ? data.sala_uuid : data.sala_id;
-  const salaUuid = rawSala && isUuid(rawSala) ? String(rawSala).trim() : null;
+  let salaUuid = undefined;
+  if (rawSala !== undefined) {
+    if (rawSala && isUuid(rawSala)) {
+      salaUuid = String(rawSala).trim();
+    } else if (rawSala && isPgConnected && sql) {
+      const sRows = await sql`SELECT uuid FROM salas WHERE uuid::text = ${String(rawSala)} OR id::text = ${String(rawSala)} LIMIT 1`;
+      if (sRows.length > 0) salaUuid = sRows[0].uuid;
+      else salaUuid = null;
+    } else {
+      salaUuid = null;
+    }
+  }
 
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE dispositivos
-      SET nombre = COALESCE(${data.nombre}, nombre), 
-          sala_uuid = ${rawSala !== undefined ? (salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
-          ip_local = COALESCE(${data.ip_local}, ip_local),
-          ip_remota = COALESCE(${data.ip_remota}, ip_remota), 
-          ip_panel = COALESCE(${ipPanelVal}, ip_panel), 
-          usuario = COALESCE(${data.usuario}, usuario),
-          clave = COALESCE(${data.clave}, clave),
+      SET nombre = COALESCE(${data.nombre ?? null}, nombre), 
+          sala_uuid = ${salaUuid !== undefined ? (salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
+          ip_local = COALESCE(${data.ip_local ?? null}, ip_local),
+          ip_panel = ${ipPanelVal !== undefined ? sql`${ipPanelVal}` : sql`ip_panel`}, 
+          usuario = COALESCE(${data.usuario ?? null}, usuario),
+          clave = COALESCE(${data.clave ?? null}, clave),
           updated_at = CURRENT_TIMESTAMP
       WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`uuid::text = ${String(id)}`}
       RETURNING *, uuid AS id, sala_uuid AS sala_id, COALESCE(ip_panel, '') AS ip_panel, COALESCE(ip_panel, '') AS ip_panel_remoto
@@ -550,7 +573,7 @@ export async function updateDispositivoModel(id, data) {
   } else {
     const idx = inMemoryData.dispositivos.findIndex(d => String(d.uuid) === String(id) || String(d.id) === String(id));
     if (idx !== -1) {
-      inMemoryData.dispositivos[idx] = { ...inMemoryData.dispositivos[idx], ...data, ip_panel: ipPanelVal, ip_panel_remoto: ipPanelVal };
+      inMemoryData.dispositivos[idx] = { ...inMemoryData.dispositivos[idx], ...data, ...(ipPanelVal !== undefined ? { ip_panel: ipPanelVal, ip_panel_remoto: ipPanelVal } : {}) };
       return inMemoryData.dispositivos[idx];
     }
     return null;
@@ -576,7 +599,7 @@ export async function injectDispositivoPushConfigModel(id, serverUrl) {
     throw new Error(`Dispositivo ${id} no encontrado`);
   }
 
-  const rawIp = dev.ip_remota || dev.ip_local || '127.0.0.1';
+  const rawIp = (dev.ip_local || dev.ip_panel || '127.0.0.1').trim();
   const cleanIp = rawIp.split(':')[0].trim();
   const portPart = rawIp.includes(':') ? rawIp.split(':')[1].trim() : '80';
   const pushEndpoint = serverUrl ? `${serverUrl}/ISAPI/Event/notification/alertStream` : `http://${cleanIp}:${portPart}/ISAPI/Event/notification/alertStream`;
@@ -588,7 +611,6 @@ export async function injectDispositivoPushConfigModel(id, serverUrl) {
     dispositivo_id: dev.uuid,
     dispositivo_uuid: dev.uuid,
     nombre: dev.nombre,
-    ip_remota: dev.ip_remota,
     ip_local: dev.ip_local,
     usuario: dev.usuario || 'admin',
     server_url: pushEndpoint,
@@ -736,7 +758,7 @@ export async function injectHikvisionIsapiHttpListeningModel(id, config = {}) {
   }
 
   // Conexión local al dispositivo
-  const rawIp = (dev.ip_local || dev.ip_remota || '').trim();
+  const rawIp = (dev.ip_local || dev.ip_panel || '').trim();
   if (!rawIp || rawIp === '—') {
     throw new Error(`El dispositivo '${dev.nombre}' no tiene configurada la 'ip_local'`);
   }
@@ -777,7 +799,7 @@ ${hostXml}
     : `http://${rawIp.replace(/\/+$/, '')}`;
   const isapiFullUrl = `${baseHost}${isapiUri}`;
 
-  console.log(`[ISAPI INJECTION] Conectando a '${dev.nombre}' en ${isapiFullUrl} (ip_remota: ${rawIp}, usuario: '${username}')...`);
+  console.log(`[ISAPI INJECTION] Conectando a '${dev.nombre}' en ${isapiFullUrl} (ip: ${rawIp}, usuario: '${username}')...`);
 
   // PASO 1: Desafío inicial (GET sin cuerpo) para obtener nonce y realm de Digest Auth
   // sin que el servidor embebido del biométrico cierre el socket por recibir XML sin autenticar
@@ -889,7 +911,7 @@ ${hostXml}
     console.error(`[ISAPI INJECTION ERROR] en ${baseHost}:`, err.message);
     return {
       success: false,
-      error: `No se pudo conectar con el biométrico '${dev.nombre}' en ${baseHost} (ip_remota): ${err.message}`
+      error: `No se pudo conectar con el biométrico '${dev.nombre}' en ${baseHost}: ${err.message}`
     };
   }
 }

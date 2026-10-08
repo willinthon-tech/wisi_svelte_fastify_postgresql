@@ -628,6 +628,10 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
       if (!createdItem.created_at) {
         createdItem.created_at = new Date().toISOString();
       }
+      // Sanitizar propiedades undefined para evitar errores en IndexedDB / Dexie / PostgreSQL
+      Object.keys(createdItem).forEach(k => {
+        if (createdItem[k] === undefined) delete createdItem[k];
+      });
 
       // 1. Inmediatez absoluta (0ms): actualizar memoria reactiva Svelte al instante
       store.update(list => [createdItem, ...(Array.isArray(list) ? list.filter(x => String(x.uuid || x.id) !== String(createdItem.uuid)) : [])]);
@@ -684,6 +688,9 @@ export function createMasterEntityActions(store, entityName, localStoreName = en
     update: async (targetUuidOrId, draft) => {
       const targetUuid = typeof targetUuidOrId === 'object' ? (targetUuidOrId.uuid || targetUuidOrId.id) : targetUuidOrId;
       const updatedItem = { uuid: targetUuid, id: targetUuid, ...draft, updated_at: new Date().toISOString() };
+      Object.keys(updatedItem).forEach(k => {
+        if (updatedItem[k] === undefined) delete updatedItem[k];
+      });
 
       // 1. Inmediatez absoluta (0ms): actualizar memoria reactiva Svelte al instante
       store.update(list => (Array.isArray(list) ? list.map(it => (String(it.uuid || it.id) === String(targetUuid)) ? { ...it, ...updatedItem } : it) : []));

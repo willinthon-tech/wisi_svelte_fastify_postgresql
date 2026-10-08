@@ -266,6 +266,15 @@ if (buildAndroid) {
       const sizeMb = (fs.statSync(destApkPath).size / (1024 * 1024)).toFixed(2);
       console.log(`\n🎉 ✔ INSTALADOR ANDROID COPIADO:`);
       console.log(`   -> ${destApkPath} (${sizeMb} MB)`);
+
+      const downloadsDir = path.join(projectRootDir, 'backend-fastify', 'downloads');
+      if (fs.existsSync(downloadsDir)) {
+        try {
+          fs.copyFileSync(foundApk, path.join(downloadsDir, destApkName));
+          fs.copyFileSync(foundApk, path.join(downloadsDir, 'app-wisi.apk'));
+          console.log(`   -> Sincronizado en ${downloadsDir}/app-wisi.apk`);
+        } catch (_) {}
+      }
     } else {
       console.warn('⚠️ No se encontró el archivo .apk generado en android/app/build/outputs/apk/');
     }

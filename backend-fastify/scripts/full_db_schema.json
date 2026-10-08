@@ -346,11 +346,7 @@
       "type": "character varying",
       "null": "YES"
     },
-    {
-      "col": "ip_remota",
-      "type": "character varying",
-      "null": "YES"
-    },
+
     {
       "col": "ip_panel",
       "type": "character varying",

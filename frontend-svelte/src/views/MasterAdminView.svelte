@@ -830,8 +830,11 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   }
 
   function getSalaNombre(salaId) {
-    const s = $masterSalasStore.find((x) => String(x.id) === String(salaId));
-    return s ? s.nombre : `Sala #${salaId}`;
+    if (!salaId) return "Sin Sala";
+    const s = ($masterSalasStore || []).find(
+      (x) => String(x.uuid) === String(salaId) || String(x.id) === String(salaId),
+    );
+    return s ? s.nombre : `Sala #${String(salaId).slice(0, 8)}`;
   }
 
   function handleFileSelected(event) {
@@ -982,9 +985,11 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
         icono: "settings",
       };
     } else if (activeTab === "dispositivos") {
+      const defaultSala = $masterSalasStore?.[0]?.uuid || $masterSalasStore?.[0]?.id || "";
       createForm = {
         nombre: "",
-        sala_id: 1,
+        sala_id: defaultSala,
+        sala_uuid: defaultSala,
         ip_local: "",
         ip_panel: "",
         usuario: "admin",
@@ -1016,6 +1021,13 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       if (!createForm.nombre || !createForm.nombre.trim()) {
         triggerToast("Por favor ingrese el Nombre", "error");
         return;
+      }
+      if (activeTab === "dispositivos") {
+        if (!createForm.sala_id && !createForm.sala_uuid) {
+          triggerToast("Por favor seleccione la Sala a la que pertenece el dispositivo", "error");
+          return;
+        }
+        createForm.sala_uuid = createForm.sala_id || createForm.sala_uuid;
       }
     }
 
@@ -1183,11 +1195,14 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
   function startInlineEdit(item) {
     editingInlineId = item.uuid || item.id;
-    inlineDraft = { ...item };
+    inlineDraft = { ...item, sala_id: item.sala_uuid || item.sala_id };
   }
 
   async function saveInlineEdit(id) {
     try {
+      if (activeTab === "dispositivos") {
+        inlineDraft.sala_uuid = inlineDraft.sala_id;
+      }
       await masterEntityActions[activeTab].update(id, inlineDraft);
       triggerToast(
         "Registro actualizado exitosamente en la base de datos",
@@ -3011,12 +3026,12 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         bind:value={inlineDraft.sala_id}
                         style="padding: 4px 6px; border-radius: 4px; border: 1px solid #cbd5e1; font-size: 12.5px;"
                       >
-                        {#each $masterSalasStore as s}<option value={s.id}
+                        {#each $masterSalasStore as s}<option value={s.uuid || s.id}
                             >{s.nombre}</option
                           >{/each}
                       </select>
                     {:else}
-                      <span>{getSalaNombre(item.sala_id)}</span>
+                      <span>{getSalaNombre(item.sala_uuid || item.sala_id)}</span>
                     {/if}
                   </td>
                   <td
@@ -3345,7 +3360,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 class="form-input"
                 style="width: 100%; padding: 7px 10px; font-size: 13px; margin-top: 4px; display: block; font-weight: 400;"
               >
-                {#each $masterSalasStore as s}<option value={s.id}
+                {#each $masterSalasStore as s}<option value={s.uuid || s.id}
                     >{s.nombre}</option
                   >{/each}
               </select>
