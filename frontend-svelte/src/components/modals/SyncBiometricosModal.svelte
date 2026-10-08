@@ -366,44 +366,70 @@
       .toLowerCase();
   }
 
-  // Compara usuarios físicos del biométrico y del panel contra empleados del sistema usando la cédula
-  function reconcileUsers(bioUsers = [], panelUsers = [], activeEmployees = [], allSystemEmployees = [], currentSala = null, hasPanel = false) {
-    const sincronizados = [];
+  // Compara usuarios físicos del biométrico y del panel contra empleados del sistema usando cédula y asociaciones
+  function reconcileUsers(bioUsers = [], panelUsers = [], activeEmployees = [], allSystemEmployees = [], currentSala = null, hasPanel = false, currentDevice = null) {
+    const devUuid = String(currentDevice?.uuid || currentDevice?.id || '').trim().toLowerCase();
+
+    // 1. Filtrar empleados que corresponden a este dispositivo según empleado_dispositivos
+    // Si hay empleados explícitamente asociados a este dispositivo, solo esos deben estar en este equipo.
+    // Si no hay ninguno (dispositivo sin asignaciones explícitas), se toman todos los activos de la sala como fallback.
+    const assignedToThisDev = activeEmployees.filter(emp => {
+      if (!devUuid) return false;
+      const ids = (emp.dispositivos_ids || []).map(id => String(id).trim().toLowerCase());
+      return ids.includes(devUuid);
+    });
+
+    const expectedEmployees = assignedToThisDev.length > 0 ? assignedToThisDev : activeEmployees;
+
+    // Deduplicar expectedEmployees por uuid y cédula
+    const uniqueExpected = [];
+    const seenExpectedKeys = new Set();
+    for (const emp of expectedEmployees) {
+      const k = String(emp.uuid || emp.id || emp.cedula || '').trim().toUpperCase();
+      if (k && !seenExpectedKeys.has(k)) {
+        seenExpectedKeys.add(k);
+        uniqueExpected.push(emp);
+      }
+    }
+
+    const sincronizadosMap = new Map(); // Key: normalizada -> objeto empleado sincronizado
     const faltan = [];
     const matchedBioIndices = new Set();
     const matchedPanelIndices = new Set();
 
-    for (const emp of activeEmployees) {
+    // PASS 1: Empleados esperados para este equipo
+    for (const emp of uniqueExpected) {
       const exactCedula = String(emp.cedula || '').trim().toUpperCase();
       const variants = getCedulaVariants(emp.cedula).map(v => v.toUpperCase());
 
-      // 1. Cotejo contra el biométrico
-      const bioMatchIdx = (bioUsers || []).findIndex((u, idx) => {
-        if (matchedBioIndices.has(idx)) return false;
+      // 1. Cotejo contra el biométrico: marcar TODOS los índices que coincidan
+      let bioUser = null;
+      (bioUsers || []).forEach((u, idx) => {
         const uNo = String(u.employeeNo || '').trim().toUpperCase();
-        return uNo === exactCedula || variants.includes(uNo);
+        if (uNo === exactCedula || variants.includes(uNo)) {
+          matchedBioIndices.add(idx);
+          if (!bioUser) bioUser = u;
+        }
       });
 
-      // 2. Cotejo contra el panel (si aplica)
-      const panelMatchIdx = hasPanel && Array.isArray(panelUsers) ? panelUsers.findIndex((u, idx) => {
-        if (matchedPanelIndices.has(idx)) return false;
-        const uNo = String(u.employeeNo || '').trim().toUpperCase();
-        if (uNo === exactCedula || variants.includes(uNo)) return true;
-        const uVariants = getCedulaVariants(uNo).map(v => v.toUpperCase());
-        return uVariants.includes(exactCedula) || variants.some(v => uVariants.includes(v));
-      }) : -1;
+      // 2. Cotejo contra el panel (si aplica): marcar TODOS los índices que coincidan
+      let panelUser = null;
+      if (hasPanel && Array.isArray(panelUsers)) {
+        panelUsers.forEach((u, idx) => {
+          const uNo = String(u.employeeNo || '').trim().toUpperCase();
+          const uVariants = getCedulaVariants(uNo).map(v => v.toUpperCase());
+          if (uNo === exactCedula || variants.includes(uNo) || uVariants.includes(exactCedula) || variants.some(v => uVariants.includes(v))) {
+            matchedPanelIndices.add(idx);
+            if (!panelUser) panelUser = u;
+          }
+        });
+      }
 
-      const hasOnBio = bioMatchIdx !== -1;
-      const hasOnPanel = panelMatchIdx !== -1;
-
-      if (hasOnBio) matchedBioIndices.add(bioMatchIdx);
-      if (hasOnPanel) matchedPanelIndices.add(panelMatchIdx);
-
-      const bioUser = hasOnBio ? bioUsers[bioMatchIdx] : null;
-      const panelUser = hasOnPanel ? panelUsers[panelMatchIdx] : null;
-
-      // Un empleado está sincronizado si está en el biométrico (o en el panel si el dispositivo tiene panel)
+      const hasOnBio = bioUser !== null;
+      const hasOnPanel = panelUser !== null;
       const isSync = hasPanel ? (hasOnBio || hasOnPanel) : hasOnBio;
+
+      const empKey = String(emp.uuid || emp.id || emp.cedula).trim().toUpperCase();
 
       if (isSync) {
         const nameInDev = String((bioUser && bioUser.name) || (panelUser && panelUser.name) || '').trim();
@@ -412,22 +438,24 @@
         const hasFaceOnDevice = Number(bioUser?.numOfFace || bioUser?.numOfFaces || 0) > 0 || (bioUser?.userVerifyMode === 'face') || !!emp.hasFaceOnDevice;
         const hasCardOnDevice = Number(bioUser?.numOfCard || bioUser?.numOfCards || 0) > 0 || !!emp.hasCardOnDevice || hasOnPanel;
 
-        sincronizados.push({
-          ...emp,
-          bioUser,
-          panelUser,
-          hasOnBio,
-          hasOnPanel,
-          deviceUser: {
-            employeeNo: (bioUser && bioUser.employeeNo) || (panelUser && panelUser.employeeNo) || emp.cedula,
-            name: (bioUser && bioUser.name) || (panelUser && panelUser.name) || emp.nombre,
-            numOfCard: (bioUser && (bioUser.numOfCard || bioUser.numOfCards)) || (hasOnPanel ? 1 : 0),
-            numOfFace: (bioUser && (bioUser.numOfFace || bioUser.numOfFaces)) || 0
-          },
-          nameDiffers,
-          hasFaceOnDevice,
-          hasCardOnDevice
-        });
+        if (!sincronizadosMap.has(empKey)) {
+          sincronizadosMap.set(empKey, {
+            ...emp,
+            bioUser,
+            panelUser,
+            hasOnBio,
+            hasOnPanel,
+            deviceUser: {
+              employeeNo: (bioUser && bioUser.employeeNo) || (panelUser && panelUser.employeeNo) || emp.cedula,
+              name: (bioUser && bioUser.name) || (panelUser && panelUser.name) || emp.nombre,
+              numOfCard: (bioUser && (bioUser.numOfCard || bioUser.numOfCards)) || (hasOnPanel ? 1 : 0),
+              numOfFace: (bioUser && (bioUser.numOfFace || bioUser.numOfFaces)) || 0
+            },
+            nameDiffers,
+            hasFaceOnDevice,
+            hasCardOnDevice
+          });
+        }
       } else {
         faltan.push({
           ...emp,
@@ -439,7 +467,7 @@
 
     const sobran = [];
 
-    // Sobran en Biométrico
+    // PASS 2: Sobran en Biométrico (usuarios físicos no emparejados en Pass 1)
     (bioUsers || []).forEach((u, idx) => {
       if (!matchedBioIndices.has(idx)) {
         const uNo = String(u.employeeNo || '').trim().toUpperCase();
@@ -448,46 +476,29 @@
           return String(e.cedula || '').trim().toUpperCase() === uNo || empVariants.includes(uNo);
         });
 
-        // 🛡️ REGLA FUNDAMENTAL: Si el empleado está ACTIVO y pertenece a esta misma sala, no sobra
-        const currentSalaUuid = String(currentSala?.uuid || currentSala?.id || '').trim().toLowerCase();
-        const currentSalaNombre = String(currentSala?.nombre || '').trim().toLowerCase();
-        const empSalaUuid = String(sysEmp?.sala_uuid || sysEmp?.sala_id || '').trim().toLowerCase();
-        const empSalaNombre = String(sysEmp?.sala_nombre || '').trim().toLowerCase();
-
-        const isMismaSala = Boolean(
-          sysEmp?.activo && (
-            (currentSalaUuid && empSalaUuid && currentSalaUuid === empSalaUuid) ||
-            (currentSalaNombre && empSalaNombre && currentSalaNombre === empSalaNombre)
-          )
-        );
-
-        if (isMismaSala) {
-          const nameInDev = String(u.name || '').trim();
-          const nameInSys = String(sysEmp.nombre || '').trim();
-          const nameDiffers = Boolean(nameInDev && nameInSys && normalizeName(nameInDev) !== normalizeName(nameInSys));
-          const hasFaceOnDevice = Number(u.numOfFace || u.numOfFaces || 0) > 0 || (u.userVerifyMode === 'face') || !!sysEmp.hasFaceOnDevice;
-          const hasCardOnDevice = Number(u.numOfCard || u.numOfCards || 0) > 0 || !!sysEmp.hasCardOnDevice;
-
-          sincronizados.push({
-            ...sysEmp,
-            bioUser: u,
-            hasOnBio: true,
-            hasOnPanel: false,
-            deviceUser: {
-              employeeNo: u.employeeNo,
-              name: u.name,
-              numOfCard: u.numOfCard || 0,
-              numOfFace: u.numOfFace || 0
-            },
-            nameDiffers,
-            hasFaceOnDevice,
-            hasCardOnDevice
-          });
-
-          const faltanIdx = faltan.findIndex(f => String(f.cedula || '').trim().toUpperCase() === uNo);
-          if (faltanIdx !== -1) {
-            faltan.splice(faltanIdx, 1);
+        if (sysEmp) {
+          const empKey = String(sysEmp.uuid || sysEmp.id || sysEmp.cedula).trim().toUpperCase();
+          if (sincronizadosMap.has(empKey)) {
+            // Ya está sincronizado, simplemente aseguramos la bandera
+            const existing = sincronizadosMap.get(empKey);
+            existing.hasOnBio = true;
+            matchedBioIndices.add(idx);
+            return;
           }
+
+          // Si es un empleado activo de la sala pero no estaba asignado a este equipo específico:
+          const isAssignedToThis = devUuid && (sysEmp.dispositivos_ids || []).map(id => String(id).toLowerCase()).includes(devUuid);
+          sobran.push({
+            source: 'bio',
+            employeeNo: u.employeeNo,
+            name: u.name || sysEmp.nombre || 'Sin nombre',
+            numOfFace: Number(u.numOfFace || u.numOfFaces || 0),
+            numOfCard: Number(u.numOfCard || u.numOfCards || 0),
+            systemStatus: sysEmp.activo 
+              ? (!isAssignedToThis ? 'Activo (No asignado a esta puerta)' : `Activo en ${sysEmp.sala_nombre || 'sala'}`)
+              : `Desincorporado (${sysEmp.motivo_desincorporacion || 'Inactivo'})`,
+            systemEmployeeName: sysEmp.nombre
+          });
           return;
         }
 
@@ -497,13 +508,13 @@
           name: u.name || 'Sin nombre',
           numOfFace: Number(u.numOfFace || u.numOfFaces || 0),
           numOfCard: Number(u.numOfCard || u.numOfCards || 0),
-          systemStatus: sysEmp ? (sysEmp.activo ? `Activo en ${sysEmp.sala_nombre || 'otra sala'}` : `Desincorporado (${sysEmp.motivo_desincorporacion || 'Inactivo'})`) : 'No existe en el sistema',
-          systemEmployeeName: sysEmp ? sysEmp.nombre : 'Desconocido'
+          systemStatus: 'No existe en el sistema',
+          systemEmployeeName: 'Desconocido'
         });
       }
     });
 
-    // Sobran en Panel (si aplica)
+    // PASS 3: Sobran en Panel (usuarios físicos del panel no emparejados en Pass 1)
     if (hasPanel && Array.isArray(panelUsers)) {
       panelUsers.forEach((u, idx) => {
         if (!matchedPanelIndices.has(idx)) {
@@ -515,54 +526,28 @@
             return eCed === uNo || empVariants.includes(uNo) || uVariants.includes(eCed) || empVariants.some(v => uVariants.includes(v));
           });
 
-          const currentSalaUuid = String(currentSala?.uuid || currentSala?.id || '').trim().toLowerCase();
-          const currentSalaNombre = String(currentSala?.nombre || '').trim().toLowerCase();
-          const empSalaUuid = String(sysEmp?.sala_uuid || sysEmp?.sala_id || '').trim().toLowerCase();
-          const empSalaNombre = String(sysEmp?.sala_nombre || '').trim().toLowerCase();
-
-          const isMismaSala = Boolean(
-            sysEmp?.activo && (
-              (currentSalaUuid && empSalaUuid && currentSalaUuid === empSalaUuid) ||
-              (currentSalaNombre && empSalaNombre && currentSalaNombre === empSalaNombre)
-            )
-          );
-
-          if (isMismaSala) {
-            const existingSync = sincronizados.find(s => {
-              const variants = getCedulaVariants(s.cedula).map(v => v.toUpperCase());
-              const sCed = String(s.cedula || '').trim().toUpperCase();
-              return sCed === uNo || variants.includes(uNo) || uVariants.includes(sCed) || variants.some(v => uVariants.includes(v));
-            });
-            if (existingSync) {
-              existingSync.hasOnPanel = true;
-              existingSync.panelUser = u;
+          if (sysEmp) {
+            const empKey = String(sysEmp.uuid || sysEmp.id || sysEmp.cedula).trim().toUpperCase();
+            if (sincronizadosMap.has(empKey)) {
+              // Ya está sincronizado, simplemente aseguramos la bandera de panel
+              const existing = sincronizadosMap.get(empKey);
+              existing.hasOnPanel = true;
+              matchedPanelIndices.add(idx);
               return;
             }
 
-            sincronizados.push({
-              ...sysEmp,
-              panelUser: u,
-              hasOnBio: false,
-              hasOnPanel: true,
-              deviceUser: {
-                employeeNo: u.employeeNo,
-                name: u.name,
-                numOfCard: 1,
-                numOfFace: 0
-              },
-              nameDiffers: false,
-              hasFaceOnDevice: false,
-              hasCardOnDevice: true
+            const isAssignedToThis = devUuid && (sysEmp.dispositivos_ids || []).map(id => String(id).toLowerCase()).includes(devUuid);
+            sobran.push({
+              source: 'panel',
+              employeeNo: u.employeeNo,
+              name: u.name || sysEmp.nombre || 'Sin nombre',
+              numOfFace: 0,
+              numOfCard: 1,
+              systemStatus: sysEmp.activo 
+                ? (!isAssignedToThis ? 'Activo (No asignado a esta puerta)' : `Activo en ${sysEmp.sala_nombre || 'sala'}`)
+                : `Desincorporado (${sysEmp.motivo_desincorporacion || 'Inactivo'})`,
+              systemEmployeeName: sysEmp.nombre
             });
-
-            const faltanIdx = faltan.findIndex(f => {
-              const variants = getCedulaVariants(f.cedula).map(v => v.toUpperCase());
-              const fCed = String(f.cedula || '').trim().toUpperCase();
-              return fCed === uNo || variants.includes(uNo) || uVariants.includes(fCed) || variants.some(v => uVariants.includes(v));
-            });
-            if (faltanIdx !== -1) {
-              faltan.splice(faltanIdx, 1);
-            }
             return;
           }
 
@@ -572,13 +557,14 @@
             name: u.name || 'Sin nombre',
             numOfFace: 0,
             numOfCard: 1,
-            systemStatus: sysEmp ? (sysEmp.activo ? `Activo en ${sysEmp.sala_nombre || 'otra sala'}` : `Desincorporado (${sysEmp.motivo_desincorporacion || 'Inactivo'})`) : 'No existe en el sistema',
-            systemEmployeeName: sysEmp ? sysEmp.nombre : 'Desconocido'
+            systemStatus: 'No existe en el sistema',
+            systemEmployeeName: 'Desconocido'
           });
         }
       });
     }
 
+    const sincronizados = Array.from(sincronizadosMap.values());
     return { sincronizados, faltan, sobran };
   }
 
@@ -686,7 +672,7 @@
         }
 
         // Cruzar y clasificar datos considerando biométrico y panel
-        const recon = reconcileUsers(bioUsers, panelUsers, contextActiveEmployees, contextAllSystemEmployees, json.sala || targetDev?.salaObj, hasPanel);
+        const recon = reconcileUsers(bioUsers, panelUsers, contextActiveEmployees, contextAllSystemEmployees, json.sala || targetDev?.salaObj, hasPanel, dev);
         devRes.sincronizados = recon.sincronizados;
         devRes.faltan = recon.faltan;
         devRes.sobran = recon.sobran;
@@ -795,7 +781,7 @@
       }
 
       const currentSala = auditResult?.sala || biometricosDisponibles.find(d => (d.uuid || d.id) === selectedDispositivoId)?.salaObj;
-      const recon = reconcileUsers(bioUsers, panelUsers, contextActiveEmployees, contextAllSystemEmployees, currentSala, hasPanel);
+      const recon = reconcileUsers(bioUsers, panelUsers, contextActiveEmployees, contextAllSystemEmployees, currentSala, hasPanel, currentDevice);
 
       if (auditResult && auditResult.devices && auditResult.devices[selectedDeviceIndex]) {
         const d = auditResult.devices[selectedDeviceIndex];

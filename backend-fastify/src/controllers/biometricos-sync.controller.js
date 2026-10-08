@@ -51,13 +51,20 @@ export async function getSalaContextoBiometricos(request, reply) {
       ORDER BY nombre ASC
     `;
 
-    // 3. Empleados activos de la sala
+    // 3. Empleados activos de la sala con sus dispositivos asociados
     const activeEmployees = await sql`
       SELECT 
         e.uuid, e.uuid AS id, e.nombre, e.cedula, e.foto, e.sexo, e.fecha_ingreso, e.activo,
         c.uuid AS cargo_id, c.nombre AS cargo_nombre,
         d.uuid AS departamento_id, d.nombre AS departamento_nombre,
-        s.uuid AS sala_id, s.nombre AS sala_nombre
+        s.uuid AS sala_id, s.nombre AS sala_nombre,
+        COALESCE(
+          (SELECT array_agg(ed.dispositivo_uuid::text) 
+           FROM empleado_dispositivos ed 
+           WHERE ed.empleado_uuid = e.uuid
+             AND (ed.is_deleted IS NULL OR ed.is_deleted = false)),
+          ARRAY[]::text[]
+        ) AS dispositivos_ids
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
       LEFT JOIN areas a ON c.area_uuid = a.uuid
@@ -88,6 +95,7 @@ export async function getSalaContextoBiometricos(request, reply) {
       }
       return {
         ...emp,
+        dispositivos_ids: Array.isArray(emp.dispositivos_ids) ? emp.dispositivos_ids : [],
         photoUrl
       };
     });
@@ -96,7 +104,14 @@ export async function getSalaContextoBiometricos(request, reply) {
     const allSystemEmployees = await sql`
       SELECT e.uuid, e.uuid AS id, e.nombre, e.cedula, e.activo, e.motivo_desincorporacion, e.foto, e.sexo,
              s.nombre as sala_nombre, s.uuid as sala_uuid, s.uuid as sala_id,
-             d.nombre as departamento_nombre, c.nombre as cargo_nombre
+             d.nombre as departamento_nombre, c.nombre as cargo_nombre,
+             COALESCE(
+               (SELECT array_agg(ed.dispositivo_uuid::text) 
+                FROM empleado_dispositivos ed 
+                WHERE ed.empleado_uuid = e.uuid
+                  AND (ed.is_deleted IS NULL OR ed.is_deleted = false)),
+               ARRAY[]::text[]
+             ) AS dispositivos_ids
       FROM empleados e
       LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
       LEFT JOIN areas a ON c.area_uuid = a.uuid
