@@ -196,9 +196,10 @@ export async function localAddUser(host, username = 'admin', password = '', empl
 
   let body;
   if (isPanel) {
+    const panelEmpNo = generarCardNoDesdeCedula(rawCedula) || rawCedula;
     body = {
       UserInfo: {
-        employeeNo: rawCedula,
+        employeeNo: panelEmpNo,
         name: nombre,
         userType: "normal",
         closeDelayEnabled: false,

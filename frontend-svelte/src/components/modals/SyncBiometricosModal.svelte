@@ -412,13 +412,15 @@
         }
       });
 
-      // 2. Cotejo contra el panel (si aplica): marcar TODOS los índices que coincidan
+      // 2. Cotejo contra el panel (si aplica):
+      // El panel se verifica buscando la V que es 1 y la E que es 2 (ej: V20783422 -> 120783422)
+      // El resto de números en el panel son registros manuales/sobrantes que no corresponden al sistema.
       let panelUser = null;
       if (hasPanel && Array.isArray(panelUsers)) {
+        const expectedPanelNo = generarCardNoDesdeCedula(emp.cedula);
         panelUsers.forEach((u, idx) => {
           const uNo = String(u.employeeNo || '').trim().toUpperCase();
-          const uVariants = getCedulaVariants(uNo).map(v => v.toUpperCase());
-          if (uNo === exactCedula || variants.includes(uNo) || uVariants.includes(exactCedula) || variants.some(v => uVariants.includes(v))) {
+          if (uNo === expectedPanelNo || uNo === exactCedula) {
             matchedPanelIndices.add(idx);
             if (!panelUser) panelUser = u;
           }
@@ -519,11 +521,10 @@
       panelUsers.forEach((u, idx) => {
         if (!matchedPanelIndices.has(idx)) {
           const uNo = String(u.employeeNo || '').trim().toUpperCase();
-          const uVariants = getCedulaVariants(uNo).map(v => v.toUpperCase());
           const sysEmp = (allSystemEmployees || []).find(e => {
-            const empVariants = getCedulaVariants(e.cedula).map(v => v.toUpperCase());
+            const expectedPNo = generarCardNoDesdeCedula(e.cedula);
             const eCed = String(e.cedula || '').trim().toUpperCase();
-            return eCed === uNo || empVariants.includes(uNo) || uVariants.includes(eCed) || empVariants.some(v => uVariants.includes(v));
+            return uNo === expectedPNo || uNo === eCed;
           });
 
           if (sysEmp) {
@@ -829,12 +830,32 @@
         if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
           try {
             await localAddUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp, false);
+            const digitsOnly = String(emp.cedula || '').replace(/\D/g, '');
+            if (digitsOnly && digitsOnly !== emp.cedula) {
+              try {
+                await localAddUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, {
+                  ...emp,
+                  employeeNo: digitsOnly
+                }, false);
+              } catch (e) {}
+            }
+
             const cardNo = generarCardNoDesdeCedula(emp.cedula);
             if (cardNo) {
               await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
+              if (digitsOnly && digitsOnly !== emp.cedula) {
+                try {
+                  await localSetupCard(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, digitsOnly, cardNo);
+                } catch (e) {}
+              }
             }
             if (photoUrl) {
               await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, emp.cedula, emp.nombre, emp.sexo, photoUrl);
+              if (digitsOnly && digitsOnly !== emp.cedula) {
+                try {
+                  await localUploadFace(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, digitsOnly, emp.nombre, emp.sexo, photoUrl);
+                } catch (e) {}
+              }
             }
             empUpdated = true;
           } catch (e) {
@@ -842,13 +863,13 @@
           }
         }
 
-        // 2. Panel local si aplica
+        // 2. Panel local si aplica (V -> 1, E -> 2)
         if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
+            const panelCardNo = generarCardNoDesdeCedula(emp.cedula);
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
-            const cardNo = generarCardNoDesdeCedula(emp.cedula);
-            if (cardNo) {
-              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp.cedula, cardNo);
+            if (panelCardNo) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelCardNo, panelCardNo);
             }
             empUpdated = true;
           } catch (e) {
