@@ -388,7 +388,9 @@
       const panelMatchIdx = hasPanel && Array.isArray(panelUsers) ? panelUsers.findIndex((u, idx) => {
         if (matchedPanelIndices.has(idx)) return false;
         const uNo = String(u.employeeNo || '').trim().toUpperCase();
-        return variants.includes(uNo) || uNo === exactCedula;
+        if (uNo === exactCedula || variants.includes(uNo)) return true;
+        const uVariants = getCedulaVariants(uNo).map(v => v.toUpperCase());
+        return uVariants.includes(exactCedula) || variants.some(v => uVariants.includes(v));
       }) : -1;
 
       const hasOnBio = bioMatchIdx !== -1;
@@ -506,9 +508,11 @@
       panelUsers.forEach((u, idx) => {
         if (!matchedPanelIndices.has(idx)) {
           const uNo = String(u.employeeNo || '').trim().toUpperCase();
+          const uVariants = getCedulaVariants(uNo).map(v => v.toUpperCase());
           const sysEmp = (allSystemEmployees || []).find(e => {
             const empVariants = getCedulaVariants(e.cedula).map(v => v.toUpperCase());
-            return String(e.cedula || '').trim().toUpperCase() === uNo || empVariants.includes(uNo);
+            const eCed = String(e.cedula || '').trim().toUpperCase();
+            return eCed === uNo || empVariants.includes(uNo) || uVariants.includes(eCed) || empVariants.some(v => uVariants.includes(v));
           });
 
           const currentSalaUuid = String(currentSala?.uuid || currentSala?.id || '').trim().toLowerCase();
@@ -526,7 +530,8 @@
           if (isMismaSala) {
             const existingSync = sincronizados.find(s => {
               const variants = getCedulaVariants(s.cedula).map(v => v.toUpperCase());
-              return String(s.cedula || '').trim().toUpperCase() === uNo || variants.includes(uNo);
+              const sCed = String(s.cedula || '').trim().toUpperCase();
+              return sCed === uNo || variants.includes(uNo) || uVariants.includes(sCed) || variants.some(v => uVariants.includes(v));
             });
             if (existingSync) {
               existingSync.hasOnPanel = true;
@@ -552,7 +557,8 @@
 
             const faltanIdx = faltan.findIndex(f => {
               const variants = getCedulaVariants(f.cedula).map(v => v.toUpperCase());
-              return String(f.cedula || '').trim().toUpperCase() === uNo || variants.includes(uNo);
+              const fCed = String(f.cedula || '').trim().toUpperCase();
+              return fCed === uNo || variants.includes(uNo) || uVariants.includes(fCed) || variants.some(v => uVariants.includes(v));
             });
             if (faltanIdx !== -1) {
               faltan.splice(faltanIdx, 1);
@@ -852,10 +858,9 @@
         if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
-            const panelEmployeeNo = String(emp.cedula || '').replace(/\D/g, '') || String(emp.cedula || '').trim();
-            const cardNo = generarCardNoDesdeCedula(emp.cedula);
-            if (cardNo) {
-              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, cardNo);
+            const panelEmployeeNo = generarCardNoDesdeCedula(emp.cedula);
+            if (panelEmployeeNo) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, panelEmployeeNo);
             }
           } catch (e) {
             console.warn(`Error actualizando ${emp.nombre} en panel:`, e.message);
@@ -945,10 +950,9 @@
         if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
-            const panelEmployeeNo = String(emp.cedula || '').replace(/\D/g, '') || String(emp.cedula || '').trim();
-            const cardNo = generarCardNoDesdeCedula(emp.cedula);
-            if (cardNo) {
-              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, cardNo);
+            const panelEmployeeNo = generarCardNoDesdeCedula(emp.cedula);
+            if (panelEmployeeNo) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, panelEmployeeNo);
             }
             addedOk = true;
           } catch (e) {

@@ -69,6 +69,16 @@ export function generarCardNoDesdeCedula(cedula) {
   if (clean.startsWith('E')) {
     return `2${digits}`;
   }
+  if (clean.startsWith('V')) {
+    return `1${digits}`;
+  }
+  // Si ya es puramente numérico (ej. 12345678 o 22345678)
+  if (digits.startsWith('1') && digits.length >= 8) {
+    return digits;
+  }
+  if (digits.startsWith('2') && digits.length >= 8) {
+    return digits;
+  }
   return `1${digits}`;
 }
 
@@ -186,10 +196,10 @@ export async function localAddUser(host, username = 'admin', password = '', empl
 
   let body;
   if (isPanel) {
-    const panelEmployeeNo = rawCedula.replace(/\D/g, '') || generarCardNoDesdeCedula(rawCedula);
+    const panelEmployeeNo = generarCardNoDesdeCedula(rawCedula) || rawCedula.replace(/\D/g, '');
     body = {
       UserInfo: {
-        employeeNo: panelEmployeeNo,
+        employeeNo: String(panelEmployeeNo),
         name: nombre,
         userType: "normal",
         closeDelayEnabled: false,
