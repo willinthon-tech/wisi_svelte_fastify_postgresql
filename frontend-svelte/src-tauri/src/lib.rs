@@ -102,6 +102,7 @@ async fn isapi_request(
   let full_url = format!("{}{}", clean_host, clean_uri);
 
   let client = reqwest::Client::builder()
+    .http1_title_case_headers()
     .timeout(Duration::from_secs(t_secs))
     .danger_accept_invalid_certs(true)
     .build()
@@ -157,10 +158,12 @@ async fn isapi_request(
     .map_err(|e| format!("Fallo de conexión con {}: {}", clean_host, e))?;
 
   let status = initial_res.status().as_u16();
+  let initial_headers = initial_res.headers().clone();
+  let initial_bytes = initial_res.bytes().await.unwrap_or_default();
 
   // Si requiere autenticación Digest (401)
   if status == 401 {
-    if let Some(auth_header) = initial_res.headers().get("www-authenticate") {
+    if let Some(auth_header) = initial_headers.get("www-authenticate") {
       if let Ok(auth_str) = auth_header.to_str() {
         let digest_header = compute_digest_header(auth_str, &u, &p, &m, &clean_uri);
 
@@ -181,7 +184,7 @@ async fn isapi_request(
     }
   }
 
-  let data = initial_res.text().await.unwrap_or_default();
+  let data = String::from_utf8_lossy(&initial_bytes).to_string();
   Ok(IsapiResponse {
     status,
     ok: status >= 200 && status < 300,

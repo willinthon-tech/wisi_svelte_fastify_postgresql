@@ -186,7 +186,7 @@ export async function localAddUser(host, username = 'admin', password = '', empl
 
   let body;
   if (isPanel) {
-    const panelEmployeeNo = generarCardNoDesdeCedula(rawCedula) || rawCedula.replace(/\D/g, '');
+    const panelEmployeeNo = rawCedula.replace(/\D/g, '') || generarCardNoDesdeCedula(rawCedula);
     body = {
       UserInfo: {
         employeeNo: panelEmployeeNo,

@@ -217,37 +217,32 @@
     checkReachabilityAllDevices();
   }
 
-  $: if (biometricosDisponibles.length > 0 && (!selectedDispositivoId || !biometricosDisponibles.some(d => (d.uuid || d.id) === selectedDispositivoId))) {
+  $: currentSalaDispositivos = biometricosDisponibles.filter(d => {
+    const sId = d.sala_uuid || d.sala_id;
+    return String(sId) === String(selectedSalaId);
+  });
+  $: currentSalaNombre = currentSalaDispositivos[0]?.salaNombre || '';
+
+  $: if (biometricosDisponibles.length > 0 && selectedDispositivoId !== 'ALL' && (!selectedDispositivoId || !biometricosDisponibles.some(d => (d.uuid || d.id) === selectedDispositivoId))) {
     const firstReachable = biometricosDisponibles.find(d => reachabilityMap[d.uuid || d.id] === true);
     selectedDispositivoId = firstReachable ? (firstReachable.uuid || firstReachable.id) : (biometricosDisponibles[0].uuid || biometricosDisponibles[0].id);
   }
 
   $: {
-    const selDev = biometricosDisponibles.find(d => (d.uuid || d.id) === selectedDispositivoId);
-    if (selDev) {
-      selectedSalaId = selDev.sala_uuid || selDev.sala_id;
+    if (selectedDispositivoId && selectedDispositivoId !== 'ALL') {
+      const selDev = biometricosDisponibles.find(d => (d.uuid || d.id) === selectedDispositivoId);
+      if (selDev) {
+        selectedSalaId = selDev.sala_uuid || selDev.sala_id;
+      }
     }
   }
 
   function handleSelectDispositivoChange(newDevId) {
     selectedDispositivoId = newDevId;
-    if (reachabilityMap[newDevId] === false) {
+    if (newDevId !== 'ALL' && reachabilityMap[newDevId] === false) {
       triggerToast('Este biométrico no es alcanzable en la red local actual.', 'warning');
     }
-    const selDev = biometricosDisponibles.find(d => String(d.uuid || d.id) === String(newDevId));
-    if (selDev) {
-      const devSalaId = String(selDev.sala_uuid || selDev.sala_id || '');
-      // Si la sala ya fue auditada, pasamos a enfocar el dispositivo en su pestaña
-      if (auditResult && String(auditResult.sala?.uuid || auditResult.sala?.id || '') === devSalaId) {
-        const foundIdx = (auditResult.devices || []).findIndex(d => String(d.uuid || d.id) === String(newDevId));
-        if (foundIdx !== -1) {
-          selectedDeviceIndex = foundIdx;
-          return;
-        }
-      }
-      // Si es de otra sala o no está en la auditoría, reseteamos la auditoría
-      resetAuditState();
-    }
+    resetAuditState();
   }
 
   // Inyección DIRECTA de HTTP Listener por ISAPI Local (Tauri en Windows)
@@ -371,61 +366,87 @@
       .toLowerCase();
   }
 
-  // Compara usuarios físicos del biométrico contra empleados del sistema usando la cédula EXACTA
-  function reconcileUsers(bioUsers, activeEmployees, allSystemEmployees, currentSala = null) {
+  // Compara usuarios físicos del biométrico y del panel contra empleados del sistema usando la cédula
+  function reconcileUsers(bioUsers = [], panelUsers = [], activeEmployees = [], allSystemEmployees = [], currentSala = null, hasPanel = false) {
     const sincronizados = [];
     const faltan = [];
     const matchedBioIndices = new Set();
+    const matchedPanelIndices = new Set();
 
     for (const emp of activeEmployees) {
       const exactCedula = String(emp.cedula || '').trim().toUpperCase();
+      const variants = getCedulaVariants(emp.cedula).map(v => v.toUpperCase());
 
-      // Cotejo EXACTO de cédula contra el biométrico (si en sistema está con V y en equipo sin V, son 2 registros totalmente distintos)
-      const matchIdx = bioUsers.findIndex((u, idx) => {
+      // 1. Cotejo contra el biométrico
+      const bioMatchIdx = (bioUsers || []).findIndex((u, idx) => {
         if (matchedBioIndices.has(idx)) return false;
-        return String(u.employeeNo || '').trim().toUpperCase() === exactCedula;
+        const uNo = String(u.employeeNo || '').trim().toUpperCase();
+        return uNo === exactCedula || variants.includes(uNo);
       });
 
-      if (matchIdx !== -1) {
-        matchedBioIndices.add(matchIdx);
-        const bioUser = bioUsers[matchIdx];
+      // 2. Cotejo contra el panel (si aplica)
+      const panelMatchIdx = hasPanel && Array.isArray(panelUsers) ? panelUsers.findIndex((u, idx) => {
+        if (matchedPanelIndices.has(idx)) return false;
+        const uNo = String(u.employeeNo || '').trim().toUpperCase();
+        return variants.includes(uNo) || uNo === exactCedula;
+      }) : -1;
 
-        const nameInDev = String(bioUser.name || '').trim();
+      const hasOnBio = bioMatchIdx !== -1;
+      const hasOnPanel = panelMatchIdx !== -1;
+
+      if (hasOnBio) matchedBioIndices.add(bioMatchIdx);
+      if (hasOnPanel) matchedPanelIndices.add(panelMatchIdx);
+
+      const bioUser = hasOnBio ? bioUsers[bioMatchIdx] : null;
+      const panelUser = hasOnPanel ? panelUsers[panelMatchIdx] : null;
+
+      // Un empleado está sincronizado si está en el biométrico (o en el panel si el dispositivo tiene panel)
+      const isSync = hasPanel ? (hasOnBio || hasOnPanel) : hasOnBio;
+
+      if (isSync) {
+        const nameInDev = String((bioUser && bioUser.name) || (panelUser && panelUser.name) || '').trim();
         const nameInSys = String(emp.nombre || '').trim();
         const nameDiffers = Boolean(nameInDev && nameInSys && normalizeName(nameInDev) !== normalizeName(nameInSys));
-        const hasFaceOnDevice = Number(bioUser.numOfFace || bioUser.numOfFaces || 0) > 0 || (bioUser.userVerifyMode === 'face') || !!emp.hasFaceOnDevice;
-        const hasCardOnDevice = Number(bioUser.numOfCard || bioUser.numOfCards || 0) > 0 || !!emp.hasCardOnDevice;
+        const hasFaceOnDevice = Number(bioUser?.numOfFace || bioUser?.numOfFaces || 0) > 0 || (bioUser?.userVerifyMode === 'face') || !!emp.hasFaceOnDevice;
+        const hasCardOnDevice = Number(bioUser?.numOfCard || bioUser?.numOfCards || 0) > 0 || !!emp.hasCardOnDevice || hasOnPanel;
 
         sincronizados.push({
           ...emp,
           bioUser,
+          panelUser,
+          hasOnBio,
+          hasOnPanel,
           deviceUser: {
-            employeeNo: bioUser.employeeNo,
-            name: bioUser.name,
-            numOfCard: bioUser.numOfCard || 0,
-            numOfFace: bioUser.numOfFace || 0
+            employeeNo: (bioUser && bioUser.employeeNo) || (panelUser && panelUser.employeeNo) || emp.cedula,
+            name: (bioUser && bioUser.name) || (panelUser && panelUser.name) || emp.nombre,
+            numOfCard: (bioUser && (bioUser.numOfCard || bioUser.numOfCards)) || (hasOnPanel ? 1 : 0),
+            numOfFace: (bioUser && (bioUser.numOfFace || bioUser.numOfFaces)) || 0
           },
           nameDiffers,
           hasFaceOnDevice,
           hasCardOnDevice
         });
       } else {
-        faltan.push(emp);
+        faltan.push({
+          ...emp,
+          hasOnBio: false,
+          hasOnPanel: false
+        });
       }
     }
 
     const sobran = [];
-    bioUsers.forEach((u, idx) => {
+
+    // Sobran en Biométrico
+    (bioUsers || []).forEach((u, idx) => {
       if (!matchedBioIndices.has(idx)) {
         const uNo = String(u.employeeNo || '').trim().toUpperCase();
-
-        // Buscar coincidencia EXACTA en todos los empleados del sistema
         const sysEmp = (allSystemEmployees || []).find(e => {
-          return String(e.cedula || '').trim().toUpperCase() === uNo;
+          const empVariants = getCedulaVariants(e.cedula).map(v => v.toUpperCase());
+          return String(e.cedula || '').trim().toUpperCase() === uNo || empVariants.includes(uNo);
         });
 
-        // 🛡️ REGLA FUNDAMENTAL: Si el empleado está ACTIVO y pertenece a esta misma sala,
-        // ¡NUNCA DEBE SER CLASIFICADO COMO "SOBRANTE"! Pertenece a este biométrico y se incorpora a Sincronizados.
+        // 🛡️ REGLA FUNDAMENTAL: Si el empleado está ACTIVO y pertenece a esta misma sala, no sobra
         const currentSalaUuid = String(currentSala?.uuid || currentSala?.id || '').trim().toLowerCase();
         const currentSalaNombre = String(currentSala?.nombre || '').trim().toLowerCase();
         const empSalaUuid = String(sysEmp?.sala_uuid || sysEmp?.sala_id || '').trim().toLowerCase();
@@ -448,6 +469,8 @@
           sincronizados.push({
             ...sysEmp,
             bioUser: u,
+            hasOnBio: true,
+            hasOnPanel: false,
             deviceUser: {
               employeeNo: u.employeeNo,
               name: u.name,
@@ -459,7 +482,6 @@
             hasCardOnDevice
           });
 
-          // Si por alguna razón estaba registrado en faltan, removerlo para evitar duplicidad
           const faltanIdx = faltan.findIndex(f => String(f.cedula || '').trim().toUpperCase() === uNo);
           if (faltanIdx !== -1) {
             faltan.splice(faltanIdx, 1);
@@ -468,6 +490,7 @@
         }
 
         sobran.push({
+          source: 'bio',
           employeeNo: u.employeeNo,
           name: u.name || 'Sin nombre',
           numOfFace: Number(u.numOfFace || u.numOfFaces || 0),
@@ -477,6 +500,78 @@
         });
       }
     });
+
+    // Sobran en Panel (si aplica)
+    if (hasPanel && Array.isArray(panelUsers)) {
+      panelUsers.forEach((u, idx) => {
+        if (!matchedPanelIndices.has(idx)) {
+          const uNo = String(u.employeeNo || '').trim().toUpperCase();
+          const sysEmp = (allSystemEmployees || []).find(e => {
+            const empVariants = getCedulaVariants(e.cedula).map(v => v.toUpperCase());
+            return String(e.cedula || '').trim().toUpperCase() === uNo || empVariants.includes(uNo);
+          });
+
+          const currentSalaUuid = String(currentSala?.uuid || currentSala?.id || '').trim().toLowerCase();
+          const currentSalaNombre = String(currentSala?.nombre || '').trim().toLowerCase();
+          const empSalaUuid = String(sysEmp?.sala_uuid || sysEmp?.sala_id || '').trim().toLowerCase();
+          const empSalaNombre = String(sysEmp?.sala_nombre || '').trim().toLowerCase();
+
+          const isMismaSala = Boolean(
+            sysEmp?.activo && (
+              (currentSalaUuid && empSalaUuid && currentSalaUuid === empSalaUuid) ||
+              (currentSalaNombre && empSalaNombre && currentSalaNombre === empSalaNombre)
+            )
+          );
+
+          if (isMismaSala) {
+            const existingSync = sincronizados.find(s => {
+              const variants = getCedulaVariants(s.cedula).map(v => v.toUpperCase());
+              return String(s.cedula || '').trim().toUpperCase() === uNo || variants.includes(uNo);
+            });
+            if (existingSync) {
+              existingSync.hasOnPanel = true;
+              existingSync.panelUser = u;
+              return;
+            }
+
+            sincronizados.push({
+              ...sysEmp,
+              panelUser: u,
+              hasOnBio: false,
+              hasOnPanel: true,
+              deviceUser: {
+                employeeNo: u.employeeNo,
+                name: u.name,
+                numOfCard: 1,
+                numOfFace: 0
+              },
+              nameDiffers: false,
+              hasFaceOnDevice: false,
+              hasCardOnDevice: true
+            });
+
+            const faltanIdx = faltan.findIndex(f => {
+              const variants = getCedulaVariants(f.cedula).map(v => v.toUpperCase());
+              return String(f.cedula || '').trim().toUpperCase() === uNo || variants.includes(uNo);
+            });
+            if (faltanIdx !== -1) {
+              faltan.splice(faltanIdx, 1);
+            }
+            return;
+          }
+
+          sobran.push({
+            source: 'panel',
+            employeeNo: u.employeeNo,
+            name: u.name || 'Sin nombre',
+            numOfFace: 0,
+            numOfCard: 1,
+            systemStatus: sysEmp ? (sysEmp.activo ? `Activo en ${sysEmp.sala_nombre || 'otra sala'}` : `Desincorporado (${sysEmp.motivo_desincorporacion || 'Inactivo'})`) : 'No existe en el sistema',
+            systemEmployeeName: sysEmp ? sysEmp.nombre : 'Desconocido'
+          });
+        }
+      });
+    }
 
     return { sincronizados, faltan, sobran };
   }
@@ -521,9 +616,18 @@
         return;
       }
 
+      // Si el usuario seleccionó un dispositivo específico en el desplegable,
+      // auditamos y mostramos ÚNICAMENTE ese dispositivo seleccionado.
+      // Si seleccionó auditar toda la sala ('ALL'), se auditan todos los dispositivos de la sala.
+      const devicesToAudit = (selectedDispositivoId && selectedDispositivoId !== 'ALL')
+        ? devices.filter(d => String(d.uuid || d.id) === String(selectedDispositivoId))
+        : devices;
+
+      const finalDevices = devicesToAudit.length > 0 ? devicesToAudit : devices;
+
       // 2. Auditar cada dispositivo directamente en la LAN desde Windows (Tauri Nativo)
       const auditedDevices = [];
-      for (const dev of devices) {
+      for (const dev of finalDevices) {
         const devRes = {
           uuid: dev.uuid,
           id: dev.uuid,
@@ -562,7 +666,8 @@
 
         // Consultar usuarios físicos del panel en la LAN si tiene ip_panel
         let panelUsers = [];
-        if (dev.ip_panel && dev.ip_panel.trim() && dev.ip_panel !== '—') {
+        const hasPanel = Boolean(dev.ip_panel && dev.ip_panel.trim() && dev.ip_panel !== '—');
+        if (hasPanel) {
           try {
             panelUsers = await localGetDeviceUsers(dev.ip_panel, dev.usuario || 'admin', dev.clave || '');
             devRes.panelStatus = 'online';
@@ -570,11 +675,12 @@
           } catch (err) {
             devRes.panelStatus = 'error';
             devRes.panelError = err.message;
+            console.error(`Error consultando usuarios en panel ${dev.ip_panel}:`, err);
           }
         }
 
-        // Cruzar y clasificar datos
-        const recon = reconcileUsers(bioUsers, contextActiveEmployees, contextAllSystemEmployees, json.sala || targetDev?.salaObj);
+        // Cruzar y clasificar datos considerando biométrico y panel
+        const recon = reconcileUsers(bioUsers, panelUsers, contextActiveEmployees, contextAllSystemEmployees, json.sala || targetDev?.salaObj, hasPanel);
         devRes.sincronizados = recon.sincronizados;
         devRes.faltan = recon.faltan;
         devRes.sobran = recon.sobran;
@@ -588,11 +694,10 @@
         devices: auditedDevices
       };
 
-      // Posicionar en el dispositivo seleccionado
-      const foundIdx = auditedDevices.findIndex(d => (d.uuid || d.id) === selectedDispositivoId);
-      selectedDeviceIndex = foundIdx !== -1 ? foundIdx : 0;
+      selectedDeviceIndex = 0;
 
-      triggerToast(`Auditoría local completada para ${auditedDevices.length} dispositivo(s)`, 'success');
+      const auditLabel = auditedDevices.length === 1 ? auditedDevices[0].nombre : `${auditedDevices.length} dispositivo(s)`;
+      triggerToast(`Auditoría local completada para ${auditLabel}`, 'success');
     } catch (err) {
       console.error(err);
       triggerToast(`Error de auditoría local: ${err.message}`, 'error');
@@ -674,7 +779,8 @@
       }
 
       let panelUsers = [];
-      if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—') {
+      const hasPanel = Boolean(currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—');
+      if (hasPanel) {
         try {
           panelUsers = await localGetDeviceUsers(currentDevice.ip_panel, currentDevice.usuario || 'admin', currentDevice.clave || '');
         } catch (e) {
@@ -683,7 +789,7 @@
       }
 
       const currentSala = auditResult?.sala || biometricosDisponibles.find(d => (d.uuid || d.id) === selectedDispositivoId)?.salaObj;
-      const recon = reconcileUsers(bioUsers, contextActiveEmployees, contextAllSystemEmployees, currentSala);
+      const recon = reconcileUsers(bioUsers, panelUsers, contextActiveEmployees, contextAllSystemEmployees, currentSala, hasPanel);
 
       if (auditResult && auditResult.devices && auditResult.devices[selectedDeviceIndex]) {
         const d = auditResult.devices[selectedDeviceIndex];
@@ -691,7 +797,7 @@
         d.faltan = recon.faltan;
         d.sobran = recon.sobran;
         d.totalEnDispositivo = bioUsers.length;
-        if (panelUsers.length > 0) {
+        if (hasPanel) {
           d.totalEnPanel = panelUsers.length;
         }
         auditResult = { ...auditResult };
@@ -746,9 +852,10 @@
         if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
-            const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
-            if (panelId) {
-              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelId, panelId);
+            const panelEmployeeNo = String(emp.cedula || '').replace(/\D/g, '') || String(emp.cedula || '').trim();
+            const cardNo = generarCardNoDesdeCedula(emp.cedula);
+            if (cardNo) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, cardNo);
             }
           } catch (e) {
             console.warn(`Error actualizando ${emp.nombre} en panel:`, e.message);
@@ -838,9 +945,10 @@
         if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
           try {
             await localAddUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, emp, true);
-            const panelId = generarCardNoDesdeCedula(emp.cedula) || emp.cedula.replace(/\D/g, '');
-            if (panelId) {
-              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelId, panelId);
+            const panelEmployeeNo = String(emp.cedula || '').replace(/\D/g, '') || String(emp.cedula || '').trim();
+            const cardNo = generarCardNoDesdeCedula(emp.cedula);
+            if (cardNo) {
+              await localSetupCard(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, panelEmployeeNo, cardNo);
             }
             addedOk = true;
           } catch (e) {
@@ -889,7 +997,7 @@
   }
 
   // Eliminar usuarios del biométrico / panel localmente
-  async function handleDeleteUsers(employeeNos) {
+  async function handleDeleteUsers(employeeNos, targetSource = null) {
     if (!currentDevice || !employeeNos || employeeNos.length === 0) return;
 
     for (const no of employeeNos) {
@@ -901,11 +1009,12 @@
     let deletedCount = 0;
 
     try {
+      const effectiveTarget = targetSource || actionTarget;
       for (const empNo of employeeNos) {
         let delOk = false;
 
         // 1. Eliminar de Biométrico local
-        if (currentDevice.ip_local && (actionTarget === 'both' || actionTarget === 'bio')) {
+        if (currentDevice.ip_local && (effectiveTarget === 'both' || effectiveTarget === 'bio')) {
           try {
             await localDeleteUser(currentDevice.ip_local, currentDevice.usuario, currentDevice.clave, empNo, false);
             delOk = true;
@@ -915,7 +1024,7 @@
         }
 
         // 2. Eliminar de Panel local si aplica
-        if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (actionTarget === 'both' || actionTarget === 'panel')) {
+        if (currentDevice.ip_panel && currentDevice.ip_panel.trim() && currentDevice.ip_panel !== '—' && (effectiveTarget === 'both' || effectiveTarget === 'panel')) {
           try {
             await localDeleteUser(currentDevice.ip_panel, currentDevice.usuario, currentDevice.clave, empNo, true);
             delOk = true;
@@ -1008,6 +1117,9 @@
             {#if biometricosDisponibles.length === 0}
               <option value="" disabled>No hay biométricos disponibles</option>
             {:else}
+              {#if currentSalaDispositivos.length > 1}
+                <option value="ALL">🏢 Auditar todos los biométricos de {currentSalaNombre || 'la sala'}</option>
+              {/if}
               {#each biometricosDisponibles as d}
                 {@const devId = d.uuid || d.id}
                 {@const isReachable = reachabilityMap[devId]}
@@ -1047,7 +1159,7 @@
           type="button" 
           class="sync-audit-btn" 
           on:click={handleAudit}
-          disabled={isCheckingReachability || isAuditing || isExecutingAction || !selectedDispositivoId || !isWindows || reachabilityMap[selectedDispositivoId] === false}
+          disabled={isCheckingReachability || isAuditing || isExecutingAction || !selectedDispositivoId || !isWindows || (selectedDispositivoId !== 'ALL' && reachabilityMap[selectedDispositivoId] === false)}
         >
           {#if isAuditing}
             <span class="sync-spinner"></span> Conectando...
@@ -1085,35 +1197,37 @@
           </div>
         {:else}
           <!-- Device Selection Pills -->
-          <div class="sync-devices-pills-container">
-            {#each auditResult.devices as dev, idx}
-              {@const isSelected = selectedDeviceIndex === idx}
-              <button
-                type="button"
-                class="sync-device-pill {isSelected ? 'active' : ''}"
-                on:click={() => {
-                  selectedDeviceIndex = idx;
-                  selectedDispositivoId = dev.uuid || dev.id;
-                }}
-              >
-                <div class="sync-pill-top">
-                  <span class="sync-pill-name">{dev.nombre}</span>
-                  <span class="sync-status-dot {dev.status === 'online' ? 'dot-online' : 'dot-offline'}" title={dev.status === 'online' ? 'En línea' : 'Desconectado / Error'}></span>
-                </div>
-                <div class="sync-pill-meta">
-                  <span>IP: {dev.ip_local || 'Sin IP'}</span>
-                  {#if dev.ip_panel}
-                    <span class="sync-panel-chip" title="Panel asociado">📡 Panel</span>
-                  {/if}
-                </div>
-                <div class="sync-pill-counts">
-                  <span class="pill-badge badge-sync" title="Sincronizados">🟢 {dev.sincronizados.length}</span>
-                  <span class="pill-badge badge-faltan" title="Faltan en equipo">⚠️ {dev.faltan.length}</span>
-                  <span class="pill-badge badge-sobran" title="Sobran en equipo">🚫 {dev.sobran.length}</span>
-                </div>
-              </button>
-            {/each}
-          </div>
+          {#if auditResult.devices.length > 1}
+            <div class="sync-devices-pills-container">
+              {#each auditResult.devices as dev, idx}
+                {@const isSelected = selectedDeviceIndex === idx}
+                <button
+                  type="button"
+                  class="sync-device-pill {isSelected ? 'active' : ''}"
+                  on:click={() => {
+                    selectedDeviceIndex = idx;
+                    selectedDispositivoId = dev.uuid || dev.id;
+                  }}
+                >
+                  <div class="sync-pill-top">
+                    <span class="sync-pill-name">{dev.nombre}</span>
+                    <span class="sync-status-dot {dev.status === 'online' ? 'dot-online' : 'dot-offline'}" title={dev.status === 'online' ? 'En línea' : 'Desconectado / Error'}></span>
+                  </div>
+                  <div class="sync-pill-meta">
+                    <span>IP: {dev.ip_local || 'Sin IP'}</span>
+                    {#if dev.ip_panel}
+                      <span class="sync-panel-chip" title="Panel asociado">📡 Panel</span>
+                    {/if}
+                  </div>
+                  <div class="sync-pill-counts">
+                    <span class="pill-badge badge-sync" title="Sincronizados">🟢 {dev.sincronizados.length}</span>
+                    <span class="pill-badge badge-faltan" title="Faltan en equipo">⚠️ {dev.faltan.length}</span>
+                    <span class="pill-badge badge-sobran" title="Sobran en equipo">🚫 {dev.sobran.length}</span>
+                  </div>
+                </button>
+              {/each}
+            </div>
+          {/if}
 
           <!-- Current Device Content Card -->
           {#if currentDevice}
@@ -1129,7 +1243,10 @@
                       {currentDevice.status === 'online' ? '🟢 Biométrico Conectado' : '🔴 Biométrico Desconectado'}
                     </span>
                     {#if currentDevice.ip_panel}
-                      <span class="sync-device-badge {currentDevice.panelStatus === 'online' ? 'status-panel-online' : 'status-offline'}">
+                      <span 
+                        class="sync-device-badge {currentDevice.panelStatus === 'online' ? 'status-panel-online' : 'status-offline'}"
+                        title={currentDevice.panelError ? `Error de conexión al panel: ${currentDevice.panelError}` : (currentDevice.panelStatus === 'online' ? 'Panel conectado en red local' : 'Panel desconectado')}
+                      >
                         📡 Panel: {currentDevice.ip_panel} ({currentDevice.panelStatus === 'online' ? 'En línea' : 'Desconectado'})
                       </span>
                     {/if}
@@ -1335,7 +1452,19 @@
                                 <td>{emp.departamento_nombre}</td>
                                 <td style="text-align: center;">
                                   <div style="display: flex; flex-direction: column; gap: 3px; align-items: center;">
-                                    <span class="sync-chip-badge-ok">✓ Sincronizado</span>
+                                    {#if currentDevice.ip_panel}
+                                      {#if emp.hasOnBio && emp.hasOnPanel}
+                                        <span class="sync-chip-badge-ok" title="Presente en biométrico y en panel">✓ Biométrico + Panel</span>
+                                      {:else if emp.hasOnBio && !emp.hasOnPanel}
+                                        <span class="sync-chip-badge-warn" title="Presente en biométrico pero no en panel">🟡 En Biométrico (Falta Panel)</span>
+                                      {:else if !emp.hasOnBio && emp.hasOnPanel}
+                                        <span class="sync-chip-badge-panel" title="Presente en panel pero no en biométrico">🔵 En Panel (Falta Biométrico)</span>
+                                      {:else}
+                                        <span class="sync-chip-badge-ok">✓ Sincronizado</span>
+                                      {/if}
+                                    {:else}
+                                      <span class="sync-chip-badge-ok">✓ Sincronizado</span>
+                                    {/if}
                                     {#if !emp.hasFaceOnDevice}
                                       <span class="sync-diff-badge-warn">Sin rostro en equipo</span>
                                     {/if}
@@ -1620,6 +1749,7 @@
                             </th>
                             <th style="width: 140px;">Cédula en Equipo</th>
                             <th>Nombre en Equipo</th>
+                            <th style="width: 120px; text-align: center;">Origen</th>
                             <th>Estado en Base de Datos</th>
                             <th style="width: 140px; text-align: center;">Acción</th>
                           </tr>
@@ -1627,7 +1757,7 @@
                         <tbody>
                           {#if filteredSobran.length === 0}
                             <tr>
-                              <td colspan="5" style="text-align: center; padding: 36px 16px; color: #64748b; font-weight: 600;">
+                              <td colspan="6" style="text-align: center; padding: 36px 16px; color: #64748b; font-weight: 600;">
                                 No se encontraron usuarios sobrantes que coincidan con la búsqueda "{searchSobran}".
                               </td>
                             </tr>
@@ -1645,6 +1775,13 @@
                                 </td>
                                 <td class="font-mono font-bold" style="color: #b91c1c;">{u.employeeNo}</td>
                                 <td class="font-bold">{u.name}</td>
+                                <td style="text-align: center;">
+                                  {#if u.source === 'panel'}
+                                    <span class="sync-panel-chip" style="font-size: 11px; padding: 2px 7px;">📡 Panel</span>
+                                  {:else}
+                                    <span class="sync-bio-chip" style="font-size: 11px; padding: 2px 7px;">👤 Biométrico</span>
+                                  {/if}
+                                </td>
                                 <td>
                                   <span class="sync-chip-system-status {u.systemStatus.includes('Desincorporado') ? 'chip-desinc' : u.systemStatus.includes('Activo') ? 'chip-other-sala' : u.systemStatus.includes('Coincide') ? 'chip-name-match' : 'chip-unknown'}">
                                     {u.systemStatus}
@@ -1653,8 +1790,8 @@
                                 <td style="text-align: center;">
                                   <button 
                                     type="button" 
-                                    class="sync-btn-del-single"
-                                    on:click={() => handleDeleteUsers([u.employeeNo])}
+                                    class="sync-btn-del-single" 
+                                    on:click={() => handleDeleteUsers([u.employeeNo], u.source)}
                                     disabled={deletingEmpNos.has(u.employeeNo) || isExecutingAction}
                                   >
                                     {#if deletingEmpNos.has(u.employeeNo)}
@@ -2382,6 +2519,39 @@
     font-size: 11px;
     font-weight: 800;
     border: 1px solid #bbf7d0;
+  }
+
+  .sync-chip-badge-warn {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #fef3c7;
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 800;
+    border: 1px solid #fde68a;
+  }
+
+  .sync-chip-badge-panel {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #ede9fe;
+    color: #6d28d9;
+    font-size: 11px;
+    font-weight: 800;
+    border: 1px solid #ddd6fe;
+  }
+
+  .sync-bio-chip {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 10px;
+    font-weight: 800;
+    border: 1px solid #cbd5e1;
   }
 
   .sync-diff-badge {
