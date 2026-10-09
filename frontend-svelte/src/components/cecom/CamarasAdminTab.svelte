@@ -137,14 +137,14 @@
 
     isVerifyingPorts = true;
     try {
-      triggerToast(`🔍 Conectando por ISAPI a ${form.ip_local} para verificar puertos físicos...`, "info");
+      triggerToast(`🔍 Conectando por ISAPI a ${form.ip_local} para verificar canales y video...`, "info");
       const diag = await diagnosticarPuertosGrabadorIsapi(form.ip_local, form.usuario, form.clave);
       if (diag && diag.total_puertos > 0) {
         verifiedPortsResult = diag;
         form.canales_totales = diag.total_puertos;
-        triggerToast(`✅ ${diag.puertos_activos} puertos físicos con video activo detectados (${diag.puertos_deshabilitados} deshabilitados/sin señal)`, "success");
+        triggerToast(`✅ ${diag.puertos_activos} canales con señal activa detectados (${diag.puertos_deshabilitados} sin señal/desconectados)`, "success");
       } else {
-        triggerToast(`No se detectaron puertos abiertos en ${form.ip_local}. Verifique IP, credenciales y que el DVR esté encendido.`, "warning");
+        triggerToast(`No se detectaron canales activos en ${form.ip_local}. Verifique IP, credenciales y que el grabador esté encendido.`, "warning");
       }
     } catch (err) {
       console.error("Error al verificar puertos ISAPI:", err);
@@ -711,9 +711,9 @@
         <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div style="display: flex; align-items: center; gap: 6px;">
-              <span class="material-icons" style="font-size: 18px; color: #0284c7;">cable</span>
+              <span class="material-icons" style="font-size: 18px; color: #0284c7;">videocam</span>
               <span style="font-size: 11.5px; font-weight: 800; color: #1e293b; text-transform: uppercase;">
-                Diagnóstico ISAPI de Puertos Físicos
+                Diagnóstico ISAPI de Canales y Video
               </span>
             </div>
             <button
@@ -721,14 +721,14 @@
               on:click={verificarPuertosFormulario}
               disabled={isVerifyingPorts || !form.ip_local.trim()}
               style="padding: 5px 12px; font-size: 11.5px; font-weight: 700; border-radius: 6px; background: #0284c7; color: white; border: none; cursor: pointer; display: flex; align-items: center; gap: 5px;"
-              title="Comprobar en el DVR cuáles canales físicos tienen señal activa vs deshabilitados"
+              title="Comprobar en el grabador (NVR/DVR) cuáles canales tienen señal activa vs deshabilitados"
             >
               {#if isVerifyingPorts}
                 <span class="material-icons" style="font-size: 14px; animation: spin 1s infinite linear;">sync</span>
                 Verificando...
               {:else}
                 <span class="material-icons" style="font-size: 14px;">travel_explore</span>
-                Verificar Puertos en Vivo
+                Verificar Canales en Vivo
               {/if}
             </button>
           </div>
@@ -740,10 +740,10 @@
                   🟢 {verifiedPortsResult.puertos_activos} con Video
                 </span>
                 <span style="color: #dc2626; font-weight: 800;">
-                  🔴 {verifiedPortsResult.puertos_deshabilitados} Deshabilitados
+                  🔴 {verifiedPortsResult.puertos_deshabilitados} Deshabilitados/Sin señal
                 </span>
                 <span style="color: #64748b; font-weight: 600;">
-                  (Total: {verifiedPortsResult.total_puertos} puertos físicos)
+                  (Total: {verifiedPortsResult.total_puertos} canales)
                 </span>
               </div>
 

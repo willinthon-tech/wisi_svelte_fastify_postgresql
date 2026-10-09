@@ -116,36 +116,24 @@ async fn isapi_request(
       _ => client.get(&full_url),
     };
 
-    let is_xml = if let Some(ref b) = body {
-      b.trim().starts_with('<')
-    } else {
-      false
-    };
+    req = req.header("Accept", "application/xml, text/xml, application/json, text/plain, */*");
 
-    let content_type = if is_xml {
-      "application/xml; charset=UTF-8"
-    } else {
-      "application/json; charset=UTF-8"
-    };
+    if let Some(ref b) = body {
+      let is_xml = b.trim().starts_with('<');
+      let content_type = if is_xml {
+        "application/xml; charset=UTF-8"
+      } else {
+        "application/json; charset=UTF-8"
+      };
+      req = req.header("Content-Type", content_type);
 
-    let accept_header = if is_xml {
-      "application/xml, text/xml, */*"
-    } else {
-      "application/json, text/plain, */*"
-    };
-
-    req = req
-      .header("Accept", accept_header)
-      .header("Content-Type", content_type);
+      if m == "POST" || m == "PUT" || m == "PATCH" {
+        req = req.body(b.clone());
+      }
+    }
 
     if let Some(auth_val) = auth {
       req = req.header("Authorization", auth_val);
-    }
-
-    if let Some(ref b) = body {
-      if m == "POST" || m == "PUT" {
-        req = req.body(b.clone());
-      }
     }
 
     req

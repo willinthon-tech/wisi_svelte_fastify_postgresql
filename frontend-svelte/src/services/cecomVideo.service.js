@@ -114,8 +114,41 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
 
   const canalesEncontrados = [];
 
-  // 1. Intentar obtener canales IP (NVRs o DVRs híbridos)
+  // 1. Obtener canales IP (NVRs o DVRs híbridos)
+  // Consultamos tanto la configuración (/channels) como el estado en vivo (/channels/status)
   try {
+    // 1.a Estado online/conectado de cada canal IP
+    const statusMap = {};
+    try {
+      const resStatus = await callLocalIsapi(
+        ipLocal,
+        '/ISAPI/ContentMgmt/InputProxy/channels/status',
+        'GET',
+        null,
+        usuario,
+        clave,
+        8
+      );
+      if (resStatus && resStatus.ok && resStatus.data) {
+        const statusXml = String(resStatus.data);
+        const statusBlocks = statusXml.match(/<InputProxyChannelStatus[\s\S]*?<\/InputProxyChannelStatus>/gi) || [];
+        for (const sb of statusBlocks) {
+          const sidMatch = sb.match(/<id>(\d+)<\/id>/i);
+          const sonlineMatch = sb.match(/<online>(.*?)<\/online>/i);
+          const sdetectMatch = sb.match(/<chanDetectResult>(.*?)<\/chanDetectResult>/i);
+          if (sidMatch) {
+            const sid = parseInt(sidMatch[1]);
+            const isOnline = sonlineMatch ? sonlineMatch[1].trim().toLowerCase() === 'true' : false;
+            const detectResult = sdetectMatch ? sdetectMatch[1].trim().toLowerCase() : '';
+            statusMap[sid] = isOnline || detectResult === 'connect' || detectResult === 'ok';
+          }
+        }
+      }
+    } catch (e) {
+      console.log('No se obtuvo InputProxy/channels/status:', e.message);
+    }
+
+    // 1.b Configuración, nombres e IPs de cada canal IP
     const resProxies = await callLocalIsapi(
       ipLocal,
       '/ISAPI/ContentMgmt/InputProxy/channels',
@@ -123,7 +156,7 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
       null,
       usuario,
       clave,
-      5
+      10
     );
 
     if (resProxies && resProxies.ok && resProxies.data) {
@@ -140,7 +173,19 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
           const idCanal = parseInt(idMatch[1]);
           const nombre = nameMatch ? nameMatch[1].trim() : `Cámara IP ${idCanal}`;
           const ipOrigen = ipMatch ? ipMatch[1].trim() : '';
-          const isOnline = onlineMatch ? onlineMatch[1].trim().toLowerCase() === 'true' : true;
+
+          // Si el slot del NVR no tiene IP asignada ni nombre personalizado, es un canal no configurado
+          if (!ipOrigen && (!nameMatch || !nameMatch[1].trim())) {
+            continue;
+          }
+
+          // Verificar si está online vía statusMap o etiqueta <online>
+          let isOnline = true;
+          if (statusMap[idCanal] !== undefined) {
+            isOnline = statusMap[idCanal];
+          } else if (onlineMatch) {
+            isOnline = onlineMatch[1].trim().toLowerCase() === 'true';
+          }
 
           canalesEncontrados.push({
             numero_canal: idCanal,
@@ -150,13 +195,72 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
             audio_habilitado: false,
             activo: isOnline,
             habilitado: isOnline,
-            estado: isOnline ? 'ACTIVO' : 'DESCONECTADO'
+            estado: isOnline ? 'SEÑAL ACTIVA (IP)' : 'DESCONECTADO'
           });
         }
       }
     }
   } catch (e) {
     console.log('No se obtuvieron canales InputProxy (posible DVR analógico puro):', e.message);
+  }
+
+  // 1.c Fallback para NVRs que no exponen InputProxy: consultar Streaming/channels
+  if (canalesEncontrados.length === 0) {
+    try {
+      const resStream = await callLocalIsapi(
+        ipLocal,
+        '/ISAPI/Streaming/channels',
+        'GET',
+        null,
+        usuario,
+        clave,
+        8
+      );
+      if (resStream && resStream.ok && resStream.data) {
+        const xmlStr = String(resStream.data);
+        const streamBlocks = xmlStr.match(/<StreamingChannel[\s\S]*?<\/StreamingChannel>/gi) || [];
+        const seenChannels = new Set();
+
+        for (const block of streamBlocks) {
+          const idMatch = block.match(/<id>(\d+)<\/id>/i);
+          const nameMatch = block.match(/<channelName>(.*?)<\/channelName>/i);
+          const enabledMatch = block.match(/<enabled>(.*?)<\/enabled>/i);
+          const videoInIdMatch = block.match(/<dynVideoInputChannelID>(\d+)<\/dynVideoInputChannelID>/i);
+
+          if (idMatch) {
+            const rawId = parseInt(idMatch[1]);
+            // En NVRs, 101 -> canal 1, 201 -> canal 2, 1001 -> canal 10
+            // Solo procesamos el stream principal (terminado en 01 o 1)
+            let canalNum = rawId;
+            if (videoInIdMatch) {
+              canalNum = parseInt(videoInIdMatch[1]);
+            } else if (rawId >= 100) {
+              canalNum = Math.floor(rawId / 100);
+              if (rawId % 100 !== 1) continue; // Saltar sub-streams (102, 202, etc.)
+            }
+
+            if (seenChannels.has(canalNum)) continue;
+            seenChannels.add(canalNum);
+
+            const isEnabled = enabledMatch ? enabledMatch[1].trim().toLowerCase() === 'true' : true;
+            const nombre = nameMatch ? nameMatch[1].trim() : `Cámara ${canalNum}`;
+
+            canalesEncontrados.push({
+              numero_canal: canalNum,
+              nombre: nombre || `Cámara ${canalNum}`,
+              tipo: 'IP',
+              ip_origen: '',
+              audio_habilitado: false,
+              activo: isEnabled,
+              habilitado: isEnabled,
+              estado: isEnabled ? 'SEÑAL ACTIVA (STREAM)' : 'DESHABILITADO'
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.log('No se obtuvieron canales vía Streaming/channels:', e.message);
+    }
   }
 
   // 2. Intentar obtener canales de video analógicos estándar (DVRs físicos)
@@ -168,7 +272,7 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
       null,
       usuario,
       clave,
-      5
+      8
     );
 
     if (resAnalog && resAnalog.ok && resAnalog.data) {
@@ -211,7 +315,7 @@ export async function localScanGrabadorChannels(ipLocal, usuario = 'admin', clav
       }
     }
   } catch (e) {
-    console.log('No se obtuvieron canales VideoInputChannel:', e.message);
+    console.log('No se obtuvieron canales VideoInputChannel (normal en NVRs puros):', e.message);
   }
 
   // Ordenar por número de canal ascendente
