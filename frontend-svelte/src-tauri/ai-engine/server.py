@@ -6,9 +6,10 @@ calcula scores en tiempo real y guarda eventos con aprendizaje activo.
 
 import os
 import sys
+import socket
 
-# Forzar RTSP TCP en puerto 554 para máxima estabilidad y cero congelamiento de paquetes en red local
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;500000"
+# Forzar RTSP TCP en puerto 554 con timeout rápido para evitar congelamientos en red local
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;500000|stimeout;2500000"
 
 import time
 import base64
@@ -997,6 +998,16 @@ def fetch_isapi_frame(ip, canal, usuario, clave):
         pass
     return None
 
+def check_rtsp_port_open(ip, port=554, timeout=0.6):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect((ip, int(port)))
+        s.close()
+        return True
+    except Exception:
+        return False
+
 def stream_worker(mesa_uuid, url_rtsp):
     cfg_init = mesas_config.get(mesa_uuid, {})
     m_name = cfg_init.get('nombre', 'Mesa')
@@ -1013,6 +1024,15 @@ def stream_worker(mesa_uuid, url_rtsp):
             try: cap.release()
             except Exception: pass
             cap = None
+
+        cfg = mesas_config.get(mesa_uuid, {})
+        ip_chk = cfg.get('ip')
+        if ip_chk and not check_rtsp_port_open(ip_chk, 554, timeout=0.6):
+            estado_stream[mesa_uuid] = 'desconectado'
+            live_jpeg_buffers[mesa_uuid] = make_placeholder_frame(m_name, f"IP {ip_chk} inaccesible en red LAN local")
+            last_reconnect_attempt = time.time()
+            return False
+
         try:
             c = cv2.VideoCapture(url_rtsp, cv2.CAP_FFMPEG)
             c.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -1145,11 +1165,11 @@ def stream_worker(mesa_uuid, url_rtsp):
                     estado_stream[mesa_uuid] = 'activo'
 
             now = time.time()
-            if (consecutive_failures >= 10 or not cap or not cap.isOpened()) and (now - last_reconnect_attempt > 3.0):
-                print(f"🔄 [Stream Worker] Reestableciendo flujo RTSP nativo (Puerto 554) para {cfg.get('nombre', mesa_uuid)}...")
-                conectar_rtsp()
+            if (consecutive_failures >= 10 or not cap or not cap.isOpened()) and (now - last_reconnect_attempt > 20.0):
                 last_reconnect_attempt = now
                 consecutive_failures = 0
+                if conectar_rtsp():
+                    print(f"✅ [Stream Worker] Flujo RTSP conectado para {cfg.get('nombre', mesa_uuid)}")
 
             time.sleep(0.08)
 
@@ -1262,9 +1282,11 @@ def ai_inference_loop():
             usuario = cfg.get('usuario') or 'admin'
             clave = cfg.get('clave') or ''
 
-            frame_sub = frames_actuales.get(mesa_uuid)
-            frame_hd = fetch_isapi_frame(ip, canal, usuario, clave) if (ip and canal) else None
-            frame = frame_hd if (frame_hd is not None and frame_hd.size > 0) else frame_sub
+            frame = frames_actuales.get(mesa_uuid)
+            if frame is None and ip and canal:
+                frame_hd = fetch_isapi_frame(ip, canal, usuario, clave)
+                if frame_hd is not None and frame_hd.size > 0:
+                    frame = frame_hd
 
             if frame is None:
                 continue

@@ -135,6 +135,23 @@
   $: salas = $masterSalasStore || [];
   $: liveMesasMap = $mesasLiveStatusStore || {};
 
+  let salaAutoSelected = false;
+  $: if (!salaAutoSelected && salas && salas.length > 0) {
+    const savedSala = typeof localStorage !== 'undefined' ? localStorage.getItem('cecom_last_sala_uuid') : null;
+    if (savedSala && salas.some(s => String(s.uuid || s.id) === String(savedSala))) {
+      selectedSalaUuid = savedSala;
+      salaAutoSelected = true;
+      loadMesasConCamaras();
+    } else {
+      const elMarques = salas.find(s => (s.nombre || '').toLowerCase().includes('marques'));
+      if (elMarques) {
+        selectedSalaUuid = elMarques.uuid || elMarques.id;
+        salaAutoSelected = true;
+        loadMesasConCamaras();
+      }
+    }
+  }
+
   // Modal de Visor de Visión Artificial en Vivo
   let viewingAiMesa = null;
   let isSavingFeedback = false;
@@ -425,8 +442,15 @@
         detalle: live?.detalle || '',
         estado_mesa: live?.estado_mesa || 'SIN JUGADA',
         resultado: live?.resultado || {},
-        image_b64: live?.image_b64 || ''
       };
+    }).sort((a, b) => {
+      const aLive = liveMesasMap[a.uuid];
+      const bLive = liveMesasMap[b.uuid];
+      const aHasFeed = aLive && (aLive.image_b64 || (aLive.ai_active && aLive.ultimo_evento !== 'SIN JUGADA (EN ESPERA)' && aLive.ultimo_evento !== 'desconectado'));
+      const bHasFeed = bLive && (bLive.image_b64 || (bLive.ai_active && bLive.ultimo_evento !== 'SIN JUGADA (EN ESPERA)' && bLive.ultimo_evento !== 'desconectado'));
+      if (aHasFeed && !bHasFeed) return -1;
+      if (!aHasFeed && bHasFeed) return 1;
+      return (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true });
     });
   })();
 
@@ -582,6 +606,9 @@
   }
 
   async function onSalaChange() {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('cecom_last_sala_uuid', selectedSalaUuid);
+    }
     selectedMesaUuid = "all";
     currentPage = 1;
     await loadMesasConCamaras();
@@ -654,10 +681,24 @@
   <!-- SECCIÓN 1: Badges en Tiempo Real de las Mesas -->
   <div class="badges-section">
     <div class="badges-header">
-      <h2 class="section-title">
-        🟢 Mesas Asociadas a Cámaras ({liveMesasBadges.length})
-      </h2>
-      <span class="badges-hint">Solo se auditan mesas que tengan cámaras vinculadas en CECOM</span>
+      <div class="badges-title-wrap">
+        <h2 class="section-title">
+          🟢 Mesas Asociadas a Cámaras ({liveMesasBadges.length})
+        </h2>
+        <span class="badges-hint">Solo se auditan mesas que tengan cámaras vinculadas en CECOM</span>
+      </div>
+
+      <div class="badges-header-controls">
+        <div class="sala-quick-select">
+          <label for="sala-top-filter">Casino / Sede:</label>
+          <select id="sala-top-filter" bind:value={selectedSalaUuid} on:change={onSalaChange} class="sala-select-badge">
+            <option value="all">🌐 Todas las Sedes ({salas.length})</option>
+            {#each salas as s}
+              <option value={s.uuid || s.id}>{s.nombre}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
     </div>
 
     {#if isLoadingMesas}
@@ -1864,7 +1905,54 @@
     align-items: center;
     margin-bottom: 14px;
     flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .badges-title-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .badges-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .sala-quick-select {
+    display: flex;
+    align-items: center;
     gap: 8px;
+    background: #f8fafc;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+  }
+
+  .sala-quick-select label {
+    font-size: 12px;
+    font-weight: 800;
+    color: #475569;
+    margin: 0;
+  }
+
+  .sala-select-badge {
+    border: 1px solid #94a3b8;
+    background: #ffffff;
+    color: #0f172a;
+    font-weight: 700;
+    font-size: 13px;
+    border-radius: 6px;
+    padding: 5px 10px;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sala-select-badge:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
   }
 
   .section-title {
