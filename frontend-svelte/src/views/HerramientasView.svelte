@@ -100,8 +100,7 @@
     const q = searchQuery.toLowerCase().trim();
     return (
       item.title.toLowerCase().includes(q) ||
-      item.salaName.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
+      item.salaName.toLowerCase().includes(q)
     );
   });
 
@@ -200,9 +199,6 @@
             <th on:click={() => toggleSort('salaName')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
               SALA {sortBy === 'salaName' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
             </th>
-            <th on:click={() => toggleSort('category')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
-              CATEGORÍA {sortBy === 'category' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-            </th>
             <th style="padding: 8px 14px; text-align: right;">ACCIONES</th>
           </tr>
         </thead>
@@ -210,7 +206,7 @@
         <tbody>
           {#if paginatedTools.length === 0}
             <tr>
-              <td colspan="6" style="padding: 32px 14px; text-align: center; color: #64748b; font-size: 13.5px;">
+              <td colspan="5" style="padding: 32px 14px; text-align: center; color: #64748b; font-size: 13.5px;">
                 No se encontraron registros que coincidan con la búsqueda.
               </td>
             </tr>
@@ -231,44 +227,30 @@
                   #{item.id}
                 </td>
 
-                <!-- Título: Scoreboard Baccarat -->
+                <!-- Título: Scoreboard Baccarat (sin icono) -->
                 <td style="padding: 10px 14px;">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 16px;">🎴</span>
-                    <span style="color: #0f172a; font-weight: 700; font-size: 13.5px;">
-                      {item.title}
-                    </span>
-                  </div>
+                  <span style="color: #0f172a; font-weight: 700; font-size: 13.5px;">
+                    {item.title}
+                  </span>
                 </td>
 
-                <!-- Sala (en lugar de Descripción) -->
+                <!-- Sala (sin icono) -->
                 <td style="padding: 10px 14px;">
-                  <span style="display: inline-flex; align-items: center; gap: 6px; color: #0f172a; font-weight: 700; font-size: 13px;">
-                    <span style="color: #64748b; font-size: 14px;">🏛️</span>
+                  <span style="color: #0f172a; font-weight: 700; font-size: 13px;">
                     {item.salaName}
                   </span>
                 </td>
 
-                <!-- Categoría -->
-                <td style="padding: 10px 14px;">
-                  <span style="display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;">
-                    {item.category}
-                  </span>
-                </td>
-
-                <!-- Acciones: Botón Jugar -->
+                <!-- Acciones: Botón Ver mesas -->
                 <td style="padding: 10px 14px; text-align: right; min-width: 110px;">
                   <button
                     type="button"
                     on:click={() => openGame(item.salaObj)}
                     class="btn-flow"
-                    style="padding: 6px 16px; font-size: 12.5px; font-weight: 800; border-radius: 7px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease;"
-                    title="Jugar / Abrir Scoreboard Baccarat para {item.salaName}"
+                    style="padding: 6px 16px; font-size: 12.5px; font-weight: 800; border-radius: 7px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s ease;"
+                    title="Ver mesas de Baccarat para {item.salaName}"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                      <polygon points="5 3 19 12 5 21 5 3"/>
-                    </svg>
-                    Jugar
+                    Ver mesas
                   </button>
                 </td>
               </tr>

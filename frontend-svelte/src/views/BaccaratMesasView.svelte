@@ -282,20 +282,16 @@
                   #{item.id}
                 </td>
 
-                <!-- Título: Nombre de la Mesa -->
+                <!-- Título: Nombre de la Mesa (sin icono) -->
                 <td style="padding: 10px 14px;">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 16px;">🎴</span>
-                    <span style="color: #0f172a; font-weight: 700; font-size: 13.5px;">
-                      {item.title}
-                    </span>
-                  </div>
+                  <span style="color: #0f172a; font-weight: 700; font-size: 13.5px;">
+                    {item.title}
+                  </span>
                 </td>
 
-                <!-- Sala -->
+                <!-- Sala (sin icono) -->
                 <td style="padding: 10px 14px;">
-                  <span style="display: inline-flex; align-items: center; gap: 6px; color: #0f172a; font-weight: 700; font-size: 13px;">
-                    <span style="color: #64748b; font-size: 14px;">🏛️</span>
+                  <span style="color: #0f172a; font-weight: 700; font-size: 13px;">
                     {item.salaName}
                   </span>
                 </td>
