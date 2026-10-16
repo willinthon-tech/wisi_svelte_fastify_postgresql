@@ -1,6 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import { navigateToRoute } from '../controllers/router.store.js';
+  import { currentUserStore, userSalasStore as authUserSalasStore, selectedSalaStore } from '../controllers/auth.store.js';
+  import { masterSalasStore, userSalasStore as masterUserSalasStore } from '../controllers/master.store.js';
 
   // State
   let searchQuery = '';
@@ -10,19 +12,52 @@
   let pageSize = 10;
   let selectedIds = new Set();
 
-  // Single record requested by user: "Scoreboard Baccarad"
-  const tools = [
-    {
-      id: 1,
-      uuid: 'tool-scoreboard-baccarat',
-      title: 'Scoreboard Baccarad',
-      description: 'Tablero digital y marcador en vivo para Baccarat / Punto y Banca (Bead Plate, Big Road y Estadísticas).',
-      category: 'Mesas en Vivo',
-      priority: 'Alta',
-      completed: true,
-      statusLabel: 'Activo'
+  // 1. Resolve Salas assigned to current user
+  $: userSalasMap = $masterUserSalasStore || {};
+  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id)
+    ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || [])
+    : [];
+
+  $: rawAssignedSalas = (function () {
+    const user = $currentUserStore;
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas;
     }
-  ];
+    if ($authUserSalasStore && Array.isArray($authUserSalasStore) && $authUserSalasStore.length > 0) {
+      return $authUserSalasStore;
+    }
+    return [];
+  })();
+
+  $: assignedSalaIds = (currentUserSalas.length > 0
+    ? currentUserSalas
+    : rawAssignedSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
+  ).filter(Boolean).map(String);
+
+  $: detailedSalas = (function () {
+    const allSalas = $masterSalasStore || [];
+    if (assignedSalaIds.length === 0) {
+      if (allSalas.length > 0) return allSalas;
+      if (rawAssignedSalas.length > 0) return rawAssignedSalas;
+      return [{ id: 1, nombre: 'Sala Principal' }];
+    }
+    return assignedSalaIds.map((id) => {
+      const found = allSalas.find((s) => String(s.uuid || s.id) === String(id));
+      const fallback = rawAssignedSalas.find((s) => typeof s === 'object' && String(s.uuid || s.id) === String(id));
+      return found || fallback || { id, uuid: id, nombre: `Sala #${String(id).slice(0, 8)}` };
+    });
+  })();
+
+  // 2. Generate a row per assigned sala with "Scoreboard Baccarat"
+  $: tools = detailedSalas.map((sala, idx) => ({
+    id: idx + 1,
+    uuid: `tool-sb-${sala.uuid || sala.id || idx + 1}`,
+    title: 'Scoreboard Baccarat',
+    salaId: sala.uuid || sala.id,
+    salaName: sala.nombre || sala.name || `Sala ${sala.id || idx + 1}`,
+    category: 'Mesas en Vivo',
+    salaObj: sala
+  }));
 
   function toggleSort(col) {
     if (sortBy === col) {
@@ -38,9 +73,8 @@
     const q = searchQuery.toLowerCase().trim();
     return (
       item.title.toLowerCase().includes(q) ||
-      item.description.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q) ||
-      item.priority.toLowerCase().includes(q)
+      item.salaName.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q)
     );
   });
 
@@ -81,13 +115,17 @@
     selectedIds = new Set(selectedIds);
   }
 
-  function openGame() {
-    navigateToRoute('herramientas/scoreboard-baccarat');
+  function openGame(sala) {
+    if (sala?.id || sala?.uuid) {
+      selectedSalaStore.set(sala.uuid || sala.id);
+    }
+    const salaParam = sala?.uuid || sala?.id;
+    navigateToRoute(`herramientas/scoreboard-baccarat${salaParam ? '?sala=' + encodeURIComponent(salaParam) : ''}`);
   }
 </script>
 
 <div class="herramientas-page-container">
-  <!-- STANDARD FLOWDASH DATATABLE (REPLICATING SCREENSHOT LAYOUT) -->
+  <!-- STANDARD FLOWDASH DATATABLE (ADAPTED WITHOUT PRIORIDAD AND ESTADO, REPLACING DESCRIPCION WITH SALA) -->
   <div class="table-container" style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); overflow: hidden;">
     
     <!-- Top Bar: Full width Search Input -->
@@ -132,17 +170,11 @@
             <th on:click={() => toggleSort('title')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
               TÍTULO {sortBy === 'title' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
             </th>
-            <th on:click={() => toggleSort('description')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
-              DESCRIPCIÓN {sortBy === 'description' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+            <th on:click={() => toggleSort('salaName')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
+              SALA {sortBy === 'salaName' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
             </th>
             <th on:click={() => toggleSort('category')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
               CATEGORÍA {sortBy === 'category' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-            </th>
-            <th on:click={() => toggleSort('priority')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
-              PRIORIDAD {sortBy === 'priority' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-            </th>
-            <th on:click={() => toggleSort('completed')} style="padding: 8px 14px; cursor: pointer; user-select: none;">
-              ESTADO {sortBy === 'completed' ? (sortDir === 'asc' ? '▲' : '▼') : ''}
             </th>
             <th style="padding: 8px 14px; text-align: right;">ACCIONES</th>
           </tr>
@@ -151,7 +183,7 @@
         <tbody>
           {#if paginatedTools.length === 0}
             <tr>
-              <td colspan="8" style="padding: 32px 14px; text-align: center; color: #64748b; font-size: 13.5px;">
+              <td colspan="6" style="padding: 32px 14px; text-align: center; color: #64748b; font-size: 13.5px;">
                 No se encontraron registros que coincidan con la búsqueda.
               </td>
             </tr>
@@ -172,7 +204,7 @@
                   #{item.id}
                 </td>
 
-                <!-- Título -->
+                <!-- Título: Scoreboard Baccarat -->
                 <td style="padding: 10px 14px;">
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-size: 16px;">🎴</span>
@@ -182,10 +214,11 @@
                   </div>
                 </td>
 
-                <!-- Descripción -->
+                <!-- Sala (en lugar de Descripción) -->
                 <td style="padding: 10px 14px;">
-                  <span style="color: #475569; font-size: 13px;">
-                    {item.description}
+                  <span style="display: inline-flex; align-items: center; gap: 6px; color: #0f172a; font-weight: 700; font-size: 13px;">
+                    <span style="color: #64748b; font-size: 14px;">🏛️</span>
+                    {item.salaName}
                   </span>
                 </td>
 
@@ -196,29 +229,14 @@
                   </span>
                 </td>
 
-                <!-- Prioridad -->
-                <td style="padding: 10px 14px;">
-                  <span style="display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;">
-                    {item.priority}
-                  </span>
-                </td>
-
-                <!-- Estado -->
-                <td style="padding: 10px 14px;">
-                  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;">
-                    <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981;"></span>
-                    {item.statusLabel}
-                  </span>
-                </td>
-
                 <!-- Acciones: Botón Jugar -->
                 <td style="padding: 10px 14px; text-align: right; min-width: 110px;">
                   <button
                     type="button"
-                    on:click={() => openGame(itemKey)}
+                    on:click={() => openGame(item.salaObj)}
                     class="btn-flow"
                     style="padding: 6px 16px; font-size: 12.5px; font-weight: 800; border-radius: 7px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease;"
-                    title="Jugar / Abrir Scoreboard Baccarad"
+                    title="Jugar / Abrir Scoreboard Baccarat para {item.salaName}"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                       <polygon points="5 3 19 12 5 21 5 3"/>
@@ -233,14 +251,14 @@
       </table>
     </div>
 
-    <!-- Bottom Footer (Exact layout from user screenshot) -->
+    <!-- Bottom Footer -->
     <div class="table-toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: #f8fafc; border-top: 1px solid #e2e8f0; flex-wrap: wrap;">
       <!-- Left: Filters Info -->
       <div style="font-size: 13px; color: #475569; font-weight: 500;">
         Total: (<strong style="color: #0f172a; font-weight: 800;">{sortedTools.length}</strong>) &nbsp;|&nbsp; Filtros Totales: (<strong style="color: #0f172a; font-weight: 800;">{totalFilters}</strong>) &nbsp;Filtros: <span style="color: {totalFilters > 0 ? '#2563eb' : '#64748b'}; font-weight: 700;">{activeFilterName}</span>
       </div>
 
-      <!-- Right Controls: [10 filas v] [1 - 1 de 1] [< 1 / 1 >] -->
+      <!-- Right Controls: [10 filas v] [1 - X de X] [< 1 / 1 >] -->
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
         <!-- Dropdown Filas -->
         <select 
@@ -281,7 +299,6 @@
       </div>
     </div>
   </div>
-
 </div>
 
 <style>

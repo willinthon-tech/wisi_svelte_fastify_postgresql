@@ -1,8 +1,27 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
+  import { selectedSalaStore, currentUserStore, userSalasStore } from '../controllers/auth.store.js';
+  import { masterSalasStore } from '../controllers/master.store.js';
 
   export let isModal = false;
   const dispatch = createEventDispatcher();
+
+  // Selected Sala Context
+  let currentSalaId = null;
+
+  $: currentSalaObj = (() => {
+    const sId = currentSalaId || $selectedSalaStore;
+    const all = $masterSalasStore || [];
+    const found = all.find(s => String(s.uuid || s.id) === String(sId));
+    if (found) return found;
+    const authSalas = $userSalasStore || [];
+    const foundAuth = authSalas.find(s => typeof s === 'object' && String(s.uuid || s.id) === String(sId));
+    if (foundAuth) return foundAuth;
+    return { id: sId, nombre: sId ? `Sala #${sId}` : 'Sala Principal' };
+  })();
+
+  $: currentSalaName = currentSalaObj?.nombre || currentSalaObj?.name || '';
+  $: storageKey = `wisi_baccarat_shoe_v2_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}`;
 
   // Audio Context for subtle casino sound effects (synthesized offline)
   let audioCtx = null;
@@ -88,23 +107,45 @@
   const BIG_ROWS = 6;
   const BIG_COLS = 30;
 
-  // Load saved shoe from localStorage if available
-  onMount(() => {
+  function loadSavedShoe() {
     try {
-      const saved = localStorage.getItem('wisi_baccarat_shoe_v1');
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.history)) history = parsed.history;
         if (parsed.shoeNumber) shoeNumber = parsed.shoeNumber;
+      } else {
+        history = [];
+        shoeNumber = 1;
       }
     } catch (e) {
       console.warn('Error al cargar zapato guardado', e);
     }
+  }
+
+  // Load saved shoe from localStorage if available
+  onMount(() => {
+    try {
+      const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
+      const qIdx = hash.indexOf('?');
+      if (qIdx !== -1) {
+        const params = new URLSearchParams(hash.slice(qIdx));
+        const s = params.get('sala');
+        if (s) {
+          currentSalaId = s;
+          selectedSalaStore.set(s);
+        }
+      }
+    } catch (e) {}
+    if (!currentSalaId) {
+      currentSalaId = $selectedSalaStore;
+    }
+    loadSavedShoe();
   });
 
   function saveShoe() {
     try {
-      localStorage.setItem('wisi_baccarat_shoe_v1', JSON.stringify({
+      localStorage.setItem(storageKey, JSON.stringify({
         shoeNumber,
         history
       }));
@@ -443,10 +484,16 @@
       <div class="sb-title-badge">
         <span class="sb-icon">🎴</span>
         <div>
-          <h2 class="sb-title">SCOREBOARD BACCARAD</h2>
+          <h2 class="sb-title">SCOREBOARD BACCARAT</h2>
           <span class="sb-subtitle">PUNTO Y BANCA • CASINO LIVE AUDIT</span>
         </div>
       </div>
+      {#if currentSalaName}
+        <div class="sb-shoe-pill" style="border-color: #3b82f6; background: rgba(37, 99, 235, 0.2);">
+          <span class="pill-label" style="color: #93c5fd;">SALA</span>
+          <span class="pill-value" style="color: #ffffff;">{currentSalaName}</span>
+        </div>
+      {/if}
       <div class="sb-shoe-pill">
         <span class="pill-label">ZAPATO</span>
         <span class="pill-value">#{shoeNumber}</span>

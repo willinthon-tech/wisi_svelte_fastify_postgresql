@@ -476,7 +476,7 @@
 
   function getTabTitle(tab) {
     const clean = String(tab || '').trim().replace(/^\//, '');
-    if (clean === "herramientas/scoreboard-baccarat" || clean.endsWith("scoreboard-baccarat")) return "SCOREBOARD BACCARAD";
+    if (clean.startsWith("herramientas/scoreboard-baccarat")) return "SCOREBOARD BACCARAT";
     if (clean === "herramientas" || clean === "otros/herramientas") return "HERRAMIENTAS";
     if (String(tab || '').startsWith("cecom/libro/") || String(tab || '').startsWith("libro/")) return "Libro";
     if (tab === "dashboard") return "RRHH";
@@ -1221,7 +1221,7 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
-        {:else if $currentRouteStore === "herramientas/scoreboard-baccarat" || $currentRouteStore === "/herramientas/scoreboard-baccarat"}
+        {:else if $currentRouteStore.startsWith("herramientas/scoreboard-baccarat") || $currentRouteStore.startsWith("/herramientas/scoreboard-baccarat")}
           <ScoreboardBaccarat on:close={() => navigateToRoute('herramientas')} />
         {:else if $currentRouteStore === "herramientas" || $currentRouteStore === "otros/herramientas" || $currentRouteStore === "/herramientas"}
           <HerramientasView />
