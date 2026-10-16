@@ -29,6 +29,7 @@
   import ProfileView from "./components/ProfileView.svelte";
   import ComponentsView from "./components/ComponentsView.svelte";
   import HerramientasView from "./views/HerramientasView.svelte";
+  import ScoreboardBaccarat from "./components/ScoreboardBaccarat.svelte";
 
   // Import CECOM Views
   import LibroView from "./views/cecom/LibroView.svelte";
@@ -456,6 +457,7 @@
     "cecom/ia-mesas",
     "ia-mesas",
     "herramientas",
+    "herramientas/scoreboard-baccarat",
     "otros/herramientas",
   ];
 
@@ -464,7 +466,7 @@
   function isBuiltInTab(route) {
     const clean = String(route || '').split('?')[0].trim().replace(/^\//, '');
     if (clean.startsWith('cecom/libro/') || clean.startsWith('libro/')) return true;
-    if (clean === 'herramientas' || clean === 'otros/herramientas') return true;
+    if (clean.startsWith('herramientas') || clean === 'otros/herramientas') return true;
     return builtInTabs.includes(clean) || builtInTabs.includes(route);
   }
 
@@ -473,7 +475,9 @@
   }
 
   function getTabTitle(tab) {
-    if (tab === "herramientas" || tab === "otros/herramientas" || tab === "/herramientas") return "HERRAMIENTAS";
+    const clean = String(tab || '').trim().replace(/^\//, '');
+    if (clean === "herramientas/scoreboard-baccarat" || clean.endsWith("scoreboard-baccarat")) return "SCOREBOARD BACCARAD";
+    if (clean === "herramientas" || clean === "otros/herramientas") return "HERRAMIENTAS";
     if (String(tab || '').startsWith("cecom/libro/") || String(tab || '').startsWith("libro/")) return "Libro";
     if (tab === "dashboard") return "RRHH";
     if (tab === "datatable") return "Tabla de Datos y Modal (Data Table)";
@@ -953,7 +957,7 @@
                 {/if}
               {/if}
 
-              {#if !isBuiltInTab($currentRouteStore) && $currentRouteStore !== 'herramientas' && $currentRouteStore !== 'otros/herramientas' && $currentRoutePermissionsStore.canAdd}
+              {#if !isBuiltInTab($currentRouteStore) && !$currentRouteStore.startsWith('herramientas') && $currentRouteStore !== 'otros/herramientas' && $currentRoutePermissionsStore.canAdd}
                 <button
                   on:click={openCreateModalUI}
                   type="button"
@@ -1217,6 +1221,8 @@
             on:openModal={openCreateModalUI}
             on:saveInline={handleSaveInline}
           />
+        {:else if $currentRouteStore === "herramientas/scoreboard-baccarat" || $currentRouteStore === "/herramientas/scoreboard-baccarat"}
+          <ScoreboardBaccarat on:close={() => navigateToRoute('herramientas')} />
         {:else if $currentRouteStore === "herramientas" || $currentRouteStore === "otros/herramientas" || $currentRouteStore === "/herramientas"}
           <HerramientasView />
         {:else}

@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import ScoreboardBaccarat from '../components/ScoreboardBaccarat.svelte';
+  import { navigateToRoute } from '../controllers/router.store.js';
 
   // State
   let searchQuery = '';
@@ -9,10 +9,6 @@
   let currentPage = 1;
   let pageSize = 10;
   let selectedIds = new Set();
-
-  // Modal / Game View state
-  let isGameOpen = false;
-  let activeGameId = null;
 
   // Single record requested by user: "Scoreboard Baccarad"
   const tools = [
@@ -85,14 +81,8 @@
     selectedIds = new Set(selectedIds);
   }
 
-  function openGame(toolId) {
-    activeGameId = toolId;
-    isGameOpen = true;
-  }
-
-  function closeGame() {
-    isGameOpen = false;
-    activeGameId = null;
+  function openGame() {
+    navigateToRoute('herramientas/scoreboard-baccarat');
   }
 </script>
 
@@ -292,67 +282,11 @@
     </div>
   </div>
 
-  <!-- MODAL / FULL INTERACTIVE SCOREBOARD BACCARAD -->
-  {#if isGameOpen}
-    <div
-      class="sb-modal-backdrop"
-      on:click|self={closeGame}
-    >
-      <div class="sb-modal-window">
-        <ScoreboardBaccarat
-          isModal={true}
-          on:close={closeGame}
-        />
-      </div>
-    </div>
-  {/if}
 </div>
 
 <style>
   .herramientas-page-container {
     width: 100%;
     margin-bottom: 24px;
-  }
-
-  .sb-modal-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(8px);
-    z-index: 1000000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    animation: sbFadeIn 0.2s ease-out;
-  }
-
-  .sb-modal-window {
-    width: 100%;
-    max-width: 1280px;
-    max-height: 92vh;
-    overflow-y: auto;
-    border-radius: 16px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-    animation: sbScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  @keyframes sbFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  @keyframes sbScaleIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
   }
 </style>

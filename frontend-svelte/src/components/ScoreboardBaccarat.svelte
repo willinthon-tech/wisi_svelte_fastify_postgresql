@@ -494,16 +494,14 @@
         <span>{isFullscreen ? '⤦' : '⛶'}</span> {isFullscreen ? 'Salir' : 'Pantalla Completa'}
       </button>
 
-      {#if isModal}
-        <button
-          type="button"
-          class="sb-btn sb-btn-close"
-          on:click={handleClose}
-          title="Cerrar Scoreboard y volver a Herramientas"
-        >
-          ✕ Cerrar
-        </button>
-      {/if}
+      <button
+        type="button"
+        class="sb-btn sb-btn-close"
+        on:click={handleClose}
+        title="Volver a Herramientas"
+      >
+        ✕ Volver a Herramientas
+      </button>
     </div>
   </header>
 
