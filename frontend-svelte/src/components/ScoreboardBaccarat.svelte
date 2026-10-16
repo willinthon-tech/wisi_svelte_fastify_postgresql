@@ -1,6 +1,6 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
-  import { selectedSalaStore, currentUserStore, userSalasStore } from '../controllers/auth.store.js';
+  import { selectedSalaStore, userSalasStore } from '../controllers/auth.store.js';
   import { masterSalasStore, masterMesasStore } from '../controllers/master.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
 
@@ -60,7 +60,7 @@
 
   $: currentSalaName = currentSalaObj?.nombre || currentSalaObj?.name || '';
   $: currentMesaName = currentMesaObj?.nombre || (currentMesaId ? `Mesa #${currentMesaId}` : 'Mesa 01');
-  $: storageKey = `wisi_baccarat_shoe_v2_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
+  $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
 
   let lastLoadedStorageKey = null;
   $: if (storageKey && storageKey !== lastLoadedStorageKey) {
@@ -68,7 +68,7 @@
     loadSavedShoe();
   }
 
-  // Audio Context for subtle casino sound effects (synthesized offline)
+  // Audio Context for tactile casino keypad sounds
   let audioCtx = null;
   let soundEnabled = true;
 
@@ -93,64 +93,77 @@
     }
     try {
       const now = audioCtx.currentTime;
-      if (type === 'deal') {
+      if (type === 'click') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(450, now);
+        osc.frequency.exponentialRampToValueAtTime(250, now + 0.04);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      } else if (type === 'win') {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(150, now + 0.08);
+        osc.frequency.setValueAtTime(587.33, now); // D5
+        osc.frequency.setValueAtTime(880, now + 0.08); // A5
         gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.26);
+      } else if (type === 'undo') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(160, now + 0.08);
+        gain.gain.setValueAtTime(0.1, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start(now);
         osc.stop(now + 0.09);
-      } else if (type === 'win') {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now); // C5
-        osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
-        osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now);
-        osc.stop(now + 0.36);
       }
-    } catch (e) {
-      // Audio error silently ignored
-    }
+    } catch (e) {}
   }
 
-  // Shoe state
+  // Shoe State
   let shoeNumber = 1;
-  let history = []; // array of records: { winner: 'BANCA'|'PUNTO'|'EMPATE', scoreB, scoreP, natural, bPair, pPair, bancaCards, puntoCards }
-  
-  // Current Live Hand State
-  let puntoCards = [];
-  let bancaCards = [];
-  let puntoScore = 0;
-  let bancaScore = 0;
-  let currentWinner = null;
-  let isDealing = false;
-  let lastVerdict = "";
-  let isNatural = false;
+  let history = []; // [{ id, winner: 'PUNTO'|'BANCA'|'EMPATE', bPair, pPair, natural, special, time }]
 
-  // Manual Quick Input Form State
-  let manualWinner = "BANCA";
-  let manualScoreB = 7;
-  let manualScoreP = 5;
-  let manualBPair = false;
-  let manualPPair = false;
-  let manualNatural = false;
+  // Keypad Staging Modifiers
+  let activePPair = false;
+  let activeBPair = false;
+  let activeSpecial = false;
+  let activeWin = false;
 
-  // Roadmaps grid dimensions
+  // Selected Hand for Editing
+  let selectedHandIndex = null;
+  $: selectedHand = selectedHandIndex !== null && history[selectedHandIndex] ? history[selectedHandIndex] : null;
+
+  // Notification message
+  let feedbackMessage = "";
+  let feedbackTimer = null;
+
+  function showFeedback(msg) {
+    feedbackMessage = msg;
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => {
+      feedbackMessage = "";
+    }, 3000);
+  }
+
+  // Grid dimensions
   const BEAD_ROWS = 6;
-  const BEAD_COLS = 20;
+  const BEAD_COLS = 22;
   const BIG_ROWS = 6;
-  const BIG_COLS = 30;
+  const BIG_COLS = 34;
 
   function loadSavedShoe() {
     try {
@@ -168,7 +181,15 @@
     }
   }
 
-  // Load saved shoe from localStorage if available
+  function saveShoe() {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        shoeNumber,
+        history
+      }));
+    } catch (e) {}
+  }
+
   onMount(() => {
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
@@ -188,16 +209,7 @@
     loadSavedShoe();
   });
 
-  function saveShoe() {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify({
-        shoeNumber,
-        history
-      }));
-    } catch (e) {}
-  }
-
-  // Stats derivation
+  // Derived Statistics
   $: totalHands = history.length;
   $: countBanca = history.filter(h => h.winner === 'BANCA').length;
   $: countPunto = history.filter(h => h.winner === 'PUNTO').length;
@@ -205,219 +217,140 @@
   $: countBPair = history.filter(h => h.bPair).length;
   $: countPPair = history.filter(h => h.pPair).length;
   $: countNatural = history.filter(h => h.natural).length;
+  $: countSpecial = history.filter(h => h.special).length;
 
   $: pctBanca = totalHands > 0 ? ((countBanca / totalHands) * 100).toFixed(1) : '0.0';
   $: pctPunto = totalHands > 0 ? ((countPunto / totalHands) * 100).toFixed(1) : '0.0';
   $: pctEmpate = totalHands > 0 ? ((countEmpate / totalHands) * 100).toFixed(1) : '0.0';
 
-  // --------------------------------------------------------------------------
-  // BACCARAT CARD DECK & ENGINE
-  // --------------------------------------------------------------------------
-  const SUITS = [
-    { symbol: '♠', name: 'spades', color: '#1e293b' },
-    { symbol: '♥', name: 'hearts', color: '#dc2626' },
-    { symbol: '♦', name: 'diamonds', color: '#dc2626' },
-    { symbol: '♣', name: 'clubs', color: '#1e293b' }
-  ];
-
-  const RANKS = [
-    { rank: 'A', value: 1 },
-    { rank: '2', value: 2 },
-    { rank: '3', value: 3 },
-    { rank: '4', value: 4 },
-    { rank: '5', value: 5 },
-    { rank: '6', value: 6 },
-    { rank: '7', value: 7 },
-    { rank: '8', value: 8 },
-    { rank: '9', value: 9 },
-    { rank: '10', value: 0 },
-    { rank: 'J', value: 0 },
-    { rank: 'Q', value: 0 },
-    { rank: 'K', value: 0 }
-  ];
-
-  function drawCard() {
-    const suit = SUITS[Math.floor(Math.random() * SUITS.length)];
-    const r = RANKS[Math.floor(Math.random() * RANKS.length)];
-    return {
-      rank: r.rank,
-      value: r.value,
-      suit: suit.symbol,
-      suitColor: suit.color,
-      label: `${r.rank}${suit.symbol}`
-    };
+  // Keypad Actions
+  function togglePPair() {
+    playSound('click');
+    activePPair = !activePPair;
   }
 
-  function calcBaccaratTotal(cards) {
-    const sum = cards.reduce((acc, c) => acc + c.value, 0);
-    return sum % 10;
+  function toggleBPair() {
+    playSound('click');
+    activeBPair = !activeBPair;
   }
 
-  // Live Deal with Official International Baccarat Rules
-  async function dealLiveHand() {
-    if (isDealing) return;
-    isDealing = true;
-    currentWinner = null;
-    lastVerdict = "Repartiendo cartas...";
-    playSound('deal');
-
-    // 1. Initial 2 cards for Punto and Banca
-    puntoCards = [drawCard(), drawCard()];
-    bancaCards = [drawCard(), drawCard()];
-    puntoScore = calcBaccaratTotal(puntoCards);
-    bancaScore = calcBaccaratTotal(bancaCards);
-
-    // Check pairs on first 2 cards
-    const pPair = puntoCards[0].rank === puntoCards[1].rank;
-    const bPair = bancaCards[0].rank === bancaCards[1].rank;
-
-    await new Promise(r => setTimeout(r, 400));
-    playSound('deal');
-
-    // 2. Check for Natural (8 or 9)
-    if (puntoScore >= 8 || bancaScore >= 8) {
-      isNatural = true;
-      finalizeHand(puntoCards, bancaCards, pPair, bPair, true);
-      isDealing = false;
-      return;
-    }
-
-    isNatural = false;
-
-    // 3. Player's Third Card Rule
-    let p3 = null;
-    if (puntoScore <= 5) {
-      lastVerdict = "Punto pide 3ra carta...";
-      await new Promise(r => setTimeout(r, 450));
-      p3 = drawCard();
-      puntoCards = [...puntoCards, p3];
-      puntoScore = calcBaccaratTotal(puntoCards);
-      playSound('deal');
-    }
-
-    // 4. Banker's Third Card Rule
-    let bDraws = false;
-    if (p3 === null) {
-      // Player stood on 6 or 7
-      if (bancaScore <= 5) bDraws = true;
-    } else {
-      // Player drew a 3rd card
-      const p3Val = p3.value;
-      if (bancaScore <= 2) {
-        bDraws = true;
-      } else if (bancaScore === 3 && p3Val !== 8) {
-        bDraws = true;
-      } else if (bancaScore === 4 && [2, 3, 4, 5, 6, 7].includes(p3Val)) {
-        bDraws = true;
-      } else if (bancaScore === 5 && [4, 5, 6, 7].includes(p3Val)) {
-        bDraws = true;
-      } else if (bancaScore === 6 && [6, 7].includes(p3Val)) {
-        bDraws = true;
-      }
-    }
-
-    if (bDraws) {
-      lastVerdict = "Banca pide 3ra carta...";
-      await new Promise(r => setTimeout(r, 450));
-      const b3 = drawCard();
-      bancaCards = [...bancaCards, b3];
-      bancaScore = calcBaccaratTotal(bancaCards);
-      playSound('deal');
-    }
-
-    await new Promise(r => setTimeout(r, 300));
-    finalizeHand(puntoCards, bancaCards, pPair, bPair, false);
-    isDealing = false;
+  function toggleSpecial() {
+    playSound('click');
+    activeSpecial = !activeSpecial;
   }
 
-  function finalizeHand(pCards, bCards, pPair, bPair, natural) {
-    const pScore = calcBaccaratTotal(pCards);
-    const bScore = calcBaccaratTotal(bCards);
-    let win = 'EMPATE';
-    if (bScore > pScore) win = 'BANCA';
-    else if (pScore > bScore) win = 'PUNTO';
+  function toggleWin() {
+    playSound('click');
+    activeWin = !activeWin;
+  }
 
-    currentWinner = win;
+  function recordOutcome(winner) {
     playSound('win');
-
-    if (win === 'BANCA') {
-      lastVerdict = `🏆 BANCA GANA (${bScore} a ${pScore})${natural ? ' ★ NATURAL' : ''}`;
-    } else if (win === 'PUNTO') {
-      lastVerdict = `🏆 PUNTO GANA (${pScore} a ${bScore})${natural ? ' ★ NATURAL' : ''}`;
-    } else {
-      lastVerdict = `🤝 EMPATE (TIE) (${bScore} a ${pScore})`;
-    }
-
-    const record = {
-      id: history.length + 1,
-      winner: win,
-      scoreB: bScore,
-      scoreP: pScore,
-      natural,
-      bPair,
-      pPair,
-      puntoCards: [...pCards],
-      bancaCards: [...bCards],
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    };
-
-    history = [...history, record];
-    saveShoe();
-  }
-
-  // Manual Quick Input
-  function addManualResult(winner) {
-    const record = {
+    const newRecord = {
       id: history.length + 1,
       winner,
-      scoreB: manualScoreB,
-      scoreP: manualScoreP,
-      natural: manualNatural,
-      bPair: manualBPair,
-      pPair: manualPPair,
-      puntoCards: [],
-      bancaCards: [],
+      bPair: activeBPair,
+      pPair: activePPair,
+      natural: activeWin,
+      special: activeSpecial,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     };
-    history = [...history, record];
-    currentWinner = winner;
-    lastVerdict = `${winner === 'BANCA' ? '🔴 BANCA' : winner === 'PUNTO' ? '🔵 PUNTO' : '🟢 EMPATE'} registrado (${manualScoreB} - ${manualScoreP})`;
-    playSound('win');
+
+    history = [...history, newRecord];
     saveShoe();
 
-    // Reset manual options
-    manualBPair = false;
-    manualPPair = false;
-    manualNatural = false;
+    const wLabel = winner === 'BANCA' ? '🔴 BANCA' : winner === 'PUNTO' ? '🔵 PUNTO' : '🟢 EMPATE';
+    const pairLabel = (activeBPair && activePPair) ? ' [Ambos Pares]' : activeBPair ? ' [B.Pair]' : activePPair ? ' [P.Pair]' : '';
+    showFeedback(`Mano #${newRecord.id}: ${wLabel}${pairLabel} anotada`);
+
+    // Reset modifier pills for the next hand
+    activePPair = false;
+    activeBPair = false;
+    activeSpecial = false;
+    activeWin = false;
   }
 
   function undoLast() {
     if (history.length === 0) return;
+    playSound('undo');
+    const lastId = history[history.length - 1]?.id || history.length;
     history = history.slice(0, -1);
-    currentWinner = history.length > 0 ? history[history.length - 1].winner : null;
-    lastVerdict = "Última mano deshecha";
+    if (selectedHandIndex >= history.length) {
+      selectedHandIndex = null;
+    }
     saveShoe();
+    showFeedback(`Mano #${lastId} deshecha`);
   }
 
   function resetShoe() {
     if (history.length > 0) {
-      if (!confirm(`¿Deseas reiniciar el Zapato #${shoeNumber} y comenzar uno nuevo?`)) return;
+      if (!confirm(`¿Deseas reiniciar el Zapato #${shoeNumber} y comenzar un nuevo zapato en blanco?`)) return;
     }
+    playSound('click');
     history = [];
-    puntoCards = [];
-    bancaCards = [];
-    puntoScore = 0;
-    bancaScore = 0;
-    currentWinner = null;
-    lastVerdict = "Nuevo zapato iniciado";
+    selectedHandIndex = null;
     shoeNumber += 1;
+    saveShoe();
+    showFeedback(`Zapato #${shoeNumber} iniciado`);
+  }
+
+  // Hand Selection & In-Place Editing
+  function selectHand(idx) {
+    playSound('click');
+    if (idx === null || idx === undefined || idx < 0 || idx >= history.length) {
+      selectedHandIndex = null;
+      return;
+    }
+    if (selectedHandIndex === idx) {
+      selectedHandIndex = null; // toggle off
+    } else {
+      selectedHandIndex = idx;
+    }
+  }
+
+  function updateSelectedWinner(newWinner) {
+    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    playSound('win');
+    history[selectedHandIndex].winner = newWinner;
+    history = [...history];
+    saveShoe();
+    showFeedback(`Mano #${history[selectedHandIndex].id} actualizada a ${newWinner}`);
+  }
+
+  function toggleSelectedMod(field) {
+    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    playSound('click');
+    history[selectedHandIndex][field] = !history[selectedHandIndex][field];
+    history = [...history];
     saveShoe();
   }
 
-  // --------------------------------------------------------------------------
+  function deleteSelectedHand() {
+    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    const deletedId = history[selectedHandIndex].id;
+    if (!confirm(`¿Eliminar la Mano #${deletedId}?`)) return;
+    playSound('undo');
+    history = history.filter((_, idx) => idx !== selectedHandIndex).map((h, i) => ({ ...h, id: i + 1 }));
+    selectedHandIndex = null;
+    saveShoe();
+    showFeedback(`Mano #${deletedId} eliminada`);
+  }
+
+  function prevHand() {
+    if (selectedHandIndex > 0) {
+      playSound('click');
+      selectedHandIndex--;
+    }
+  }
+
+  function nextHand() {
+    if (selectedHandIndex < history.length - 1) {
+      playSound('click');
+      selectedHandIndex++;
+    }
+  }
+
   // ROADMAP GENERATION (BEAD PLATE & BIG ROAD)
-  // --------------------------------------------------------------------------
-  // Bead Plate: fills 6 rows vertically per column, then moves right
   $: beadGrid = (() => {
     const totalCols = Math.max(BEAD_COLS, Math.ceil(history.length / BEAD_ROWS) + 2);
     const grid = Array.from({ length: BEAD_ROWS }, () => Array(totalCols).fill(null));
@@ -425,15 +358,14 @@
       const col = Math.floor(idx / BEAD_ROWS);
       const row = idx % BEAD_ROWS;
       if (col < totalCols) {
-        grid[row][col] = h;
+        grid[row][col] = { ...h, historyIndex: idx };
       }
     });
     return { grid, totalCols };
   })();
 
-  // Big Road: streaks go down, turn right on collision / bottom, ties are green slash
   $: bigRoadGrid = (() => {
-    const totalCols = Math.max(BIG_COLS, 30);
+    const totalCols = Math.max(BIG_COLS, 32);
     const grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
 
     let col = 0;
@@ -441,59 +373,53 @@
     let prevWinner = null;
     let lastPlaced = null;
 
-    for (const h of history) {
+    history.forEach((h, idx) => {
       if (h.winner === 'EMPATE') {
-        // Tie attaches to the last outcome if exists
         if (lastPlaced) {
           lastPlaced.tieCount = (lastPlaced.tieCount || 0) + 1;
         } else {
-          // Starting with tie: put green mark at 0,0
-          grid[0][0] = { ...h, isTieOnly: true, tieCount: 1 };
+          grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 1 };
           lastPlaced = grid[0][0];
         }
-        continue;
+        return;
       }
 
       if (!prevWinner) {
-        // First non-tie
-        grid[0][0] = { ...h, tieCount: 0 };
+        grid[0][0] = { ...h, historyIndex: idx, tieCount: 0 };
         lastPlaced = grid[0][0];
         prevWinner = h.winner;
         row = 1;
         col = 0;
       } else if (h.winner === prevWinner) {
-        // Same winner: go down or turn right if blocked/bottom
         if (row < BIG_ROWS && !grid[row][col]) {
-          grid[row][col] = { ...h, tieCount: 0 };
+          grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
           lastPlaced = grid[row][col];
           row++;
         } else {
-          // Dragon tail: turn right
           let dragonCol = col + 1;
           const dragonRow = row >= BIG_ROWS ? BIG_ROWS - 1 : row - 1;
           while (dragonCol < totalCols && grid[dragonRow][dragonCol]) {
             dragonCol++;
           }
           if (dragonCol < totalCols) {
-            grid[dragonRow][dragonCol] = { ...h, tieCount: 0 };
+            grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, tieCount: 0 };
             lastPlaced = grid[dragonRow][dragonCol];
           }
         }
       } else {
-        // Winner changed: find next available column at row 0
         col++;
         while (col < totalCols && grid[0][col]) {
           col++;
         }
         row = 0;
         if (col < totalCols) {
-          grid[0][col] = { ...h, tieCount: 0 };
+          grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
           lastPlaced = grid[0][col];
           row = 1;
         }
         prevWinner = h.winner;
       }
-    }
+    });
 
     return { grid, totalCols };
   })();
@@ -525,6 +451,10 @@
 
   function handleKeydown(e) {
     if (e.key === 'Escape') {
+      if (selectedHandIndex !== null) {
+        selectedHandIndex = null;
+        return;
+      }
       if (isFullscreen && document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {});
       } else {
@@ -545,31 +475,39 @@
   <header class="sb-header">
     <div class="sb-header-left">
       <div class="sb-title-badge">
-        <span class="sb-icon">🎴</span>
         <div>
           <h2 class="sb-title">SCOREBOARD BACCARAT</h2>
-          <span class="sb-subtitle">PUNTO Y BANCA • CASINO LIVE AUDIT</span>
+          <span class="sb-subtitle">PUNTO Y BANCA • TECLADO CRUPIER Y AUDITORÍA</span>
         </div>
       </div>
+
       {#if currentSalaName}
-        <div class="sb-shoe-pill" style="border-color: #3b82f6; background: rgba(37, 99, 235, 0.2);">
-          <span class="pill-label" style="color: #93c5fd;">SALA</span>
-          <span class="pill-value" style="color: #ffffff;">{currentSalaName}</span>
+        <div class="sb-shoe-pill sala-pill">
+          <span class="pill-label">SALA</span>
+          <span class="pill-value">{currentSalaName}</span>
         </div>
       {/if}
+
       {#if currentMesaName}
-        <div class="sb-shoe-pill" style="border-color: #10b981; background: rgba(16, 185, 129, 0.2);">
-          <span class="pill-label" style="color: #6ee7b7;">MESA</span>
-          <span class="pill-value" style="color: #ffffff;">{currentMesaName}</span>
+        <div class="sb-shoe-pill mesa-pill">
+          <span class="pill-label">MESA</span>
+          <span class="pill-value">{currentMesaName}</span>
         </div>
       {/if}
+
       <div class="sb-shoe-pill">
         <span class="pill-label">ZAPATO</span>
         <span class="pill-value">#{shoeNumber}</span>
         <span class="pill-sep">•</span>
-        <span class="pill-label">MANO</span>
+        <span class="pill-label">MANOS</span>
         <span class="pill-value">#{totalHands}</span>
       </div>
+
+      {#if feedbackMessage}
+        <div class="feedback-toast">
+          {feedbackMessage}
+        </div>
+      {/if}
     </div>
 
     <div class="sb-header-right">
@@ -587,16 +525,16 @@
         class="sb-btn sb-btn-warning"
         on:click={undoLast}
         disabled={history.length === 0}
-        title="Deshacer última mano registrada"
+        title="Deshacer la última mano registrada (O presiona el botón ← del teclado)"
       >
-        <span>↶</span> Deshacer
+        <span>←</span> Deshacer
       </button>
 
       <button
         type="button"
         class="sb-btn sb-btn-danger"
         on:click={resetShoe}
-        title="Reiniciar zapato actual y limpiar marcador"
+        title="Limpiar marcador e iniciar un nuevo zapato"
       >
         <span>🔄</span> Nuevo Zapato
       </button>
@@ -605,7 +543,7 @@
         type="button"
         class="sb-btn sb-btn-secondary"
         on:click={toggleFullscreen}
-        title="Modo Pantalla Completa (Ideal para monitores de sala/mesa)"
+        title="Pantalla Completa para monitor de mesa"
       >
         <span>{isFullscreen ? '⤦' : '⛶'}</span> {isFullscreen ? 'Salir' : 'Pantalla Completa'}
       </button>
@@ -621,194 +559,325 @@
     </div>
   </header>
 
-  <!-- LIVE CASINO STATISTICS STRIP -->
-  <section class="sb-stats-strip">
-    <div class="stat-card">
-      <div class="stat-lbl">TOTAL MANOS</div>
-      <div class="stat-num">{totalHands}</div>
-    </div>
-
-    <div class="stat-card punto-card">
-      <div class="stat-lbl">PUNTO (PLAYER)</div>
-      <div class="stat-num">{countPunto}</div>
-      <div class="stat-sub">{pctPunto}%</div>
-    </div>
-
-    <div class="stat-card banca-card">
-      <div class="stat-lbl">BANCA (BANKER)</div>
-      <div class="stat-num">{countBanca}</div>
-      <div class="stat-sub">{pctBanca}%</div>
-    </div>
-
-    <div class="stat-card empate-card">
-      <div class="stat-lbl">EMPATE (TIE)</div>
-      <div class="stat-num">{countEmpate}</div>
-      <div class="stat-sub">{pctEmpate}%</div>
-    </div>
-
-    <div class="stat-card pairs-card">
-      <div class="stat-lbl">PARES</div>
-      <div class="stat-pair-row">
-        <span class="pair-tag punto">P. Par: <b>{countPPair}</b></span>
-        <span class="pair-tag banca">B. Par: <b>{countBPair}</b></span>
+  <!-- TOP STATS BEAD COUNTERS STRIP (Exact Casino Spec) -->
+  <section class="casino-bead-counters-strip">
+    <div class="counters-scroll">
+      <!-- Total manos # -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-gray">#</div>
+        <div class="counter-digit">{totalHands}</div>
       </div>
-    </div>
 
-    <div class="stat-card natural-card">
-      <div class="stat-lbl">NATURALES (8/9)</div>
-      <div class="stat-num">{countNatural}</div>
-      <div class="stat-sub">{totalHands > 0 ? ((countNatural / totalHands) * 100).toFixed(0) : 0}%</div>
+      <!-- Banker B -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-red">B</div>
+        <div class="counter-digit">{countBanca}</div>
+      </div>
+
+      <!-- Player P -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-blue">P</div>
+        <div class="counter-digit">{countPunto}</div>
+      </div>
+
+      <!-- Tie T -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-green">T</div>
+        <div class="counter-digit">{countEmpate}</div>
+      </div>
+
+      <!-- Natural N -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-orange">N</div>
+        <div class="counter-digit">{countNatural}</div>
+      </div>
+
+      <!-- Banker Pair (White circle with top-left red dot) -->
+      <div class="counter-item" title="Parejas de Banca (B.Pair)">
+        <div class="bead-circle-badge bead-white">
+          <span class="bead-dot dot-tl red-dot"></span>
+        </div>
+        <div class="counter-digit">{countBPair}</div>
+      </div>
+
+      <!-- Player Pair (White circle with bottom-right blue dot) -->
+      <div class="counter-item" title="Parejas de Punto (P.Pair)">
+        <div class="bead-circle-badge bead-white">
+          <span class="bead-dot dot-br blue-dot"></span>
+        </div>
+        <div class="counter-digit">{countPPair}</div>
+      </div>
+
+      <!-- Extra side bets -->
+      <div class="counter-item" title="Lucky 6 / Side bets">
+        <div class="bead-circle-badge bead-gold">L6</div>
+        <div class="counter-digit">{countSpecial}</div>
+      </div>
+
+      <div class="counter-item" title="Super 6">
+        <div class="bead-circle-badge bead-darkgreen">S6</div>
+        <div class="counter-digit">0</div>
+      </div>
+
+      <div class="counter-item" title="Banker 6">
+        <div class="bead-circle-badge bead-darkred">B6</div>
+        <div class="counter-digit">0</div>
+      </div>
+
+      <div class="counter-item" title="Lucky 7">
+        <div class="bead-circle-badge bead-lightblue">L7</div>
+        <div class="counter-digit">0</div>
+      </div>
+
+      <div class="counter-item" title="Super 7">
+        <div class="bead-circle-badge bead-navy">S7</div>
+        <div class="counter-digit">0</div>
+      </div>
+
+      <div class="counter-item" title="Banker 7">
+        <div class="bead-circle-badge bead-gold-flame">B7</div>
+        <div class="counter-digit">0</div>
+      </div>
+
+      <div class="counter-item" title="Player 8">
+        <div class="bead-circle-badge bead-orange-flame">P8</div>
+        <div class="counter-digit">0</div>
+      </div>
+
+      <!-- Summary percentages -->
+      <div class="counter-pct-box">
+        <span class="pct-tag b">B: {pctBanca}%</span>
+        <span class="pct-tag p">P: {pctPunto}%</span>
+        <span class="pct-tag t">T: {pctEmpate}%</span>
+      </div>
     </div>
   </section>
 
-  <!-- MAIN PLAYING FELT TABLE & DEALER SECTION -->
-  <main class="sb-table-felt">
-    <!-- Punto vs Banca Live Card Arena -->
-    <div class="felt-arena">
-      <!-- LADO BANCA (RED) -->
-      <div class="felt-side banca-side" class:winner-glow={currentWinner === 'BANCA'}>
-        <div class="side-badge-header">
-          <span class="side-title">🔴 BANCA (BANKER)</span>
-          <span class="side-score-circle" class:active-score={bancaCards.length > 0}>
-            {bancaCards.length > 0 ? bancaScore : '—'}
-          </span>
-        </div>
-
-        <div class="cards-holder">
-          {#if bancaCards.length > 0}
-            {#each bancaCards as c, i}
-              <div class="casino-card" style="--card-color: {c.suitColor};">
-                <span class="card-rank">{c.rank}</span>
-                <span class="card-suit">{c.suit}</span>
-                <span class="card-corner-bottom">{c.rank}</span>
-              </div>
-            {/each}
-          {:else}
-            <div class="card-placeholder">Carta 1</div>
-            <div class="card-placeholder">Carta 2</div>
-            <div class="card-placeholder optional">Carta 3</div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- ARENA CENTER: VS & DEAL CONTROLS -->
-      <div class="felt-center">
-        <div class="vs-circle" class:banca-win={currentWinner === 'BANCA'} class:punto-win={currentWinner === 'PUNTO'} class:tie-win={currentWinner === 'EMPATE'}>
-          {#if currentWinner === 'BANCA'}
-            <span>B</span>
-          {:else if currentWinner === 'PUNTO'}
-            <span>P</span>
-          {:else if currentWinner === 'EMPATE'}
-            <span>T</span>
-          {:else}
-            <span>VS</span>
-          {/if}
-        </div>
+  <!-- PROFESSIONAL CROUPIER ARCADE KEYPAD (Exact Reference Alignment) -->
+  <section class="croupier-keypad-panel">
+    <div class="keypad-grid-4col">
+      <!-- COLUMN 1: P.PAIR + P BUTTON -->
+      <div class="keypad-column">
+        <button
+          type="button"
+          class="keypad-pill pill-ppair"
+          class:active={activePPair}
+          on:click={togglePPair}
+          title="Activar Pareja de Punto (P.Pair)"
+        >
+          P.Pair
+        </button>
 
         <button
           type="button"
-          class="btn-deal-action"
-          on:click={dealLiveHand}
-          disabled={isDealing}
+          class="keypad-btn-circle btn-punto"
+          on:click={() => recordOutcome('PUNTO')}
+          title="Registrar victoria de PUNTO (Player)"
         >
-          {#if isDealing}
-            <span class="spin-icon">⏳</span> Repartiendo...
-          {:else}
-            <span>🎴</span> REPARTIR MANO
+          {#if activeBPair}
+            <span class="badge-corner-tl" title="B.Pair activo"></span>
           {/if}
-        </button>
-
-        {#if lastVerdict}
-          <div class="verdict-banner" class:banca-b={currentWinner === 'BANCA'} class:punto-b={currentWinner === 'PUNTO'} class:empate-b={currentWinner === 'EMPATE'}>
-            {lastVerdict}
+          {#if activePPair}
+            <span class="badge-corner-br" title="P.Pair activo"></span>
+          {/if}
+          <div class="btn-inner-gloss">
+            <span class="btn-letter">P</span>
           </div>
-        {/if}
+        </button>
+        <span class="btn-caption punto-caption">PUNTO</span>
       </div>
 
-      <!-- LADO PUNTO (BLUE) -->
-      <div class="felt-side punto-side" class:winner-glow={currentWinner === 'PUNTO'}>
-        <div class="side-badge-header">
-          <span class="side-title">🔵 PUNTO (PLAYER)</span>
-          <span class="side-score-circle" class:active-score={puntoCards.length > 0}>
-            {puntoCards.length > 0 ? puntoScore : '—'}
-          </span>
-        </div>
+      <!-- COLUMN 2: B.PAIR + B BUTTON -->
+      <div class="keypad-column">
+        <button
+          type="button"
+          class="keypad-pill pill-bpair"
+          class:active={activeBPair}
+          on:click={toggleBPair}
+          title="Activar Pareja de Banca (B.Pair)"
+        >
+          B.Pair
+        </button>
 
-        <div class="cards-holder">
-          {#if puntoCards.length > 0}
-            {#each puntoCards as c, i}
-              <div class="casino-card" style="--card-color: {c.suitColor};">
-                <span class="card-rank">{c.rank}</span>
-                <span class="card-suit">{c.suit}</span>
-                <span class="card-corner-bottom">{c.rank}</span>
-              </div>
-            {/each}
-          {:else}
-            <div class="card-placeholder">Carta 1</div>
-            <div class="card-placeholder">Carta 2</div>
-            <div class="card-placeholder optional">Carta 3</div>
+        <button
+          type="button"
+          class="keypad-btn-circle btn-banca"
+          on:click={() => recordOutcome('BANCA')}
+          title="Registrar victoria de BANCA (Banker)"
+        >
+          {#if activeBPair}
+            <span class="badge-corner-tl" title="B.Pair activo"></span>
           {/if}
+          {#if activePPair}
+            <span class="badge-corner-br" title="P.Pair activo"></span>
+          {/if}
+          <div class="btn-inner-gloss">
+            <span class="btn-letter">B</span>
+          </div>
+        </button>
+        <span class="btn-caption banca-caption">BANCA</span>
+      </div>
+
+      <!-- COLUMN 3: SPECIAL + T BUTTON -->
+      <div class="keypad-column">
+        <button
+          type="button"
+          class="keypad-pill pill-special"
+          class:active={activeSpecial}
+          on:click={toggleSpecial}
+          title="Activar apuesta especial / Lucky 6"
+        >
+          Special
+        </button>
+
+        <button
+          type="button"
+          class="keypad-btn-circle btn-tie"
+          on:click={() => recordOutcome('EMPATE')}
+          title="Registrar EMPATE (Tie)"
+        >
+          {#if activeBPair}
+            <span class="badge-corner-tl" title="B.Pair activo"></span>
+          {/if}
+          {#if activePPair}
+            <span class="badge-corner-br" title="P.Pair activo"></span>
+          {/if}
+          <div class="btn-inner-gloss">
+            <span class="btn-letter">T</span>
+          </div>
+        </button>
+        <span class="btn-caption tie-caption">EMPATE</span>
+      </div>
+
+      <!-- COLUMN 4: WIN / NATURAL + UNDO BUTTON -->
+      <div class="keypad-column">
+        <button
+          type="button"
+          class="keypad-pill pill-win"
+          class:active={activeWin}
+          on:click={toggleWin}
+          title="Activar Victoria Natural (8 ó 9)"
+        >
+          Win
+        </button>
+
+        <button
+          type="button"
+          class="keypad-btn-circle btn-undo"
+          on:click={undoLast}
+          disabled={history.length === 0}
+          title="Retroceder / Deshacer última mano registrada"
+        >
+          <div class="btn-inner-gloss">
+            <span class="btn-letter">←</span>
+          </div>
+        </button>
+        <span class="btn-caption undo-caption">RETROCEDER</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- INLINE CELL EDIT TOOLBAR (Active when any cell in roadmaps is clicked) -->
+  {#if selectedHandIndex !== null && selectedHand}
+    <div class="edit-toolbar-box">
+      <div class="edit-toolbar-header">
+        <div class="edit-title-group">
+          <span class="edit-badge">🟡 EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
+          <span class="edit-hint">Haz clic en los botones para cambiar el resultado o los pares de esta mano</span>
+        </div>
+
+        <div class="edit-quick-actions">
+          <button type="button" class="btn-tool-nav" on:click={prevHand} disabled={selectedHandIndex === 0} title="Mano anterior">
+            ◀ Anterior
+          </button>
+          <button type="button" class="btn-tool-nav" on:click={nextHand} disabled={selectedHandIndex === history.length - 1} title="Siguiente mano">
+            Siguiente ▶
+          </button>
+          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Eliminar esta mano del zapato">
+            🗑️ Eliminar
+          </button>
+          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Cerrar edición">
+            ✓ Guardar / Listo
+          </button>
+        </div>
+      </div>
+
+      <div class="edit-controls-row">
+        <div class="edit-group">
+          <span class="edit-group-label">GANADOR:</span>
+          <button
+            type="button"
+            class="edit-choice-btn punto"
+            class:chosen={selectedHand.winner === 'PUNTO'}
+            on:click={() => updateSelectedWinner('PUNTO')}
+          >
+            🔵 PUNTO
+          </button>
+          <button
+            type="button"
+            class="edit-choice-btn banca"
+            class:chosen={selectedHand.winner === 'BANCA'}
+            on:click={() => updateSelectedWinner('BANCA')}
+          >
+            🔴 BANCA
+          </button>
+          <button
+            type="button"
+            class="edit-choice-btn empate"
+            class:chosen={selectedHand.winner === 'EMPATE'}
+            on:click={() => updateSelectedWinner('EMPATE')}
+          >
+            🟢 EMPATE
+          </button>
+        </div>
+
+        <div class="edit-group">
+          <span class="edit-group-label">PARES Y ATRIBUTOS:</span>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.pPair}
+            on:click={() => toggleSelectedMod('pPair')}
+          >
+            🔵 P.Pair {selectedHand.pPair ? '✓' : ''}
+          </button>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.bPair}
+            on:click={() => toggleSelectedMod('bPair')}
+          >
+            🔴 B.Pair {selectedHand.bPair ? '✓' : ''}
+          </button>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.natural}
+            on:click={() => toggleSelectedMod('natural')}
+          >
+            ⚡ Natural (Win) {selectedHand.natural ? '✓' : ''}
+          </button>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.special}
+            on:click={() => toggleSelectedMod('special')}
+          >
+            ⭐ Special {selectedHand.special ? '✓' : ''}
+          </button>
         </div>
       </div>
     </div>
+  {/if}
 
-    <!-- QUICK MANUAL REGISTRATION PANEL FOR DEALERS / SUPERVISORS -->
-    <div class="manual-input-strip">
-      <div class="manual-input-label">
-        <span>⚡ REGISTRO RÁPIDO CRUPIER:</span>
-      </div>
-
-      <div class="quick-btn-group">
-        <button
-          type="button"
-          class="btn-quick banca"
-          on:click={() => addManualResult('BANCA')}
-          title="Registrar victoria de BANCA"
-        >
-          + BANCA
-        </button>
-        <button
-          type="button"
-          class="btn-quick punto"
-          on:click={() => addManualResult('PUNTO')}
-          title="Registrar victoria de PUNTO"
-        >
-          + PUNTO
-        </button>
-        <button
-          type="button"
-          class="btn-quick empate"
-          on:click={() => addManualResult('EMPATE')}
-          title="Registrar EMPATE (TIE)"
-        >
-          + EMPATE
-        </button>
-      </div>
-
-      <div class="quick-options">
-        <label class="check-pill">
-          <input type="checkbox" bind:checked={manualBPair} />
-          <span>Par Banca</span>
-        </label>
-        <label class="check-pill">
-          <input type="checkbox" bind:checked={manualPPair} />
-          <span>Par Punto</span>
-        </label>
-        <label class="check-pill">
-          <input type="checkbox" bind:checked={manualNatural} />
-          <span>Natural (8/9)</span>
-        </label>
-      </div>
-    </div>
-  </main>
-
-  <!-- OFFICIAL CASINO ROADMAPS SECTION -->
+  <!-- OFFICIAL CASINO ROADMAPS SECTION (Interactive & Clickable to Edit) -->
   <section class="sb-roadmaps-section">
     <!-- 1. BEAD PLATE (珠盘路) -->
     <div class="roadmap-card">
       <div class="roadmap-header">
         <div class="rm-title">
           <span>●</span> BEAD PLATE (PLATO DE CUENTAS)
+          <span class="rm-instruction">Haz clic en cualquier celda para seleccionarla y editarla</span>
         </div>
         <div class="rm-legend">
           <span class="lg-b">🔴 B: Banca</span>
@@ -823,13 +892,18 @@
             {#each beadGrid.grid as row, rIdx}
               <tr>
                 {#each row as cell, cIdx}
-                  <td class="bead-cell">
+                  <td
+                    class="bead-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    class:has-hand={!!cell}
+                    on:click={() => cell && selectHand(cell.historyIndex)}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
+                  >
                     {#if cell}
                       <div
                         class="bead-circle {cell.winner.toLowerCase()}"
                         class:has-b-pair={cell.bPair}
                         class:has-p-pair={cell.pPair}
-                        title="Mano #{cell.id}: {cell.winner} ({cell.scoreB}-{cell.scoreP}){cell.natural ? ' [Natural]' : ''}"
                       >
                         <span class="bead-letter">
                           {cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T'}
@@ -858,9 +932,10 @@
       <div class="roadmap-header">
         <div class="rm-title">
           <span>═</span> BIG ROAD (GRAN CAMINO)
+          <span class="rm-instruction">Haz clic en una celda para editar</span>
         </div>
         <div class="rm-legend">
-          <span>Rachas y Tendencias de Juego</span>
+          <span>Tendencias y Rachas</span>
         </div>
       </div>
 
@@ -870,12 +945,17 @@
             {#each bigRoadGrid.grid as row, rIdx}
               <tr>
                 {#each row as cell, cIdx}
-                  <td class="bigroad-cell">
+                  <td
+                    class="bigroad-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    class:has-hand={!!cell}
+                    on:click={() => cell && selectHand(cell.historyIndex)}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''} (Clic para editar)` : ''}
+                  >
                     {#if cell}
                       <div
                         class="bigroad-ring {cell.winner.toLowerCase()}"
                         class:is-tie={cell.isTieOnly}
-                        title="{cell.winner}{cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}"
                       >
                         {#if cell.tieCount > 0}
                           <span class="bigroad-tie-slash"></span>
@@ -908,28 +988,21 @@
   .scoreboard-container {
     background: #090d16;
     color: #f8fafc;
-    border-radius: 0;
-    border: none;
-    box-shadow: none;
     min-height: 100vh;
     width: 100%;
     box-sizing: border-box;
-    font-family: inherit;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 14px 18px;
+    padding: 14px 20px;
   }
 
   .fullscreen-mode {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     z-index: 9999999;
-    border-radius: 0;
-    padding: 20px;
+    padding: 18px 24px;
     overflow-y: auto;
   }
 
@@ -938,7 +1011,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 14px;
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-wrap: wrap;
@@ -947,7 +1020,7 @@
   .sb-header-left {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     flex-wrap: wrap;
   }
 
@@ -955,10 +1028,6 @@
     display: flex;
     align-items: center;
     gap: 10px;
-  }
-
-  .sb-icon {
-    font-size: 26px;
   }
 
   .sb-title {
@@ -974,7 +1043,7 @@
   .sb-subtitle {
     font-size: 10px;
     font-weight: 700;
-    letter-spacing: 1.5px;
+    letter-spacing: 1.2px;
     color: #eab308;
     display: block;
   }
@@ -990,6 +1059,20 @@
     font-size: 12px;
   }
 
+  .sala-pill {
+    border-color: #3b82f6;
+    background: rgba(37, 99, 235, 0.18);
+  }
+  .sala-pill .pill-label { color: #93c5fd; }
+  .sala-pill .pill-value { color: #ffffff; }
+
+  .mesa-pill {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.18);
+  }
+  .mesa-pill .pill-label { color: #6ee7b7; }
+  .mesa-pill .pill-value { color: #ffffff; }
+
   .pill-label {
     color: #94a3b8;
     font-weight: 600;
@@ -1003,6 +1086,22 @@
 
   .pill-sep {
     color: #475569;
+  }
+
+  .feedback-toast {
+    background: #1e3a8a;
+    border: 1px solid #3b82f6;
+    color: #e0f2fe;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 999px;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .sb-header-right {
@@ -1074,408 +1173,499 @@
     background: #64748b;
   }
 
-  /* STATS STRIP */
-  .sb-stats-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 10px;
-  }
-
-  .stat-card {
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 10px;
-    padding: 10px 12px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: #475569;
-  }
-
-  .punto-card::before { background: #2563eb; }
-  .banca-card::before { background: #dc2626; }
-  .empate-card::before { background: #16a34a; }
-  .pairs-card::before { background: #d97706; }
-  .natural-card::before { background: #eab308; }
-
-  .stat-lbl {
-    font-size: 10px;
-    font-weight: 800;
-    color: #94a3b8;
-    letter-spacing: 0.5px;
-  }
-
-  .stat-num {
-    font-size: 20px;
-    font-weight: 900;
-    color: #ffffff;
-    line-height: 1.1;
-  }
-
-  .stat-sub {
-    font-size: 11px;
-    font-weight: 700;
-    color: #64748b;
-  }
-
-  .punto-card .stat-num { color: #60a5fa; }
-  .punto-card .stat-sub { color: #3b82f6; }
-  .banca-card .stat-num { color: #f87171; }
-  .banca-card .stat-sub { color: #ef4444; }
-  .empate-card .stat-num { color: #4ade80; }
-  .empate-card .stat-sub { color: #22c55e; }
-
-  .stat-pair-row {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 2px;
-  }
-  .pair-tag {
-    font-size: 11px;
-    font-weight: 700;
-  }
-  .pair-tag.punto { color: #93c5fd; }
-  .pair-tag.banca { color: #fca5a5; }
-
-  /* CASINO TABLE FELT */
-  .sb-table-felt {
-    background: radial-gradient(ellipse at center, #0f3928 0%, #071f16 100%);
-    border: 2px solid #ca8a04;
-    border-radius: 14px;
-    padding: 20px;
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .felt-arena {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 20px;
-    align-items: center;
-  }
-
-  @media (max-width: 860px) {
-    .felt-arena {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .felt-side {
-    background: rgba(0, 0, 0, 0.35);
-    border-radius: 12px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
-  }
-
-  .banca-side { border-color: rgba(239, 68, 68, 0.3); }
-  .punto-side { border-color: rgba(59, 130, 246, 0.3); }
-
-  .winner-glow.banca-side {
-    box-shadow: 0 0 25px rgba(239, 68, 68, 0.5);
-    border-color: #ef4444;
-    background: rgba(220, 38, 38, 0.15);
-  }
-
-  .winner-glow.punto-side {
-    box-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
-    border-color: #3b82f6;
-    background: rgba(37, 99, 235, 0.15);
-  }
-
-  .side-badge-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .side-title {
-    font-size: 14px;
-    font-weight: 900;
-    letter-spacing: 0.5px;
-  }
-  .banca-side .side-title { color: #fca5a5; }
-  .punto-side .side-title { color: #93c5fd; }
-
-  .side-score-circle {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: #0f172a;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: 900;
-    color: #94a3b8;
-    border: 1px solid #334155;
-  }
-
-  .banca-side .active-score {
-    background: #dc2626;
-    color: #ffffff;
-    border-color: #f87171;
-    box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
-  }
-
-  .punto-side .active-score {
-    background: #2563eb;
-    color: #ffffff;
-    border-color: #60a5fa;
-    box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
-  }
-
-  .cards-holder {
-    display: flex;
-    gap: 10px;
-    min-height: 105px;
-    justify-content: center;
-    align-items: center;
-  }
-
-  .card-placeholder {
-    width: 68px;
-    height: 98px;
-    border: 1.5px dashed rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10.5px;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.3);
-  }
-
-  .casino-card {
-    width: 68px;
-    height: 98px;
+  /* CASINO BEAD COUNTERS STRIP (Exact Reference Spec) */
+  .casino-bead-counters-strip {
     background: #ffffff;
     border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+    padding: 8px 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    border: 1.5px solid #cbd5e1;
+  }
+
+  .counters-scroll {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .counter-item {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    padding: 6px;
+    align-items: center;
+    gap: 4px;
+    min-width: 38px;
+  }
+
+  .bead-circle-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 900;
+    color: #ffffff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25), inset 0 2px 2px rgba(255, 255, 255, 0.6);
     position: relative;
     user-select: none;
-    animation: cardDrop 0.25s ease-out;
   }
 
-  @keyframes cardDrop {
-    from {
-      transform: translateY(-20px) scale(0.85);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0) scale(1);
-      opacity: 1;
-    }
+  .bead-gray { background: radial-gradient(circle at 35% 30%, #9ca3af, #4b5563); }
+  .bead-red { background: radial-gradient(circle at 35% 30%, #ef4444, #b91c1c); }
+  .bead-blue { background: radial-gradient(circle at 35% 30%, #3b82f6, #1d4ed8); }
+  .bead-green { background: radial-gradient(circle at 35% 30%, #22c55e, #15803d); }
+  .bead-orange { background: radial-gradient(circle at 35% 30%, #f97316, #c2410c); }
+  
+  .bead-white {
+    background: radial-gradient(circle at 35% 30%, #ffffff, #e2e8f0);
+    border: 2px solid #cbd5e1;
+    color: #1e293b;
   }
 
-  .card-rank {
-    font-size: 15px;
+  .bead-gold { background: radial-gradient(circle at 35% 30%, #facc15, #ca8a04); color: #000; font-size: 12px; }
+  .bead-darkgreen { background: radial-gradient(circle at 35% 30%, #166534, #052e16); font-size: 12px; }
+  .bead-darkred { background: radial-gradient(circle at 35% 30%, #991b1b, #450a0a); font-size: 12px; }
+  .bead-lightblue { background: radial-gradient(circle at 35% 30%, #38bdf8, #0284c7); font-size: 12px; }
+  .bead-navy { background: radial-gradient(circle at 35% 30%, #1d4ed8, #0f172a); font-size: 12px; }
+  .bead-gold-flame { background: radial-gradient(circle at 35% 30%, #eab308, #713f12); color: #000; font-size: 12px; }
+  .bead-orange-flame { background: radial-gradient(circle at 35% 30%, #f97316, #7c2d12); font-size: 12px; }
+
+  .bead-dot {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1.5px solid #ffffff;
+  }
+  .dot-tl.red-dot {
+    top: 1px;
+    left: 1px;
+    background: #ef4444;
+  }
+  .dot-br.blue-dot {
+    bottom: 1px;
+    right: 1px;
+    background: #2563eb;
+  }
+
+  .counter-digit {
+    font-size: 16px;
     font-weight: 900;
-    color: var(--card-color);
+    color: #0f172a;
     line-height: 1;
   }
 
-  .card-suit {
-    font-size: 26px;
-    color: var(--card-color);
-    text-align: center;
-    line-height: 1;
+  .counter-pct-box {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f1f5f9;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
   }
 
-  .card-corner-bottom {
+  .pct-tag {
     font-size: 12px;
     font-weight: 800;
-    color: var(--card-color);
-    align-self: flex-end;
-    transform: rotate(180deg);
+  }
+  .pct-tag.b { color: #dc2626; }
+  .pct-tag.p { color: #2563eb; }
+  .pct-tag.t { color: #16a34a; }
+
+  /* CROUPIER ARCADE KEYPAD (Exact Reference Alignment) */
+  .croupier-keypad-panel {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    border: 2px solid #e2e8f0;
+    display: flex;
+    justify-content: center;
   }
 
-  /* CENTER ARENA CONTROLS */
-  .felt-center {
+  .keypad-grid-4col {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+    max-width: 680px;
+    width: 100%;
+  }
+
+  @media (max-width: 600px) {
+    .keypad-grid-4col {
+      gap: 12px;
+    }
+  }
+
+  .keypad-column {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 12px;
-    text-align: center;
   }
 
-  .vs-circle {
-    width: 52px;
-    height: 52px;
+  /* MODIFIER PILLS ROW */
+  .keypad-pill {
+    width: 100%;
+    max-width: 125px;
+    height: 42px;
+    border-radius: 999px;
+    background: #ffffff;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    user-select: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  .keypad-pill:active {
+    transform: scale(0.96);
+  }
+
+  .keypad-pill.pill-ppair {
+    border: 2.5px solid #0000ff;
+    color: #0000ff;
+  }
+  .keypad-pill.pill-ppair.active {
+    background: radial-gradient(circle at 50% 30%, #1e40af, #0000cc);
+    color: #ffffff;
+    border-color: #0000aa;
+    box-shadow: 0 0 14px rgba(0, 0, 255, 0.5);
+  }
+
+  .keypad-pill.pill-bpair {
+    border: 2.5px solid #dc2626;
+    color: #dc2626;
+  }
+  .keypad-pill.pill-bpair.active {
+    background: radial-gradient(circle at 50% 30%, #ef4444, #990000);
+    color: #ffffff;
+    border-color: #880000;
+    box-shadow: 0 0 14px rgba(220, 38, 38, 0.5);
+  }
+
+  .keypad-pill.pill-special {
+    border: 2.5px solid #94a3b8;
+    color: #94a3b8;
+  }
+  .keypad-pill.pill-special.active {
+    background: radial-gradient(circle at 50% 30%, #64748b, #334155);
+    color: #ffffff;
+    border-color: #1e293b;
+    box-shadow: 0 0 14px rgba(100, 116, 139, 0.5);
+  }
+
+  .keypad-pill.pill-win {
+    border: 2.5px solid #7c3aed;
+    color: #7c3aed;
+  }
+  .keypad-pill.pill-win.active {
+    background: radial-gradient(circle at 50% 30%, #a855f7, #6b21a8);
+    color: #ffffff;
+    border-color: #581c87;
+    box-shadow: 0 0 14px rgba(124, 58, 237, 0.5);
+  }
+
+  /* 3D CIRCULAR CASINO BUTTONS */
+  .keypad-btn-circle {
+    width: 86px;
+    height: 86px;
     border-radius: 50%;
-    background: #0f172a;
-    border: 2px solid #ca8a04;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    font-weight: 900;
-    color: #eab308;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  }
-
-  .vs-circle.banca-win {
-    background: #dc2626;
-    color: #fff;
-    border-color: #fca5a5;
-  }
-  .vs-circle.punto-win {
-    background: #2563eb;
-    color: #fff;
-    border-color: #93c5fd;
-  }
-  .vs-circle.tie-win {
-    background: #16a34a;
-    color: #fff;
-    border-color: #86efac;
-  }
-
-  .btn-deal-action {
-    background: linear-gradient(135deg, #eab308, #ca8a04);
-    color: #0f172a;
-    border: none;
-    border-radius: 10px;
-    padding: 12px 24px;
-    font-size: 14px;
-    font-weight: 900;
-    letter-spacing: 0.5px;
     cursor: pointer;
-    box-shadow: 0 6px 16px rgba(202, 138, 4, 0.4);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.15s ease;
+    border: none;
+    background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
+    padding: 4px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    user-select: none;
   }
 
-  .btn-deal-action:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(202, 138, 4, 0.6);
+  @media (max-width: 600px) {
+    .keypad-btn-circle {
+      width: 70px;
+      height: 70px;
+    }
   }
 
-  .btn-deal-action:disabled {
-    opacity: 0.6;
+  .keypad-btn-circle:hover {
+    filter: brightness(1.05);
+  }
+
+  .keypad-btn-circle:active {
+    transform: translateY(3px) scale(0.96);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  }
+
+  .keypad-btn-circle:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
   }
 
-  .verdict-banner {
-    font-size: 13px;
+  .btn-inner-gloss {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -4px 6px rgba(0, 0, 0, 0.4);
+  }
+
+  .btn-letter {
+    font-size: 38px;
+    font-weight: 900;
+    color: #ffffff;
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+    line-height: 1;
+  }
+
+  @media (max-width: 600px) {
+    .btn-letter {
+      font-size: 30px;
+    }
+  }
+
+  /* P Button: Royal Blue */
+  .btn-punto .btn-inner-gloss {
+    background: radial-gradient(circle at 35% 30%, #3b82f6 0%, #1d4ed8 50%, #001f80 100%);
+  }
+
+  /* B Button: Crimson Red */
+  .btn-banca .btn-inner-gloss {
+    background: radial-gradient(circle at 35% 30%, #f87171 0%, #dc2626 50%, #7f1d1d 100%);
+  }
+
+  /* T Button: Emerald Green */
+  .btn-tie .btn-inner-gloss {
+    background: radial-gradient(circle at 35% 30%, #4ade80 0%, #16a34a 50%, #14532d 100%);
+  }
+
+  /* Undo Button: Amber / Gold */
+  .btn-undo .btn-inner-gloss {
+    background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
+  }
+  .btn-undo .btn-letter {
+    font-size: 34px;
+  }
+
+  /* CORNER BADGES ON P, B, T (When P.Pair / B.Pair active) */
+  .badge-corner-tl {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ff4d4d, #b91c1c);
+    border: 2.5px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+    z-index: 10;
+    animation: popBadge 0.15s ease-out;
+  }
+
+  .badge-corner-br {
+    position: absolute;
+    bottom: 0px;
+    right: 0px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8);
+    border: 2.5px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+    z-index: 10;
+    animation: popBadge 0.15s ease-out;
+  }
+
+  @keyframes popBadge {
+    0% { transform: scale(0.3); opacity: 0; }
+    80% { transform: scale(1.15); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .btn-caption {
+    font-size: 11px;
     font-weight: 800;
-    padding: 6px 14px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.6);
-    color: #f8fafc;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    letter-spacing: 0.5px;
+    user-select: none;
   }
+  .punto-caption { color: #2563eb; }
+  .banca-caption { color: #dc2626; }
+  .tie-caption { color: #16a34a; }
+  .undo-caption { color: #854d0e; }
 
-  .verdict-banner.banca-b {
-    background: rgba(220, 38, 38, 0.3);
-    border-color: #dc2626;
-    color: #fca5a5;
-  }
-  .verdict-banner.punto-b {
-    background: rgba(37, 99, 235, 0.3);
-    border-color: #2563eb;
-    color: #93c5fd;
-  }
-  .verdict-banner.empate-b {
-    background: rgba(22, 163, 74, 0.3);
-    border-color: #16a34a;
-    color: #86efac;
-  }
-
-  /* MANUAL STRIP */
-  .manual-input-strip {
-    background: rgba(0, 0, 0, 0.4);
+  /* INLINE EDIT TOOLBAR */
+  .edit-toolbar-box {
+    background: #0f172a;
+    border: 2px solid #f59e0b;
     border-radius: 10px;
-    padding: 10px 16px;
+    padding: 12px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
+    animation: slideDown 0.2s ease;
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .edit-toolbar-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: 12px;
     flex-wrap: wrap;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
   }
 
-  .manual-input-label {
-    font-size: 11px;
-    font-weight: 800;
-    color: #ca8a04;
-  }
-
-  .quick-btn-group {
+  .edit-title-group {
     display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .edit-badge {
+    background: #f59e0b;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 900;
+    padding: 4px 12px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .edit-hint {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .edit-quick-actions {
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
 
-  .btn-quick {
+  .btn-tool-nav, .btn-tool-del, .btn-tool-done {
     border: none;
     border-radius: 6px;
-    padding: 7px 16px;
+    padding: 6px 12px;
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
-  .btn-quick.banca {
-    background: #dc2626;
+  .btn-tool-nav {
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+  }
+  .btn-tool-nav:hover:not(:disabled) {
+    background: #334155;
     color: #ffffff;
   }
-  .btn-quick.banca:hover { background: #ef4444; }
-
-  .btn-quick.punto {
-    background: #2563eb;
-    color: #ffffff;
+  .btn-tool-nav:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
-  .btn-quick.punto:hover { background: #3b82f6; }
 
-  .btn-quick.empate {
+  .btn-tool-del {
+    background: #7f1d1d;
+    color: #fee2e2;
+  }
+  .btn-tool-del:hover {
+    background: #991b1b;
+  }
+
+  .btn-tool-done {
     background: #16a34a;
     color: #ffffff;
   }
-  .btn-quick.empate:hover { background: #22c55e; }
-
-  .quick-options {
-    display: flex;
-    gap: 10px;
-    align-items: center;
+  .btn-tool-done:hover {
+    background: #22c55e;
   }
 
-  .check-pill {
-    display: inline-flex;
+  .edit-controls-row {
+    display: flex;
     align-items: center;
-    gap: 5px;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .edit-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .edit-group-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #eab308;
+    margin-right: 4px;
+  }
+
+  .edit-choice-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    opacity: 0.6;
+  }
+
+  .edit-choice-btn.punto { background: #1d4ed8; color: #ffffff; }
+  .edit-choice-btn.banca { background: #b91c1c; color: #ffffff; }
+  .edit-choice-btn.empate { background: #15803d; color: #ffffff; }
+
+  .edit-choice-btn.chosen {
+    opacity: 1;
+    transform: scale(1.06);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+    outline: 2px solid #ffffff;
+  }
+
+  .edit-pill-toggle {
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    padding: 5px 12px;
     font-size: 11.5px;
     font-weight: 700;
-    color: #cbd5e1;
     cursor: pointer;
+    transition: all 0.15s ease;
   }
 
-  .check-pill input {
-    cursor: pointer;
+  .edit-pill-toggle.active-pill {
+    background: #3b82f6;
+    color: #ffffff;
+    border-color: #60a5fa;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
   }
 
   /* ROADMAPS SECTION */
@@ -1502,13 +1692,25 @@
     font-size: 12px;
     font-weight: 800;
     color: #94a3b8;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .rm-title {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     color: #f1f5f9;
+  }
+
+  .rm-instruction {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #eab308;
+    background: rgba(234, 179, 8, 0.12);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(234, 179, 8, 0.3);
   }
 
   .rm-legend {
@@ -1542,6 +1744,23 @@
     padding: 0;
     text-align: center;
     vertical-align: middle;
+    transition: background 0.15s ease;
+  }
+
+  .bead-cell.has-hand {
+    cursor: pointer;
+  }
+  .bead-cell.has-hand:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* YELLOW HIGHLIGHT ON SELECTION (Exact Reference Image 5) */
+  .bead-cell.selected-cell, .bigroad-cell.selected-cell {
+    background: #ffc107 !important;
+    outline: 2px solid #b45309;
+    z-index: 5;
+    position: relative;
+    box-shadow: 0 0 12px rgba(255, 193, 7, 0.85);
   }
 
   .bead-circle {
@@ -1598,6 +1817,14 @@
     padding: 0;
     text-align: center;
     vertical-align: middle;
+    transition: background 0.15s ease;
+  }
+
+  .bigroad-cell.has-hand {
+    cursor: pointer;
+  }
+  .bigroad-cell.has-hand:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .bigroad-ring {
@@ -1624,7 +1851,7 @@
     top: 50%;
     left: 50%;
     width: 18px;
-    height: 2px;
+    height: 2.5px;
     background: #22c55e;
     transform: translate(-50%, -50%) rotate(45deg);
   }
