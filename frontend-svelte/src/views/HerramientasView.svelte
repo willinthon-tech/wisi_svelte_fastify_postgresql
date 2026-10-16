@@ -36,15 +36,42 @@
 
   $: detailedSalas = (function () {
     const allSalas = $masterSalasStore || [];
+    let list = [];
     if (assignedSalaIds.length === 0) {
-      if (allSalas.length > 0) return allSalas;
-      if (rawAssignedSalas.length > 0) return rawAssignedSalas;
-      return [{ id: 1, nombre: 'Sala Principal' }];
+      list = allSalas.length > 0 ? allSalas : (rawAssignedSalas.length > 0 ? rawAssignedSalas : [{ id: 1, nombre: 'Sala Principal', grupo_id: 1 }]);
+    } else {
+      list = assignedSalaIds.map((id) => {
+        const found = allSalas.find((s) => String(s.uuid || s.id) === String(id));
+        const fallback = rawAssignedSalas.find((s) => typeof s === 'object' && String(s.uuid || s.id) === String(id));
+        return found || fallback || { id, uuid: id, nombre: `Sala #${String(id).slice(0, 8)}`, grupo_id: 1 };
+      });
     }
-    return assignedSalaIds.map((id) => {
-      const found = allSalas.find((s) => String(s.uuid || s.id) === String(id));
-      const fallback = rawAssignedSalas.find((s) => typeof s === 'object' && String(s.uuid || s.id) === String(id));
-      return found || fallback || { id, uuid: id, nombre: `Sala #${String(id).slice(0, 8)}` };
+
+    // Filtrar estrictamente solo salas tipo 1 (tipo SALA, no tipo GALPÓN)
+    return list.filter((sala) => {
+      // 1. Si tiene grupo_id: 1 = SALA, 2 = GALPÓN
+      if (sala.grupo_id !== undefined && sala.grupo_id !== null) {
+        if (Number(sala.grupo_id) === 2 || Number(sala.grupo_id) !== 1) return false;
+      }
+      // 2. Si tiene grupo_nombre
+      if (sala.grupo_nombre) {
+        const gn = String(sala.grupo_nombre).toLowerCase().trim();
+        if (gn.includes('galpon') || gn.includes('galpón')) return false;
+      }
+      // 3. Si tiene tipo_id o tipo
+      if (sala.tipo_id !== undefined && sala.tipo_id !== null) {
+        if (Number(sala.tipo_id) === 2 || Number(sala.tipo_id) !== 1) return false;
+      }
+      if (sala.tipo !== undefined && sala.tipo !== null) {
+        const t = String(sala.tipo).toLowerCase().trim();
+        if (t === '2' || t.includes('galpon') || t.includes('galpón')) return false;
+      }
+      // 4. Validación por nombre de instalación (excluir Galpon / Galpón)
+      const nom = String(sala.nombre || sala.name || '').toLowerCase().trim();
+      if (nom.includes('galpon') || nom.includes('galpón')) {
+        return false;
+      }
+      return true;
     });
   })();
 
