@@ -190,13 +190,9 @@
         type="button"
         on:click={goBackToSalas}
         class="btn-flow"
-        style="padding: 7px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #ffffff; color: #334155; border: 1px solid #cbd5e1; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s ease;"
+        style="padding: 7px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #ffffff; color: #334155; border: 1px solid #cbd5e1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s ease;"
         title="Volver a la selección de salas en Herramientas"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="19" y1="12" x2="5" y2="12"></line>
-          <polyline points="12 19 5 12 12 5"></polyline>
-        </svg>
         Atrás
       </button>
     </div>
@@ -308,12 +304,9 @@
                     type="button"
                     on:click={() => openMesaScoreboard(item)}
                     class="btn-flow"
-                    style="padding: 6px 16px; font-size: 12.5px; font-weight: 800; border-radius: 7px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease;"
+                    style="padding: 6px 16px; font-size: 12.5px; font-weight: 800; border-radius: 7px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s ease;"
                     title="Jugar / Abrir Scoreboard para {item.title}"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                      <polygon points="5 3 19 12 5 21 5 3"/>
-                    </svg>
                     Jugar
                   </button>
                 </td>
