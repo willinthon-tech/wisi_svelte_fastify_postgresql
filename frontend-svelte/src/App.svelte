@@ -30,6 +30,7 @@
   import ComponentsView from "./components/ComponentsView.svelte";
   import HerramientasView from "./views/HerramientasView.svelte";
   import ScoreboardBaccarat from "./components/ScoreboardBaccarat.svelte";
+  import BaccaratMesasView from "./views/BaccaratMesasView.svelte";
 
   // Import CECOM Views
   import LibroView from "./views/cecom/LibroView.svelte";
@@ -476,7 +477,11 @@
 
   function getTabTitle(tab) {
     const clean = String(tab || '').trim().replace(/^\//, '');
-    if (clean.startsWith("herramientas/scoreboard-baccarat")) return "SCOREBOARD BACCARAT";
+    if (clean.startsWith("herramientas/scoreboard-baccarat")) {
+      const parts = clean.split('/').filter(Boolean);
+      if (parts.length >= 4) return "SCOREBOARD BACCARAT";
+      return "MESAS DE BACCARAT";
+    }
     if (clean === "herramientas" || clean === "otros/herramientas") return "HERRAMIENTAS";
     if (String(tab || '').startsWith("cecom/libro/") || String(tab || '').startsWith("libro/")) return "Libro";
     if (tab === "dashboard") return "RRHH";
@@ -1222,7 +1227,21 @@
             on:saveInline={handleSaveInline}
           />
         {:else if $currentRouteStore.startsWith("herramientas/scoreboard-baccarat") || $currentRouteStore.startsWith("/herramientas/scoreboard-baccarat")}
-          <ScoreboardBaccarat on:close={() => navigateToRoute('herramientas')} />
+          {@const cleanRoute = $currentRouteStore.replace(/^#\/?/, '').replace(/^\//, '').split('?')[0]}
+          {@const parts = cleanRoute.split('/').filter(Boolean)}
+          {@const routeSalaId = parts[2] || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '').get('sala') : null)}
+          {@const routeMesaId = parts[3] || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '').get('mesa') : null)}
+          {#if routeSalaId && routeMesaId}
+            <ScoreboardBaccarat 
+              salaId={routeSalaId} 
+              mesaId={routeMesaId} 
+              on:close={() => navigateToRoute(`herramientas/scoreboard-baccarat/${routeSalaId}`)} 
+            />
+          {:else if routeSalaId}
+            <BaccaratMesasView salaId={routeSalaId} />
+          {:else}
+            <HerramientasView />
+          {/if}
         {:else if $currentRouteStore === "herramientas" || $currentRouteStore === "otros/herramientas" || $currentRouteStore === "/herramientas"}
           <HerramientasView />
         {:else}

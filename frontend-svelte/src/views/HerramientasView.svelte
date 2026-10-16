@@ -147,7 +147,7 @@
       selectedSalaStore.set(sala.uuid || sala.id);
     }
     const salaParam = sala?.uuid || sala?.id;
-    navigateToRoute(`herramientas/scoreboard-baccarat${salaParam ? '?sala=' + encodeURIComponent(salaParam) : ''}`);
+    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(salaParam)}`);
   }
 </script>
 

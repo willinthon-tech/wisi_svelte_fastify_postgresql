@@ -1,13 +1,42 @@
 <script>
   import { onMount, createEventDispatcher } from 'svelte';
   import { selectedSalaStore, currentUserStore, userSalasStore } from '../controllers/auth.store.js';
-  import { masterSalasStore } from '../controllers/master.store.js';
+  import { masterSalasStore, masterMesasStore } from '../controllers/master.store.js';
 
+  export let salaId = null;
+  export let mesaId = null;
   export let isModal = false;
   const dispatch = createEventDispatcher();
 
   // Selected Sala Context
-  let currentSalaId = null;
+  $: currentSalaId = salaId || (() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+      const parts = hash.split('/').filter(Boolean);
+      if (parts[0] === 'herramientas' && parts[1] === 'scoreboard-baccarat' && parts[2]) {
+        return parts[2];
+      }
+      const sp = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
+      const s = sp.get('sala');
+      if (s) return s;
+    }
+    return $selectedSalaStore;
+  })();
+
+  // Selected Mesa Context
+  $: currentMesaId = mesaId || (() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+      const parts = hash.split('/').filter(Boolean);
+      if (parts[0] === 'herramientas' && parts[1] === 'scoreboard-baccarat' && parts[3]) {
+        return parts[3];
+      }
+      const sp = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
+      const m = sp.get('mesa');
+      if (m) return m;
+    }
+    return null;
+  })();
 
   $: currentSalaObj = (() => {
     const sId = currentSalaId || $selectedSalaStore;
@@ -17,11 +46,26 @@
     const authSalas = $userSalasStore || [];
     const foundAuth = authSalas.find(s => typeof s === 'object' && String(s.uuid || s.id) === String(sId));
     if (foundAuth) return foundAuth;
-    return { id: sId, nombre: sId ? `Sala #${sId}` : 'Sala Principal' };
+    return { id: sId, nombre: sId ? `Sala #${String(sId).slice(0, 8)}` : 'Sala Principal' };
+  })();
+
+  $: currentMesaObj = (() => {
+    if (!currentMesaId) return null;
+    const all = $masterMesasStore || [];
+    const found = all.find(m => String(m.uuid || m.id) === String(currentMesaId));
+    if (found) return found;
+    return { id: currentMesaId, nombre: `Mesa #${String(currentMesaId).slice(0, 8)}` };
   })();
 
   $: currentSalaName = currentSalaObj?.nombre || currentSalaObj?.name || '';
-  $: storageKey = `wisi_baccarat_shoe_v2_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}`;
+  $: currentMesaName = currentMesaObj?.nombre || (currentMesaId ? `Mesa #${currentMesaId}` : 'Mesa 01');
+  $: storageKey = `wisi_baccarat_shoe_v2_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
+
+  let lastLoadedStorageKey = null;
+  $: if (storageKey && storageKey !== lastLoadedStorageKey) {
+    lastLoadedStorageKey = storageKey;
+    loadSavedShoe();
+  }
 
   // Audio Context for subtle casino sound effects (synthesized offline)
   let audioCtx = null;
@@ -494,6 +538,12 @@
           <span class="pill-value" style="color: #ffffff;">{currentSalaName}</span>
         </div>
       {/if}
+      {#if currentMesaName}
+        <div class="sb-shoe-pill" style="border-color: #10b981; background: rgba(16, 185, 129, 0.2);">
+          <span class="pill-label" style="color: #6ee7b7;">MESA</span>
+          <span class="pill-value" style="color: #ffffff;">{currentMesaName}</span>
+        </div>
+      {/if}
       <div class="sb-shoe-pill">
         <span class="pill-label">ZAPATO</span>
         <span class="pill-value">#{shoeNumber}</span>
@@ -545,9 +595,9 @@
         type="button"
         class="sb-btn sb-btn-close"
         on:click={handleClose}
-        title="Volver a Herramientas"
+        title="Volver a la lista de mesas de la sala"
       >
-        ✕ Volver a Herramientas
+        ✕ Volver a Mesas
       </button>
     </div>
   </header>
