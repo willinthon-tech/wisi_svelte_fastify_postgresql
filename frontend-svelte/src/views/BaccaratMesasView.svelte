@@ -176,30 +176,29 @@
 <div class="baccarat-mesas-view-container">
   <!-- Top Navigation Bar & Sala Breadcrumb -->
   <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap;">
-    <div style="display: flex; align-items: center; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px;">
+        {salaName}
+      </h2>
+      <span style="font-size: 11.5px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 6px;">
+        Mesas de Baccarat
+      </span>
+    </div>
+
+    <div>
       <button
         type="button"
         on:click={goBackToSalas}
         class="btn-flow"
-        style="padding: 7px 14px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #ffffff; color: #475569; border: 1px solid #cbd5e1; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s ease;"
+        style="padding: 7px 16px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #ffffff; color: #334155; border: 1px solid #cbd5e1; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.15s ease;"
         title="Volver a la selección de salas en Herramientas"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="19" y1="12" x2="5" y2="12"></line>
           <polyline points="12 19 5 12 12 5"></polyline>
         </svg>
-        Volver a Salas
+        Atrás
       </button>
-
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 18px;">🏛️</span>
-        <h2 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px;">
-          {salaName}
-        </h2>
-        <span style="font-size: 11.5px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2px 8px; border-radius: 6px;">
-          Mesas de Baccarat
-        </span>
-      </div>
     </div>
   </div>
 
