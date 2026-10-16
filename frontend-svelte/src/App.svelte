@@ -866,6 +866,20 @@
   $: publicLibroId = getPublicLibroId(cleanPublicRoute);
   $: isMaquinasPublicRoute = cleanPublicRoute.startsWith('reportes/maquinas');
   $: publicMaquinaReporteId = getPublicMaquinaReporteId(cleanPublicRoute);
+
+  $: isStandaloneScoreboard = (() => {
+    const raw = String($currentRouteStore || '').replace(/^#\/?/, '').replace(/^\//, '').split('?')[0];
+    if (!raw.startsWith('herramientas/scoreboard-baccarat')) return false;
+    const parts = raw.split('/').filter(Boolean);
+    return Boolean(parts.length >= 4 && parts[2] && parts[3]);
+  })();
+
+  $: standaloneScoreboardParams = (() => {
+    if (!isStandaloneScoreboard) return { salaId: null, mesaId: null };
+    const raw = String($currentRouteStore || '').replace(/^#\/?/, '').replace(/^\//, '').split('?')[0];
+    const parts = raw.split('/').filter(Boolean);
+    return { salaId: parts[2], mesaId: parts[3] };
+  })();
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
@@ -891,13 +905,23 @@
     </div>
   {/if}
 {:else if $isAuthenticatedStore}
-  <!-- Main Application Layout when Authenticated -->
-  <div
-    class="app-layout {$isSidebarOpenStore
-      ? 'sidebar-expanded'
-      : 'sidebar-collapsed'}"
-  >
-    <!-- Left Navy Sidebar -->
+  {#if isStandaloneScoreboard}
+    <!-- Standalone Fullscreen Live Casino Scoreboard View (Abre completa, sin barras ni menús) -->
+    <div class="standalone-scoreboard-wrapper" style="position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 999999; background: #090d16; overflow-y: auto;">
+      <ScoreboardBaccarat 
+        salaId={standaloneScoreboardParams.salaId} 
+        mesaId={standaloneScoreboardParams.mesaId} 
+        on:close={() => navigateToRoute(`herramientas/scoreboard-baccarat/${standaloneScoreboardParams.salaId}`)} 
+      />
+    </div>
+  {:else}
+    <!-- Main Application Layout when Authenticated -->
+    <div
+      class="app-layout {$isSidebarOpenStore
+        ? 'sidebar-expanded'
+        : 'sidebar-collapsed'}"
+    >
+      <!-- Left Navy Sidebar -->
     <Sidebar
       activeTab={$currentRouteStore}
       isOpen={$isSidebarOpenStore}
@@ -1230,14 +1254,7 @@
           {@const cleanRoute = $currentRouteStore.replace(/^#\/?/, '').replace(/^\//, '').split('?')[0]}
           {@const parts = cleanRoute.split('/').filter(Boolean)}
           {@const routeSalaId = parts[2] || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '').get('sala') : null)}
-          {@const routeMesaId = parts[3] || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '').get('mesa') : null)}
-          {#if routeSalaId && routeMesaId}
-            <ScoreboardBaccarat 
-              salaId={routeSalaId} 
-              mesaId={routeMesaId} 
-              on:close={() => navigateToRoute(`herramientas/scoreboard-baccarat/${routeSalaId}`)} 
-            />
-          {:else if routeSalaId}
+          {#if routeSalaId}
             <BaccaratMesasView salaId={routeSalaId} />
           {:else}
             <HerramientasView />
@@ -1274,6 +1291,7 @@
       on:close={closeDeleteModalUI}
     />
   </div>
+  {/if}
 {:else}
   <!-- Centered Standalone Login Screen when Unauthenticated -->
   <div

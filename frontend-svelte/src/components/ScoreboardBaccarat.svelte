@@ -2,6 +2,7 @@
   import { onMount, createEventDispatcher } from 'svelte';
   import { selectedSalaStore, currentUserStore, userSalasStore } from '../controllers/auth.store.js';
   import { masterSalasStore, masterMesasStore } from '../controllers/master.store.js';
+  import { navigateToRoute } from '../controllers/router.store.js';
 
   export let salaId = null;
   export let mesaId = null;
@@ -511,11 +512,29 @@
 
   function handleClose() {
     if (isFullscreen && document.fullscreenElement) {
-      document.exitFullscreen?.();
+      document.exitFullscreen?.().catch(() => {});
+    }
+    const sId = currentSalaId || currentSalaObj?.uuid || currentSalaObj?.id;
+    if (sId) {
+      navigateToRoute(`herramientas/scoreboard-baccarat/${sId}`);
+    } else {
+      navigateToRoute('herramientas');
     }
     dispatch('close');
   }
+
+  function handleKeydown(e) {
+    if (e.key === 'Escape') {
+      if (isFullscreen && document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      } else {
+        handleClose();
+      }
+    }
+  }
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 <div
   bind:this={rootElement}
@@ -597,7 +616,7 @@
         on:click={handleClose}
         title="Volver a la lista de mesas de la sala"
       >
-        ✕ Volver a Mesas
+        ← Volver a Mesas
       </button>
     </div>
   </header>
@@ -889,15 +908,17 @@
   .scoreboard-container {
     background: #090d16;
     color: #f8fafc;
-    border-radius: 14px;
-    border: 1px solid #1e293b;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-    overflow: hidden;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    min-height: 100vh;
+    width: 100%;
+    box-sizing: border-box;
     font-family: inherit;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 16px;
+    padding: 14px 18px;
   }
 
   .fullscreen-mode {
