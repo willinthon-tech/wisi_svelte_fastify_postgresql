@@ -100,6 +100,14 @@ export const navMenuStore = writable([
       { uuid: 'd2992a2a-642a-4b29-8547-772c8f1963a3', nombre: 'Excepciones', ruta: '/configuracion/excepciones', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] },
       { uuid: '4827f008-2c8b-44d9-be39-6ff3f4ee744e', nombre: 'Fechas Patrias', ruta: '/configuracion/fechas-patrias', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
     ]
+  },
+  {
+    uuid: 'page-otros-tools',
+    nombre: 'OTROS',
+    icono: 'build',
+    modulos: [
+      { uuid: 'mod-otros-herramientas', nombre: 'Herramientas', ruta: '/herramientas', permisos: ['VER', 'AGREGAR', 'EDITAR', 'ELIMINAR'] }
+    ]
   }
 ]);
 
