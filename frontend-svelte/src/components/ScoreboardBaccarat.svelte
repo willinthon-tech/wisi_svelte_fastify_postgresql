@@ -70,7 +70,6 @@
 
   // Audio Context for tactile casino keypad sounds
   let audioCtx = null;
-  let soundEnabled = true;
 
   function initAudio() {
     if (typeof window === 'undefined') return;
@@ -85,7 +84,6 @@
   }
 
   function playSound(type) {
-    if (!soundEnabled) return;
     initAudio();
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') {
@@ -159,11 +157,11 @@
     }, 3000);
   }
 
-  // Grid dimensions
+  // Grid dimensions for col-6 side-by-side roadmaps
   const BEAD_ROWS = 6;
-  const BEAD_COLS = 22;
+  const BEAD_COLS = 16;
   const BIG_ROWS = 6;
-  const BIG_COLS = 34;
+  const BIG_COLS = 24;
 
   function loadSavedShoe() {
     try {
@@ -365,7 +363,7 @@
   })();
 
   $: bigRoadGrid = (() => {
-    const totalCols = Math.max(BIG_COLS, 32);
+    const totalCols = Math.max(BIG_COLS, 26);
     const grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
 
     let col = 0;
@@ -471,92 +469,40 @@
   class="scoreboard-container"
   class:fullscreen-mode={isFullscreen}
 >
-  <!-- TOP CASINO HEADER BAR -->
+  <!-- TOP CASINO HEADER (Clean, Sala/Mesa/Zapato under Title) -->
   <header class="sb-header">
-    <div class="sb-header-left">
-      <div class="sb-title-badge">
-        <div>
-          <h2 class="sb-title">SCOREBOARD BACCARAT</h2>
-          <span class="sb-subtitle">PUNTO Y BANCA • TECLADO CRUPIER Y AUDITORÍA</span>
+    <div class="sb-header-brand">
+      <h2 class="sb-title">SCOREBOARD BACCARAT</h2>
+      <div class="sb-pills-row">
+        {#if currentSalaName}
+          <div class="sb-shoe-pill sala-pill">
+            <span class="pill-label">SALA</span>
+            <span class="pill-value">{currentSalaName}</span>
+          </div>
+        {/if}
+
+        {#if currentMesaName}
+          <div class="sb-shoe-pill mesa-pill">
+            <span class="pill-label">MESA</span>
+            <span class="pill-value">{currentMesaName}</span>
+          </div>
+        {/if}
+
+        <div class="sb-shoe-pill shoe-pill">
+          <span class="pill-label">ZAPATO</span>
+          <span class="pill-value">#{shoeNumber}</span>
+          <span class="pill-sep">•</span>
+          <span class="pill-label">MANOS</span>
+          <span class="pill-value">#{totalHands}</span>
         </div>
       </div>
+    </div>
 
-      {#if currentSalaName}
-        <div class="sb-shoe-pill sala-pill">
-          <span class="pill-label">SALA</span>
-          <span class="pill-value">{currentSalaName}</span>
-        </div>
-      {/if}
-
-      {#if currentMesaName}
-        <div class="sb-shoe-pill mesa-pill">
-          <span class="pill-label">MESA</span>
-          <span class="pill-value">{currentMesaName}</span>
-        </div>
-      {/if}
-
-      <div class="sb-shoe-pill">
-        <span class="pill-label">ZAPATO</span>
-        <span class="pill-value">#{shoeNumber}</span>
-        <span class="pill-sep">•</span>
-        <span class="pill-label">MANOS</span>
-        <span class="pill-value">#{totalHands}</span>
+    {#if feedbackMessage}
+      <div class="feedback-toast">
+        {feedbackMessage}
       </div>
-
-      {#if feedbackMessage}
-        <div class="feedback-toast">
-          {feedbackMessage}
-        </div>
-      {/if}
-    </div>
-
-    <div class="sb-header-right">
-      <button
-        type="button"
-        class="sb-btn sb-btn-ghost"
-        on:click={() => soundEnabled = !soundEnabled}
-        title={soundEnabled ? 'Silenciar sonidos' : 'Activar sonidos'}
-      >
-        <span>{soundEnabled ? '🔊' : '🔇'}</span>
-      </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-warning"
-        on:click={undoLast}
-        disabled={history.length === 0}
-        title="Deshacer la última mano registrada (O presiona el botón ← del teclado)"
-      >
-        <span>←</span> Deshacer
-      </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-danger"
-        on:click={resetShoe}
-        title="Limpiar marcador e iniciar un nuevo zapato"
-      >
-        <span>🔄</span> Nuevo Zapato
-      </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-secondary"
-        on:click={toggleFullscreen}
-        title="Pantalla Completa para monitor de mesa"
-      >
-        <span>{isFullscreen ? '⤦' : '⛶'}</span> {isFullscreen ? 'Salir' : 'Pantalla Completa'}
-      </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-close"
-        on:click={handleClose}
-        title="Volver a la lista de mesas de la sala"
-      >
-        ← Volver a Mesas
-      </button>
-    </div>
+    {/if}
   </header>
 
   <!-- TOP STATS BEAD COUNTERS STRIP (Exact Casino Spec) -->
@@ -653,7 +599,211 @@
     </div>
   </section>
 
-  <!-- PROFESSIONAL CROUPIER ARCADE KEYPAD (Exact Reference Alignment) -->
+  <!-- OFFICIAL CASINO ROADMAPS SECTION: COL-6 & COL-6 (SIDE BY SIDE) -->
+  <section class="sb-roadmaps-grid-2col">
+    <!-- COL-6 LEFT: BEAD PLATE (珠盘路) -->
+    <div class="roadmap-card col-half">
+      <div class="roadmap-header">
+        <div class="rm-title">
+          <span>●</span> BEAD PLATE (PLATO DE CUENTAS)
+        </div>
+        <div class="rm-legend">
+          <span class="lg-b">🔴 B</span>
+          <span class="lg-p">🔵 P</span>
+          <span class="lg-t">🟢 T</span>
+        </div>
+      </div>
+
+      <div class="grid-scrollable">
+        <table class="bead-table">
+          <tbody>
+            {#each beadGrid.grid as row, rIdx}
+              <tr>
+                {#each row as cell, cIdx}
+                  <td
+                    class="bead-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    class:has-hand={!!cell}
+                    on:click={() => cell && selectHand(cell.historyIndex)}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
+                  >
+                    {#if cell}
+                      <div
+                        class="bead-circle {cell.winner.toLowerCase()}"
+                        class:has-b-pair={cell.bPair}
+                        class:has-p-pair={cell.pPair}
+                      >
+                        <span class="bead-letter">
+                          {cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T'}
+                        </span>
+                        {#if cell.bPair}
+                          <span class="dot-b-pair" title="Par Banca"></span>
+                        {/if}
+                        {#if cell.pPair}
+                          <span class="dot-p-pair" title="Par Punto"></span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <div class="bead-empty"></div>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- COL-6 RIGHT: BIG ROAD (大路) -->
+    <div class="roadmap-card col-half">
+      <div class="roadmap-header">
+        <div class="rm-title">
+          <span>═</span> BIG ROAD (GRAN CAMINO)
+        </div>
+        <div class="rm-legend">
+          <span class="rm-hint">Rachas y Tendencias</span>
+        </div>
+      </div>
+
+      <div class="grid-scrollable">
+        <table class="bigroad-table">
+          <tbody>
+            {#each bigRoadGrid.grid as row, rIdx}
+              <tr>
+                {#each row as cell, cIdx}
+                  <td
+                    class="bigroad-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    class:has-hand={!!cell}
+                    on:click={() => cell && selectHand(cell.historyIndex)}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''} (Clic para editar)` : ''}
+                  >
+                    {#if cell}
+                      <div
+                        class="bigroad-ring {cell.winner.toLowerCase()}"
+                        class:is-tie={cell.isTieOnly}
+                      >
+                        {#if cell.tieCount > 0}
+                          <span class="bigroad-tie-slash"></span>
+                          {#if cell.tieCount > 1}
+                            <span class="tie-badge-num">{cell.tieCount}</span>
+                          {/if}
+                        {/if}
+                        {#if cell.bPair}
+                          <span class="dot-b-pair"></span>
+                        {/if}
+                        {#if cell.pPair}
+                          <span class="dot-p-pair"></span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <div class="bigroad-empty"></div>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- INLINE CELL EDIT TOOLBAR (Active when any cell in roadmaps is clicked) -->
+  {#if selectedHandIndex !== null && selectedHand}
+    <div class="edit-toolbar-box">
+      <div class="edit-toolbar-header">
+        <div class="edit-title-group">
+          <span class="edit-badge">🟡 EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
+          <span class="edit-hint">Modifica el ganador o las parejas de esta mano</span>
+        </div>
+
+        <div class="edit-quick-actions">
+          <button type="button" class="btn-tool-nav" on:click={prevHand} disabled={selectedHandIndex === 0} title="Mano anterior">
+            ◀ Anterior
+          </button>
+          <button type="button" class="btn-tool-nav" on:click={nextHand} disabled={selectedHandIndex === history.length - 1} title="Siguiente mano">
+            Siguiente ▶
+          </button>
+          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Eliminar esta mano del zapato">
+            🗑️ Eliminar
+          </button>
+          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Cerrar edición">
+            ✓ Listo
+          </button>
+        </div>
+      </div>
+
+      <div class="edit-controls-row">
+        <div class="edit-group">
+          <span class="edit-group-label">GANADOR:</span>
+          <button
+            type="button"
+            class="edit-choice-btn punto"
+            class:chosen={selectedHand.winner === 'PUNTO'}
+            on:click={() => updateSelectedWinner('PUNTO')}
+          >
+            🔵 PUNTO
+          </button>
+          <button
+            type="button"
+            class="edit-choice-btn banca"
+            class:chosen={selectedHand.winner === 'BANCA'}
+            on:click={() => updateSelectedWinner('BANCA')}
+          >
+            🔴 BANCA
+          </button>
+          <button
+            type="button"
+            class="edit-choice-btn empate"
+            class:chosen={selectedHand.winner === 'EMPATE'}
+            on:click={() => updateSelectedWinner('EMPATE')}
+          >
+            🟢 EMPATE
+          </button>
+        </div>
+
+        <div class="edit-group">
+          <span class="edit-group-label">PARES Y ATRIBUTOS:</span>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.pPair}
+            on:click={() => toggleSelectedMod('pPair')}
+          >
+            🔵 P.Pair {selectedHand.pPair ? '✓' : ''}
+          </button>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.bPair}
+            on:click={() => toggleSelectedMod('bPair')}
+          >
+            🔴 B.Pair {selectedHand.bPair ? '✓' : ''}
+          </button>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.natural}
+            on:click={() => toggleSelectedMod('natural')}
+          >
+            ⚡ Natural {selectedHand.natural ? '✓' : ''}
+          </button>
+          <button
+            type="button"
+            class="edit-pill-toggle"
+            class:active-pill={selectedHand.special}
+            on:click={() => toggleSelectedMod('special')}
+          >
+            ⭐ Special {selectedHand.special ? '✓' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- CROUPIER ARCADE KEYPAD (Exact Reference Alignment) -->
   <section class="croupier-keypad-panel">
     <div class="keypad-grid-4col">
       <!-- COLUMN 1: P.PAIR + P BUTTON -->
@@ -777,211 +927,49 @@
     </div>
   </section>
 
-  <!-- INLINE CELL EDIT TOOLBAR (Active when any cell in roadmaps is clicked) -->
-  {#if selectedHandIndex !== null && selectedHand}
-    <div class="edit-toolbar-box">
-      <div class="edit-toolbar-header">
-        <div class="edit-title-group">
-          <span class="edit-badge">🟡 EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
-          <span class="edit-hint">Haz clic en los botones para cambiar el resultado o los pares de esta mano</span>
-        </div>
-
-        <div class="edit-quick-actions">
-          <button type="button" class="btn-tool-nav" on:click={prevHand} disabled={selectedHandIndex === 0} title="Mano anterior">
-            ◀ Anterior
-          </button>
-          <button type="button" class="btn-tool-nav" on:click={nextHand} disabled={selectedHandIndex === history.length - 1} title="Siguiente mano">
-            Siguiente ▶
-          </button>
-          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Eliminar esta mano del zapato">
-            🗑️ Eliminar
-          </button>
-          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Cerrar edición">
-            ✓ Guardar / Listo
-          </button>
-        </div>
-      </div>
-
-      <div class="edit-controls-row">
-        <div class="edit-group">
-          <span class="edit-group-label">GANADOR:</span>
-          <button
-            type="button"
-            class="edit-choice-btn punto"
-            class:chosen={selectedHand.winner === 'PUNTO'}
-            on:click={() => updateSelectedWinner('PUNTO')}
-          >
-            🔵 PUNTO
-          </button>
-          <button
-            type="button"
-            class="edit-choice-btn banca"
-            class:chosen={selectedHand.winner === 'BANCA'}
-            on:click={() => updateSelectedWinner('BANCA')}
-          >
-            🔴 BANCA
-          </button>
-          <button
-            type="button"
-            class="edit-choice-btn empate"
-            class:chosen={selectedHand.winner === 'EMPATE'}
-            on:click={() => updateSelectedWinner('EMPATE')}
-          >
-            🟢 EMPATE
-          </button>
-        </div>
-
-        <div class="edit-group">
-          <span class="edit-group-label">PARES Y ATRIBUTOS:</span>
-          <button
-            type="button"
-            class="edit-pill-toggle"
-            class:active-pill={selectedHand.pPair}
-            on:click={() => toggleSelectedMod('pPair')}
-          >
-            🔵 P.Pair {selectedHand.pPair ? '✓' : ''}
-          </button>
-          <button
-            type="button"
-            class="edit-pill-toggle"
-            class:active-pill={selectedHand.bPair}
-            on:click={() => toggleSelectedMod('bPair')}
-          >
-            🔴 B.Pair {selectedHand.bPair ? '✓' : ''}
-          </button>
-          <button
-            type="button"
-            class="edit-pill-toggle"
-            class:active-pill={selectedHand.natural}
-            on:click={() => toggleSelectedMod('natural')}
-          >
-            ⚡ Natural (Win) {selectedHand.natural ? '✓' : ''}
-          </button>
-          <button
-            type="button"
-            class="edit-pill-toggle"
-            class:active-pill={selectedHand.special}
-            on:click={() => toggleSelectedMod('special')}
-          >
-            ⭐ Special {selectedHand.special ? '✓' : ''}
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- OFFICIAL CASINO ROADMAPS SECTION (Interactive & Clickable to Edit) -->
-  <section class="sb-roadmaps-section">
-    <!-- 1. BEAD PLATE (珠盘路) -->
-    <div class="roadmap-card">
-      <div class="roadmap-header">
-        <div class="rm-title">
-          <span>●</span> BEAD PLATE (PLATO DE CUENTAS)
-          <span class="rm-instruction">Haz clic en cualquier celda para seleccionarla y editarla</span>
-        </div>
-        <div class="rm-legend">
-          <span class="lg-b">🔴 B: Banca</span>
-          <span class="lg-p">🔵 P: Punto</span>
-          <span class="lg-t">🟢 T: Empate</span>
-        </div>
-      </div>
-
-      <div class="grid-scrollable">
-        <table class="bead-table">
-          <tbody>
-            {#each beadGrid.grid as row, rIdx}
-              <tr>
-                {#each row as cell, cIdx}
-                  <td
-                    class="bead-cell"
-                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                    class:has-hand={!!cell}
-                    on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
-                  >
-                    {#if cell}
-                      <div
-                        class="bead-circle {cell.winner.toLowerCase()}"
-                        class:has-b-pair={cell.bPair}
-                        class:has-p-pair={cell.pPair}
-                      >
-                        <span class="bead-letter">
-                          {cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T'}
-                        </span>
-                        {#if cell.bPair}
-                          <span class="dot-b-pair" title="Par Banca"></span>
-                        {/if}
-                        {#if cell.pPair}
-                          <span class="dot-p-pair" title="Par Punto"></span>
-                        {/if}
-                      </div>
-                    {:else}
-                      <div class="bead-empty"></div>
-                    {/if}
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+  <!-- ACTION BUTTONS FOOTER BAR (AL PIE) -->
+  <footer class="sb-footer">
+    <div class="sb-footer-left">
+      <button
+        type="button"
+        class="sb-btn sb-btn-close"
+        on:click={handleClose}
+        title="Volver a la lista de mesas de la sala"
+      >
+        ← Volver a Mesas
+      </button>
     </div>
 
-    <!-- 2. BIG ROAD (大路) -->
-    <div class="roadmap-card">
-      <div class="roadmap-header">
-        <div class="rm-title">
-          <span>═</span> BIG ROAD (GRAN CAMINO)
-          <span class="rm-instruction">Haz clic en una celda para editar</span>
-        </div>
-        <div class="rm-legend">
-          <span>Tendencias y Rachas</span>
-        </div>
-      </div>
+    <div class="sb-footer-right">
+      <button
+        type="button"
+        class="sb-btn sb-btn-warning"
+        on:click={undoLast}
+        disabled={history.length === 0}
+        title="Deshacer la última mano registrada (O usa el botón ← del teclado)"
+      >
+        <span>←</span> Deshacer
+      </button>
 
-      <div class="grid-scrollable">
-        <table class="bigroad-table">
-          <tbody>
-            {#each bigRoadGrid.grid as row, rIdx}
-              <tr>
-                {#each row as cell, cIdx}
-                  <td
-                    class="bigroad-cell"
-                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                    class:has-hand={!!cell}
-                    on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''} (Clic para editar)` : ''}
-                  >
-                    {#if cell}
-                      <div
-                        class="bigroad-ring {cell.winner.toLowerCase()}"
-                        class:is-tie={cell.isTieOnly}
-                      >
-                        {#if cell.tieCount > 0}
-                          <span class="bigroad-tie-slash"></span>
-                          {#if cell.tieCount > 1}
-                            <span class="tie-badge-num">{cell.tieCount}</span>
-                          {/if}
-                        {/if}
-                        {#if cell.bPair}
-                          <span class="dot-b-pair"></span>
-                        {/if}
-                        {#if cell.pPair}
-                          <span class="dot-p-pair"></span>
-                        {/if}
-                      </div>
-                    {:else}
-                      <div class="bigroad-empty"></div>
-                    {/if}
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+      <button
+        type="button"
+        class="sb-btn sb-btn-danger"
+        on:click={resetShoe}
+        title="Limpiar marcador e iniciar un nuevo zapato"
+      >
+        <span>🔄</span> Nuevo Zapato
+      </button>
+
+      <button
+        type="button"
+        class="sb-btn sb-btn-secondary"
+        on:click={toggleFullscreen}
+        title="Modo Pantalla Completa"
+      >
+        <span>{isFullscreen ? '⤦' : '⛶'}</span> {isFullscreen ? 'Salir Pantalla Completa' : 'Pantalla Completa'}
+      </button>
     </div>
-  </section>
+  </footer>
 </div>
 
 <style>
@@ -1002,50 +990,42 @@
     position: fixed;
     inset: 0;
     z-index: 9999999;
-    padding: 18px 24px;
+    padding: 16px 22px;
     overflow-y: auto;
   }
 
-  /* HEADER */
+  /* HEADER (Clean, Sala/Mesa/Zapato under title) */
   .sb-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 14px;
-    padding-bottom: 12px;
+    padding-bottom: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-wrap: wrap;
   }
 
-  .sb-header-left {
+  .sb-header-brand {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .sb-title-badge {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .sb-title {
     margin: 0;
-    font-size: 19px;
+    font-size: 21px;
     font-weight: 900;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
     background: linear-gradient(135deg, #ffffff, #cbd5e1);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
-  .sb-subtitle {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    color: #eab308;
-    display: block;
+  .sb-pills-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .sb-shoe-pill {
@@ -1053,10 +1033,10 @@
     align-items: center;
     gap: 6px;
     background: #1e293b;
-    padding: 5px 12px;
+    padding: 4px 10px;
     border-radius: 999px;
     border: 1px solid #334155;
-    font-size: 12px;
+    font-size: 11.5px;
   }
 
   .sala-pill {
@@ -1073,10 +1053,14 @@
   .mesa-pill .pill-label { color: #6ee7b7; }
   .mesa-pill .pill-value { color: #ffffff; }
 
+  .shoe-pill {
+    border-color: #64748b;
+  }
+
   .pill-label {
     color: #94a3b8;
     font-weight: 600;
-    font-size: 11px;
+    font-size: 10.5px;
   }
 
   .pill-value {
@@ -1097,6 +1081,7 @@
     padding: 4px 12px;
     border-radius: 999px;
     animation: fadeIn 0.2s ease;
+    align-self: center;
   }
 
   @keyframes fadeIn {
@@ -1104,88 +1089,19 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .sb-header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .sb-btn {
-    border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 12.5px;
-    font-weight: 700;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease;
-  }
-
-  .sb-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .sb-btn-ghost {
-    background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
-  }
-  .sb-btn-ghost:hover:not(:disabled) {
-    background: #334155;
-    color: #ffffff;
-  }
-
-  .sb-btn-warning {
-    background: #854d0e;
-    color: #fef08a;
-  }
-  .sb-btn-warning:hover:not(:disabled) {
-    background: #a16207;
-  }
-
-  .sb-btn-danger {
-    background: #991b1b;
-    color: #fee2e2;
-  }
-  .sb-btn-danger:hover:not(:disabled) {
-    background: #b91c1c;
-  }
-
-  .sb-btn-secondary {
-    background: #1e293b;
-    color: #38bdf8;
-    border: 1px solid #0284c7;
-  }
-  .sb-btn-secondary:hover {
-    background: #0284c7;
-    color: #ffffff;
-  }
-
-  .sb-btn-close {
-    background: #475569;
-    color: #ffffff;
-  }
-  .sb-btn-close:hover {
-    background: #64748b;
-  }
-
   /* CASINO BEAD COUNTERS STRIP (Exact Reference Spec) */
   .casino-bead-counters-strip {
     background: #ffffff;
     border-radius: 8px;
-    padding: 8px 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    padding: 7px 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
     border: 1.5px solid #cbd5e1;
   }
 
   .counters-scroll {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     overflow-x: auto;
     padding-bottom: 2px;
   }
@@ -1194,18 +1110,18 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    min-width: 38px;
+    gap: 3px;
+    min-width: 36px;
   }
 
   .bead-circle-badge {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 900;
     color: #ffffff;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25), inset 0 2px 2px rgba(255, 255, 255, 0.6);
@@ -1225,18 +1141,18 @@
     color: #1e293b;
   }
 
-  .bead-gold { background: radial-gradient(circle at 35% 30%, #facc15, #ca8a04); color: #000; font-size: 12px; }
-  .bead-darkgreen { background: radial-gradient(circle at 35% 30%, #166534, #052e16); font-size: 12px; }
-  .bead-darkred { background: radial-gradient(circle at 35% 30%, #991b1b, #450a0a); font-size: 12px; }
-  .bead-lightblue { background: radial-gradient(circle at 35% 30%, #38bdf8, #0284c7); font-size: 12px; }
-  .bead-navy { background: radial-gradient(circle at 35% 30%, #1d4ed8, #0f172a); font-size: 12px; }
-  .bead-gold-flame { background: radial-gradient(circle at 35% 30%, #eab308, #713f12); color: #000; font-size: 12px; }
-  .bead-orange-flame { background: radial-gradient(circle at 35% 30%, #f97316, #7c2d12); font-size: 12px; }
+  .bead-gold { background: radial-gradient(circle at 35% 30%, #facc15, #ca8a04); color: #000; font-size: 11px; }
+  .bead-darkgreen { background: radial-gradient(circle at 35% 30%, #166534, #052e16); font-size: 11px; }
+  .bead-darkred { background: radial-gradient(circle at 35% 30%, #991b1b, #450a0a); font-size: 11px; }
+  .bead-lightblue { background: radial-gradient(circle at 35% 30%, #38bdf8, #0284c7); font-size: 11px; }
+  .bead-navy { background: radial-gradient(circle at 35% 30%, #1d4ed8, #0f172a); font-size: 11px; }
+  .bead-gold-flame { background: radial-gradient(circle at 35% 30%, #eab308, #713f12); color: #000; font-size: 11px; }
+  .bead-orange-flame { background: radial-gradient(circle at 35% 30%, #f97316, #7c2d12); font-size: 11px; }
 
   .bead-dot {
     position: absolute;
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     border: 1.5px solid #ffffff;
   }
@@ -1252,7 +1168,7 @@
   }
 
   .counter-digit {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 900;
     color: #0f172a;
     line-height: 1;
@@ -1262,27 +1178,396 @@
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     background: #f1f5f9;
-    padding: 6px 14px;
+    padding: 5px 12px;
     border-radius: 999px;
     border: 1px solid #e2e8f0;
   }
 
   .pct-tag {
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 800;
   }
   .pct-tag.b { color: #dc2626; }
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
+  /* ROADMAPS SECTION: COL-6 & COL-6 (SIDE BY SIDE) */
+  .sb-roadmaps-grid-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  @media (max-width: 960px) {
+    .sb-roadmaps-grid-2col {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .col-half {
+    min-width: 0;
+  }
+
+  .roadmap-card {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .roadmap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #94a3b8;
+    gap: 8px;
+  }
+
+  .rm-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #f1f5f9;
+    font-size: 12px;
+  }
+
+  .rm-hint {
+    font-size: 10px;
+    color: #64748b;
+  }
+
+  .rm-legend {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .lg-b { color: #f87171; }
+  .lg-p { color: #60a5fa; }
+  .lg-t { color: #4ade80; }
+
+  .grid-scrollable {
+    overflow-x: auto;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 4px;
+  }
+
+  /* BEAD TABLE */
+  .bead-table, .bigroad-table {
+    border-collapse: collapse;
+    margin: 0 auto;
+  }
+
+  .bead-cell {
+    width: 26px;
+    height: 26px;
+    border: 1px solid #1e293b;
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+    transition: background 0.15s ease;
+  }
+
+  .bead-cell.has-hand {
+    cursor: pointer;
+  }
+  .bead-cell.has-hand:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* YELLOW HIGHLIGHT ON SELECTION (Exact Reference Image 5) */
+  .bead-cell.selected-cell, .bigroad-cell.selected-cell {
+    background: #ffc107 !important;
+    outline: 2px solid #b45309;
+    z-index: 5;
+    position: relative;
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.85);
+  }
+
+  .bead-circle {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    margin: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    font-size: 10.5px;
+    font-weight: 900;
+    color: #ffffff;
+    user-select: none;
+  }
+
+  .bead-circle.banca { background: #dc2626; }
+  .bead-circle.punto { background: #2563eb; }
+  .bead-circle.empate { background: #16a34a; }
+
+  .dot-b-pair {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 5px;
+    height: 5px;
+    background: #ef4444;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+  }
+
+  .dot-p-pair {
+    position: absolute;
+    bottom: 1px;
+    right: 1px;
+    width: 5px;
+    height: 5px;
+    background: #3b82f6;
+    border: 1px solid #ffffff;
+    border-radius: 50%;
+  }
+
+  .bead-empty, .bigroad-empty {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* BIG ROAD TABLE */
+  .bigroad-cell {
+    width: 22px;
+    height: 22px;
+    border: 1px solid #1e293b;
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+    transition: background 0.15s ease;
+  }
+
+  .bigroad-cell.has-hand {
+    cursor: pointer;
+  }
+  .bigroad-cell.has-hand:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .bigroad-ring {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    margin: auto;
+    border: 2px solid transparent;
+    position: relative;
+  }
+
+  .bigroad-ring.banca {
+    border-color: #ef4444;
+  }
+  .bigroad-ring.punto {
+    border-color: #3b82f6;
+  }
+  .bigroad-ring.empate {
+    border-color: #22c55e;
+  }
+
+  .bigroad-tie-slash {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 2px;
+    background: #22c55e;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+
+  .tie-badge-num {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #16a34a;
+    color: #fff;
+    font-size: 8px;
+    font-weight: 900;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* INLINE EDIT TOOLBAR */
+  .edit-toolbar-box {
+    background: #0f172a;
+    border: 2px solid #f59e0b;
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+    animation: slideDown 0.2s ease;
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .edit-toolbar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 6px;
+  }
+
+  .edit-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .edit-badge {
+    background: #f59e0b;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 900;
+    padding: 3px 10px;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .edit-hint {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  .edit-quick-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-tool-nav, .btn-tool-del, .btn-tool-done {
+    border: none;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-tool-nav {
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+  }
+  .btn-tool-nav:hover:not(:disabled) {
+    background: #334155;
+    color: #ffffff;
+  }
+  .btn-tool-nav:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-tool-del {
+    background: #7f1d1d;
+    color: #fee2e2;
+  }
+  .btn-tool-del:hover {
+    background: #991b1b;
+  }
+
+  .btn-tool-done {
+    background: #16a34a;
+    color: #ffffff;
+  }
+  .btn-tool-done:hover {
+    background: #22c55e;
+  }
+
+  .edit-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .edit-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .edit-group-label {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #eab308;
+    margin-right: 2px;
+  }
+
+  .edit-choice-btn {
+    border: none;
+    border-radius: 5px;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    opacity: 0.6;
+  }
+
+  .edit-choice-btn.punto { background: #1d4ed8; color: #ffffff; }
+  .edit-choice-btn.banca { background: #b91c1c; color: #ffffff; }
+  .edit-choice-btn.empate { background: #15803d; color: #ffffff; }
+
+  .edit-choice-btn.chosen {
+    opacity: 1;
+    transform: scale(1.06);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+    outline: 2px solid #ffffff;
+  }
+
+  .edit-pill-toggle {
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .edit-pill-toggle.active-pill {
+    background: #3b82f6;
+    color: #ffffff;
+    border-color: #60a5fa;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+  }
+
   /* CROUPIER ARCADE KEYPAD (Exact Reference Alignment) */
   .croupier-keypad-panel {
     background: #ffffff;
     border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    padding: 14px 18px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
     display: flex;
     justify-content: center;
@@ -1291,14 +1576,14 @@
   .keypad-grid-4col {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 28px;
-    max-width: 680px;
+    gap: 24px;
+    max-width: 660px;
     width: 100%;
   }
 
   @media (max-width: 600px) {
     .keypad-grid-4col {
-      gap: 12px;
+      gap: 10px;
     }
   }
 
@@ -1306,18 +1591,18 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
 
   /* MODIFIER PILLS ROW */
   .keypad-pill {
     width: 100%;
-    max-width: 125px;
-    height: 42px;
+    max-width: 120px;
+    height: 40px;
     border-radius: 999px;
     background: #ffffff;
     font-family: inherit;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 800;
     cursor: pointer;
     display: inline-flex;
@@ -1378,8 +1663,8 @@
 
   /* 3D CIRCULAR CASINO BUTTONS */
   .keypad-btn-circle {
-    width: 86px;
-    height: 86px;
+    width: 82px;
+    height: 82px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -1396,8 +1681,8 @@
 
   @media (max-width: 600px) {
     .keypad-btn-circle {
-      width: 70px;
-      height: 70px;
+      width: 66px;
+      height: 66px;
     }
   }
 
@@ -1427,7 +1712,7 @@
   }
 
   .btn-letter {
-    font-size: 38px;
+    font-size: 36px;
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
@@ -1436,7 +1721,7 @@
 
   @media (max-width: 600px) {
     .btn-letter {
-      font-size: 30px;
+      font-size: 28px;
     }
   }
 
@@ -1460,19 +1745,19 @@
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
   .btn-undo .btn-letter {
-    font-size: 34px;
+    font-size: 32px;
   }
 
-  /* CORNER BADGES ON P, B, T (When P.Pair / B.Pair active) */
+  /* CORNER BADGES ON P, B, T */
   .badge-corner-tl {
     position: absolute;
     top: 0px;
     left: 0px;
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #ff4d4d, #b91c1c);
-    border: 2.5px solid #ffffff;
+    border: 2px solid #ffffff;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
     z-index: 10;
     animation: popBadge 0.15s ease-out;
@@ -1482,11 +1767,11 @@
     position: absolute;
     bottom: 0px;
     right: 0px;
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8);
-    border: 2.5px solid #ffffff;
+    border: 2px solid #ffffff;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
     z-index: 10;
     animation: popBadge 0.15s ease-out;
@@ -1509,366 +1794,74 @@
   .tie-caption { color: #16a34a; }
   .undo-caption { color: #854d0e; }
 
-  /* INLINE EDIT TOOLBAR */
-  .edit-toolbar-box {
-    background: #0f172a;
-    border: 2px solid #f59e0b;
-    border-radius: 10px;
-    padding: 12px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
-    animation: slideDown 0.2s ease;
-  }
-
-  @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .edit-toolbar-header {
+  /* FOOTER ACTION BAR (AL PIE) */
+  .sb-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    flex-wrap: wrap;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 8px;
-  }
-
-  .edit-title-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: auto;
     flex-wrap: wrap;
   }
 
-  .edit-badge {
-    background: #f59e0b;
-    color: #0f172a;
-    font-size: 13px;
-    font-weight: 900;
-    padding: 4px 12px;
-    border-radius: 6px;
-    letter-spacing: 0.5px;
-  }
-
-  .edit-hint {
-    font-size: 12px;
-    color: #94a3b8;
-  }
-
-  .edit-quick-actions {
+  .sb-footer-left, .sb-footer-right {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
-  .btn-tool-nav, .btn-tool-del, .btn-tool-done {
+  .sb-btn {
     border: none;
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 12px;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     transition: all 0.15s ease;
   }
 
-  .btn-tool-nav {
-    background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
-  }
-  .btn-tool-nav:hover:not(:disabled) {
-    background: #334155;
-    color: #ffffff;
-  }
-  .btn-tool-nav:disabled {
+  .sb-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
   }
 
-  .btn-tool-del {
-    background: #7f1d1d;
+  .sb-btn-warning {
+    background: #854d0e;
+    color: #fef08a;
+  }
+  .sb-btn-warning:hover:not(:disabled) {
+    background: #a16207;
+  }
+
+  .sb-btn-danger {
+    background: #991b1b;
     color: #fee2e2;
   }
-  .btn-tool-del:hover {
-    background: #991b1b;
+  .sb-btn-danger:hover:not(:disabled) {
+    background: #b91c1c;
   }
 
-  .btn-tool-done {
-    background: #16a34a;
-    color: #ffffff;
-  }
-  .btn-tool-done:hover {
-    background: #22c55e;
-  }
-
-  .edit-controls-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-
-  .edit-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .edit-group-label {
-    font-size: 11px;
-    font-weight: 800;
-    color: #eab308;
-    margin-right: 4px;
-  }
-
-  .edit-choice-btn {
-    border: none;
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 12px;
-    font-weight: 800;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    opacity: 0.6;
-  }
-
-  .edit-choice-btn.punto { background: #1d4ed8; color: #ffffff; }
-  .edit-choice-btn.banca { background: #b91c1c; color: #ffffff; }
-  .edit-choice-btn.empate { background: #15803d; color: #ffffff; }
-
-  .edit-choice-btn.chosen {
-    opacity: 1;
-    transform: scale(1.06);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
-    outline: 2px solid #ffffff;
-  }
-
-  .edit-pill-toggle {
+  .sb-btn-secondary {
     background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
-    border-radius: 999px;
-    padding: 5px 12px;
-    font-size: 11.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    color: #38bdf8;
+    border: 1px solid #0284c7;
   }
-
-  .edit-pill-toggle.active-pill {
-    background: #3b82f6;
+  .sb-btn-secondary:hover {
+    background: #0284c7;
     color: #ffffff;
-    border-color: #60a5fa;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
   }
 
-  /* ROADMAPS SECTION */
-  .sb-roadmaps-section {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .roadmap-card {
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 10px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .roadmap-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 12px;
-    font-weight: 800;
-    color: #94a3b8;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .rm-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #f1f5f9;
-  }
-
-  .rm-instruction {
-    font-size: 10.5px;
-    font-weight: 600;
-    color: #eab308;
-    background: rgba(234, 179, 8, 0.12);
-    padding: 2px 8px;
-    border-radius: 4px;
-    border: 1px solid rgba(234, 179, 8, 0.3);
-  }
-
-  .rm-legend {
-    display: flex;
-    gap: 12px;
-    font-size: 11px;
-    font-weight: 700;
-  }
-  .lg-b { color: #f87171; }
-  .lg-p { color: #60a5fa; }
-  .lg-t { color: #4ade80; }
-
-  .grid-scrollable {
-    overflow-x: auto;
-    background: #020617;
-    border: 1px solid #1e293b;
-    border-radius: 6px;
-    padding: 6px;
-  }
-
-  /* BEAD TABLE */
-  .bead-table, .bigroad-table {
-    border-collapse: collapse;
-    margin: 0 auto;
-  }
-
-  .bead-cell {
-    width: 28px;
-    height: 28px;
-    border: 1px solid #1e293b;
-    padding: 0;
-    text-align: center;
-    vertical-align: middle;
-    transition: background 0.15s ease;
-  }
-
-  .bead-cell.has-hand {
-    cursor: pointer;
-  }
-  .bead-cell.has-hand:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  /* YELLOW HIGHLIGHT ON SELECTION (Exact Reference Image 5) */
-  .bead-cell.selected-cell, .bigroad-cell.selected-cell {
-    background: #ffc107 !important;
-    outline: 2px solid #b45309;
-    z-index: 5;
-    position: relative;
-    box-shadow: 0 0 12px rgba(255, 193, 7, 0.85);
-  }
-
-  .bead-circle {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    margin: auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    font-size: 11px;
-    font-weight: 900;
+  .sb-btn-close {
+    background: #334155;
     color: #ffffff;
-    user-select: none;
   }
-
-  .bead-circle.banca { background: #dc2626; }
-  .bead-circle.punto { background: #2563eb; }
-  .bead-circle.empate { background: #16a34a; }
-
-  .dot-b-pair {
-    position: absolute;
-    top: 1px;
-    left: 1px;
-    width: 5px;
-    height: 5px;
-    background: #ef4444;
-    border: 1px solid #ffffff;
-    border-radius: 50%;
-  }
-
-  .dot-p-pair {
-    position: absolute;
-    bottom: 1px;
-    right: 1px;
-    width: 5px;
-    height: 5px;
-    background: #3b82f6;
-    border: 1px solid #ffffff;
-    border-radius: 50%;
-  }
-
-  .bead-empty, .bigroad-empty {
-    width: 24px;
-    height: 24px;
-  }
-
-  /* BIG ROAD TABLE */
-  .bigroad-cell {
-    width: 24px;
-    height: 24px;
-    border: 1px solid #1e293b;
-    padding: 0;
-    text-align: center;
-    vertical-align: middle;
-    transition: background 0.15s ease;
-  }
-
-  .bigroad-cell.has-hand {
-    cursor: pointer;
-  }
-  .bigroad-cell.has-hand:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .bigroad-ring {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    margin: auto;
-    border: 2.5px solid transparent;
-    position: relative;
-  }
-
-  .bigroad-ring.banca {
-    border-color: #ef4444;
-  }
-  .bigroad-ring.punto {
-    border-color: #3b82f6;
-  }
-  .bigroad-ring.empate {
-    border-color: #22c55e;
-  }
-
-  .bigroad-tie-slash {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 18px;
-    height: 2.5px;
-    background: #22c55e;
-    transform: translate(-50%, -50%) rotate(45deg);
-  }
-
-  .tie-badge-num {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    background: #16a34a;
-    color: #fff;
-    font-size: 8.5px;
-    font-weight: 900;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .sb-btn-close:hover {
+    background: #475569;
   }
 </style>
