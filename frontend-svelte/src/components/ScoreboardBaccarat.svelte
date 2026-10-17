@@ -325,6 +325,9 @@
     if (unsubscribeWs) {
       unsubscribeWs();
     }
+    if (isFullscreen) {
+      exitAppFullscreen();
+    }
   });
 
   // Derived Statistics
@@ -936,19 +939,71 @@
   let isFullscreen = false;
   let rootElement;
 
+  function exitAppFullscreen() {
+    if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
+      try { window.Capacitor?.Plugins?.KioskPlugin?.setFullscreen?.({ enable: false }); } catch (e) {}
+    }
+    if (typeof window !== 'undefined' && window.AndroidKiosk?.setFullscreen) {
+      try { window.AndroidKiosk.setFullscreen(false); } catch (e) {}
+    }
+    if (typeof document !== 'undefined' && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    isFullscreen = false;
+  }
+
   function toggleFullscreen() {
-    if (!rootElement) return;
-    if (!document.fullscreenElement) {
-      rootElement.requestFullscreen?.().then(() => isFullscreen = true).catch(() => {});
-    } else {
-      document.exitFullscreen?.().then(() => isFullscreen = false).catch(() => {});
+    playSound('click');
+    const nextState = !isFullscreen;
+    isFullscreen = nextState;
+
+    // 1. En Capacitor Android nativo (Plugin Bridge)
+    if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
+      try {
+        const KioskPlugin = window.Capacitor?.Plugins?.KioskPlugin;
+        if (KioskPlugin?.setFullscreen) {
+          KioskPlugin.setFullscreen({ enable: nextState });
+        }
+      } catch (e) {
+        console.warn('Error en Capacitor KioskPlugin:', e);
+      }
+    }
+
+    // 2. En Android Nativo: Ocultar/Mostrar el banner del sistema (Status Bar y Navigation Bar)
+    if (typeof window !== 'undefined' && window.AndroidKiosk) {
+      try {
+        if (typeof window.AndroidKiosk.setFullscreen === 'function') {
+          window.AndroidKiosk.setFullscreen(nextState);
+        } else if (typeof window.AndroidKiosk.setImmersive === 'function') {
+          window.AndroidKiosk.setImmersive(nextState);
+        } else if (typeof window.AndroidKiosk.setKiosk === 'function') {
+          window.AndroidKiosk.setKiosk(nextState);
+        }
+      } catch (e) {
+        console.warn('Error en AndroidKiosk fullscreen:', e);
+      }
+    }
+
+    // 3. En Navegadores Web y Desktop: HTML5 Fullscreen API
+    if (typeof document !== 'undefined') {
+      try {
+        if (nextState) {
+          if (!document.fullscreenElement) {
+            const target = rootElement || document.documentElement;
+            const req = target.requestFullscreen || document.documentElement.requestFullscreen;
+            req?.call(target, { navigationUI: 'hide' })?.catch(() => {});
+          }
+        } else {
+          if (document.fullscreenElement) {
+            document.exitFullscreen?.().catch(() => {});
+          }
+        }
+      } catch (e) {}
     }
   }
 
   function handleClose() {
-    if (isFullscreen && document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
-    }
+    exitAppFullscreen();
     const sId = currentSalaId || currentSalaObj?.uuid || currentSalaObj?.id;
     if (sId) {
       navigateToRoute(`herramientas/scoreboard-baccarat/${sId}`);
@@ -964,8 +1019,8 @@
         selectedHandIndex = null;
         return;
       }
-      if (isFullscreen && document.fullscreenElement) {
-        document.exitFullscreen?.().catch(() => {});
+      if (isFullscreen) {
+        toggleFullscreen();
       } else {
         handleClose();
       }

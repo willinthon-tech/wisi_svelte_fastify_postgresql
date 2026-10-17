@@ -25,16 +25,25 @@ import android.webkit.WebView;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
 
 public class MainActivity extends BridgeActivity {
     private boolean isKiosk = false;
+    private boolean isFullscreenMode = false;
     private BroadcastReceiver downloadReceiver;
     private BroadcastReceiver kioskCommandReceiver;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(KioskPlugin.class);
         super.onCreate(savedInstanceState);
         
         // 1. Mantener la pantalla encendida permanentemente mientras Wisi Space esté abierta
@@ -47,27 +56,36 @@ public class MainActivity extends BridgeActivity {
         requestInitialPermissions();
 
         // 4. Configurar WebView con DownloadListener y KioskBridge
-        WebView webView = getBridge().getWebView();
-        if (webView != null) {
-            webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
-                downloadWithManager(url, contentDisposition, mimetype);
-            });
-
-            webView.addJavascriptInterface(new KioskBridge(), "AndroidKiosk");
-        }
+        setupWebViewBridge();
 
         // 5. En tablets y dispositivos antiguos, auto-ocultar barras de navegación si se deslizan
         View decorView = getWindow().getDecorView();
-        decorView.setOnSystemUiVisibilityChangeListener(visibility -> {
-            if (isKiosk && ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0 || (visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)) {
-                decorView.postDelayed(() -> {
-                    if (isKiosk) setImmersiveMode(true);
-                }, 300);
-            }
-        });
+        if (decorView != null) {
+            decorView.setOnSystemUiVisibilityChangeListener(visibility -> {
+                if ((isKiosk || isFullscreenMode) && ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0 || (visibility & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)) {
+                    decorView.postDelayed(() -> {
+                        if (isKiosk || isFullscreenMode) setImmersiveMode(true);
+                    }, 300);
+                }
+            });
+        }
 
         // 6. Registrar receptor de comandos ADB para activar/desactivar Kiosco remotamente
         registerKioskCommandReceiver();
+    }
+
+    private void setupWebViewBridge() {
+        try {
+            if (getBridge() != null) {
+                WebView webView = getBridge().getWebView();
+                if (webView != null) {
+                    webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+                        downloadWithManager(url, contentDisposition, mimetype);
+                    });
+                    webView.addJavascriptInterface(new KioskBridge(), "AndroidKiosk");
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     private void requestInitialPermissions() {
@@ -238,31 +256,58 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void setImmersiveMode(boolean enable) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            WindowInsetsController controller = getWindow().getInsetsController();
-            if (controller != null) {
-                if (enable) {
-                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_DEFAULT);
-                } else {
-                    controller.show(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+        isFullscreenMode = enable;
+        runOnUiThread(() -> {
+            try {
+                // 1. Permitir que la app se extienda sobre el notch / cámara frontal (Display Cutout)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    WindowManager.LayoutParams lp = getWindow().getAttributes();
+                    if (enable) {
+                        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                    } else {
+                        lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+                    }
+                    getWindow().setAttributes(lp);
                 }
-            }
-        } else {
-            View decorView = getWindow().getDecorView();
-            if (enable) {
-                decorView.setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_FULLSCREEN
-                );
-            } else {
-                decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
-            }
-        }
+
+                // 2. Flags de WindowManager para pantalla completa
+                if (enable) {
+                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+                } else {
+                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                }
+
+                // 3. AndroidX WindowCompat y WindowInsetsControllerCompat (Soporta desde Android 5 hasta Android 15+)
+                View decorView = getWindow().getDecorView();
+                if (decorView != null) {
+                    WindowCompat.setDecorFitsSystemWindows(getWindow(), !enable);
+                    WindowInsetsControllerCompat insetsController = WindowCompat.getInsetsController(getWindow(), decorView);
+                    if (insetsController != null) {
+                        if (enable) {
+                            insetsController.hide(WindowInsetsCompat.Type.systemBars());
+                            insetsController.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                        } else {
+                            insetsController.show(WindowInsetsCompat.Type.systemBars());
+                        }
+                    }
+
+                    // 4. Flags del decorView para compatibilidad con versiones antiguas y capas personalizadas (MIUI/ColorOS)
+                    if (enable) {
+                        decorView.setSystemUiVisibility(
+                            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        );
+                    } else {
+                        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                    }
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     public void enableKioskMode(boolean enable) {
@@ -329,9 +374,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (isKiosk) {
+        if (isKiosk || isFullscreenMode) {
             setImmersiveMode(true);
-            if (!hasFocus) {
+            if (!hasFocus && isKiosk) {
                 // Si el usuario deslizó desde arriba para abrir notificaciones / ajustes rápidos
                 try {
                     Object statusBarService = getSystemService("statusbar");
@@ -372,6 +417,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        setupWebViewBridge();
+        if (isKiosk || isFullscreenMode) {
+            setImmersiveMode(true);
+        }
         checkAndApplyDeviceOwnerKiosk();
     }
 
@@ -463,6 +512,31 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
+        public void setFullscreen(boolean enable) {
+            runOnUiThread(() -> setImmersiveMode(enable));
+        }
+
+        @JavascriptInterface
+        public void enterFullscreen() {
+            runOnUiThread(() -> setImmersiveMode(true));
+        }
+
+        @JavascriptInterface
+        public void exitFullscreen() {
+            runOnUiThread(() -> setImmersiveMode(false));
+        }
+
+        @JavascriptInterface
+        public void setImmersive(boolean enable) {
+            runOnUiThread(() -> setImmersiveMode(enable));
+        }
+
+        @JavascriptInterface
+        public boolean isFullscreenActive() {
+            return isFullscreenMode;
+        }
+
+        @JavascriptInterface
         public void downloadFile(String url, String filename, String mimeType) {
             runOnUiThread(() -> downloadWithManager(url, "attachment; filename=" + filename, mimeType));
         }
@@ -480,4 +554,65 @@ public class MainActivity extends BridgeActivity {
             });
         }
     }
+
+    @CapacitorPlugin(name = "KioskPlugin")
+    public static class KioskPlugin extends Plugin {
+        @PluginMethod
+        public void setFullscreen(PluginCall call) {
+            Boolean enable = call.getBoolean("enable", true);
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null) {
+                activity.setImmersiveMode(enable != null && enable);
+            }
+            call.resolve();
+        }
+
+        @PluginMethod
+        public void enterFullscreen(PluginCall call) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null) {
+                activity.setImmersiveMode(true);
+            }
+            call.resolve();
+        }
+
+        @PluginMethod
+        public void exitFullscreen(PluginCall call) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null) {
+                activity.setImmersiveMode(false);
+            }
+            call.resolve();
+        }
+
+        @PluginMethod
+        public void setImmersive(PluginCall call) {
+            Boolean enable = call.getBoolean("enable", true);
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null) {
+                activity.setImmersiveMode(enable != null && enable);
+            }
+            call.resolve();
+        }
+
+        @PluginMethod
+        public void setKiosk(PluginCall call) {
+            Boolean enable = call.getBoolean("enable", true);
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null) {
+                activity.enableKioskMode(enable != null && enable);
+            }
+            call.resolve();
+        }
+
+        @PluginMethod
+        public void isFullscreenActive(PluginCall call) {
+            MainActivity activity = (MainActivity) getActivity();
+            boolean active = activity != null && activity.isFullscreenMode;
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("active", active);
+            call.resolve(ret);
+        }
+    }
 }
+

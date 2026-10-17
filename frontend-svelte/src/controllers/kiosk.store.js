@@ -5,7 +5,10 @@ import { triggerToast } from './ui.store.js';
  * Detecta si la interfaz nativa de Kiosco de Android está disponible
  */
 export function hasAndroidKioskBridge() {
-  return typeof window !== 'undefined' && typeof window.AndroidKiosk !== 'undefined';
+  return (
+    (typeof window !== 'undefined' && typeof window.AndroidKiosk !== 'undefined') ||
+    (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.())
+  );
 }
 
 // En Web y Desktop inicializa en false para evitar bloqueos no deseados
@@ -59,10 +62,15 @@ function applyKioskState(enable, notify = true) {
     }
   } catch (e) {}
 
-  // 1. Si estamos en Android nativo con el puente AndroidKiosk
+  // 1. Si estamos en Android nativo con el puente AndroidKiosk o Capacitor
   if (hasAndroidKioskBridge()) {
     try {
-      window.AndroidKiosk.setKiosk(enable);
+      if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.KioskPlugin?.setKiosk) {
+        window.Capacitor.Plugins.KioskPlugin.setKiosk({ enable });
+      }
+      if (typeof window !== 'undefined' && window.AndroidKiosk?.setKiosk) {
+        window.AndroidKiosk.setKiosk(enable);
+      }
       if (notify) {
         triggerToast(enable ? '🔒 Modo Kiosco 100% activado' : '🔓 Modo Kiosco desactivado', 'info');
       }
