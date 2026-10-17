@@ -45,18 +45,6 @@
     return `${y}-${m}-${d}`;
   }
 
-  function getNextDateStr(dateStr) {
-    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return getTodayStr();
-    }
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const date = new Date(Date.UTC(y, m - 1, d + 1));
-    const ny = date.getUTCFullYear();
-    const nm = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const nd = String(date.getUTCDate()).padStart(2, '0');
-    return `${ny}-${nm}-${nd}`;
-  }
-
   $: currentSession = (sessions && selectedSessionIndex >= 0 && selectedSessionIndex < sessions.length)
     ? sessions[selectedSessionIndex]
     : null;
@@ -65,8 +53,6 @@
 
   // Solo la última sesión permite jugar y editar (sesiones anteriores son histórico de solo lectura)
   $: isLatestSession = sessions.length > 0 && selectedSessionIndex === (sessions.length - 1);
-
-  $: nextSessionDateStr = latestSessionInList ? getNextDateStr(latestSessionInList.fecha) : getTodayStr();
 
   // Selected Sala Context
   $: currentSalaId = salaId || (() => {
@@ -82,6 +68,9 @@
     }
     return $selectedSalaStore;
   })();
+
+  $: currentSalaUuid = currentSalaObj?.uuid || currentSalaId;
+  $: currentMesaUuid = currentMesaObj?.uuid || currentMesaId;
 
   // Selected Mesa Context
   $: currentMesaId = mesaId || (() => {
@@ -120,20 +109,20 @@
   $: currentSalaName = currentSalaObj?.nombre || currentSalaObj?.name || '';
   $: currentMesaName = currentMesaObj?.nombre || (currentMesaId ? `Mesa #${currentMesaId}` : 'Mesa 01');
   $: sessionUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
-  $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}${sessionUuid ? `_sess_${sessionUuid}` : ''}`;
+  $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaUuid || 'default'}_${currentMesaUuid || 'default'}${sessionUuid ? `_sess_${sessionUuid}` : ''}`;
 
   let lastLoadedStorageKey = null;
   $: if (storageKey && storageKey !== lastLoadedStorageKey) {
     lastLoadedStorageKey = storageKey;
-    if (sessionUuid && currentMesaId) {
-      loadMesaDataForSession(sessionUuid, currentMesaId);
+    if (sessionUuid && currentMesaUuid) {
+      loadMesaDataForSession(sessionUuid, currentMesaUuid);
     }
   }
 
   let lastFetchedSalaId = null;
-  $: if (currentSalaId && currentSalaId !== lastFetchedSalaId) {
-    lastFetchedSalaId = currentSalaId;
-    fetchSessions(currentSalaId);
+  $: if (currentSalaUuid && currentSalaUuid !== lastFetchedSalaId) {
+    lastFetchedSalaId = currentSalaUuid;
+    fetchSessions(currentSalaUuid);
   }
 
   // Audio Context for tactile casino keypad sounds
@@ -382,10 +371,11 @@
 
   async function loadSessionsFromLocalDb(sId) {
     if (!sId) return false;
+    const sUuid = String(currentSalaUuid || sId);
     try {
       const local = await getLocalItems(
         'record_libro_score_baccarat',
-        item => String(item.sala_id || item.sala_uuid) === String(sId),
+        item => String(item.sala_uuid || item.sala_id) === sUuid,
         'fecha',
         'asc'
       );
@@ -408,12 +398,13 @@
 
   async function fetchSessions(sId, selectLatest = true) {
     if (!sId) return;
+    const sUuid = String(currentSalaUuid || sId);
     // 1. Cargar sesiones desde la base de datos interna local (Local-First)
-    await loadSessionsFromLocalDb(sId);
+    await loadSessionsFromLocalDb(sUuid);
 
     try {
       isSessionsLoading = true;
-      const res = await fetch(toBackendUrl(`/api/baccarat/sessions?sala_id=${encodeURIComponent(sId)}`));
+      const res = await fetch(toBackendUrl(`/api/baccarat/sessions?sala_uuid=${encodeURIComponent(sUuid)}&sala_id=${encodeURIComponent(sUuid)}`));
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -428,7 +419,7 @@
           const activeSess = sessions[selectedSessionIndex];
           if (activeSess) {
             activeSessionId = activeSess.uuid || activeSess.id;
-            await loadMesaDataForSession(activeSessionId, currentMesaId);
+            await loadMesaDataForSession(activeSessionId, currentMesaUuid);
           }
         }
       }
@@ -442,38 +433,40 @@
   async function loadMesaDataForSession(sId, mId) {
     if (!sId || !mId) return;
     const strSessId = String(sId);
-    const strMesaId = String(mId);
+    const strMesaUuid = String(currentMesaUuid || mId);
 
     try {
       // 1. Cargar primero de la base de datos interna local (Local-First IndexedDB) por sesión estricta
       const localRows = await getLocalItems(
         'record_libro_score_baccarat_mesa',
-        item => (String(item.session_uuid || item.session_id) === strSessId) &&
-                (String(item.mesa_id || item.mesa_uuid) === strMesaId)
+        item => (String(item.record_libro_score_baccarat_uuid || item.session_uuid || item.session_id) === strSessId) &&
+                (String(item.mesa_uuid || item.mesa_id) === strMesaUuid)
       );
       if (Array.isArray(localRows) && localRows.length > 0) {
         applyMesaData(localRows[0]);
       }
 
       // 2. Sincronizar con el backend PostgreSQL (Fuente autoritativa)
-      const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?session_id=${encodeURIComponent(strSessId)}&mesa_id=${encodeURIComponent(strMesaId)}`));
+      const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?record_libro_score_baccarat_uuid=${encodeURIComponent(strSessId)}&mesa_uuid=${encodeURIComponent(strMesaUuid)}&session_id=${encodeURIComponent(strSessId)}&mesa_id=${encodeURIComponent(strMesaUuid)}`));
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
           applyMesaData(json.data);
 
           // Purgar cualquier residuo de clave legacy un-namespaced
-          const baseLegacyKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
+          const baseLegacyKey = `wisi_baccarat_shoe_v3_${currentSalaUuid || 'default'}_${strMesaUuid}`;
           try {
             localStorage.removeItem(baseLegacyKey);
           } catch (e) {}
 
           // Guardar en la base de datos interna local (IndexedDB) aislado para esta sesión
           await upsertLocalItem('record_libro_score_baccarat_mesa', {
-            uuid: json.data.uuid || `bacc_mesa_${strSessId}_${strMesaId}`,
+            uuid: json.data.uuid || generateSafeUuid(),
+            record_libro_score_baccarat_uuid: strSessId,
+            mesa_uuid: strMesaUuid,
             session_uuid: strSessId,
             session_id: strSessId,
-            mesa_id: strMesaId,
+            mesa_id: strMesaUuid,
             shoe_number: shoeNumber,
             tie_mode: tieMode,
             history,
@@ -507,7 +500,7 @@
       const sess = sessions[selectedSessionIndex];
       if (sess) {
         activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
-        await loadMesaDataForSession(activeSessionId, currentMesaId);
+        await loadMesaDataForSession(activeSessionId, currentMesaUuid);
       }
     }
   }
@@ -521,13 +514,13 @@
       const sess = sessions[selectedSessionIndex];
       if (sess) {
         activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
-        await loadMesaDataForSession(activeSessionId, currentMesaId);
+        await loadMesaDataForSession(activeSessionId, currentMesaUuid);
       }
     }
   }
 
   async function handleCreateNewSession() {
-    if (!currentSalaId || isSessionsLoading || !isLatestSession) return;
+    if (!currentSalaUuid || isSessionsLoading || !isLatestSession) return;
     try {
       isSessionsLoading = true;
       // Guardar la sesión y zapato actuales antes de crear la nueva sesión
@@ -538,7 +531,9 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sala_id: currentSalaId,
+          sala_uuid: currentSalaUuid,
+          sala_id: currentSalaUuid,
+          fecha: getTodayStr(),
           uuid: clientGeneratedUuid
         })
       });
@@ -570,9 +565,11 @@
         const newSessUuid = newSession.uuid || newSession.id;
         const newMesaRecord = {
           uuid: generateSafeUuid(),
+          record_libro_score_baccarat_uuid: newSessUuid,
+          mesa_uuid: currentMesaUuid,
           session_uuid: newSessUuid,
           session_id: newSessUuid,
-          mesa_id: currentMesaId,
+          mesa_id: currentMesaUuid,
           shoe_number: 1,
           tie_mode: 'slash',
           history: [],
@@ -583,7 +580,7 @@
         await upsertLocalItem('record_libro_score_baccarat_mesa', newMesaRecord).catch(() => {});
 
         // Clave de almacenamiento aislada para la nueva sesión
-        const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}_sess_${newSessUuid}`;
+        const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaUuid}_${currentMesaUuid}_sess_${newSessUuid}`;
         lastLoadedStorageKey = newStorageKey;
         try {
           localStorage.setItem(newStorageKey, JSON.stringify({
@@ -640,7 +637,7 @@
           const res = await fetch(toBackendUrl('/api/baccarat/sessions/delete-last'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sala_id: currentSalaId })
+            body: JSON.stringify({ sala_uuid: currentSalaUuid, sala_id: currentSalaUuid })
           });
           const json = await res.json();
           if (json.success) {
@@ -649,7 +646,7 @@
             const activeSess = sessions[selectedSessionIndex];
             if (activeSess) {
               activeSessionId = activeSess.uuid || activeSess.id;
-              await loadMesaDataForSession(activeSessionId, currentMesaId);
+              await loadMesaDataForSession(activeSessionId, currentMesaUuid);
               showFeedback(`Última sesión eliminada. Sesión activa: ${activeSess.fecha}`);
             }
             closeOptionsMenu();
@@ -672,12 +669,13 @@
     sendWebSocketMessage({
       type: 'BACCARAT_TABLE_UPDATE',
       storageKey,
-      salaId: currentSalaId,
-      salaUuid: currentSalaObj?.uuid || currentSalaId,
-      mesaId: currentMesaId,
-      mesaUuid: currentMesaObj?.uuid || currentMesaId,
+      salaId: currentSalaUuid,
+      salaUuid: currentSalaUuid,
+      mesaId: currentMesaUuid,
+      mesaUuid: currentMesaUuid,
       sessionId: sessUuid,
       sessionUuid: sessUuid,
+      record_libro_score_baccarat_uuid: sessUuid,
       isLatestSession: true,
       shoeNumber,
       shoes,
@@ -695,7 +693,7 @@
     }
 
     const sessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
-    if (!sessUuid || !currentMesaId) return;
+    if (!sessUuid || !currentMesaUuid) return;
 
     // Actualizar el zapato activo en el arreglo shoes
     const currIdx = shoes.findIndex(s => s.shoe_number === shoeNumber);
@@ -706,7 +704,7 @@
     }
     shoes = [...shoes];
 
-    const mesaRecordUuid = `bacc_mesa_${sessUuid}_${currentMesaId}`;
+    const mesaRecordUuid = `bacc_mesa_${sessUuid}_${currentMesaUuid}`;
 
     try {
       localStorage.setItem(storageKey, JSON.stringify({
@@ -721,9 +719,11 @@
     // 1. Guardar de inmediato en la base de datos interna local (Local-First IndexedDB)
     upsertLocalItem('record_libro_score_baccarat_mesa', {
       uuid: mesaRecordUuid,
+      record_libro_score_baccarat_uuid: sessUuid,
+      mesa_uuid: currentMesaUuid,
       session_uuid: sessUuid,
       session_id: sessUuid,
-      mesa_id: currentMesaId,
+      mesa_id: currentMesaUuid,
       shoe_number: shoeNumber,
       tie_mode: tieMode,
       history,
@@ -739,10 +739,11 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        uuid: mesaRecordUuid,
+        record_libro_score_baccarat_uuid: sessUuid,
+        mesa_uuid: currentMesaUuid,
         session_id: sessUuid,
         session_uuid: sessUuid,
-        mesa_id: currentMesaId,
+        mesa_id: currentMesaUuid,
         shoe_number: shoeNumber,
         tie_mode: tieMode,
         history,
@@ -763,16 +764,17 @@
   }
 
   // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa (estrictamente por sesión)
-  $: if ($isWsConnectedStore && isLatestSession && currentSalaId && currentMesaId && sessionUuid) {
+  $: if ($isWsConnectedStore && isLatestSession && currentSalaUuid && currentMesaUuid && sessionUuid) {
     sendWebSocketMessage({
       type: 'BACCARAT_GET_STATE',
       storageKey,
       sessionId: sessionUuid,
       sessionUuid: sessionUuid,
-      salaId: currentSalaId,
-      salaUuid: currentSalaObj?.uuid || currentSalaId,
-      mesaId: currentMesaId,
-      mesaUuid: currentMesaObj?.uuid || currentMesaId
+      record_libro_score_baccarat_uuid: sessionUuid,
+      salaId: currentSalaUuid,
+      salaUuid: currentSalaUuid,
+      mesaId: currentMesaUuid,
+      mesaUuid: currentMesaUuid
     });
   }
 
@@ -1753,7 +1755,6 @@
 
           <div class="session-label-wrapper">
             {#if isLatestSession}
-              <span class="session-status-dot"></span>
               <span class="session-label-text actual">Actual</span>
               <span class="session-date-text">( {currentSession.fecha} )</span>
             {:else}
@@ -2374,15 +2375,15 @@
               Borrar Zapato #{shoeNumber}
             </button>
 
-            <!-- COL-6: Crear Nueva Sesión (Fecha + 1 día) -->
+            <!-- COL-6: Crear Nueva Sesión -->
             <button
               type="button"
               class="btn-opt col-6 btn-opt-new-session"
               on:click={handleCreateNewSession}
               disabled={isSessionsLoading || !isLatestSession}
-              title={!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear nueva sesión sumando 1 día (${nextSessionDateStr})`}
+              title={!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : 'Crear una nueva sesión de juego'}
             >
-              Crear Nueva Sesión ({nextSessionDateStr})
+              Crear Nueva Sesión
             </button>
 
             <!-- COL-6: Borrar Última Sesión -->
@@ -2729,20 +2730,7 @@
     user-select: none;
   }
 
-  .session-status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #ef4444;
-    box-shadow: 0 0 8px #ef4444;
-    display: inline-block;
-    animation: sessionDotPulse 2s infinite ease-in-out;
-  }
 
-  @keyframes sessionDotPulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.8); }
-  }
 
   .session-label-text {
     font-size: 13px;

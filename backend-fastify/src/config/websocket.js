@@ -57,23 +57,35 @@ export async function initWebsockets(fastify) {
               const shoesList = Array.isArray(data.shoes) && data.shoes.length > 0 ? data.shoes : [
                 { shoe_number: sNum, tie_mode: tMode, history: hands }
               ];
-              sql`
-                INSERT INTO record_libro_score_baccarat_mesa (
-                  uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, shoes, updated_at
-                ) VALUES (
-                  gen_random_uuid(), ${sIdStr}, ${sIdStr}, ${mIdStr}, ${sNum}, ${tMode},
-                  ${JSON.stringify(hands)}::jsonb,
-                  ${JSON.stringify(shoesList)}::jsonb,
-                  NOW()
-                )
-                ON CONFLICT (session_id, mesa_id) DO UPDATE SET
-                  session_uuid = COALESCE(EXCLUDED.session_uuid, record_libro_score_baccarat_mesa.session_uuid),
-                  shoe_number = EXCLUDED.shoe_number,
-                  tie_mode = EXCLUDED.tie_mode,
-                  history = EXCLUDED.history,
-                  shoes = EXCLUDED.shoes,
-                  updated_at = NOW();
-              `.catch(() => {});
+              if (isUuidVal) {
+                sql`
+                  INSERT INTO record_libro_score_baccarat_mesa (
+                    uuid, 
+                    record_libro_score_baccarat_uuid, 
+                    mesa_uuid,
+                    shoe_number, 
+                    tie_mode, 
+                    history, 
+                    shoes, 
+                    updated_at
+                  ) VALUES (
+                    gen_random_uuid(), 
+                    ${sIdStr}::uuid, 
+                    ${mIdStr},
+                    ${sNum}, 
+                    ${tMode},
+                    ${JSON.stringify(hands)}::jsonb,
+                    ${JSON.stringify(shoesList)}::jsonb,
+                    NOW()
+                  )
+                  ON CONFLICT (record_libro_score_baccarat_uuid, mesa_uuid) DO UPDATE SET
+                    shoe_number = EXCLUDED.shoe_number,
+                    tie_mode = EXCLUDED.tie_mode,
+                    history = EXCLUDED.history,
+                    shoes = EXCLUDED.shoes,
+                    updated_at = NOW();
+                `.catch(() => {});
+              }
             }
           }).catch(() => {});
         }

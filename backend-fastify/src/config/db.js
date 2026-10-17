@@ -106,34 +106,32 @@ export async function initDb() {
       await sql`
         CREATE TABLE IF NOT EXISTS record_libro_score_baccarat (
           uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          sala_id VARCHAR(100) NOT NULL,
+          sala_uuid VARCHAR(100) NOT NULL,
           fecha VARCHAR(50) NOT NULL,
           estado VARCHAR(20) DEFAULT 'abierta',
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `;
-      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_sala ON record_libro_score_baccarat (sala_id);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_sala_uuid ON record_libro_score_baccarat (sala_uuid);`;
       await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_fecha ON record_libro_score_baccarat (fecha);`;
       await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_uuid ON record_libro_score_baccarat (uuid);`;
 
       await sql`
         CREATE TABLE IF NOT EXISTS record_libro_score_baccarat_mesa (
           uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          session_id VARCHAR(100) NOT NULL,
-          session_uuid VARCHAR(100),
-          mesa_id VARCHAR(100) NOT NULL,
+          record_libro_score_baccarat_uuid UUID,
+          mesa_uuid VARCHAR(100),
           shoe_number INTEGER DEFAULT 1,
           tie_mode VARCHAR(20) DEFAULT 'slash',
           history JSONB NOT NULL DEFAULT '[]'::jsonb,
           shoes JSONB NOT NULL DEFAULT '[]'::jsonb,
           created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW(),
-          CONSTRAINT uq_baccarat_mesa_session UNIQUE (session_id, mesa_id)
+          updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `;
 
-      // Migraciones seguras para migrar tablas previas hacia UUID PRIMARY KEY y remover id
+      // Migraciones seguras para migrar tablas previas hacia UUID PRIMARY KEY y estandarización a UUIDs
       try {
         await sql`ALTER TABLE record_libro_score_baccarat ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();`;
@@ -154,19 +152,62 @@ export async function initDb() {
             END IF;
           END $$;
         `;
-        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS record_libro_score_baccarat_mesa_session_id_fkey;`;
-        await sql`ALTER TABLE record_libro_score_baccarat_mesa ALTER COLUMN session_id TYPE VARCHAR(100) USING session_id::VARCHAR(100);`;
-        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS session_uuid VARCHAR(100);`;
+
+        // Estandarizar sala_uuid y eliminar sala_id
+        await sql`ALTER TABLE record_libro_score_baccarat ADD COLUMN IF NOT EXISTS sala_uuid VARCHAR(100);`;
+        await sql`
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'record_libro_score_baccarat' AND column_name = 'sala_id') THEN
+              UPDATE record_libro_score_baccarat SET sala_uuid = sala_id WHERE sala_uuid IS NULL;
+              ALTER TABLE record_libro_score_baccarat DROP COLUMN IF EXISTS sala_id CASCADE;
+            END IF;
+          END $$;
+        `;
+
+        // Estandarizar record_libro_score_baccarat_uuid y mesa_uuid
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS record_libro_score_baccarat_uuid UUID;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS mesa_uuid VARCHAR(100);`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS shoes JSONB NOT NULL DEFAULT '[]'::jsonb;`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS history JSONB NOT NULL DEFAULT '[]'::jsonb;`;
-        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS uq_baccarat_mesa_session;`;
-        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD CONSTRAINT uq_baccarat_mesa_session UNIQUE (session_id, mesa_id);`;
+
+        await sql`
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'record_libro_score_baccarat_mesa' AND column_name = 'session_uuid') THEN
+              UPDATE record_libro_score_baccarat_mesa
+              SET record_libro_score_baccarat_uuid = session_uuid::uuid
+              WHERE record_libro_score_baccarat_uuid IS NULL 
+                AND session_uuid ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'record_libro_score_baccarat_mesa' AND column_name = 'session_id') THEN
+              UPDATE record_libro_score_baccarat_mesa
+              SET record_libro_score_baccarat_uuid = session_id::uuid
+              WHERE record_libro_score_baccarat_uuid IS NULL 
+                AND session_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'record_libro_score_baccarat_mesa' AND column_name = 'mesa_id') THEN
+              UPDATE record_libro_score_baccarat_mesa
+              SET mesa_uuid = mesa_id
+              WHERE mesa_uuid IS NULL;
+            END IF;
+
+            -- Eliminar columnas obsoletas
+            ALTER TABLE record_libro_score_baccarat_mesa DROP COLUMN IF EXISTS session_id CASCADE;
+            ALTER TABLE record_libro_score_baccarat_mesa DROP COLUMN IF EXISTS session_uuid CASCADE;
+            ALTER TABLE record_libro_score_baccarat_mesa DROP COLUMN IF EXISTS mesa_id CASCADE;
+          END $$;
+        `;
+
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS uq_baccarat_mesa_session CASCADE;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS uq_baccarat_mesa_uuid CASCADE;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD CONSTRAINT uq_baccarat_mesa_uuid UNIQUE (record_libro_score_baccarat_uuid, mesa_uuid);`;
       } catch (eAlt) {
         // Ignorar si ya fueron alteradas
       }
-      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_session ON record_libro_score_baccarat_mesa (session_id);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_sess_uuid ON record_libro_score_baccarat_mesa (record_libro_score_baccarat_uuid);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_mesa_uuid ON record_libro_score_baccarat_mesa (mesa_uuid);`;
       await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_uuid ON record_libro_score_baccarat_mesa (uuid);`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_mesa ON record_libro_score_baccarat_mesa (mesa_id);`;
     } catch (eBacc) {
       console.warn('Advertencia migrando tablas baccarat:', eBacc.message);
     }
