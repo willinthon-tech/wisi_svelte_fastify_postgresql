@@ -734,32 +734,12 @@
     </div>
   </section>
 
-  <!-- INLINE CELL EDIT TOOLBAR (Active when any cell in roadmaps is clicked) -->
+  <!-- INLINE CELL EDIT TOOLBAR (En una sola línea) -->
   {#if selectedHandIndex !== null && selectedHand}
     <div class="edit-toolbar-box">
-      <div class="edit-toolbar-header">
-        <div class="edit-title-group">
-          <span class="edit-badge">🟡 EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
-          <span class="edit-hint">Modifica el ganador o las parejas de esta mano</span>
-        </div>
+      <div class="edit-single-line">
+        <span class="edit-badge">🟡 EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
 
-        <div class="edit-quick-actions">
-          <button type="button" class="btn-tool-nav" on:click={prevHand} disabled={selectedHandIndex === 0} title="Mano anterior">
-            ◀ Anterior
-          </button>
-          <button type="button" class="btn-tool-nav" on:click={nextHand} disabled={selectedHandIndex === history.length - 1} title="Siguiente mano">
-            Siguiente ▶
-          </button>
-          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Eliminar esta mano del zapato">
-            🗑️ Eliminar
-          </button>
-          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Cerrar edición">
-            ✓ Listo
-          </button>
-        </div>
-      </div>
-
-      <div class="edit-controls-row">
         <div class="edit-group">
           <span class="edit-group-label">GANADOR:</span>
           <button
@@ -821,6 +801,21 @@
             on:click={() => toggleSelectedMod('special')}
           >
             ⭐ Special {selectedHand.special ? '✓' : ''}
+          </button>
+        </div>
+
+        <div class="edit-quick-actions">
+          <button type="button" class="btn-tool-nav" on:click={prevHand} disabled={selectedHandIndex === 0} title="Mano anterior">
+            ◀ Anterior
+          </button>
+          <button type="button" class="btn-tool-nav" on:click={nextHand} disabled={selectedHandIndex === history.length - 1} title="Siguiente mano">
+            Siguiente ▶
+          </button>
+          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Eliminar esta mano del zapato">
+            🗑️ Eliminar
+          </button>
+          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Cerrar edición">
+            ✓ Listo
           </button>
         </div>
       </div>
@@ -1464,54 +1459,41 @@
     justify-content: center;
   }
 
-  /* INLINE EDIT TOOLBAR */
+  /* INLINE EDIT TOOLBAR (En una sola línea) */
   .edit-toolbar-box {
     background: #0f172a;
-    border: 2px solid #f59e0b;
-    border-radius: 10px;
-    padding: 8px 14px;
+    border: 1.5px solid #f59e0b;
+    border-radius: 8px;
+    padding: 6px 12px;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
     box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
     animation: slideDown 0.2s ease;
   }
 
   @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-6px); }
+    from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }
   }
 
-  .edit-toolbar-header {
+  .edit-single-line {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    flex-wrap: wrap;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 6px;
-  }
-
-  .edit-title-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    width: 100%;
     flex-wrap: wrap;
   }
 
   .edit-badge {
     background: #f59e0b;
     color: #0f172a;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 900;
-    padding: 2px 8px;
+    padding: 3px 8px;
     border-radius: 5px;
     letter-spacing: 0.5px;
-  }
-
-  .edit-hint {
-    font-size: 10.5px;
-    color: #94a3b8;
+    white-space: nowrap;
   }
 
   .edit-quick-actions {
@@ -1528,6 +1510,7 @@
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
   }
 
   .btn-tool-nav {
@@ -1558,14 +1541,6 @@
   }
   .btn-tool-done:hover {
     background: #22c55e;
-  }
-
-  .edit-controls-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
   }
 
   .edit-group {
