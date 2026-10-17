@@ -372,6 +372,7 @@
   async function loadSessionsFromLocalDb(sId) {
     if (!sId) return false;
     const sUuid = String(currentSalaUuid || sId);
+    const todayStr = getTodayStr();
     try {
       const local = await getLocalItems(
         'record_libro_score_baccarat',
@@ -379,8 +380,29 @@
         'fecha',
         'asc'
       );
-      if (Array.isArray(local) && local.length > 0) {
-        sessions = local;
+
+      // PURGA ACTIVA DE INDEXEDDB: Eliminar cualquier sesión y mesa con fecha futura generada durante pruebas
+      for (const item of local) {
+        if (item.fecha && item.fecha > todayStr) {
+          if (item.uuid) await deleteLocalItem('record_libro_score_baccarat', item.uuid);
+          if (item._local_key) await deleteLocalItem('record_libro_score_baccarat', item._local_key);
+          const sessKey = String(item.uuid || item.id || '');
+          if (sessKey) {
+            const orphanMesas = await getLocalItems(
+              'record_libro_score_baccarat_mesa',
+              m => String(m.record_libro_score_baccarat_uuid || m.session_uuid || m.session_id) === sessKey
+            );
+            for (const om of orphanMesas) {
+              if (om.uuid) await deleteLocalItem('record_libro_score_baccarat_mesa', om.uuid);
+              if (om._local_key) await deleteLocalItem('record_libro_score_baccarat_mesa', om._local_key);
+            }
+          }
+        }
+      }
+
+      const validLocal = local.filter(item => !item.fecha || item.fecha <= todayStr);
+      if (Array.isArray(validLocal) && validLocal.length > 0) {
+        sessions = validLocal;
         if (selectedSessionIndex === -1 || selectedSessionIndex >= sessions.length) {
           selectedSessionIndex = sessions.length - 1;
         }
@@ -399,6 +421,8 @@
   async function fetchSessions(sId, selectLatest = true) {
     if (!sId) return;
     const sUuid = String(currentSalaUuid || sId);
+    const todayStr = getTodayStr();
+
     // 1. Cargar sesiones desde la base de datos interna local (Local-First)
     await loadSessionsFromLocalDb(sUuid);
 
@@ -408,10 +432,31 @@
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          sessions = json.data;
+          // Filtrar en frontend cualquier fecha futura
+          const serverSessions = json.data.filter(s => !s.fecha || s.fecha <= todayStr);
+          sessions = serverSessions;
+
+          // RECONCILIACIÓN ESTRICTA: Purgar de IndexedDB cualquier sesión local que ya no exista en el servidor
+          const localSessions = await getLocalItems('record_libro_score_baccarat', item => String(item.sala_uuid || item.sala_id) === sUuid);
+          const serverUuids = new Set(serverSessions.map(s => String(s.uuid)));
+          for (const loc of localSessions) {
+            if (!serverUuids.has(String(loc.uuid)) || (loc.fecha && loc.fecha > todayStr)) {
+              if (loc.uuid) await deleteLocalItem('record_libro_score_baccarat', loc.uuid);
+              if (loc._local_key) await deleteLocalItem('record_libro_score_baccarat', loc._local_key);
+              // Purgar también sus registros de mesas huérfanas en IndexedDB
+              const locSessId = String(loc.uuid || loc.id || '');
+              if (locSessId) {
+                const orphanMesas = await getLocalItems('record_libro_score_baccarat_mesa', m => String(m.record_libro_score_baccarat_uuid || m.session_uuid || m.session_id) === locSessId);
+                for (const om of orphanMesas) {
+                  if (om.uuid) await deleteLocalItem('record_libro_score_baccarat_mesa', om.uuid);
+                  if (om._local_key) await deleteLocalItem('record_libro_score_baccarat_mesa', om._local_key);
+                }
+              }
+            }
+          }
 
           // Guardar en base de datos interna local (IndexedDB)
-          await saveLocalItems('record_libro_score_baccarat', sessions);
+          await saveLocalItems('record_libro_score_baccarat', serverSessions);
 
           if (selectLatest || selectedSessionIndex === -1 || selectedSessionIndex >= sessions.length) {
             selectedSessionIndex = sessions.length - 1;
@@ -421,12 +466,47 @@
             activeSessionId = activeSess.uuid || activeSess.id;
             await loadMesaDataForSession(activeSessionId, currentMesaUuid);
           }
+          return;
         }
       }
     } catch (e) {
-      console.warn('Error fetching baccarat sessions from backend:', e);
+      console.warn('Error fetching baccarat sessions from backend (modo offline):', e);
     } finally {
       isSessionsLoading = false;
+    }
+
+    // MODO OFFLINE FALLBACK: Si no hay sesiones válidas (o estábamos offline), crear la primera sesión local limpia de HOY
+    if (sessions.length === 0) {
+      const offlineUuid = generateSafeUuid();
+      const initialSession = {
+        uuid: offlineUuid,
+        sala_uuid: sUuid,
+        sala_id: sUuid,
+        fecha: todayStr,
+        estado: 'abierta',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      await upsertLocalItem('record_libro_score_baccarat', initialSession);
+      sessions = [initialSession];
+      selectedSessionIndex = 0;
+      activeSessionId = offlineUuid;
+
+      // Inicializar mesa limpia [] para esta sesión offline
+      const cleanMesa = {
+        uuid: generateSafeUuid(),
+        record_libro_score_baccarat_uuid: offlineUuid,
+        mesa_uuid: currentMesaUuid,
+        session_uuid: offlineUuid,
+        session_id: offlineUuid,
+        mesa_id: currentMesaUuid,
+        shoe_number: 1,
+        tie_mode: 'slash',
+        history: [],
+        shoes: [{ shoe_number: 1, history: [], tie_mode: 'slash' }]
+      };
+      await upsertLocalItem('record_libro_score_baccarat_mesa', cleanMesa);
+      applyMesaData(cleanMesa);
     }
   }
 
@@ -444,6 +524,8 @@
       );
       if (Array.isArray(localRows) && localRows.length > 0) {
         applyMesaData(localRows[0]);
+      } else {
+        applyMesaData(null);
       }
 
       // 2. Sincronizar con el backend PostgreSQL (Fuente autoritativa)
@@ -467,18 +549,18 @@
             session_uuid: strSessId,
             session_id: strSessId,
             mesa_id: strMesaUuid,
-            shoe_number: shoeNumber,
-            tie_mode: tieMode,
-            history,
-            shoes
+            shoe_number: json.data.shoe_number || 1,
+            tie_mode: json.data.tie_mode || 'slash',
+            history: json.data.history || [],
+            shoes: json.data.shoes || [{ shoe_number: 1, history: [], tie_mode: 'slash' }]
           }).catch(() => {});
 
           try {
             localStorage.setItem(storageKey, JSON.stringify({
-              shoeNumber,
-              history,
-              shoes,
-              tieMode,
+              shoeNumber: json.data.shoe_number || 1,
+              history: json.data.history || [],
+              shoes: json.data.shoes || [{ shoe_number: 1, history: [], tie_mode: 'slash' }],
+              tieMode: json.data.tie_mode || 'slash',
               sessionId: strSessId
             }));
           } catch (e) {}
@@ -792,6 +874,36 @@
         keysToRemove.forEach(k => localStorage.removeItem(k));
       }
     } catch (e) {}
+
+    // 2. PURGA ACTIVA DE DATOS CORRUPTOS EN INDEXEDDB (Sesiones futuras, outbox pendiente corrupto)
+    (async () => {
+      try {
+        const today = getTodayStr();
+        // Limpiar outbox pendiente con fechas futuras
+        const baccQueue = await getLocalItems('outbox_sync_queue', item => item.entity && item.entity.includes('baccarat'));
+        for (const q of baccQueue) {
+          if (q.payload?.fecha && q.payload.fecha > today) {
+            if (q._local_key) await deleteLocalItem('outbox_sync_queue', q._local_key);
+          }
+        }
+        // Limpiar sesiones locales con fechas futuras
+        const baccSessions = await getLocalItems('record_libro_score_baccarat');
+        for (const bs of baccSessions) {
+          if (bs.fecha && bs.fecha > today) {
+            if (bs.uuid) await deleteLocalItem('record_libro_score_baccarat', bs.uuid);
+            if (bs._local_key) await deleteLocalItem('record_libro_score_baccarat', bs._local_key);
+            const sessKey = String(bs.uuid || bs.id || '');
+            if (sessKey) {
+              const ms = await getLocalItems('record_libro_score_baccarat_mesa', m => String(m.record_libro_score_baccarat_uuid || m.session_uuid || m.session_id) === sessKey);
+              for (const m of ms) {
+                if (m.uuid) await deleteLocalItem('record_libro_score_baccarat_mesa', m.uuid);
+                if (m._local_key) await deleteLocalItem('record_libro_score_baccarat_mesa', m._local_key);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    })();
 
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';

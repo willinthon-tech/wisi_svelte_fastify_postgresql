@@ -44,7 +44,21 @@ export async function getSessions(req, reply) {
       return reply.code(400).send({ success: false, message: 'El parámetro sala_uuid es requerido' });
     }
 
+    const todayStr = getTodayStr();
+
     if (isPgConnected && sql) {
+      // AUTO-LIMPIEZA DE BASE DE DATOS: Purgar automáticamente registros de sesiones con fechas futuras
+      await sql`
+        DELETE FROM record_libro_score_baccarat_mesa
+        WHERE record_libro_score_baccarat_uuid IN (
+          SELECT uuid FROM record_libro_score_baccarat WHERE sala_uuid = ${salaUuid} AND fecha > ${todayStr}
+        );
+      `.catch(() => {});
+      await sql`
+        DELETE FROM record_libro_score_baccarat
+        WHERE sala_uuid = ${salaUuid} AND fecha > ${todayStr};
+      `.catch(() => {});
+
       let sessions = await sql`
         SELECT uuid, sala_uuid, fecha, estado, created_at, updated_at
         FROM record_libro_score_baccarat
@@ -54,7 +68,6 @@ export async function getSessions(req, reply) {
 
       // Si no existe ninguna sesión aún, auto-crear la primera con la fecha real de hoy y UUID seguro
       if (sessions.length === 0) {
-        const todayStr = getTodayStr();
         const newUuid = randomUUID();
         const [newSession] = await sql`
           INSERT INTO record_libro_score_baccarat (uuid, sala_uuid, fecha, estado)
@@ -74,9 +87,9 @@ export async function getSessions(req, reply) {
     }
 
     // Fallback en memoria
+    memorySessions = memorySessions.filter(s => s.fecha <= todayStr);
     let salaSessions = memorySessions.filter(s => String(s.sala_uuid || s.sala_id) === salaUuid);
     if (salaSessions.length === 0) {
-      const todayStr = getTodayStr();
       const newSession = {
         uuid: randomUUID(),
         sala_uuid: salaUuid,
@@ -110,8 +123,12 @@ export async function createSession(req, reply) {
     const clientUuid = req.body?.uuid ? String(req.body.uuid).trim() : null;
     const targetUuid = (clientUuid && isUuid(clientUuid)) ? clientUuid : randomUUID();
 
-    // La fecha de la sesión es SIEMPRE la fecha real actual (hoy) o la enviada explícitamente
-    const fecha = req.body?.fecha ? String(req.body.fecha).trim() : getTodayStr();
+    // La fecha de la sesión es SIEMPRE la fecha real actual (hoy). NUNCA permitir fechas en el futuro.
+    const todayStr = getTodayStr();
+    let fecha = req.body?.fecha ? String(req.body.fecha).trim() : todayStr;
+    if (fecha > todayStr) {
+      fecha = todayStr;
+    }
 
     if (isPgConnected && sql) {
       const [created] = await sql`
