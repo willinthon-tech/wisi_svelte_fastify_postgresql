@@ -280,7 +280,9 @@
     showFeedback(`Mano #${lastId} deshecha`);
   }
 
-  // Modal de confirmación (Borrar Zapato / Nuevo Zapato)
+  // Modal de opciones y confirmación
+  let isOptionsModalOpen = false;
+
   let confirmModalState = {
     isOpen: false,
     title: '',
@@ -290,46 +292,56 @@
     onConfirm: () => {}
   };
 
-  function openClearShoeModal() {
-    if (history.length === 0) return;
-    confirmModalState = {
-      isOpen: true,
-      title: 'Borrar Zapato',
-      question: `¿Deseas borrar el Zapato #${shoeNumber}?`,
-      isDanger: true,
-      confirmText: 'Borrar',
-      onConfirm: doClearShoe
-    };
+  function openOptionsMenu() {
+    isOptionsModalOpen = true;
   }
 
-  function doClearShoe() {
+  function closeOptionsMenu() {
+    isOptionsModalOpen = false;
+  }
+
+  // Acción directa 1: Borrar Zapato #{shoeNumber}
+  function handleDirectClearShoe() {
     playSound('undo');
     history = [];
     selectedHandIndex = null;
     saveShoe();
     showFeedback(`Zapato #${shoeNumber} borrado`);
-    confirmModalState.isOpen = false;
+    isOptionsModalOpen = false;
   }
 
-  function openNewShoeModal() {
-    confirmModalState = {
-      isOpen: true,
-      title: 'Nuevo Zapato',
-      question: '¿Deseas iniciar un nuevo zapato?',
-      isDanger: false,
-      confirmText: 'Iniciar',
-      onConfirm: doNewShoe
-    };
-  }
-
-  function doNewShoe() {
+  // Acción directa 2: Crear Nuevo Zapato #{shoeNumber + 1}
+  function handleDirectNewShoe() {
     playSound('click');
     history = [];
     selectedHandIndex = null;
     shoeNumber += 1;
     saveShoe();
     showFeedback(`Nuevo Zapato #${shoeNumber} iniciado`);
+    isOptionsModalOpen = false;
+  }
+
+  // Acción con confirmación 3: Borrar Todos los Registros de la Mesa
+  function openResetAllModal() {
+    confirmModalState = {
+      isOpen: true,
+      title: 'Borrar Todos los Registros',
+      question: '¿Deseas borrar todos los registros de la mesa?',
+      isDanger: true,
+      confirmText: 'Borrar',
+      onConfirm: handleConfirmResetAll
+    };
+  }
+
+  function handleConfirmResetAll() {
+    playSound('undo');
+    history = [];
+    selectedHandIndex = null;
+    shoeNumber = 1;
+    saveShoe();
+    showFeedback('Todos los registros de la mesa han sido borrados');
     confirmModalState.isOpen = false;
+    isOptionsModalOpen = false;
   }
 
   function closeConfirmModal() {
@@ -570,21 +582,11 @@
     <div class="sb-header-right">
       <button
         type="button"
-        class="sb-btn sb-btn-clear"
-        on:click={openClearShoeModal}
-        disabled={history.length === 0}
-        title="Borrar las manos registradas del zapato actual"
+        class="sb-btn sb-btn-options"
+        on:click={openOptionsMenu}
+        title="Opciones de la mesa y zapato"
       >
-        Borrar Zapato
-      </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-new-shoe"
-        on:click={openNewShoeModal}
-        title="Iniciar un nuevo zapato"
-      >
-        Nuevo Zapato
+        Opciones
       </button>
 
       <button
@@ -957,9 +959,60 @@
     </div>
   </footer>
 
-  <!-- MODAL DE CONFIRMACIÓN ELEGANTE (BORRAR ZAPATO / NUEVO ZAPATO) -->
-  {#if confirmModalState.isOpen}
+  <!-- MODAL DE OPCIONES DE MESA -->
+  {#if isOptionsModalOpen}
     <div class="modal-backdrop">
+      <div class="modal-container options-modal-container" on:click|stopPropagation>
+        <div class="modal-header">
+          <div class="modal-title">
+            Opciones de Mesa
+          </div>
+          <button type="button" class="close-btn" on:click={closeOptionsMenu} title="Cerrar modal">✕</button>
+        </div>
+
+        <div class="modal-body options-modal-body">
+          <div class="options-grid">
+            <!-- COL-6: Borrar Zapato #{shoeNumber} (Acción directa) -->
+            <button
+              type="button"
+              class="btn-opt col-6 btn-opt-clear"
+              on:click={handleDirectClearShoe}
+            >
+              Borrar Zapato #{shoeNumber}
+            </button>
+
+            <!-- COL-6: Crear Nuevo Zapato #{shoeNumber + 1} (Acción directa) -->
+            <button
+              type="button"
+              class="btn-opt col-6 btn-opt-new"
+              on:click={handleDirectNewShoe}
+            >
+              Crear Nuevo Zapato #{shoeNumber + 1}
+            </button>
+
+            <!-- COL-12: Borrar Todos los Registros de la Mesa (Acción con confirmación) -->
+            <button
+              type="button"
+              class="btn-opt col-12 btn-opt-reset"
+              on:click={openResetAllModal}
+            >
+              Borrar Todos los Registros de la Mesa
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-cancel" on:click={closeOptionsMenu}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- MODAL DE CONFIRMACIÓN DIRECTA (BORRAR TODOS LOS REGISTROS) -->
+  {#if confirmModalState.isOpen}
+    <div class="modal-backdrop modal-backdrop-confirm">
       <div class="modal-container" on:click|stopPropagation>
         <!-- Modal Header -->
         <div class="modal-header">
@@ -1161,22 +1214,15 @@
     cursor: not-allowed;
   }
 
-  .sb-btn-clear {
-    background: #78350f;
-    color: #fef08a;
-    border: 1px solid #b45309;
+  .sb-btn-options {
+    background: #1e293b;
+    color: #f8fafc;
+    border: 1px solid #475569;
   }
-  .sb-btn-clear:hover:not(:disabled) {
-    background: #92400e;
-  }
-
-  .sb-btn-new-shoe {
-    background: #991b1b;
-    color: #fee2e2;
-    border: 1px solid #dc2626;
-  }
-  .sb-btn-new-shoe:hover:not(:disabled) {
-    background: #b91c1c;
+  .sb-btn-options:hover {
+    background: #334155;
+    color: #ffffff;
+    border-color: #64748b;
   }
 
   .sb-btn-back {
@@ -2058,5 +2104,83 @@
 
   .btn-confirm-primary:hover {
     background: #15803d;
+  }
+
+  /* MODAL DE OPCIONES DE MESA */
+  .options-modal-container {
+    max-width: 480px;
+  }
+
+  .options-modal-body {
+    padding: 20px;
+  }
+
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .btn-opt {
+    border: none;
+    border-radius: 8px;
+    padding: 15px 12px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.35;
+    user-select: none;
+  }
+
+  .btn-opt.col-6 {
+    /* Ocupa 1 columna de las 2 */
+  }
+
+  .btn-opt.col-12 {
+    grid-column: 1 / -1;
+  }
+
+  .btn-opt-clear {
+    background: #78350f;
+    color: #fef3c7;
+    border: 1.5px solid #b45309;
+  }
+  .btn-opt-clear:hover {
+    background: #92400e;
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(180, 83, 9, 0.35);
+  }
+
+  .btn-opt-new {
+    background: #166534;
+    color: #dcfce7;
+    border: 1.5px solid #16a34a;
+  }
+  .btn-opt-new:hover {
+    background: #15803d;
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(22, 163, 74, 0.35);
+  }
+
+  .btn-opt-reset {
+    background: #991b1b;
+    color: #fee2e2;
+    border: 1.5px solid #dc2626;
+  }
+  .btn-opt-reset:hover {
+    background: #dc2626;
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.35);
+  }
+
+  .modal-backdrop-confirm {
+    z-index: 1000000;
   }
 </style>
