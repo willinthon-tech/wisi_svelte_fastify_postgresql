@@ -3,10 +3,10 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
   import { isTauriWindows } from '../../services/tauriIsapi.service.js';
-  import { currentRouteStore, isHerramientasRoute } from '../../controllers/router.store.js';
+  import { currentRouteStore, isDashboardRoute } from '../../controllers/router.store.js';
 
   $: update = $availableUpdateStore;
-  $: isSilencedInRoute = isHerramientasRoute($currentRouteStore);
+  $: isOnlyInDashboard = isDashboardRoute($currentRouteStore);
 
   let isRefreshingData = false;
 
@@ -83,7 +83,7 @@
   }
 </script>
 
-{#if $isVersionModalOpenStore && update && !isSilencedInRoute}
+{#if $isVersionModalOpenStore && update && isOnlyInDashboard}
   <div class="version-modal-backdrop" on:click|stopPropagation>
     <div class="version-modal-card" on:click|stopPropagation>
       

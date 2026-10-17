@@ -52,6 +52,25 @@ export function isHerramientasRoute(route = null) {
   return false;
 }
 
+/**
+ * Verifica si la ruta dada (o la activa si no se pasa parámetro) corresponde
+ * única y exclusivamente a /dashboard.
+ */
+export function isDashboardRoute(route = null) {
+  const target = (route !== null && route !== undefined) ? route : (typeof window !== 'undefined' ? get(currentRouteStore) : '');
+  const clean = target ? String(target).toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim() : '';
+  if (clean === '' || clean === 'dashboard') {
+    return true;
+  }
+  if (typeof window !== 'undefined') {
+    const hash = String(window.location.hash || '').toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim();
+    if (hash === '' || hash === 'dashboard') {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function initRouter() {
   if (typeof window === 'undefined') return;
 

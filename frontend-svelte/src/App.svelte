@@ -15,7 +15,7 @@
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
   import SyncBiometricosModal from "./components/modals/SyncBiometricosModal.svelte";
   import VersionUpdateModal from "./components/modals/VersionUpdateModal.svelte";
-  import { initVersionChecker, checkAppVersionOnStartup, isVersionModalOpenStore } from "./controllers/version.store.js";
+  import { initVersionChecker, checkAppVersionOnStartup, isVersionModalOpenStore, availableUpdateStore } from "./controllers/version.store.js";
   import { isTauriWindows } from "./services/tauriIsapi.service.js";
   import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
   import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal, openPhotoModalForAttlog } from "./controllers/globalModal.store.js";
@@ -110,6 +110,7 @@
     isPublicRoute,
     navigateToRoute,
     isHerramientasRoute,
+    isDashboardRoute,
   } from "./controllers/router.store.js";
   import {
     loadMasterStoresFromBackend,
@@ -393,14 +394,25 @@
     }
   }
 
-  // Si el usuario entra a /herramientas o cualquier subruta, cerrar inmediatamente modal de versión y alerta de marcaje
+  // Si el usuario entra a /herramientas o cualquier subruta, cerrar inmediatamente alerta de marcaje
   $: if (isHerramientasRoute($currentRouteStore)) {
     if (globalMarcajeAlert) {
       if (globalMarcajeAlertTimer) clearTimeout(globalMarcajeAlertTimer);
       globalMarcajeAlert = null;
     }
+  }
+
+  // El modal de actualización de versión SOLO se muestra en /dashboard; en cualquier otra ruta se cierra
+  $: if (!isDashboardRoute($currentRouteStore)) {
     if ($isVersionModalOpenStore) {
       isVersionModalOpenStore.set(false);
+    }
+  }
+
+  // Al entrar a /dashboard, si hay una actualización disponible esperando, abrir el modal
+  $: if (isDashboardRoute($currentRouteStore)) {
+    if ($availableUpdateStore && !$isVersionModalOpenStore) {
+      isVersionModalOpenStore.set(true);
     }
   }
 
@@ -1438,8 +1450,8 @@
 <!-- Modal Global Unificado de Fotografías y Fichas -->
 <GlobalPhotoModal />
 
-<!-- Modal Informativo de Actualización de Versión Multiplataforma (Silenciado en /herramientas) -->
-{#if !isHerramientasRoute($currentRouteStore)}
+<!-- Modal Informativo de Actualización de Versión Multiplataforma (Únicamente en /dashboard) -->
+{#if isDashboardRoute($currentRouteStore)}
   <VersionUpdateModal />
 {/if}
 

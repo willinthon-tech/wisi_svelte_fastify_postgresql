@@ -3,7 +3,7 @@ import { isTauriWindows } from '../services/tauriIsapi.service.js';
 import { triggerToast } from './ui.store.js';
 import { loadMasterStoresFromBackend } from './master.store.js';
 import { toBackendUrl } from '../config/api.config.js';
-import { isHerramientasRoute } from './router.store.js';
+import { isHerramientasRoute, isDashboardRoute } from './router.store.js';
 
 // Versión local inyectada en build time
 export const LOCAL_APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v10';
@@ -123,7 +123,7 @@ export async function checkAppVersionOnStartup() {
     const justUpgraded = sessionStorage.getItem('wisi_just_upgraded_reload');
     if (justUpgraded) {
       sessionStorage.removeItem('wisi_just_upgraded_reload');
-      if (!isHerramientasRoute()) {
+      if (isDashboardRoute()) {
         triggerToast(`🚀 ¡WISI actualizado a la versión v${htmlVerNum}! Datos y caché sincronizados.`, 'success');
       }
       return;
@@ -202,8 +202,8 @@ export async function checkAppVersionOnStartup() {
 
       // D) En Windows o Android o si el DOM venía de caché, forzar un refresco limpio con cache-busting
       if (hasStaleDomCache || platform === 'windows' || platform === 'android') {
-        if (isHerramientasRoute()) {
-          console.log('[VersionStore] 🤫 Recarga preventiva pospuesta por estar en ruta de herramientas.');
+        if (!isDashboardRoute()) {
+          console.log('[VersionStore] 🤫 Recarga preventiva pospuesta por no estar en /dashboard.');
           return;
         }
         try {
@@ -222,7 +222,7 @@ export async function checkAppVersionOnStartup() {
         return;
       }
 
-      if (!isHerramientasRoute()) {
+      if (isDashboardRoute()) {
         triggerToast(`🚀 ¡WISI actualizado a la versión v${htmlVerNum}! Datos y caché sincronizados.`, 'success');
       }
     }
@@ -351,8 +351,8 @@ export async function checkSystemVersion(options = { isSilent: false }) {
 
       // Si se detectó una nueva versión en el HTML del servidor:
       if (isWebOutdated && !isAutoRefreshingWeb) {
-        if (isHerramientasRoute()) {
-          console.log('[VersionStore] 🤫 Nueva versión web detectada pero silenciada por estar en ruta de herramientas.');
+        if (!isDashboardRoute()) {
+          console.log('[VersionStore] 🤫 Nueva versión web detectada pero silenciada por no estar en /dashboard.');
           return versionData;
         }
         isAutoRefreshingWeb = true;
@@ -387,11 +387,11 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           peso: winData.peso,
           fecha: winData.fecha
         });
-        if (isHerramientasRoute()) {
-          console.log('[VersionStore] 🤫 Aviso de actualización Windows silenciado por estar en ruta de herramientas.');
-          isVersionModalOpenStore.set(false);
-        } else {
+        if (isDashboardRoute()) {
           isVersionModalOpenStore.set(true);
+        } else {
+          console.log('[VersionStore] 🤫 Aviso de actualización Windows silenciado por no estar en /dashboard.');
+          isVersionModalOpenStore.set(false);
         }
       } else {
         availableUpdateStore.set(null);
@@ -422,11 +422,11 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           peso: androidData.peso,
           fecha: androidData.fecha
         });
-        if (isHerramientasRoute()) {
-          console.log('[VersionStore] 🤫 Aviso de actualización Android silenciado por estar en ruta de herramientas.');
-          isVersionModalOpenStore.set(false);
-        } else {
+        if (isDashboardRoute()) {
           isVersionModalOpenStore.set(true);
+        } else {
+          console.log('[VersionStore] 🤫 Aviso de actualización Android silenciado por no estar en /dashboard.');
+          isVersionModalOpenStore.set(false);
         }
       } else {
         availableUpdateStore.set(null);
