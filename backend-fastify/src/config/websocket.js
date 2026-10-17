@@ -22,20 +22,27 @@ export async function initWebsockets(fastify) {
       }
 
       if (data.type === 'BACCARAT_TABLE_UPDATE') {
-        const tableKey = data.storageKey || `${data.salaId}_${data.mesaId}`;
-        if (tableKey) {
-          baccaratTableStates.set(tableKey, {
-            sessionId: data.sessionId,
-            salaId: data.salaId,
-            mesaId: data.mesaId,
-            storageKey: data.storageKey,
-            shoeNumber: data.shoeNumber,
-            history: data.history,
-            tieMode: data.tieMode,
-            isLatestSession: data.isLatestSession,
-            updatedAt: Date.now()
-          });
-        }
+        const stateData = {
+          sessionId: data.sessionId,
+          sessionUuid: data.sessionUuid || data.sessionId,
+          salaId: data.salaId,
+          salaUuid: data.salaUuid || data.salaId,
+          mesaId: data.mesaId,
+          mesaUuid: data.mesaUuid || data.mesaId,
+          storageKey: data.storageKey,
+          shoeNumber: data.shoeNumber,
+          shoes: Array.isArray(data.shoes) ? data.shoes : [],
+          history: Array.isArray(data.history) ? data.history : [],
+          tieMode: data.tieMode,
+          isLatestSession: data.isLatestSession,
+          senderClientId: data.senderClientId,
+          updatedAt: Date.now()
+        };
+
+        // Almacenar en caché en memoria indexado por múltiples llaves para lookup rápido
+        if (data.storageKey) baccaratTableStates.set(data.storageKey, stateData);
+        if (data.salaId && data.mesaId) baccaratTableStates.set(`${data.salaId}_${data.mesaId}`, stateData);
+        if (data.salaUuid && data.mesaUuid) baccaratTableStates.set(`${data.salaUuid}_${data.mesaUuid}`, stateData);
 
         // Persistir en PostgreSQL de forma asíncrona si hay sesión y mesa válidas
         if (data.sessionId && data.mesaId) {
@@ -44,40 +51,36 @@ export async function initWebsockets(fastify) {
               const sNum = Math.max(1, Number(data.shoeNumber) || 1);
               const tMode = data.tieMode === 'circle' ? 'circle' : 'slash';
               const hands = Array.isArray(data.history) ? data.history : [];
+              const shoesList = Array.isArray(data.shoes) && data.shoes.length > 0 ? data.shoes : [
+                { shoe_number: sNum, tie_mode: tMode, history: hands }
+              ];
               const sIdStr = String(data.sessionId || data.sessionUuid || '').trim();
               const mIdStr = String(data.mesaId).trim();
               sql`
                 INSERT INTO record_libro_score_baccarat_mesa (
-                  session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at
+                  uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, shoes, updated_at
                 ) VALUES (
-                  ${sIdStr}, ${sIdStr}, ${mIdStr}, ${sNum}, ${tMode}, ${JSON.stringify(hands)}::jsonb, NOW()
+                  gen_random_uuid(), ${sIdStr}, ${sIdStr}, ${mIdStr}, ${sNum}, ${tMode},
+                  ${JSON.stringify(hands)}::jsonb,
+                  ${JSON.stringify(shoesList)}::jsonb,
+                  NOW()
                 )
                 ON CONFLICT (session_id, mesa_id) DO UPDATE SET
                   session_uuid = COALESCE(EXCLUDED.session_uuid, record_libro_score_baccarat_mesa.session_uuid),
                   shoe_number = EXCLUDED.shoe_number,
                   tie_mode = EXCLUDED.tie_mode,
                   history = EXCLUDED.history,
+                  shoes = EXCLUDED.shoes,
                   updated_at = NOW();
               `.catch(() => {});
             }
           }).catch(() => {});
         }
 
-        // Reenviar la actualización a todos los demás clientes conectados
+        // Reenviar la actualización en tiempo real a todos los demás clientes conectados
         const payloadStr = JSON.stringify({
           type: 'BACCARAT_TABLE_UPDATE',
-          data: {
-            sessionId: data.sessionId,
-            salaId: data.salaId,
-            mesaId: data.mesaId,
-            storageKey: data.storageKey,
-            shoeNumber: data.shoeNumber,
-            history: data.history,
-            tieMode: data.tieMode,
-            isLatestSession: data.isLatestSession,
-            senderClientId: data.senderClientId,
-            updatedAt: Date.now()
-          }
+          data: stateData
         });
 
         for (const client of activeClients) {
@@ -94,8 +97,14 @@ export async function initWebsockets(fastify) {
 
       if (data.type === 'BACCARAT_GET_STATE') {
         const tableKey = data.storageKey || `${data.salaId}_${data.mesaId}`;
-        if (tableKey && baccaratTableStates.has(tableKey)) {
-          const state = baccaratTableStates.get(tableKey);
+        let state = baccaratTableStates.get(tableKey);
+        if (!state && data.salaId && data.mesaId) {
+          state = baccaratTableStates.get(`${data.salaId}_${data.mesaId}`);
+        }
+        if (!state && data.salaUuid && data.mesaUuid) {
+          state = baccaratTableStates.get(`${data.salaUuid}_${data.mesaUuid}`);
+        }
+        if (state) {
           socket.send(JSON.stringify({
             type: 'BACCARAT_TABLE_UPDATE',
             data: state

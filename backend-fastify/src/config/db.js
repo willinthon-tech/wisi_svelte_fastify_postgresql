@@ -101,12 +101,11 @@ export async function initDb() {
       console.warn('Advertencia migrando cecom_ia_eventos:', eMig.message);
     }
 
-    // Garantizar tablas para Sesiones y Mesas del Scoreboard de Baccarat
+    // Garantizar tablas para Sesiones y Mesas del Scoreboard de Baccarat (Estándar WISI: UUID PRIMARY KEY)
     try {
       await sql`
         CREATE TABLE IF NOT EXISTS record_libro_score_baccarat (
-          id SERIAL PRIMARY KEY,
-          uuid UUID DEFAULT gen_random_uuid() UNIQUE,
+          uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           sala_id VARCHAR(100) NOT NULL,
           fecha VARCHAR(50) NOT NULL,
           estado VARCHAR(20) DEFAULT 'abierta',
@@ -120,27 +119,48 @@ export async function initDb() {
 
       await sql`
         CREATE TABLE IF NOT EXISTS record_libro_score_baccarat_mesa (
-          id SERIAL PRIMARY KEY,
-          uuid UUID DEFAULT gen_random_uuid() UNIQUE,
+          uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           session_id VARCHAR(100) NOT NULL,
           session_uuid VARCHAR(100),
           mesa_id VARCHAR(100) NOT NULL,
           shoe_number INTEGER DEFAULT 1,
           tie_mode VARCHAR(20) DEFAULT 'slash',
           history JSONB NOT NULL DEFAULT '[]'::jsonb,
+          shoes JSONB NOT NULL DEFAULT '[]'::jsonb,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW(),
           CONSTRAINT uq_baccarat_mesa_session UNIQUE (session_id, mesa_id)
         );
       `;
-      // Migraciones seguras para columnas UUID si las tablas ya existían
+
+      // Migraciones seguras para migrar tablas previas hacia UUID PRIMARY KEY y remover id
       try {
         await sql`ALTER TABLE record_libro_score_baccarat ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();`;
+        await sql`UPDATE record_libro_score_baccarat SET uuid = gen_random_uuid() WHERE uuid IS NULL;`;
+        await sql`UPDATE record_libro_score_baccarat_mesa SET uuid = gen_random_uuid() WHERE uuid IS NULL;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS record_libro_score_baccarat_mesa_pkey CASCADE;`;
+        await sql`ALTER TABLE record_libro_score_baccarat DROP CONSTRAINT IF EXISTS record_libro_score_baccarat_pkey CASCADE;`;
+        await sql`ALTER TABLE record_libro_score_baccarat DROP COLUMN IF EXISTS id CASCADE;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP COLUMN IF EXISTS id CASCADE;`;
+        await sql`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'record_libro_score_baccarat_pkey') THEN
+              ALTER TABLE record_libro_score_baccarat ADD PRIMARY KEY (uuid);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'record_libro_score_baccarat_mesa_pkey') THEN
+              ALTER TABLE record_libro_score_baccarat_mesa ADD PRIMARY KEY (uuid);
+            END IF;
+          END $$;
+        `;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS record_libro_score_baccarat_mesa_session_id_fkey;`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ALTER COLUMN session_id TYPE VARCHAR(100) USING session_id::VARCHAR(100);`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS session_uuid VARCHAR(100);`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS shoes JSONB NOT NULL DEFAULT '[]'::jsonb;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS history JSONB NOT NULL DEFAULT '[]'::jsonb;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS uq_baccarat_mesa_session;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD CONSTRAINT uq_baccarat_mesa_session UNIQUE (session_id, mesa_id);`;
       } catch (eAlt) {
         // Ignorar si ya fueron alteradas
       }

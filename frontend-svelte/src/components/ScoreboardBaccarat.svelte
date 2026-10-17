@@ -415,6 +415,7 @@
 
     try {
       // 1. Cargar primero de la base de datos interna local (IndexedDB)
+      let hadLocalData = false;
       const localRows = await getLocalItems(
         'record_libro_score_baccarat_mesa',
         item => (String(item.session_uuid || item.session_id) === strSessId || String(item.session_id) === strSessId) &&
@@ -422,6 +423,7 @@
       );
       if (Array.isArray(localRows) && localRows.length > 0) {
         applyMesaData(localRows[0]);
+        hadLocalData = true;
       }
 
       if (onlyLocal) return;
@@ -431,7 +433,14 @@
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          applyMesaData(json.data);
+          const bShoes = Array.isArray(json.data.shoes) ? json.data.shoes : [];
+          const hasHandsInBackend = bShoes.some(s => Array.isArray(s.history) && s.history.length > 0) ||
+                                   (Array.isArray(json.data.history) && json.data.history.length > 0);
+
+          // Si el backend tiene manos O si localmente no teníamos datos, aplicar la respuesta del backend
+          if (hasHandsInBackend || !hadLocalData) {
+            applyMesaData(json.data);
+          }
 
           // Guardar en base de datos interna local (IndexedDB)
           await upsertLocalItem('record_libro_score_baccarat_mesa', {
@@ -465,10 +474,14 @@
 
   async function goToPrevSession() {
     if (selectedSessionIndex > 0 && !isSessionsLoading) {
+      // Guardar el zapato actual antes de cambiar de sesión
+      if (isCurrentShoeActive) {
+        saveShoe(true);
+      }
       selectedSessionIndex--;
       const sess = sessions[selectedSessionIndex];
       if (sess) {
-        activeSessionId = sess.uuid || sess.id;
+        activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
         showFeedback(`Cargando sesión ${sess.fecha}...`);
         await loadMesaDataForSession(activeSessionId, currentMesaId);
       }
@@ -477,10 +490,13 @@
 
   async function goToNextSession() {
     if (selectedSessionIndex < sessions.length - 1 && !isSessionsLoading) {
+      if (isCurrentShoeActive) {
+        saveShoe(true);
+      }
       selectedSessionIndex++;
       const sess = sessions[selectedSessionIndex];
       if (sess) {
-        activeSessionId = sess.uuid || sess.id;
+        activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
         showFeedback(`Cargando sesión ${sess.fecha}...`);
         await loadMesaDataForSession(activeSessionId, currentMesaId);
       }
@@ -491,6 +507,9 @@
     if (!currentSalaId || isSessionsLoading || !isLatestSession) return;
     try {
       isSessionsLoading = true;
+      // Guardar la sesión y zapato actuales antes de crear la nueva sesión
+      saveShoe(true);
+
       const clientGeneratedUuid = generateSafeUuid();
       const res = await fetch(toBackendUrl('/api/baccarat/sessions'), {
         method: 'POST',
@@ -617,7 +636,9 @@
       type: 'BACCARAT_TABLE_UPDATE',
       storageKey,
       salaId: currentSalaId,
+      salaUuid: currentSalaObj?.uuid || currentSalaId,
       mesaId: currentMesaId,
+      mesaUuid: currentMesaObj?.uuid || currentMesaId,
       sessionId: sessUuid,
       sessionUuid: sessUuid,
       isLatestSession: true,
@@ -702,12 +723,14 @@
   }
 
   // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa
-  $: if ($isWsConnectedStore && storageKey && isLatestSession) {
+  $: if ($isWsConnectedStore && isLatestSession && currentSalaId && currentMesaId) {
     sendWebSocketMessage({
       type: 'BACCARAT_GET_STATE',
       storageKey,
       salaId: currentSalaId,
-      mesaId: currentMesaId
+      salaUuid: currentSalaObj?.uuid || currentSalaId,
+      mesaId: currentMesaId,
+      mesaUuid: currentMesaObj?.uuid || currentMesaId
     });
   }
 
@@ -741,15 +764,43 @@
       if (!update) return;
       if (update.senderClientId === myClientId) return;
 
-      // Si el usuario está viendo una sesión histórica o zapato histórico, no sobreescribir
-      if (!isCurrentShoeActive) return;
+      // Verificar si la actualización pertenece a la misma mesa/sala
+      const matchesSala = 
+        (update.salaId && String(update.salaId) === String(currentSalaId)) ||
+        (update.salaUuid && currentSalaObj?.uuid && String(update.salaUuid) === String(currentSalaObj.uuid)) ||
+        (update.salaId && currentSalaObj?.uuid && String(update.salaId) === String(currentSalaObj.uuid)) ||
+        (update.salaUuid && String(update.salaUuid) === String(currentSalaId));
 
-      const isCurrentTable = (update.storageKey && update.storageKey === storageKey) ||
-        (String(update.salaId) === String(currentSalaId) && String(update.mesaId) === String(currentMesaId));
+      const matchesMesa = 
+        (update.mesaId && String(update.mesaId) === String(currentMesaId)) ||
+        (update.mesaUuid && currentMesaObj?.uuid && String(update.mesaUuid) === String(currentMesaObj.uuid)) ||
+        (update.mesaId && currentMesaObj?.uuid && String(update.mesaId) === String(currentMesaObj.uuid)) ||
+        (update.mesaUuid && String(update.mesaUuid) === String(currentMesaId));
+
+      const isCurrentTable = (update.storageKey && update.storageKey === storageKey) || (matchesSala && matchesMesa);
 
       if (isCurrentTable) {
+        // Si el usuario está viendo una sesión histórica o zapato histórico pasado, no sobreescribir la vista actual
+        if (!isCurrentShoeActive && !isSessionsLoading) {
+          // Persistir en segundo plano en IndexedDB para que al volver a la actual esté al día
+          const sessUuid = currentSession?.uuid || update.sessionUuid || update.sessionId;
+          if (sessUuid && currentMesaId && Array.isArray(update.shoes)) {
+            upsertLocalItem('record_libro_score_baccarat_mesa', {
+              uuid: `bacc_mesa_${sessUuid}_${currentMesaId}`,
+              session_uuid: sessUuid,
+              session_id: sessUuid,
+              mesa_id: currentMesaId,
+              shoe_number: update.shoeNumber || shoeNumber,
+              tie_mode: update.tieMode || tieMode,
+              history: update.history || history,
+              shoes: update.shoes
+            }).catch(() => {});
+          }
+          return;
+        }
+
         let changed = false;
-        if (Array.isArray(update.shoes)) {
+        if (Array.isArray(update.shoes) && update.shoes.length > 0) {
           shoes = update.shoes;
           changed = true;
         }
@@ -757,9 +808,11 @@
           history = update.history;
           changed = true;
         }
-        if (update.shoeNumber !== undefined && update.shoeNumber !== null && update.shoeNumber !== shoeNumber) {
+        if (update.shoeNumber !== undefined && update.shoeNumber !== null) {
           shoeNumber = update.shoeNumber;
           activeShoeNumber = update.shoeNumber;
+          activeShoeIndex = shoes.findIndex(s => s.shoe_number === shoeNumber);
+          if (activeShoeIndex === -1) activeShoeIndex = shoes.length - 1;
           changed = true;
         }
         if (update.tieMode && (update.tieMode === 'slash' || update.tieMode === 'circle')) {
@@ -769,7 +822,30 @@
           }
         }
         if (changed) {
-          saveShoe(true); // Evitar retransmitir
+          // Persistir localmente de inmediato en esta máquina
+          const sessUuid = currentSession?.uuid || update.sessionUuid || update.sessionId;
+          if (sessUuid && currentMesaId) {
+            try {
+              localStorage.setItem(storageKey, JSON.stringify({
+                shoeNumber,
+                history,
+                shoes,
+                tieMode,
+                sessionId: sessUuid
+              }));
+            } catch (e) {}
+
+            upsertLocalItem('record_libro_score_baccarat_mesa', {
+              uuid: `bacc_mesa_${sessUuid}_${currentMesaId}`,
+              session_uuid: sessUuid,
+              session_id: sessUuid,
+              mesa_id: currentMesaId,
+              shoe_number: shoeNumber,
+              tie_mode: tieMode,
+              history,
+              shoes
+            }).catch(() => {});
+          }
           showFeedback('⚡ Mesa sincronizada en tiempo real');
         }
       }
