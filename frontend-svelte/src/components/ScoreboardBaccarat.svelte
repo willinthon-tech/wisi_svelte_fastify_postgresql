@@ -1058,7 +1058,7 @@
       score: activeScore,
       bPair: activeBPair,
       pPair: activePPair,
-      natural: activeWin || activeScore === 8 || activeScore === 9,
+      natural: Boolean(activeWin),
       special: activeSpecial,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     };
