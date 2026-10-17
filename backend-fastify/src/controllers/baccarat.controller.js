@@ -9,6 +9,23 @@ export function isUuid(val) {
   return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 }
 
+export function safeJsonParse(val, fallback = []) {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'object') return val;
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      if (typeof parsed === 'string') {
+        try { return JSON.parse(parsed); } catch { return parsed; }
+      }
+      return parsed;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 function getTodayStr() {
   const now = new Date();
   const y = now.getFullYear();
@@ -239,18 +256,47 @@ export async function getMesaData(req, reply) {
       `;
 
       if (rows.length > 0) {
-        let shoesList = Array.isArray(rows[0].shoes) && rows[0].shoes.length > 0 ? rows[0].shoes : [];
+        const row = rows[0];
+        const parsedShoes = safeJsonParse(row.shoes, []);
+        const parsedHistory = safeJsonParse(row.history, []);
+
+        let shoesList = Array.isArray(parsedShoes) && parsedShoes.length > 0 ? parsedShoes : [];
         if (shoesList.length === 0) {
+          const hands = Array.isArray(parsedHistory) ? parsedHistory : [];
           shoesList = [{
-            shoe_number: rows[0].shoe_number || 1,
-            tie_mode: rows[0].tie_mode || 'slash',
-            history: Array.isArray(rows[0].history) ? rows[0].history : []
+            shoe_number: row.shoe_number || 1,
+            tie_mode: row.tie_mode || 'slash',
+            history: hands
           }];
+        } else {
+          // Normalizar cada zapato asegurando que history sea un Array real
+          shoesList = shoesList.map(s => ({
+            ...s,
+            shoe_number: Number(s.shoe_number) || 1,
+            tie_mode: s.tie_mode || 'slash',
+            history: Array.isArray(s.history) ? s.history : safeJsonParse(s.history, [])
+          }));
         }
+
+        // Si por alguna razón la lista de zapatos no incluye el zapato 1, añadirlo
+        if (!shoesList.some(s => s.shoe_number === 1)) {
+          shoesList.unshift({ shoe_number: 1, history: [], tie_mode: 'slash' });
+        }
+        shoesList.sort((a, b) => a.shoe_number - b.shoe_number);
+
+        // La historia activa es la del último zapato seleccionado
+        const activeShoe = shoesList.find(s => s.shoe_number === row.shoe_number) || shoesList[shoesList.length - 1];
+        const activeHistory = (activeShoe && Array.isArray(activeShoe.history) && activeShoe.history.length > 0)
+          ? activeShoe.history
+          : (Array.isArray(parsedHistory) ? parsedHistory : []);
+
         return reply.send({
           success: true,
           data: {
-            ...rows[0],
+            ...row,
+            shoe_number: activeShoe?.shoe_number || row.shoe_number || 1,
+            tie_mode: activeShoe?.tie_mode || row.tie_mode || 'slash',
+            history: activeHistory,
             shoes: shoesList
           }
         });
@@ -309,10 +355,26 @@ export async function saveMesaData(req, reply) {
 
     const sNumber = Math.max(1, Number(shoe_number) || 1);
     const tMode = tie_mode === 'circle' ? 'circle' : 'slash';
-    const handsArray = Array.isArray(history) ? history : [];
-    let shoesList = Array.isArray(shoes) && shoes.length > 0 ? shoes : [
+    
+    // Normalizar arrays reales para no guardar cadenas JSON dobles
+    const handsArray = Array.isArray(history) ? history : safeJsonParse(history, []);
+    let parsedShoes = Array.isArray(shoes) ? shoes : safeJsonParse(shoes, []);
+    let shoesList = Array.isArray(parsedShoes) && parsedShoes.length > 0 ? parsedShoes : [
       { shoe_number: sNumber, tie_mode: tMode, history: handsArray }
     ];
+
+    // Asegurar que el zapato activo esté actualizado dentro de shoesList
+    const currIdx = shoesList.findIndex(s => Number(s.shoe_number) === sNumber);
+    if (currIdx >= 0) {
+      shoesList[currIdx] = { shoe_number: sNumber, history: handsArray, tie_mode: tMode };
+    } else {
+      shoesList.push({ shoe_number: sNumber, history: handsArray, tie_mode: tMode });
+    }
+    // Asegurar que exista Zapato 1
+    if (!shoesList.some(s => s.shoe_number === 1)) {
+      shoesList.unshift({ shoe_number: 1, history: [], tie_mode: 'slash' });
+    }
+    shoesList.sort((a, b) => a.shoe_number - b.shoe_number);
 
     if (isPgConnected && sql) {
       const [saved] = await sql`
@@ -334,7 +396,14 @@ export async function saveMesaData(req, reply) {
         RETURNING uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, shoes, updated_at;
       `;
 
-      return reply.send({ success: true, data: saved });
+      return reply.send({
+        success: true,
+        data: {
+          ...saved,
+          history: handsArray,
+          shoes: shoesList
+        }
+      });
     }
 
     // Fallback en memoria

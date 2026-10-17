@@ -126,8 +126,6 @@
     lastLoadedStorageKey = storageKey;
     if (sessionUuid && currentMesaId) {
       loadMesaDataForSession(sessionUuid, currentMesaId);
-    } else {
-      loadSavedShoe();
     }
   }
 
@@ -268,6 +266,23 @@
   $: derivedCellSize = Math.max(Math.floor((derivedBandHeight - 2) / 6), 11);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / derivedCellSize) + 1, 36);
 
+  function safeJsonParse(val, fallback = []) {
+    if (val === null || val === undefined) return fallback;
+    if (typeof val === 'object') return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        if (typeof parsed === 'string') {
+          try { return JSON.parse(parsed); } catch { return parsed; }
+        }
+        return parsed;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  }
+
   function applyMesaData(data) {
     if (!data) {
       shoes = [{ shoe_number: 1, history: [], tie_mode: 'slash' }];
@@ -280,18 +295,35 @@
       return;
     }
 
+    const rawShoes = safeJsonParse(data.shoes, []);
+    const rawHistory = safeJsonParse(data.history, []);
+
     let sList = [];
-    if (Array.isArray(data.shoes) && data.shoes.length > 0) {
-      sList = data.shoes;
+    if (Array.isArray(rawShoes) && rawShoes.length > 0) {
+      sList = rawShoes.map(s => ({
+        ...s,
+        shoe_number: Number(s.shoe_number) || 1,
+        tie_mode: s.tie_mode || 'slash',
+        history: Array.isArray(s.history) ? s.history : safeJsonParse(s.history, [])
+      }));
     } else {
       const sNum = Math.max(1, Number(data.shoe_number) || 1);
-      const h = Array.isArray(data.history) ? data.history : [];
+      const h = Array.isArray(rawHistory) ? rawHistory : [];
       sList = [{ shoe_number: sNum, tie_mode: data.tie_mode || 'slash', history: h }];
     }
+
+    // Asegurar que siempre exista al menos el Zapato #1
+    if (!sList.some(s => s.shoe_number === 1)) {
+      sList.unshift({ shoe_number: 1, history: [], tie_mode: 'slash' });
+    }
+    sList.sort((a, b) => a.shoe_number - b.shoe_number);
     shoes = sList;
 
-    // Seleccionar el último zapato de la sesión
-    activeShoeIndex = shoes.length - 1;
+    // Si data especifica shoe_number, buscar ese zapato; de lo contrario seleccionar el último
+    const targetShoeNum = Number(data.shoe_number) || (shoes[shoes.length - 1]?.shoe_number || 1);
+    const foundIdx = shoes.findIndex(s => s.shoe_number === targetShoeNum);
+    activeShoeIndex = foundIdx >= 0 ? foundIdx : shoes.length - 1;
+
     const activeS = shoes[activeShoeIndex] || { shoe_number: 1, history: [], tie_mode: 'slash' };
     shoeNumber = activeS.shoe_number;
     activeShoeNumber = activeS.shoe_number;
@@ -422,8 +454,18 @@
                 (String(item.mesa_id || item.mesa_uuid) === strMesaId)
       );
       if (Array.isArray(localRows) && localRows.length > 0) {
-        applyMesaData(localRows[0]);
-        hadLocalData = true;
+        const localObj = localRows[0];
+        const localShoes = safeJsonParse(localObj.shoes, []);
+        const localHistory = safeJsonParse(localObj.history, []);
+        const localHasHands = (Array.isArray(localShoes) && localShoes.some(s => {
+          const h = Array.isArray(s.history) ? s.history : safeJsonParse(s.history, []);
+          return h.length > 0;
+        })) || (Array.isArray(localHistory) && localHistory.length > 0);
+
+        if (localHasHands) {
+          applyMesaData(localObj);
+          hadLocalData = true;
+        }
       }
 
       if (onlyLocal) return;
@@ -433,12 +475,33 @@
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          const bShoes = Array.isArray(json.data.shoes) ? json.data.shoes : [];
-          const hasHandsInBackend = bShoes.some(s => Array.isArray(s.history) && s.history.length > 0) ||
-                                   (Array.isArray(json.data.history) && json.data.history.length > 0);
+          const bShoes = safeJsonParse(json.data.shoes, []);
+          const bHistory = safeJsonParse(json.data.history, []);
+          const hasHandsInBackend = (Array.isArray(bShoes) && bShoes.some(s => {
+            const h = Array.isArray(s.history) ? s.history : safeJsonParse(s.history, []);
+            return h.length > 0;
+          })) || (Array.isArray(bHistory) && bHistory.length > 0);
 
-          // Si el backend tiene manos O si localmente no teníamos datos, aplicar la respuesta del backend
-          if (hasHandsInBackend || !hadLocalData) {
+          if (hasHandsInBackend) {
+            applyMesaData(json.data);
+          } else if (!hadLocalData) {
+            // Si ni el backend ni IndexedDB tenían manos para esta sesión, verificar si hay manos huérfanas en localStorage
+            const baseLegacyKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
+            try {
+              const legacyRaw = localStorage.getItem(baseLegacyKey);
+              if (legacyRaw) {
+                const legacyParsed = JSON.parse(legacyRaw);
+                const lHands = Array.isArray(legacyParsed?.history) ? legacyParsed.history : [];
+                const lShoes = Array.isArray(legacyParsed?.shoes) ? legacyParsed.shoes : [];
+                if (lHands.length > 0 || lShoes.some(s => Array.isArray(s.history) && s.history.length > 0)) {
+                  // Migrar las manos huérfanas a esta sesión y guardar en backend
+                  applyMesaData(legacyParsed);
+                  saveShoe();
+                  return;
+                }
+              }
+            } catch (eMig) {}
+
             applyMesaData(json.data);
           }
 
@@ -469,7 +532,6 @@
     } catch (e) {
       console.warn('Error loading mesa data from backend:', e);
     }
-    loadSavedShoe();
   }
 
   async function goToPrevSession() {
