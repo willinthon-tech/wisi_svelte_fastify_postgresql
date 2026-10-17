@@ -552,7 +552,7 @@
     return { grid, totalCols };
   })();
 
-  // 2. BIG ROAD (GRAN CAMINO) - Columnas de rachas con soporte para turnos (Dragon Tails) y números de puntaje
+  // 2. BIG ROAD (GRAN CAMINO) - Columnas de rachas con soporte para turnos (Dragon Tails)
   $: bigRoadGrid = (() => {
     let totalCols = Math.max(bigRoadColsNeeded, 52);
     let grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
@@ -561,6 +561,7 @@
     let row = 0;
     let prevWinner = null;
     let lastPlaced = null;
+    let currentRun = []; // Array de { r, c, cell } pertenecientes a la corrida actual
 
     history.forEach((h, idx) => {
       if (h.winner === 'EMPATE') {
@@ -570,6 +571,7 @@
           } else {
             grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 1 };
             lastPlaced = grid[0][0];
+            currentRun = [{ r: 0, c: 0, cell: grid[0][0] }];
           }
           return;
         } else {
@@ -579,12 +581,14 @@
             lastPlaced = grid[0][0];
             row = 1;
             col = 0;
+            currentRun = [{ r: 0, c: 0, cell: grid[0][0] }];
             return;
           }
 
           if (row < BIG_ROWS && !grid[row][col]) {
             grid[row][col] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
             lastPlaced = grid[row][col];
+            currentRun.push({ r: row, c: col, cell: grid[row][col] });
             row++;
           } else {
             let dragonCol = col + 1;
@@ -602,6 +606,7 @@
             }
             grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
             lastPlaced = grid[dragonRow][dragonCol];
+            currentRun.push({ r: dragonRow, c: dragonCol, cell: grid[dragonRow][dragonCol] });
           }
           return;
         }
@@ -612,12 +617,14 @@
           if (row < BIG_ROWS && !grid[row][col]) {
             grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
             lastPlaced = grid[row][col];
+            currentRun.push({ r: row, c: col, cell: grid[row][col] });
             row++;
           } else {
             col++;
             row = 0;
             grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
             lastPlaced = grid[0][col];
+            currentRun = [{ r: 0, c: col, cell: grid[0][col] }];
             row = 1;
           }
           prevWinner = h.winner;
@@ -627,12 +634,14 @@
         grid[0][0] = { ...h, historyIndex: idx, tieCount: 0 };
         lastPlaced = grid[0][0];
         prevWinner = h.winner;
+        currentRun = [{ r: 0, c: 0, cell: grid[0][0] }];
         row = 1;
         col = 0;
       } else if (h.winner === prevWinner) {
         if (row < BIG_ROWS && !grid[row][col]) {
           grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
           lastPlaced = grid[row][col];
+          currentRun.push({ r: row, c: col, cell: grid[row][col] });
           row++;
         } else {
           let dragonCol = col + 1;
@@ -650,6 +659,7 @@
           }
           grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, tieCount: 0 };
           lastPlaced = grid[dragonRow][dragonCol];
+          currentRun.push({ r: dragonRow, c: dragonCol, cell: grid[dragonRow][dragonCol] });
         }
       } else {
         col++;
@@ -667,21 +677,35 @@
         row = 0;
         grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
         lastPlaced = grid[0][col];
+        currentRun = [{ r: 0, c: col, cell: grid[0][col] }];
         row = 1;
         prevWinner = h.winner;
       }
     });
 
-    // Calcular raya de corrida vertical para columnas con 3 o más jugadas consecutivas
-    for (let c = 0; c < totalCols; c++) {
-      let runLength = 0;
-      while (runLength < BIG_ROWS && grid[runLength][c] !== null) {
-        runLength++;
-      }
-      if (runLength >= 3) {
-        for (let r = 0; r < runLength; r++) {
-          grid[r][c].hasStreakLine = true;
-          grid[r][c].streakPos = r === 0 ? 'start' : r === runLength - 1 ? 'end' : 'middle';
+    // La raya de corrida SOLO se visualiza en la última jugada (la corrida actual en curso),
+    // si ya lleva 3 o más de 3, y siguiendo la corrida completa (columnas verticales y dragon tails horizontales)
+    if (currentRun.length >= 3) {
+      for (let i = 0; i < currentRun.length; i++) {
+        const item = currentRun[i];
+        const cell = item.cell;
+        cell.hasStreakLine = true;
+
+        const prev = i > 0 ? currentRun[i - 1] : null;
+        const next = i < currentRun.length - 1 ? currentRun[i + 1] : null;
+
+        if (prev) {
+          if (prev.r === item.r - 1 && prev.c === item.c) cell.streakTop = true;
+          if (prev.r === item.r + 1 && prev.c === item.c) cell.streakBottom = true;
+          if (prev.r === item.r && prev.c === item.c - 1) cell.streakLeft = true;
+          if (prev.r === item.r && prev.c === item.c + 1) cell.streakRight = true;
+        }
+
+        if (next) {
+          if (next.r === item.r - 1 && next.c === item.c) cell.streakTop = true;
+          if (next.r === item.r + 1 && next.c === item.c) cell.streakBottom = true;
+          if (next.r === item.r && next.c === item.c - 1) cell.streakLeft = true;
+          if (next.r === item.r && next.c === item.c + 1) cell.streakRight = true;
         }
       }
     }
@@ -1056,7 +1080,10 @@
                   >
                     {#if cell}
                       {#if cell.hasStreakLine}
-                        <span class="streak-line streak-{cell.streakPos}"></span>
+                        {#if cell.streakTop}<span class="streak-seg streak-seg-top"></span>{/if}
+                        {#if cell.streakBottom}<span class="streak-seg streak-seg-bottom"></span>{/if}
+                        {#if cell.streakLeft}<span class="streak-seg streak-seg-left"></span>{/if}
+                        {#if cell.streakRight}<span class="streak-seg streak-seg-right"></span>{/if}
                       {/if}
                       <div
                         class="bigroad-ring {cell.winner.toLowerCase()}"
@@ -2223,32 +2250,45 @@
     background: rgba(255, 255, 255, 0.08);
   }
 
-  /* RAYA VERTICAL DE CORRIDA (>= 3 JUGADAS CONSECUTIVAS EN COLUMNA) */
-  .streak-line {
+  /* RAYA CONTINUA DE CORRIDA EN JUGADA ACTUAL (Soporta columnas verticales y Dragon Tails horizontales) */
+  .streak-seg {
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 3.5px;
     background: #f59e0b;
     z-index: 1;
     pointer-events: none;
-    box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
+    box-shadow: 0 0 5px rgba(245, 158, 11, 0.6);
   }
-  .streak-line.streak-start {
-    top: 50%;
-    bottom: -1px;
-    border-top-left-radius: 2px;
-    border-top-right-radius: 2px;
-  }
-  .streak-line.streak-middle {
-    top: -1px;
-    bottom: -1px;
-  }
-  .streak-line.streak-end {
+
+  .streak-seg.streak-seg-top {
+    left: 50%;
     top: -1px;
     bottom: 50%;
-    border-bottom-left-radius: 2px;
-    border-bottom-right-radius: 2px;
+    width: 3.5px;
+    transform: translateX(-50%);
+  }
+
+  .streak-seg.streak-seg-bottom {
+    left: 50%;
+    top: 50%;
+    bottom: -1px;
+    width: 3.5px;
+    transform: translateX(-50%);
+  }
+
+  .streak-seg.streak-seg-left {
+    top: 50%;
+    left: -1px;
+    right: 50%;
+    height: 3.5px;
+    transform: translateY(-50%);
+  }
+
+  .streak-seg.streak-seg-right {
+    top: 50%;
+    left: 50%;
+    right: -1px;
+    height: 3.5px;
+    transform: translateY(-50%);
   }
 
   /* PUNTICO 3D ESFÉRICO DE VICTORIA NATURAL (Referencia Imagen 4) */
