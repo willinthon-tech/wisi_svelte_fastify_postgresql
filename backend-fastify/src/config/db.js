@@ -140,6 +140,7 @@ export async function initDb() {
         await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS record_libro_score_baccarat_mesa_session_id_fkey;`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ALTER COLUMN session_id TYPE VARCHAR(100) USING session_id::VARCHAR(100);`;
         await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS session_uuid VARCHAR(100);`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS shoes JSONB NOT NULL DEFAULT '[]'::jsonb;`;
       } catch (eAlt) {
         // Ignorar si ya fueron alteradas
       }

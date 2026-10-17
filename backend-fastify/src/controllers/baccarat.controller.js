@@ -233,7 +233,7 @@ export async function getMesaData(req, reply) {
 
     if (isPgConnected && sql) {
       const rows = await sql`
-        SELECT id, uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at
+        SELECT id, uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, shoes, updated_at
         FROM record_libro_score_baccarat_mesa
         WHERE (session_id = ${sId} OR session_uuid = ${sId} OR (uuid::text = ${sId}))
           AND mesa_id = ${mId}
@@ -241,7 +241,21 @@ export async function getMesaData(req, reply) {
       `;
 
       if (rows.length > 0) {
-        return reply.send({ success: true, data: rows[0] });
+        let shoesList = Array.isArray(rows[0].shoes) && rows[0].shoes.length > 0 ? rows[0].shoes : [];
+        if (shoesList.length === 0) {
+          shoesList = [{
+            shoe_number: rows[0].shoe_number || 1,
+            tie_mode: rows[0].tie_mode || 'slash',
+            history: Array.isArray(rows[0].history) ? rows[0].history : []
+          }];
+        }
+        return reply.send({
+          success: true,
+          data: {
+            ...rows[0],
+            shoes: shoesList
+          }
+        });
       }
 
       return reply.send({
@@ -253,7 +267,8 @@ export async function getMesaData(req, reply) {
           mesa_id: mId,
           shoe_number: 1,
           tie_mode: 'slash',
-          history: []
+          history: [],
+          shoes: [{ shoe_number: 1, tie_mode: 'slash', history: [] }]
         }
       });
     }
@@ -267,7 +282,8 @@ export async function getMesaData(req, reply) {
       mesa_id: mId,
       shoe_number: 1,
       tie_mode: 'slash',
-      history: []
+      history: [],
+      shoes: [{ shoe_number: 1, tie_mode: 'slash', history: [] }]
     };
 
     return reply.send({ success: true, data });
@@ -282,7 +298,7 @@ export async function getMesaData(req, reply) {
  */
 export async function saveMesaData(req, reply) {
   try {
-    const { session_id, session_uuid, uuid, mesa_id, shoe_number, tie_mode, history } = req.body || {};
+    const { session_id, session_uuid, uuid, mesa_id, shoe_number, tie_mode, history, shoes } = req.body || {};
 
     if (!session_id || !mesa_id) {
       return reply.code(400).send({ success: false, message: 'session_id y mesa_id son requeridos' });
@@ -296,21 +312,28 @@ export async function saveMesaData(req, reply) {
     const sNumber = Math.max(1, Number(shoe_number) || 1);
     const tMode = tie_mode === 'circle' ? 'circle' : 'slash';
     const handsArray = Array.isArray(history) ? history : [];
+    let shoesList = Array.isArray(shoes) && shoes.length > 0 ? shoes : [
+      { shoe_number: sNumber, tie_mode: tMode, history: handsArray }
+    ];
 
     if (isPgConnected && sql) {
       const [saved] = await sql`
         INSERT INTO record_libro_score_baccarat_mesa (
-          uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at
+          uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, shoes, updated_at
         ) VALUES (
-          ${mesaDataUuid}::uuid, ${sId}, ${sessUuid}, ${mId}, ${sNumber}, ${tMode}, ${JSON.stringify(handsArray)}::jsonb, NOW()
+          ${mesaDataUuid}::uuid, ${sId}, ${sessUuid}, ${mId}, ${sNumber}, ${tMode},
+          ${JSON.stringify(handsArray)}::jsonb,
+          ${JSON.stringify(shoesList)}::jsonb,
+          NOW()
         )
         ON CONFLICT (session_id, mesa_id) DO UPDATE SET
           session_uuid = COALESCE(EXCLUDED.session_uuid, record_libro_score_baccarat_mesa.session_uuid),
           shoe_number = EXCLUDED.shoe_number,
           tie_mode = EXCLUDED.tie_mode,
           history = EXCLUDED.history,
+          shoes = EXCLUDED.shoes,
           updated_at = NOW()
-        RETURNING id, uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at;
+        RETURNING id, uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, shoes, updated_at;
       `;
 
       return reply.send({ success: true, data: saved });
@@ -327,6 +350,7 @@ export async function saveMesaData(req, reply) {
       shoe_number: sNumber,
       tie_mode: tMode,
       history: handsArray,
+      shoes: shoesList,
       updated_at: new Date().toISOString()
     };
     memoryMesaData.set(key, saved);

@@ -202,7 +202,14 @@
 
   // Shoe State
   let shoeNumber = 1;
+  let activeShoeNumber = 1;
+  let activeShoeIndex = 0;
+  let shoes = [{ shoe_number: 1, history: [], tie_mode: 'slash' }];
   let history = []; // [{ id, winner: 'PUNTO'|'BANCA'|'EMPATE', bPair, pPair, natural, special, time }]
+
+  $: maxShoeNumber = shoes.length > 0 ? Math.max(...shoes.map(s => Number(s.shoe_number) || 1), 1) : 1;
+  $: isViewingPastShoe = activeShoeNumber < maxShoeNumber;
+  $: isCurrentShoeActive = isLatestSession && !isViewingPastShoe;
 
   // Keypad Staging Modifiers & Score
   let activePPair = false;
@@ -212,7 +219,7 @@
   let activeScore = null; // null | 0..9
 
   function selectScore(num) {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('click');
     if (activeScore === num) {
       activeScore = null;
@@ -261,22 +268,83 @@
   $: derivedCellSize = Math.max(Math.floor((derivedBandHeight - 2) / 6), 11);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / derivedCellSize) + 1, 36);
 
+  function applyMesaData(data) {
+    if (!data) {
+      shoes = [{ shoe_number: 1, history: [], tie_mode: 'slash' }];
+      activeShoeIndex = 0;
+      activeShoeNumber = 1;
+      shoeNumber = 1;
+      history = [];
+      tieMode = 'slash';
+      selectedHandIndex = null;
+      return;
+    }
+
+    let sList = [];
+    if (Array.isArray(data.shoes) && data.shoes.length > 0) {
+      sList = data.shoes;
+    } else {
+      const sNum = Math.max(1, Number(data.shoe_number) || 1);
+      const h = Array.isArray(data.history) ? data.history : [];
+      sList = [{ shoe_number: sNum, tie_mode: data.tie_mode || 'slash', history: h }];
+    }
+    shoes = sList;
+
+    // Seleccionar el último zapato de la sesión
+    activeShoeIndex = shoes.length - 1;
+    const activeS = shoes[activeShoeIndex] || { shoe_number: 1, history: [], tie_mode: 'slash' };
+    shoeNumber = activeS.shoe_number;
+    activeShoeNumber = activeS.shoe_number;
+    history = Array.isArray(activeS.history) ? activeS.history : [];
+    tieMode = activeS.tie_mode || 'slash';
+    selectedHandIndex = null;
+  }
+
+  function goToPrevShoe() {
+    if (activeShoeIndex > 0) {
+      switchShoe(activeShoeIndex - 1);
+    }
+  }
+
+  function goToNextShoe() {
+    if (activeShoeIndex < shoes.length - 1) {
+      switchShoe(activeShoeIndex + 1);
+    }
+  }
+
+  function switchShoe(newIndex) {
+    if (newIndex < 0 || newIndex >= shoes.length) return;
+    // Si estábamos en el zapato activo y se editaron manos, sincronizar en shoes
+    if (isLatestSession && activeShoeNumber === maxShoeNumber) {
+      const currIdx = shoes.findIndex(s => s.shoe_number === activeShoeNumber);
+      if (currIdx >= 0) {
+        shoes[currIdx] = { shoe_number: activeShoeNumber, history, tie_mode: tieMode };
+      }
+    }
+    activeShoeIndex = newIndex;
+    const targetShoe = shoes[activeShoeIndex];
+    if (targetShoe) {
+      activeShoeNumber = targetShoe.shoe_number;
+      shoeNumber = targetShoe.shoe_number;
+      history = Array.isArray(targetShoe.history) ? targetShoe.history : [];
+      tieMode = targetShoe.tie_mode || 'slash';
+      selectedHandIndex = null;
+      showFeedback(`Viendo Zapato #${activeShoeNumber}${activeShoeNumber < maxShoeNumber ? ' (Histórico)' : ''}`);
+    }
+  }
+
   function loadSavedShoe() {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.history)) history = parsed.history;
-        if (parsed.shoeNumber) shoeNumber = parsed.shoeNumber;
-        if (parsed.tieMode === 'slash' || parsed.tieMode === 'circle') {
-          tieMode = parsed.tieMode;
-        }
+        applyMesaData(parsed);
       } else {
-        history = [];
-        shoeNumber = 1;
+        applyMesaData(null);
       }
     } catch (e) {
       console.warn('Error al cargar zapato guardado', e);
+      applyMesaData(null);
     }
   }
 
@@ -353,10 +421,7 @@
                 (String(item.mesa_id || item.mesa_uuid) === strMesaId)
       );
       if (Array.isArray(localRows) && localRows.length > 0) {
-        const local = localRows[0];
-        shoeNumber = Math.max(1, Number(local.shoe_number) || 1);
-        tieMode = local.tie_mode === 'circle' ? 'circle' : 'slash';
-        history = Array.isArray(local.history) ? local.history : [];
+        applyMesaData(localRows[0]);
       }
 
       if (onlyLocal) return;
@@ -366,9 +431,7 @@
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          shoeNumber = Math.max(1, Number(json.data.shoe_number) || 1);
-          tieMode = json.data.tie_mode === 'circle' ? 'circle' : 'slash';
-          history = Array.isArray(json.data.history) ? json.data.history : [];
+          applyMesaData(json.data);
 
           // Guardar en base de datos interna local (IndexedDB)
           await upsertLocalItem('record_libro_score_baccarat_mesa', {
@@ -378,13 +441,15 @@
             mesa_id: strMesaId,
             shoe_number: shoeNumber,
             tie_mode: tieMode,
-            history
+            history,
+            shoes
           });
 
           try {
             localStorage.setItem(storageKey, JSON.stringify({
               shoeNumber,
               history,
+              shoes,
               tieMode,
               sessionId: strSessId
             }));
@@ -423,7 +488,7 @@
   }
 
   async function handleCreateNewSession() {
-    if (!currentSalaId || isSessionsLoading) return;
+    if (!currentSalaId || isSessionsLoading || !isLatestSession) return;
     try {
       isSessionsLoading = true;
       const clientGeneratedUuid = generateSafeUuid();
@@ -446,16 +511,40 @@
         selectedSessionIndex = sessions.length - 1;
         activeSessionId = newSession.uuid || newSession.id;
 
-        // Reiniciar mesa para la nueva sesión
+        // Inicializar mesa limpia EXCLUSIVAMENTE para la nueva sesión
         shoeNumber = 1;
+        activeShoeNumber = 1;
+        activeShoeIndex = 0;
         history = [];
+        shoes = [{ shoe_number: 1, history: [], tie_mode: 'slash' }];
         activeScore = null;
         activePPair = false;
         activeBPair = false;
         activeSpecial = false;
         activeWin = false;
+        selectedHandIndex = null;
 
-        saveShoe();
+        // Persistir explícitamente el nuevo registro de mesa con el UUID de la NUEVA sesión
+        const newSessUuid = newSession.uuid || newSession.id;
+        const newMesaRecord = {
+          uuid: `bacc_mesa_${newSessUuid}_${currentMesaId}`,
+          session_uuid: newSessUuid,
+          session_id: newSessUuid,
+          mesa_id: currentMesaId,
+          shoe_number: 1,
+          tie_mode: 'slash',
+          history: [],
+          shoes: [{ shoe_number: 1, history: [], tie_mode: 'slash' }]
+        };
+
+        await upsertLocalItem('record_libro_score_baccarat_mesa', newMesaRecord);
+
+        fetch(toBackendUrl('/api/baccarat/mesa-data'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newMesaRecord)
+        }).catch(e => console.warn('Advertencia guardando nueva mesa:', e));
+
         closeOptionsMenu();
         showFeedback(`¡Nueva sesión creada! (${newSession.fecha})`);
       } else {
@@ -522,7 +611,7 @@
   }
 
   function broadcastTableUpdate() {
-    if (!isLatestSession) return; // Solo sincronizar en tiempo real si es la última sesión activa
+    if (!isCurrentShoeActive) return; // Solo sincronizar en tiempo real si es el zapato activo de la última sesión
     const sessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
     sendWebSocketMessage({
       type: 'BACCARAT_TABLE_UPDATE',
@@ -533,6 +622,7 @@
       sessionUuid: sessUuid,
       isLatestSession: true,
       shoeNumber,
+      shoes,
       history,
       tieMode,
       senderClientId: myClientId,
@@ -541,60 +631,70 @@
   }
 
   function saveShoe(skipBroadcast = false) {
-    if (!isLatestSession) {
-      // Las sesiones anteriores son histórico de solo lectura
+    if (!isCurrentShoeActive) {
+      // Las sesiones anteriores o zapatos anteriores son histórico de solo lectura
       return;
     }
 
     const sessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
+    if (!sessUuid || !currentMesaId) return;
+
+    // Actualizar el zapato activo en el arreglo shoes
+    const currIdx = shoes.findIndex(s => s.shoe_number === shoeNumber);
+    if (currIdx >= 0) {
+      shoes[currIdx] = { shoe_number: shoeNumber, history, tie_mode: tieMode };
+    } else {
+      shoes.push({ shoe_number: shoeNumber, history, tie_mode: tieMode });
+    }
+    shoes = [...shoes];
+
     const mesaRecordUuid = `bacc_mesa_${sessUuid}_${currentMesaId}`;
 
     try {
       localStorage.setItem(storageKey, JSON.stringify({
         shoeNumber,
         history,
+        shoes,
         tieMode,
         sessionId: sessUuid
       }));
     } catch (e) {}
 
     // 1. Guardar de inmediato en la base de datos interna local (Local-First IndexedDB)
-    if (sessUuid && currentMesaId) {
-      upsertLocalItem('record_libro_score_baccarat_mesa', {
-        uuid: mesaRecordUuid,
-        session_uuid: sessUuid,
-        session_id: sessUuid,
-        mesa_id: currentMesaId,
-        shoe_number: shoeNumber,
-        tie_mode: tieMode,
-        history
-      }).catch(err => console.warn('Advertencia guardando en base de datos interna local:', err));
-    }
+    upsertLocalItem('record_libro_score_baccarat_mesa', {
+      uuid: mesaRecordUuid,
+      session_uuid: sessUuid,
+      session_id: sessUuid,
+      mesa_id: currentMesaId,
+      shoe_number: shoeNumber,
+      tie_mode: tieMode,
+      history,
+      shoes
+    }).catch(err => console.warn('Advertencia guardando en base de datos interna local:', err));
 
     if (!skipBroadcast) {
       broadcastTableUpdate();
     }
 
     // 2. Persistir en la base de datos PostgreSQL en el backend
-    if (sessUuid && currentMesaId) {
-      fetch(toBackendUrl('/api/baccarat/mesa-data'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uuid: mesaRecordUuid,
-          session_id: sessUuid,
-          session_uuid: sessUuid,
-          mesa_id: currentMesaId,
-          shoe_number: shoeNumber,
-          tie_mode: tieMode,
-          history
-        })
-      }).catch(e => console.warn('Advertencia guardando mesa en base de datos:', e));
-    }
+    fetch(toBackendUrl('/api/baccarat/mesa-data'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uuid: mesaRecordUuid,
+        session_id: sessUuid,
+        session_uuid: sessUuid,
+        mesa_id: currentMesaId,
+        shoe_number: shoeNumber,
+        tie_mode: tieMode,
+        history,
+        shoes
+      })
+    }).catch(e => console.warn('Advertencia guardando mesa en base de datos:', e));
   }
 
   function toggleTieMode() {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('click');
     tieMode = tieMode === 'slash' ? 'circle' : 'slash';
     saveShoe();
@@ -641,20 +741,25 @@
       if (!update) return;
       if (update.senderClientId === myClientId) return;
 
-      // OJO: si el usuario está viendo una sesión histórica anterior, no sobreescribir ni mutar
-      if (!isLatestSession) return;
+      // Si el usuario está viendo una sesión histórica o zapato histórico, no sobreescribir
+      if (!isCurrentShoeActive) return;
 
       const isCurrentTable = (update.storageKey && update.storageKey === storageKey) ||
         (String(update.salaId) === String(currentSalaId) && String(update.mesaId) === String(currentMesaId));
 
       if (isCurrentTable) {
         let changed = false;
+        if (Array.isArray(update.shoes)) {
+          shoes = update.shoes;
+          changed = true;
+        }
         if (Array.isArray(update.history)) {
           history = update.history;
           changed = true;
         }
         if (update.shoeNumber !== undefined && update.shoeNumber !== null && update.shoeNumber !== shoeNumber) {
           shoeNumber = update.shoeNumber;
+          activeShoeNumber = update.shoeNumber;
           changed = true;
         }
         if (update.tieMode && (update.tieMode === 'slash' || update.tieMode === 'circle')) {
@@ -696,31 +801,31 @@
 
   // Keypad Actions
   function togglePPair() {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('click');
     activePPair = !activePPair;
   }
 
   function toggleBPair() {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('click');
     activeBPair = !activeBPair;
   }
 
   function toggleSpecial() {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('click');
     activeSpecial = !activeSpecial;
   }
 
   function toggleWin() {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('click');
     activeWin = !activeWin;
   }
 
   function recordOutcome(winner) {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('win');
     const newRecord = {
       id: history.length + 1,
@@ -750,7 +855,7 @@
   }
 
   function undoLast() {
-    if (!isLatestSession || history.length === 0) return;
+    if (!isCurrentShoeActive || history.length === 0) return;
     playSound('undo');
     const lastId = history[history.length - 1]?.id || history.length;
     history = history.slice(0, -1);
@@ -792,49 +897,82 @@
     isOptionsModalOpen = false;
   }
 
-  // Acción directa 1: Borrar Zapato #{shoeNumber}
+  // Acción directa 1: Borrar Registros del Zapato #{activeShoeNumber}
   function handleDirectClearShoe() {
-    if (!isLatestSession) return;
+    if (!isLatestSession || isViewingPastShoe || history.length === 0) return;
     playSound('undo');
     history = [];
     selectedHandIndex = null;
+
+    const idx = shoes.findIndex(s => s.shoe_number === shoeNumber);
+    if (idx >= 0) {
+      shoes[idx].history = [];
+    }
+    shoes = [...shoes];
+
     saveShoe();
     showFeedback(`Registros del Zapato #${shoeNumber} borrados`);
     isOptionsModalOpen = false;
   }
 
-  // Acción directa 2: Crear Nuevo Zapato #{shoeNumber + 1}
+  // Acción directa 2: Crear Nuevo Zapato #{maxShoeNumber + 1}
   function handleDirectNewShoe() {
-    if (!isLatestSession) return;
+    if (!isLatestSession || history.length === 0) return;
     playSound('click');
+
+    // Asegurar que el zapato actual esté guardado con su historia
+    const currIdx = shoes.findIndex(s => s.shoe_number === shoeNumber);
+    if (currIdx >= 0) {
+      shoes[currIdx] = { shoe_number: shoeNumber, history, tie_mode: tieMode };
+    }
+
+    const newNum = maxShoeNumber + 1;
     history = [];
     selectedHandIndex = null;
-    shoeNumber += 1;
+    shoeNumber = newNum;
+    activeShoeNumber = newNum;
+
+    shoes = [...shoes, { shoe_number: newNum, history: [], tie_mode: tieMode }];
+    activeShoeIndex = shoes.length - 1;
+
     saveShoe();
     showFeedback(`Nuevo Zapato #${shoeNumber} iniciado`);
     isOptionsModalOpen = false;
   }
 
-  // Acción con confirmación 3: Borrar Todos los Registros de la Mesa
-  function openResetAllModal() {
-    if (!isLatestSession) return;
+  // Acción con confirmación 3: Borrar Zapato #{shoeNumber}
+  function openDeleteCurrentShoeModal() {
+    if (!isLatestSession || shoeNumber <= 1 || history.length > 0) return;
     openConfirmModal({
-      title: 'Borrar Todos los Registros',
-      question: '¿Deseas borrar todos los registros de la mesa?',
+      title: `Borrar Zapato #${shoeNumber}`,
+      question: `¿Desea borrar el Zapato #${shoeNumber} y volver al Zapato #${shoeNumber - 1}?`,
       isDanger: true,
-      confirmText: 'Borrar',
-      onConfirm: handleConfirmResetAll
+      confirmText: 'Borrar Zapato',
+      onConfirm: handleConfirmDeleteCurrentShoe
     });
   }
 
-  function handleConfirmResetAll() {
-    if (!isLatestSession) return;
+  function handleConfirmDeleteCurrentShoe() {
+    if (!isLatestSession || shoeNumber <= 1 || history.length > 0) return;
     playSound('undo');
-    history = [];
+
+    // Quitar el zapato actual
+    shoes = shoes.filter(s => s.shoe_number !== shoeNumber);
+    if (shoes.length === 0) {
+      shoes = [{ shoe_number: 1, history: [], tie_mode: 'slash' }];
+    }
+
+    // Regresar al zapato anterior
+    const prevShoe = shoes[shoes.length - 1];
+    shoeNumber = prevShoe.shoe_number;
+    activeShoeNumber = prevShoe.shoe_number;
+    activeShoeIndex = shoes.length - 1;
+    history = Array.isArray(prevShoe.history) ? prevShoe.history : [];
+    tieMode = prevShoe.tie_mode || 'slash';
     selectedHandIndex = null;
-    shoeNumber = 1;
+
     saveShoe();
-    showFeedback('Todos los registros de la mesa han sido borrados');
+    showFeedback(`Zapato eliminado. Se regresó al Zapato #${shoeNumber}`);
     confirmModalState.isOpen = false;
     isOptionsModalOpen = false;
   }
@@ -845,7 +983,7 @@
 
   // Hand Selection & In-Place Editing
   function selectHand(idx) {
-    if (!isLatestSession) return;
+    if (!isCurrentShoeActive) return;
     playSound('click');
     if (idx === null || idx === undefined || idx < 0 || idx >= history.length) {
       selectedHandIndex = null;
@@ -859,7 +997,7 @@
   }
 
   function updateSelectedWinner(newWinner) {
-    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
     playSound('win');
     history[selectedHandIndex].winner = newWinner;
     history = [...history];
@@ -868,7 +1006,7 @@
   }
 
   function toggleSelectedMod(field) {
-    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
     playSound('click');
     history[selectedHandIndex][field] = !history[selectedHandIndex][field];
     history = [...history];
@@ -876,7 +1014,7 @@
   }
 
   function updateSelectedScore(num) {
-    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
     playSound('click');
     history[selectedHandIndex].score = history[selectedHandIndex].score === num ? null : num;
     history = [...history];
@@ -884,7 +1022,7 @@
   }
 
   function deleteSelectedHand() {
-    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
     const deletedId = history[selectedHandIndex].id;
     playSound('undo');
     history = history.filter((_, idx) => idx !== selectedHandIndex).map((h, i) => ({ ...h, id: i + 1 }));
@@ -1424,11 +1562,38 @@
         {/if}
 
         <div class="sb-shoe-pill shoe-pill">
+          {#if shoes.length > 1}
+            <button
+              type="button"
+              class="shoe-pill-arrow btn-prev-shoe"
+              disabled={activeShoeIndex <= 0}
+              on:click={goToPrevShoe}
+              title="Ver zapato anterior"
+            >
+              ‹
+            </button>
+          {/if}
+
           <span class="pill-label">ZAPATO</span>
-          <span class="pill-value">#{shoeNumber}</span>
+          <span class="pill-value">#{activeShoeNumber}</span>
+          {#if shoes.length > 1}
+            <span class="pill-sub">({activeShoeIndex + 1}/{shoes.length})</span>
+          {/if}
           <span class="pill-sep">•</span>
           <span class="pill-label">MANOS</span>
           <span class="pill-value">#{totalHands}</span>
+
+          {#if shoes.length > 1}
+            <button
+              type="button"
+              class="shoe-pill-arrow btn-next-shoe"
+              disabled={activeShoeIndex >= shoes.length - 1}
+              on:click={goToNextShoe}
+              title="Ver zapato siguiente"
+            >
+              ›
+            </button>
+          {/if}
         </div>
 
         <!-- FULLSCREEN ICON BUTTON (SOLO EL ICONO) -->
@@ -1870,9 +2035,9 @@
               type="button"
               class="btn-num-key btn-num-{num}"
               class:active={activeScore === num}
-              disabled={!isLatestSession}
+              disabled={!isCurrentShoeActive}
               on:click={() => selectScore(num)}
-              title="Seleccionar valor {num} para la mano"
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : `Seleccionar valor ${num} para la mano`}
             >
               {num}
             </button>
@@ -1882,9 +2047,9 @@
             type="button"
             class="btn-num-key btn-num-zero"
             class:active={activeScore === 0}
-            disabled={!isLatestSession}
+            disabled={!isCurrentShoeActive}
             on:click={() => selectScore(0)}
-            title="Seleccionar valor 0 para la mano"
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Seleccionar valor 0 para la mano'}
           >
             0
           </button>
@@ -1898,9 +2063,9 @@
         type="button"
         class="keypad-pill pill-ppair"
         class:active={activePPair}
-        disabled={!isLatestSession}
+        disabled={!isCurrentShoeActive}
         on:click={togglePPair}
-        title="Activar Pareja de Punto (P.Pair)"
+        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Punto (P.Pair)'}
       >
         P.Pair
       </button>
@@ -1909,9 +2074,9 @@
         type="button"
         class="keypad-pill pill-bpair"
         class:active={activeBPair}
-        disabled={!isLatestSession}
+        disabled={!isCurrentShoeActive}
         on:click={toggleBPair}
-        title="Activar Pareja de Banca (B.Pair)"
+        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Banca (B.Pair)'}
       >
         B.Pair
       </button>
@@ -1920,9 +2085,9 @@
         type="button"
         class="keypad-pill pill-win"
         class:active={activeWin}
-        disabled={!isLatestSession}
+        disabled={!isCurrentShoeActive}
         on:click={toggleWin}
-        title="Activar Victoria Natural (8 ó 9)"
+        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria Natural (8 ó 9)'}
       >
         Natural
       </button>
@@ -1936,9 +2101,9 @@
           <button
             type="button"
             class="keypad-btn-circle btn-punto"
-            disabled={!isLatestSession}
+            disabled={!isCurrentShoeActive}
             on:click={() => recordOutcome('PUNTO')}
-            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Registrar victoria de PUNTO (Player)'}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'}
           >
             {#if activeBPair}
               <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -1958,9 +2123,9 @@
           <button
             type="button"
             class="keypad-btn-circle btn-banca"
-            disabled={!isLatestSession}
+            disabled={!isCurrentShoeActive}
             on:click={() => recordOutcome('BANCA')}
-            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Registrar victoria de BANCA (Banker)'}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'}
           >
             {#if activeBPair}
               <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -1980,9 +2145,9 @@
           <button
             type="button"
             class="keypad-btn-circle btn-tie"
-            disabled={!isLatestSession}
+            disabled={!isCurrentShoeActive}
             on:click={() => recordOutcome('EMPATE')}
-            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Registrar EMPATE (Tie)'}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'}
           >
             {#if activeBPair}
               <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -2006,8 +2171,8 @@
           type="button"
           class="keypad-btn-circle btn-undo"
           on:click={undoLast}
-          disabled={!isLatestSession || history.length === 0}
-          title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Retroceder / Deshacer última mano registrada'}
+          disabled={!isCurrentShoeActive || history.length === 0}
+          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'}
         >
           <div class="btn-inner-gloss">
             <svg class="btn-arrow-icon" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
@@ -2023,9 +2188,9 @@
         <button
           type="button"
           class="keypad-btn-tie-toggle"
-          disabled={!isLatestSession}
+          disabled={!isCurrentShoeActive}
           on:click={toggleTieMode}
-          title={tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
+          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
         >
           <div class="tie-toggle-box">
             {#if tieMode === 'slash'}
@@ -2057,34 +2222,37 @@
 
         <div class="modal-body options-modal-body">
           <div class="options-grid">
-            <!-- COL-6: Borrar Registros del Zapato #{shoeNumber} (Acción directa) -->
+            <!-- COL-6: Borrar Registros del Zapato #{activeShoeNumber} (Acción directa) -->
             <button
               type="button"
               class="btn-opt col-6 btn-opt-clear"
               on:click={handleDirectClearShoe}
-              disabled={!isLatestSession || history.length === 0}
+              disabled={!isLatestSession || isViewingPastShoe || history.length === 0}
+              title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : history.length === 0 ? 'No hay registros en el zapato actual para borrar' : `Borrar registros del Zapato #${activeShoeNumber}`}
             >
-              Borrar Registros del Zapato #{shoeNumber}
+              Borrar Registros del Zapato #{activeShoeNumber}
             </button>
 
-            <!-- COL-6: Crear Nuevo Zapato #{shoeNumber + 1} (Acción directa) -->
+            <!-- COL-6: Crear Nuevo Zapato #{maxShoeNumber + 1} (Acción directa) -->
             <button
               type="button"
               class="btn-opt col-6 btn-opt-new"
               on:click={handleDirectNewShoe}
-              disabled={!isLatestSession}
+              disabled={!isLatestSession || history.length === 0}
+              title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
             >
-              Crear Nuevo Zapato #{shoeNumber + 1}
+              Crear Nuevo Zapato #{maxShoeNumber + 1}
             </button>
 
-            <!-- COL-12: Borrar Todos los Registros de la Mesa (Acción con confirmación) -->
+            <!-- COL-12: Borrar Zapato #{shoeNumber} (Acción con confirmación) -->
             <button
               type="button"
               class="btn-opt col-12 btn-opt-reset"
-              on:click={openResetAllModal}
-              disabled={!isLatestSession || (history.length === 0 && shoeNumber === 1)}
+              on:click={openDeleteCurrentShoeModal}
+              disabled={!isLatestSession || shoeNumber <= 1 || history.length > 0}
+              title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : shoeNumber <= 1 ? 'No se puede borrar el primer zapato de la mesa' : history.length > 0 ? 'No se puede borrar si el zapato tiene jugadas registradas' : `Borrar Zapato #${shoeNumber}`}
             >
-              Borrar Todos los Registros de la Mesa
+              Borrar Zapato #{shoeNumber}
             </button>
 
             <!-- COL-6: Crear Nueva Sesión (Fecha + 1 día) -->
@@ -2092,8 +2260,8 @@
               type="button"
               class="btn-opt col-6 btn-opt-new-session"
               on:click={handleCreateNewSession}
-              disabled={isSessionsLoading}
-              title="Crear nueva sesión sumando 1 día ({nextSessionDateStr})"
+              disabled={isSessionsLoading || !isLatestSession}
+              title={!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear nueva sesión sumando 1 día (${nextSessionDateStr})`}
             >
               Crear Nueva Sesión ({nextSessionDateStr})
             </button>
@@ -2103,8 +2271,8 @@
               type="button"
               class="btn-opt col-6 btn-opt-delete-session"
               on:click={handleConfirmDeleteLastSession}
-              disabled={sessions.length <= 1 || isSessionsLoading}
-              title={sessions.length <= 1 ? 'Debe existir al menos una sesión' : 'Borrar última sesión registrada y seleccionar la anterior'}
+              disabled={sessions.length <= 1 || isSessionsLoading || !isLatestSession}
+              title={!isLatestSession ? 'Solo se puede borrar la última sesión' : sessions.length <= 1 ? 'Debe existir al menos una sesión' : 'Borrar última sesión registrada y seleccionar la anterior'}
             >
               Borrar Última Sesión
             </button>
@@ -2235,6 +2403,39 @@
 
   .shoe-pill {
     border-color: #64748b;
+  }
+
+  .shoe-pill-arrow {
+    background: rgba(56, 189, 248, 0.2);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+    border-radius: 4px;
+    width: 17px;
+    height: 17px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.15s ease;
+  }
+  .shoe-pill-arrow:hover:not(:disabled) {
+    background: #38bdf8;
+    color: #0f172a;
+  }
+  .shoe-pill-arrow:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    border-color: transparent;
+  }
+
+  .pill-sub {
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 500;
   }
 
   .pill-label {
