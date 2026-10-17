@@ -306,7 +306,7 @@
     history = [];
     selectedHandIndex = null;
     saveShoe();
-    showFeedback(`Zapato #${shoeNumber} borrado`);
+    showFeedback(`Registros del Zapato #${shoeNumber} borrados`);
     isOptionsModalOpen = false;
   }
 
@@ -972,13 +972,13 @@
 
         <div class="modal-body options-modal-body">
           <div class="options-grid">
-            <!-- COL-6: Borrar Zapato #{shoeNumber} (Acción directa) -->
+            <!-- COL-6: Borrar Registros del Zapato #{shoeNumber} (Acción directa) -->
             <button
               type="button"
               class="btn-opt col-6 btn-opt-clear"
               on:click={handleDirectClearShoe}
             >
-              Borrar Zapato #{shoeNumber}
+              Borrar Registros del Zapato #{shoeNumber}
             </button>
 
             <!-- COL-6: Crear Nuevo Zapato #{shoeNumber + 1} (Acción directa) -->
