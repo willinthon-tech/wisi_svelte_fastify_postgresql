@@ -167,18 +167,29 @@
     }, 3000);
   }
 
-  // Dynamic widths for 100% edge-to-edge coverage of grids
+  // Dynamic dimensions for 100% edge-to-edge coverage of grids
   let bigRoadWidth = 1400;
+  let bigRoadHeight = 260;
   let beadWidth = 700;
+  let beadHeight = 260;
   let derivedWidth = 700;
+  let derivedHeight = 260;
 
   const BEAD_ROWS = 6;
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 6;
 
-  $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / 24) + 1, 52);
-  $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / 26) + 1, 26);
-  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / 13) + 1, 52);
+  // Exact 1:1 square cell sizes based on container height (6 rows each)
+  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 240) - 2) / 6), 28);
+  $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 30);
+
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 240) - 2) / 6), 28);
+  $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 16);
+
+  // Derived roads: each of the 3 bands has 6 rows (total 18 rows)
+  $: derivedBandHeight = (derivedHeight || 240) / 3;
+  $: derivedCellSize = Math.max(Math.floor((derivedBandHeight - 2) / 6), 11);
+  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / derivedCellSize) + 1, 36);
 
   function loadSavedShoe() {
     try {
@@ -795,8 +806,12 @@
 
   <!-- OFFICIAL CASINO ROADMAPS MASTER SECTION -->
   <section class="sb-roadmaps-master">
-    <!-- SUPERIOR: BIG ROAD (GRAN CAMINO) - ANCHO COMPLETO / COL-12 -->
-    <div class="roadmap-card col-full bigroad-card" bind:clientWidth={bigRoadWidth}>
+    <div
+      class="roadmap-card col-full bigroad-card"
+      bind:clientWidth={bigRoadWidth}
+      bind:clientHeight={bigRoadHeight}
+      style="--big-cell-size: {bigRoadCellSize}px;"
+    >
       <div class="grid-scrollable" bind:this={bigRoadScrollEl}>
         <table class="bigroad-table">
           <tbody>
@@ -846,7 +861,12 @@
     <!-- INFERIOR: 2 COLUMNAS (COL-6 IZQUIERDA Y COL-6 DERECHA) -->
     <div class="sb-roadmaps-bottom-split">
       <!-- COL-6 IZQUIERDA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (1/3 CADA UNO) -->
-      <div class="roadmap-card col-half derived-roads-column" bind:clientWidth={derivedWidth}>
+      <div
+        class="roadmap-card col-half derived-roads-column"
+        bind:clientWidth={derivedWidth}
+        bind:clientHeight={derivedHeight}
+        style="--derived-cell-size: {derivedCellSize}px;"
+      >
         <!-- 1. BIG EYE BOY (GRAN OJO) -->
         <div class="derived-band" bind:this={bigEyeScrollEl}>
           <table class="derived-table">
@@ -921,7 +941,12 @@
       </div>
 
       <!-- COL-6 DERECHA: BEAD PLATE (PLATO DE CUENTAS) -->
-      <div class="roadmap-card col-half bead-card" bind:clientWidth={beadWidth}>
+      <div
+        class="roadmap-card col-half bead-card"
+        bind:clientWidth={beadWidth}
+        bind:clientHeight={beadHeight}
+        style="--bead-cell-size: {beadCellSize}px;"
+      >
         <div class="grid-scrollable" bind:this={beadScrollEl}>
           <table class="bead-table">
             <tbody>
@@ -1735,30 +1760,31 @@
     overflow-y: hidden;
     background: #020617;
     display: flex;
-    align-items: stretch;
+    align-items: center;
     padding: 0;
     margin: 0;
   }
 
-  /* TABLES: FILL FULL HEIGHT & WIDTH, NO GAPS */
+  /* TABLES: DO NOT STRETCH CELLS INTO RECTANGLES, PRESERVE EXACT 1:1 SQUARES */
   .bigroad-table, .bead-table, .derived-table {
     border-collapse: collapse;
-    width: 100%;
-    min-width: 100%;
-    height: 100%;
+    width: max-content;
+    height: auto;
     margin: 0;
     table-layout: fixed;
   }
 
-  .bigroad-table tr, .bead-table tr, .derived-table tr {
-    height: 16.6666%;
+  /* 1. Big Eye Boy: Anillo hueco rojo / azul */
+  .derived-table tr {
+    height: var(--derived-cell-size, 13px);
   }
 
-  /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-cell {
-    width: 13px;
-    min-width: 13px;
-    height: 16.6666%;
+    width: var(--derived-cell-size, 13px);
+    min-width: var(--derived-cell-size, 13px);
+    max-width: var(--derived-cell-size, 13px);
+    height: var(--derived-cell-size, 13px);
+    box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1775,11 +1801,11 @@
 
   .derived-ring {
     display: block;
-    width: 8px;
-    height: 8px;
+    width: calc(var(--derived-cell-size, 13px) - 5px);
+    height: calc(var(--derived-cell-size, 13px) - 5px);
     margin: auto;
     border-radius: 50%;
-    border: 1.8px solid transparent;
+    border: 2px solid transparent;
     box-sizing: border-box;
   }
   .derived-ring.red { border-color: #ef4444; }
@@ -1788,8 +1814,8 @@
   /* 2. Small Road: Punto sólido rojo / azul */
   .derived-dot {
     display: block;
-    width: 6.5px;
-    height: 6.5px;
+    width: calc(var(--derived-cell-size, 13px) * 0.55);
+    height: calc(var(--derived-cell-size, 13px) * 0.55);
     margin: auto;
     border-radius: 50%;
   }
@@ -1799,8 +1825,8 @@
   /* 3. Cockroach Pig: Línea diagonal roja / azul */
   .derived-slash {
     display: block;
-    width: 8.5px;
-    height: 2px;
+    width: calc(var(--derived-cell-size, 13px) * 0.75);
+    height: 2.2px;
     margin: auto;
     transform: rotate(-45deg);
     border-radius: 1px;
@@ -1808,11 +1834,17 @@
   .derived-slash.red { background: #ef4444; }
   .derived-slash.blue { background: #3b82f6; }
 
-  /* BEAD TABLE */
+  /* BEAD TABLE (EXACT SQUARES & LARGE PROMINENT BEADS) */
+  .bead-table tr {
+    height: var(--bead-cell-size, 40px);
+  }
+
   .bead-cell {
-    width: 26px;
-    min-width: 26px;
-    height: 16.6666%;
+    width: var(--bead-cell-size, 40px);
+    min-width: var(--bead-cell-size, 40px);
+    max-width: var(--bead-cell-size, 40px);
+    height: var(--bead-cell-size, 40px);
+    box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1837,18 +1869,18 @@
   }
 
   .bead-circle {
-    width: 21px;
-    height: 21px;
+    width: calc(var(--bead-cell-size, 40px) - 6px);
+    height: calc(var(--bead-cell-size, 40px) - 6px);
     border-radius: 50%;
     margin: auto;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
-    font-size: 10px;
-    font-weight: 900;
     color: #ffffff;
     user-select: none;
+    box-sizing: border-box;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
   }
 
   .bead-circle.banca { background: #dc2626; }
@@ -1856,47 +1888,66 @@
   .bead-circle.empate { background: #16a34a; }
 
   .bead-letter {
-    font-size: 10px;
+    font-size: calc(var(--bead-cell-size, 40px) * 0.44);
     font-weight: 900;
     line-height: 1;
+    color: #ffffff;
   }
   .bead-letter.has-score {
-    font-size: 11px;
+    font-size: calc(var(--bead-cell-size, 40px) * 0.46);
     font-weight: 900;
+    color: #ffffff;
   }
 
   .dot-b-pair {
     position: absolute;
     top: 1px;
     left: 1px;
-    width: 5px;
-    height: 5px;
+    width: 8px;
+    height: 8px;
     background: #ef4444;
-    border: 1px solid #ffffff;
+    border: 1.5px solid #ffffff;
     border-radius: 50%;
+    z-index: 3;
   }
 
   .dot-p-pair {
     position: absolute;
     bottom: 1px;
     right: 1px;
-    width: 5px;
-    height: 5px;
+    width: 8px;
+    height: 8px;
     background: #3b82f6;
-    border: 1px solid #ffffff;
+    border: 1.5px solid #ffffff;
     border-radius: 50%;
+    z-index: 3;
+  }
+
+  .bead-circle .dot-b-pair {
+    top: 1px;
+    left: 1px;
+  }
+  .bead-circle .dot-p-pair {
+    bottom: 1px;
+    right: 1px;
   }
 
   .bead-empty, .bigroad-empty {
-    width: 21px;
-    height: 21px;
+    width: 100%;
+    height: 100%;
   }
 
-  /* BIG ROAD TABLE */
+  /* BIG ROAD TABLE (EXACT SQUARES & LARGE PROMINENT RINGS) */
+  .bigroad-table tr {
+    height: var(--big-cell-size, 40px);
+  }
+
   .bigroad-cell {
-    width: 24px;
-    min-width: 24px;
-    height: 16.6666%;
+    width: var(--big-cell-size, 40px);
+    min-width: var(--big-cell-size, 40px);
+    max-width: var(--big-cell-size, 40px);
+    height: var(--big-cell-size, 40px);
+    box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1912,15 +1963,16 @@
   }
 
   .bigroad-ring {
-    width: 18px;
-    height: 18px;
+    width: calc(var(--big-cell-size, 40px) - 8px);
+    height: calc(var(--big-cell-size, 40px) - 8px);
     border-radius: 50%;
     margin: auto;
-    border: 2.2px solid transparent;
+    border: 3px solid transparent;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
   }
 
   .bigroad-ring.banca {
@@ -1939,7 +1991,7 @@
   }
 
   .bigroad-score {
-    font-size: 9.5px;
+    font-size: calc(var(--big-cell-size, 40px) * 0.40);
     font-weight: 900;
     color: #ffffff;
     line-height: 1;
@@ -1952,8 +2004,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 16px;
-    height: 2.2px;
+    width: calc(var(--big-cell-size, 40px) * 0.7);
+    height: 3px;
     background: #22c55e;
     transform: translate(-50%, -50%) rotate(45deg);
     z-index: 1;
@@ -1962,20 +2014,29 @@
 
   .tie-badge-num {
     position: absolute;
-    top: -4px;
-    right: -4px;
+    top: -5px;
+    right: -5px;
     background: #16a34a;
-    color: #fff;
-    font-size: 8px;
+    color: #ffffff;
+    font-size: 11px;
     font-weight: 900;
-    width: 11px;
-    height: 11px;
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 3;
-    border: 1px solid #ffffff;
+    border: 1.5px solid #0f172a;
+  }
+
+  .bigroad-ring .dot-b-pair {
+    top: 0px;
+    left: 0px;
+  }
+  .bigroad-ring .dot-p-pair {
+    bottom: 0px;
+    right: 0px;
   }
 
   /* RESPONSIVE: CUANDO NO ES 16:9 O EN PANTALLAS PEQUEÑAS / MÓVILES */
@@ -1990,7 +2051,7 @@
       flex: none;
     }
     .bigroad-card {
-      height: 190px;
+      height: 220px;
       flex: none;
     }
     .sb-roadmaps-bottom-split {
@@ -1998,11 +2059,11 @@
       flex: none;
     }
     .derived-roads-column {
-      height: 250px;
+      height: 270px;
       flex: none;
     }
     .bead-card {
-      height: 190px;
+      height: 220px;
       flex: none;
     }
   }
