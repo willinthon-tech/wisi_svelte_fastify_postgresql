@@ -361,7 +361,6 @@
       history = Array.isArray(targetShoe.history) ? targetShoe.history : [];
       tieMode = targetShoe.tie_mode || 'slash';
       selectedHandIndex = null;
-      showFeedback(`Viendo Zapato #${activeShoeNumber}${activeShoeNumber < maxShoeNumber ? ' (Histórico)' : ''}`);
     }
   }
 
@@ -544,7 +543,6 @@
       const sess = sessions[selectedSessionIndex];
       if (sess) {
         activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
-        showFeedback(`Cargando sesión ${sess.fecha}...`);
         await loadMesaDataForSession(activeSessionId, currentMesaId);
       }
     }
@@ -559,7 +557,6 @@
       const sess = sessions[selectedSessionIndex];
       if (sess) {
         activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
-        showFeedback(`Cargando sesión ${sess.fecha}...`);
         await loadMesaDataForSession(activeSessionId, currentMesaId);
       }
     }
@@ -781,7 +778,6 @@
     playSound('click');
     tieMode = tieMode === 'slash' ? 'circle' : 'slash';
     saveShoe();
-    showFeedback(tieMode === 'slash' ? 'Modo Tie: Raya diagonal [/]' : 'Modo Tie: Círculo [O]');
   }
 
   // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa
@@ -908,7 +904,6 @@
               shoes
             }).catch(() => {});
           }
-          showFeedback('⚡ Mesa sincronizada en tiempo real');
         }
       }
     });
@@ -979,11 +974,6 @@
     history = [...history, newRecord];
     saveShoe();
 
-    const wLabel = winner === 'BANCA' ? '🔴 BANCA' : winner === 'PUNTO' ? '🔵 PUNTO' : '🟢 EMPATE';
-    const scoreLabel = activeScore !== null ? ` (${activeScore})` : '';
-    const pairLabel = (activeBPair && activePPair) ? ' [Ambos Pares]' : activeBPair ? ' [B.Pair]' : activePPair ? ' [P.Pair]' : '';
-    showFeedback(`Mano #${newRecord.id}: ${wLabel}${scoreLabel}${pairLabel} anotada`);
-
     // Reset modifier pills and score for the next hand
     activePPair = false;
     activeBPair = false;
@@ -995,13 +985,11 @@
   function undoLast() {
     if (!isCurrentShoeActive || history.length === 0) return;
     playSound('undo');
-    const lastId = history[history.length - 1]?.id || history.length;
     history = history.slice(0, -1);
     if (selectedHandIndex >= history.length) {
       selectedHandIndex = null;
     }
     saveShoe();
-    showFeedback(`Mano #${lastId} deshecha`);
   }
 
   // Modal de opciones y confirmación
@@ -1140,7 +1128,6 @@
     history[selectedHandIndex].winner = newWinner;
     history = [...history];
     saveShoe();
-    showFeedback(`Mano #${history[selectedHandIndex].id} actualizada a ${newWinner}`);
   }
 
   function toggleSelectedMod(field) {
@@ -1161,12 +1148,10 @@
 
   function deleteSelectedHand() {
     if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
-    const deletedId = history[selectedHandIndex].id;
     playSound('undo');
     history = history.filter((_, idx) => idx !== selectedHandIndex).map((h, i) => ({ ...h, id: i + 1 }));
     selectedHandIndex = null;
     saveShoe();
-    showFeedback(`Mano #${deletedId} eliminada`);
   }
 
   function prevHand() {
@@ -1764,22 +1749,28 @@
     <!-- NAVEGADOR DE SESIONES EN EL MEDIO SUPERIOR -->
     <div class="sb-header-center">
       {#if currentSession}
-        <div class="sb-session-navigator">
+        <div class="sb-session-navigator" class:is-past={!isLatestSession}>
           <button
             type="button"
             class="session-nav-arrow btn-prev-session"
             disabled={selectedSessionIndex <= 0 || isSessionsLoading}
             on:click={goToPrevSession}
             title="Ver sesión anterior (Histórico)"
+            aria-label="Sesión anterior"
           >
-            ←
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
           </button>
 
           <div class="session-label-wrapper">
             {#if isLatestSession}
-              <span class="session-label-text">Sesión Actual ( {currentSession.fecha} )</span>
+              <span class="session-status-dot"></span>
+              <span class="session-label-text actual">Actual</span>
+              <span class="session-date-text">( {currentSession.fecha} )</span>
             {:else}
-              <span class="session-label-text">Sesión ( {currentSession.fecha} )</span>
+              <span class="session-label-text past">Sesión</span>
+              <span class="session-date-text">( {currentSession.fecha} )</span>
             {/if}
           </div>
 
@@ -1789,8 +1780,11 @@
             disabled={selectedSessionIndex >= sessions.length - 1 || isSessionsLoading}
             on:click={goToNextSession}
             title="Ver sesión siguiente"
+            aria-label="Sesión siguiente"
           >
-            →
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </button>
         </div>
       {/if}
@@ -2646,52 +2640,104 @@
   .sb-session-navigator {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    background: rgba(15, 23, 42, 0.85);
-    border: 1px solid rgba(239, 68, 68, 0.45);
-    padding: 3px 14px;
-    border-radius: 999px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    gap: 8px;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 1.5px solid rgba(239, 68, 68, 0.5);
+    padding: 3px 6px;
+    border-radius: 9999px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 14px rgba(239, 68, 68, 0.18);
+    backdrop-filter: blur(8px);
+    transition: all 0.25s ease;
+  }
+
+  .sb-session-navigator.is-past {
+    border-color: rgba(148, 163, 184, 0.35);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   }
 
   .session-nav-arrow {
-    background: transparent;
-    border: none;
-    color: #ef4444;
-    font-size: 18px;
-    font-weight: 900;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
     cursor: pointer;
-    padding: 0 4px;
-    line-height: 1;
+    padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.15s ease, color 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .session-nav-arrow:hover:not(:disabled) {
-    color: #f87171;
-    transform: scale(1.3);
+    background: rgba(239, 68, 68, 0.25);
+    border-color: #ef4444;
+    color: #ffffff;
+    transform: scale(1.1);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  }
+
+  .session-nav-arrow:active:not(:disabled) {
+    transform: scale(0.95);
   }
 
   .session-nav-arrow:disabled {
-    opacity: 0.25;
+    opacity: 0.18;
     cursor: not-allowed;
+    background: transparent;
+    border-color: transparent;
+    color: #475569;
+    transform: none;
+    box-shadow: none;
   }
 
   .session-label-wrapper {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: 7px;
+    padding: 0 6px;
     user-select: none;
   }
 
+  .session-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 8px #ef4444;
+    display: inline-block;
+    animation: sessionDotPulse 2s infinite ease-in-out;
+  }
+
+  @keyframes sessionDotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
   .session-label-text {
-    color: #ef4444;
     font-size: 13px;
     font-weight: 800;
     letter-spacing: 0.5px;
     white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+
+  .session-label-text.actual {
+    color: #f87171;
+  }
+
+  .session-label-text.past {
+    color: #94a3b8;
+  }
+
+  .session-date-text {
+    color: #f1f5f9;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   /* BOTONES SUPERIORES SIN ICONOS */
