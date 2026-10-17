@@ -1777,7 +1777,8 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 8px;
+    align-items: center;
+    gap: 7px;
     padding-right: 14px;
     border-right: 2px solid #e2e8f0;
     min-width: 0;
@@ -1785,10 +1786,11 @@
 
   .footer-modifiers-col .keypad-pill {
     width: 100%;
-    max-width: 100%;
-    height: 34px;
-    font-size: 13px;
+    max-width: 135px;
+    height: 32px;
+    font-size: 12.5px;
     font-weight: 800;
+    letter-spacing: 0.3px;
   }
 
   /* SECCIÓN 3: COL-6 ACCIONES PRINCIPALES */
@@ -1869,6 +1871,9 @@
     border: 2.5px solid #0000ff;
     color: #0000ff;
   }
+  .keypad-pill.pill-ppair:hover:not(.active) {
+    background: rgba(0, 0, 255, 0.06);
+  }
   .keypad-pill.pill-ppair.active {
     background: radial-gradient(circle at 50% 30%, #1e40af, #0000cc);
     color: #ffffff;
@@ -1880,6 +1885,9 @@
     border: 2.5px solid #dc2626;
     color: #dc2626;
   }
+  .keypad-pill.pill-bpair:hover:not(.active) {
+    background: rgba(220, 38, 38, 0.06);
+  }
   .keypad-pill.pill-bpair.active {
     background: radial-gradient(circle at 50% 30%, #ef4444, #990000);
     color: #ffffff;
@@ -1890,6 +1898,9 @@
   .keypad-pill.pill-win {
     border: 2.5px solid #ea580c;
     color: #ea580c;
+  }
+  .keypad-pill.pill-win:hover:not(.active) {
+    background: rgba(234, 88, 12, 0.06);
   }
   .keypad-pill.pill-win.active {
     background: radial-gradient(circle at 50% 30%, #f97316, #c2410c);
