@@ -280,26 +280,72 @@
     showFeedback(`Mano #${lastId} deshecha`);
   }
 
-  function clearCurrentShoe() {
+  // Modal de confirmación (Borrar Zapato / Nuevo Zapato)
+  let confirmModalState = {
+    isOpen: false,
+    title: '',
+    question: '',
+    highlightLabel: '',
+    highlightValue: '',
+    isDanger: true,
+    alertTitle: '',
+    alertSubtext: '',
+    confirmText: '',
+    onConfirm: () => {}
+  };
+
+  function openClearShoeModal() {
     if (history.length === 0) return;
-    if (!confirm(`¿Deseas borrar todas las manos registradas en el Zapato #${shoeNumber}?`)) return;
+    confirmModalState = {
+      isOpen: true,
+      title: 'Confirmar Borrado de Zapato',
+      question: `¿Deseas borrar todas las manos registradas en el Zapato #${shoeNumber}?`,
+      highlightLabel: 'Zapato Actual',
+      highlightValue: `Zapato #${shoeNumber} (${history.length} manos registradas)`,
+      isDanger: true,
+      alertTitle: 'Esta acción no se puede deshacer.',
+      alertSubtext: 'Se eliminarán permanentemente todas las manos registradas en el zapato actual.',
+      confirmText: 'Sí, Borrar Zapato',
+      onConfirm: doClearShoe
+    };
+  }
+
+  function doClearShoe() {
     playSound('undo');
     history = [];
     selectedHandIndex = null;
     saveShoe();
     showFeedback(`Zapato #${shoeNumber} borrado`);
+    confirmModalState.isOpen = false;
   }
 
-  function resetShoe() {
-    if (history.length > 0) {
-      if (!confirm(`¿Deseas iniciar un Nuevo Zapato? (Pasará al Zapato #${shoeNumber + 1})`)) return;
-    }
+  function openNewShoeModal() {
+    confirmModalState = {
+      isOpen: true,
+      title: 'Confirmar Nuevo Zapato',
+      question: `¿Deseas iniciar un Nuevo Zapato? (Pasará al Zapato #${shoeNumber + 1})`,
+      highlightLabel: 'Siguiente Zapato',
+      highlightValue: `Zapato #${shoeNumber + 1} (Cerrando Zapato #${shoeNumber} con ${history.length} manos)`,
+      isDanger: false,
+      alertTitle: 'Nuevo Zapato de Baccarat',
+      alertSubtext: `El Zapato #${shoeNumber} se archivará y comenzará una nueva ronda con zapato limpio.`,
+      confirmText: 'Sí, Iniciar Nuevo Zapato',
+      onConfirm: doNewShoe
+    };
+  }
+
+  function doNewShoe() {
     playSound('click');
     history = [];
     selectedHandIndex = null;
     shoeNumber += 1;
     saveShoe();
     showFeedback(`Nuevo Zapato #${shoeNumber} iniciado`);
+    confirmModalState.isOpen = false;
+  }
+
+  function closeConfirmModal() {
+    confirmModalState.isOpen = false;
   }
 
   // Hand Selection & In-Place Editing
@@ -336,7 +382,6 @@
   function deleteSelectedHand() {
     if (selectedHandIndex === null || !history[selectedHandIndex]) return;
     const deletedId = history[selectedHandIndex].id;
-    if (!confirm(`¿Eliminar la Mano #${deletedId}?`)) return;
     playSound('undo');
     history = history.filter((_, idx) => idx !== selectedHandIndex).map((h, i) => ({ ...h, id: i + 1 }));
     selectedHandIndex = null;
@@ -538,7 +583,7 @@
       <button
         type="button"
         class="sb-btn sb-btn-clear"
-        on:click={clearCurrentShoe}
+        on:click={openClearShoeModal}
         disabled={history.length === 0}
         title="Borrar las manos registradas del zapato actual"
       >
@@ -548,7 +593,7 @@
       <button
         type="button"
         class="sb-btn sb-btn-new-shoe"
-        on:click={resetShoe}
+        on:click={openNewShoeModal}
         title="Iniciar un nuevo zapato"
       >
         Nuevo Zapato
@@ -923,6 +968,70 @@
       </div>
     </div>
   </footer>
+
+  <!-- MODAL DE CONFIRMACIÓN ELEGANTE (BORRAR ZAPATO / NUEVO ZAPATO) -->
+  {#if confirmModalState.isOpen}
+    <div class="modal-backdrop">
+      <div class="modal-container" on:click|stopPropagation>
+        <!-- Modal Header -->
+        <div class="modal-header">
+          <div class="modal-title">
+            {confirmModalState.title}
+          </div>
+          <button type="button" class="close-btn" on:click={closeConfirmModal} title="Cerrar modal">✕</button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="modal-body">
+          <h4 class="question-text">
+            {confirmModalState.question}
+          </h4>
+
+          <!-- Highlight Box (Yellow Left Border) -->
+          <div class="highlight-box">
+            <span class="entity-label">{confirmModalState.highlightLabel}:</span>
+            <span class="entity-value">{confirmModalState.highlightValue}</span>
+          </div>
+
+          {#if confirmModalState.isDanger}
+            <!-- Red Alert Box -->
+            <div class="red-alert-box">
+              <div class="alert-title">
+                <span>⚠️</span> {confirmModalState.alertTitle}
+              </div>
+              <div class="alert-subtext">
+                {confirmModalState.alertSubtext}
+              </div>
+            </div>
+          {:else}
+            <!-- Amber Alert Box -->
+            <div class="amber-alert-box">
+              <div class="alert-title-amber">
+                <span>ℹ️</span> {confirmModalState.alertTitle}
+              </div>
+              <div class="alert-subtext-amber">
+                {confirmModalState.alertSubtext}
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="modal-footer">
+          <button type="button" class="btn-cancel" on:click={closeConfirmModal}>
+            Cancelar
+          </button>
+          <button 
+            type="button" 
+            class={confirmModalState.isDanger ? 'btn-confirm-danger' : 'btn-confirm-primary'} 
+            on:click={confirmModalState.onConfirm}
+          >
+            {confirmModalState.confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -1844,4 +1953,224 @@
   .banca-caption { color: #dc2626; }
   .tie-caption { color: #16a34a; }
   .undo-caption { color: #854d0e; }
+
+  /* MODAL DE CONFIRMACIÓN (ESTILO OFICIAL WISI) */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .modal-container {
+    background: #ffffff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 480px;
+    overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes modalIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95) translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .modal-header {
+    padding: 14px 20px;
+    background: #fffbeb;
+    border-bottom: 1px solid #fef3c7;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .modal-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.2px;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    color: #92400e;
+    padding: 4px 8px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: background 0.15s ease;
+  }
+
+  .close-btn:hover {
+    background: #fef3c7;
+  }
+
+  .modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .question-text {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1.4;
+  }
+
+  .highlight-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .entity-label {
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .entity-value {
+    color: #334155;
+    font-weight: 600;
+  }
+
+  .red-alert-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .alert-title {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #991b1b;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .alert-subtext {
+    font-size: 12.5px;
+    color: #b91c1c;
+    line-height: 1.4;
+  }
+
+  .amber-alert-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .alert-title-amber {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .alert-subtext-amber {
+    font-size: 12.5px;
+    color: #b45309;
+    line-height: 1.4;
+  }
+
+  .modal-footer {
+    padding: 12px 20px;
+    background: #ffffff;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn-cancel {
+    padding: 8px 20px;
+    background: #64748b;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .btn-cancel:hover {
+    background: #475569;
+  }
+
+  .btn-confirm-danger {
+    padding: 8px 20px;
+    background: #dc2626;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);
+  }
+
+  .btn-confirm-danger:hover {
+    background: #b91c1c;
+  }
+
+  .btn-confirm-primary {
+    padding: 8px 20px;
+    background: #16a34a;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    box-shadow: 0 2px 4px rgba(22, 163, 74, 0.2);
+  }
+
+  .btn-confirm-primary:hover {
+    background: #15803d;
+  }
 </style>
