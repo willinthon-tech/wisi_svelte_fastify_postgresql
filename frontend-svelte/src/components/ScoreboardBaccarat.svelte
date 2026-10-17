@@ -167,11 +167,13 @@
     }, 3000);
   }
 
-  // Grid dimensions for col-6 side-by-side roadmaps
+  // Grid dimensions for Master Layout (Big Road col-12 on top, Derived Roads + Bead Plate on bottom col-6 & col-6)
   const BEAD_ROWS = 6;
-  const BEAD_COLS = 18;
+  const BEAD_COLS = 22;
   const BIG_ROWS = 6;
-  const BIG_COLS = 26;
+  const BIG_COLS = 38;
+  const DERIVED_ROWS = 6;
+  const DERIVED_COLS = 32;
 
   function loadSavedShoe() {
     try {
@@ -424,7 +426,11 @@
     }
   }
 
-  // ROADMAP GENERATION (BEAD PLATE & BIG ROAD)
+  // ==========================================
+  // ROADMAPS GENERATION (BEAD, BIG ROAD & DERIVED)
+  // ==========================================
+
+  // 1. BEAD PLATE (PLATO DE CUENTAS) - Matriz 6 Filas x N Columnas secuencial
   $: beadGrid = (() => {
     const totalCols = Math.max(BEAD_COLS, Math.ceil(history.length / BEAD_ROWS) + 2);
     const grid = Array.from({ length: BEAD_ROWS }, () => Array(totalCols).fill(null));
@@ -438,9 +444,10 @@
     return { grid, totalCols };
   })();
 
+  // 2. BIG ROAD (GRAN CAMINO) - Columnas de rachas con soporte para turnos (Dragon Tails) y números de puntaje
   $: bigRoadGrid = (() => {
-    const totalCols = Math.max(BIG_COLS, 26);
-    const grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
+    let totalCols = Math.max(BIG_COLS, 38);
+    let grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
 
     let col = 0;
     let row = 0;
@@ -472,31 +479,190 @@
         } else {
           let dragonCol = col + 1;
           const dragonRow = row >= BIG_ROWS ? BIG_ROWS - 1 : row - 1;
-          while (dragonCol < totalCols && grid[dragonRow][dragonCol]) {
+          while (dragonCol >= totalCols) {
+            grid.forEach(rArr => rArr.push(null));
+            totalCols++;
+          }
+          while (grid[dragonRow][dragonCol]) {
             dragonCol++;
+            if (dragonCol >= totalCols) {
+              grid.forEach(rArr => rArr.push(null));
+              totalCols++;
+            }
           }
-          if (dragonCol < totalCols) {
-            grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, tieCount: 0 };
-            lastPlaced = grid[dragonRow][dragonCol];
-          }
+          grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, tieCount: 0 };
+          lastPlaced = grid[dragonRow][dragonCol];
         }
       } else {
         col++;
+        while (col >= totalCols) {
+          grid.forEach(rArr => rArr.push(null));
+          totalCols++;
+        }
         while (col < totalCols && grid[0][col]) {
           col++;
+          if (col >= totalCols) {
+            grid.forEach(rArr => rArr.push(null));
+            totalCols++;
+          }
         }
         row = 0;
-        if (col < totalCols) {
-          grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
-          lastPlaced = grid[0][col];
-          row = 1;
-        }
+        grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
+        lastPlaced = grid[0][col];
+        row = 1;
         prevWinner = h.winner;
       }
     });
 
     return { grid, totalCols };
   })();
+
+  // 3. LOGICAL COLUMNS FOR DERIVED ROADS
+  $: bigRoadLogicalColumns = (() => {
+    const columns = [];
+    let currentCol = null;
+
+    history.forEach((h, idx) => {
+      if (h.winner === 'EMPATE') {
+        if (currentCol && currentCol.length > 0) {
+          const lastEntry = currentCol[currentCol.length - 1];
+          lastEntry.tieCount = (lastEntry.tieCount || 0) + 1;
+        }
+        return;
+      }
+
+      if (!currentCol || currentCol[0].winner !== h.winner) {
+        currentCol = [{ ...h, historyIndex: idx, tieCount: 0 }];
+        columns.push(currentCol);
+      } else {
+        currentCol.push({ ...h, historyIndex: idx, tieCount: 0 });
+      }
+    });
+
+    return columns;
+  })();
+
+  // 4. DERIVED ROADS ALGORITHM (Big Eye Boy: k=1, Small Road: k=2, Cockroach Road: k=3)
+  function buildDerivedRoad(columns, k, minCols = 28) {
+    const marks = [];
+
+    for (let c = 0; c < columns.length; c++) {
+      for (let r = 0; r < columns[c].length; r++) {
+        if (c < k || (c === k && r === 0)) {
+          continue;
+        }
+
+        let isRed = false;
+        if (r === 0) {
+          const lenPrev = columns[c - 1].length;
+          const lenRef = columns[c - 1 - k].length;
+          isRed = (lenPrev === lenRef);
+        } else {
+          const refCol = columns[c - k];
+          const lenRef = refCol ? refCol.length : 0;
+          if (r < lenRef) {
+            isRed = true;
+          } else if (r === lenRef) {
+            isRed = false;
+          } else {
+            isRed = true;
+          }
+        }
+
+        marks.push({
+          color: isRed ? 'red' : 'blue',
+          handId: columns[c][r].id,
+          historyIndex: columns[c][r].historyIndex
+        });
+      }
+    }
+
+    const ROWS = DERIVED_ROWS;
+    let totalCols = Math.max(minCols, 24);
+    let grid = Array.from({ length: ROWS }, () => Array(totalCols).fill(null));
+
+    let col = 0;
+    let row = 0;
+    let prevColor = null;
+
+    marks.forEach((m) => {
+      if (!prevColor) {
+        grid[0][0] = m;
+        prevColor = m.color;
+        row = 1;
+        col = 0;
+      } else if (m.color === prevColor) {
+        if (row < ROWS && !grid[row][col]) {
+          grid[row][col] = m;
+          row++;
+        } else {
+          let dCol = col + 1;
+          const dRow = row >= ROWS ? ROWS - 1 : row - 1;
+          while (dCol >= totalCols) {
+            grid.forEach(rArr => rArr.push(null));
+            totalCols++;
+          }
+          while (grid[dRow][dCol]) {
+            dCol++;
+            if (dCol >= totalCols) {
+              grid.forEach(rArr => rArr.push(null));
+              totalCols++;
+            }
+          }
+          grid[dRow][dCol] = m;
+        }
+      } else {
+        let nextCol = col + 1;
+        while (nextCol >= totalCols) {
+          grid.forEach(rArr => rArr.push(null));
+          totalCols++;
+        }
+        while (grid[0][nextCol]) {
+          nextCol++;
+          if (nextCol >= totalCols) {
+            grid.forEach(rArr => rArr.push(null));
+            totalCols++;
+          }
+        }
+        col = nextCol;
+        row = 0;
+        grid[0][col] = m;
+        row = 1;
+        prevColor = m.color;
+      }
+    });
+
+    const redCount = marks.filter(m => m.color === 'red').length;
+    const blueCount = marks.filter(m => m.color === 'blue').length;
+
+    return { marks, grid, totalCols, redCount, blueCount };
+  }
+
+  $: bigEyeGrid = buildDerivedRoad(bigRoadLogicalColumns, 1, DERIVED_COLS);
+  $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, DERIVED_COLS);
+  $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, DERIVED_COLS);
+
+  // Auto-scroll elementos a la derecha para ver los últimos registros
+  let bigRoadScrollEl;
+  let beadScrollEl;
+  let bigEyeScrollEl;
+  let smallRoadScrollEl;
+  let cockroachScrollEl;
+
+  function scrollToLatest() {
+    if (typeof window === 'undefined') return;
+    setTimeout(() => {
+      if (bigRoadScrollEl) bigRoadScrollEl.scrollLeft = bigRoadScrollEl.scrollWidth;
+      if (beadScrollEl) beadScrollEl.scrollLeft = beadScrollEl.scrollWidth;
+      if (bigEyeScrollEl) bigEyeScrollEl.scrollLeft = bigEyeScrollEl.scrollWidth;
+      if (smallRoadScrollEl) smallRoadScrollEl.scrollLeft = smallRoadScrollEl.scrollWidth;
+      if (cockroachScrollEl) cockroachScrollEl.scrollLeft = cockroachScrollEl.scrollWidth;
+    }, 60);
+  }
+
+  $: if (history.length) {
+    scrollToLatest();
+  }
 
   let isFullscreen = false;
   let rootElement;
@@ -622,74 +788,23 @@
 
 
 
-  <!-- OFFICIAL CASINO ROADMAPS SECTION: COL-6 & COL-6 (SIDE BY SIDE) -->
-  <section class="sb-roadmaps-grid-2col">
-    <!-- COL-6 LEFT: BEAD PLATE (珠盘路) -->
-    <div class="roadmap-card col-half">
-      <div class="roadmap-header">
-        <div class="rm-title">
-          <span>●</span> BEAD PLATE (PLATO DE CUENTAS)
-        </div>
-        <div class="rm-legend">
-          <span class="lg-b">🔴 B</span>
-          <span class="lg-p">🔵 P</span>
-          <span class="lg-t">🟢 T</span>
-        </div>
-      </div>
-
-      <div class="grid-scrollable">
-        <table class="bead-table">
-          <tbody>
-            {#each beadGrid.grid as row, rIdx}
-              <tr>
-                {#each row as cell, cIdx}
-                  <td
-                    class="bead-cell"
-                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                    class:has-hand={!!cell}
-                    on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
-                  >
-                    {#if cell}
-                      <div
-                        class="bead-circle {cell.winner.toLowerCase()}"
-                        class:has-b-pair={cell.bPair}
-                        class:has-p-pair={cell.pPair}
-                      >
-                        <span class="bead-letter" class:has-score={cell.score !== undefined && cell.score !== null}>
-                          {cell.score !== undefined && cell.score !== null ? cell.score : (cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T')}
-                        </span>
-                        {#if cell.bPair}
-                          <span class="dot-b-pair" title="Par Banca"></span>
-                        {/if}
-                        {#if cell.pPair}
-                          <span class="dot-p-pair" title="Par Punto"></span>
-                        {/if}
-                      </div>
-                    {:else}
-                      <div class="bead-empty"></div>
-                    {/if}
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- COL-6 RIGHT: BIG ROAD (大路) -->
-    <div class="roadmap-card col-half">
+  <!-- OFFICIAL CASINO ROADMAPS MASTER SECTION -->
+  <section class="sb-roadmaps-master">
+    <!-- SUPERIOR: BIG ROAD (GRAN CAMINO) - ANCHO COMPLETO / COL-12 -->
+    <div class="roadmap-card col-full bigroad-card">
       <div class="roadmap-header">
         <div class="rm-title">
           <span>═</span> BIG ROAD (GRAN CAMINO)
         </div>
         <div class="rm-legend">
+          <span class="lg-p">🔵 PUNTO</span>
+          <span class="lg-b">🔴 BANCA</span>
+          <span class="lg-t">🟢 EMPATE</span>
           <span class="rm-hint">Rachas y Tendencias</span>
         </div>
       </div>
 
-      <div class="grid-scrollable">
+      <div class="grid-scrollable" bind:this={bigRoadScrollEl}>
         <table class="bigroad-table">
           <tbody>
             {#each bigRoadGrid.grid as row, rIdx}
@@ -700,13 +815,16 @@
                     class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
                     class:has-hand={!!cell}
                     on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''} (Clic para editar)` : ''}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''} (Clic para editar)` : ''}
                   >
                     {#if cell}
                       <div
                         class="bigroad-ring {cell.winner.toLowerCase()}"
                         class:is-tie={cell.isTieOnly}
                       >
+                        {#if cell.score !== undefined && cell.score !== null}
+                          <span class="bigroad-score">{cell.score}</span>
+                        {/if}
                         {#if cell.tieCount > 0}
                           <span class="bigroad-tie-slash"></span>
                           {#if cell.tieCount > 1}
@@ -729,6 +847,165 @@
             {/each}
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- INFERIOR: 2 COLUMNAS (COL-6 IZQUIERDA Y COL-6 DERECHA) -->
+    <div class="sb-roadmaps-bottom-split">
+      <!-- COL-6 IZQUIERDA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (COL-4 CADA UNO EN ALTURA) -->
+      <div class="derived-roads-column">
+        <!-- 1. BIG EYE BOY (GRAN OJO) -->
+        <div class="derived-strip-card">
+          <div class="derived-strip-header">
+            <span class="derived-title">🔴/🔵 BIG EYE BOY (GRAN OJO)</span>
+            <div class="derived-counts">
+              <span class="cnt-red">🔴 {bigEyeGrid.redCount}</span>
+              <span class="cnt-blue">🔵 {bigEyeGrid.blueCount}</span>
+            </div>
+          </div>
+          <div class="derived-grid-scroll" bind:this={bigEyeScrollEl}>
+            <table class="derived-table">
+              <tbody>
+                {#each bigEyeGrid.grid as row}
+                  <tr>
+                    {#each row as cell}
+                      <td
+                        class="derived-cell"
+                        class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                        on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                        title={cell ? `Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                      >
+                        {#if cell}
+                          <span class="derived-ring {cell.color}"></span>
+                        {/if}
+                      </td>
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 2. SMALL ROAD (CAMINO PEQUEÑO) -->
+        <div class="derived-strip-card">
+          <div class="derived-strip-header">
+            <span class="derived-title">🔴/🔵 SMALL ROAD (CAMINO PEQUEÑO)</span>
+            <div class="derived-counts">
+              <span class="cnt-red">🔴 {smallRoadGrid.redCount}</span>
+              <span class="cnt-blue">🔵 {smallRoadGrid.blueCount}</span>
+            </div>
+          </div>
+          <div class="derived-grid-scroll" bind:this={smallRoadScrollEl}>
+            <table class="derived-table">
+              <tbody>
+                {#each smallRoadGrid.grid as row}
+                  <tr>
+                    {#each row as cell}
+                      <td
+                        class="derived-cell"
+                        class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                        on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                        title={cell ? `Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                      >
+                        {#if cell}
+                          <span class="derived-dot {cell.color}"></span>
+                        {/if}
+                      </td>
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3. COCKROACH ROAD (CUCARACHA) -->
+        <div class="derived-strip-card">
+          <div class="derived-strip-header">
+            <span class="derived-title">🔴/🔵 COCKROACH ROAD (CUCARACHA)</span>
+            <div class="derived-counts">
+              <span class="cnt-red">🔴 {cockroachGrid.redCount}</span>
+              <span class="cnt-blue">🔵 {cockroachGrid.blueCount}</span>
+            </div>
+          </div>
+          <div class="derived-grid-scroll" bind:this={cockroachScrollEl}>
+            <table class="derived-table">
+              <tbody>
+                {#each cockroachGrid.grid as row}
+                  <tr>
+                    {#each row as cell}
+                      <td
+                        class="derived-cell"
+                        class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                        on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                        title={cell ? `Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                      >
+                        {#if cell}
+                          <span class="derived-slash {cell.color}"></span>
+                        {/if}
+                      </td>
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- COL-6 DERECHA: BEAD PLATE (PLATO DE CUENTAS) -->
+      <div class="roadmap-card col-half bead-card">
+        <div class="roadmap-header">
+          <div class="rm-title">
+            <span>●</span> BEAD PLATE (PLATO DE CUENTAS)
+          </div>
+          <div class="rm-legend">
+            <span class="lg-b">🔴 B</span>
+            <span class="lg-p">🔵 P</span>
+            <span class="lg-t">🟢 T</span>
+          </div>
+        </div>
+
+        <div class="grid-scrollable" bind:this={beadScrollEl}>
+          <table class="bead-table">
+            <tbody>
+              {#each beadGrid.grid as row, rIdx}
+                <tr>
+                  {#each row as cell, cIdx}
+                    <td
+                      class="bead-cell"
+                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                      class:has-hand={!!cell}
+                      on:click={() => cell && selectHand(cell.historyIndex)}
+                      title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
+                    >
+                      {#if cell}
+                        <div
+                          class="bead-circle {cell.winner.toLowerCase()}"
+                          class:has-b-pair={cell.bPair}
+                          class:has-p-pair={cell.pPair}
+                        >
+                          <span class="bead-letter" class:has-score={cell.score !== undefined && cell.score !== null}>
+                            {cell.score !== undefined && cell.score !== null ? cell.score : (cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T')}
+                          </span>
+                          {#if cell.bPair}
+                            <span class="dot-b-pair" title="Par Banca"></span>
+                          {/if}
+                          {#if cell.pPair}
+                            <span class="dot-p-pair" title="Par Punto"></span>
+                          {/if}
+                        </div>
+                      {:else}
+                        <div class="bead-empty"></div>
+                      {/if}
+                    </td>
+                  {/each}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -1402,19 +1679,18 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  /* ROADMAPS SECTION: COL-6 & COL-6 (SIDE BY SIDE) */
-  .sb-roadmaps-grid-2col {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    align-items: stretch;
+  /* OFFICIAL CASINO ROADMAPS MASTER SECTION */
+  .sb-roadmaps-master {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     flex: 1;
+    min-height: 0;
   }
 
-  @media (max-width: 960px) {
-    .sb-roadmaps-grid-2col {
-      grid-template-columns: 1fr;
-    }
+  .col-full {
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .col-half {
@@ -1429,6 +1705,18 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .bigroad-card {
+    flex: 0 0 auto;
+  }
+
+  .bead-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
   }
 
   .roadmap-header {
@@ -1447,6 +1735,7 @@
     gap: 6px;
     color: #f1f5f9;
     font-size: 11.5px;
+    letter-spacing: 0.5px;
   }
 
   .rm-hint {
@@ -1470,20 +1759,151 @@
     border: 1px solid #1e293b;
     border-radius: 6px;
     padding: 4px;
-    flex: 1;
     display: flex;
     align-items: center;
   }
 
+  /* SPLIT BOTTOM SECTION: COL-6 DERIVED ROADS & COL-6 BEAD PLATE */
+  .sb-roadmaps-bottom-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  @media (max-width: 960px) {
+    .sb-roadmaps-bottom-split {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* GRUPO IZQUIERDO: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (COL-4 CADA UNO EN ALTURA) */
+  .derived-roads-column {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 8px 10px;
+    justify-content: space-between;
+    min-width: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .derived-strip-card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 5px 8px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .derived-strip-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 9.5px;
+    font-weight: 800;
+  }
+
+  .derived-title {
+    color: #cbd5e1;
+    letter-spacing: 0.5px;
+  }
+
+  .derived-counts {
+    display: flex;
+    gap: 8px;
+    font-size: 9px;
+    font-weight: 800;
+  }
+  .cnt-red { color: #f87171; }
+  .cnt-blue { color: #60a5fa; }
+
+  .derived-grid-scroll {
+    overflow-x: auto;
+    display: flex;
+    align-items: center;
+    padding: 2px 0;
+  }
+
+  .derived-table {
+    border-collapse: collapse;
+    margin: 0;
+  }
+
+  .derived-cell {
+    width: 13px;
+    height: 13px;
+    min-width: 13px;
+    max-width: 13px;
+    border: 1px solid #1e293b;
+    padding: 0;
+    text-align: center;
+    vertical-align: middle;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .derived-cell:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .derived-cell.selected-cell {
+    background: #ffc107 !important;
+  }
+
+  /* 1. Big Eye Boy: Anillo hueco rojo / azul */
+  .derived-ring {
+    display: block;
+    width: 8px;
+    height: 8px;
+    margin: auto;
+    border-radius: 50%;
+    border: 1.8px solid transparent;
+    box-sizing: border-box;
+  }
+  .derived-ring.red { border-color: #ef4444; }
+  .derived-ring.blue { border-color: #3b82f6; }
+
+  /* 2. Small Road: Punto sólido rojo / azul */
+  .derived-dot {
+    display: block;
+    width: 6.5px;
+    height: 6.5px;
+    margin: auto;
+    border-radius: 50%;
+  }
+  .derived-dot.red { background: #ef4444; }
+  .derived-dot.blue { background: #3b82f6; }
+
+  /* 3. Cockroach Pig: Línea diagonal roja / azul */
+  .derived-slash {
+    display: block;
+    width: 8.5px;
+    height: 2px;
+    margin: auto;
+    transform: rotate(-45deg);
+    border-radius: 1px;
+  }
+  .derived-slash.red { background: #ef4444; }
+  .derived-slash.blue { background: #3b82f6; }
+
   /* BEAD TABLE */
   .bead-table, .bigroad-table {
     border-collapse: collapse;
-    margin: 0 auto;
+    margin: 0;
   }
 
   .bead-cell {
     width: 25px;
     height: 25px;
+    min-width: 25px;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1565,8 +1985,9 @@
 
   /* BIG ROAD TABLE */
   .bigroad-cell {
-    width: 21px;
-    height: 21px;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1582,12 +2003,15 @@
   }
 
   .bigroad-ring {
-    width: 17px;
-    height: 17px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     margin: auto;
-    border: 2px solid transparent;
+    border: 2.2px solid transparent;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .bigroad-ring.banca {
@@ -1600,14 +2024,31 @@
     border-color: #22c55e;
   }
 
+  .bigroad-ring.is-tie {
+    background: #16a34a;
+    border-color: #22c55e;
+  }
+
+  .bigroad-score {
+    font-size: 9.5px;
+    font-weight: 900;
+    color: #ffffff;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+    position: relative;
+    z-index: 2;
+  }
+
   .bigroad-tie-slash {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 15px;
-    height: 2px;
+    width: 16px;
+    height: 2.2px;
     background: #22c55e;
     transform: translate(-50%, -50%) rotate(45deg);
+    z-index: 1;
+    border-radius: 1px;
   }
 
   .tie-badge-num {
@@ -1624,6 +2065,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    z-index: 3;
+    border: 1px solid #ffffff;
   }
 
   /* INLINE EDIT TOOLBAR (En una sola línea) */
