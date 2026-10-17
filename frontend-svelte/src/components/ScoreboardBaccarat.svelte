@@ -1062,7 +1062,6 @@
     activeShoeIndex = shoes.length - 1;
 
     saveShoe();
-    showFeedback(`Nuevo Zapato #${shoeNumber} iniciado`);
     isOptionsModalOpen = false;
   }
 
@@ -1718,6 +1717,21 @@
             </button>
           {/if}
         </div>
+
+        <!-- BOTÓN NUEVO ZAPATO DIRECTO -->
+        <button
+          type="button"
+          class="sb-btn-new-shoe"
+          disabled={!isLatestSession || history.length === 0}
+          on:click={handleDirectNewShoe}
+          title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Nuevo Zapato</span>
+        </button>
 
         <!-- FULLSCREEN ICON BUTTON (SOLO EL ICONO) -->
         <button
@@ -2583,6 +2597,48 @@
 
   .pill-sep {
     color: #475569;
+  }
+
+  /* BOTÓN NUEVO ZAPATO DIRECTO */
+  .sb-btn-new-shoe {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.22) 0%, rgba(14, 165, 233, 0.12) 100%);
+    border: 1.5px solid #0284c7;
+    color: #38bdf8;
+    padding: 3px 11px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1.2;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    user-select: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+
+  .sb-btn-new-shoe:hover:not(:disabled) {
+    background: #0284c7;
+    border-color: #38bdf8;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  }
+
+  .sb-btn-new-shoe:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .sb-btn-new-shoe:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: #1e293b;
+    border-color: #334155;
+    color: #64748b;
+    transform: none;
+    box-shadow: none;
   }
 
   /* ICONO PANTALLA COMPLETA AL LADO DE ZAPATO (SOLO EL ICONO) */
