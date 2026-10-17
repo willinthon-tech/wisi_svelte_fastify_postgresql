@@ -748,7 +748,7 @@
             class:chosen={selectedHand.winner === 'PUNTO'}
             on:click={() => updateSelectedWinner('PUNTO')}
           >
-            🔵 PUNTO
+            PUNTO
           </button>
           <button
             type="button"
@@ -756,7 +756,7 @@
             class:chosen={selectedHand.winner === 'BANCA'}
             on:click={() => updateSelectedWinner('BANCA')}
           >
-            🔴 BANCA
+            BANCA
           </button>
           <button
             type="button"
@@ -764,7 +764,7 @@
             class:chosen={selectedHand.winner === 'EMPATE'}
             on:click={() => updateSelectedWinner('EMPATE')}
           >
-            🟢 EMPATE
+            EMPATE
           </button>
         </div>
 
@@ -772,35 +772,27 @@
           <span class="edit-group-label">PARES Y ATRIBUTOS:</span>
           <button
             type="button"
-            class="edit-pill-toggle"
+            class="edit-pill-toggle pill-ppair"
             class:active-pill={selectedHand.pPair}
             on:click={() => toggleSelectedMod('pPair')}
           >
-            🔵 P.Pair {selectedHand.pPair ? '✓' : ''}
+            P.Pair{selectedHand.pPair ? ' ✓' : ''}
           </button>
           <button
             type="button"
-            class="edit-pill-toggle"
+            class="edit-pill-toggle pill-bpair"
             class:active-pill={selectedHand.bPair}
             on:click={() => toggleSelectedMod('bPair')}
           >
-            🔴 B.Pair {selectedHand.bPair ? '✓' : ''}
+            B.Pair{selectedHand.bPair ? ' ✓' : ''}
           </button>
           <button
             type="button"
-            class="edit-pill-toggle"
+            class="edit-pill-toggle pill-natural"
             class:active-pill={selectedHand.natural}
             on:click={() => toggleSelectedMod('natural')}
           >
-            ⚡ Natural {selectedHand.natural ? '✓' : ''}
-          </button>
-          <button
-            type="button"
-            class="edit-pill-toggle"
-            class:active-pill={selectedHand.special}
-            on:click={() => toggleSelectedMod('special')}
-          >
-            ⭐ Special {selectedHand.special ? '✓' : ''}
+            Natural{selectedHand.natural ? ' ✓' : ''}
           </button>
         </div>
 
@@ -887,16 +879,16 @@
         <span class="btn-caption banca-caption">BANCA</span>
       </div>
 
-      <!-- COLUMN 3: SPECIAL + T BUTTON -->
+      <!-- COLUMN 3: T BUTTON -->
       <div class="keypad-column">
         <button
           type="button"
-          class="keypad-pill pill-special"
-          class:active={activeSpecial}
-          on:click={toggleSpecial}
-          title="Activar apuesta especial / Lucky 6"
+          class="keypad-pill pill-win"
+          class:active={activeWin}
+          on:click={toggleWin}
+          title="Activar Victoria Natural (8 ó 9)"
         >
-          Special
+          Natural
         </button>
 
         <button
@@ -918,17 +910,9 @@
         <span class="btn-caption tie-caption">EMPATE</span>
       </div>
 
-      <!-- COLUMN 4: WIN / NATURAL + UNDO BUTTON -->
+      <!-- COLUMN 4: UNDO BUTTON -->
       <div class="keypad-column">
-        <button
-          type="button"
-          class="keypad-pill pill-win"
-          class:active={activeWin}
-          on:click={toggleWin}
-          title="Activar Victoria Natural (8 ó 9)"
-        >
-          Win
-        </button>
+        <div class="keypad-pill-placeholder"></div>
 
         <button
           type="button"
@@ -1558,44 +1542,91 @@
   }
 
   .edit-choice-btn {
-    border: none;
-    border-radius: 5px;
-    padding: 4px 10px;
+    border: 1.5px solid transparent;
+    border-radius: 6px;
+    padding: 4px 12px;
     font-size: 11px;
     font-weight: 800;
     cursor: pointer;
     transition: all 0.15s ease;
-    opacity: 0.6;
+    opacity: 0.65;
+    user-select: none;
   }
 
-  .edit-choice-btn.punto { background: #1d4ed8; color: #ffffff; }
-  .edit-choice-btn.banca { background: #b91c1c; color: #ffffff; }
-  .edit-choice-btn.empate { background: #15803d; color: #ffffff; }
+  .edit-choice-btn.punto {
+    background: #1d4ed8;
+    color: #ffffff;
+    border-color: #3b82f6;
+  }
+  .edit-choice-btn.banca {
+    background: #b91c1c;
+    color: #ffffff;
+    border-color: #ef4444;
+  }
+  .edit-choice-btn.empate {
+    background: #15803d;
+    color: #ffffff;
+    border-color: #22c55e;
+  }
 
   .edit-choice-btn.chosen {
     opacity: 1;
     transform: scale(1.06);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
     outline: 2px solid #ffffff;
   }
 
   .edit-pill-toggle {
     background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
     border-radius: 999px;
-    padding: 3px 9px;
+    padding: 3px 10px;
     font-size: 10.5px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
+    user-select: none;
   }
 
-  .edit-pill-toggle.active-pill {
-    background: #3b82f6;
+  .edit-pill-toggle.pill-ppair {
+    border: 1.5px solid #2563eb;
+    color: #93c5fd;
+    background: rgba(37, 99, 235, 0.18);
+  }
+  .edit-pill-toggle.pill-ppair.active-pill {
+    background: #2563eb;
     color: #ffffff;
-    border-color: #60a5fa;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+    border-color: #93c5fd;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.6);
+  }
+
+  .edit-pill-toggle.pill-bpair {
+    border: 1.5px solid #dc2626;
+    color: #fca5a5;
+    background: rgba(220, 38, 38, 0.18);
+  }
+  .edit-pill-toggle.pill-bpair.active-pill {
+    background: #dc2626;
+    color: #ffffff;
+    border-color: #fca5a5;
+    box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
+  }
+
+  .edit-pill-toggle.pill-natural {
+    border: 1.5px solid #ea580c;
+    color: #fdba74;
+    background: rgba(234, 88, 12, 0.18);
+  }
+  .edit-pill-toggle.pill-natural.active-pill {
+    background: #ea580c;
+    color: #ffffff;
+    border-color: #fed7aa;
+    box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
+  }
+
+  .keypad-pill-placeholder {
+    width: 100%;
+    max-width: 110px;
+    height: 38px;
   }
 
   /* CROUPIER ARCADE KEYPAD (AL PIE DE PÁGINA) */
@@ -1676,26 +1707,15 @@
     box-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
   }
 
-  .keypad-pill.pill-special {
-    border: 2.5px solid #94a3b8;
-    color: #94a3b8;
-  }
-  .keypad-pill.pill-special.active {
-    background: radial-gradient(circle at 50% 30%, #64748b, #334155);
-    color: #ffffff;
-    border-color: #1e293b;
-    box-shadow: 0 0 12px rgba(100, 116, 139, 0.5);
-  }
-
   .keypad-pill.pill-win {
-    border: 2.5px solid #7c3aed;
-    color: #7c3aed;
+    border: 2.5px solid #ea580c;
+    color: #ea580c;
   }
   .keypad-pill.pill-win.active {
-    background: radial-gradient(circle at 50% 30%, #a855f7, #6b21a8);
+    background: radial-gradient(circle at 50% 30%, #f97316, #c2410c);
     color: #ffffff;
-    border-color: #581c87;
-    box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+    border-color: #9a3412;
+    box-shadow: 0 0 12px rgba(234, 88, 12, 0.5);
   }
 
   /* 3D CIRCULAR CASINO BUTTONS */
