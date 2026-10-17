@@ -444,30 +444,40 @@
     const strMesaId = String(mId);
 
     try {
-      // Sincronizar directamente con el backend PostgreSQL (Fuente autoritativa de la verdad)
+      // 1. Cargar primero de la base de datos interna local (Local-First IndexedDB) por sesión estricta
+      const localRows = await getLocalItems(
+        'record_libro_score_baccarat_mesa',
+        item => (String(item.session_uuid || item.session_id) === strSessId) &&
+                (String(item.mesa_id || item.mesa_uuid) === strMesaId)
+      );
+      if (Array.isArray(localRows) && localRows.length > 0) {
+        applyMesaData(localRows[0]);
+      }
+
+      // 2. Sincronizar con el backend PostgreSQL (Fuente autoritativa)
       const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?session_id=${encodeURIComponent(strSessId)}&mesa_id=${encodeURIComponent(strMesaId)}`));
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          const bShoes = safeJsonParse(json.data.shoes, []);
-          const bHistory = safeJsonParse(json.data.history, []);
-          const hasHandsInBackend = (Array.isArray(bShoes) && bShoes.some(s => {
-            const h = Array.isArray(s.history) ? s.history : safeJsonParse(s.history, []);
-            return h.length > 0;
-          })) || (Array.isArray(bHistory) && bHistory.length > 0);
-
-          if (hasHandsInBackend) {
-            applyMesaData(json.data);
-          } else {
-            // Sesión completamente limpia sin manos en la base de datos (dejado vacío [])
-            applyMesaData(null);
-          }
+          applyMesaData(json.data);
 
           // Purgar cualquier residuo de clave legacy un-namespaced
           const baseLegacyKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
           try {
             localStorage.removeItem(baseLegacyKey);
           } catch (e) {}
+
+          // Guardar en la base de datos interna local (IndexedDB) aislado para esta sesión
+          await upsertLocalItem('record_libro_score_baccarat_mesa', {
+            uuid: json.data.uuid || `bacc_mesa_${strSessId}_${strMesaId}`,
+            session_uuid: strSessId,
+            session_id: strSessId,
+            mesa_id: strMesaId,
+            shoe_number: shoeNumber,
+            tie_mode: tieMode,
+            history,
+            shoes
+          }).catch(() => {});
 
           try {
             localStorage.setItem(storageKey, JSON.stringify({
@@ -481,11 +491,8 @@
           return;
         }
       }
-      // Si no hay datos en backend, inicializar limpio []
-      applyMesaData(null);
     } catch (e) {
       console.warn('Error loading mesa data from backend:', e);
-      applyMesaData(null);
     }
   }
 
@@ -570,6 +577,9 @@
           history: [],
           shoes: [{ shoe_number: 1, history: [], tie_mode: 'slash' }]
         };
+
+        // Guardar mesa limpia [] en la base de datos local interna (IndexedDB)
+        await upsertLocalItem('record_libro_score_baccarat_mesa', newMesaRecord).catch(() => {});
 
         // Clave de almacenamiento aislada para la nueva sesión
         const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}_sess_${newSessUuid}`;
@@ -707,11 +717,23 @@
       }));
     } catch (e) {}
 
+    // 1. Guardar de inmediato en la base de datos interna local (Local-First IndexedDB)
+    upsertLocalItem('record_libro_score_baccarat_mesa', {
+      uuid: mesaRecordUuid,
+      session_uuid: sessUuid,
+      session_id: sessUuid,
+      mesa_id: currentMesaId,
+      shoe_number: shoeNumber,
+      tie_mode: tieMode,
+      history,
+      shoes
+    }).catch(err => console.warn('Advertencia guardando en base de datos interna local:', err));
+
     if (!skipBroadcast) {
       broadcastTableUpdate();
     }
 
-    // Persistir directamente en la base de datos PostgreSQL en el backend
+    // 2. Persistir directamente en la base de datos PostgreSQL en el backend
     fetch(toBackendUrl('/api/baccarat/mesa-data'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -767,9 +789,6 @@
         keysToRemove.forEach(k => localStorage.removeItem(k));
       }
     } catch (e) {}
-
-    // 2. Purgar de la base de datos interna local (IndexedDB) la tabla de mesas para erradicar cualquier registro fantasma
-    replaceLocalItems('record_libro_score_baccarat_mesa', []).catch(() => {});
 
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
