@@ -888,7 +888,7 @@
           {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
             <button
               type="button"
-              class="btn-num-key"
+              class="btn-num-key btn-num-{num}"
               class:active={activeScore === num}
               on:click={() => selectScore(num)}
               title="Seleccionar valor {num} para la mano"
@@ -896,7 +896,7 @@
               {num}
             </button>
           {/each}
-          <!-- 0 centrado en la fila inferior -->
+          <!-- 0 al lado del 3, 6, 9 abarcando todo el largo de las 3 filas -->
           <button
             type="button"
             class="btn-num-key btn-num-zero"
@@ -1828,7 +1828,7 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(240px, 3.4fr) minmax(95px, 1.8fr) minmax(110px, 1.8fr) minmax(250px, 3.6fr) minmax(90px, 1.4fr);
+    grid-template-columns: minmax(240px, 3.2fr) minmax(130px, 2fr) minmax(110px, 1.7fr) minmax(260px, 3.7fr) minmax(95px, 1.4fr);
     gap: 14px;
     align-items: stretch;
     margin-top: auto;
@@ -1841,7 +1841,7 @@
     justify-content: center;
     align-items: center;
     gap: 8px;
-    padding-right: 12px;
+    padding-right: 14px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -1873,7 +1873,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 12px;
+    padding-right: 14px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -1884,24 +1884,44 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 105px;
+    max-width: 145px;
   }
 
   .score-keypad-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 3px;
+    grid-template-columns: repeat(3, 1fr) 1.25fr;
+    grid-template-rows: repeat(3, 31px);
+    grid-template-areas:
+      "n1 n2 n3 n0"
+      "n4 n5 n6 n0"
+      "n7 n8 n9 n0";
+    gap: 4px;
     width: 100%;
   }
 
+  .btn-num-1 { grid-area: n1; }
+  .btn-num-2 { grid-area: n2; }
+  .btn-num-3 { grid-area: n3; }
+  .btn-num-4 { grid-area: n4; }
+  .btn-num-5 { grid-area: n5; }
+  .btn-num-6 { grid-area: n6; }
+  .btn-num-7 { grid-area: n7; }
+  .btn-num-8 { grid-area: n8; }
+  .btn-num-9 { grid-area: n9; }
+  .btn-num-zero {
+    grid-area: n0;
+    height: 100%;
+    font-size: 20px;
+    font-weight: 900;
+  }
+
   .btn-num-key {
-    height: 23px;
-    border-radius: 5px;
+    border-radius: 6px;
     border: 1.5px solid #cbd5e1;
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
-    color: #1e293b;
+    color: #0f172a;
     font-family: inherit;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -1911,7 +1931,7 @@
     line-height: 1;
     transition: all 0.12s ease;
     user-select: none;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 
   .btn-num-key:hover:not(.active) {
@@ -1924,17 +1944,14 @@
     transform: scale(0.95);
   }
 
-  .btn-num-zero {
-    grid-column: 2;
-  }
-
+  /* Activo: estilo brillante Casino Oro/Amarillo */
   .btn-num-key.active {
     background: radial-gradient(circle at 45% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%);
     color: #000000;
     border-color: #a16207;
-    box-shadow: 0 0 10px rgba(234, 179, 8, 0.75), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 12px rgba(234, 179, 8, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.9);
     font-weight: 900;
-    transform: scale(1.05);
+    transform: scale(1.03);
     z-index: 2;
   }
 
@@ -1945,7 +1962,7 @@
     justify-content: center;
     align-items: center;
     gap: 6px;
-    padding-right: 12px;
+    padding-right: 14px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -1960,11 +1977,13 @@
     margin: 0 auto;
   }
 
-  /* GRUPO 4: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) */
+  /* GRUPO 4: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) + SEPARADOR CON RETROCEDER */
   .footer-outcomes-col {
     display: flex;
     justify-content: center;
     align-items: center;
+    padding-right: 14px;
+    border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
 
