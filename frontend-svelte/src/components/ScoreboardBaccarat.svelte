@@ -159,9 +159,9 @@
 
   // Grid dimensions for col-6 side-by-side roadmaps
   const BEAD_ROWS = 6;
-  const BEAD_COLS = 16;
+  const BEAD_COLS = 18;
   const BIG_ROWS = 6;
-  const BIG_COLS = 24;
+  const BIG_COLS = 26;
 
   function loadSavedShoe() {
     try {
@@ -280,16 +280,26 @@
     showFeedback(`Mano #${lastId} deshecha`);
   }
 
+  function clearCurrentShoe() {
+    if (history.length === 0) return;
+    if (!confirm(`¿Deseas borrar todas las manos registradas en el Zapato #${shoeNumber}?`)) return;
+    playSound('undo');
+    history = [];
+    selectedHandIndex = null;
+    saveShoe();
+    showFeedback(`Zapato #${shoeNumber} borrado`);
+  }
+
   function resetShoe() {
     if (history.length > 0) {
-      if (!confirm(`¿Deseas reiniciar el Zapato #${shoeNumber} y comenzar un nuevo zapato en blanco?`)) return;
+      if (!confirm(`¿Deseas iniciar un Nuevo Zapato? (Pasará al Zapato #${shoeNumber + 1})`)) return;
     }
     playSound('click');
     history = [];
     selectedHandIndex = null;
     shoeNumber += 1;
     saveShoe();
-    showFeedback(`Zapato #${shoeNumber} iniciado`);
+    showFeedback(`Nuevo Zapato #${shoeNumber} iniciado`);
   }
 
   // Hand Selection & In-Place Editing
@@ -469,9 +479,9 @@
   class="scoreboard-container"
   class:fullscreen-mode={isFullscreen}
 >
-  <!-- TOP CASINO HEADER (Clean, Sala/Mesa/Zapato under Title) -->
+  <!-- TOP CASINO HEADER -->
   <header class="sb-header">
-    <div class="sb-header-brand">
+    <div class="sb-header-left">
       <h2 class="sb-title">SCOREBOARD BACCARAT</h2>
       <div class="sb-pills-row">
         {#if currentSalaName}
@@ -495,14 +505,64 @@
           <span class="pill-label">MANOS</span>
           <span class="pill-value">#{totalHands}</span>
         </div>
+
+        <!-- FULLSCREEN ICON BUTTON (SOLO EL ICONO) -->
+        <button
+          type="button"
+          class="sb-icon-btn-fullscreen"
+          class:active={isFullscreen}
+          on:click={toggleFullscreen}
+          title={isFullscreen ? 'Salir de Pantalla Completa' : 'Pantalla Completa'}
+        >
+          {#if isFullscreen}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+            </svg>
+          {:else}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+          {/if}
+        </button>
+
+        {#if feedbackMessage}
+          <div class="feedback-toast">
+            {feedbackMessage}
+          </div>
+        {/if}
       </div>
     </div>
 
-    {#if feedbackMessage}
-      <div class="feedback-toast">
-        {feedbackMessage}
-      </div>
-    {/if}
+    <!-- BOTONES SUPERIORES SIN ICONOS -->
+    <div class="sb-header-right">
+      <button
+        type="button"
+        class="sb-btn sb-btn-clear"
+        on:click={clearCurrentShoe}
+        disabled={history.length === 0}
+        title="Borrar las manos registradas del zapato actual"
+      >
+        Borrar Zapato
+      </button>
+
+      <button
+        type="button"
+        class="sb-btn sb-btn-new-shoe"
+        on:click={resetShoe}
+        title="Iniciar un nuevo zapato"
+      >
+        Nuevo Zapato
+      </button>
+
+      <button
+        type="button"
+        class="sb-btn sb-btn-back"
+        on:click={handleClose}
+        title="Volver a la lista de mesas de la sala"
+      >
+        Volver a Mesas
+      </button>
+    </div>
   </header>
 
   <!-- TOP STATS BEAD COUNTERS STRIP (Exact Casino Spec) -->
@@ -803,8 +863,8 @@
     </div>
   {/if}
 
-  <!-- CROUPIER ARCADE KEYPAD (Exact Reference Alignment) -->
-  <section class="croupier-keypad-panel">
+  <!-- CROUPIER ARCADE KEYPAD (AL PIE DE PÁGINA) -->
+  <footer class="croupier-keypad-panel">
     <div class="keypad-grid-4col">
       <!-- COLUMN 1: P.PAIR + P BUTTON -->
       <div class="keypad-column">
@@ -925,50 +985,6 @@
         <span class="btn-caption undo-caption">RETROCEDER</span>
       </div>
     </div>
-  </section>
-
-  <!-- ACTION BUTTONS FOOTER BAR (AL PIE) -->
-  <footer class="sb-footer">
-    <div class="sb-footer-left">
-      <button
-        type="button"
-        class="sb-btn sb-btn-close"
-        on:click={handleClose}
-        title="Volver a la lista de mesas de la sala"
-      >
-        ← Volver a Mesas
-      </button>
-    </div>
-
-    <div class="sb-footer-right">
-      <button
-        type="button"
-        class="sb-btn sb-btn-warning"
-        on:click={undoLast}
-        disabled={history.length === 0}
-        title="Deshacer la última mano registrada (O usa el botón ← del teclado)"
-      >
-        <span>←</span> Deshacer
-      </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-danger"
-        on:click={resetShoe}
-        title="Limpiar marcador e iniciar un nuevo zapato"
-      >
-        <span>🔄</span> Nuevo Zapato
-      </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-secondary"
-        on:click={toggleFullscreen}
-        title="Modo Pantalla Completa"
-      >
-        <span>{isFullscreen ? '⤦' : '⛶'}</span> {isFullscreen ? 'Salir Pantalla Completa' : 'Pantalla Completa'}
-      </button>
-    </div>
   </footer>
 </div>
 
@@ -983,37 +999,37 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 14px 20px;
+    padding: 12px 18px;
   }
 
   .fullscreen-mode {
     position: fixed;
     inset: 0;
     z-index: 9999999;
-    padding: 16px 22px;
+    padding: 14px 20px;
     overflow-y: auto;
   }
 
-  /* HEADER (Clean, Sala/Mesa/Zapato under title) */
+  /* HEADER */
   .sb-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 14px;
-    padding-bottom: 10px;
+    padding-bottom: 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-wrap: wrap;
   }
 
-  .sb-header-brand {
+  .sb-header-left {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
   }
 
   .sb-title {
     margin: 0;
-    font-size: 21px;
+    font-size: 20px;
     font-weight: 900;
     letter-spacing: 0.8px;
     background: linear-gradient(135deg, #ffffff, #cbd5e1);
@@ -1033,10 +1049,10 @@
     align-items: center;
     gap: 6px;
     background: #1e293b;
-    padding: 4px 10px;
+    padding: 3px 9px;
     border-radius: 999px;
     border: 1px solid #334155;
-    font-size: 11.5px;
+    font-size: 11px;
   }
 
   .sala-pill {
@@ -1060,7 +1076,7 @@
   .pill-label {
     color: #94a3b8;
     font-weight: 600;
-    font-size: 10.5px;
+    font-size: 10px;
   }
 
   .pill-value {
@@ -1072,28 +1088,105 @@
     color: #475569;
   }
 
+  /* ICONO PANTALLA COMPLETA AL LADO DE ZAPATO (SOLO EL ICONO) */
+  .sb-icon-btn-fullscreen {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #1e293b;
+    border: 1.5px solid #0284c7;
+    color: #38bdf8;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+  }
+  .sb-icon-btn-fullscreen:hover {
+    background: #0284c7;
+    color: #ffffff;
+    transform: scale(1.08);
+  }
+  .sb-icon-btn-fullscreen.active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  }
+
   .feedback-toast {
     background: #1e3a8a;
     border: 1px solid #3b82f6;
     color: #e0f2fe;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
-    padding: 4px 12px;
+    padding: 3px 10px;
     border-radius: 999px;
     animation: fadeIn 0.2s ease;
-    align-self: center;
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
+    from { opacity: 0; transform: translateY(-3px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* BOTONES SUPERIORES SIN ICONOS */
+  .sb-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .sb-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+  }
+
+  .sb-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .sb-btn-clear {
+    background: #78350f;
+    color: #fef08a;
+    border: 1px solid #b45309;
+  }
+  .sb-btn-clear:hover:not(:disabled) {
+    background: #92400e;
+  }
+
+  .sb-btn-new-shoe {
+    background: #991b1b;
+    color: #fee2e2;
+    border: 1px solid #dc2626;
+  }
+  .sb-btn-new-shoe:hover:not(:disabled) {
+    background: #b91c1c;
+  }
+
+  .sb-btn-back {
+    background: #1e293b;
+    color: #ffffff;
+    border: 1px solid #334155;
+  }
+  .sb-btn-back:hover {
+    background: #334155;
   }
 
   /* CASINO BEAD COUNTERS STRIP (Exact Reference Spec) */
   .casino-bead-counters-strip {
     background: #ffffff;
     border-radius: 8px;
-    padding: 7px 12px;
+    padding: 6px 12px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
     border: 1.5px solid #cbd5e1;
   }
@@ -1101,7 +1194,7 @@
   .counters-scroll {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
     overflow-x: auto;
     padding-bottom: 2px;
   }
@@ -1110,21 +1203,21 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    min-width: 36px;
+    gap: 2px;
+    min-width: 34px;
   }
 
   .bead-circle-badge {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 900;
     color: #ffffff;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25), inset 0 2px 2px rgba(255, 255, 255, 0.6);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), inset 0 2px 2px rgba(255, 255, 255, 0.6);
     position: relative;
     user-select: none;
   }
@@ -1168,7 +1261,7 @@
   }
 
   .counter-digit {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 900;
     color: #0f172a;
     line-height: 1;
@@ -1180,13 +1273,13 @@
     align-items: center;
     gap: 8px;
     background: #f1f5f9;
-    padding: 5px 12px;
+    padding: 4px 10px;
     border-radius: 999px;
     border: 1px solid #e2e8f0;
   }
 
   .pct-tag {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 800;
   }
   .pct-tag.b { color: #dc2626; }
@@ -1199,6 +1292,7 @@
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     align-items: stretch;
+    flex: 1;
   }
 
   @media (max-width: 960px) {
@@ -1215,17 +1309,17 @@
     background: #0f172a;
     border: 1px solid #1e293b;
     border-radius: 10px;
-    padding: 10px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .roadmap-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 800;
     color: #94a3b8;
     gap: 8px;
@@ -1236,7 +1330,7 @@
     align-items: center;
     gap: 6px;
     color: #f1f5f9;
-    font-size: 12px;
+    font-size: 11.5px;
   }
 
   .rm-hint {
@@ -1247,7 +1341,7 @@
   .rm-legend {
     display: flex;
     gap: 8px;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
   }
   .lg-b { color: #f87171; }
@@ -1260,6 +1354,9 @@
     border: 1px solid #1e293b;
     border-radius: 6px;
     padding: 4px;
+    flex: 1;
+    display: flex;
+    align-items: center;
   }
 
   /* BEAD TABLE */
@@ -1269,8 +1366,8 @@
   }
 
   .bead-cell {
-    width: 26px;
-    height: 26px;
+    width: 25px;
+    height: 25px;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1295,15 +1392,15 @@
   }
 
   .bead-circle {
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
     border-radius: 50%;
     margin: auto;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 900;
     color: #ffffff;
     user-select: none;
@@ -1336,14 +1433,14 @@
   }
 
   .bead-empty, .bigroad-empty {
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
   }
 
   /* BIG ROAD TABLE */
   .bigroad-cell {
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1359,8 +1456,8 @@
   }
 
   .bigroad-ring {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
     border-radius: 50%;
     margin: auto;
     border: 2px solid transparent;
@@ -1381,7 +1478,7 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 16px;
+    width: 15px;
     height: 2px;
     background: #22c55e;
     transform: translate(-50%, -50%) rotate(45deg);
@@ -1408,10 +1505,10 @@
     background: #0f172a;
     border: 2px solid #f59e0b;
     border-radius: 10px;
-    padding: 10px 14px;
+    padding: 8px 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
     animation: slideDown 0.2s ease;
   }
@@ -1441,15 +1538,15 @@
   .edit-badge {
     background: #f59e0b;
     color: #0f172a;
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 900;
-    padding: 3px 10px;
-    border-radius: 6px;
+    padding: 2px 8px;
+    border-radius: 5px;
     letter-spacing: 0.5px;
   }
 
   .edit-hint {
-    font-size: 11px;
+    font-size: 10.5px;
     color: #94a3b8;
   }
 
@@ -1462,8 +1559,8 @@
   .btn-tool-nav, .btn-tool-del, .btn-tool-done {
     border: none;
     border-radius: 5px;
-    padding: 5px 10px;
-    font-size: 11.5px;
+    padding: 4px 10px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -1515,7 +1612,7 @@
   }
 
   .edit-group-label {
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 800;
     color: #eab308;
     margin-right: 2px;
@@ -1524,8 +1621,8 @@
   .edit-choice-btn {
     border: none;
     border-radius: 5px;
-    padding: 5px 12px;
-    font-size: 11.5px;
+    padding: 4px 10px;
+    font-size: 11px;
     font-weight: 800;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -1548,8 +1645,8 @@
     color: #cbd5e1;
     border: 1px solid #334155;
     border-radius: 999px;
-    padding: 4px 10px;
-    font-size: 11px;
+    padding: 3px 9px;
+    font-size: 10.5px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -1562,22 +1659,23 @@
     box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
   }
 
-  /* CROUPIER ARCADE KEYPAD (Exact Reference Alignment) */
+  /* CROUPIER ARCADE KEYPAD (AL PIE DE PÁGINA) */
   .croupier-keypad-panel {
     background: #ffffff;
     border-radius: 12px;
-    padding: 14px 18px;
+    padding: 12px 16px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
     display: flex;
     justify-content: center;
+    margin-top: auto;
   }
 
   .keypad-grid-4col {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 24px;
-    max-width: 660px;
+    gap: 20px;
+    max-width: 620px;
     width: 100%;
   }
 
@@ -1591,18 +1689,18 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   /* MODIFIER PILLS ROW */
   .keypad-pill {
     width: 100%;
-    max-width: 120px;
-    height: 40px;
+    max-width: 110px;
+    height: 38px;
     border-radius: 999px;
     background: #ffffff;
     font-family: inherit;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 800;
     cursor: pointer;
     display: inline-flex;
@@ -1625,7 +1723,7 @@
     background: radial-gradient(circle at 50% 30%, #1e40af, #0000cc);
     color: #ffffff;
     border-color: #0000aa;
-    box-shadow: 0 0 14px rgba(0, 0, 255, 0.5);
+    box-shadow: 0 0 12px rgba(0, 0, 255, 0.5);
   }
 
   .keypad-pill.pill-bpair {
@@ -1636,7 +1734,7 @@
     background: radial-gradient(circle at 50% 30%, #ef4444, #990000);
     color: #ffffff;
     border-color: #880000;
-    box-shadow: 0 0 14px rgba(220, 38, 38, 0.5);
+    box-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
   }
 
   .keypad-pill.pill-special {
@@ -1647,7 +1745,7 @@
     background: radial-gradient(circle at 50% 30%, #64748b, #334155);
     color: #ffffff;
     border-color: #1e293b;
-    box-shadow: 0 0 14px rgba(100, 116, 139, 0.5);
+    box-shadow: 0 0 12px rgba(100, 116, 139, 0.5);
   }
 
   .keypad-pill.pill-win {
@@ -1658,13 +1756,13 @@
     background: radial-gradient(circle at 50% 30%, #a855f7, #6b21a8);
     color: #ffffff;
     border-color: #581c87;
-    box-shadow: 0 0 14px rgba(124, 58, 237, 0.5);
+    box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
   }
 
   /* 3D CIRCULAR CASINO BUTTONS */
   .keypad-btn-circle {
-    width: 82px;
-    height: 82px;
+    width: 78px;
+    height: 78px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -1673,16 +1771,16 @@
     cursor: pointer;
     border: none;
     background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
-    padding: 4px;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    padding: 3.5px;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
   }
 
   @media (max-width: 600px) {
     .keypad-btn-circle {
-      width: 66px;
-      height: 66px;
+      width: 62px;
+      height: 62px;
     }
   }
 
@@ -1692,7 +1790,7 @@
 
   .keypad-btn-circle:active {
     transform: translateY(3px) scale(0.96);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
   }
 
   .keypad-btn-circle:disabled {
@@ -1712,16 +1810,16 @@
   }
 
   .btn-letter {
-    font-size: 36px;
+    font-size: 34px;
     font-weight: 900;
     color: #ffffff;
-    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
     line-height: 1;
   }
 
   @media (max-width: 600px) {
     .btn-letter {
-      font-size: 28px;
+      font-size: 26px;
     }
   }
 
@@ -1745,7 +1843,7 @@
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
   .btn-undo .btn-letter {
-    font-size: 32px;
+    font-size: 30px;
   }
 
   /* CORNER BADGES ON P, B, T */
@@ -1753,8 +1851,8 @@
     position: absolute;
     top: 0px;
     left: 0px;
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #ff4d4d, #b91c1c);
     border: 2px solid #ffffff;
@@ -1767,8 +1865,8 @@
     position: absolute;
     bottom: 0px;
     right: 0px;
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8);
     border: 2px solid #ffffff;
@@ -1784,7 +1882,7 @@
   }
 
   .btn-caption {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 800;
     letter-spacing: 0.5px;
     user-select: none;
@@ -1793,75 +1891,4 @@
   .banca-caption { color: #dc2626; }
   .tie-caption { color: #16a34a; }
   .undo-caption { color: #854d0e; }
-
-  /* FOOTER ACTION BAR (AL PIE) */
-  .sb-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    margin-top: auto;
-    flex-wrap: wrap;
-  }
-
-  .sb-footer-left, .sb-footer-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .sb-btn {
-    border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.15s ease;
-  }
-
-  .sb-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .sb-btn-warning {
-    background: #854d0e;
-    color: #fef08a;
-  }
-  .sb-btn-warning:hover:not(:disabled) {
-    background: #a16207;
-  }
-
-  .sb-btn-danger {
-    background: #991b1b;
-    color: #fee2e2;
-  }
-  .sb-btn-danger:hover:not(:disabled) {
-    background: #b91c1c;
-  }
-
-  .sb-btn-secondary {
-    background: #1e293b;
-    color: #38bdf8;
-    border: 1px solid #0284c7;
-  }
-  .sb-btn-secondary:hover {
-    background: #0284c7;
-    color: #ffffff;
-  }
-
-  .sb-btn-close {
-    background: #334155;
-    color: #ffffff;
-  }
-  .sb-btn-close:hover {
-    background: #475569;
-  }
 </style>
