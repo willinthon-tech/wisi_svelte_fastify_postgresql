@@ -25,26 +25,53 @@ export async function initWebsockets(fastify) {
         const tableKey = data.storageKey || `${data.salaId}_${data.mesaId}`;
         if (tableKey) {
           baccaratTableStates.set(tableKey, {
+            sessionId: data.sessionId,
             salaId: data.salaId,
             mesaId: data.mesaId,
             storageKey: data.storageKey,
             shoeNumber: data.shoeNumber,
             history: data.history,
             tieMode: data.tieMode,
+            isLatestSession: data.isLatestSession,
             updatedAt: Date.now()
           });
+        }
+
+        // Persistir en PostgreSQL de forma asíncrona si hay sesión y mesa válidas
+        if (data.sessionId && data.mesaId) {
+          import('./db.js').then(({ sql, isPgConnected }) => {
+            if (isPgConnected && sql) {
+              const sNum = Math.max(1, Number(data.shoeNumber) || 1);
+              const tMode = data.tieMode === 'circle' ? 'circle' : 'slash';
+              const hands = Array.isArray(data.history) ? data.history : [];
+              sql`
+                INSERT INTO record_libro_score_baccarat_mesa (
+                  session_id, mesa_id, shoe_number, tie_mode, history, updated_at
+                ) VALUES (
+                  ${Number(data.sessionId)}, ${String(data.mesaId)}, ${sNum}, ${tMode}, ${JSON.stringify(hands)}::jsonb, NOW()
+                )
+                ON CONFLICT (session_id, mesa_id) DO UPDATE SET
+                  shoe_number = EXCLUDED.shoe_number,
+                  tie_mode = EXCLUDED.tie_mode,
+                  history = EXCLUDED.history,
+                  updated_at = NOW();
+              `.catch(() => {});
+            }
+          }).catch(() => {});
         }
 
         // Reenviar la actualización a todos los demás clientes conectados
         const payloadStr = JSON.stringify({
           type: 'BACCARAT_TABLE_UPDATE',
           data: {
+            sessionId: data.sessionId,
             salaId: data.salaId,
             mesaId: data.mesaId,
             storageKey: data.storageKey,
             shoeNumber: data.shoeNumber,
             history: data.history,
             tieMode: data.tieMode,
+            isLatestSession: data.isLatestSession,
             senderClientId: data.senderClientId,
             updatedAt: Date.now()
           }

@@ -3,6 +3,7 @@
   import { selectedSalaStore, userSalasStore } from '../controllers/auth.store.js';
   import { masterSalasStore, masterMesasStore } from '../controllers/master.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
+  import { toBackendUrl } from '../config/api.config.js';
   import {
     sendWebSocketMessage,
     latestBaccaratUpdateStore,
@@ -21,6 +22,43 @@
 
   // Tie visualization mode: 'slash' (rayitas diagonales) | 'circle' (círculos verdes en columna)
   let tieMode = 'slash';
+
+  // Sesiones de Libro Score Baccarat (Persistencia Global y por Mesa)
+  let sessions = []; // [{ id, uuid, sala_id, fecha, estado, created_at, updated_at }]
+  let selectedSessionIndex = -1;
+  let isSessionsLoading = false;
+  let activeSessionId = null;
+
+  function getTodayStr() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function getNextDateStr(dateStr) {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return getTodayStr();
+    }
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d + 1));
+    const ny = date.getUTCFullYear();
+    const nm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const nd = String(date.getUTCDate()).padStart(2, '0');
+    return `${ny}-${nm}-${nd}`;
+  }
+
+  $: currentSession = (sessions && selectedSessionIndex >= 0 && selectedSessionIndex < sessions.length)
+    ? sessions[selectedSessionIndex]
+    : null;
+
+  $: latestSessionInList = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+  // Solo la última sesión permite jugar y editar (sesiones anteriores son histórico de solo lectura)
+  $: isLatestSession = sessions.length > 0 && selectedSessionIndex === (sessions.length - 1);
+
+  $: nextSessionDateStr = latestSessionInList ? getNextDateStr(latestSessionInList.fecha) : getTodayStr();
 
   // Selected Sala Context
   $: currentSalaId = salaId || (() => {
@@ -73,12 +111,22 @@
 
   $: currentSalaName = currentSalaObj?.nombre || currentSalaObj?.name || '';
   $: currentMesaName = currentMesaObj?.nombre || (currentMesaId ? `Mesa #${currentMesaId}` : 'Mesa 01');
-  $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
+  $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}${currentSession?.id ? `_sess_${currentSession.id}` : ''}`;
 
   let lastLoadedStorageKey = null;
   $: if (storageKey && storageKey !== lastLoadedStorageKey) {
     lastLoadedStorageKey = storageKey;
-    loadSavedShoe();
+    if (currentSession?.id && currentMesaId) {
+      loadMesaDataForSession(currentSession.id, currentMesaId);
+    } else {
+      loadSavedShoe();
+    }
+  }
+
+  let lastFetchedSalaId = null;
+  $: if (currentSalaId && currentSalaId !== lastFetchedSalaId) {
+    lastFetchedSalaId = currentSalaId;
+    fetchSessions(currentSalaId);
   }
 
   // Audio Context for tactile casino keypad sounds
@@ -156,6 +204,7 @@
   let activeScore = null; // null | 0..9
 
   function selectScore(num) {
+    if (!isLatestSession) return;
     playSound('click');
     if (activeScore === num) {
       activeScore = null;
@@ -223,12 +272,174 @@
     }
   }
 
+  async function fetchSessions(sId, selectLatest = true) {
+    if (!sId) return;
+    try {
+      isSessionsLoading = true;
+      const res = await fetch(toBackendUrl(`/api/baccarat/sessions?sala_id=${encodeURIComponent(sId)}`));
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          sessions = json.data;
+          if (selectLatest || selectedSessionIndex === -1 || selectedSessionIndex >= sessions.length) {
+            selectedSessionIndex = sessions.length - 1;
+          }
+          const activeSess = sessions[selectedSessionIndex];
+          if (activeSess) {
+            activeSessionId = activeSess.id;
+            await loadMesaDataForSession(activeSess.id, currentMesaId);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching baccarat sessions:', e);
+    } finally {
+      isSessionsLoading = false;
+    }
+  }
+
+  async function loadMesaDataForSession(sId, mId) {
+    if (!sId || !mId) return;
+    try {
+      const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?session_id=${encodeURIComponent(sId)}&mesa_id=${encodeURIComponent(mId)}`));
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          shoeNumber = Math.max(1, Number(json.data.shoe_number) || 1);
+          tieMode = json.data.tie_mode === 'circle' ? 'circle' : 'slash';
+          history = Array.isArray(json.data.history) ? json.data.history : [];
+          try {
+            localStorage.setItem(storageKey, JSON.stringify({
+              shoeNumber,
+              history,
+              tieMode,
+              sessionId: sId
+            }));
+          } catch (e) {}
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading mesa data from backend:', e);
+    }
+    loadSavedShoe();
+  }
+
+  async function goToPrevSession() {
+    if (selectedSessionIndex > 0 && !isSessionsLoading) {
+      selectedSessionIndex--;
+      const sess = sessions[selectedSessionIndex];
+      if (sess) {
+        activeSessionId = sess.id;
+        showFeedback(`Cargando sesión ${sess.fecha}...`);
+        await loadMesaDataForSession(sess.id, currentMesaId);
+      }
+    }
+  }
+
+  async function goToNextSession() {
+    if (selectedSessionIndex < sessions.length - 1 && !isSessionsLoading) {
+      selectedSessionIndex++;
+      const sess = sessions[selectedSessionIndex];
+      if (sess) {
+        activeSessionId = sess.id;
+        showFeedback(`Cargando sesión ${sess.fecha}...`);
+        await loadMesaDataForSession(sess.id, currentMesaId);
+      }
+    }
+  }
+
+  async function handleCreateNewSession() {
+    if (!currentSalaId || isSessionsLoading) return;
+    try {
+      isSessionsLoading = true;
+      const res = await fetch(toBackendUrl('/api/baccarat/sessions'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sala_id: currentSalaId })
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const newSession = json.data;
+        sessions = [...sessions, newSession];
+        selectedSessionIndex = sessions.length - 1;
+        activeSessionId = newSession.id;
+
+        // Reiniciar mesa para la nueva sesión
+        shoeNumber = 1;
+        history = [];
+        activeScore = null;
+        activePPair = false;
+        activeBPair = false;
+        activeSpecial = false;
+        activeWin = false;
+
+        saveShoe();
+        closeOptionsMenu();
+        showFeedback(`¡Nueva sesión creada! (${newSession.fecha})`);
+      } else {
+        alert(json.message || 'Error al crear nueva sesión');
+      }
+    } catch (e) {
+      console.error('Error al crear nueva sesión:', e);
+      alert('Error de conexión al crear nueva sesión');
+    } finally {
+      isSessionsLoading = false;
+    }
+  }
+
+  function handleConfirmDeleteLastSession() {
+    if (sessions.length <= 1) {
+      alert('No se puede borrar la sesión porque debe haber al menos una registrada.');
+      return;
+    }
+    const target = sessions[sessions.length - 1];
+    openConfirmModal({
+      title: 'Borrar Última Sesión',
+      question: `¿Está seguro de que desea borrar la última sesión (${target.fecha})? Esta acción no se puede deshacer y se seleccionará la sesión anterior.`,
+      isDanger: true,
+      confirmText: 'Borrar Sesión',
+      onConfirm: async () => {
+        try {
+          isSessionsLoading = true;
+          const res = await fetch(toBackendUrl('/api/baccarat/sessions/delete-last'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sala_id: currentSalaId })
+          });
+          const json = await res.json();
+          if (json.success) {
+            sessions = sessions.slice(0, -1);
+            selectedSessionIndex = sessions.length - 1;
+            const activeSess = sessions[selectedSessionIndex];
+            if (activeSess) {
+              activeSessionId = activeSess.id;
+              await loadMesaDataForSession(activeSess.id, currentMesaId);
+              showFeedback(`Última sesión eliminada. Sesión activa: ${activeSess.fecha}`);
+            }
+            closeOptionsMenu();
+          } else {
+            alert(json.message || 'Error al borrar última sesión');
+          }
+        } catch (e) {
+          console.error('Error al borrar última sesión:', e);
+          alert('Error de conexión al borrar última sesión');
+        } finally {
+          isSessionsLoading = false;
+        }
+      }
+    });
+  }
+
   function broadcastTableUpdate() {
+    if (!isLatestSession) return; // Solo sincronizar en tiempo real si es la última sesión activa
     sendWebSocketMessage({
       type: 'BACCARAT_TABLE_UPDATE',
       storageKey,
       salaId: currentSalaId,
       mesaId: currentMesaId,
+      sessionId: currentSession?.id,
+      isLatestSession: true,
       shoeNumber,
       history,
       tieMode,
@@ -238,20 +449,42 @@
   }
 
   function saveShoe(skipBroadcast = false) {
+    if (!isLatestSession) {
+      // Las sesiones anteriores son histórico de solo lectura
+      return;
+    }
+
     try {
       localStorage.setItem(storageKey, JSON.stringify({
         shoeNumber,
         history,
-        tieMode
+        tieMode,
+        sessionId: currentSession?.id
       }));
     } catch (e) {}
 
     if (!skipBroadcast) {
       broadcastTableUpdate();
     }
+
+    // Persistir en base de datos PostgreSQL
+    if (currentSession?.id && currentMesaId) {
+      fetch(toBackendUrl('/api/baccarat/mesa-data'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: currentSession.id,
+          mesa_id: currentMesaId,
+          shoe_number: shoeNumber,
+          tie_mode: tieMode,
+          history
+        })
+      }).catch(e => console.warn('Advertencia guardando mesa en base de datos:', e));
+    }
   }
 
   function toggleTieMode() {
+    if (!isLatestSession) return;
     playSound('click');
     tieMode = tieMode === 'slash' ? 'circle' : 'slash';
     saveShoe();
@@ -259,7 +492,7 @@
   }
 
   // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa
-  $: if ($isWsConnectedStore && storageKey) {
+  $: if ($isWsConnectedStore && storageKey && isLatestSession) {
     sendWebSocketMessage({
       type: 'BACCARAT_GET_STATE',
       storageKey,
@@ -284,7 +517,11 @@
     if (!currentSalaId) {
       currentSalaId = $selectedSalaStore;
     }
-    loadSavedShoe();
+    if (currentSalaId) {
+      fetchSessions(currentSalaId);
+    } else {
+      loadSavedShoe();
+    }
 
     // Asegurar conexión WebSocket activa
     initWebSocketConnection();
@@ -293,6 +530,9 @@
     unsubscribeWs = latestBaccaratUpdateStore.subscribe((update) => {
       if (!update) return;
       if (update.senderClientId === myClientId) return;
+
+      // OJO: si el usuario está viendo una sesión histórica anterior, no sobreescribir ni mutar
+      if (!isLatestSession) return;
 
       const isCurrentTable = (update.storageKey && update.storageKey === storageKey) ||
         (String(update.salaId) === String(currentSalaId) && String(update.mesaId) === String(currentMesaId));
@@ -346,26 +586,31 @@
 
   // Keypad Actions
   function togglePPair() {
+    if (!isLatestSession) return;
     playSound('click');
     activePPair = !activePPair;
   }
 
   function toggleBPair() {
+    if (!isLatestSession) return;
     playSound('click');
     activeBPair = !activeBPair;
   }
 
   function toggleSpecial() {
+    if (!isLatestSession) return;
     playSound('click');
     activeSpecial = !activeSpecial;
   }
 
   function toggleWin() {
+    if (!isLatestSession) return;
     playSound('click');
     activeWin = !activeWin;
   }
 
   function recordOutcome(winner) {
+    if (!isLatestSession) return;
     playSound('win');
     const newRecord = {
       id: history.length + 1,
@@ -395,7 +640,7 @@
   }
 
   function undoLast() {
-    if (history.length === 0) return;
+    if (!isLatestSession || history.length === 0) return;
     playSound('undo');
     const lastId = history[history.length - 1]?.id || history.length;
     history = history.slice(0, -1);
@@ -418,6 +663,17 @@
     onConfirm: () => {}
   };
 
+  function openConfirmModal(opts = {}) {
+    confirmModalState = {
+      isOpen: true,
+      title: opts.title || 'Confirmar Acción',
+      question: opts.question || '¿Está seguro?',
+      isDanger: opts.isDanger !== false,
+      confirmText: opts.confirmText || 'Confirmar',
+      onConfirm: opts.onConfirm || (() => {})
+    };
+  }
+
   function openOptionsMenu() {
     isOptionsModalOpen = true;
   }
@@ -428,6 +684,7 @@
 
   // Acción directa 1: Borrar Zapato #{shoeNumber}
   function handleDirectClearShoe() {
+    if (!isLatestSession) return;
     playSound('undo');
     history = [];
     selectedHandIndex = null;
@@ -438,6 +695,7 @@
 
   // Acción directa 2: Crear Nuevo Zapato #{shoeNumber + 1}
   function handleDirectNewShoe() {
+    if (!isLatestSession) return;
     playSound('click');
     history = [];
     selectedHandIndex = null;
@@ -449,17 +707,18 @@
 
   // Acción con confirmación 3: Borrar Todos los Registros de la Mesa
   function openResetAllModal() {
-    confirmModalState = {
-      isOpen: true,
+    if (!isLatestSession) return;
+    openConfirmModal({
       title: 'Borrar Todos los Registros',
       question: '¿Deseas borrar todos los registros de la mesa?',
       isDanger: true,
       confirmText: 'Borrar',
       onConfirm: handleConfirmResetAll
-    };
+    });
   }
 
   function handleConfirmResetAll() {
+    if (!isLatestSession) return;
     playSound('undo');
     history = [];
     selectedHandIndex = null;
@@ -476,6 +735,7 @@
 
   // Hand Selection & In-Place Editing
   function selectHand(idx) {
+    if (!isLatestSession) return;
     playSound('click');
     if (idx === null || idx === undefined || idx < 0 || idx >= history.length) {
       selectedHandIndex = null;
@@ -489,7 +749,7 @@
   }
 
   function updateSelectedWinner(newWinner) {
-    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
     playSound('win');
     history[selectedHandIndex].winner = newWinner;
     history = [...history];
@@ -498,7 +758,7 @@
   }
 
   function toggleSelectedMod(field) {
-    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
     playSound('click');
     history[selectedHandIndex][field] = !history[selectedHandIndex][field];
     history = [...history];
@@ -506,7 +766,7 @@
   }
 
   function updateSelectedScore(num) {
-    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
     playSound('click');
     history[selectedHandIndex].score = history[selectedHandIndex].score === num ? null : num;
     history = [...history];
@@ -514,7 +774,7 @@
   }
 
   function deleteSelectedHand() {
-    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (!isLatestSession || selectedHandIndex === null || !history[selectedHandIndex]) return;
     const deletedId = history[selectedHandIndex].id;
     playSound('undo');
     history = history.filter((_, idx) => idx !== selectedHandIndex).map((h, i) => ({ ...h, id: i + 1 }));
@@ -1088,6 +1348,41 @@
       </div>
     </div>
 
+    <!-- NAVEGADOR DE SESIONES EN EL MEDIO SUPERIOR -->
+    <div class="sb-header-center">
+      {#if currentSession}
+        <div class="sb-session-navigator">
+          <button
+            type="button"
+            class="session-nav-arrow btn-prev-session"
+            disabled={selectedSessionIndex <= 0 || isSessionsLoading}
+            on:click={goToPrevSession}
+            title="Ver sesión anterior (Histórico)"
+          >
+            ←
+          </button>
+
+          <div class="session-label-wrapper">
+            {#if isLatestSession}
+              <span class="session-label-text">Sesión Actual ( {currentSession.fecha} )</span>
+            {:else}
+              <span class="session-label-text">Sesión ( {currentSession.fecha} )</span>
+            {/if}
+          </div>
+
+          <button
+            type="button"
+            class="session-nav-arrow btn-next-session"
+            disabled={selectedSessionIndex >= sessions.length - 1 || isSessionsLoading}
+            on:click={goToNextSession}
+            title="Ver sesión siguiente"
+          >
+            →
+          </button>
+        </div>
+      {/if}
+    </div>
+
     <!-- BOTONES SUPERIORES SIN ICONOS -->
     <div class="sb-header-right">
       <button
@@ -1465,6 +1760,7 @@
               type="button"
               class="btn-num-key btn-num-{num}"
               class:active={activeScore === num}
+              disabled={!isLatestSession}
               on:click={() => selectScore(num)}
               title="Seleccionar valor {num} para la mano"
             >
@@ -1476,6 +1772,7 @@
             type="button"
             class="btn-num-key btn-num-zero"
             class:active={activeScore === 0}
+            disabled={!isLatestSession}
             on:click={() => selectScore(0)}
             title="Seleccionar valor 0 para la mano"
           >
@@ -1491,6 +1788,7 @@
         type="button"
         class="keypad-pill pill-ppair"
         class:active={activePPair}
+        disabled={!isLatestSession}
         on:click={togglePPair}
         title="Activar Pareja de Punto (P.Pair)"
       >
@@ -1501,6 +1799,7 @@
         type="button"
         class="keypad-pill pill-bpair"
         class:active={activeBPair}
+        disabled={!isLatestSession}
         on:click={toggleBPair}
         title="Activar Pareja de Banca (B.Pair)"
       >
@@ -1511,6 +1810,7 @@
         type="button"
         class="keypad-pill pill-win"
         class:active={activeWin}
+        disabled={!isLatestSession}
         on:click={toggleWin}
         title="Activar Victoria Natural (8 ó 9)"
       >
@@ -1526,8 +1826,9 @@
           <button
             type="button"
             class="keypad-btn-circle btn-punto"
+            disabled={!isLatestSession}
             on:click={() => recordOutcome('PUNTO')}
-            title="Registrar victoria de PUNTO (Player)"
+            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Registrar victoria de PUNTO (Player)'}
           >
             {#if activeBPair}
               <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -1547,8 +1848,9 @@
           <button
             type="button"
             class="keypad-btn-circle btn-banca"
+            disabled={!isLatestSession}
             on:click={() => recordOutcome('BANCA')}
-            title="Registrar victoria de BANCA (Banker)"
+            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Registrar victoria de BANCA (Banker)'}
           >
             {#if activeBPair}
               <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -1568,8 +1870,9 @@
           <button
             type="button"
             class="keypad-btn-circle btn-tie"
+            disabled={!isLatestSession}
             on:click={() => recordOutcome('EMPATE')}
-            title="Registrar EMPATE (Tie)"
+            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Registrar EMPATE (Tie)'}
           >
             {#if activeBPair}
               <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -1593,8 +1896,8 @@
           type="button"
           class="keypad-btn-circle btn-undo"
           on:click={undoLast}
-          disabled={history.length === 0}
-          title="Retroceder / Deshacer última mano registrada"
+          disabled={!isLatestSession || history.length === 0}
+          title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Retroceder / Deshacer última mano registrada'}
         >
           <div class="btn-inner-gloss">
             <svg class="btn-arrow-icon" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
@@ -1610,6 +1913,7 @@
         <button
           type="button"
           class="keypad-btn-tie-toggle"
+          disabled={!isLatestSession}
           on:click={toggleTieMode}
           title={tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
         >
@@ -1648,6 +1952,7 @@
               type="button"
               class="btn-opt col-6 btn-opt-clear"
               on:click={handleDirectClearShoe}
+              disabled={!isLatestSession || history.length === 0}
             >
               Borrar Registros del Zapato #{shoeNumber}
             </button>
@@ -1657,6 +1962,7 @@
               type="button"
               class="btn-opt col-6 btn-opt-new"
               on:click={handleDirectNewShoe}
+              disabled={!isLatestSession}
             >
               Crear Nuevo Zapato #{shoeNumber + 1}
             </button>
@@ -1666,8 +1972,31 @@
               type="button"
               class="btn-opt col-12 btn-opt-reset"
               on:click={openResetAllModal}
+              disabled={!isLatestSession || (history.length === 0 && shoeNumber === 1)}
             >
               Borrar Todos los Registros de la Mesa
+            </button>
+
+            <!-- COL-6: Crear Nueva Sesión (Fecha + 1 día) -->
+            <button
+              type="button"
+              class="btn-opt col-6 btn-opt-new-session"
+              on:click={handleCreateNewSession}
+              disabled={isSessionsLoading}
+              title="Crear nueva sesión sumando 1 día ({nextSessionDateStr})"
+            >
+              Crear Nueva Sesión ({nextSessionDateStr})
+            </button>
+
+            <!-- COL-6: Borrar Última Sesión -->
+            <button
+              type="button"
+              class="btn-opt col-6 btn-opt-delete-session"
+              on:click={handleConfirmDeleteLastSession}
+              disabled={sessions.length <= 1 || isSessionsLoading}
+              title={sessions.length <= 1 ? 'Debe existir al menos una sesión' : 'Borrar última sesión registrada y seleccionar la anterior'}
+            >
+              Borrar Última Sesión
             </button>
           </div>
         </div>
@@ -1854,6 +2183,66 @@
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-3px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* HEADER CENTER / NAVEGADOR DE SESIONES */
+  .sb-header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-width: 220px;
+  }
+
+  .sb-session-navigator {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    padding: 3px 14px;
+    border-radius: 999px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .session-nav-arrow {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 18px;
+    font-weight: 900;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, color 0.15s ease;
+  }
+
+  .session-nav-arrow:hover:not(:disabled) {
+    color: #f87171;
+    transform: scale(1.3);
+  }
+
+  .session-nav-arrow:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+  }
+
+  .session-label-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+
+  .session-label-text {
+    color: #ef4444;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
   }
 
   /* BOTONES SUPERIORES SIN ICONOS */
@@ -3369,6 +3758,50 @@
     background: #dc2626;
     color: #ffffff;
     box-shadow: 0 4px 10px rgba(220, 38, 38, 0.35);
+  }
+
+  .btn-opt-new-session {
+    background: #0369a1;
+    color: #e0f2fe;
+    border: 1.5px solid #0284c7;
+  }
+  .btn-opt-new-session:hover:not(:disabled) {
+    background: #0284c7;
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35);
+  }
+
+  .btn-opt-delete-session {
+    background: #881337;
+    color: #ffe4e6;
+    border: 1.5px solid #be123c;
+  }
+  .btn-opt-delete-session:hover:not(:disabled) {
+    background: #be123c;
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(190, 18, 60, 0.35);
+  }
+
+  .btn-opt:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    box-shadow: none !important;
+  }
+
+  .keypad-btn-circle:disabled {
+    opacity: 0.35;
+    filter: grayscale(85%);
+    cursor: not-allowed;
+    pointer-events: none;
+    box-shadow: none;
+  }
+
+  .btn-num-key:disabled,
+  .keypad-pill:disabled,
+  .keypad-btn-tie-toggle:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
   }
 
   .modal-backdrop-confirm {

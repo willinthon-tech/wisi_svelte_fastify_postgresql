@@ -101,6 +101,42 @@ export async function initDb() {
       console.warn('Advertencia migrando cecom_ia_eventos:', eMig.message);
     }
 
+    // Garantizar tablas para Sesiones y Mesas del Scoreboard de Baccarat
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS record_libro_score_baccarat (
+          id SERIAL PRIMARY KEY,
+          uuid UUID DEFAULT gen_random_uuid(),
+          sala_id VARCHAR(100) NOT NULL,
+          fecha VARCHAR(50) NOT NULL,
+          estado VARCHAR(20) DEFAULT 'abierta',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_sala ON record_libro_score_baccarat (sala_id);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_fecha ON record_libro_score_baccarat (fecha);`;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS record_libro_score_baccarat_mesa (
+          id SERIAL PRIMARY KEY,
+          uuid UUID DEFAULT gen_random_uuid(),
+          session_id INTEGER NOT NULL REFERENCES record_libro_score_baccarat(id) ON DELETE CASCADE,
+          mesa_id VARCHAR(100) NOT NULL,
+          shoe_number INTEGER DEFAULT 1,
+          tie_mode VARCHAR(20) DEFAULT 'slash',
+          history JSONB NOT NULL DEFAULT '[]'::jsonb,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW(),
+          CONSTRAINT uq_baccarat_mesa_session UNIQUE (session_id, mesa_id)
+        );
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_session ON record_libro_score_baccarat_mesa (session_id);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_mesa ON record_libro_score_baccarat_mesa (mesa_id);`;
+    } catch (eBacc) {
+      console.warn('Advertencia migrando tablas baccarat:', eBacc.message);
+    }
+
     isPgConnected = true;
     console.log(`\x1b[32m[CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {
