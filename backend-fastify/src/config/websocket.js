@@ -39,13 +39,16 @@ export async function initWebsockets(fastify) {
           updatedAt: Date.now()
         };
 
-        // Almacenar en caché en memoria indexado por múltiples llaves para lookup rápido
+        // Almacenar en caché en memoria indexado estrictamente por storageKey y sesión+mesa
+        const sIdStr = String(data.sessionId || data.sessionUuid || '').trim();
+        const mIdStr = String(data.mesaId || data.mesaUuid || '').trim();
         if (data.storageKey) baccaratTableStates.set(data.storageKey, stateData);
-        if (data.salaId && data.mesaId) baccaratTableStates.set(`${data.salaId}_${data.mesaId}`, stateData);
-        if (data.salaUuid && data.mesaUuid) baccaratTableStates.set(`${data.salaUuid}_${data.mesaUuid}`, stateData);
+        if (sIdStr && mIdStr) {
+          baccaratTableStates.set(`${sIdStr}_${mIdStr}`, stateData);
+        }
 
         // Persistir en PostgreSQL de forma asíncrona si hay sesión y mesa válidas
-        if (data.sessionId && data.mesaId) {
+        if (sIdStr && mIdStr) {
           import('./db.js').then(({ sql, isPgConnected }) => {
             if (isPgConnected && sql) {
               const sNum = Math.max(1, Number(data.shoeNumber) || 1);
@@ -54,8 +57,6 @@ export async function initWebsockets(fastify) {
               const shoesList = Array.isArray(data.shoes) && data.shoes.length > 0 ? data.shoes : [
                 { shoe_number: sNum, tie_mode: tMode, history: hands }
               ];
-              const sIdStr = String(data.sessionId || data.sessionUuid || '').trim();
-              const mIdStr = String(data.mesaId).trim();
               sql`
                 INSERT INTO record_libro_score_baccarat_mesa (
                   uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, shoes, updated_at
@@ -96,13 +97,14 @@ export async function initWebsockets(fastify) {
       }
 
       if (data.type === 'BACCARAT_GET_STATE') {
-        const tableKey = data.storageKey || `${data.salaId}_${data.mesaId}`;
-        let state = baccaratTableStates.get(tableKey);
-        if (!state && data.salaId && data.mesaId) {
-          state = baccaratTableStates.get(`${data.salaId}_${data.mesaId}`);
+        const sIdStr = String(data.sessionId || data.sessionUuid || '').trim();
+        const mIdStr = String(data.mesaId || data.mesaUuid || '').trim();
+        let state = null;
+        if (data.storageKey) {
+          state = baccaratTableStates.get(data.storageKey);
         }
-        if (!state && data.salaUuid && data.mesaUuid) {
-          state = baccaratTableStates.get(`${data.salaUuid}_${data.mesaUuid}`);
+        if (!state && sIdStr && mIdStr) {
+          state = baccaratTableStates.get(`${sIdStr}_${mIdStr}`);
         }
         if (state) {
           socket.send(JSON.stringify({

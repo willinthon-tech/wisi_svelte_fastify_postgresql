@@ -396,7 +396,6 @@
         const activeSess = sessions[selectedSessionIndex];
         if (activeSess) {
           activeSessionId = activeSess.uuid || activeSess.id;
-          await loadMesaDataForSession(activeSessionId, currentMesaId, true);
         }
         return true;
       }
@@ -408,7 +407,7 @@
 
   async function fetchSessions(sId, selectLatest = true) {
     if (!sId) return;
-    // 1. Cargar de inmediato desde la base de datos interna local (Local-First)
+    // 1. Cargar sesiones desde la base de datos interna local (Local-First)
     await loadSessionsFromLocalDb(sId);
 
     try {
@@ -439,37 +438,13 @@
     }
   }
 
-  async function loadMesaDataForSession(sId, mId, onlyLocal = false) {
+  async function loadMesaDataForSession(sId, mId) {
     if (!sId || !mId) return;
     const strSessId = String(sId);
     const strMesaId = String(mId);
 
     try {
-      // 1. Cargar primero de la base de datos interna local (IndexedDB)
-      let hadLocalData = false;
-      const localRows = await getLocalItems(
-        'record_libro_score_baccarat_mesa',
-        item => (String(item.session_uuid || item.session_id) === strSessId || String(item.session_id) === strSessId) &&
-                (String(item.mesa_id || item.mesa_uuid) === strMesaId)
-      );
-      if (Array.isArray(localRows) && localRows.length > 0) {
-        const localObj = localRows[0];
-        const localShoes = safeJsonParse(localObj.shoes, []);
-        const localHistory = safeJsonParse(localObj.history, []);
-        const localHasHands = (Array.isArray(localShoes) && localShoes.some(s => {
-          const h = Array.isArray(s.history) ? s.history : safeJsonParse(s.history, []);
-          return h.length > 0;
-        })) || (Array.isArray(localHistory) && localHistory.length > 0);
-
-        if (localHasHands) {
-          applyMesaData(localObj);
-          hadLocalData = true;
-        }
-      }
-
-      if (onlyLocal) return;
-
-      // 2. Sincronizar con el servidor backend
+      // Sincronizar directamente con el backend PostgreSQL (Fuente autoritativa de la verdad)
       const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?session_id=${encodeURIComponent(strSessId)}&mesa_id=${encodeURIComponent(strMesaId)}`));
       if (res.ok) {
         const json = await res.json();
@@ -483,9 +458,9 @@
 
           if (hasHandsInBackend) {
             applyMesaData(json.data);
-          } else if (!hadLocalData) {
-            // Ni backend ni IndexedDB tienen manos: esta sesión inicia completamente limpia
-            applyMesaData(json.data);
+          } else {
+            // Sesión completamente limpia sin manos en la base de datos (dejado vacío [])
+            applyMesaData(null);
           }
 
           // Purgar cualquier residuo de clave legacy un-namespaced
@@ -493,18 +468,6 @@
           try {
             localStorage.removeItem(baseLegacyKey);
           } catch (e) {}
-
-          // Guardar en base de datos interna local (IndexedDB)
-          await upsertLocalItem('record_libro_score_baccarat_mesa', {
-            uuid: json.data.uuid || `bacc_mesa_${strSessId}_${strMesaId}`,
-            session_uuid: strSessId,
-            session_id: strSessId,
-            mesa_id: strMesaId,
-            shoe_number: shoeNumber,
-            tie_mode: tieMode,
-            history,
-            shoes
-          });
 
           try {
             localStorage.setItem(storageKey, JSON.stringify({
@@ -518,8 +481,11 @@
           return;
         }
       }
+      // Si no hay datos en backend, inicializar limpio []
+      applyMesaData(null);
     } catch (e) {
       console.warn('Error loading mesa data from backend:', e);
+      applyMesaData(null);
     }
   }
 
@@ -604,8 +570,6 @@
           history: [],
           shoes: [{ shoe_number: 1, history: [], tie_mode: 'slash' }]
         };
-
-        await upsertLocalItem('record_libro_score_baccarat_mesa', newMesaRecord);
 
         // Clave de almacenamiento aislada para la nueva sesión
         const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}_sess_${newSessUuid}`;
@@ -743,23 +707,11 @@
       }));
     } catch (e) {}
 
-    // 1. Guardar de inmediato en la base de datos interna local (Local-First IndexedDB)
-    upsertLocalItem('record_libro_score_baccarat_mesa', {
-      uuid: mesaRecordUuid,
-      session_uuid: sessUuid,
-      session_id: sessUuid,
-      mesa_id: currentMesaId,
-      shoe_number: shoeNumber,
-      tie_mode: tieMode,
-      history,
-      shoes
-    }).catch(err => console.warn('Advertencia guardando en base de datos interna local:', err));
-
     if (!skipBroadcast) {
       broadcastTableUpdate();
     }
 
-    // 2. Persistir en la base de datos PostgreSQL en el backend
+    // Persistir directamente en la base de datos PostgreSQL en el backend
     fetch(toBackendUrl('/api/baccarat/mesa-data'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -787,11 +739,13 @@
     }
   }
 
-  // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa
-  $: if ($isWsConnectedStore && isLatestSession && currentSalaId && currentMesaId) {
+  // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa (estrictamente por sesión)
+  $: if ($isWsConnectedStore && isLatestSession && currentSalaId && currentMesaId && sessionUuid) {
     sendWebSocketMessage({
       type: 'BACCARAT_GET_STATE',
       storageKey,
+      sessionId: sessionUuid,
+      sessionUuid: sessionUuid,
       salaId: currentSalaId,
       salaUuid: currentSalaObj?.uuid || currentSalaId,
       mesaId: currentMesaId,
@@ -800,19 +754,22 @@
   }
 
   onMount(() => {
-    // Limpiar claves legacy huérfanas de localStorage para evitar que contaminen nuevas sesiones
+    // 1. Limpiar claves legacy y cachés locales antiguos para evitar que contaminen nuevas sesiones
     try {
       if (typeof localStorage !== 'undefined') {
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k && k.startsWith('wisi_baccarat_shoe_v3_') && !k.includes('_sess_')) {
+          if (k && k.startsWith('wisi_baccarat_shoe_v3_')) {
             keysToRemove.push(k);
           }
         }
         keysToRemove.forEach(k => localStorage.removeItem(k));
       }
     } catch (e) {}
+
+    // 2. Purgar de la base de datos interna local (IndexedDB) la tabla de mesas para erradicar cualquier registro fantasma
+    replaceLocalItems('record_libro_score_baccarat_mesa', []).catch(() => {});
 
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
@@ -856,25 +813,16 @@
         (update.mesaId && currentMesaObj?.uuid && String(update.mesaId) === String(currentMesaObj.uuid)) ||
         (update.mesaUuid && String(update.mesaUuid) === String(currentMesaId));
 
-      const isCurrentTable = (update.storageKey && update.storageKey === storageKey) || (matchesSala && matchesMesa);
+      // CRITICAL: Verificar que la actualización pertenece EXACTAMENTE a la sesión actual abierta
+      const currentSessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
+      const updateSessUuid = update.sessionUuid || update.sessionId;
+      const matchesSession = Boolean(currentSessUuid && updateSessUuid && String(currentSessUuid) === String(updateSessUuid));
+
+      const isCurrentTable = (update.storageKey && update.storageKey === storageKey) || (matchesSala && matchesMesa && matchesSession);
 
       if (isCurrentTable) {
         // Si el usuario está viendo una sesión histórica o zapato histórico pasado, no sobreescribir la vista actual
         if (!isCurrentShoeActive && !isSessionsLoading) {
-          // Persistir en segundo plano en IndexedDB para que al volver a la actual esté al día
-          const sessUuid = currentSession?.uuid || update.sessionUuid || update.sessionId;
-          if (sessUuid && currentMesaId && Array.isArray(update.shoes)) {
-            upsertLocalItem('record_libro_score_baccarat_mesa', {
-              uuid: `bacc_mesa_${sessUuid}_${currentMesaId}`,
-              session_uuid: sessUuid,
-              session_id: sessUuid,
-              mesa_id: currentMesaId,
-              shoe_number: update.shoeNumber || shoeNumber,
-              tie_mode: update.tieMode || tieMode,
-              history: update.history || history,
-              shoes: update.shoes
-            }).catch(() => {});
-          }
           return;
         }
 
@@ -901,7 +849,7 @@
           }
         }
         if (changed) {
-          // Persistir localmente de inmediato en esta máquina
+          // Guardar en caché para esta sesión específica
           const sessUuid = currentSession?.uuid || update.sessionUuid || update.sessionId;
           if (sessUuid && currentMesaId) {
             try {
@@ -913,17 +861,6 @@
                 sessionId: sessUuid
               }));
             } catch (e) {}
-
-            upsertLocalItem('record_libro_score_baccarat_mesa', {
-              uuid: `bacc_mesa_${sessUuid}_${currentMesaId}`,
-              session_uuid: sessUuid,
-              session_id: sessUuid,
-              mesa_id: currentMesaId,
-              shoe_number: shoeNumber,
-              tie_mode: tieMode,
-              history,
-              shoes
-            }).catch(() => {});
           }
         }
       }
