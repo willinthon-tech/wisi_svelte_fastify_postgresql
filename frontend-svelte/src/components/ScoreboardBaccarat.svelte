@@ -135,11 +135,21 @@
   let shoeNumber = 1;
   let history = []; // [{ id, winner: 'PUNTO'|'BANCA'|'EMPATE', bPair, pPair, natural, special, time }]
 
-  // Keypad Staging Modifiers
+  // Keypad Staging Modifiers & Score
   let activePPair = false;
   let activeBPair = false;
   let activeSpecial = false;
   let activeWin = false;
+  let activeScore = null; // null | 0..9
+
+  function selectScore(num) {
+    playSound('click');
+    if (activeScore === num) {
+      activeScore = null;
+    } else {
+      activeScore = num;
+    }
+  }
 
   // Selected Hand for Editing
   let selectedHandIndex = null;
@@ -247,6 +257,7 @@
     const newRecord = {
       id: history.length + 1,
       winner,
+      score: activeScore,
       bPair: activeBPair,
       pPair: activePPair,
       natural: activeWin,
@@ -258,14 +269,16 @@
     saveShoe();
 
     const wLabel = winner === 'BANCA' ? '🔴 BANCA' : winner === 'PUNTO' ? '🔵 PUNTO' : '🟢 EMPATE';
+    const scoreLabel = activeScore !== null ? ` (${activeScore})` : '';
     const pairLabel = (activeBPair && activePPair) ? ' [Ambos Pares]' : activeBPair ? ' [B.Pair]' : activePPair ? ' [P.Pair]' : '';
-    showFeedback(`Mano #${newRecord.id}: ${wLabel}${pairLabel} anotada`);
+    showFeedback(`Mano #${newRecord.id}: ${wLabel}${scoreLabel}${pairLabel} anotada`);
 
-    // Reset modifier pills for the next hand
+    // Reset modifier pills and score for the next hand
     activePPair = false;
     activeBPair = false;
     activeSpecial = false;
     activeWin = false;
+    activeScore = null;
   }
 
   function undoLast() {
@@ -375,6 +388,14 @@
     if (selectedHandIndex === null || !history[selectedHandIndex]) return;
     playSound('click');
     history[selectedHandIndex][field] = !history[selectedHandIndex][field];
+    history = [...history];
+    saveShoe();
+  }
+
+  function updateSelectedScore(num) {
+    if (selectedHandIndex === null || !history[selectedHandIndex]) return;
+    playSound('click');
+    history[selectedHandIndex].score = history[selectedHandIndex].score === num ? null : num;
     history = [...history];
     saveShoe();
   }
@@ -627,7 +648,7 @@
                     class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
                     class:has-hand={!!cell}
                     on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
                   >
                     {#if cell}
                       <div
@@ -635,8 +656,8 @@
                         class:has-b-pair={cell.bPair}
                         class:has-p-pair={cell.pPair}
                       >
-                        <span class="bead-letter">
-                          {cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T'}
+                        <span class="bead-letter" class:has-score={cell.score !== undefined && cell.score !== null}>
+                          {cell.score !== undefined && cell.score !== null ? cell.score : (cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T')}
                         </span>
                         {#if cell.bPair}
                           <span class="dot-b-pair" title="Par Banca"></span>
@@ -774,6 +795,20 @@
           </button>
         </div>
 
+        <div class="edit-group">
+          <span class="edit-group-label">VALOR:</span>
+          {#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
+            <button
+              type="button"
+              class="edit-choice-btn edit-score-btn"
+              class:chosen={selectedHand.score === num}
+              on:click={() => updateSelectedScore(num)}
+            >
+              {num}
+            </button>
+          {/each}
+        </div>
+
         <div class="edit-quick-actions">
           <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Borrar esta mano del zapato">
             Borrar
@@ -846,7 +881,36 @@
       </div>
     </div>
 
-    <!-- SECCIÓN 2 (COL-2): MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) -->
+    <!-- GRUPO 2: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
+    <div class="footer-score-col">
+      <div class="score-keypad-box">
+        <div class="score-keypad-grid">
+          {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
+            <button
+              type="button"
+              class="btn-num-key"
+              class:active={activeScore === num}
+              on:click={() => selectScore(num)}
+              title="Seleccionar valor {num} para la mano"
+            >
+              {num}
+            </button>
+          {/each}
+          <!-- 0 centrado en la fila inferior -->
+          <button
+            type="button"
+            class="btn-num-key btn-num-zero"
+            class:active={activeScore === 0}
+            on:click={() => selectScore(0)}
+            title="Seleccionar valor 0 para la mano"
+          >
+            0
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRUPO 3: MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) -->
     <div class="footer-modifiers-col">
       <button
         type="button"
@@ -1460,6 +1524,16 @@
   .bead-circle.punto { background: #2563eb; }
   .bead-circle.empate { background: #16a34a; }
 
+  .bead-letter {
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+  }
+  .bead-letter.has-score {
+    font-size: 11px;
+    font-weight: 900;
+  }
+
   .dot-b-pair {
     position: absolute;
     top: 1px;
@@ -1683,6 +1757,22 @@
     outline: 2px solid #ffffff;
   }
 
+  .edit-choice-btn.edit-score-btn {
+    min-width: 20px;
+    padding: 3px 6px;
+    font-size: 11px;
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+  }
+  .edit-choice-btn.edit-score-btn.chosen {
+    background: radial-gradient(circle at 45% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%);
+    color: #000000;
+    border-color: #a16207;
+    font-weight: 900;
+    outline: 1.5px solid #ffffff;
+  }
+
   .edit-pill-toggle {
     background: #1e293b;
     border-radius: 999px;
@@ -1730,28 +1820,28 @@
     box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
   }
 
-  /* FOOTER OPERATIONAL PANEL: 4 GRUPOS (COL-4 STATS, COL-2 MODIFIERS, COL-4 RESULTADOS, COL-2 RETROCEDER) */
+  /* FOOTER OPERATIONAL PANEL: 5 GRUPOS (STATS, VALOR/KEYPAD, MODIFIERS, OUTCOMES, RETROCEDER) */
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 12px;
-    padding: 12px 18px;
+    padding: 10px 16px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: 4fr 2fr 4fr 2fr;
-    gap: 16px;
+    grid-template-columns: minmax(240px, 3.4fr) minmax(95px, 1.8fr) minmax(110px, 1.8fr) minmax(250px, 3.6fr) minmax(90px, 1.4fr);
+    gap: 14px;
     align-items: stretch;
     margin-top: auto;
   }
 
-  /* GRUPO 1: COL-4 STATS */
+  /* GRUPO 1: STATS */
   .footer-stats-col {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 8px;
-    padding-right: 14px;
+    padding-right: 12px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -1777,14 +1867,85 @@
     font-weight: 800;
   }
 
-  /* GRUPO 2: COL-2 MODIFIERS (APILADOS VERTICALMENTE) + SEPARADOR SEÑALADO EN AZUL */
+  /* GRUPO 2: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) */
+  .footer-score-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding-right: 12px;
+    border-right: 2px solid #cbd5e1;
+    min-width: 0;
+  }
+
+  .score-keypad-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 105px;
+  }
+
+  .score-keypad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+    width: 100%;
+  }
+
+  .btn-num-key {
+    height: 23px;
+    border-radius: 5px;
+    border: 1.5px solid #cbd5e1;
+    background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+    color: #1e293b;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    transition: all 0.12s ease;
+    user-select: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  .btn-num-key:hover:not(.active) {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+    transform: translateY(-1px);
+  }
+
+  .btn-num-key:active {
+    transform: scale(0.95);
+  }
+
+  .btn-num-zero {
+    grid-column: 2;
+  }
+
+  .btn-num-key.active {
+    background: radial-gradient(circle at 45% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%);
+    color: #000000;
+    border-color: #a16207;
+    box-shadow: 0 0 10px rgba(234, 179, 8, 0.75), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+    font-weight: 900;
+    transform: scale(1.05);
+    z-index: 2;
+  }
+
+  /* GRUPO 3: MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) + SEPARADOR SEÑALADO EN AZUL */
   .footer-modifiers-col {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 6px;
-    padding-right: 14px;
+    padding-right: 12px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -1799,7 +1960,7 @@
     margin: 0 auto;
   }
 
-  /* GRUPO 3: COL-4 RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) */
+  /* GRUPO 4: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) */
   .footer-outcomes-col {
     display: flex;
     justify-content: center;
@@ -1816,7 +1977,7 @@
     max-width: 360px;
   }
 
-  /* GRUPO 4: COL-2 ACCIÓN RETROCEDER */
+  /* GRUPO 5: ACCIÓN RETROCEDER */
   .footer-undo-col {
     display: flex;
     justify-content: center;
@@ -1832,12 +1993,12 @@
     gap: 6px;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 1024px) {
     .scoreboard-footer-panel {
       grid-template-columns: 1fr;
       gap: 14px;
     }
-    .footer-stats-col, .footer-modifiers-col, .footer-outcomes-col {
+    .footer-stats-col, .footer-score-col, .footer-modifiers-col, .footer-outcomes-col {
       border-right: none;
       border-bottom: 2px solid #cbd5e1;
       padding-right: 0;
