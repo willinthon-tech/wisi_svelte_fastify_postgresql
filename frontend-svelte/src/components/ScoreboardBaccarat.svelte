@@ -167,13 +167,18 @@
     }, 3000);
   }
 
-  // Grid dimensions for Master Layout (Big Road col-12 on top, Derived Roads + Bead Plate on bottom col-6 & col-6)
+  // Dynamic widths for 100% edge-to-edge coverage of grids
+  let bigRoadWidth = 1400;
+  let beadWidth = 700;
+  let derivedWidth = 700;
+
   const BEAD_ROWS = 6;
-  const BEAD_COLS = 22;
   const BIG_ROWS = 6;
-  const BIG_COLS = 38;
   const DERIVED_ROWS = 6;
-  const DERIVED_COLS = 32;
+
+  $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / 24) + 1, 52);
+  $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / 26) + 1, 26);
+  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / 13) + 1, 52);
 
   function loadSavedShoe() {
     try {
@@ -432,7 +437,7 @@
 
   // 1. BEAD PLATE (PLATO DE CUENTAS) - Matriz 6 Filas x N Columnas secuencial
   $: beadGrid = (() => {
-    const totalCols = Math.max(BEAD_COLS, Math.ceil(history.length / BEAD_ROWS) + 2);
+    const totalCols = Math.max(beadColsNeeded, Math.ceil(history.length / BEAD_ROWS) + 2);
     const grid = Array.from({ length: BEAD_ROWS }, () => Array(totalCols).fill(null));
     history.forEach((h, idx) => {
       const col = Math.floor(idx / BEAD_ROWS);
@@ -446,7 +451,7 @@
 
   // 2. BIG ROAD (GRAN CAMINO) - Columnas de rachas con soporte para turnos (Dragon Tails) y números de puntaje
   $: bigRoadGrid = (() => {
-    let totalCols = Math.max(BIG_COLS, 38);
+    let totalCols = Math.max(bigRoadColsNeeded, 52);
     let grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
 
     let col = 0;
@@ -638,9 +643,9 @@
     return { marks, grid, totalCols, redCount, blueCount };
   }
 
-  $: bigEyeGrid = buildDerivedRoad(bigRoadLogicalColumns, 1, DERIVED_COLS);
-  $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, DERIVED_COLS);
-  $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, DERIVED_COLS);
+  $: bigEyeGrid = buildDerivedRoad(bigRoadLogicalColumns, 1, derivedColsNeeded);
+  $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, derivedColsNeeded);
+  $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, derivedColsNeeded);
 
   // Auto-scroll elementos a la derecha para ver los últimos registros
   let bigRoadScrollEl;
@@ -791,19 +796,7 @@
   <!-- OFFICIAL CASINO ROADMAPS MASTER SECTION -->
   <section class="sb-roadmaps-master">
     <!-- SUPERIOR: BIG ROAD (GRAN CAMINO) - ANCHO COMPLETO / COL-12 -->
-    <div class="roadmap-card col-full bigroad-card">
-      <div class="roadmap-header">
-        <div class="rm-title">
-          <span>═</span> BIG ROAD (GRAN CAMINO)
-        </div>
-        <div class="rm-legend">
-          <span class="lg-p">🔵 PUNTO</span>
-          <span class="lg-b">🔴 BANCA</span>
-          <span class="lg-t">🟢 EMPATE</span>
-          <span class="rm-hint">Rachas y Tendencias</span>
-        </div>
-      </div>
-
+    <div class="roadmap-card col-full bigroad-card" bind:clientWidth={bigRoadWidth}>
       <div class="grid-scrollable" bind:this={bigRoadScrollEl}>
         <table class="bigroad-table">
           <tbody>
@@ -852,121 +845,83 @@
 
     <!-- INFERIOR: 2 COLUMNAS (COL-6 IZQUIERDA Y COL-6 DERECHA) -->
     <div class="sb-roadmaps-bottom-split">
-      <!-- COL-6 IZQUIERDA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (COL-4 CADA UNO EN ALTURA) -->
-      <div class="derived-roads-column">
+      <!-- COL-6 IZQUIERDA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (1/3 CADA UNO) -->
+      <div class="roadmap-card col-half derived-roads-column" bind:clientWidth={derivedWidth}>
         <!-- 1. BIG EYE BOY (GRAN OJO) -->
-        <div class="derived-strip-card">
-          <div class="derived-strip-header">
-            <span class="derived-title">🔴/🔵 BIG EYE BOY (GRAN OJO)</span>
-            <div class="derived-counts">
-              <span class="cnt-red">🔴 {bigEyeGrid.redCount}</span>
-              <span class="cnt-blue">🔵 {bigEyeGrid.blueCount}</span>
-            </div>
-          </div>
-          <div class="derived-grid-scroll" bind:this={bigEyeScrollEl}>
-            <table class="derived-table">
-              <tbody>
-                {#each bigEyeGrid.grid as row}
-                  <tr>
-                    {#each row as cell}
-                      <td
-                        class="derived-cell"
-                        class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                        on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                        title={cell ? `Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                      >
-                        {#if cell}
-                          <span class="derived-ring {cell.color}"></span>
-                        {/if}
-                      </td>
-                    {/each}
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+        <div class="derived-band" bind:this={bigEyeScrollEl}>
+          <table class="derived-table">
+            <tbody>
+              {#each bigEyeGrid.grid as row}
+                <tr>
+                  {#each row as cell}
+                    <td
+                      class="derived-cell"
+                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                      on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                      title={cell ? `Gran Ojo - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                    >
+                      {#if cell}
+                        <span class="derived-ring {cell.color}"></span>
+                      {/if}
+                    </td>
+                  {/each}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
 
         <!-- 2. SMALL ROAD (CAMINO PEQUEÑO) -->
-        <div class="derived-strip-card">
-          <div class="derived-strip-header">
-            <span class="derived-title">🔴/🔵 SMALL ROAD (CAMINO PEQUEÑO)</span>
-            <div class="derived-counts">
-              <span class="cnt-red">🔴 {smallRoadGrid.redCount}</span>
-              <span class="cnt-blue">🔵 {smallRoadGrid.blueCount}</span>
-            </div>
-          </div>
-          <div class="derived-grid-scroll" bind:this={smallRoadScrollEl}>
-            <table class="derived-table">
-              <tbody>
-                {#each smallRoadGrid.grid as row}
-                  <tr>
-                    {#each row as cell}
-                      <td
-                        class="derived-cell"
-                        class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                        on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                        title={cell ? `Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                      >
-                        {#if cell}
-                          <span class="derived-dot {cell.color}"></span>
-                        {/if}
-                      </td>
-                    {/each}
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+        <div class="derived-band" bind:this={smallRoadScrollEl}>
+          <table class="derived-table">
+            <tbody>
+              {#each smallRoadGrid.grid as row}
+                <tr>
+                  {#each row as cell}
+                    <td
+                      class="derived-cell"
+                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                      on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                      title={cell ? `Camino Pequeño - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                    >
+                      {#if cell}
+                        <span class="derived-dot {cell.color}"></span>
+                      {/if}
+                    </td>
+                  {/each}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
 
         <!-- 3. COCKROACH ROAD (CUCARACHA) -->
-        <div class="derived-strip-card">
-          <div class="derived-strip-header">
-            <span class="derived-title">🔴/🔵 COCKROACH ROAD (CUCARACHA)</span>
-            <div class="derived-counts">
-              <span class="cnt-red">🔴 {cockroachGrid.redCount}</span>
-              <span class="cnt-blue">🔵 {cockroachGrid.blueCount}</span>
-            </div>
-          </div>
-          <div class="derived-grid-scroll" bind:this={cockroachScrollEl}>
-            <table class="derived-table">
-              <tbody>
-                {#each cockroachGrid.grid as row}
-                  <tr>
-                    {#each row as cell}
-                      <td
-                        class="derived-cell"
-                        class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                        on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                        title={cell ? `Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                      >
-                        {#if cell}
-                          <span class="derived-slash {cell.color}"></span>
-                        {/if}
-                      </td>
-                    {/each}
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+        <div class="derived-band" bind:this={cockroachScrollEl}>
+          <table class="derived-table">
+            <tbody>
+              {#each cockroachGrid.grid as row}
+                <tr>
+                  {#each row as cell}
+                    <td
+                      class="derived-cell"
+                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                      on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                      title={cell ? `Cucaracha - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                    >
+                      {#if cell}
+                        <span class="derived-slash {cell.color}"></span>
+                      {/if}
+                    </td>
+                  {/each}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
       </div>
 
       <!-- COL-6 DERECHA: BEAD PLATE (PLATO DE CUENTAS) -->
-      <div class="roadmap-card col-half bead-card">
-        <div class="roadmap-header">
-          <div class="rm-title">
-            <span>●</span> BEAD PLATE (PLATO DE CUENTAS)
-          </div>
-          <div class="rm-legend">
-            <span class="lg-b">🔴 B</span>
-            <span class="lg-p">🔵 P</span>
-            <span class="lg-t">🟢 T</span>
-          </div>
-        </div>
-
+      <div class="roadmap-card col-half bead-card" bind:clientWidth={beadWidth}>
         <div class="grid-scrollable" bind:this={beadScrollEl}>
           <table class="bead-table">
             <tbody>
@@ -1401,22 +1356,26 @@
   .scoreboard-container {
     background: #090d16;
     color: #f8fafc;
-    min-height: 100vh;
-    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    width: 100vw;
     box-sizing: border-box;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px 18px;
+    gap: 8px;
+    padding: 8px 12px;
+    overflow: hidden;
   }
 
   .fullscreen-mode {
     position: fixed;
     inset: 0;
     z-index: 9999999;
-    padding: 14px 20px;
-    overflow-y: auto;
+    padding: 8px 12px;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
   }
 
   /* HEADER */
@@ -1683,7 +1642,7 @@
   .sb-roadmaps-master {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     flex: 1;
     min-height: 0;
   }
@@ -1698,152 +1657,108 @@
   }
 
   .roadmap-card {
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 10px;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background: #020617;
+    border: 1.5px solid #1e293b;
+    border-radius: 8px;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
   .bigroad-card {
-    flex: 0 0 auto;
-  }
-
-  .bead-card {
-    display: flex;
-    flex-direction: column;
+    flex: 1;
     min-height: 0;
-    height: 100%;
-  }
-
-  .roadmap-header {
+    width: 100%;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 11px;
-    font-weight: 800;
-    color: #94a3b8;
-    gap: 8px;
-  }
-
-  .rm-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #f1f5f9;
-    font-size: 11.5px;
-    letter-spacing: 0.5px;
-  }
-
-  .rm-hint {
-    font-size: 10px;
-    color: #64748b;
-  }
-
-  .rm-legend {
-    display: flex;
-    gap: 8px;
-    font-size: 10.5px;
-    font-weight: 700;
-  }
-  .lg-b { color: #f87171; }
-  .lg-p { color: #60a5fa; }
-  .lg-t { color: #4ade80; }
-
-  .grid-scrollable {
-    overflow-x: auto;
-    background: #020617;
-    border: 1px solid #1e293b;
-    border-radius: 6px;
-    padding: 4px;
-    display: flex;
-    align-items: center;
   }
 
   /* SPLIT BOTTOM SECTION: COL-6 DERIVED ROADS & COL-6 BEAD PLATE */
   .sb-roadmaps-bottom-split {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 8px;
     flex: 1;
     min-height: 0;
     align-items: stretch;
   }
 
-  @media (max-width: 960px) {
-    .sb-roadmaps-bottom-split {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* GRUPO IZQUIERDO: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (COL-4 CADA UNO EN ALTURA) */
+  /* GRUPO IZQUIERDO: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (1/3 CADA UNO) */
   .derived-roads-column {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 10px;
-    padding: 8px 10px;
-    justify-content: space-between;
-    min-width: 0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  }
-
-  .derived-strip-card {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+    height: 100%;
+    min-height: 0;
     background: #020617;
-    border: 1px solid #1e293b;
-    border-radius: 6px;
-    padding: 5px 8px;
-    min-width: 0;
+    border: 1.5px solid #1e293b;
+    border-radius: 8px;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .derived-band {
     flex: 1;
-  }
-
-  .derived-strip-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 9.5px;
-    font-weight: 800;
-  }
-
-  .derived-title {
-    color: #cbd5e1;
-    letter-spacing: 0.5px;
-  }
-
-  .derived-counts {
-    display: flex;
-    gap: 8px;
-    font-size: 9px;
-    font-weight: 800;
-  }
-  .cnt-red { color: #f87171; }
-  .cnt-blue { color: #60a5fa; }
-
-  .derived-grid-scroll {
+    min-height: 0;
+    width: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
     display: flex;
-    align-items: center;
-    padding: 2px 0;
+    align-items: stretch;
+    border-bottom: 2px solid #334155;
+    background: #020617;
+  }
+  .derived-band:last-child {
+    border-bottom: none;
   }
 
-  .derived-table {
-    border-collapse: collapse;
+  .bead-card {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    background: #020617;
+    border: 1.5px solid #1e293b;
+    border-radius: 8px;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .grid-scrollable {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: #020617;
+    display: flex;
+    align-items: stretch;
+    padding: 0;
     margin: 0;
   }
 
+  /* TABLES: FILL FULL HEIGHT & WIDTH, NO GAPS */
+  .bigroad-table, .bead-table, .derived-table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 100%;
+    height: 100%;
+    margin: 0;
+    table-layout: fixed;
+  }
+
+  .bigroad-table tr, .bead-table tr, .derived-table tr {
+    height: 16.6666%;
+  }
+
+  /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-cell {
     width: 13px;
-    height: 13px;
     min-width: 13px;
-    max-width: 13px;
+    height: 16.6666%;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1858,7 +1773,6 @@
     background: #ffc107 !important;
   }
 
-  /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-ring {
     display: block;
     width: 8px;
@@ -1895,15 +1809,10 @@
   .derived-slash.blue { background: #3b82f6; }
 
   /* BEAD TABLE */
-  .bead-table, .bigroad-table {
-    border-collapse: collapse;
-    margin: 0;
-  }
-
   .bead-cell {
-    width: 25px;
-    height: 25px;
-    min-width: 25px;
+    width: 26px;
+    min-width: 26px;
+    height: 16.6666%;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -1985,9 +1894,9 @@
 
   /* BIG ROAD TABLE */
   .bigroad-cell {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
+    width: 24px;
+    min-width: 24px;
+    height: 16.6666%;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
@@ -2067,6 +1976,35 @@
     justify-content: center;
     z-index: 3;
     border: 1px solid #ffffff;
+  }
+
+  /* RESPONSIVE: CUANDO NO ES 16:9 O EN PANTALLAS PEQUEÑAS / MÓVILES */
+  @media (max-width: 960px), (max-aspect-ratio: 4/3) {
+    .scoreboard-container, .fullscreen-mode {
+      height: auto;
+      max-height: none;
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+    .sb-roadmaps-master {
+      flex: none;
+    }
+    .bigroad-card {
+      height: 190px;
+      flex: none;
+    }
+    .sb-roadmaps-bottom-split {
+      grid-template-columns: 1fr;
+      flex: none;
+    }
+    .derived-roads-column {
+      height: 250px;
+      flex: none;
+    }
+    .bead-card {
+      height: 190px;
+      flex: none;
+    }
   }
 
   /* INLINE EDIT TOOLBAR (En una sola línea) */
