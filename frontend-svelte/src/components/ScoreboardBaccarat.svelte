@@ -1022,7 +1022,9 @@
           title="Retroceder / Deshacer última mano registrada"
         >
           <div class="btn-inner-gloss">
-            <span class="btn-letter">←</span>
+            <svg class="btn-arrow-icon" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 12H5m0 0l6-6M5 12l6 6" />
+            </svg>
           </div>
         </button>
         <span class="btn-caption undo-caption">RETROCEDER</span>
@@ -1840,8 +1842,8 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 8px;
-    padding-right: 14px;
+    gap: 10px;
+    padding: 6px 14px 6px 4px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -1858,13 +1860,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 14px;
     background: #f1f5f9;
-    padding: 4px 14px;
+    padding: 6px 16px;
     border-radius: 999px;
     border: 1px solid #e2e8f0;
     font-size: 11.5px;
     font-weight: 800;
+    margin-top: 6px;
+    margin-bottom: 2px;
   }
 
   /* GRUPO 2: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) */
@@ -2187,8 +2191,20 @@
   .btn-undo .btn-inner-gloss {
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
-  .btn-undo .btn-letter {
-    font-size: 30px;
+  .btn-arrow-icon {
+    width: 32px;
+    height: 32px;
+    display: block;
+    color: #ffffff;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65));
+    transition: transform 0.1s ease;
+  }
+
+  @media (max-width: 600px) {
+    .btn-arrow-icon {
+      width: 25px;
+      height: 25px;
+    }
   }
 
   /* CORNER BADGES ON P, B, T */
