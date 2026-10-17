@@ -592,6 +592,12 @@
         <div class="counter-digit">{countEmpate}</div>
       </div>
 
+      <!-- Natural N (Victorias con 8 ó 9 de mano) -->
+      <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
+        <div class="bead-circle-badge bead-orange">N</div>
+        <div class="counter-digit">{countNatural}</div>
+      </div>
+
       <!-- Banker Pair (White circle with top-left red dot) -->
       <div class="counter-item" title="Parejas de Banca (B.Pair)">
         <div class="bead-circle-badge bead-white">
