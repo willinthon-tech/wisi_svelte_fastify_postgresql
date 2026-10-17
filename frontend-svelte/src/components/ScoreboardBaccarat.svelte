@@ -599,63 +599,7 @@
     </div>
   </header>
 
-  <!-- TOP STATS BEAD COUNTERS STRIP (Exact Casino Spec) -->
-  <section class="casino-bead-counters-strip">
-    <div class="counters-scroll">
-      <!-- Total manos # -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-gray">#</div>
-        <div class="counter-digit">{totalHands}</div>
-      </div>
 
-      <!-- Banker B -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-red">B</div>
-        <div class="counter-digit">{countBanca}</div>
-      </div>
-
-      <!-- Player P -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-blue">P</div>
-        <div class="counter-digit">{countPunto}</div>
-      </div>
-
-      <!-- Tie T -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-green">T</div>
-        <div class="counter-digit">{countEmpate}</div>
-      </div>
-
-      <!-- Natural N (Victorias con 8 ó 9 de mano) -->
-      <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
-        <div class="bead-circle-badge bead-orange">N</div>
-        <div class="counter-digit">{countNatural}</div>
-      </div>
-
-      <!-- Banker Pair (White circle with top-left red dot) -->
-      <div class="counter-item" title="Parejas de Banca (B.Pair)">
-        <div class="bead-circle-badge bead-white">
-          <span class="bead-dot dot-tl red-dot"></span>
-        </div>
-        <div class="counter-digit">{countBPair}</div>
-      </div>
-
-      <!-- Player Pair (White circle with bottom-right blue dot) -->
-      <div class="counter-item" title="Parejas de Punto (P.Pair)">
-        <div class="bead-circle-badge bead-white">
-          <span class="bead-dot dot-br blue-dot"></span>
-        </div>
-        <div class="counter-digit">{countPPair}</div>
-      </div>
-
-      <!-- Summary percentages -->
-      <div class="counter-pct-box">
-        <span class="pct-tag b">B: {pctBanca}%</span>
-        <span class="pct-tag p">P: {pctPunto}%</span>
-        <span class="pct-tag t">T: {pctEmpate}%</span>
-      </div>
-    </div>
-  </section>
 
   <!-- OFFICIAL CASINO ROADMAPS SECTION: COL-6 & COL-6 (SIDE BY SIDE) -->
   <section class="sb-roadmaps-grid-2col">
@@ -842,118 +786,179 @@
     </div>
   {/if}
 
-  <!-- CROUPIER ARCADE KEYPAD (AL PIE DE PÁGINA) -->
-  <footer class="croupier-keypad-panel">
-    <div class="keypad-grid-4col">
-      <!-- COLUMN 1: P.PAIR + P BUTTON -->
-      <div class="keypad-column">
-        <button
-          type="button"
-          class="keypad-pill pill-ppair"
-          class:active={activePPair}
-          on:click={togglePPair}
-          title="Activar Pareja de Punto (P.Pair)"
-        >
-          P.Pair
-        </button>
+  <!-- FOOTER OPERATIONAL PANEL: COL-3 INFO & STATS + COL-9 ARCADE KEYPAD -->
+  <footer class="scoreboard-footer-panel">
+    <!-- COL-3: STATS INFO (CONTADORES Y PORCENTAJES) -->
+    <div class="footer-stats-col">
+      <div class="footer-counters-row">
+        <!-- Total manos # -->
+        <div class="counter-item">
+          <div class="bead-circle-badge bead-gray">#</div>
+          <div class="counter-digit">{totalHands}</div>
+        </div>
 
-        <button
-          type="button"
-          class="keypad-btn-circle btn-punto"
-          on:click={() => recordOutcome('PUNTO')}
-          title="Registrar victoria de PUNTO (Player)"
-        >
-          {#if activeBPair}
-            <span class="badge-corner-tl" title="B.Pair activo"></span>
-          {/if}
-          {#if activePPair}
-            <span class="badge-corner-br" title="P.Pair activo"></span>
-          {/if}
-          <div class="btn-inner-gloss">
-            <span class="btn-letter">P</span>
+        <!-- Banker B -->
+        <div class="counter-item">
+          <div class="bead-circle-badge bead-red">B</div>
+          <div class="counter-digit">{countBanca}</div>
+        </div>
+
+        <!-- Player P -->
+        <div class="counter-item">
+          <div class="bead-circle-badge bead-blue">P</div>
+          <div class="counter-digit">{countPunto}</div>
+        </div>
+
+        <!-- Tie T -->
+        <div class="counter-item">
+          <div class="bead-circle-badge bead-green">T</div>
+          <div class="counter-digit">{countEmpate}</div>
+        </div>
+
+        <!-- Natural N -->
+        <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
+          <div class="bead-circle-badge bead-orange">N</div>
+          <div class="counter-digit">{countNatural}</div>
+        </div>
+
+        <!-- Banker Pair -->
+        <div class="counter-item" title="Parejas de Banca (B.Pair)">
+          <div class="bead-circle-badge bead-white">
+            <span class="bead-dot dot-tl red-dot"></span>
           </div>
-        </button>
-        <span class="btn-caption punto-caption">PUNTO</span>
+          <div class="counter-digit">{countBPair}</div>
+        </div>
+
+        <!-- Player Pair -->
+        <div class="counter-item" title="Parejas de Punto (P.Pair)">
+          <div class="bead-circle-badge bead-white">
+            <span class="bead-dot dot-br blue-dot"></span>
+          </div>
+          <div class="counter-digit">{countPPair}</div>
+        </div>
       </div>
 
-      <!-- COLUMN 2: B.PAIR + B BUTTON -->
-      <div class="keypad-column">
-        <button
-          type="button"
-          class="keypad-pill pill-bpair"
-          class:active={activeBPair}
-          on:click={toggleBPair}
-          title="Activar Pareja de Banca (B.Pair)"
-        >
-          B.Pair
-        </button>
-
-        <button
-          type="button"
-          class="keypad-btn-circle btn-banca"
-          on:click={() => recordOutcome('BANCA')}
-          title="Registrar victoria de BANCA (Banker)"
-        >
-          {#if activeBPair}
-            <span class="badge-corner-tl" title="B.Pair activo"></span>
-          {/if}
-          {#if activePPair}
-            <span class="badge-corner-br" title="P.Pair activo"></span>
-          {/if}
-          <div class="btn-inner-gloss">
-            <span class="btn-letter">B</span>
-          </div>
-        </button>
-        <span class="btn-caption banca-caption">BANCA</span>
+      <!-- Summary percentages -->
+      <div class="footer-counter-pct-box">
+        <span class="pct-tag b">B: {pctBanca}%</span>
+        <span class="pct-tag p">P: {pctPunto}%</span>
+        <span class="pct-tag t">T: {pctEmpate}%</span>
       </div>
+    </div>
 
-      <!-- COLUMN 3: T BUTTON -->
-      <div class="keypad-column">
-        <button
-          type="button"
-          class="keypad-pill pill-win"
-          class:active={activeWin}
-          on:click={toggleWin}
-          title="Activar Victoria Natural (8 ó 9)"
-        >
-          Natural
-        </button>
+    <!-- COL-9: CROUPIER ARCADE KEYPAD -->
+    <div class="footer-keypad-col">
+      <div class="keypad-grid-4col">
+        <!-- COLUMN 1: P.PAIR + P BUTTON -->
+        <div class="keypad-column">
+          <button
+            type="button"
+            class="keypad-pill pill-ppair"
+            class:active={activePPair}
+            on:click={togglePPair}
+            title="Activar Pareja de Punto (P.Pair)"
+          >
+            P.Pair
+          </button>
 
-        <button
-          type="button"
-          class="keypad-btn-circle btn-tie"
-          on:click={() => recordOutcome('EMPATE')}
-          title="Registrar EMPATE (Tie)"
-        >
-          {#if activeBPair}
-            <span class="badge-corner-tl" title="B.Pair activo"></span>
-          {/if}
-          {#if activePPair}
-            <span class="badge-corner-br" title="P.Pair activo"></span>
-          {/if}
-          <div class="btn-inner-gloss">
-            <span class="btn-letter">T</span>
-          </div>
-        </button>
-        <span class="btn-caption tie-caption">EMPATE</span>
-      </div>
+          <button
+            type="button"
+            class="keypad-btn-circle btn-punto"
+            on:click={() => recordOutcome('PUNTO')}
+            title="Registrar victoria de PUNTO (Player)"
+          >
+            {#if activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">P</span>
+            </div>
+          </button>
+          <span class="btn-caption punto-caption">PUNTO</span>
+        </div>
 
-      <!-- COLUMN 4: UNDO BUTTON -->
-      <div class="keypad-column">
-        <div class="keypad-pill-placeholder"></div>
+        <!-- COLUMN 2: B.PAIR + B BUTTON -->
+        <div class="keypad-column">
+          <button
+            type="button"
+            class="keypad-pill pill-bpair"
+            class:active={activeBPair}
+            on:click={toggleBPair}
+            title="Activar Pareja de Banca (B.Pair)"
+          >
+            B.Pair
+          </button>
 
-        <button
-          type="button"
-          class="keypad-btn-circle btn-undo"
-          on:click={undoLast}
-          disabled={history.length === 0}
-          title="Retroceder / Deshacer última mano registrada"
-        >
-          <div class="btn-inner-gloss">
-            <span class="btn-letter">←</span>
-          </div>
-        </button>
-        <span class="btn-caption undo-caption">RETROCEDER</span>
+          <button
+            type="button"
+            class="keypad-btn-circle btn-banca"
+            on:click={() => recordOutcome('BANCA')}
+            title="Registrar victoria de BANCA (Banker)"
+          >
+            {#if activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">B</span>
+            </div>
+          </button>
+          <span class="btn-caption banca-caption">BANCA</span>
+        </div>
+
+        <!-- COLUMN 3: T BUTTON -->
+        <div class="keypad-column">
+          <button
+            type="button"
+            class="keypad-pill pill-win"
+            class:active={activeWin}
+            on:click={toggleWin}
+            title="Activar Victoria Natural (8 ó 9)"
+          >
+            Natural
+          </button>
+
+          <button
+            type="button"
+            class="keypad-btn-circle btn-tie"
+            on:click={() => recordOutcome('EMPATE')}
+            title="Registrar EMPATE (Tie)"
+          >
+            {#if activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">T</span>
+            </div>
+          </button>
+          <span class="btn-caption tie-caption">EMPATE</span>
+        </div>
+
+        <!-- COLUMN 4: UNDO BUTTON -->
+        <div class="keypad-column">
+          <div class="keypad-pill-placeholder"></div>
+
+          <button
+            type="button"
+            class="keypad-btn-circle btn-undo"
+            on:click={undoLast}
+            disabled={history.length === 0}
+            title="Retroceder / Deshacer última mano registrada"
+          >
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">←</span>
+            </div>
+          </button>
+          <span class="btn-caption undo-caption">RETROCEDER</span>
+        </div>
       </div>
     </div>
   </footer>
@@ -1728,24 +1733,81 @@
     height: 38px;
   }
 
-  /* CROUPIER ARCADE KEYPAD (AL PIE DE PÁGINA) */
-  .croupier-keypad-panel {
+  /* FOOTER OPERATIONAL PANEL: COL-3 STATS + COL-9 KEYPAD */
+  .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 12px;
-    padding: 12px 16px;
+    padding: 12px 18px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
     display: flex;
-    justify-content: center;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
     margin-top: auto;
+  }
+
+  /* COL-3: STATS INFO */
+  .footer-stats-col {
+    flex: 0 0 32%;
+    max-width: 380px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+    padding-right: 18px;
+    border-right: 2px solid #e2e8f0;
+  }
+
+  .footer-counters-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .footer-counter-pct-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background: #f1f5f9;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    font-size: 11.5px;
+    font-weight: 800;
+  }
+
+  /* COL-9: KEYPAD */
+  .footer-keypad-col {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
   .keypad-grid-4col {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    max-width: 620px;
+    gap: 18px;
+    max-width: 580px;
     width: 100%;
+  }
+
+  @media (max-width: 900px) {
+    .scoreboard-footer-panel {
+      flex-direction: column;
+      gap: 12px;
+    }
+    .footer-stats-col {
+      flex: 1 1 100%;
+      max-width: 100%;
+      border-right: none;
+      border-bottom: 2px solid #e2e8f0;
+      padding-right: 0;
+      padding-bottom: 10px;
+    }
   }
 
   @media (max-width: 600px) {
