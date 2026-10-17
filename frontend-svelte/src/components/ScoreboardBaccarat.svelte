@@ -879,9 +879,9 @@
       </button>
     </div>
 
-    <!-- SECCIÓN 3 (COL-6): ACCIONES PRINCIPALES (PUNTO, BANCA, EMPATE, RETROCEDER) -->
-    <div class="footer-actions-col">
-      <div class="actions-grid-4col">
+    <!-- GRUPO 3 (COL-4): RESULTADOS (PUNTO, BANCA, EMPATE) -->
+    <div class="footer-outcomes-col">
+      <div class="outcomes-grid-3col">
         <!-- PUNTO BUTTON -->
         <div class="action-btn-item">
           <button
@@ -944,22 +944,24 @@
           </button>
           <span class="btn-caption tie-caption">EMPATE</span>
         </div>
+      </div>
+    </div>
 
-        <!-- RETROCEDER BUTTON -->
-        <div class="action-btn-item">
-          <button
-            type="button"
-            class="keypad-btn-circle btn-undo"
-            on:click={undoLast}
-            disabled={history.length === 0}
-            title="Retroceder / Deshacer última mano registrada"
-          >
-            <div class="btn-inner-gloss">
-              <span class="btn-letter">←</span>
-            </div>
-          </button>
-          <span class="btn-caption undo-caption">RETROCEDER</span>
-        </div>
+    <!-- GRUPO 4 (COL-2): ACCIÓN RETROCEDER -->
+    <div class="footer-undo-col">
+      <div class="action-btn-item">
+        <button
+          type="button"
+          class="keypad-btn-circle btn-undo"
+          on:click={undoLast}
+          disabled={history.length === 0}
+          title="Retroceder / Deshacer última mano registrada"
+        >
+          <div class="btn-inner-gloss">
+            <span class="btn-letter">←</span>
+          </div>
+        </button>
+        <span class="btn-caption undo-caption">RETROCEDER</span>
       </div>
     </div>
   </footer>
@@ -1728,7 +1730,7 @@
     box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
   }
 
-  /* FOOTER OPERATIONAL PANEL: COL-4 STATS + COL-2 MODIFIERS + COL-6 ACTIONS */
+  /* FOOTER OPERATIONAL PANEL: 4 GRUPOS (COL-4 STATS, COL-2 MODIFIERS, COL-4 RESULTADOS, COL-2 RETROCEDER) */
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 12px;
@@ -1736,102 +1738,115 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: 4fr 2fr 6fr;
+    grid-template-columns: 4fr 2fr 4fr 2fr;
     gap: 16px;
-    align-items: center;
+    align-items: stretch;
     margin-top: auto;
   }
 
-  /* SECCIÓN 1: COL-4 STATS */
+  /* GRUPO 1: COL-4 STATS */
   .footer-stats-col {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
     padding-right: 14px;
-    border-right: 2px solid #e2e8f0;
+    border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
 
   .footer-counters-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
   }
 
   .footer-counter-pct-box {
     display: flex;
     align-items: center;
-    justify-content: space-around;
+    justify-content: center;
+    gap: 12px;
     background: #f1f5f9;
-    padding: 5px 12px;
+    padding: 4px 14px;
     border-radius: 999px;
     border: 1px solid #e2e8f0;
     font-size: 11.5px;
     font-weight: 800;
   }
 
-  /* SECCIÓN 2: COL-2 MODIFIERS (APILADOS VERTICALMENTE) */
+  /* GRUPO 2: COL-2 MODIFIERS (APILADOS VERTICALMENTE) + SEPARADOR SEÑALADO EN AZUL */
   .footer-modifiers-col {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     padding-right: 14px;
-    border-right: 2px solid #e2e8f0;
+    border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
 
   .footer-modifiers-col .keypad-pill {
     width: 100%;
-    max-width: 135px;
-    height: 32px;
-    font-size: 12.5px;
+    max-width: 125px;
+    height: 31px;
+    font-size: 12px;
     font-weight: 800;
     letter-spacing: 0.3px;
+    margin: 0 auto;
   }
 
-  /* SECCIÓN 3: COL-6 ACCIONES PRINCIPALES */
-  .footer-actions-col {
+  /* GRUPO 3: COL-4 RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) */
+  .footer-outcomes-col {
     display: flex;
     justify-content: center;
     align-items: center;
     min-width: 0;
   }
 
-  .actions-grid-4col {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    width: 100%;
-    max-width: 540px;
+  .outcomes-grid-3col {
+    display: flex;
     align-items: center;
-    justify-items: center;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
+    max-width: 360px;
+  }
+
+  /* GRUPO 4: COL-2 ACCIÓN RETROCEDER */
+  .footer-undo-col {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 0;
   }
 
   .action-btn-item {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 6px;
   }
 
-  @media (max-width: 900px) {
+  @media (max-width: 960px) {
     .scoreboard-footer-panel {
       grid-template-columns: 1fr;
       gap: 14px;
     }
-    .footer-stats-col, .footer-modifiers-col {
+    .footer-stats-col, .footer-modifiers-col, .footer-outcomes-col {
       border-right: none;
-      border-bottom: 2px solid #e2e8f0;
+      border-bottom: 2px solid #cbd5e1;
       padding-right: 0;
       padding-bottom: 12px;
     }
     .footer-modifiers-col {
       flex-direction: row;
       justify-content: center;
+      gap: 8px;
     }
     .footer-modifiers-col .keypad-pill {
       max-width: 110px;
@@ -1839,8 +1854,8 @@
   }
 
   @media (max-width: 600px) {
-    .actions-grid-4col {
-      gap: 8px;
+    .outcomes-grid-3col {
+      gap: 10px;
     }
   }
 
