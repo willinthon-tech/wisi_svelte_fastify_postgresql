@@ -658,25 +658,98 @@
   $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, derivedColsNeeded);
   $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, derivedColsNeeded);
 
-  // Auto-scroll elementos a la derecha para ver los últimos registros
+  // Smart auto-scroll: Solo desplazar cuando las jugadas realmente se desbordan de la pantalla visible
   let bigRoadScrollEl;
   let beadScrollEl;
   let bigEyeScrollEl;
   let smallRoadScrollEl;
   let cockroachScrollEl;
 
+  function smartScroll(el, latestCol, cellSize) {
+    if (!el) return;
+    if (latestCol <= 0) {
+      if (el.scrollLeft !== 0) el.scrollTo({ left: 0, behavior: 'smooth' });
+      return;
+    }
+    const visibleWidth = el.clientWidth || 0;
+    // Borde derecho de la última columna ocupada + 2 columnas de margen visual
+    const latestRightX = (latestCol + 2) * (cellSize || 40);
+    if (latestRightX <= visibleWidth) {
+      // Las jugadas aún caben dentro de la pantalla visible inicial -> mantener en el principio
+      if (el.scrollLeft !== 0) {
+        el.scrollTo({ left: 0, behavior: 'smooth' });
+      }
+    } else {
+      // La jugada se desbordó: desplazar suavemente solo lo necesario para mostrarla
+      const targetLeft = latestRightX - visibleWidth;
+      el.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+    }
+  }
+
+  function getLatestBeadCol() {
+    if (!history.length) return 0;
+    return Math.floor((history.length - 1) / BEAD_ROWS);
+  }
+
+  function getLatestBigRoadCol() {
+    if (!history.length || !bigRoadGrid?.grid) return 0;
+    let maxCol = 0;
+    for (let r = 0; r < bigRoadGrid.grid.length; r++) {
+      const row = bigRoadGrid.grid[r];
+      for (let c = row.length - 1; c >= 0; c--) {
+        if (row[c]) {
+          if (c > maxCol) maxCol = c;
+          break;
+        }
+      }
+    }
+    return maxCol;
+  }
+
+  function getLatestDerivedCol(gridObj) {
+    if (!gridObj?.grid) return 0;
+    let maxCol = 0;
+    for (let r = 0; r < gridObj.grid.length; r++) {
+      const row = gridObj.grid[r];
+      for (let c = row.length - 1; c >= 0; c--) {
+        if (row[c]) {
+          if (c > maxCol) maxCol = c;
+          break;
+        }
+      }
+    }
+    return maxCol;
+  }
+
   function scrollToLatest() {
     if (typeof window === 'undefined') return;
     setTimeout(() => {
-      if (bigRoadScrollEl) bigRoadScrollEl.scrollLeft = bigRoadScrollEl.scrollWidth;
-      if (beadScrollEl) beadScrollEl.scrollLeft = beadScrollEl.scrollWidth;
-      if (bigEyeScrollEl) bigEyeScrollEl.scrollLeft = bigEyeScrollEl.scrollWidth;
-      if (smallRoadScrollEl) smallRoadScrollEl.scrollLeft = smallRoadScrollEl.scrollWidth;
-      if (cockroachScrollEl) cockroachScrollEl.scrollLeft = cockroachScrollEl.scrollWidth;
+      const beadCol = getLatestBeadCol();
+      smartScroll(beadScrollEl, beadCol, beadCellSize);
+
+      const bigCol = getLatestBigRoadCol();
+      smartScroll(bigRoadScrollEl, bigCol, bigRoadCellSize);
+
+      const eyeCol = getLatestDerivedCol(bigEyeGrid);
+      smartScroll(bigEyeScrollEl, eyeCol, derivedCellSize);
+
+      const smallCol = getLatestDerivedCol(smallRoadGrid);
+      smartScroll(smallRoadScrollEl, smallCol, derivedCellSize);
+
+      const roachCol = getLatestDerivedCol(cockroachGrid);
+      smartScroll(cockroachScrollEl, roachCol, derivedCellSize);
     }, 60);
   }
 
-  $: if (history.length) {
+  $: if (history.length === 0) {
+    setTimeout(() => {
+      if (bigRoadScrollEl) bigRoadScrollEl.scrollLeft = 0;
+      if (beadScrollEl) beadScrollEl.scrollLeft = 0;
+      if (bigEyeScrollEl) bigEyeScrollEl.scrollLeft = 0;
+      if (smallRoadScrollEl) smallRoadScrollEl.scrollLeft = 0;
+      if (cockroachScrollEl) cockroachScrollEl.scrollLeft = 0;
+    }, 30);
+  } else {
     scrollToLatest();
   }
 
