@@ -786,9 +786,9 @@
     </div>
   {/if}
 
-  <!-- FOOTER OPERATIONAL PANEL: COL-3 INFO & STATS + COL-9 ARCADE KEYPAD -->
+  <!-- FOOTER OPERATIONAL PANEL: COL-4 STATS + COL-2 MODIFIERS + COL-6 MAIN ACTIONS -->
   <footer class="scoreboard-footer-panel">
-    <!-- COL-3: STATS INFO (CONTADORES Y PORCENTAJES) -->
+    <!-- SECCIÓN 1 (COL-4): STATS INFO (CONTADORES Y PORCENTAJES) -->
     <div class="footer-stats-col">
       <div class="footer-counters-row">
         <!-- Total manos # -->
@@ -846,21 +846,44 @@
       </div>
     </div>
 
-    <!-- COL-9: CROUPIER ARCADE KEYPAD -->
-    <div class="footer-keypad-col">
-      <div class="keypad-grid-4col">
-        <!-- COLUMN 1: P.PAIR + P BUTTON -->
-        <div class="keypad-column">
-          <button
-            type="button"
-            class="keypad-pill pill-ppair"
-            class:active={activePPair}
-            on:click={togglePPair}
-            title="Activar Pareja de Punto (P.Pair)"
-          >
-            P.Pair
-          </button>
+    <!-- SECCIÓN 2 (COL-2): MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) -->
+    <div class="footer-modifiers-col">
+      <button
+        type="button"
+        class="keypad-pill pill-ppair"
+        class:active={activePPair}
+        on:click={togglePPair}
+        title="Activar Pareja de Punto (P.Pair)"
+      >
+        P.Pair
+      </button>
 
+      <button
+        type="button"
+        class="keypad-pill pill-bpair"
+        class:active={activeBPair}
+        on:click={toggleBPair}
+        title="Activar Pareja de Banca (B.Pair)"
+      >
+        B.Pair
+      </button>
+
+      <button
+        type="button"
+        class="keypad-pill pill-win"
+        class:active={activeWin}
+        on:click={toggleWin}
+        title="Activar Victoria Natural (8 ó 9)"
+      >
+        Natural
+      </button>
+    </div>
+
+    <!-- SECCIÓN 3 (COL-6): ACCIONES PRINCIPALES (PUNTO, BANCA, EMPATE, RETROCEDER) -->
+    <div class="footer-actions-col">
+      <div class="actions-grid-4col">
+        <!-- PUNTO BUTTON -->
+        <div class="action-btn-item">
           <button
             type="button"
             class="keypad-btn-circle btn-punto"
@@ -880,18 +903,8 @@
           <span class="btn-caption punto-caption">PUNTO</span>
         </div>
 
-        <!-- COLUMN 2: B.PAIR + B BUTTON -->
-        <div class="keypad-column">
-          <button
-            type="button"
-            class="keypad-pill pill-bpair"
-            class:active={activeBPair}
-            on:click={toggleBPair}
-            title="Activar Pareja de Banca (B.Pair)"
-          >
-            B.Pair
-          </button>
-
+        <!-- BANCA BUTTON -->
+        <div class="action-btn-item">
           <button
             type="button"
             class="keypad-btn-circle btn-banca"
@@ -911,18 +924,8 @@
           <span class="btn-caption banca-caption">BANCA</span>
         </div>
 
-        <!-- COLUMN 3: T BUTTON -->
-        <div class="keypad-column">
-          <button
-            type="button"
-            class="keypad-pill pill-win"
-            class:active={activeWin}
-            on:click={toggleWin}
-            title="Activar Victoria Natural (8 ó 9)"
-          >
-            Natural
-          </button>
-
+        <!-- EMPATE BUTTON -->
+        <div class="action-btn-item">
           <button
             type="button"
             class="keypad-btn-circle btn-tie"
@@ -942,10 +945,8 @@
           <span class="btn-caption tie-caption">EMPATE</span>
         </div>
 
-        <!-- COLUMN 4: UNDO BUTTON -->
-        <div class="keypad-column">
-          <div class="keypad-pill-placeholder"></div>
-
+        <!-- RETROCEDER BUTTON -->
+        <div class="action-btn-item">
           <button
             type="button"
             class="keypad-btn-circle btn-undo"
@@ -1727,37 +1728,29 @@
     box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
   }
 
-  .keypad-pill-placeholder {
-    width: 100%;
-    max-width: 110px;
-    height: 38px;
-  }
-
-  /* FOOTER OPERATIONAL PANEL: COL-3 STATS + COL-9 KEYPAD */
+  /* FOOTER OPERATIONAL PANEL: COL-4 STATS + COL-2 MODIFIERS + COL-6 ACTIONS */
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 12px;
     padding: 12px 18px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 4fr 2fr 6fr;
     gap: 16px;
+    align-items: center;
     margin-top: auto;
   }
 
-  /* COL-3: STATS INFO */
+  /* SECCIÓN 1: COL-4 STATS */
   .footer-stats-col {
-    flex: 0 0 32%;
-    max-width: 380px;
-    min-width: 260px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 10px;
-    padding-right: 18px;
+    padding-right: 14px;
     border-right: 2px solid #e2e8f0;
+    min-width: 0;
   }
 
   .footer-counters-row {
@@ -1779,48 +1772,74 @@
     font-weight: 800;
   }
 
-  /* COL-9: KEYPAD */
-  .footer-keypad-col {
-    flex: 1;
+  /* SECCIÓN 2: COL-2 MODIFIERS (APILADOS VERTICALMENTE) */
+  .footer-modifiers-col {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding-right: 14px;
+    border-right: 2px solid #e2e8f0;
+    min-width: 0;
+  }
+
+  .footer-modifiers-col .keypad-pill {
+    width: 100%;
+    max-width: 100%;
+    height: 34px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  /* SECCIÓN 3: COL-6 ACCIONES PRINCIPALES */
+  .footer-actions-col {
     display: flex;
     justify-content: center;
     align-items: center;
+    min-width: 0;
   }
 
-  .keypad-grid-4col {
+  .actions-grid-4col {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 18px;
-    max-width: 580px;
+    gap: 16px;
     width: 100%;
+    max-width: 540px;
+    align-items: center;
+    justify-items: center;
+  }
+
+  .action-btn-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
   }
 
   @media (max-width: 900px) {
     .scoreboard-footer-panel {
-      flex-direction: column;
-      gap: 12px;
+      grid-template-columns: 1fr;
+      gap: 14px;
     }
-    .footer-stats-col {
-      flex: 1 1 100%;
-      max-width: 100%;
+    .footer-stats-col, .footer-modifiers-col {
       border-right: none;
       border-bottom: 2px solid #e2e8f0;
       padding-right: 0;
-      padding-bottom: 10px;
+      padding-bottom: 12px;
+    }
+    .footer-modifiers-col {
+      flex-direction: row;
+      justify-content: center;
+    }
+    .footer-modifiers-col .keypad-pill {
+      max-width: 110px;
     }
   }
 
   @media (max-width: 600px) {
-    .keypad-grid-4col {
-      gap: 10px;
+    .actions-grid-4col {
+      gap: 8px;
     }
-  }
-
-  .keypad-column {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
   }
 
   /* MODIFIER PILLS ROW */
