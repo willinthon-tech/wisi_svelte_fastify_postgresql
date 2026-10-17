@@ -5,6 +5,13 @@
   import { navigateToRoute } from '../controllers/router.store.js';
   import { toBackendUrl } from '../config/api.config.js';
   import {
+    getLocalItems,
+    saveLocalItems,
+    upsertLocalItem,
+    deleteLocalItem,
+    generateSafeUuid
+  } from '../services/localDb.service.js';
+  import {
     sendWebSocketMessage,
     latestBaccaratUpdateStore,
     isWsConnectedStore,
@@ -111,13 +118,14 @@
 
   $: currentSalaName = currentSalaObj?.nombre || currentSalaObj?.name || '';
   $: currentMesaName = currentMesaObj?.nombre || (currentMesaId ? `Mesa #${currentMesaId}` : 'Mesa 01');
-  $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}${currentSession?.id ? `_sess_${currentSession.id}` : ''}`;
+  $: sessionUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
+  $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}${sessionUuid ? `_sess_${sessionUuid}` : ''}`;
 
   let lastLoadedStorageKey = null;
   $: if (storageKey && storageKey !== lastLoadedStorageKey) {
     lastLoadedStorageKey = storageKey;
-    if (currentSession?.id && currentMesaId) {
-      loadMesaDataForSession(currentSession.id, currentMesaId);
+    if (sessionUuid && currentMesaId) {
+      loadMesaDataForSession(sessionUuid, currentMesaId);
     } else {
       loadSavedShoe();
     }
@@ -272,8 +280,38 @@
     }
   }
 
+  async function loadSessionsFromLocalDb(sId) {
+    if (!sId) return false;
+    try {
+      const local = await getLocalItems(
+        'record_libro_score_baccarat',
+        item => String(item.sala_id || item.sala_uuid) === String(sId),
+        'fecha',
+        'asc'
+      );
+      if (Array.isArray(local) && local.length > 0) {
+        sessions = local;
+        if (selectedSessionIndex === -1 || selectedSessionIndex >= sessions.length) {
+          selectedSessionIndex = sessions.length - 1;
+        }
+        const activeSess = sessions[selectedSessionIndex];
+        if (activeSess) {
+          activeSessionId = activeSess.uuid || activeSess.id;
+          await loadMesaDataForSession(activeSessionId, currentMesaId, true);
+        }
+        return true;
+      }
+    } catch (e) {
+      console.warn('Error al cargar sesiones de base de datos local:', e);
+    }
+    return false;
+  }
+
   async function fetchSessions(sId, selectLatest = true) {
     if (!sId) return;
+    // 1. Cargar de inmediato desde la base de datos interna local (Local-First)
+    await loadSessionsFromLocalDb(sId);
+
     try {
       isSessionsLoading = true;
       const res = await fetch(toBackendUrl(`/api/baccarat/sessions?sala_id=${encodeURIComponent(sId)}`));
@@ -281,39 +319,74 @@
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           sessions = json.data;
+
+          // Guardar en base de datos interna local (IndexedDB)
+          await saveLocalItems('record_libro_score_baccarat', sessions);
+
           if (selectLatest || selectedSessionIndex === -1 || selectedSessionIndex >= sessions.length) {
             selectedSessionIndex = sessions.length - 1;
           }
           const activeSess = sessions[selectedSessionIndex];
           if (activeSess) {
-            activeSessionId = activeSess.id;
-            await loadMesaDataForSession(activeSess.id, currentMesaId);
+            activeSessionId = activeSess.uuid || activeSess.id;
+            await loadMesaDataForSession(activeSessionId, currentMesaId);
           }
         }
       }
     } catch (e) {
-      console.warn('Error fetching baccarat sessions:', e);
+      console.warn('Error fetching baccarat sessions from backend:', e);
     } finally {
       isSessionsLoading = false;
     }
   }
 
-  async function loadMesaDataForSession(sId, mId) {
+  async function loadMesaDataForSession(sId, mId, onlyLocal = false) {
     if (!sId || !mId) return;
+    const strSessId = String(sId);
+    const strMesaId = String(mId);
+
     try {
-      const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?session_id=${encodeURIComponent(sId)}&mesa_id=${encodeURIComponent(mId)}`));
+      // 1. Cargar primero de la base de datos interna local (IndexedDB)
+      const localRows = await getLocalItems(
+        'record_libro_score_baccarat_mesa',
+        item => (String(item.session_uuid || item.session_id) === strSessId || String(item.session_id) === strSessId) &&
+                (String(item.mesa_id || item.mesa_uuid) === strMesaId)
+      );
+      if (Array.isArray(localRows) && localRows.length > 0) {
+        const local = localRows[0];
+        shoeNumber = Math.max(1, Number(local.shoe_number) || 1);
+        tieMode = local.tie_mode === 'circle' ? 'circle' : 'slash';
+        history = Array.isArray(local.history) ? local.history : [];
+      }
+
+      if (onlyLocal) return;
+
+      // 2. Sincronizar con el servidor backend
+      const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?session_id=${encodeURIComponent(strSessId)}&mesa_id=${encodeURIComponent(strMesaId)}`));
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
           shoeNumber = Math.max(1, Number(json.data.shoe_number) || 1);
           tieMode = json.data.tie_mode === 'circle' ? 'circle' : 'slash';
           history = Array.isArray(json.data.history) ? json.data.history : [];
+
+          // Guardar en base de datos interna local (IndexedDB)
+          await upsertLocalItem('record_libro_score_baccarat_mesa', {
+            uuid: json.data.uuid || `bacc_mesa_${strSessId}_${strMesaId}`,
+            session_uuid: strSessId,
+            session_id: strSessId,
+            mesa_id: strMesaId,
+            shoe_number: shoeNumber,
+            tie_mode: tieMode,
+            history
+          });
+
           try {
             localStorage.setItem(storageKey, JSON.stringify({
               shoeNumber,
               history,
               tieMode,
-              sessionId: sId
+              sessionId: strSessId
             }));
           } catch (e) {}
           return;
@@ -330,9 +403,9 @@
       selectedSessionIndex--;
       const sess = sessions[selectedSessionIndex];
       if (sess) {
-        activeSessionId = sess.id;
+        activeSessionId = sess.uuid || sess.id;
         showFeedback(`Cargando sesión ${sess.fecha}...`);
-        await loadMesaDataForSession(sess.id, currentMesaId);
+        await loadMesaDataForSession(activeSessionId, currentMesaId);
       }
     }
   }
@@ -342,9 +415,9 @@
       selectedSessionIndex++;
       const sess = sessions[selectedSessionIndex];
       if (sess) {
-        activeSessionId = sess.id;
+        activeSessionId = sess.uuid || sess.id;
         showFeedback(`Cargando sesión ${sess.fecha}...`);
-        await loadMesaDataForSession(sess.id, currentMesaId);
+        await loadMesaDataForSession(activeSessionId, currentMesaId);
       }
     }
   }
@@ -353,17 +426,25 @@
     if (!currentSalaId || isSessionsLoading) return;
     try {
       isSessionsLoading = true;
+      const clientGeneratedUuid = generateSafeUuid();
       const res = await fetch(toBackendUrl('/api/baccarat/sessions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sala_id: currentSalaId })
+        body: JSON.stringify({
+          sala_id: currentSalaId,
+          uuid: clientGeneratedUuid
+        })
       });
       const json = await res.json();
       if (json.success && json.data) {
         const newSession = json.data;
+
+        // Guardar en la base de datos interna local (IndexedDB)
+        await upsertLocalItem('record_libro_score_baccarat', newSession);
+
         sessions = [...sessions, newSession];
         selectedSessionIndex = sessions.length - 1;
-        activeSessionId = newSession.id;
+        activeSessionId = newSession.uuid || newSession.id;
 
         // Reiniciar mesa para la nueva sesión
         shoeNumber = 1;
@@ -402,6 +483,15 @@
       onConfirm: async () => {
         try {
           isSessionsLoading = true;
+
+          // Eliminar de base de datos interna local
+          if (target.uuid) {
+            await deleteLocalItem('record_libro_score_baccarat', target.uuid);
+          }
+          if (target.id) {
+            await deleteLocalItem('record_libro_score_baccarat', target.id);
+          }
+
           const res = await fetch(toBackendUrl('/api/baccarat/sessions/delete-last'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -413,8 +503,8 @@
             selectedSessionIndex = sessions.length - 1;
             const activeSess = sessions[selectedSessionIndex];
             if (activeSess) {
-              activeSessionId = activeSess.id;
-              await loadMesaDataForSession(activeSess.id, currentMesaId);
+              activeSessionId = activeSess.uuid || activeSess.id;
+              await loadMesaDataForSession(activeSessionId, currentMesaId);
               showFeedback(`Última sesión eliminada. Sesión activa: ${activeSess.fecha}`);
             }
             closeOptionsMenu();
@@ -433,12 +523,14 @@
 
   function broadcastTableUpdate() {
     if (!isLatestSession) return; // Solo sincronizar en tiempo real si es la última sesión activa
+    const sessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
     sendWebSocketMessage({
       type: 'BACCARAT_TABLE_UPDATE',
       storageKey,
       salaId: currentSalaId,
       mesaId: currentMesaId,
-      sessionId: currentSession?.id,
+      sessionId: sessUuid,
+      sessionUuid: sessUuid,
       isLatestSession: true,
       shoeNumber,
       history,
@@ -454,26 +546,44 @@
       return;
     }
 
+    const sessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
+    const mesaRecordUuid = `bacc_mesa_${sessUuid}_${currentMesaId}`;
+
     try {
       localStorage.setItem(storageKey, JSON.stringify({
         shoeNumber,
         history,
         tieMode,
-        sessionId: currentSession?.id
+        sessionId: sessUuid
       }));
     } catch (e) {}
+
+    // 1. Guardar de inmediato en la base de datos interna local (Local-First IndexedDB)
+    if (sessUuid && currentMesaId) {
+      upsertLocalItem('record_libro_score_baccarat_mesa', {
+        uuid: mesaRecordUuid,
+        session_uuid: sessUuid,
+        session_id: sessUuid,
+        mesa_id: currentMesaId,
+        shoe_number: shoeNumber,
+        tie_mode: tieMode,
+        history
+      }).catch(err => console.warn('Advertencia guardando en base de datos interna local:', err));
+    }
 
     if (!skipBroadcast) {
       broadcastTableUpdate();
     }
 
-    // Persistir en base de datos PostgreSQL
-    if (currentSession?.id && currentMesaId) {
+    // 2. Persistir en la base de datos PostgreSQL en el backend
+    if (sessUuid && currentMesaId) {
       fetch(toBackendUrl('/api/baccarat/mesa-data'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: currentSession.id,
+          uuid: mesaRecordUuid,
+          session_id: sessUuid,
+          session_uuid: sessUuid,
           mesa_id: currentMesaId,
           shoe_number: shoeNumber,
           tie_mode: tieMode,

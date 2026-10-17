@@ -106,7 +106,7 @@ export async function initDb() {
       await sql`
         CREATE TABLE IF NOT EXISTS record_libro_score_baccarat (
           id SERIAL PRIMARY KEY,
-          uuid UUID DEFAULT gen_random_uuid(),
+          uuid UUID DEFAULT gen_random_uuid() UNIQUE,
           sala_id VARCHAR(100) NOT NULL,
           fecha VARCHAR(50) NOT NULL,
           estado VARCHAR(20) DEFAULT 'abierta',
@@ -116,12 +116,14 @@ export async function initDb() {
       `;
       await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_sala ON record_libro_score_baccarat (sala_id);`;
       await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_fecha ON record_libro_score_baccarat (fecha);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_uuid ON record_libro_score_baccarat (uuid);`;
 
       await sql`
         CREATE TABLE IF NOT EXISTS record_libro_score_baccarat_mesa (
           id SERIAL PRIMARY KEY,
-          uuid UUID DEFAULT gen_random_uuid(),
-          session_id INTEGER NOT NULL REFERENCES record_libro_score_baccarat(id) ON DELETE CASCADE,
+          uuid UUID DEFAULT gen_random_uuid() UNIQUE,
+          session_id VARCHAR(100) NOT NULL,
+          session_uuid VARCHAR(100),
           mesa_id VARCHAR(100) NOT NULL,
           shoe_number INTEGER DEFAULT 1,
           tie_mode VARCHAR(20) DEFAULT 'slash',
@@ -131,7 +133,18 @@ export async function initDb() {
           CONSTRAINT uq_baccarat_mesa_session UNIQUE (session_id, mesa_id)
         );
       `;
+      // Migraciones seguras para columnas UUID si las tablas ya existían
+      try {
+        await sql`ALTER TABLE record_libro_score_baccarat ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT gen_random_uuid();`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa DROP CONSTRAINT IF EXISTS record_libro_score_baccarat_mesa_session_id_fkey;`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ALTER COLUMN session_id TYPE VARCHAR(100) USING session_id::VARCHAR(100);`;
+        await sql`ALTER TABLE record_libro_score_baccarat_mesa ADD COLUMN IF NOT EXISTS session_uuid VARCHAR(100);`;
+      } catch (eAlt) {
+        // Ignorar si ya fueron alteradas
+      }
       await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_session ON record_libro_score_baccarat_mesa (session_id);`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_uuid ON record_libro_score_baccarat_mesa (uuid);`;
       await sql`CREATE INDEX IF NOT EXISTS idx_record_baccarat_m_mesa ON record_libro_score_baccarat_mesa (mesa_id);`;
     } catch (eBacc) {
       console.warn('Advertencia migrando tablas baccarat:', eBacc.message);

@@ -1,9 +1,13 @@
+import { randomUUID } from 'crypto';
 import { sql, isPgConnected } from '../config/db.js';
 
 // In-Memory Fallback cuando la base de datos esté en modo offline/desconectada
 let memorySessions = [];
 let memoryMesaData = new Map();
-let memorySessionIdCounter = 1;
+
+export function isUuid(val) {
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+}
 
 function getTodayStr() {
   const now = new Date();
@@ -40,15 +44,16 @@ export async function getSessions(req, reply) {
         SELECT id, uuid, sala_id, fecha, estado, created_at, updated_at
         FROM record_libro_score_baccarat
         WHERE sala_id = ${salaId}
-        ORDER BY id ASC;
+        ORDER BY fecha ASC, id ASC;
       `;
 
-      // Si no existe ninguna sesión aún, auto-crear la primera con la fecha de hoy
+      // Si no existe ninguna sesión aún, auto-crear la primera con la fecha de hoy y UUID seguro
       if (sessions.length === 0) {
         const todayStr = getTodayStr();
+        const newUuid = randomUUID();
         const [newSession] = await sql`
-          INSERT INTO record_libro_score_baccarat (sala_id, fecha, estado)
-          VALUES (${salaId}, ${todayStr}, 'abierta')
+          INSERT INTO record_libro_score_baccarat (uuid, sala_id, fecha, estado)
+          VALUES (${newUuid}::uuid, ${salaId}, ${todayStr}, 'abierta')
           RETURNING id, uuid, sala_id, fecha, estado, created_at, updated_at;
         `;
         sessions = [newSession];
@@ -62,8 +67,8 @@ export async function getSessions(req, reply) {
     if (salaSessions.length === 0) {
       const todayStr = getTodayStr();
       const newSession = {
-        id: memorySessionIdCounter++,
-        uuid: `mem-${Date.now()}`,
+        id: randomUUID(),
+        uuid: randomUUID(),
         sala_id: salaId,
         fecha: todayStr,
         estado: 'abierta',
@@ -91,14 +96,17 @@ export async function createSession(req, reply) {
       return reply.code(400).send({ success: false, message: 'El parámetro sala_id es requerido' });
     }
 
+    const clientUuid = req.body?.uuid ? String(req.body.uuid).trim() : null;
+    const targetUuid = (clientUuid && isUuid(clientUuid)) ? clientUuid : randomUUID();
+
     let nextFecha = getTodayStr();
 
     if (isPgConnected && sql) {
       const lastSession = await sql`
-        SELECT id, fecha
+        SELECT id, uuid, fecha
         FROM record_libro_score_baccarat
         WHERE sala_id = ${salaId}
-        ORDER BY id DESC
+        ORDER BY fecha DESC, id DESC
         LIMIT 1;
       `;
 
@@ -107,8 +115,9 @@ export async function createSession(req, reply) {
       }
 
       const [created] = await sql`
-        INSERT INTO record_libro_score_baccarat (sala_id, fecha, estado)
-        VALUES (${salaId}, ${nextFecha}, 'abierta')
+        INSERT INTO record_libro_score_baccarat (uuid, sala_id, fecha, estado)
+        VALUES (${targetUuid}::uuid, ${salaId}, ${nextFecha}, 'abierta')
+        ON CONFLICT (uuid) DO UPDATE SET fecha = EXCLUDED.fecha, updated_at = NOW()
         RETURNING id, uuid, sala_id, fecha, estado, created_at, updated_at;
       `;
 
@@ -122,8 +131,8 @@ export async function createSession(req, reply) {
     }
 
     const created = {
-      id: memorySessionIdCounter++,
-      uuid: `mem-${Date.now()}`,
+      id: targetUuid,
+      uuid: targetUuid,
       sala_id: salaId,
       fecha: nextFecha,
       estado: 'abierta',
@@ -154,7 +163,7 @@ export async function deleteLastSession(req, reply) {
         SELECT id, uuid, fecha
         FROM record_libro_score_baccarat
         WHERE sala_id = ${salaId}
-        ORDER BY id DESC
+        ORDER BY fecha DESC, id DESC
         LIMIT 2;
       `;
 
@@ -165,9 +174,17 @@ export async function deleteLastSession(req, reply) {
       const targetToDelete = lastSessions[0];
       const previousSession = lastSessions[1] || null;
 
+      // Borrar registros de mesas asociados a esta sesión
+      await sql`
+        DELETE FROM record_libro_score_baccarat_mesa
+        WHERE session_id = ${String(targetToDelete.uuid)}
+           OR session_id = ${String(targetToDelete.id)}
+           OR session_uuid = ${String(targetToDelete.uuid)};
+      `;
+
       await sql`
         DELETE FROM record_libro_score_baccarat
-        WHERE id = ${targetToDelete.id};
+        WHERE uuid = ${targetToDelete.uuid} OR id = ${targetToDelete.id};
       `;
 
       return reply.send({
@@ -186,7 +203,7 @@ export async function deleteLastSession(req, reply) {
     const targetToDelete = salaSessions[salaSessions.length - 1];
     const previousSession = salaSessions.length > 1 ? salaSessions[salaSessions.length - 2] : null;
 
-    memorySessions = memorySessions.filter(s => s.id !== targetToDelete.id);
+    memorySessions = memorySessions.filter(s => s.uuid !== targetToDelete.uuid && s.id !== targetToDelete.id);
 
     return reply.send({
       success: true,
@@ -211,11 +228,15 @@ export async function getMesaData(req, reply) {
       return reply.code(400).send({ success: false, message: 'session_id y mesa_id son requeridos' });
     }
 
+    const sId = String(sessionId).trim();
+    const mId = String(mesaId).trim();
+
     if (isPgConnected && sql) {
       const rows = await sql`
-        SELECT id, uuid, session_id, mesa_id, shoe_number, tie_mode, history, updated_at
+        SELECT id, uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at
         FROM record_libro_score_baccarat_mesa
-        WHERE session_id = ${Number(sessionId)} AND mesa_id = ${mesaId}
+        WHERE (session_id = ${sId} OR session_uuid = ${sId} OR (uuid::text = ${sId}))
+          AND mesa_id = ${mId}
         LIMIT 1;
       `;
 
@@ -226,8 +247,10 @@ export async function getMesaData(req, reply) {
       return reply.send({
         success: true,
         data: {
-          session_id: Number(sessionId),
-          mesa_id: mesaId,
+          uuid: randomUUID(),
+          session_id: sId,
+          session_uuid: isUuid(sId) ? sId : null,
+          mesa_id: mId,
           shoe_number: 1,
           tie_mode: 'slash',
           history: []
@@ -236,10 +259,12 @@ export async function getMesaData(req, reply) {
     }
 
     // Fallback en memoria
-    const key = `${sessionId}_${mesaId}`;
+    const key = `${sId}_${mId}`;
     const data = memoryMesaData.get(key) || {
-      session_id: Number(sessionId),
-      mesa_id: mesaId,
+      uuid: randomUUID(),
+      session_id: sId,
+      session_uuid: isUuid(sId) ? sId : null,
+      mesa_id: mId,
       shoe_number: 1,
       tie_mode: 'slash',
       history: []
@@ -257,11 +282,16 @@ export async function getMesaData(req, reply) {
  */
 export async function saveMesaData(req, reply) {
   try {
-    const { session_id, mesa_id, shoe_number, tie_mode, history } = req.body || {};
+    const { session_id, session_uuid, uuid, mesa_id, shoe_number, tie_mode, history } = req.body || {};
 
     if (!session_id || !mesa_id) {
       return reply.code(400).send({ success: false, message: 'session_id y mesa_id son requeridos' });
     }
+
+    const sId = String(session_id).trim();
+    const mId = String(mesa_id).trim();
+    const sessUuid = (session_uuid && isUuid(session_uuid)) ? String(session_uuid).trim() : (isUuid(sId) ? sId : null);
+    const mesaDataUuid = (uuid && isUuid(uuid)) ? String(uuid).trim() : randomUUID();
 
     const sNumber = Math.max(1, Number(shoe_number) || 1);
     const tMode = tie_mode === 'circle' ? 'circle' : 'slash';
@@ -270,28 +300,30 @@ export async function saveMesaData(req, reply) {
     if (isPgConnected && sql) {
       const [saved] = await sql`
         INSERT INTO record_libro_score_baccarat_mesa (
-          session_id, mesa_id, shoe_number, tie_mode, history, updated_at
+          uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at
         ) VALUES (
-          ${Number(session_id)}, ${String(mesa_id)}, ${sNumber}, ${tMode}, ${JSON.stringify(handsArray)}::jsonb, NOW()
+          ${mesaDataUuid}::uuid, ${sId}, ${sessUuid}, ${mId}, ${sNumber}, ${tMode}, ${JSON.stringify(handsArray)}::jsonb, NOW()
         )
         ON CONFLICT (session_id, mesa_id) DO UPDATE SET
+          session_uuid = COALESCE(EXCLUDED.session_uuid, record_libro_score_baccarat_mesa.session_uuid),
           shoe_number = EXCLUDED.shoe_number,
           tie_mode = EXCLUDED.tie_mode,
           history = EXCLUDED.history,
           updated_at = NOW()
-        RETURNING id, uuid, session_id, mesa_id, shoe_number, tie_mode, history, updated_at;
+        RETURNING id, uuid, session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at;
       `;
 
       return reply.send({ success: true, data: saved });
     }
 
     // Fallback en memoria
-    const key = `${session_id}_${mesa_id}`;
+    const key = `${sId}_${mId}`;
     const saved = {
-      id: Date.now(),
-      uuid: `mem-data-${Date.now()}`,
-      session_id: Number(session_id),
-      mesa_id: String(mesa_id),
+      id: mesaDataUuid,
+      uuid: mesaDataUuid,
+      session_id: sId,
+      session_uuid: sessUuid,
+      mesa_id: mId,
       shoe_number: sNumber,
       tie_mode: tMode,
       history: handsArray,

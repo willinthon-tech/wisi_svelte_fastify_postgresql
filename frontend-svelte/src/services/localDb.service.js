@@ -5,7 +5,7 @@ export const pendingSyncCountStore = writable(0);
 export const isLocalDbReadyStore = writable(false);
 
 const DB_NAME = 'wisi_local_db_v1';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 /**
  * Generador de UUID v4 seguro y compatible con cualquier entorno:
@@ -75,6 +75,8 @@ export const LOCAL_STORES = [
   'libro_datos',
   'libro_drop_mesas',
   'libro_reporte',
+  'record_libro_score_baccarat',
+  'record_libro_score_baccarat_mesa',
   'attlogs',
   'outbox_sync_queue'
 ];

@@ -44,13 +44,16 @@ export async function initWebsockets(fastify) {
               const sNum = Math.max(1, Number(data.shoeNumber) || 1);
               const tMode = data.tieMode === 'circle' ? 'circle' : 'slash';
               const hands = Array.isArray(data.history) ? data.history : [];
+              const sIdStr = String(data.sessionId || data.sessionUuid || '').trim();
+              const mIdStr = String(data.mesaId).trim();
               sql`
                 INSERT INTO record_libro_score_baccarat_mesa (
-                  session_id, mesa_id, shoe_number, tie_mode, history, updated_at
+                  session_id, session_uuid, mesa_id, shoe_number, tie_mode, history, updated_at
                 ) VALUES (
-                  ${Number(data.sessionId)}, ${String(data.mesaId)}, ${sNum}, ${tMode}, ${JSON.stringify(hands)}::jsonb, NOW()
+                  ${sIdStr}, ${sIdStr}, ${mIdStr}, ${sNum}, ${tMode}, ${JSON.stringify(hands)}::jsonb, NOW()
                 )
                 ON CONFLICT (session_id, mesa_id) DO UPDATE SET
+                  session_uuid = COALESCE(EXCLUDED.session_uuid, record_libro_score_baccarat_mesa.session_uuid),
                   shoe_number = EXCLUDED.shoe_number,
                   tie_mode = EXCLUDED.tie_mode,
                   history = EXCLUDED.history,
