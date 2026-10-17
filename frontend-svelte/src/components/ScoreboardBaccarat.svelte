@@ -484,25 +484,15 @@
           if (hasHandsInBackend) {
             applyMesaData(json.data);
           } else if (!hadLocalData) {
-            // Si ni el backend ni IndexedDB tenían manos para esta sesión, verificar si hay manos huérfanas en localStorage
-            const baseLegacyKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
-            try {
-              const legacyRaw = localStorage.getItem(baseLegacyKey);
-              if (legacyRaw) {
-                const legacyParsed = JSON.parse(legacyRaw);
-                const lHands = Array.isArray(legacyParsed?.history) ? legacyParsed.history : [];
-                const lShoes = Array.isArray(legacyParsed?.shoes) ? legacyParsed.shoes : [];
-                if (lHands.length > 0 || lShoes.some(s => Array.isArray(s.history) && s.history.length > 0)) {
-                  // Migrar las manos huérfanas a esta sesión y guardar en backend
-                  applyMesaData(legacyParsed);
-                  saveShoe();
-                  return;
-                }
-              }
-            } catch (eMig) {}
-
+            // Ni backend ni IndexedDB tienen manos: esta sesión inicia completamente limpia
             applyMesaData(json.data);
           }
+
+          // Purgar cualquier residuo de clave legacy un-namespaced
+          const baseLegacyKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}`;
+          try {
+            localStorage.removeItem(baseLegacyKey);
+          } catch (e) {}
 
           // Guardar en base de datos interna local (IndexedDB)
           await upsertLocalItem('record_libro_score_baccarat_mesa', {
@@ -605,7 +595,7 @@
         // Persistir explícitamente el nuevo registro de mesa con el UUID de la NUEVA sesión
         const newSessUuid = newSession.uuid || newSession.id;
         const newMesaRecord = {
-          uuid: `bacc_mesa_${newSessUuid}_${currentMesaId}`,
+          uuid: generateSafeUuid(),
           session_uuid: newSessUuid,
           session_id: newSessUuid,
           mesa_id: currentMesaId,
@@ -617,7 +607,20 @@
 
         await upsertLocalItem('record_libro_score_baccarat_mesa', newMesaRecord);
 
-        fetch(toBackendUrl('/api/baccarat/mesa-data'), {
+        // Clave de almacenamiento aislada para la nueva sesión
+        const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaObj?.uuid || currentSalaObj?.id || 'default'}_${currentMesaObj?.uuid || currentMesaObj?.id || currentMesaId || 'default'}_sess_${newSessUuid}`;
+        lastLoadedStorageKey = newStorageKey;
+        try {
+          localStorage.setItem(newStorageKey, JSON.stringify({
+            shoeNumber: 1,
+            history: [],
+            shoes: [{ shoe_number: 1, history: [], tie_mode: 'slash' }],
+            tieMode: 'slash',
+            sessionId: newSessUuid
+          }));
+        } catch (e) {}
+
+        await fetch(toBackendUrl('/api/baccarat/mesa-data'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newMesaRecord)
@@ -797,6 +800,20 @@
   }
 
   onMount(() => {
+    // Limpiar claves legacy huérfanas de localStorage para evitar que contaminen nuevas sesiones
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('wisi_baccarat_shoe_v3_') && !k.includes('_sess_')) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+      }
+    } catch (e) {}
+
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
       const qIdx = hash.indexOf('?');
