@@ -527,7 +527,6 @@
   <!-- TOP CASINO HEADER -->
   <header class="sb-header">
     <div class="sb-header-left">
-      <h2 class="sb-title">SCOREBOARD BACCARAT</h2>
       <div class="sb-pills-row">
         {#if currentSalaName}
           <div class="sb-shoe-pill sala-pill">
@@ -1082,18 +1081,9 @@
 
   .sb-header-left {
     display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .sb-title {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 900;
-    letter-spacing: 0.8px;
-    background: linear-gradient(135deg, #ffffff, #cbd5e1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .sb-pills-row {
