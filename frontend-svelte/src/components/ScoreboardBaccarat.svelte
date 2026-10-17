@@ -738,7 +738,7 @@
   {#if selectedHandIndex !== null && selectedHand}
     <div class="edit-toolbar-box">
       <div class="edit-single-line">
-        <span class="edit-badge">🟡 EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
+        <span class="edit-badge">EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
 
         <div class="edit-group">
           <span class="edit-group-label">GANADOR:</span>
@@ -776,7 +776,7 @@
             class:active-pill={selectedHand.pPair}
             on:click={() => toggleSelectedMod('pPair')}
           >
-            P.Pair{selectedHand.pPair ? ' ✓' : ''}
+            P.Pair
           </button>
           <button
             type="button"
@@ -784,7 +784,7 @@
             class:active-pill={selectedHand.bPair}
             on:click={() => toggleSelectedMod('bPair')}
           >
-            B.Pair{selectedHand.bPair ? ' ✓' : ''}
+            B.Pair
           </button>
           <button
             type="button"
@@ -792,22 +792,16 @@
             class:active-pill={selectedHand.natural}
             on:click={() => toggleSelectedMod('natural')}
           >
-            Natural{selectedHand.natural ? ' ✓' : ''}
+            Natural
           </button>
         </div>
 
         <div class="edit-quick-actions">
-          <button type="button" class="btn-tool-nav" on:click={prevHand} disabled={selectedHandIndex === 0} title="Mano anterior">
-            ◀ Anterior
+          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Borrar esta mano del zapato">
+            Borrar
           </button>
-          <button type="button" class="btn-tool-nav" on:click={nextHand} disabled={selectedHandIndex === history.length - 1} title="Siguiente mano">
-            Siguiente ▶
-          </button>
-          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Eliminar esta mano del zapato">
-            🗑️ Eliminar
-          </button>
-          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Cerrar edición">
-            ✓ Listo
+          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Guardar cambios">
+            Guardar
           </button>
         </div>
       </div>
