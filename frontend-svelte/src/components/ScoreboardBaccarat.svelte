@@ -7,6 +7,7 @@
   import {
     getLocalItems,
     saveLocalItems,
+    replaceLocalItems,
     upsertLocalItem,
     deleteLocalItem,
     generateSafeUuid
