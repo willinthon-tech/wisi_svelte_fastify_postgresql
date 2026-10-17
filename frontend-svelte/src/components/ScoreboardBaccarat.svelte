@@ -592,12 +592,6 @@
         <div class="counter-digit">{countEmpate}</div>
       </div>
 
-      <!-- Natural N -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-orange">N</div>
-        <div class="counter-digit">{countNatural}</div>
-      </div>
-
       <!-- Banker Pair (White circle with top-left red dot) -->
       <div class="counter-item" title="Parejas de Banca (B.Pair)">
         <div class="bead-circle-badge bead-white">
@@ -612,42 +606,6 @@
           <span class="bead-dot dot-br blue-dot"></span>
         </div>
         <div class="counter-digit">{countPPair}</div>
-      </div>
-
-      <!-- Extra side bets -->
-      <div class="counter-item" title="Lucky 6 / Side bets">
-        <div class="bead-circle-badge bead-gold">L6</div>
-        <div class="counter-digit">{countSpecial}</div>
-      </div>
-
-      <div class="counter-item" title="Super 6">
-        <div class="bead-circle-badge bead-darkgreen">S6</div>
-        <div class="counter-digit">0</div>
-      </div>
-
-      <div class="counter-item" title="Banker 6">
-        <div class="bead-circle-badge bead-darkred">B6</div>
-        <div class="counter-digit">0</div>
-      </div>
-
-      <div class="counter-item" title="Lucky 7">
-        <div class="bead-circle-badge bead-lightblue">L7</div>
-        <div class="counter-digit">0</div>
-      </div>
-
-      <div class="counter-item" title="Super 7">
-        <div class="bead-circle-badge bead-navy">S7</div>
-        <div class="counter-digit">0</div>
-      </div>
-
-      <div class="counter-item" title="Banker 7">
-        <div class="bead-circle-badge bead-gold-flame">B7</div>
-        <div class="counter-digit">0</div>
-      </div>
-
-      <div class="counter-item" title="Player 8">
-        <div class="bead-circle-badge bead-orange-flame">P8</div>
-        <div class="counter-digit">0</div>
       </div>
 
       <!-- Summary percentages -->
