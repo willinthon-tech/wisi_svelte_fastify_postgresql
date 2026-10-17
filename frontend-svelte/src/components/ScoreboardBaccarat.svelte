@@ -774,10 +774,14 @@
   }
 
   function toggleTieMode() {
-    if (!isCurrentShoeActive) return;
     playSound('click');
     tieMode = tieMode === 'slash' ? 'circle' : 'slash';
-    saveShoe();
+    if (shoes && shoes[activeShoeIndex]) {
+      shoes[activeShoeIndex].tie_mode = tieMode;
+    }
+    if (isCurrentShoeActive) {
+      saveShoe();
+    }
   }
 
   // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa
@@ -2330,9 +2334,8 @@
         <button
           type="button"
           class="keypad-btn-tie-toggle"
-          disabled={!isCurrentShoeActive}
           on:click={toggleTieMode}
-          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
+          title={tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
         >
           <div class="tie-toggle-box">
             {#if tieMode === 'slash'}
@@ -3325,13 +3328,10 @@
     border-color: #22c55e;
   }
 
-  .bigroad-ring.empate.tie-solid {
-    background: #16a34a;
-  }
-
+  .bigroad-ring.empate.tie-solid,
   .bigroad-ring.is-tie {
-    background: #16a34a;
     border-color: #22c55e;
+    background: transparent;
   }
 
   .bigroad-score {
@@ -4344,8 +4344,7 @@
   }
 
   .btn-num-key:disabled,
-  .keypad-pill:disabled,
-  .keypad-btn-tie-toggle:disabled {
+  .keypad-pill:disabled {
     opacity: 0.35;
     cursor: not-allowed;
     pointer-events: none;
