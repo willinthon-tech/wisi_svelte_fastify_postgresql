@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 
 export const currentRouteStore = writable('dashboard');
 
@@ -9,6 +9,47 @@ export function isPublicRoute(route) {
          clean.startsWith('reportes/cecom/libro/') || 
          clean.startsWith('reportes/cecom/ibro/') ||
          clean.startsWith('reportes/maquinas');
+}
+
+/**
+ * Verifica si la ruta dada (o la activa si no se pasa parámetro) corresponde
+ * a /herramientas o cualquiera de sus subrutas (ej: /herramientas/scoreboard-baccarat/...).
+ */
+export function isHerramientasRoute(route = null) {
+  const target = (route !== null && route !== undefined) ? route : (typeof window !== 'undefined' ? get(currentRouteStore) : '');
+  const clean = target ? String(target).toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim() : '';
+  if (
+    clean === 'herramientas' ||
+    clean.startsWith('herramientas/') ||
+    clean === 'otros/herramientas' ||
+    clean.startsWith('otros/herramientas/') ||
+    clean.includes('scoreboard-baccarat')
+  ) {
+    return true;
+  }
+  if (typeof window !== 'undefined') {
+    const hash = String(window.location.hash || '').toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim();
+    if (
+      hash === 'herramientas' ||
+      hash.startsWith('herramientas/') ||
+      hash === 'otros/herramientas' ||
+      hash.startsWith('otros/herramientas/') ||
+      hash.includes('scoreboard-baccarat')
+    ) {
+      return true;
+    }
+    const path = String(window.location.pathname || '').toLowerCase().replace(/^\//, '').split('?')[0].trim();
+    if (
+      path === 'herramientas' ||
+      path.startsWith('herramientas/') ||
+      path === 'otros/herramientas' ||
+      path.startsWith('otros/herramientas/') ||
+      path.includes('scoreboard-baccarat')
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function initRouter() {

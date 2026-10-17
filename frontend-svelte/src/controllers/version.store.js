@@ -3,6 +3,7 @@ import { isTauriWindows } from '../services/tauriIsapi.service.js';
 import { triggerToast } from './ui.store.js';
 import { loadMasterStoresFromBackend } from './master.store.js';
 import { toBackendUrl } from '../config/api.config.js';
+import { isHerramientasRoute } from './router.store.js';
 
 // Versión local inyectada en build time
 export const LOCAL_APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v10';
@@ -122,7 +123,9 @@ export async function checkAppVersionOnStartup() {
     const justUpgraded = sessionStorage.getItem('wisi_just_upgraded_reload');
     if (justUpgraded) {
       sessionStorage.removeItem('wisi_just_upgraded_reload');
-      triggerToast(`🚀 ¡WISI actualizado a la versión v${htmlVerNum}! Datos y caché sincronizados.`, 'success');
+      if (!isHerramientasRoute()) {
+        triggerToast(`🚀 ¡WISI actualizado a la versión v${htmlVerNum}! Datos y caché sincronizados.`, 'success');
+      }
       return;
     }
   } catch (_) {}
@@ -199,6 +202,10 @@ export async function checkAppVersionOnStartup() {
 
       // D) En Windows o Android o si el DOM venía de caché, forzar un refresco limpio con cache-busting
       if (hasStaleDomCache || platform === 'windows' || platform === 'android') {
+        if (isHerramientasRoute()) {
+          console.log('[VersionStore] 🤫 Recarga preventiva pospuesta por estar en ruta de herramientas.');
+          return;
+        }
         try {
           sessionStorage.setItem('wisi_just_upgraded_reload', '1');
         } catch (_) {}
@@ -215,7 +222,9 @@ export async function checkAppVersionOnStartup() {
         return;
       }
 
-      triggerToast(`🚀 ¡WISI actualizado a la versión v${htmlVerNum}! Datos y caché sincronizados.`, 'success');
+      if (!isHerramientasRoute()) {
+        triggerToast(`🚀 ¡WISI actualizado a la versión v${htmlVerNum}! Datos y caché sincronizados.`, 'success');
+      }
     }
   }
 }
@@ -342,6 +351,10 @@ export async function checkSystemVersion(options = { isSilent: false }) {
 
       // Si se detectó una nueva versión en el HTML del servidor:
       if (isWebOutdated && !isAutoRefreshingWeb) {
+        if (isHerramientasRoute()) {
+          console.log('[VersionStore] 🤫 Nueva versión web detectada pero silenciada por estar en ruta de herramientas.');
+          return versionData;
+        }
         isAutoRefreshingWeb = true;
         triggerToast('🚀 Nueva versión web detectada en el servidor. Actualizando aplicación...', 'info');
         setTimeout(() => {
@@ -374,7 +387,12 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           peso: winData.peso,
           fecha: winData.fecha
         });
-        isVersionModalOpenStore.set(true);
+        if (isHerramientasRoute()) {
+          console.log('[VersionStore] 🤫 Aviso de actualización Windows silenciado por estar en ruta de herramientas.');
+          isVersionModalOpenStore.set(false);
+        } else {
+          isVersionModalOpenStore.set(true);
+        }
       } else {
         availableUpdateStore.set(null);
         isVersionModalOpenStore.set(false);
@@ -404,7 +422,12 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           peso: androidData.peso,
           fecha: androidData.fecha
         });
-        isVersionModalOpenStore.set(true);
+        if (isHerramientasRoute()) {
+          console.log('[VersionStore] 🤫 Aviso de actualización Android silenciado por estar en ruta de herramientas.');
+          isVersionModalOpenStore.set(false);
+        } else {
+          isVersionModalOpenStore.set(true);
+        }
       } else {
         availableUpdateStore.set(null);
         isVersionModalOpenStore.set(false);

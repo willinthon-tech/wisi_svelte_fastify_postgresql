@@ -15,7 +15,7 @@
   import GlobalPhotoModal from "./components/common/GlobalPhotoModal.svelte";
   import SyncBiometricosModal from "./components/modals/SyncBiometricosModal.svelte";
   import VersionUpdateModal from "./components/modals/VersionUpdateModal.svelte";
-  import { initVersionChecker, checkAppVersionOnStartup } from "./controllers/version.store.js";
+  import { initVersionChecker, checkAppVersionOnStartup, isVersionModalOpenStore } from "./controllers/version.store.js";
   import { isTauriWindows } from "./services/tauriIsapi.service.js";
   import PwaInstallPrompt from "./components/common/PwaInstallPrompt.svelte";
   import { openPhotoModal, updatePhotoModalItems, handleRealtimeAttlogInPhotoModal, openPhotoModalForAttlog } from "./controllers/globalModal.store.js";
@@ -109,6 +109,7 @@
     initRouter,
     isPublicRoute,
     navigateToRoute,
+    isHerramientasRoute,
   } from "./controllers/router.store.js";
   import {
     loadMasterStoresFromBackend,
@@ -392,30 +393,14 @@
     }
   }
 
-  // Verifica si la ruta actual es /herramientas o cualquiera de sus subrutas (ej: /herramientas/scoreboard-baccarat/...)
-  function isHerramientasRoute(route) {
-    const clean = route ? String(route).toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim() : '';
-    if (clean === 'herramientas' || clean.startsWith('herramientas/') || clean === 'otros/herramientas' || clean.startsWith('otros/herramientas/')) {
-      return true;
-    }
-    if (typeof window !== 'undefined') {
-      const hash = String(window.location.hash || '').toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim();
-      if (hash === 'herramientas' || hash.startsWith('herramientas/') || hash === 'otros/herramientas' || hash.startsWith('otros/herramientas/')) {
-        return true;
-      }
-      const path = String(window.location.pathname || '').toLowerCase().replace(/^\//, '').split('?')[0].trim();
-      if (path === 'herramientas' || path.startsWith('herramientas/') || path === 'otros/herramientas' || path.startsWith('otros/herramientas/')) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Si el usuario entra a /herramientas o cualquier subruta, cerrar inmediatamente cualquier alerta de marcaje activa
+  // Si el usuario entra a /herramientas o cualquier subruta, cerrar inmediatamente modal de versión y alerta de marcaje
   $: if (isHerramientasRoute($currentRouteStore)) {
     if (globalMarcajeAlert) {
       if (globalMarcajeAlertTimer) clearTimeout(globalMarcajeAlertTimer);
       globalMarcajeAlert = null;
+    }
+    if ($isVersionModalOpenStore) {
+      isVersionModalOpenStore.set(false);
     }
   }
 
@@ -1453,8 +1438,10 @@
 <!-- Modal Global Unificado de Fotografías y Fichas -->
 <GlobalPhotoModal />
 
-<!-- Modal Informativo de Actualización de Versión Multiplataforma -->
-<VersionUpdateModal />
+<!-- Modal Informativo de Actualización de Versión Multiplataforma (Silenciado en /herramientas) -->
+{#if !isHerramientasRoute($currentRouteStore)}
+  <VersionUpdateModal />
+{/if}
 
 <!-- Modal de Auditoría y Sincronización de Biométricos -->
 {#if $isAuthenticatedStore}
