@@ -10,26 +10,83 @@ export async function initWebsockets(fastify) {
     options: { maxPayload: 1048576 }
   });
 
+  // Estado en memoria de las mesas de Baccarat activas para sincronización instantánea
+  const baccaratTableStates = new Map();
+
+  function handleClientMessage(socket, msg) {
+    try {
+      const data = JSON.parse(msg.toString());
+      if (data.type === 'PING') {
+        socket.send(JSON.stringify({ type: 'PONG' }));
+        return;
+      }
+
+      if (data.type === 'BACCARAT_TABLE_UPDATE') {
+        const tableKey = data.storageKey || `${data.salaId}_${data.mesaId}`;
+        if (tableKey) {
+          baccaratTableStates.set(tableKey, {
+            salaId: data.salaId,
+            mesaId: data.mesaId,
+            storageKey: data.storageKey,
+            shoeNumber: data.shoeNumber,
+            history: data.history,
+            tieMode: data.tieMode,
+            updatedAt: Date.now()
+          });
+        }
+
+        // Reenviar la actualización a todos los demás clientes conectados
+        const payloadStr = JSON.stringify({
+          type: 'BACCARAT_TABLE_UPDATE',
+          data: {
+            salaId: data.salaId,
+            mesaId: data.mesaId,
+            storageKey: data.storageKey,
+            shoeNumber: data.shoeNumber,
+            history: data.history,
+            tieMode: data.tieMode,
+            senderClientId: data.senderClientId,
+            updatedAt: Date.now()
+          }
+        });
+
+        for (const client of activeClients) {
+          if (client !== socket && client.readyState === 1) {
+            try {
+              client.send(payloadStr);
+            } catch (e) {
+              activeClients.delete(client);
+            }
+          }
+        }
+        return;
+      }
+
+      if (data.type === 'BACCARAT_GET_STATE') {
+        const tableKey = data.storageKey || `${data.salaId}_${data.mesaId}`;
+        if (tableKey && baccaratTableStates.has(tableKey)) {
+          const state = baccaratTableStates.get(tableKey);
+          socket.send(JSON.stringify({
+            type: 'BACCARAT_TABLE_UPDATE',
+            data: state
+          }));
+        }
+        return;
+      }
+    } catch (e) {
+      // silent parse error
+    }
+  }
+
   // WebSocket endpoint for real-time attlog notifications
   fastify.get('/ws/attlogs', { websocket: true }, (connection, req) => {
     const socket = connection.socket;
     activeClients.add(socket);
-    //console.log(`\x1b[36m⚡ [WEBSOCKET]\x1b[0m Cliente conectado en /ws/attlogs. Total activos: ${activeClients.size}`);
 
-    socket.on('message', (msg) => {
-      try {
-        const data = JSON.parse(msg.toString());
-        if (data.type === 'PING') {
-          socket.send(JSON.stringify({ type: 'PONG' }));
-        }
-      } catch (e) {
-        // silent parse error
-      }
-    });
+    socket.on('message', (msg) => handleClientMessage(socket, msg));
 
     socket.on('close', () => {
       activeClients.delete(socket);
-      //console.log(`\x1b[33m⚡ [WEBSOCKET]\x1b[0m Cliente desconectado. Total activos: ${activeClients.size}`);
     });
 
     socket.on('error', (err) => {
@@ -41,22 +98,11 @@ export async function initWebsockets(fastify) {
   fastify.get('/ws', { websocket: true }, (connection, req) => {
     const socket = connection.socket;
     activeClients.add(socket);
-    //console.log(`\x1b[36m⚡ [WEBSOCKET]\x1b[0m Cliente conectado en /ws. Total activos: ${activeClients.size}`);
 
-    socket.on('message', (msg) => {
-      try {
-        const data = JSON.parse(msg.toString());
-        if (data.type === 'PING') {
-          socket.send(JSON.stringify({ type: 'PONG' }));
-        }
-      } catch (e) {
-        // silent parse error
-      }
-    });
+    socket.on('message', (msg) => handleClientMessage(socket, msg));
 
     socket.on('close', () => {
       activeClients.delete(socket);
-      //console.log(`\x1b[33m⚡ [WEBSOCKET]\x1b[0m Cliente desconectado. Total activos: ${activeClients.size}`);
     });
 
     socket.on('error', (err) => {

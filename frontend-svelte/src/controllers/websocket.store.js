@@ -15,6 +15,9 @@ export const latestCheckOutStore = writable(null);
 // Everything else (undefined, other statuses) → separate alert toast
 export const latestMarcajeAlertStore = writable(null);
 
+// Baccarat live table updates (synchronized across players/operators watching same table)
+export const latestBaccaratUpdateStore = writable(null);
+
 let socket = null;
 let reconnectTimer = null;
 let pingInterval = null;
@@ -22,6 +25,21 @@ let pongTimeoutTimer = null;
 let currentCallback = null;
 let lifecycleListenersAttached = false;
 let reconnectAttempts = 0;
+
+/**
+ * Sends a message object via the active WebSocket connection
+ */
+export function sendWebSocketMessage(data) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    try {
+      socket.send(JSON.stringify(data));
+      return true;
+    } catch (e) {
+      console.warn('[WebSocket] Error enviando mensaje:', e);
+    }
+  }
+  return false;
+}
 
 export function initWebSocketConnection(onNewMarcajeCallback) {
   if (onNewMarcajeCallback) {
@@ -138,6 +156,8 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
           import('./version.store.js').then(({ checkSystemVersion }) => {
             checkSystemVersion({ isSilent: false }).catch(() => {});
           });
+        } else if (payload.type === 'BACCARAT_TABLE_UPDATE' && payload.data) {
+          latestBaccaratUpdateStore.set(payload.data);
         }
       } catch (err) {
         console.warn('Error parseando mensaje WebSocket:', err);

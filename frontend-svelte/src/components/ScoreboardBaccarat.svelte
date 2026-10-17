@@ -1,13 +1,26 @@
 <script>
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { selectedSalaStore, userSalasStore } from '../controllers/auth.store.js';
   import { masterSalasStore, masterMesasStore } from '../controllers/master.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
+  import {
+    sendWebSocketMessage,
+    latestBaccaratUpdateStore,
+    isWsConnectedStore,
+    initWebSocketConnection
+  } from '../controllers/websocket.store.js';
 
   export let salaId = null;
   export let mesaId = null;
   export let isModal = false;
   const dispatch = createEventDispatcher();
+
+  // Unique client identifier for real-time WebSocket synchronization
+  const myClientId = 'bacc_' + Math.random().toString(36).slice(2, 9) + '_' + Date.now();
+  let unsubscribeWs = null;
+
+  // Tie visualization mode: 'slash' (rayitas diagonales) | 'circle' (círculos verdes en columna)
+  let tieMode = 'slash';
 
   // Selected Sala Context
   $: currentSalaId = salaId || (() => {
@@ -198,6 +211,9 @@
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.history)) history = parsed.history;
         if (parsed.shoeNumber) shoeNumber = parsed.shoeNumber;
+        if (parsed.tieMode === 'slash' || parsed.tieMode === 'circle') {
+          tieMode = parsed.tieMode;
+        }
       } else {
         history = [];
         shoeNumber = 1;
@@ -207,13 +223,49 @@
     }
   }
 
-  function saveShoe() {
+  function broadcastTableUpdate() {
+    sendWebSocketMessage({
+      type: 'BACCARAT_TABLE_UPDATE',
+      storageKey,
+      salaId: currentSalaId,
+      mesaId: currentMesaId,
+      shoeNumber,
+      history,
+      tieMode,
+      senderClientId: myClientId,
+      timestamp: Date.now()
+    });
+  }
+
+  function saveShoe(skipBroadcast = false) {
     try {
       localStorage.setItem(storageKey, JSON.stringify({
         shoeNumber,
-        history
+        history,
+        tieMode
       }));
     } catch (e) {}
+
+    if (!skipBroadcast) {
+      broadcastTableUpdate();
+    }
+  }
+
+  function toggleTieMode() {
+    playSound('click');
+    tieMode = tieMode === 'slash' ? 'circle' : 'slash';
+    saveShoe();
+    showFeedback(tieMode === 'slash' ? 'Modo Tie: Raya diagonal [/]' : 'Modo Tie: Círculo [O]');
+  }
+
+  // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa
+  $: if ($isWsConnectedStore && storageKey) {
+    sendWebSocketMessage({
+      type: 'BACCARAT_GET_STATE',
+      storageKey,
+      salaId: currentSalaId,
+      mesaId: currentMesaId
+    });
   }
 
   onMount(() => {
@@ -233,6 +285,46 @@
       currentSalaId = $selectedSalaStore;
     }
     loadSavedShoe();
+
+    // Asegurar conexión WebSocket activa
+    initWebSocketConnection();
+
+    // Sincronización en tiempo real entre múltiples clientes observando/editando la misma mesa
+    unsubscribeWs = latestBaccaratUpdateStore.subscribe((update) => {
+      if (!update) return;
+      if (update.senderClientId === myClientId) return;
+
+      const isCurrentTable = (update.storageKey && update.storageKey === storageKey) ||
+        (String(update.salaId) === String(currentSalaId) && String(update.mesaId) === String(currentMesaId));
+
+      if (isCurrentTable) {
+        let changed = false;
+        if (Array.isArray(update.history)) {
+          history = update.history;
+          changed = true;
+        }
+        if (update.shoeNumber !== undefined && update.shoeNumber !== null && update.shoeNumber !== shoeNumber) {
+          shoeNumber = update.shoeNumber;
+          changed = true;
+        }
+        if (update.tieMode && (update.tieMode === 'slash' || update.tieMode === 'circle')) {
+          if (tieMode !== update.tieMode) {
+            tieMode = update.tieMode;
+            changed = true;
+          }
+        }
+        if (changed) {
+          saveShoe(true); // Evitar retransmitir
+          showFeedback('⚡ Mesa sincronizada en tiempo real');
+        }
+      }
+    });
+  });
+
+  onDestroy(() => {
+    if (unsubscribeWs) {
+      unsubscribeWs();
+    }
   });
 
   // Derived Statistics
@@ -278,7 +370,7 @@
       score: activeScore,
       bPair: activeBPair,
       pPair: activePPair,
-      natural: activeWin,
+      natural: activeWin || activeScore === 8 || activeScore === 9,
       special: activeSpecial,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     };
@@ -472,16 +564,66 @@
 
     history.forEach((h, idx) => {
       if (h.winner === 'EMPATE') {
-        if (lastPlaced) {
-          lastPlaced.tieCount = (lastPlaced.tieCount || 0) + 1;
+        if (tieMode === 'slash') {
+          if (lastPlaced) {
+            lastPlaced.tieCount = (lastPlaced.tieCount || 0) + 1;
+          } else {
+            grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 1 };
+            lastPlaced = grid[0][0];
+          }
+          return;
         } else {
-          grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 1 };
-          lastPlaced = grid[0][0];
+          // tieMode === 'circle': El empate ocupa su propia celda en la columna actual
+          if (!prevWinner && !lastPlaced) {
+            grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
+            lastPlaced = grid[0][0];
+            row = 1;
+            col = 0;
+            return;
+          }
+
+          if (row < BIG_ROWS && !grid[row][col]) {
+            grid[row][col] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
+            lastPlaced = grid[row][col];
+            row++;
+          } else {
+            let dragonCol = col + 1;
+            const dragonRow = row >= BIG_ROWS ? BIG_ROWS - 1 : row - 1;
+            while (dragonCol >= totalCols) {
+              grid.forEach(rArr => rArr.push(null));
+              totalCols++;
+            }
+            while (grid[dragonRow][dragonCol]) {
+              dragonCol++;
+              if (dragonCol >= totalCols) {
+                grid.forEach(rArr => rArr.push(null));
+                totalCols++;
+              }
+            }
+            grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
+            lastPlaced = grid[dragonRow][dragonCol];
+          }
+          return;
         }
-        return;
       }
 
       if (!prevWinner) {
+        if (grid[0][0] && grid[0][0].isTieOnly && tieMode === 'circle') {
+          if (row < BIG_ROWS && !grid[row][col]) {
+            grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
+            lastPlaced = grid[row][col];
+            row++;
+          } else {
+            col++;
+            row = 0;
+            grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
+            lastPlaced = grid[0][col];
+            row = 1;
+          }
+          prevWinner = h.winner;
+          return;
+        }
+
         grid[0][0] = { ...h, historyIndex: idx, tieCount: 0 };
         lastPlaced = grid[0][0];
         prevWinner = h.winner;
@@ -529,6 +671,20 @@
         prevWinner = h.winner;
       }
     });
+
+    // Calcular raya de corrida vertical para columnas con 3 o más jugadas consecutivas
+    for (let c = 0; c < totalCols; c++) {
+      let runLength = 0;
+      while (runLength < BIG_ROWS && grid[runLength][c] !== null) {
+        runLength++;
+      }
+      if (runLength >= 3) {
+        for (let r = 0; r < runLength; r++) {
+          grid[r][c].hasStreakLine = true;
+          grid[r][c].streakPos = r === 0 ? 'start' : r === runLength - 1 ? 'end' : 'middle';
+        }
+      }
+    }
 
     return { grid, totalCols };
   })();
@@ -896,17 +1052,24 @@
                     class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
                     class:has-hand={!!cell}
                     on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''} (Clic para editar)` : ''}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}${cell.natural ? ' [Natural]' : ''} (Clic para editar)` : ''}
                   >
                     {#if cell}
+                      {#if cell.hasStreakLine}
+                        <span class="streak-line streak-{cell.streakPos}"></span>
+                      {/if}
                       <div
                         class="bigroad-ring {cell.winner.toLowerCase()}"
                         class:is-tie={cell.isTieOnly}
+                        class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && cell.score === null}
                       >
+                        {#if cell.natural}
+                          <span class="dot-natural" title="Victoria Natural (8 ó 9)"></span>
+                        {/if}
                         {#if cell.score !== undefined && cell.score !== null}
                           <span class="bigroad-score">{cell.score}</span>
                         {/if}
-                        {#if cell.tieCount > 0}
+                        {#if cell.tieCount > 0 && tieMode === 'slash'}
                           <span class="bigroad-tie-slash"></span>
                           {#if cell.tieCount > 1}
                             <span class="tie-badge-num">{cell.tieCount}</span>
@@ -1341,7 +1504,7 @@
       </div>
     </div>
 
-    <!-- GRUPO 4 (COL-2): ACCIÓN RETROCEDER -->
+    <!-- GRUPO 4 (COL-2): ACCIÓN RETROCEDER Y BOTÓN VISUALIZAR TIE -->
     <div class="footer-undo-col">
       <div class="action-btn-item">
         <button
@@ -1358,6 +1521,29 @@
           </div>
         </button>
         <span class="btn-caption undo-caption">RETROCEDER</span>
+      </div>
+
+      <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) -->
+      <div class="action-btn-item">
+        <button
+          type="button"
+          class="keypad-btn-tie-toggle"
+          on:click={toggleTieMode}
+          title={tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
+        >
+          <div class="tie-toggle-box">
+            {#if tieMode === 'slash'}
+              <svg width="34" height="34" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="3.6" stroke-linecap="round" />
+              </svg>
+            {:else}
+              <svg width="34" height="34" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <circle cx="16" cy="16" r="10.5" stroke="#0f172a" stroke-width="3.6" fill="none" />
+              </svg>
+            {/if}
+          </div>
+        </button>
+        <span class="btn-caption tie-toggle-caption">Tie</span>
       </div>
     </div>
   </footer>
@@ -2026,6 +2212,8 @@
     text-align: center;
     vertical-align: middle;
     transition: background 0.15s ease;
+    position: relative;
+    overflow: visible;
   }
 
   .bigroad-cell.has-hand {
@@ -2033,6 +2221,53 @@
   }
   .bigroad-cell.has-hand:hover {
     background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* RAYA VERTICAL DE CORRIDA (>= 3 JUGADAS CONSECUTIVAS EN COLUMNA) */
+  .streak-line {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3.5px;
+    background: #f59e0b;
+    z-index: 1;
+    pointer-events: none;
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
+  }
+  .streak-line.streak-start {
+    top: 50%;
+    bottom: -1px;
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+  }
+  .streak-line.streak-middle {
+    top: -1px;
+    bottom: -1px;
+  }
+  .streak-line.streak-end {
+    top: -1px;
+    bottom: 50%;
+    border-bottom-left-radius: 2px;
+    border-bottom-right-radius: 2px;
+  }
+
+  /* PUNTICO 3D ESFÉRICO DE VICTORIA NATURAL (Referencia Imagen 4) */
+  .dot-natural {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(var(--big-cell-size, 40px) * 0.44);
+    height: calc(var(--big-cell-size, 40px) * 0.44);
+    max-width: 17px;
+    max-height: 17px;
+    min-width: 10px;
+    min-height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #ffffff 0%, #fed7aa 22%, #f59e0b 58%, #b45309 100%);
+    box-shadow: 0 1.5px 3.5px rgba(0, 0, 0, 0.45), inset 0 0 2px rgba(255, 255, 255, 0.8);
+    z-index: 2;
+    pointer-events: none;
   }
 
   .bigroad-ring {
@@ -2046,6 +2281,7 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
+    z-index: 2;
   }
 
   .bigroad-ring.banca {
@@ -2056,6 +2292,10 @@
   }
   .bigroad-ring.empate {
     border-color: #22c55e;
+  }
+
+  .bigroad-ring.empate.tie-solid {
+    background: #16a34a;
   }
 
   .bigroad-ring.is-tie {
@@ -2345,7 +2585,7 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(240px, 3.2fr) minmax(130px, 2fr) minmax(110px, 1.7fr) minmax(260px, 3.7fr) minmax(95px, 1.4fr);
+    grid-template-columns: minmax(230px, 3fr) minmax(120px, 1.8fr) minmax(100px, 1.5fr) minmax(250px, 3.5fr) minmax(160px, 2.2fr);
     gap: 14px;
     align-items: stretch;
     margin-top: auto;
@@ -2515,11 +2755,12 @@
     max-width: 360px;
   }
 
-  /* GRUPO 5: ACCIÓN RETROCEDER */
+  /* GRUPO 5: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
   .footer-undo-col {
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: 16px;
     min-width: 0;
   }
 
@@ -2529,6 +2770,53 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
+  }
+
+  /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]) */
+  .keypad-btn-tie-toggle {
+    width: 66px;
+    height: 66px;
+    background: #ffffff;
+    border: 2.5px solid #0f172a;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    transition: all 0.15s ease-out;
+    padding: 0;
+  }
+
+  .keypad-btn-tie-toggle:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 12px -2px rgba(0, 0, 0, 0.15);
+    background: #f8fafc;
+    border-color: #000000;
+  }
+
+  .keypad-btn-tie-toggle:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .tie-toggle-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+
+  .tie-toggle-svg {
+    display: block;
+  }
+
+  .tie-toggle-caption {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #1e293b;
+    letter-spacing: 0.5px;
   }
 
   @media (max-width: 1024px) {
