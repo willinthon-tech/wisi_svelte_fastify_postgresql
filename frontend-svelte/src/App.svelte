@@ -392,8 +392,38 @@
     }
   }
 
+  // Verifica si la ruta actual es /herramientas o cualquiera de sus subrutas (ej: /herramientas/scoreboard-baccarat/...)
+  function isHerramientasRoute(route) {
+    const clean = route ? String(route).toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim() : '';
+    if (clean === 'herramientas' || clean.startsWith('herramientas/') || clean === 'otros/herramientas' || clean.startsWith('otros/herramientas/')) {
+      return true;
+    }
+    if (typeof window !== 'undefined') {
+      const hash = String(window.location.hash || '').toLowerCase().replace(/^#\/?/, '').replace(/^\//, '').split('?')[0].trim();
+      if (hash === 'herramientas' || hash.startsWith('herramientas/') || hash === 'otros/herramientas' || hash.startsWith('otros/herramientas/')) {
+        return true;
+      }
+      const path = String(window.location.pathname || '').toLowerCase().replace(/^\//, '').split('?')[0].trim();
+      if (path === 'herramientas' || path.startsWith('herramientas/') || path === 'otros/herramientas' || path.startsWith('otros/herramientas/')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Si el usuario entra a /herramientas o cualquier subruta, cerrar inmediatamente cualquier alerta de marcaje activa
+  $: if (isHerramientasRoute($currentRouteStore)) {
+    if (globalMarcajeAlert) {
+      if (globalMarcajeAlertTimer) clearTimeout(globalMarcajeAlertTimer);
+      globalMarcajeAlert = null;
+    }
+  }
+
   // Alerta única global (Top-Right): Entrada, Salida o Puerta / Otros
   function triggerGlobalMarcajeToast(rec, base, isSync = false) {
+    // Silenciar por completo las notificaciones de marcaje en /herramientas y sus subrutas
+    if (isHerramientasRoute($currentRouteStore)) return;
+
     const empFoto = rec.empleado_foto || rec.foto || (rec.empleado_id ? `/empleados/${rec.empleado_id}.jpg` : null);
     globalMarcajeAlert = {
       id: rec.id,
@@ -631,7 +661,8 @@
       if (
         currentTab === 'willinthontech' ||
         currentTab === 'master' ||
-        currentTab.includes('willinthontech')
+        currentTab.includes('willinthontech') ||
+        isHerramientasRoute($currentRouteStore)
       ) return;
 
       // --- Filtro estricto de sala: solo mostrar si el usuario tiene asignada la sala del marcaje ---
@@ -1311,7 +1342,7 @@
 />
 
 <!-- Alerta flotante superior única: Último Marcaje (Entrada, Salida o Puerta / Otros) -->
-{#if globalMarcajeAlert && $isAuthenticatedStore}
+{#if globalMarcajeAlert && $isAuthenticatedStore && !isHerramientasRoute($currentRouteStore)}
   <div class="global-marcaje-alert-toast-container">
     <div
       class="global-marcaje-alert-card"
