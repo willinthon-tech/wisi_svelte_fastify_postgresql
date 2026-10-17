@@ -285,11 +285,7 @@
     isOpen: false,
     title: '',
     question: '',
-    highlightLabel: '',
-    highlightValue: '',
     isDanger: true,
-    alertTitle: '',
-    alertSubtext: '',
     confirmText: '',
     onConfirm: () => {}
   };
@@ -298,14 +294,10 @@
     if (history.length === 0) return;
     confirmModalState = {
       isOpen: true,
-      title: 'Confirmar Borrado de Zapato',
-      question: `¿Deseas borrar todas las manos registradas en el Zapato #${shoeNumber}?`,
-      highlightLabel: 'Zapato Actual',
-      highlightValue: `Zapato #${shoeNumber} (${history.length} manos registradas)`,
+      title: 'Borrar Zapato',
+      question: `¿Deseas borrar el Zapato #${shoeNumber}?`,
       isDanger: true,
-      alertTitle: 'Esta acción no se puede deshacer.',
-      alertSubtext: 'Se eliminarán permanentemente todas las manos registradas en el zapato actual.',
-      confirmText: 'Sí, Borrar Zapato',
+      confirmText: 'Borrar',
       onConfirm: doClearShoe
     };
   }
@@ -322,14 +314,10 @@
   function openNewShoeModal() {
     confirmModalState = {
       isOpen: true,
-      title: 'Confirmar Nuevo Zapato',
-      question: `¿Deseas iniciar un Nuevo Zapato? (Pasará al Zapato #${shoeNumber + 1})`,
-      highlightLabel: 'Siguiente Zapato',
-      highlightValue: `Zapato #${shoeNumber + 1} (Cerrando Zapato #${shoeNumber} con ${history.length} manos)`,
+      title: 'Nuevo Zapato',
+      question: '¿Deseas iniciar un nuevo zapato?',
       isDanger: false,
-      alertTitle: 'Nuevo Zapato de Baccarat',
-      alertSubtext: `El Zapato #${shoeNumber} se archivará y comenzará una nueva ronda con zapato limpio.`,
-      confirmText: 'Sí, Iniciar Nuevo Zapato',
+      confirmText: 'Iniciar',
       onConfirm: doNewShoe
     };
   }
@@ -986,34 +974,6 @@
           <h4 class="question-text">
             {confirmModalState.question}
           </h4>
-
-          <!-- Highlight Box (Yellow Left Border) -->
-          <div class="highlight-box">
-            <span class="entity-label">{confirmModalState.highlightLabel}:</span>
-            <span class="entity-value">{confirmModalState.highlightValue}</span>
-          </div>
-
-          {#if confirmModalState.isDanger}
-            <!-- Red Alert Box -->
-            <div class="red-alert-box">
-              <div class="alert-title">
-                <span>⚠️</span> {confirmModalState.alertTitle}
-              </div>
-              <div class="alert-subtext">
-                {confirmModalState.alertSubtext}
-              </div>
-            </div>
-          {:else}
-            <!-- Amber Alert Box -->
-            <div class="amber-alert-box">
-              <div class="alert-title-amber">
-                <span>ℹ️</span> {confirmModalState.alertTitle}
-              </div>
-              <div class="alert-subtext-amber">
-                {confirmModalState.alertSubtext}
-              </div>
-            </div>
-          {/if}
         </div>
 
         <!-- Modal Footer -->
@@ -1971,7 +1931,7 @@
     background: #ffffff;
     border-radius: 12px;
     width: 100%;
-    max-width: 480px;
+    max-width: 400px;
     overflow: hidden;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
     border: 1px solid #e2e8f0;
@@ -2027,91 +1987,17 @@
   }
 
   .modal-body {
-    padding: 20px;
+    padding: 24px 20px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
   }
 
   .question-text {
     margin: 0;
-    font-size: 14.5px;
-    font-weight: 800;
+    font-size: 15px;
+    font-weight: 700;
     color: #1e293b;
-    line-height: 1.4;
-  }
-
-  .highlight-box {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #f59e0b;
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 13.5px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .entity-label {
-    font-weight: 800;
-    color: #0f172a;
-  }
-
-  .entity-value {
-    color: #334155;
-    font-weight: 600;
-  }
-
-  .red-alert-box {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 8px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .alert-title {
-    font-size: 13.5px;
-    font-weight: 800;
-    color: #991b1b;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .alert-subtext {
-    font-size: 12.5px;
-    color: #b91c1c;
-    line-height: 1.4;
-  }
-
-  .amber-alert-box {
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    border-radius: 8px;
-    padding: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .alert-title-amber {
-    font-size: 13.5px;
-    font-weight: 800;
-    color: #92400e;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .alert-subtext-amber {
-    font-size: 12.5px;
-    color: #b45309;
-    line-height: 1.4;
+    line-height: 1.45;
   }
 
   .modal-footer {
