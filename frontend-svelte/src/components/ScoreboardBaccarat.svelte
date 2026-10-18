@@ -1789,8 +1789,11 @@
               disabled={activeShoeIndex <= 0}
               on:click={goToPrevShoe}
               title="Ver zapato anterior"
+              aria-label="Zapato anterior"
             >
-              ‹
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
             </button>
           {/if}
 
@@ -1810,8 +1813,11 @@
               disabled={activeShoeIndex >= shoes.length - 1}
               on:click={goToNextShoe}
               title="Ver zapato siguiente"
+              aria-label="Zapato siguiente"
             >
-              ›
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
             </button>
           {/if}
         </div>
@@ -1824,7 +1830,11 @@
           on:click={handleDirectNewShoe}
           title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
         >
-          Nuevo Zapato
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Nuevo Zapato</span>
         </button>
       </div>
     </div>
@@ -1841,7 +1851,7 @@
             title="Ver sesión anterior (Histórico)"
             aria-label="Sesión anterior"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="15 18 9 12 15 6"></polyline>
             </svg>
           </button>
@@ -1864,7 +1874,7 @@
             title="Ver sesión siguiente"
             aria-label="Sesión siguiente"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </button>
@@ -2640,19 +2650,21 @@
   .sb-pills-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     flex-wrap: wrap;
   }
 
   .sb-shoe-pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     background: #1e293b;
-    padding: 3px 9px;
+    padding: 4px 12px;
+    min-height: 34px;
+    box-sizing: border-box;
     border-radius: 999px;
-    border: 1px solid #334155;
-    font-size: 11px;
+    border: 1.5px solid #334155;
+    font-size: 12px;
   }
 
   .sala-pill {
@@ -2671,74 +2683,89 @@
 
   .shoe-pill {
     border-color: #64748b;
+    padding: 3px 6px;
+    gap: 8px;
   }
 
   .shoe-pill-arrow {
-    background: rgba(56, 189, 248, 0.2);
-    border: 1px solid rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.22);
+    border: 1.5px solid rgba(56, 189, 248, 0.5);
     color: #38bdf8;
-    border-radius: 4px;
-    width: 17px;
-    height: 17px;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
-    font-weight: 900;
-    line-height: 1;
     cursor: pointer;
     padding: 0;
     transition: all 0.15s ease;
   }
   .shoe-pill-arrow:hover:not(:disabled) {
-    background: #38bdf8;
-    color: #0f172a;
+    background: #0284c7;
+    border-color: #38bdf8;
+    color: #ffffff;
+    transform: scale(1.08);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+  }
+  .shoe-pill-arrow:active:not(:disabled) {
+    transform: scale(0.95);
   }
   .shoe-pill-arrow:disabled {
-    opacity: 0.25;
+    opacity: 0.2;
     cursor: not-allowed;
     border-color: transparent;
+    background: transparent;
+    color: #64748b;
+    transform: none;
+    box-shadow: none;
   }
 
   .pill-sub {
-    font-size: 10px;
+    font-size: 11px;
     color: #94a3b8;
-    font-weight: 500;
+    font-weight: 600;
   }
 
   .pill-label {
     color: #94a3b8;
-    font-weight: 600;
-    font-size: 10px;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.5px;
   }
 
   .pill-value {
     color: #38bdf8;
     font-weight: 800;
+    font-size: 13px;
   }
 
   .pill-sep {
     color: #475569;
+    font-weight: bold;
   }
 
   /* BOTÓN NUEVO ZAPATO DIRECTO */
   .sb-btn-new-shoe {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: linear-gradient(135deg, rgba(2, 132, 199, 0.22) 0%, rgba(14, 165, 233, 0.12) 100%);
+    gap: 7px;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.35) 0%, rgba(14, 165, 233, 0.2) 100%);
     border: 1.5px solid #0284c7;
     color: #38bdf8;
-    padding: 3px 11px;
+    padding: 6px 14px;
+    min-height: 34px;
+    box-sizing: border-box;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-    line-height: 1.2;
+    line-height: 1;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
     user-select: none;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
 
   .sb-btn-new-shoe:hover:not(:disabled) {
@@ -2746,7 +2773,7 @@
     border-color: #38bdf8;
     color: #ffffff;
     transform: translateY(-1px);
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
   }
 
   .sb-btn-new-shoe:active:not(:disabled) {
@@ -2754,11 +2781,11 @@
   }
 
   .sb-btn-new-shoe:disabled {
-    opacity: 0.35;
+    opacity: 0.5;
     cursor: not-allowed;
     background: #1e293b;
     border-color: #334155;
-    color: #64748b;
+    color: #94a3b8;
     transform: none;
     box-shadow: none;
   }
@@ -2803,10 +2830,12 @@
   .sb-session-navigator {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    background: linear-gradient(180deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.98) 100%);
-    border: 1.5px solid rgba(239, 68, 68, 0.5);
+    gap: 10px;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 1.5px solid rgba(239, 68, 68, 0.55);
     padding: 3px 6px;
+    min-height: 38px;
+    box-sizing: border-box;
     border-radius: 9999px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 14px rgba(239, 68, 68, 0.18);
     backdrop-filter: blur(8px);
@@ -2819,11 +2848,12 @@
   }
 
   .session-nav-arrow {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
     color: #e2e8f0;
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     border-radius: 50%;
     cursor: pointer;
     padding: 0;
@@ -2834,11 +2864,11 @@
   }
 
   .session-nav-arrow:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.25);
+    background: rgba(239, 68, 68, 0.35);
     border-color: #ef4444;
     color: #ffffff;
     transform: scale(1.1);
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
   }
 
   .session-nav-arrow:active:not(:disabled) {
@@ -2846,10 +2876,10 @@
   }
 
   .session-nav-arrow:disabled {
-    opacity: 0.18;
+    opacity: 0.22;
     cursor: not-allowed;
     background: transparent;
-    border-color: transparent;
+    border-color: rgba(255, 255, 255, 0.06);
     color: #475569;
     transform: none;
     box-shadow: none;
@@ -2858,15 +2888,13 @@
   .session-label-wrapper {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 0 6px;
+    gap: 8px;
+    padding: 0 8px;
     user-select: none;
   }
 
-
-
   .session-label-text {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.5px;
     white-space: nowrap;
@@ -2883,7 +2911,7 @@
 
   .session-date-text {
     color: #f1f5f9;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.5px;
     white-space: nowrap;
@@ -2900,9 +2928,14 @@
 
   .sb-btn {
     border: none;
-    border-radius: 6px;
-    padding: 7px 14px;
-    font-size: 12px;
+    border-radius: 8px;
+    padding: 0 16px;
+    min-height: 34px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -4573,16 +4606,19 @@
 
   .theme-light .shoe-pill-arrow {
     background: #e0f2fe;
-    border: 1px solid #7dd3fc;
+    border: 1.5px solid #7dd3fc;
     color: #0284c7;
   }
   .theme-light .shoe-pill-arrow:hover:not(:disabled) {
     background: #0284c7;
+    border-color: #0369a1;
     color: #ffffff;
   }
   .theme-light .shoe-pill-arrow:disabled {
-    opacity: 0.3;
-    border-color: #e2e8f0;
+    opacity: 0.25;
+    border-color: transparent;
+    background: transparent;
+    color: #94a3b8;
   }
 
   .theme-light .sb-btn-new-shoe {
@@ -4598,9 +4634,10 @@
     box-shadow: 0 0 10px rgba(2, 132, 199, 0.5);
   }
   .theme-light .sb-btn-new-shoe:disabled {
-    background: #e2e8f0;
+    background: #f1f5f9;
     border-color: #cbd5e1;
     color: #94a3b8;
+    opacity: 0.7;
   }
 
   .theme-light .sb-session-navigator {
@@ -4614,13 +4651,19 @@
   }
   .theme-light .session-nav-arrow {
     background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    color: #475569;
+    border: 1.5px solid #cbd5e1;
+    color: #334155;
   }
   .theme-light .session-nav-arrow:hover:not(:disabled) {
     background: #fee2e2;
     border-color: #ef4444;
     color: #b91c1c;
+  }
+  .theme-light .session-nav-arrow:disabled {
+    opacity: 0.3;
+    background: transparent;
+    border-color: #e2e8f0;
+    color: #cbd5e1;
   }
   .theme-light .session-label-text.actual {
     color: #dc2626;
