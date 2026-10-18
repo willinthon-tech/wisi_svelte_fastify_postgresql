@@ -4365,6 +4365,7 @@
     padding-right: 18px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
+    height: 100%;
   }
 
   .score-keypad-box {
@@ -4373,12 +4374,12 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 175px;
+    max-width: 176px;
   }
 
   .score-keypad-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr) 1.2fr;
+    grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(3, 38px);
     grid-template-areas:
       "n1 n2 n3 n0"
@@ -4386,6 +4387,7 @@
       "n7 n8 n9 n0";
     gap: 6px;
     width: 100%;
+    height: 126px;
   }
 
   .btn-num-1 { grid-area: n1; }
@@ -4454,6 +4456,7 @@
     border-right: 2px solid #cbd5e1;
     min-width: 0;
     width: 100%;
+    height: 100%;
   }
 
   .modifiers-stack {
@@ -4461,9 +4464,10 @@
     flex-direction: column;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
-    max-width: 140px;
+    max-width: 135px;
+    height: 126px;
   }
 
   .modifiers-stack .keypad-pill {
@@ -4477,7 +4481,7 @@
     margin: 0 auto;
   }
 
-  /* GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO */
+  /* GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO EXACTO */
   .footer-outcomes-col {
     display: flex;
     justify-content: center;
@@ -4485,13 +4489,14 @@
     padding-right: 18px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
+    height: 100%;
   }
 
   .outcomes-grid-3col {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 22px;
+    gap: 20px;
     width: 100%;
     max-width: 440px;
   }
@@ -4501,8 +4506,9 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 18px;
+    gap: 20px;
     min-width: 0;
+    height: 100%;
   }
 
   .action-btn-item {
@@ -4511,34 +4517,36 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
+    width: 96px;
   }
 
-  /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]): MISMO ALTO/PROPORCIÓN VISUAL */
+  /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]): MISMO TAMAÑO EXACTO (96px x 96px) */
   .keypad-btn-tie-toggle {
-    width: 88px;
-    height: 88px;
+    width: 96px;
+    height: 96px;
     background: #ffffff;
-    border: 2.5px solid #0f172a;
-    border-radius: 12px;
+    border: 3px solid #0f172a;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-    transition: all 0.15s ease-out;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
     padding: 0;
+    box-sizing: border-box;
   }
 
   .keypad-btn-tie-toggle:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 12px -2px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 16px -2px rgba(0, 0, 0, 0.3);
     background: #f8fafc;
     border-color: #000000;
   }
 
   .keypad-btn-tie-toggle:active {
-    transform: translateY(1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transform: translateY(2px) scale(0.97);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   }
 
   .tie-toggle-box {
@@ -4554,10 +4562,14 @@
   }
 
   .tie-toggle-caption {
-    font-size: 15px;
+    font-size: 13.5px;
     font-weight: 900;
     color: #1e293b;
     letter-spacing: 0.5px;
+    user-select: none;
+    text-align: center;
+    width: 100%;
+    margin-top: 2px;
   }
 
   /* BOTÓN EDITAR EN MODO EDICIÓN */
@@ -4750,6 +4762,13 @@
       width: 72px;
       height: 72px;
     }
+    .keypad-btn-tie-toggle {
+      width: 72px;
+      height: 72px;
+    }
+    .action-btn-item {
+      width: 72px;
+    }
   }
 
   .keypad-btn-circle:hover {
@@ -4864,10 +4883,13 @@
   }
 
   .btn-caption {
-    font-size: 16px;
+    font-size: 13.5px;
     font-weight: 900;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.5px;
     user-select: none;
+    text-align: center;
+    width: 100%;
+    margin-top: 2px;
   }
   .punto-caption { color: #2563eb; }
   .banca-caption { color: #dc2626; }
