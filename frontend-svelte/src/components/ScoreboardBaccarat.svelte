@@ -546,17 +546,17 @@
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 12;
 
-  // Dynamic roadmap sizing: scales with available height (e.g. 14px - 45px depending on monitor)
-  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 14);
+  // Dynamic roadmap sizing: scales with available height (e.g. 12px - 45px depending on monitor)
+  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 12);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 14);
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 12);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
   // Derived roads: cuadrículas compactas de casino (12 filas, adaptativas para cubrir la tarjeta)
-  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 24);
+  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 20);
   $: derivedRows = DERIVED_ROWS;
-  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 6);
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 5);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 45);
 
   function safeJsonParse(val, fallback = []) {
@@ -3615,7 +3615,7 @@
   /* COLUMNA IZQUIERDA (COL-10): GRAN CAMINO ARRIBA (ABARCA 2 DERIVADAS) Y PLATO DE BOLAS ABAJO (ABARCA 1) */
   .sb-roadmaps-left-col {
     display: grid;
-    grid-template-rows: calc((100% - 8px) * 2 / 3) calc((100% - 8px) / 3);
+    grid-template-rows: 2fr 1fr;
     gap: clamp(4px, 0.8vh, 8px);
     height: 100%;
     min-height: 0;
@@ -4271,11 +4271,11 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  @media (max-width: 1200px) {
+  @media (max-width: 860px) {
     .scoreboard-stats-bar {
       grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      padding: 10px 16px;
+      gap: 6px;
+      padding: 4px 10px;
     }
     .stats-bar-col.col-counters {
       grid-column: 1 / -1;
@@ -4285,6 +4285,7 @@
     .stats-strip-counters {
       justify-content: center;
       margin: 0 auto;
+      gap: 12px;
     }
     .stats-bar-col.col-prediction {
       grid-column: 1;
@@ -4305,11 +4306,11 @@
     }
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 580px) {
     .scoreboard-stats-bar {
       grid-template-columns: 1fr;
-      gap: 10px;
-      padding: 8px 10px;
+      gap: 4px;
+      padding: 4px 6px;
     }
     .stats-bar-col.col-counters,
     .stats-bar-col.col-prediction,
@@ -4324,12 +4325,12 @@
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 14px;
-    padding: clamp(6px, 1.2vh, 12px) clamp(10px, 1.4vw, 18px);
+    padding: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
     display: grid;
     grid-template-columns: minmax(130px, 1fr) minmax(170px, 1.25fr) minmax(280px, 2.5fr) minmax(170px, 1.45fr);
-    gap: clamp(8px, 1.2vw, 18px);
+    gap: clamp(6px, 1vw, 16px);
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
@@ -4337,7 +4338,7 @@
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
-    --footer-btn-size: clamp(70px, 9.8vh, 92px);
+    --footer-btn-size: clamp(64px, 9.2vh, 92px);
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -4700,9 +4701,9 @@
   @media (max-width: 1180px) {
     .scoreboard-footer-panel {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: clamp(6px, 1vh, 12px) clamp(10px, 1.4vw, 18px);
-      padding: clamp(6px, 1vh, 12px) clamp(10px, 1.4vw, 18px);
-      --footer-btn-size: clamp(60px, 8.4vh, 84px);
+      gap: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
+      padding: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
+      --footer-btn-size: clamp(52px, 7.6vh, 82px);
     }
 
     /* FILA 1 (ARRIBA):
@@ -4715,7 +4716,7 @@
       border-right: 2px solid #cbd5e1;
       border-bottom: 2px solid #cbd5e1;
       padding-right: 12px;
-      padding-bottom: clamp(6px, 1vh, 10px);
+      padding-bottom: clamp(4px, 0.6vh, 8px);
       justify-content: center;
       align-items: center;
       width: 100%;
@@ -4726,7 +4727,7 @@
     }
     .score-keypad-grid {
       grid-template-rows: repeat(3, 1fr);
-      gap: 4px;
+      gap: 3px;
       height: calc(var(--footer-btn-size) * 1.32);
     }
 
@@ -4737,7 +4738,7 @@
       border-bottom: 2px solid #cbd5e1;
       padding-left: 12px;
       padding-right: 0;
-      padding-bottom: clamp(6px, 1vh, 10px);
+      padding-bottom: clamp(4px, 0.6vh, 8px);
       justify-content: center;
       align-items: center;
       width: 100%;
@@ -4746,10 +4747,10 @@
       margin: 0 auto;
       max-width: calc(var(--footer-btn-size) * 2.45);
       height: calc(var(--footer-btn-size) * 1.32);
-      gap: 6px;
+      gap: 5px;
     }
     .modifiers-grid-2x2 .keypad-pill {
-      font-size: clamp(11px, calc(var(--footer-btn-size) * 0.16), 13.5px);
+      font-size: clamp(10.5px, calc(var(--footer-btn-size) * 0.16), 13px);
     }
 
     /* FILA 2 (ABAJO):
@@ -4762,14 +4763,14 @@
       border-right: 2px solid #cbd5e1;
       border-bottom: none;
       padding-right: 12px;
-      padding-top: clamp(6px, 1vh, 8px);
+      padding-top: clamp(4px, 0.6vh, 8px);
       justify-content: center;
       align-items: center;
       width: 100%;
     }
     .outcomes-grid-3col {
       margin: 0 auto;
-      gap: clamp(8px, 1.2vw, 14px);
+      gap: clamp(6px, 1.2vw, 14px);
       max-width: calc(var(--footer-btn-size) * 3 + 36px);
     }
 
@@ -4779,11 +4780,11 @@
       border-right: none;
       border-bottom: none;
       padding-left: 12px;
-      padding-top: clamp(6px, 1vh, 8px);
+      padding-top: clamp(4px, 0.6vh, 8px);
       justify-content: center;
       align-items: center;
       width: 100%;
-      gap: clamp(10px, 1.5vw, 18px);
+      gap: clamp(8px, 1.4vw, 16px);
     }
 
     .action-btn-item {
@@ -4806,7 +4807,7 @@
       height: calc(var(--footer-btn-size) * 0.4);
     }
     .btn-caption, .tie-toggle-caption {
-      font-size: clamp(11px, calc(var(--footer-btn-size) * 0.14), 12.5px);
+      font-size: clamp(10.5px, calc(var(--footer-btn-size) * 0.14), 12.5px);
     }
   }
 
@@ -4814,9 +4815,9 @@
   @media (max-width: 680px) {
     .scoreboard-footer-panel {
       grid-template-columns: 1fr;
-      gap: 8px;
-      padding: 6px 10px;
-      --footer-btn-size: clamp(48px, 6.8vh, 58px);
+      gap: 6px;
+      padding: 4px 8px;
+      --footer-btn-size: clamp(40px, 5.8vh, 52px);
     }
     .footer-score-col,
     .footer-modifiers-col,
@@ -4962,8 +4963,8 @@
 
   /* 3D CIRCULAR CASINO BUTTONS: TODOS DEL MISMO TAMAÑO EXACTO */
   .keypad-btn-circle {
-    width: 96px;
-    height: 96px;
+    width: var(--footer-btn-size, 92px);
+    height: var(--footer-btn-size, 92px);
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -4976,11 +4977,13 @@
     box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
+    box-sizing: border-box;
+    flex-shrink: 0;
   }
 
   .keypad-btn-circle.btn-undo {
-    width: 96px;
-    height: 96px;
+    width: var(--footer-btn-size, 92px);
+    height: var(--footer-btn-size, 92px);
   }
 
   .keypad-btn-circle:hover {
@@ -5009,7 +5012,7 @@
   }
 
   .btn-letter {
-    font-size: 46px;
+    font-size: calc(var(--footer-btn-size, 92px) * 0.48);
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -5036,8 +5039,8 @@
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
   .btn-arrow-icon {
-    width: 38px;
-    height: 38px;
+    width: calc(var(--footer-btn-size, 92px) * 0.4);
+    height: calc(var(--footer-btn-size, 92px) * 0.4);
     display: block;
     color: #ffffff;
     filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.65));
@@ -5049,8 +5052,10 @@
     position: absolute;
     top: 0px;
     left: 0px;
-    width: 19px;
-    height: 19px;
+    width: calc(var(--footer-btn-size, 92px) * 0.2);
+    height: calc(var(--footer-btn-size, 92px) * 0.2);
+    min-width: 14px;
+    min-height: 14px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #ff4d4d, #b91c1c);
     border: 2px solid #ffffff;
@@ -5063,8 +5068,10 @@
     position: absolute;
     bottom: 0px;
     right: 0px;
-    width: 19px;
-    height: 19px;
+    width: calc(var(--footer-btn-size, 92px) * 0.2);
+    height: calc(var(--footer-btn-size, 92px) * 0.2);
+    min-width: 14px;
+    min-height: 14px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8);
     border: 2px solid #ffffff;
@@ -5080,18 +5087,54 @@
   }
 
   .btn-caption {
-    font-size: 13.5px;
+    font-size: clamp(10.5px, calc(var(--footer-btn-size, 92px) * 0.14), 13px);
     font-weight: 900;
     letter-spacing: 0.6px;
     user-select: none;
     text-align: center;
     width: 100%;
-    margin-top: 4px;
+    margin-top: 2px;
   }
   .punto-caption { color: #2563eb; }
   .banca-caption { color: #dc2626; }
   .tie-caption { color: #16a34a; }
   .undo-caption { color: #854d0e; }
+
+  /* REGLAS DE ESCALADO PARA PANTALLAS CON ALTURA COMPACTA (< 768px DE ALTO) */
+  @media (max-height: 768px) {
+    .scoreboard-container {
+      gap: 3px;
+      padding: 3px 6px;
+    }
+    .scoreboard-stats-bar {
+      padding: 2px 8px;
+      gap: 8px;
+    }
+    .scoreboard-footer-panel {
+      padding: 3px 8px;
+      --footer-btn-size: clamp(48px, 7.4vh, 72px);
+    }
+  }
+
+  @media (max-height: 600px) {
+    .sb-btn-table-info {
+      min-height: 28px;
+      font-size: 12px;
+      padding: 2px 10px;
+    }
+    .scoreboard-container {
+      gap: 2px;
+      padding: 2px 4px;
+    }
+    .scoreboard-stats-bar {
+      padding: 2px 6px;
+      gap: 6px;
+    }
+    .scoreboard-footer-panel {
+      padding: 2px 6px;
+      --footer-btn-size: clamp(38px, 6vh, 54px);
+    }
+  }
 
   /* MODAL DE CONFIRMACIÓN (ESTILO OFICIAL WISI) */
   .modal-backdrop {
