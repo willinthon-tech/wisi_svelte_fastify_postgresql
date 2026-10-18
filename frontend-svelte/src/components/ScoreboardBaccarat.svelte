@@ -258,16 +258,16 @@
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 6;
 
-  // Compact roadmap sizing (6 rows each, ~20-24px per cell)
-  $: bigRoadCellSize = Math.min(Math.max(Math.floor(((bigRoadHeight || 144) - 2) / 6), 18), 24);
+  // Compact roadmap sizing (6 rows each, ~20-22px per cell)
+  $: bigRoadCellSize = Math.min(Math.max(Math.floor(((bigRoadHeight || 136) - 2) / 6), 18), 23);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.min(Math.max(Math.floor(((beadHeight || 144) - 2) / 6), 18), 24);
+  $: beadCellSize = Math.min(Math.max(Math.floor(((beadHeight || 136) - 2) / 6), 18), 23);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
   // Derived roads: each of the 3 bands has 6 rows (total 18 rows)
-  $: derivedBandHeight = (derivedHeight || 144) / 3;
-  $: derivedCellSize = Math.min(Math.max(Math.floor((derivedBandHeight - 2) / 6), 7), 10);
+  $: derivedBandHeight = (derivedHeight || 136) / 3;
+  $: derivedCellSize = Math.min(Math.max(Math.floor((derivedBandHeight - 2) / 6), 7), 9);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / derivedCellSize) + 1, 50);
 
   function safeJsonParse(val, fallback = []) {
@@ -2175,247 +2175,244 @@
     </div>
   {/if}
 
-  <!-- FOOTER OPERATIONAL PANEL: FRANJA SUPERIOR DE STATS + CONTROLES GRANDES -->
-  <footer class="scoreboard-footer-panel">
-    <!-- FRANJA SUPERIOR: ESTADÍSTICAS A LO LARGO DE TODA LA SECCIÓN -->
-    <div class="footer-stats-strip">
-      <div class="stats-strip-counters">
-        <!-- Total manos # -->
-        <div class="counter-item">
-          <div class="bead-circle-badge bead-gray">#</div>
-          <div class="counter-digit">{totalHands}</div>
-        </div>
-
-        <!-- Banker B -->
-        <div class="counter-item">
-          <div class="bead-circle-badge bead-red">B</div>
-          <div class="counter-digit">{countBanca}</div>
-        </div>
-
-        <!-- Player P -->
-        <div class="counter-item">
-          <div class="bead-circle-badge bead-blue">P</div>
-          <div class="counter-digit">{countPunto}</div>
-        </div>
-
-        <!-- Tie T -->
-        <div class="counter-item">
-          <div class="bead-circle-badge bead-green">T</div>
-          <div class="counter-digit">{countEmpate}</div>
-        </div>
-
-        <!-- Natural N -->
-        <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
-          <div class="bead-circle-badge bead-orange">N</div>
-          <div class="counter-digit">{countNatural}</div>
-        </div>
-
-        <!-- Banker Pair -->
-        <div class="counter-item" title="Parejas de Banca (B.Pair)">
-          <div class="bead-circle-badge bead-white">
-            <span class="bead-dot dot-tl red-dot"></span>
-          </div>
-          <div class="counter-digit">{countBPair}</div>
-        </div>
-
-        <!-- Player Pair -->
-        <div class="counter-item" title="Parejas de Punto (P.Pair)">
-          <div class="bead-circle-badge bead-white">
-            <span class="bead-dot dot-br blue-dot"></span>
-          </div>
-          <div class="counter-digit">{countPPair}</div>
-        </div>
+  <!-- FRANJA DE ESTADÍSTICAS INDEPENDIENTE (APARTE) -->
+  <section class="scoreboard-stats-bar">
+    <div class="stats-strip-counters">
+      <!-- Total manos # -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-gray">#</div>
+        <div class="counter-digit">{totalHands}</div>
       </div>
 
-      <!-- Resumen de porcentajes -->
-      <div class="stats-strip-pct-box">
-        <span class="pct-tag b">B: {pctBanca}%</span>
-        <span class="pct-tag p">P: {pctPunto}%</span>
-        <span class="pct-tag t">T: {pctEmpate}%</span>
+      <!-- Banker B -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-red">B</div>
+        <div class="counter-digit">{countBanca}</div>
+      </div>
+
+      <!-- Player P -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-blue">P</div>
+        <div class="counter-digit">{countPunto}</div>
+      </div>
+
+      <!-- Tie T -->
+      <div class="counter-item">
+        <div class="bead-circle-badge bead-green">T</div>
+        <div class="counter-digit">{countEmpate}</div>
+      </div>
+
+      <!-- Natural N -->
+      <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
+        <div class="bead-circle-badge bead-orange">N</div>
+        <div class="counter-digit">{countNatural}</div>
+      </div>
+
+      <!-- Banker Pair -->
+      <div class="counter-item" title="Parejas de Banca (B.Pair)">
+        <div class="bead-circle-badge bead-white">
+          <span class="bead-dot dot-tl red-dot"></span>
+        </div>
+        <div class="counter-digit">{countBPair}</div>
+      </div>
+
+      <!-- Player Pair -->
+      <div class="counter-item" title="Parejas de Punto (P.Pair)">
+        <div class="bead-circle-badge bead-white">
+          <span class="bead-dot dot-br blue-dot"></span>
+        </div>
+        <div class="counter-digit">{countPPair}</div>
       </div>
     </div>
 
-    <!-- SECCIÓN INFERIOR: BOTONES DE CONTROL OPERATIVO EXPANDIDOS -->
-    <div class="footer-controls-row">
-      <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
-      <div class="footer-score-col">
-        <div class="score-keypad-box">
-          <div class="score-keypad-grid">
-            {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
-              <button
-                type="button"
-                class="btn-num-key btn-num-{num}"
-                class:active={activeScore === num}
-                disabled={!isCurrentShoeActive}
-                on:click={() => selectScore(num)}
-                title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : `Seleccionar valor ${num} para la mano`}
-              >
-                {num}
-              </button>
-            {/each}
-            <!-- 0 al lado del 3, 6, 9 abarcando todo el largo de las 3 filas -->
+    <!-- Resumen de porcentajes -->
+    <div class="stats-strip-pct-box">
+      <span class="pct-tag b">B: {pctBanca}%</span>
+      <span class="pct-tag p">P: {pctPunto}%</span>
+      <span class="pct-tag t">T: {pctEmpate}%</span>
+    </div>
+  </section>
+
+  <!-- PANEL OPERATIVO DE CONTROLES (SEPARADO Y MÁS GRANDE) -->
+  <footer class="scoreboard-footer-panel">
+    <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
+    <div class="footer-score-col">
+      <div class="score-keypad-box">
+        <div class="score-keypad-grid">
+          {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
             <button
               type="button"
-              class="btn-num-key btn-num-zero"
-              class:active={activeScore === 0}
+              class="btn-num-key btn-num-{num}"
+              class:active={activeScore === num}
               disabled={!isCurrentShoeActive}
-              on:click={() => selectScore(0)}
-              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Seleccionar valor 0 para la mano'}
+              on:click={() => selectScore(num)}
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : `Seleccionar valor ${num} para la mano`}
             >
-              0
+              {num}
             </button>
-          </div>
+          {/each}
+          <!-- 0 al lado del 3, 6, 9 abarcando todo el largo de las 3 filas -->
+          <button
+            type="button"
+            class="btn-num-key btn-num-zero"
+            class:active={activeScore === 0}
+            disabled={!isCurrentShoeActive}
+            on:click={() => selectScore(0)}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Seleccionar valor 0 para la mano'}
+          >
+            0
+          </button>
         </div>
       </div>
+    </div>
 
-      <!-- GRUPO 2: MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) -->
-      <div class="footer-modifiers-col">
-        <button
-          type="button"
-          class="keypad-pill pill-ppair"
-          class:active={activePPair}
-          disabled={!isCurrentShoeActive}
-          on:click={togglePPair}
-          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Punto (P.Pair)'}
-        >
-          P.Pair
-        </button>
+    <!-- GRUPO 2: MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) -->
+    <div class="footer-modifiers-col">
+      <button
+        type="button"
+        class="keypad-pill pill-ppair"
+        class:active={activePPair}
+        disabled={!isCurrentShoeActive}
+        on:click={togglePPair}
+        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Punto (P.Pair)'}
+      >
+        P.Pair
+      </button>
 
-        <button
-          type="button"
-          class="keypad-pill pill-bpair"
-          class:active={activeBPair}
-          disabled={!isCurrentShoeActive}
-          on:click={toggleBPair}
-          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Banca (B.Pair)'}
-        >
-          B.Pair
-        </button>
+      <button
+        type="button"
+        class="keypad-pill pill-bpair"
+        class:active={activeBPair}
+        disabled={!isCurrentShoeActive}
+        on:click={toggleBPair}
+        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Banca (B.Pair)'}
+      >
+        B.Pair
+      </button>
 
-        <button
-          type="button"
-          class="keypad-pill pill-win"
-          class:active={activeWin}
-          disabled={!isCurrentShoeActive}
-          on:click={toggleWin}
-          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria Natural (8 ó 9)'}
-        >
-          Natural
-        </button>
-      </div>
+      <button
+        type="button"
+        class="keypad-pill pill-win"
+        class:active={activeWin}
+        disabled={!isCurrentShoeActive}
+        on:click={toggleWin}
+        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria Natural (8 ó 9)'}
+      >
+        Natural
+      </button>
+    </div>
 
-      <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
-      <div class="footer-outcomes-col">
-        <div class="outcomes-grid-3col">
-          <!-- PUNTO BUTTON -->
-          <div class="action-btn-item">
-            <button
-              type="button"
-              class="keypad-btn-circle btn-punto"
-              disabled={!isCurrentShoeActive}
-              on:click={() => recordOutcome('PUNTO')}
-              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'}
-            >
-              {#if activeBPair}
-                <span class="badge-corner-tl" title="B.Pair activo"></span>
-              {/if}
-              {#if activePPair}
-                <span class="badge-corner-br" title="P.Pair activo"></span>
-              {/if}
-              <div class="btn-inner-gloss">
-                <span class="btn-letter">P</span>
-              </div>
-            </button>
-            <span class="btn-caption punto-caption">PUNTO</span>
-          </div>
-
-          <!-- BANCA BUTTON -->
-          <div class="action-btn-item">
-            <button
-              type="button"
-              class="keypad-btn-circle btn-banca"
-              disabled={!isCurrentShoeActive}
-              on:click={() => recordOutcome('BANCA')}
-              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'}
-            >
-              {#if activeBPair}
-                <span class="badge-corner-tl" title="B.Pair activo"></span>
-              {/if}
-              {#if activePPair}
-                <span class="badge-corner-br" title="P.Pair activo"></span>
-              {/if}
-              <div class="btn-inner-gloss">
-                <span class="btn-letter">B</span>
-              </div>
-            </button>
-            <span class="btn-caption banca-caption">BANCA</span>
-          </div>
-
-          <!-- EMPATE BUTTON -->
-          <div class="action-btn-item">
-            <button
-              type="button"
-              class="keypad-btn-circle btn-tie"
-              disabled={!isCurrentShoeActive}
-              on:click={() => recordOutcome('EMPATE')}
-              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'}
-            >
-              {#if activeBPair}
-                <span class="badge-corner-tl" title="B.Pair activo"></span>
-              {/if}
-              {#if activePPair}
-                <span class="badge-corner-br" title="P.Pair activo"></span>
-              {/if}
-              <div class="btn-inner-gloss">
-                <span class="btn-letter">T</span>
-              </div>
-            </button>
-            <span class="btn-caption tie-caption">EMPATE</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- GRUPO 4: ACCIÓN RETROCEDER Y BOTÓN VISUALIZAR TIE -->
-      <div class="footer-undo-col">
+    <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
+    <div class="footer-outcomes-col">
+      <div class="outcomes-grid-3col">
+        <!-- PUNTO BUTTON -->
         <div class="action-btn-item">
           <button
             type="button"
-            class="keypad-btn-circle btn-undo"
-            on:click={undoLast}
-            disabled={!isCurrentShoeActive || history.length === 0}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'}
+            class="keypad-btn-circle btn-punto"
+            disabled={!isCurrentShoeActive}
+            on:click={() => recordOutcome('PUNTO')}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'}
           >
+            {#if activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
             <div class="btn-inner-gloss">
-              <svg class="btn-arrow-icon" width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 12H5m0 0l6-6M5 12l6 6" />
-              </svg>
+              <span class="btn-letter">P</span>
             </div>
           </button>
-          <span class="btn-caption undo-caption">RETROCEDER</span>
+          <span class="btn-caption punto-caption">PUNTO</span>
         </div>
 
-        <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) -->
+        <!-- BANCA BUTTON -->
         <div class="action-btn-item">
           <button
             type="button"
-            class="keypad-btn-tie-toggle"
-            on:click={toggleTieMode}
-            title={tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
+            class="keypad-btn-circle btn-banca"
+            disabled={!isCurrentShoeActive}
+            on:click={() => recordOutcome('BANCA')}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'}
           >
-            <div class="tie-toggle-box">
-              {#if tieMode === 'slash'}
-                <svg width="40" height="40" viewBox="0 0 32 32" class="tie-toggle-svg">
-                  <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="3.8" stroke-linecap="round" />
-                </svg>
-              {:else}
-                <svg width="40" height="40" viewBox="0 0 32 32" class="tie-toggle-svg">
-                  <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="3.8" fill="none" />
-                </svg>
-              {/if}
+            {#if activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">B</span>
             </div>
           </button>
-          <span class="btn-caption tie-toggle-caption">Tie</span>
+          <span class="btn-caption banca-caption">BANCA</span>
         </div>
+
+        <!-- EMPATE BUTTON -->
+        <div class="action-btn-item">
+          <button
+            type="button"
+            class="keypad-btn-circle btn-tie"
+            disabled={!isCurrentShoeActive}
+            on:click={() => recordOutcome('EMPATE')}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'}
+          >
+            {#if activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">T</span>
+            </div>
+          </button>
+          <span class="btn-caption tie-caption">EMPATE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRUPO 4: ACCIÓN RETROCEDER Y BOTÓN VISUALIZAR TIE -->
+    <div class="footer-undo-col">
+      <div class="action-btn-item">
+        <button
+          type="button"
+          class="keypad-btn-circle btn-undo"
+          on:click={undoLast}
+          disabled={!isCurrentShoeActive || history.length === 0}
+          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'}
+        >
+          <div class="btn-inner-gloss">
+            <svg class="btn-arrow-icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 12H5m0 0l6-6M5 12l6 6" />
+            </svg>
+          </div>
+        </button>
+        <span class="btn-caption undo-caption">RETROCEDER</span>
+      </div>
+
+      <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) -->
+      <div class="action-btn-item">
+        <button
+          type="button"
+          class="keypad-btn-tie-toggle"
+          on:click={toggleTieMode}
+          title={tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
+        >
+          <div class="tie-toggle-box">
+            {#if tieMode === 'slash'}
+              <svg width="44" height="44" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="4" stroke-linecap="round" />
+              </svg>
+            {:else}
+              <svg width="44" height="44" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="4" fill="none" />
+              </svg>
+            {/if}
+          </div>
+        </button>
+        <span class="btn-caption tie-toggle-caption">Tie</span>
       </div>
     </div>
   </footer>
@@ -3072,9 +3069,9 @@
   }
 
   .bigroad-card {
-    height: 144px;
-    min-height: 135px;
-    max-height: 150px;
+    height: 136px;
+    min-height: 125px;
+    max-height: 142px;
     flex: 0 0 auto;
     width: 100%;
     display: flex;
@@ -3085,9 +3082,9 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    height: 144px;
-    min-height: 135px;
-    max-height: 150px;
+    height: 136px;
+    min-height: 125px;
+    max-height: 142px;
     flex: 0 0 auto;
     align-items: stretch;
   }
@@ -3712,38 +3709,26 @@
     box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
   }
 
-  /* FOOTER OPERATIONAL PANEL: FRANJA SUPERIOR STATS + CONTROLES EXPANDIDOS */
-  .scoreboard-footer-panel {
+  /* BARRA DE ESTADÍSTICAS INDEPENDIENTE (APARTE) */
+  .scoreboard-stats-bar {
     background: #ffffff;
     border-radius: 12px;
-    padding: 8px 16px 12px 16px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    padding: 7px 18px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     border: 2px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: auto;
-    flex-shrink: 0;
-  }
-
-  /* FRANJA SUPERIOR: STATS HORIZONTAL COMPLETO A LO LARGO DE TODA LA SECCIÓN */
-  .footer-stats-strip {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
-    padding: 4px 12px 6px 12px;
-    border-bottom: 1.5px solid #e2e8f0;
     gap: 16px;
-    background: #f8fafc;
-    border-radius: 8px;
+    width: 100%;
     box-sizing: border-box;
+    flex-shrink: 0;
   }
 
   .stats-strip-counters {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 20px;
     flex-wrap: nowrap;
     overflow-x: auto;
   }
@@ -3752,30 +3737,59 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
+  }
+
+  .bead-circle-badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 900;
+    color: #ffffff;
+    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+    position: relative;
+    user-select: none;
+  }
+
+  .counter-digit {
+    font-size: 16px;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1;
+    min-width: 12px;
   }
 
   .stats-strip-pct-box {
     display: flex;
     align-items: center;
-    gap: 12px;
-    background: #ffffff;
-    padding: 3px 12px;
+    gap: 14px;
+    background: #f1f5f9;
+    padding: 4px 16px;
     border-radius: 999px;
     border: 1px solid #cbd5e1;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 800;
     white-space: nowrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   }
 
-  /* SECCIÓN INFERIOR: CONTROLES EXPANDIDOS */
-  .footer-controls-row {
+  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN MÁS GRANDE */
+  .scoreboard-footer-panel {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 14px 22px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(140px, 1.2fr) minmax(130px, 1fr) minmax(320px, 2.5fr) minmax(170px, 1.3fr);
-    gap: 16px;
+    grid-template-columns: minmax(180px, 1.25fr) minmax(150px, 1.05fr) minmax(400px, 2.9fr) minmax(210px, 1.5fr);
+    gap: 24px;
     align-items: center;
-    width: 100%;
+    margin-top: auto;
+    flex-shrink: 0;
   }
 
   /* GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) */
@@ -3784,7 +3798,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 14px;
+    padding-right: 20px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -3795,18 +3809,18 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 180px;
+    max-width: 210px;
   }
 
   .score-keypad-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr) 1.25fr;
-    grid-template-rows: repeat(3, 38px);
+    grid-template-rows: repeat(3, 44px);
     grid-template-areas:
       "n1 n2 n3 n0"
       "n4 n5 n6 n0"
       "n7 n8 n9 n0";
-    gap: 5px;
+    gap: 6px;
     width: 100%;
   }
 
@@ -3822,17 +3836,17 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 900;
   }
 
   .btn-num-key {
-    border-radius: 6px;
+    border-radius: 8px;
     border: 1.5px solid #cbd5e1;
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: 17px;
+    font-size: 19px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -3872,17 +3886,17 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 8px;
-    padding-right: 14px;
+    gap: 10px;
+    padding-right: 20px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
 
   .footer-modifiers-col .keypad-pill {
     width: 100%;
-    max-width: 140px;
-    height: 38px;
-    font-size: 13.5px;
+    max-width: 155px;
+    height: 42px;
+    font-size: 14.5px;
     font-weight: 800;
     letter-spacing: 0.3px;
     margin: 0 auto;
@@ -3893,7 +3907,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding-right: 14px;
+    padding-right: 20px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -3902,9 +3916,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 24px;
+    gap: 28px;
     width: 100%;
-    max-width: 440px;
+    max-width: 480px;
   }
 
   /* GRUPO 4: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
@@ -3912,7 +3926,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 18px;
+    gap: 20px;
     min-width: 0;
   }
 
@@ -3921,16 +3935,16 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 7px;
   }
 
   /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]) */
   .keypad-btn-tie-toggle {
-    width: 78px;
-    height: 78px;
+    width: 86px;
+    height: 86px;
     background: #ffffff;
-    border: 2.5px solid #0f172a;
-    border-radius: 10px;
+    border: 3px solid #0f172a;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3965,36 +3979,36 @@
   }
 
   .tie-toggle-caption {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 900;
     color: #1e293b;
     letter-spacing: 0.5px;
   }
 
   @media (max-width: 1024px) {
-    .footer-controls-row {
+    .scoreboard-footer-panel {
       grid-template-columns: 1fr 1fr;
-      gap: 14px;
+      gap: 16px;
     }
     .footer-score-col, .footer-modifiers-col, .footer-outcomes-col {
       border-right: none;
       border-bottom: 2px solid #cbd5e1;
       padding-right: 0;
-      padding-bottom: 12px;
+      padding-bottom: 14px;
     }
     .footer-modifiers-col {
       flex-direction: row;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
     }
     .footer-modifiers-col .keypad-pill {
-      max-width: 110px;
+      max-width: 120px;
     }
   }
 
   @media (max-width: 600px) {
     .outcomes-grid-3col {
-      gap: 12px;
+      gap: 14px;
     }
   }
 
@@ -4065,8 +4079,8 @@
 
   /* 3D CIRCULAR CASINO BUTTONS */
   .keypad-btn-circle {
-    width: 96px;
-    height: 96px;
+    width: 108px;
+    height: 108px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -4075,25 +4089,25 @@
     cursor: pointer;
     border: none;
     background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
-    padding: 4px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    padding: 4.5px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
   }
 
   .keypad-btn-circle.btn-undo {
-    width: 88px;
-    height: 88px;
+    width: 98px;
+    height: 98px;
   }
 
   @media (max-width: 600px) {
     .keypad-btn-circle {
-      width: 68px;
-      height: 68px;
+      width: 72px;
+      height: 72px;
     }
     .keypad-btn-circle.btn-undo {
-      width: 68px;
-      height: 68px;
+      width: 72px;
+      height: 72px;
     }
   }
 
@@ -4123,7 +4137,7 @@
   }
 
   .btn-letter {
-    font-size: 44px;
+    font-size: 52px;
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -4132,7 +4146,7 @@
 
   @media (max-width: 600px) {
     .btn-letter {
-      font-size: 30px;
+      font-size: 32px;
     }
   }
 
@@ -4156,8 +4170,8 @@
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
   .btn-arrow-icon {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     display: block;
     color: #ffffff;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65));
@@ -4166,8 +4180,8 @@
 
   @media (max-width: 600px) {
     .btn-arrow-icon {
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
     }
   }
 
@@ -4207,9 +4221,9 @@
   }
 
   .btn-caption {
-    font-size: 13px;
+    font-size: 14.5px;
     font-weight: 900;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     user-select: none;
   }
   .punto-caption { color: #2563eb; }
@@ -4774,9 +4788,10 @@
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   }
 
-  .theme-light .footer-stats-strip {
-    background: #f1f5f9;
-    border-bottom: 1.5px solid #cbd5e1;
+  .theme-light .scoreboard-stats-bar {
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   }
 
   .theme-light .stats-strip-pct-box {
