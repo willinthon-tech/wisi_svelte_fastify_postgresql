@@ -1767,75 +1767,58 @@
   <header class="sb-header">
     <div class="sb-header-left">
       <div class="sb-pills-row">
-        {#if currentSalaName}
-          <div class="sb-shoe-pill sala-pill">
-            <span class="pill-label">SALA</span>
-            <span class="pill-value">{currentSalaName}</span>
-          </div>
-        {/if}
-
-        {#if currentMesaName}
-          <div class="sb-shoe-pill mesa-pill">
-            <span class="pill-label">MESA</span>
-            <span class="pill-value">{currentMesaName}</span>
+        {#if currentSalaName || currentMesaName}
+          <div class="sb-table-title" title="{currentSalaName || ''} - {currentMesaName || ''}">
+            {#if currentSalaName && currentMesaName}
+              <span class="loc-part"><span class="loc-label">Sala</span> <strong class="loc-val">{currentSalaName}</strong></span>
+              <span class="loc-sep">-</span>
+              <span class="loc-part"><span class="loc-label">Mesa</span> <strong class="loc-val">{currentMesaName}</strong></span>
+            {:else if currentSalaName}
+              <span class="loc-part"><span class="loc-label">Sala</span> <strong class="loc-val">{currentSalaName}</strong></span>
+            {:else if currentMesaName}
+              <span class="loc-part"><span class="loc-label">Mesa</span> <strong class="loc-val">{currentMesaName}</strong></span>
+            {/if}
           </div>
         {/if}
 
         <div class="sb-shoe-pill shoe-pill">
-          {#if shoes.length > 1}
-            <button
-              type="button"
-              class="shoe-pill-arrow btn-prev-shoe"
-              disabled={activeShoeIndex <= 0}
-              on:click={goToPrevShoe}
-              title="Ver zapato anterior"
-              aria-label="Zapato anterior"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6"></polyline>
-              </svg>
-            </button>
-          {/if}
+          <button
+            type="button"
+            class="nav-arrow-btn btn-prev-shoe"
+            disabled={shoes.length <= 1 || activeShoeIndex <= 0}
+            on:click={goToPrevShoe}
+            title="Ver zapato anterior"
+            aria-label="Zapato anterior"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
 
-          <span class="pill-label">ZAPATO</span>
-          <span class="pill-value">#{activeShoeNumber}</span>
-          {#if shoes.length > 1}
-            <span class="pill-sub">({activeShoeIndex + 1}/{shoes.length})</span>
-          {/if}
-          <span class="pill-sep">•</span>
-          <span class="pill-label">MANOS</span>
-          <span class="pill-value">#{totalHands}</span>
+          <div class="shoe-pill-content">
+            <span class="pill-label">ZAPATO</span>
+            <span class="pill-value">#{activeShoeNumber}</span>
+            {#if shoes.length > 1}
+              <span class="pill-sub">({activeShoeIndex + 1}/{shoes.length})</span>
+            {/if}
+            <span class="pill-sep">•</span>
+            <span class="pill-label">MANOS</span>
+            <span class="pill-value">#{totalHands}</span>
+          </div>
 
-          {#if shoes.length > 1}
-            <button
-              type="button"
-              class="shoe-pill-arrow btn-next-shoe"
-              disabled={activeShoeIndex >= shoes.length - 1}
-              on:click={goToNextShoe}
-              title="Ver zapato siguiente"
-              aria-label="Zapato siguiente"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </button>
-          {/if}
+          <button
+            type="button"
+            class="nav-arrow-btn btn-next-shoe"
+            disabled={shoes.length <= 1 || activeShoeIndex >= shoes.length - 1}
+            on:click={goToNextShoe}
+            title="Ver zapato siguiente"
+            aria-label="Zapato siguiente"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
         </div>
-
-        <!-- BOTÓN NUEVO ZAPATO DIRECTO -->
-        <button
-          type="button"
-          class="sb-btn-new-shoe"
-          disabled={!isLatestSession || history.length === 0}
-          on:click={handleDirectNewShoe}
-          title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          <span>Nuevo Zapato</span>
-        </button>
       </div>
     </div>
 
@@ -1845,13 +1828,13 @@
         <div class="sb-session-navigator" class:is-past={!isLatestSession}>
           <button
             type="button"
-            class="session-nav-arrow btn-prev-session"
+            class="nav-arrow-btn btn-prev-session"
             disabled={selectedSessionIndex <= 0 || isSessionsLoading}
             on:click={goToPrevSession}
             title="Ver sesión anterior (Histórico)"
             aria-label="Sesión anterior"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="15 18 9 12 15 6"></polyline>
             </svg>
           </button>
@@ -1868,13 +1851,13 @@
 
           <button
             type="button"
-            class="session-nav-arrow btn-next-session"
+            class="nav-arrow-btn btn-next-session"
             disabled={selectedSessionIndex >= sessions.length - 1 || isSessionsLoading}
             on:click={goToNextSession}
             title="Ver sesión siguiente"
             aria-label="Sesión siguiente"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </button>
@@ -2650,76 +2633,109 @@
   .sb-pills-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
     flex-wrap: wrap;
   }
 
-  .sb-shoe-pill {
+  /* TEXTO SALA Y MESA (SIN BURBUJAS) */
+  .sb-table-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #f1f5f9;
+    padding: 0 4px;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .sb-table-title .loc-part {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .sb-table-title .loc-label {
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+  .sb-table-title .loc-val {
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 14.5px;
+  }
+  .sb-table-title .loc-sep {
+    color: #475569;
+    font-weight: bold;
+    margin: 0 3px;
+  }
+
+  /* CONTENEDORES ESTANDARIZADOS: ZAPATO Y SESIÓN */
+  .sb-shoe-pill,
+  .sb-session-navigator {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     background: #1e293b;
-    padding: 4px 12px;
-    min-height: 34px;
-    box-sizing: border-box;
-    border-radius: 999px;
     border: 1.5px solid #334155;
-    font-size: 12px;
+    padding: 3px 5px;
+    min-height: 38px;
+    box-sizing: border-box;
+    border-radius: 9999px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    transition: all 0.2s ease;
   }
 
-  .sala-pill {
-    border-color: #3b82f6;
-    background: rgba(37, 99, 235, 0.18);
-  }
-  .sala-pill .pill-label { color: #93c5fd; }
-  .sala-pill .pill-value { color: #ffffff; }
-
-  .mesa-pill {
-    border-color: #10b981;
-    background: rgba(16, 185, 129, 0.18);
-  }
-  .mesa-pill .pill-label { color: #6ee7b7; }
-  .mesa-pill .pill-value { color: #ffffff; }
-
-  .shoe-pill {
-    border-color: #64748b;
-    padding: 3px 6px;
-    gap: 8px;
+  .sb-session-navigator.is-past {
+    border-color: #475569;
   }
 
-  .shoe-pill-arrow {
-    background: rgba(56, 189, 248, 0.22);
-    border: 1.5px solid rgba(56, 189, 248, 0.5);
+  /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE Y ATRÁS) */
+  .nav-arrow-btn {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
     color: #38bdf8;
-    border-radius: 6px;
-    width: 28px;
-    height: 28px;
-    min-width: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     padding: 0;
-    transition: all 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  .shoe-pill-arrow:hover:not(:disabled) {
+
+  .nav-arrow-btn:hover:not(:disabled) {
     background: #0284c7;
     border-color: #38bdf8;
     color: #ffffff;
     transform: scale(1.08);
-    box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
   }
-  .shoe-pill-arrow:active:not(:disabled) {
-    transform: scale(0.95);
+
+  .nav-arrow-btn:active:not(:disabled) {
+    transform: scale(0.94);
   }
-  .shoe-pill-arrow:disabled {
-    opacity: 0.2;
+
+  .nav-arrow-btn:disabled {
+    opacity: 0.22;
     cursor: not-allowed;
-    border-color: transparent;
     background: transparent;
+    border-color: rgba(255, 255, 255, 0.08);
     color: #64748b;
     transform: none;
     box-shadow: none;
+  }
+
+  /* CONTENIDO DE ZAPATO */
+  .shoe-pill-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 6px;
+    user-select: none;
   }
 
   .pill-sub {
@@ -2738,56 +2754,12 @@
   .pill-value {
     color: #38bdf8;
     font-weight: 800;
-    font-size: 13px;
+    font-size: 13.5px;
   }
 
   .pill-sep {
     color: #475569;
     font-weight: bold;
-  }
-
-  /* BOTÓN NUEVO ZAPATO DIRECTO */
-  .sb-btn-new-shoe {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    background: linear-gradient(135deg, rgba(2, 132, 199, 0.35) 0%, rgba(14, 165, 233, 0.2) 100%);
-    border: 1.5px solid #0284c7;
-    color: #38bdf8;
-    padding: 6px 14px;
-    min-height: 34px;
-    box-sizing: border-box;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    line-height: 1;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-    user-select: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  }
-
-  .sb-btn-new-shoe:hover:not(:disabled) {
-    background: #0284c7;
-    border-color: #38bdf8;
-    color: #ffffff;
-    transform: translateY(-1px);
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
-  }
-
-  .sb-btn-new-shoe:active:not(:disabled) {
-    transform: translateY(0);
-  }
-
-  .sb-btn-new-shoe:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background: #1e293b;
-    border-color: #334155;
-    color: #94a3b8;
-    transform: none;
-    box-shadow: none;
   }
 
   /* ICONO PANTALLA COMPLETA AL LADO DE ZAPATO (SOLO EL ICONO) */
@@ -2827,74 +2799,16 @@
     min-width: 220px;
   }
 
-  .sb-session-navigator {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    background: linear-gradient(180deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
-    border: 1.5px solid rgba(239, 68, 68, 0.55);
-    padding: 3px 6px;
-    min-height: 38px;
-    box-sizing: border-box;
-    border-radius: 9999px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 14px rgba(239, 68, 68, 0.18);
-    backdrop-filter: blur(8px);
-    transition: all 0.25s ease;
-  }
-
-  .sb-session-navigator.is-past {
-    border-color: rgba(148, 163, 184, 0.35);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  }
-
-  .session-nav-arrow {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1.5px solid rgba(255, 255, 255, 0.18);
-    color: #e2e8f0;
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    border-radius: 50%;
-    cursor: pointer;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .session-nav-arrow:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.35);
-    border-color: #ef4444;
-    color: #ffffff;
-    transform: scale(1.1);
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
-  }
-
-  .session-nav-arrow:active:not(:disabled) {
-    transform: scale(0.95);
-  }
-
-  .session-nav-arrow:disabled {
-    opacity: 0.22;
-    cursor: not-allowed;
-    background: transparent;
-    border-color: rgba(255, 255, 255, 0.06);
-    color: #475569;
-    transform: none;
-    box-shadow: none;
-  }
-
   .session-label-wrapper {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 0 8px;
+    padding: 0 6px;
     user-select: none;
   }
 
   .session-label-text {
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 800;
     letter-spacing: 0.5px;
     white-space: nowrap;
@@ -2902,7 +2816,7 @@
   }
 
   .session-label-text.actual {
-    color: #f87171;
+    color: #38bdf8;
   }
 
   .session-label-text.past {
@@ -2911,14 +2825,14 @@
 
   .session-date-text {
     color: #f1f5f9;
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 700;
     letter-spacing: 0.5px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 
-  /* BOTONES SUPERIORES SIN ICONOS */
+  /* BOTONES SUPERIORES */
   .sb-header-right {
     display: flex;
     align-items: center;
@@ -2930,7 +2844,7 @@
     border: none;
     border-radius: 8px;
     padding: 0 16px;
-    min-height: 34px;
+    min-height: 38px;
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
@@ -4581,92 +4495,69 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   }
 
-  .theme-light .sala-pill {
-    background: #eff6ff;
-    border-color: #3b82f6;
+  /* TEMA CLARO: TITULO SALA Y MESA */
+  .theme-light .sb-table-title {
+    color: #0f172a;
   }
-  .theme-light .sala-pill .pill-label { color: #2563eb; font-weight: 700; }
-  .theme-light .sala-pill .pill-value { color: #1d4ed8; font-weight: 800; }
-
-  .theme-light .mesa-pill {
-    background: #ecfdf5;
-    border-color: #10b981;
+  .theme-light .sb-table-title .loc-label {
+    color: #64748b;
   }
-  .theme-light .mesa-pill .pill-label { color: #059669; font-weight: 700; }
-  .theme-light .mesa-pill .pill-value { color: #047857; font-weight: 800; }
+  .theme-light .sb-table-title .loc-val {
+    color: #0f172a;
+  }
+  .theme-light .sb-table-title .loc-sep {
+    color: #cbd5e1;
+  }
 
-  .theme-light .shoe-pill {
+  /* TEMA CLARO: PILLS ESTANDARIZADAS ZAPATO Y SESIÓN */
+  .theme-light .sb-shoe-pill,
+  .theme-light .sb-session-navigator {
     background: #ffffff;
-    border-color: #cbd5e1;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   }
-  .theme-light .shoe-pill .pill-label { color: #64748b; font-weight: 700; }
-  .theme-light .shoe-pill .pill-value { color: #0284c7; font-weight: 800; }
-  .theme-light .pill-sub { color: #64748b; }
-  .theme-light .pill-sep { color: #94a3b8; }
 
-  .theme-light .shoe-pill-arrow {
-    background: #e0f2fe;
-    border: 1.5px solid #7dd3fc;
-    color: #0284c7;
+  .theme-light .sb-session-navigator.is-past {
+    border-color: #94a3b8;
   }
-  .theme-light .shoe-pill-arrow:hover:not(:disabled) {
+
+  /* TEMA CLARO: BOTONES DE NAVEGACIÓN UNIFICADOS */
+  .theme-light .nav-arrow-btn {
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    color: #0284c7;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+
+  .theme-light .nav-arrow-btn:hover:not(:disabled) {
     background: #0284c7;
     border-color: #0369a1;
     color: #ffffff;
-  }
-  .theme-light .shoe-pill-arrow:disabled {
-    opacity: 0.25;
-    border-color: transparent;
-    background: transparent;
-    color: #94a3b8;
+    transform: scale(1.08);
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
   }
 
-  .theme-light .sb-btn-new-shoe {
-    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-    border: 1.5px solid #0284c7;
-    color: #ffffff;
-    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
-  }
-  .theme-light .sb-btn-new-shoe:hover:not(:disabled) {
-    background: #0369a1;
-    border-color: #075985;
-    color: #ffffff;
-    box-shadow: 0 0 10px rgba(2, 132, 199, 0.5);
-  }
-  .theme-light .sb-btn-new-shoe:disabled {
-    background: #f1f5f9;
-    border-color: #cbd5e1;
-    color: #94a3b8;
-    opacity: 0.7;
+  .theme-light .nav-arrow-btn:active:not(:disabled) {
+    transform: scale(0.94);
   }
 
-  .theme-light .sb-session-navigator {
-    background: #ffffff;
-    border: 1.5px solid #ef4444;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 0 12px rgba(239, 68, 68, 0.15);
-  }
-  .theme-light .sb-session-navigator.is-past {
-    border-color: #94a3b8;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  }
-  .theme-light .session-nav-arrow {
-    background: #f8fafc;
-    border: 1.5px solid #cbd5e1;
-    color: #334155;
-  }
-  .theme-light .session-nav-arrow:hover:not(:disabled) {
-    background: #fee2e2;
-    border-color: #ef4444;
-    color: #b91c1c;
-  }
-  .theme-light .session-nav-arrow:disabled {
-    opacity: 0.3;
+  .theme-light .nav-arrow-btn:disabled {
+    opacity: 0.28;
     background: transparent;
     border-color: #e2e8f0;
     color: #cbd5e1;
+    transform: none;
+    box-shadow: none;
   }
+
+  /* TEMA CLARO: ZAPATO Y SESIÓN CONTENIDO */
+  .theme-light .pill-label { color: #64748b; font-weight: 700; }
+  .theme-light .pill-value { color: #0284c7; font-weight: 800; }
+  .theme-light .pill-sub { color: #64748b; }
+  .theme-light .pill-sep { color: #94a3b8; }
+
   .theme-light .session-label-text.actual {
-    color: #dc2626;
+    color: #0284c7;
     text-shadow: none;
   }
   .theme-light .session-label-text.past {
