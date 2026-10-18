@@ -2583,8 +2583,8 @@
       </div>
     </div>
 
-    <!-- COLUMNA 2 (col-4): PREDICCIÓN / NEXT (ASK BANKER & ASK PLAYER) -->
-    <div class="stats-bar-col col-prediction">
+    <!-- COLUMNA 2 (col-6): PREDICCIÓN / NEXT (ASK BANKER & ASK PLAYER) -->
+    <div class="stats-bar-col col-prediction col-6">
       <span class="pred-title">Next</span>
       <div class="prediction-pills-row">
         <!-- Pill Ask Banker (B) -->
@@ -2619,8 +2619,8 @@
       </div>
     </div>
 
-    <!-- COLUMNA 3 (col-4): RESUMEN DE PORCENTAJES -->
-    <div class="stats-bar-col col-percentages">
+    <!-- COLUMNA 3 (col-6): RESUMEN DE PORCENTAJES -->
+    <div class="stats-bar-col col-percentages col-6">
       <div class="stats-strip-pct-box">
         <span class="pct-tag b">B: {pctBanca}%</span>
         <span class="pct-tag p">P: {pctPunto}%</span>
@@ -4090,10 +4090,19 @@
   .stats-bar-col.col-prediction {
     justify-content: center;
     gap: 14px;
+    width: 100%;
   }
 
   .stats-bar-col.col-percentages {
-    justify-content: flex-end;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .stats-bar-col.col-6 {
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin: 0 auto;
   }
 
   .stats-strip-counters {
@@ -4270,16 +4279,52 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  @media (max-width: 1180px) {
+  @media (max-width: 1200px) {
+    .scoreboard-stats-bar {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      padding: 10px 16px;
+    }
+    .stats-bar-col.col-counters {
+      grid-column: 1 / -1;
+      justify-content: center;
+      width: 100%;
+    }
+    .stats-strip-counters {
+      justify-content: center;
+      margin: 0 auto;
+    }
+    .stats-bar-col.col-prediction {
+      grid-column: 1;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .stats-bar-col.col-percentages {
+      grid-column: 2;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .stats-strip-pct-box {
+      margin: 0 auto;
+    }
+  }
+
+  @media (max-width: 600px) {
     .scoreboard-stats-bar {
       grid-template-columns: 1fr;
-      gap: 12px;
-      padding: 10px 14px;
+      gap: 10px;
+      padding: 8px 10px;
     }
     .stats-bar-col.col-counters,
     .stats-bar-col.col-prediction,
     .stats-bar-col.col-percentages {
+      grid-column: 1;
       justify-content: center;
+      width: 100%;
     }
   }
 
