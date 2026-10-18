@@ -546,18 +546,18 @@
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 6;
 
-  // Dynamic roadmap sizing: scales seamlessly across all screen resolutions
-  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 11);
+  // Dynamic roadmap sizing: scales with available height (e.g. 24px - 50px depending on monitor)
+  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 20);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 10);
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 18);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads (Gran Ojo, Camino Pequeño, Cucaracha): estándar internacional canónico de 6 filas exactas
-  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 24);
-  $: derivedRows = DERIVED_ROWS; // Exactamente 6 filas siempre
-  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / DERIVED_ROWS), 6);
-  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 40);
+  // Derived roads: cuadrículas pequeñas y compactas estándar de casino (~9px a 10px, 6 filas)
+  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 36);
+  $: derivedRows = 6;
+  $: derivedCellSize = Math.min(Math.max(Math.floor(((derivedBandHeight || 90) - 4) / 6), 7), 10);
+  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 45);
 
   function safeJsonParse(val, fallback = []) {
     if (val === null || val === undefined) return fallback;
@@ -2530,10 +2530,10 @@
     </div>
   </section>
 
-  <!-- FRANJA DE ESTADÍSTICAS Y PREDICCIÓN (GRUPO 1: CONTADORES | GRUPO 2: PREDICCIÓN Y PORCENTAJES) -->
+  <!-- FRANJA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) -->
   <section class="scoreboard-stats-bar">
-    <!-- GRUPO 1: CONTADORES GLOBALES DE ZAPATO -->
-    <div class="stats-bar-group stats-group-counters">
+    <!-- COLUMNA 1 (col-4): CONTADORES DE JUEGO -->
+    <div class="stats-bar-col col-counters">
       <div class="stats-strip-counters">
         <!-- Total manos # -->
         <div class="counter-item" title="Total de manos jugadas en este zapato">
@@ -2583,43 +2583,44 @@
       </div>
     </div>
 
-    <!-- GRUPO 2: PREDICCIÓN (NEXT) + RESUMEN DE PORCENTAJES -->
-    <div class="stats-bar-group stats-group-prediction">
-      <div class="prediction-block">
-        <span class="pred-title">Next</span>
-        <div class="prediction-pills-row">
-          <!-- Pill Ask Banker (B) -->
-          <button
-            type="button"
-            class="pred-pill pred-pill-banker"
-            on:click={() => handlePredictionClick('BANCA')}
-            title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextBankerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextBankerPrediction.cockroach || 'pendiente'})"
-          >
-            <span class="pred-badge-circle b">B</span>
-            <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextBankerPrediction.bigEye || 'pendiente'}"></span>
-            <span class="pred-symbol pred-dot {nextBankerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextBankerPrediction.smallRoad || 'pendiente'}"></span>
-            <svg class="pred-symbol pred-slash {nextBankerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextBankerPrediction.cockroach || 'pendiente'}">
-              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
-            </svg>
-          </button>
+    <!-- COLUMNA 2 (col-4): PREDICCIÓN / NEXT (ASK BANKER & ASK PLAYER) -->
+    <div class="stats-bar-col col-prediction">
+      <span class="pred-title">Next</span>
+      <div class="prediction-pills-row">
+        <!-- Pill Ask Banker (B) -->
+        <button
+          type="button"
+          class="pred-pill pred-pill-banker"
+          on:click={() => handlePredictionClick('BANCA')}
+          title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextBankerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextBankerPrediction.cockroach || 'pendiente'})"
+        >
+          <span class="pred-badge-circle b">B</span>
+          <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextBankerPrediction.bigEye || 'pendiente'}"></span>
+          <span class="pred-symbol pred-dot {nextBankerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextBankerPrediction.smallRoad || 'pendiente'}"></span>
+          <svg class="pred-symbol pred-slash {nextBankerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextBankerPrediction.cockroach || 'pendiente'}">
+            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+          </svg>
+        </button>
 
-          <!-- Pill Ask Player (P) -->
-          <button
-            type="button"
-            class="pred-pill pred-pill-player"
-            on:click={() => handlePredictionClick('PUNTO')}
-            title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextPlayerPrediction.cockroach || 'pendiente'})"
-          >
-            <span class="pred-badge-circle p">P</span>
-            <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextPlayerPrediction.bigEye || 'pendiente'}"></span>
-            <span class="pred-symbol pred-dot {nextPlayerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextPlayerPrediction.smallRoad || 'pendiente'}"></span>
-            <svg class="pred-symbol pred-slash {nextPlayerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextPlayerPrediction.cockroach || 'pendiente'}">
-              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
-            </svg>
-          </button>
-        </div>
+        <!-- Pill Ask Player (P) -->
+        <button
+          type="button"
+          class="pred-pill pred-pill-player"
+          on:click={() => handlePredictionClick('PUNTO')}
+          title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextPlayerPrediction.cockroach || 'pendiente'})"
+        >
+          <span class="pred-badge-circle p">P</span>
+          <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextPlayerPrediction.bigEye || 'pendiente'}"></span>
+          <span class="pred-symbol pred-dot {nextPlayerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextPlayerPrediction.smallRoad || 'pendiente'}"></span>
+          <svg class="pred-symbol pred-slash {nextPlayerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextPlayerPrediction.cockroach || 'pendiente'}">
+            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+          </svg>
+        </button>
       </div>
+    </div>
 
+    <!-- COLUMNA 3 (col-4): RESUMEN DE PORCENTAJES -->
+    <div class="stats-bar-col col-percentages">
       <div class="stats-strip-pct-box">
         <span class="pct-tag b">B: {pctBanca}%</span>
         <span class="pct-tag p">P: {pctPunto}%</span>
@@ -2681,223 +2682,215 @@
       </div>
     {/if}
 
-    <div class="footer-controls-row">
-      <!-- BLOQUE 1 (IZQUIERDA): ENTRADA Y MODIFICADORES (TECLADO NUMÉRICO + PAIRS/NATURAL/WIN) -->
-      <div class="footer-group footer-group-input">
-        <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
-        <div class="footer-score-col">
-          <div class="score-keypad-box">
-            <div class="score-keypad-grid">
-              {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
-                <button
-                  type="button"
-                  class="btn-num-key btn-num-{num}"
-                  class:active={isEditingHand ? selectedHand.score === num : activeScore === num}
-                  disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.natural && num !== 8 && num !== 9) : (activeNatural && num !== 8 && num !== 9))}
-                  on:click={() => handleKeypadNumber(num)}
-                  title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) && num !== 8 && num !== 9 ? 'Con Natural activo solo se permiten 8 y 9' : `Seleccionar valor ${num} para la mano`))}
-                >
-                  {num}
-                </button>
-              {/each}
-              <!-- 0 al lado del 3, 6, 9 abarcando todo el largo de las 3 filas -->
-              <button
-                type="button"
-                class="btn-num-key btn-num-zero"
-                class:active={isEditingHand ? selectedHand.score === 0 : activeScore === 0}
-                disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.natural : activeNatural)}
-                on:click={() => handleKeypadNumber(0)}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano'))}
-              >
-                0
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO -->
-        <div class="footer-modifiers-col">
-          <div class="modifiers-subgrid">
-            <div class="modifiers-left-stack">
-              <button
-                type="button"
-                class="keypad-pill pill-ppair"
-                class:active={isEditingHand ? selectedHand.pPair : activePPair}
-                disabled={isObserverMode || !isCurrentShoeActive}
-                on:click={handleTogglePPair}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Punto (P.Pair)')}
-              >
-                P.Pair
-              </button>
-
-              <button
-                type="button"
-                class="keypad-pill pill-bpair"
-                class:active={isEditingHand ? selectedHand.bPair : activeBPair}
-                disabled={isObserverMode || !isCurrentShoeActive}
-                on:click={handleToggleBPair}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Banca (B.Pair)')}
-              >
-                B.Pair
-              </button>
-
-              <button
-                type="button"
-                class="keypad-pill pill-natural"
-                class:active={isEditingHand ? selectedHand.natural : activeNatural}
-                disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
-                on:click={handleToggleNatural}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)'))}
-              >
-                Natural
-              </button>
-            </div>
-
-            <div class="modifiers-right-stack">
-              <button
-                type="button"
-                class="keypad-pill pill-win"
-                class:active={isEditingHand ? selectedHand.win : activeWin}
-                disabled={isObserverMode || !isCurrentShoeActive}
-                on:click={handleToggleWin}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Victoria WIN (Círculo sólido en Gran Camino con letras blancas)')}
-              >
-                Win
-              </button>
-            </div>
-          </div>
+    <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
+    <div class="footer-score-col">
+      <div class="score-keypad-box">
+        <div class="score-keypad-grid">
+          {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
+            <button
+              type="button"
+              class="btn-num-key btn-num-{num}"
+              class:active={isEditingHand ? selectedHand.score === num : activeScore === num}
+              disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.natural && num !== 8 && num !== 9) : (activeNatural && num !== 8 && num !== 9))}
+              on:click={() => handleKeypadNumber(num)}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) && num !== 8 && num !== 9 ? 'Con Natural activo solo se permiten 8 y 9' : `Seleccionar valor ${num} para la mano`))}
+            >
+              {num}
+            </button>
+          {/each}
+          <!-- 0 al lado del 3, 6, 9 abarcando todo el largo de las 3 filas -->
+          <button
+            type="button"
+            class="btn-num-key btn-num-zero"
+            class:active={isEditingHand ? selectedHand.score === 0 : activeScore === 0}
+            disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.natural : activeNatural)}
+            on:click={() => handleKeypadNumber(0)}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano'))}
+          >
+            0
+          </button>
         </div>
       </div>
+    </div>
 
-      <!-- BLOQUE 2 (DERECHA): RESULTADOS PRINCIPALES + ACCIONES RETROCEDER Y TIE -->
-      <div class="footer-group footer-group-actions">
-        <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
-        <div class="footer-outcomes-col">
-          <div class="outcomes-grid-3col">
-            <!-- PUNTO BUTTON -->
-            <div class="action-btn-item">
-              <button
-                type="button"
-                class="keypad-btn-circle btn-punto"
-                class:is-chosen-winner={isEditingHand && selectedHand.winner === 'PUNTO'}
-                disabled={isObserverMode || !isCurrentShoeActive}
-                on:click={() => handleSelectOutcome('PUNTO')}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'))}
-              >
-                {#if isEditingHand ? selectedHand.bPair : activeBPair}
-                  <span class="badge-corner-tl" title="B.Pair activo"></span>
-                {/if}
-                {#if isEditingHand ? selectedHand.pPair : activePPair}
-                  <span class="badge-corner-br" title="P.Pair activo"></span>
-                {/if}
-                <div class="btn-inner-gloss">
-                  <span class="btn-letter">P</span>
-                </div>
-              </button>
-              <span class="btn-caption punto-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'PUNTO'}>PUNTO</span>
-            </div>
+    <!-- GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO -->
+    <div class="footer-modifiers-col">
+      <div class="modifiers-subgrid">
+        <div class="modifiers-left-stack">
+          <button
+            type="button"
+            class="keypad-pill pill-ppair"
+            class:active={isEditingHand ? selectedHand.pPair : activePPair}
+            disabled={isObserverMode || !isCurrentShoeActive}
+            on:click={handleTogglePPair}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Punto (P.Pair)')}
+          >
+            P.Pair
+          </button>
 
-            <!-- BANCA BUTTON -->
-            <div class="action-btn-item">
-              <button
-                type="button"
-                class="keypad-btn-circle btn-banca"
-                class:is-chosen-winner={isEditingHand && selectedHand.winner === 'BANCA'}
-                disabled={isObserverMode || !isCurrentShoeActive}
-                on:click={() => handleSelectOutcome('BANCA')}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'))}
-              >
-                {#if isEditingHand ? selectedHand.bPair : activeBPair}
-                  <span class="badge-corner-tl" title="B.Pair activo"></span>
-                {/if}
-                {#if isEditingHand ? selectedHand.pPair : activePPair}
-                  <span class="badge-corner-br" title="P.Pair activo"></span>
-                {/if}
-                <div class="btn-inner-gloss">
-                  <span class="btn-letter">B</span>
-                </div>
-              </button>
-              <span class="btn-caption banca-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'BANCA'}>BANCA</span>
-            </div>
+          <button
+            type="button"
+            class="keypad-pill pill-bpair"
+            class:active={isEditingHand ? selectedHand.bPair : activeBPair}
+            disabled={isObserverMode || !isCurrentShoeActive}
+            on:click={handleToggleBPair}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Banca (B.Pair)')}
+          >
+            B.Pair
+          </button>
 
-            <!-- EMPATE BUTTON -->
-            <div class="action-btn-item">
-              <button
-                type="button"
-                class="keypad-btn-circle btn-tie"
-                class:is-chosen-winner={isEditingHand && selectedHand.winner === 'EMPATE'}
-                disabled={isObserverMode || !isCurrentShoeActive}
-                on:click={() => handleSelectOutcome('EMPATE')}
-                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a EMPATE (Tie)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'))}
-              >
-                {#if isEditingHand ? selectedHand.bPair : activeBPair}
-                  <span class="badge-corner-tl" title="B.Pair activo"></span>
-                {/if}
-                {#if isEditingHand ? selectedHand.pPair : activePPair}
-                  <span class="badge-corner-br" title="P.Pair activo"></span>
-                {/if}
-                <div class="btn-inner-gloss">
-                  <span class="btn-letter">T</span>
-                </div>
-              </button>
-              <span class="btn-caption tie-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'EMPATE'}>EMPATE</span>
-            </div>
-          </div>
+          <button
+            type="button"
+            class="keypad-pill pill-natural"
+            class:active={isEditingHand ? selectedHand.natural : activeNatural}
+            disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
+            on:click={handleToggleNatural}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)'))}
+          >
+            Natural
+          </button>
         </div>
 
-        <!-- GRUPO 4: ACCIÓN RETROCEDER / ATRÁS Y BOTÓN VISUALIZAR TIE / EDITAR -->
-        <div class="footer-undo-col">
-          <div class="action-btn-item">
-            <button
-              type="button"
-              class="keypad-btn-circle btn-undo"
-              class:is-btn-atras={isEditingHand}
-              on:click={handleBackOrUndo}
-              disabled={isObserverMode || !isCurrentShoeActive || (!isEditingHand && history.length === 0)}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'))}
-            >
-              <div class="btn-inner-gloss">
-                <svg class="btn-arrow-icon" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M19 12H5m0 0l6-6M5 12l6 6" />
-                </svg>
-              </div>
-            </button>
-            <span class="btn-caption undo-caption" class:is-atras-caption={isEditingHand}>
-              {isEditingHand ? 'Atrás' : 'RETROCEDER'}
-            </span>
-          </div>
-
-          <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) O GUARDAR EDICIÓN -->
-          <div class="action-btn-item">
-            <button
-              type="button"
-              class="keypad-btn-tie-toggle"
-              class:is-btn-editar={isEditingHand}
-              on:click={handleConfirmEditOrTieToggle}
-              title={isEditingHand ? 'Guardar y confirmar cambios de la mano' : (tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])')}
-            >
-              <div class="tie-toggle-box">
-                {#if isEditingHand}
-                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="editar-icon-svg">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                {:else if tieMode === 'slash'}
-                  <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
-                    <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="4" stroke-linecap="round" />
-                  </svg>
-                {:else}
-                  <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
-                    <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="4" fill="none" />
-                  </svg>
-                {/if}
-              </div>
-            </button>
-            <span class="btn-caption tie-toggle-caption" class:is-editar-caption={isEditingHand}>
-              {isEditingHand ? 'Editar' : 'Tie'}
-            </span>
-          </div>
+        <div class="modifiers-right-stack">
+          <button
+            type="button"
+            class="keypad-pill pill-win"
+            class:active={isEditingHand ? selectedHand.win : activeWin}
+            disabled={isObserverMode || !isCurrentShoeActive}
+            on:click={handleToggleWin}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Victoria WIN (Círculo sólido en Gran Camino con letras blancas)')}
+          >
+            Win
+          </button>
         </div>
+      </div>
+    </div>
+
+    <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
+    <div class="footer-outcomes-col">
+      <div class="outcomes-grid-3col">
+        <!-- PUNTO BUTTON -->
+        <div class="action-btn-item">
+          <button
+            type="button"
+            class="keypad-btn-circle btn-punto"
+            class:is-chosen-winner={isEditingHand && selectedHand.winner === 'PUNTO'}
+            disabled={isObserverMode || !isCurrentShoeActive}
+            on:click={() => handleSelectOutcome('PUNTO')}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'))}
+          >
+            {#if isEditingHand ? selectedHand.bPair : activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if isEditingHand ? selectedHand.pPair : activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">P</span>
+            </div>
+          </button>
+          <span class="btn-caption punto-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'PUNTO'}>PUNTO</span>
+        </div>
+
+        <!-- BANCA BUTTON -->
+        <div class="action-btn-item">
+          <button
+            type="button"
+            class="keypad-btn-circle btn-banca"
+            class:is-chosen-winner={isEditingHand && selectedHand.winner === 'BANCA'}
+            disabled={isObserverMode || !isCurrentShoeActive}
+            on:click={() => handleSelectOutcome('BANCA')}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'))}
+          >
+            {#if isEditingHand ? selectedHand.bPair : activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if isEditingHand ? selectedHand.pPair : activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">B</span>
+            </div>
+          </button>
+          <span class="btn-caption banca-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'BANCA'}>BANCA</span>
+        </div>
+
+        <!-- EMPATE BUTTON -->
+        <div class="action-btn-item">
+          <button
+            type="button"
+            class="keypad-btn-circle btn-tie"
+            class:is-chosen-winner={isEditingHand && selectedHand.winner === 'EMPATE'}
+            disabled={isObserverMode || !isCurrentShoeActive}
+            on:click={() => handleSelectOutcome('EMPATE')}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a EMPATE (Tie)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'))}
+          >
+            {#if isEditingHand ? selectedHand.bPair : activeBPair}
+              <span class="badge-corner-tl" title="B.Pair activo"></span>
+            {/if}
+            {#if isEditingHand ? selectedHand.pPair : activePPair}
+              <span class="badge-corner-br" title="P.Pair activo"></span>
+            {/if}
+            <div class="btn-inner-gloss">
+              <span class="btn-letter">T</span>
+            </div>
+          </button>
+          <span class="btn-caption tie-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'EMPATE'}>EMPATE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRUPO 4: ACCIÓN RETROCEDER / ATRÁS Y BOTÓN VISUALIZAR TIE / EDITAR -->
+    <div class="footer-undo-col">
+      <div class="action-btn-item">
+        <button
+          type="button"
+          class="keypad-btn-circle btn-undo"
+          class:is-btn-atras={isEditingHand}
+          on:click={handleBackOrUndo}
+          disabled={isObserverMode || !isCurrentShoeActive || (!isEditingHand && history.length === 0)}
+          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'))}
+        >
+          <div class="btn-inner-gloss">
+            <svg class="btn-arrow-icon" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 12H5m0 0l6-6M5 12l6 6" />
+            </svg>
+          </div>
+        </button>
+        <span class="btn-caption undo-caption" class:is-atras-caption={isEditingHand}>
+          {isEditingHand ? 'Atrás' : 'RETROCEDER'}
+        </span>
+      </div>
+
+      <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) O GUARDAR EDICIÓN -->
+      <div class="action-btn-item">
+        <button
+          type="button"
+          class="keypad-btn-tie-toggle"
+          class:is-btn-editar={isEditingHand}
+          on:click={handleConfirmEditOrTieToggle}
+          title={isEditingHand ? 'Guardar y confirmar cambios de la mano' : (tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])')}
+        >
+          <div class="tie-toggle-box">
+            {#if isEditingHand}
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="editar-icon-svg">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            {:else if tieMode === 'slash'}
+              <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="4" stroke-linecap="round" />
+              </svg>
+            {:else}
+              <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="4" fill="none" />
+              </svg>
+            {/if}
+          </div>
+        </button>
+        <span class="btn-caption tie-toggle-caption" class:is-editar-caption={isEditingHand}>
+          {isEditingHand ? 'Editar' : 'Tie'}
+        </span>
       </div>
     </div>
   </footer>
@@ -3161,8 +3154,8 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     display: flex;
     flex-direction: column;
-    gap: clamp(2px, 0.5vh, 6px);
-    padding: clamp(2px, 0.5vh, 6px) clamp(4px, 0.8vw, 10px);
+    gap: 8px;
+    padding: 8px 12px;
     overflow: hidden;
   }
 
@@ -3170,15 +3163,10 @@
     position: fixed;
     inset: 0;
     z-index: 9999999;
-    padding: clamp(2px, 0.5vh, 6px) clamp(4px, 0.8vw, 10px);
+    padding: 8px 12px;
     height: 100vh;
-    height: 100dvh;
     max-height: 100vh;
-    max-height: 100dvh;
     width: 100vw;
-    width: 100dvw;
-    max-width: 100vw;
-    max-width: 100dvw;
     overflow: hidden;
   }
 
@@ -3616,25 +3604,22 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-10 IZQUIERDA Y COL-2 DERECHA INVARIANTE) */
+  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-10 IZQUIERDA Y COL-2 DERECHA) */
   .sb-roadmaps-master {
-    --roadmap-gap: clamp(3px, 0.5vw, 6px);
-    --derived-card-h: calc((100% - (2 * var(--roadmap-gap))) / 3);
     display: grid;
-    grid-template-columns: minmax(0, 10fr) minmax(clamp(80px, 15vw, 260px), 2fr);
-    gap: var(--roadmap-gap);
-    flex: 1 1 0%;
-    min-height: 0;
+    grid-template-columns: minmax(0, 10fr) minmax(0, 2fr);
+    gap: 8px;
+    flex: 1 1 auto;
+    min-height: 260px;
     width: 100%;
-    max-width: 100%;
     align-items: stretch;
   }
 
   /* COLUMNA IZQUIERDA (COL-10): GRAN CAMINO ARRIBA (ABARCA 2 DERIVADAS) Y PLATO DE BOLAS ABAJO (ABARCA 1) */
   .sb-roadmaps-left-col {
     display: grid;
-    grid-template-rows: calc(var(--derived-card-h) * 2 + var(--roadmap-gap)) var(--derived-card-h);
-    gap: var(--roadmap-gap);
+    grid-template-rows: calc((100% - 16px) * 2 / 3 + 8px) calc((100% - 16px) / 3);
+    gap: 8px;
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -3666,11 +3651,11 @@
     display: flex;
   }
 
-  /* COLUMNA DERECHA (COL-2): 3 CUADRILLAS DERIVADAS - APILADAS EN 3 FILAS IGUALES */
+  /* COLUMNA DERECHA (COL-2): 3 CUADRILLAS DERIVADAS - APILADAS CON SEPARACIÓN IDÉNTICA A LAS OTRAS (GAP: 8PX) */
   .derived-roads-column {
     display: grid;
     grid-template-rows: repeat(3, minmax(0, 1fr));
-    gap: var(--roadmap-gap);
+    gap: 8px;
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -3723,14 +3708,14 @@
 
   /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-table tr {
-    height: var(--derived-cell-size, 12px);
+    height: var(--derived-cell-size, 9.5px);
   }
 
   .derived-cell {
-    width: var(--derived-cell-size, 12px);
-    min-width: var(--derived-cell-size, 12px);
-    max-width: var(--derived-cell-size, 12px);
-    height: var(--derived-cell-size, 12px);
+    width: var(--derived-cell-size, 9.5px);
+    min-width: var(--derived-cell-size, 9.5px);
+    max-width: var(--derived-cell-size, 9.5px);
+    height: var(--derived-cell-size, 9.5px);
     box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
@@ -3751,11 +3736,11 @@
   .derived-ring {
     display: inline-block;
     vertical-align: middle;
-    width: max(6px, calc(var(--derived-cell-size, 12px) * 0.68));
-    height: max(6px, calc(var(--derived-cell-size, 12px) * 0.68));
+    width: max(5px, calc(var(--derived-cell-size, 9.5px) * 0.68));
+    height: max(5px, calc(var(--derived-cell-size, 9.5px) * 0.68));
     margin: 0 auto;
     border-radius: 50%;
-    border: 1.6px solid transparent;
+    border: 1.4px solid transparent;
     box-sizing: border-box;
   }
   .derived-ring.red { border-color: #ef4444; }
@@ -3765,20 +3750,20 @@
   .derived-dot {
     display: inline-block;
     vertical-align: middle;
-    width: max(4px, calc(var(--derived-cell-size, 12px) * 0.52));
-    height: max(4px, calc(var(--derived-cell-size, 12px) * 0.52));
+    width: max(3.5px, calc(var(--derived-cell-size, 9.5px) * 0.52));
+    height: max(3.5px, calc(var(--derived-cell-size, 9.5px) * 0.52));
     margin: 0 auto;
     border-radius: 50%;
   }
   .derived-dot.red { background: #ef4444; }
   .derived-dot.blue { background: #3b82f6; }
 
-  /* 3. Cockroach Pig (Cucaracha): Línea diagonal roja / azul prolija y definida */
+  /* 3. Cockroach Pig (Cucaracha): Línea diagonal roja / azul */
   .derived-slash {
     display: inline-block;
     vertical-align: middle;
-    width: max(7px, calc(var(--derived-cell-size, 12px) * 0.74));
-    height: 2px;
+    width: max(5.5px, calc(var(--derived-cell-size, 9.5px) * 0.78));
+    height: 1.5px;
     margin: 0 auto;
     transform: rotate(-45deg);
     border-radius: 1px;
@@ -4071,165 +4056,82 @@
     border: 1.5px solid #ffffff;
   }
 
-  /* RESPONSIVE: ADAPTACIÓN SUAVE PARA TODAS LAS RESOLUCIONES PRESERVANDO EL ORDEN INVARIANTE */
-  @media (max-height: 768px) {
-    .scoreboard-container, .fullscreen-mode {
-      padding: 4px 8px;
-      gap: 4px;
-    }
-    .sb-header {
-      padding: 2px 2px 4px 2px;
-    }
-    .scoreboard-stats-bar {
-      padding: 4px 10px;
-      min-height: 38px;
-    }
-    .scoreboard-footer-panel {
-      padding: 6px 12px;
-      gap: 10px;
-    }
-    .score-keypad-grid {
-      grid-template-rows: repeat(3, 38px);
-    }
-    .modifiers-left-stack .keypad-pill {
-      height: 36px;
-      font-size: 13px;
-    }
-    .modifiers-right-stack .keypad-pill.pill-win {
-      min-height: 125px;
-      font-size: 17px;
-    }
-    .keypad-btn-tie-toggle {
-      width: 82px;
-      height: 82px;
-    }
-    .footer-edit-banner {
-      padding: 2px 8px;
-    }
-  }
-
-  @media (max-height: 640px) {
-    .scoreboard-container, .fullscreen-mode {
-      padding: 2px 6px;
-      gap: 3px;
-    }
-    .scoreboard-stats-bar {
-      padding: 2px 8px;
-      min-height: 32px;
-      font-size: 12px;
-    }
-    .scoreboard-footer-panel {
-      padding: 4px 8px;
-      gap: 6px;
-    }
-    .footer-edit-banner {
-      padding: 2px 6px;
-    }
-    .footer-edit-badge {
-      font-size: 9.5px;
-      padding: 1px 5px;
-    }
-    .footer-edit-text {
-      font-size: 10px;
-    }
-    .footer-btn-del-hand {
-      font-size: 9.5px;
-      padding: 1px 6px;
-    }
-    .score-keypad-grid {
-      grid-template-rows: repeat(3, 30px);
-    }
-    .modifiers-left-stack .keypad-pill {
-      height: 28px;
-      font-size: 11px;
-    }
-    .modifiers-right-stack .keypad-pill.pill-win {
-      min-height: 100px;
-      font-size: 14px;
-    }
-    .keypad-btn-tie-toggle {
-      width: 68px;
-      height: 68px;
-    }
-  }
-
-
-  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (GRUPO 1: CONTADORES | GRUPO 2: PREDICCIÓN Y PORCENTAJES) */
+  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) */
   .scoreboard-stats-bar {
     background: #ffffff;
     border-radius: 12px;
-    padding: clamp(3px, 0.5vh, 6px) clamp(8px, 1.2vw, 18px);
+    padding: 10px 22px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     border: 2px solid #e2e8f0;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    justify-content: space-between;
-    gap: clamp(8px, 1.2vw, 16px);
+    gap: 16px;
     width: 100%;
     box-sizing: border-box;
     flex-shrink: 0;
-    min-height: clamp(36px, 4.5vh, 44px);
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .scoreboard-stats-bar::-webkit-scrollbar {
-    display: none;
   }
 
-  .stats-bar-group {
+  .stats-bar-col {
     display: flex;
     align-items: center;
-    flex-shrink: 0;
-    flex-wrap: nowrap;
+    min-width: 0;
   }
 
-  .stats-group-counters {
+  .stats-bar-col.col-counters {
     justify-content: flex-start;
   }
 
-  .stats-group-prediction {
+  .stats-bar-col.col-prediction {
+    justify-content: center;
+    gap: 14px;
+  }
+
+  .stats-bar-col.col-percentages {
     justify-content: flex-end;
-    gap: clamp(8px, 1vw, 16px);
-    flex-wrap: nowrap;
   }
 
   .stats-strip-counters {
     display: flex;
     align-items: center;
-    gap: clamp(8px, 0.9vw, 14px);
+    gap: 18px;
     flex-wrap: nowrap;
-    overflow: visible;
+    overflow-x: auto;
   }
 
   .counter-item {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: clamp(4px, 0.4vw, 6px);
-    flex-shrink: 0;
+    gap: 8px;
+  }
+
+  .bead-circle-badge {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 900;
+    color: #ffffff;
+    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+    position: relative;
+    user-select: none;
   }
 
   .counter-digit {
-    font-size: clamp(13px, 1vw, 16px);
+    font-size: 18px;
     font-weight: 900;
     color: #0f172a;
     line-height: 1;
-    min-width: 12px;
+    min-width: 14px;
   }
 
   /* PREDICCIÓN (NEXT / ASK BANKER & ASK PLAYER) */
-  .prediction-block {
-    display: inline-flex;
-    align-items: center;
-    gap: clamp(6px, 0.7vw, 10px);
-    flex-wrap: nowrap;
-    flex-shrink: 0;
-  }
-
   .pred-title {
-    font-size: clamp(12px, 0.9vw, 15px);
+    font-size: 17px;
     font-weight: 900;
     color: #1e293b;
     letter-spacing: 0.4px;
@@ -4239,24 +4141,23 @@
   .prediction-pills-row {
     display: flex;
     align-items: center;
-    gap: clamp(6px, 0.7vw, 10px);
+    gap: 12px;
     flex-wrap: nowrap;
   }
 
   .pred-pill {
     display: inline-flex;
     align-items: center;
-    gap: clamp(6px, 0.6vw, 10px);
+    gap: 8px;
     background: #ffffff;
     border: 1.5px solid #cbd5e1;
     border-radius: 999px;
-    padding: clamp(2px, 0.3vh, 4px) clamp(8px, 0.8vw, 14px) clamp(2px, 0.3vh, 4px) clamp(5px, 0.5vw, 8px);
+    padding: 4px 14px 4px 8px;
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     transition: all 0.15s ease;
     user-select: none;
     line-height: 1;
-    flex-shrink: 0;
   }
 
   .pred-pill:hover {
@@ -4271,17 +4172,16 @@
   }
 
   .pred-badge-circle {
-    width: clamp(20px, 1.6vw, 25px);
-    height: clamp(20px, 1.6vw, 25px);
+    width: 25px;
+    height: 25px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: clamp(11px, 0.9vw, 14px);
+    font-size: 14px;
     font-weight: 900;
     color: #ffffff;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    flex-shrink: 0;
   }
 
   .pred-badge-circle.b {
@@ -4296,15 +4196,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
   }
 
   /* 1. Gran Ojo (Hollow Ring) */
   .pred-symbol.pred-ring {
-    width: clamp(11px, 0.9vw, 15px);
-    height: clamp(11px, 0.9vw, 15px);
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    border: clamp(1.8px, 0.18vw, 2.6px) solid transparent;
+    border: 2.5px solid transparent;
     box-sizing: border-box;
   }
   .pred-symbol.pred-ring.red {
@@ -4319,8 +4218,8 @@
 
   /* 2. Camino Pequeño (Solid Dot) */
   .pred-symbol.pred-dot {
-    width: clamp(9px, 0.75vw, 12px);
-    height: clamp(9px, 0.75vw, 12px);
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
   }
   .pred-symbol.pred-dot.red {
@@ -4335,8 +4234,8 @@
 
   /* 3. Cucaracha (Diagonal Slash) */
   .pred-symbol.pred-slash {
-    width: clamp(12px, 0.9vw, 16px);
-    height: clamp(12px, 0.9vw, 16px);
+    width: 14px;
+    height: 14px;
   }
   .pred-symbol.pred-slash.red {
     color: #dc2626;
@@ -4351,34 +4250,49 @@
   .stats-strip-pct-box {
     display: flex;
     align-items: center;
-    gap: clamp(8px, 1vw, 16px);
+    gap: 14px;
     background: #f1f5f9;
-    padding: clamp(3px, 0.4vh, 6px) clamp(8px, 0.9vw, 18px);
+    padding: 6px 16px;
     border-radius: 999px;
     border: 1px solid #cbd5e1;
-    font-size: clamp(11px, 0.85vw, 13.5px);
+    font-size: 13.5px;
     font-weight: 800;
     white-space: nowrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    flex-shrink: 0;
   }
 
-  /* PANEL OPERATIVO DE CONTROLES */
+  .pct-tag.b { color: #dc2626; }
+  .pct-tag.p { color: #2563eb; }
+  .pct-tag.t { color: #16a34a; }
+
+  @media (max-width: 1180px) {
+    .scoreboard-stats-bar {
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 10px 14px;
+    }
+    .stats-bar-col.col-counters,
+    .stats-bar-col.col-prediction,
+    .stats-bar-col.col-percentages {
+      justify-content: center;
+    }
+  }
+
+  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN MÁS GRANDE */
   .scoreboard-footer-panel {
     background: #ffffff;
-    border-radius: 16px;
-    padding: clamp(6px, 1vh, 12px) clamp(12px, 1.5vw, 20px);
+    border-radius: 14px;
+    padding: 16px 24px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: center;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: minmax(185px, 1.15fr) minmax(215px, 1.35fr) minmax(410px, 2.7fr) minmax(220px, 1.4fr);
+    gap: 26px;
+    align-items: center;
     flex-shrink: 0;
+    position: relative;
     box-sizing: border-box;
     width: 100%;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -4387,18 +4301,9 @@
     box-shadow: 0 0 22px rgba(245, 158, 11, 0.45), 0 8px 24px rgba(0, 0, 0, 0.25) !important;
   }
 
-  .footer-controls-row {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: clamp(14px, 1.8vw, 24px);
-    width: 100%;
-    box-sizing: border-box;
-  }
-
   /* BANNER SUPERIOR DE EDICIÓN EN EL FOOTER */
   .footer-edit-banner {
+    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -4466,36 +4371,13 @@
     box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
   }
 
-  .footer-group {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    min-width: 0;
-  }
-
-  /* BLOQUE 1 (IZQUIERDA): ENTRADA (TECLADO NUMÉRICO + PAIRS/NATURAL/WIN) */
-  .footer-group-input {
-    justify-content: center;
-    gap: clamp(12px, 1.5vw, 22px);
-    flex: 1 1 auto;
-    padding-right: clamp(14px, 1.8vw, 24px);
-    border-right: 2px solid #cbd5e1;
-  }
-
-  /* BLOQUE 2 (DERECHA): RESULTADOS (PUNTO, BANCA, EMPATE) + RETROCEDER Y TIE */
-  .footer-group-actions {
-    justify-content: center;
-    gap: clamp(16px, 2vw, 32px);
-    flex: 1.25 1 auto;
-  }
-
   /* GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) */
   .footer-score-col {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 18px;
+    padding-right: 22px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -4506,7 +4388,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 245px;
+    max-width: 225px;
   }
 
   .score-keypad-grid {
@@ -4533,17 +4415,17 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 900;
   }
 
   .btn-num-key {
-    border-radius: 9px;
+    border-radius: 8px;
     border: 1.5px solid #cbd5e1;
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: 24px;
+    font-size: 21px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4582,32 +4464,35 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    padding-right: 22px;
+    border-right: 2px solid #cbd5e1;
     min-width: 0;
+    width: 100%;
   }
 
   .modifiers-subgrid {
     display: flex;
     align-items: stretch;
     justify-content: center;
-    gap: 14px;
+    gap: 12px;
     width: 100%;
-    max-width: 270px;
+    max-width: 250px;
   }
 
   .modifiers-left-stack {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 9px;
+    gap: 8px;
     flex: 1 1 auto;
     min-width: 0;
   }
 
   .modifiers-left-stack .keypad-pill {
     width: 100%;
-    max-width: 145px;
-    height: 48px;
-    font-size: 16px;
+    max-width: 130px;
+    height: 42px;
+    font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.3px;
     margin: 0 auto;
@@ -4618,15 +4503,15 @@
     flex-direction: column;
     justify-content: stretch;
     flex: 0 0 auto;
-    width: 92px;
+    width: 82px;
   }
 
   .modifiers-right-stack .keypad-pill.pill-win {
     width: 100%;
     height: 100%;
-    min-height: 165px;
-    border-radius: 26px;
-    font-size: 22px;
+    min-height: 142px;
+    border-radius: 24px;
+    font-size: 19px;
     font-weight: 900;
     letter-spacing: 0.5px;
     display: flex;
@@ -4649,9 +4534,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 28px;
+    gap: 30px;
     width: 100%;
-    max-width: 560px;
+    max-width: 520px;
   }
 
   /* GRUPO 4: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
@@ -4673,11 +4558,11 @@
 
   /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]) */
   .keypad-btn-tie-toggle {
-    width: 108px;
-    height: 108px;
+    width: 94px;
+    height: 94px;
     background: #ffffff;
-    border: 3.5px solid #0f172a;
-    border-radius: 16px;
+    border: 3px solid #0f172a;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4770,307 +4655,39 @@
     text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
   }
 
-  /* RESPONSIVE: EN PANTALLAS PEQUEÑAS / MENOR ANCHO, LOS 2 GRUPOS SE COLOCAN UNO ARRIBA Y OTRO ABAJO (COL-6 / COL-6 APILADOS) */
-  @media (max-width: 1260px) {
-    /* 1. FRANJA DE ESTADÍSTICAS: Contadores (arriba) y Predicción/Porcentajes (abajo) */
-    .scoreboard-stats-bar {
-      flex-direction: column;
-      align-items: stretch;
-      padding: clamp(3px, 0.5vh, 6px) clamp(8px, 1.2vw, 14px);
-      gap: clamp(3px, 0.5vh, 6px);
-      min-height: auto;
-      overflow-x: visible;
-    }
-
-    .stats-bar-group {
-      width: 100%;
-      justify-content: center;
-    }
-
-    .stats-group-counters {
-      border-bottom: 1.5px solid #cbd5e1;
-      padding-bottom: clamp(3px, 0.5vh, 5px);
-    }
-
-    .stats-strip-counters {
-      width: 100%;
-      justify-content: center;
-      gap: clamp(6px, 1.2vw, 14px);
-      flex-wrap: wrap;
-    }
-
-    .stats-group-prediction {
-      justify-content: center;
-      padding-top: clamp(2px, 0.3vh, 3px);
-      gap: clamp(8px, 1.8vw, 20px);
-      flex-wrap: wrap;
-    }
-
-    /* 2. PANEL OPERATIVO DE CONTROLES: Entrada/Teclado (arriba) y Acciones/Resultados (abajo) */
+  @media (max-width: 1024px) {
     .scoreboard-footer-panel {
-      flex-direction: column;
-      align-items: stretch;
-      padding: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
-      gap: clamp(6px, 1vh, 10px);
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
     }
-
-    .footer-controls-row {
-      flex-direction: column;
-      align-items: stretch;
-      gap: clamp(6px, 1vh, 10px);
-    }
-
-    .footer-group {
-      width: 100%;
-      justify-content: center;
-    }
-
-    .footer-group-input {
+    .footer-score-col, .footer-modifiers-col, .footer-outcomes-col {
       border-right: none;
       border-bottom: 2px solid #cbd5e1;
       padding-right: 0;
-      padding-bottom: clamp(6px, 0.9vh, 10px);
-      gap: clamp(12px, 2vw, 24px);
+      padding-bottom: 14px;
     }
-
-    .score-keypad-box {
-      max-width: clamp(170px, 20vw, 240px);
-    }
-
-    .score-keypad-grid {
-      grid-template-rows: repeat(3, clamp(26px, 3.8vh, 42px));
-      gap: clamp(3px, 0.5vh, 6px);
-    }
-
-    .btn-num-key {
-      font-size: clamp(15px, 2.2vh, 22px);
-    }
-
-    .btn-num-zero {
-      font-size: clamp(20px, 2.8vh, 28px);
-    }
-
-    .modifiers-subgrid {
-      gap: clamp(6px, 1vw, 12px);
-      max-width: clamp(180px, 22vw, 250px);
-    }
-
-    .modifiers-left-stack {
-      gap: clamp(3px, 0.5vh, 7px);
-    }
-
-    .modifiers-left-stack .keypad-pill {
-      height: clamp(26px, 3.8vh, 42px);
-      font-size: clamp(12px, 1.6vh, 15px);
-    }
-
-    .modifiers-right-stack {
-      width: clamp(60px, 7vw, 84px);
-    }
-
-    .modifiers-right-stack .keypad-pill.pill-win {
-      min-height: clamp(84px, 12.5vh, 140px);
-      font-size: clamp(14px, 2vh, 19px);
-    }
-
-    .footer-group-actions {
-      padding-top: clamp(2px, 0.4vh, 4px);
-      gap: clamp(12px, 2vw, 28px);
-    }
-
-    .outcomes-grid-3col {
-      gap: clamp(10px, 1.6vw, 22px);
-      max-width: none;
-    }
-
-    .keypad-btn-circle {
-      width: clamp(56px, 9vh, 96px);
-      height: clamp(56px, 9vh, 96px);
-    }
-
-    .keypad-btn-circle.btn-undo {
-      width: clamp(52px, 8.2vh, 88px);
-      height: clamp(52px, 8.2vh, 88px);
-    }
-
-    .keypad-btn-tie-toggle {
-      width: clamp(48px, 7.6vh, 80px);
-      height: clamp(48px, 7.6vh, 80px);
-    }
-
-    .action-btn-item {
-      gap: clamp(2px, 0.4vh, 5px);
-    }
-
-    .btn-caption {
-      font-size: clamp(10px, 1.3vh, 13px);
-    }
-
-    .btn-arrow-icon {
-      width: clamp(24px, 4vh, 40px);
-      height: clamp(24px, 4vh, 40px);
-    }
-
-    .tie-toggle-svg {
-      width: clamp(24px, 4vh, 40px);
-      height: clamp(24px, 4vh, 40px);
-    }
-  }
-
-  @media (max-width: 860px) {
-    .keypad-btn-circle {
-      width: clamp(52px, 8.5vh, 80px);
-      height: clamp(52px, 8.5vh, 80px);
-    }
-    .keypad-btn-circle.btn-undo {
-      width: clamp(48px, 7.8vh, 76px);
-      height: clamp(48px, 7.8vh, 76px);
-    }
-    .keypad-btn-tie-toggle {
-      width: clamp(44px, 7.2vh, 70px);
-      height: clamp(44px, 7.2vh, 70px);
-    }
-    .outcomes-grid-3col {
-      gap: 12px;
-    }
-    .footer-undo-col {
-      gap: 10px;
-    }
-    .footer-outcomes-col {
-      padding-right: 10px;
-    }
-  }
-
-  @media (max-width: 680px) {
-    .scoreboard-stats-bar {
-      padding: 4px 6px;
-      gap: 4px;
-    }
-    .stats-group-counters {
-      padding-bottom: 4px;
-    }
-    .stats-strip-counters {
-      gap: 5px;
-    }
-    .stats-group-prediction {
-      gap: 6px;
-    }
-    .stats-strip-pct-box {
-      font-size: 10.5px;
-      padding: 2px 6px;
-    }
-
-    .scoreboard-footer-panel {
-      padding: 4px 6px;
-      gap: 6px;
-    }
-    .footer-group-input {
-      gap: 8px;
-      padding-bottom: 6px;
-    }
-    .footer-group-actions {
-      gap: 8px;
-    }
-    .outcomes-grid-3col {
-      gap: 8px;
-    }
-    .footer-undo-col {
-      gap: 6px;
+    .footer-modifiers-col {
+      justify-content: center;
+      padding-bottom: 14px;
     }
   }
 
   @media (max-width: 600px) {
     .outcomes-grid-3col {
-      gap: 10px;
+      gap: 14px;
     }
     .modifiers-subgrid {
-      gap: 4px;
+      gap: 6px;
     }
     .modifiers-left-stack .keypad-pill {
-      height: 32px;
-      font-size: 12px;
+      height: 38px;
+      font-size: 13px;
     }
     .modifiers-right-stack {
-      width: 58px;
+      width: 65px;
     }
     .modifiers-right-stack .keypad-pill.pill-win {
-      font-size: 14px;
-    }
-  }
-
-  /* RESPONSIVE POR ALTURA: GARANTIZA QUE EN RESOLUCIONES CON POCA ALTURA NADA SE DESBORDE DE 100VH */
-  @media (max-height: 800px) {
-    .scoreboard-container {
-      gap: 2px;
-      padding: 2px 6px;
-    }
-    .sb-header {
-      padding: 2px 2px;
-      gap: 6px;
-    }
-    .sb-btn-table-info,
-    .sb-shoe-pill,
-    .sb-session-navigator,
-    .sb-btn-new-shoe {
-      min-height: 28px;
-      padding: 1px 8px;
-      font-size: 12px;
-    }
-    .scoreboard-stats-bar {
-      padding: 2px 8px;
-      min-height: 30px;
-      gap: 6px;
-    }
-    .scoreboard-footer-panel {
-      padding: 4px 8px;
-      gap: 6px;
-    }
-    .score-keypad-grid {
-      grid-template-rows: repeat(3, 30px);
-    }
-    .modifiers-left-stack .keypad-pill {
-      height: 30px;
-    }
-    .modifiers-right-stack .keypad-pill.pill-win {
-      min-height: 100px;
-    }
-    .keypad-btn-circle {
-      width: 72px;
-      height: 72px;
-    }
-    .keypad-btn-circle.btn-undo {
-      width: 66px;
-      height: 66px;
-    }
-    .keypad-btn-tie-toggle {
-      width: 60px;
-      height: 60px;
-    }
-  }
-
-  @media (max-height: 640px) {
-    .keypad-btn-circle {
-      width: 56px;
-      height: 56px;
-    }
-    .keypad-btn-circle.btn-undo {
-      width: 50px;
-      height: 50px;
-    }
-    .keypad-btn-tie-toggle {
-      width: 46px;
-      height: 46px;
-    }
-    .score-keypad-grid {
-      grid-template-rows: repeat(3, 24px);
-    }
-    .modifiers-left-stack .keypad-pill {
-      height: 24px;
-      font-size: 11px;
-    }
-    .modifiers-right-stack .keypad-pill.pill-win {
-      min-height: 80px;
-      font-size: 12px;
+      font-size: 16px;
     }
   }
 
@@ -5156,8 +4773,8 @@
 
   /* 3D CIRCULAR CASINO BUTTONS */
   .keypad-btn-circle {
-    width: 136px;
-    height: 136px;
+    width: 118px;
+    height: 118px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -5166,15 +4783,15 @@
     cursor: pointer;
     border: none;
     background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
-    padding: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    padding: 5px;
+    box-shadow: 0 7px 20px rgba(0, 0, 0, 0.38), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
   }
 
   .keypad-btn-circle.btn-undo {
-    width: 120px;
-    height: 120px;
+    width: 106px;
+    height: 106px;
   }
 
   @media (max-width: 600px) {
@@ -5214,7 +4831,7 @@
   }
 
   .btn-letter {
-    font-size: 68px;
+    font-size: 58px;
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -5265,10 +4882,10 @@
   /* CORNER BADGES ON P, B, T */
   .badge-corner-tl {
     position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 23px;
-    height: 23px;
+    top: 0px;
+    left: 0px;
+    width: 19px;
+    height: 19px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #ff4d4d, #b91c1c);
     border: 2px solid #ffffff;
@@ -5279,10 +4896,10 @@
 
   .badge-corner-br {
     position: absolute;
-    bottom: 2px;
-    right: 2px;
-    width: 23px;
-    height: 23px;
+    bottom: 0px;
+    right: 0px;
+    width: 19px;
+    height: 19px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8);
     border: 2px solid #ffffff;
@@ -5751,7 +5368,10 @@
     border-color: rgba(2, 132, 199, 0.45) !important;
   }
 
-  .scoreboard-footer-panel.is-observer-mode .footer-controls-row {
+  .scoreboard-footer-panel.is-observer-mode .footer-score-col,
+  .scoreboard-footer-panel.is-observer-mode .footer-modifiers-col,
+  .scoreboard-footer-panel.is-observer-mode .footer-outcomes-col,
+  .scoreboard-footer-panel.is-observer-mode .footer-undo-col {
     filter: grayscale(1) contrast(0.85);
     opacity: 0.38;
     pointer-events: none;
@@ -5778,11 +5398,13 @@
   }
 
   .footer-observer-strip {
+    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     width: 100%;
+    box-sizing: border-box;
     background: rgba(2, 132, 199, 0.12);
     border: 1px solid rgba(2, 132, 199, 0.3);
     border-radius: 6px;
@@ -5805,7 +5427,10 @@
     position: relative;
   }
 
-  .scoreboard-footer-panel.no-mesa-selected .footer-controls-row {
+  .scoreboard-footer-panel.no-mesa-selected .footer-score-col,
+  .scoreboard-footer-panel.no-mesa-selected .footer-modifiers-col,
+  .scoreboard-footer-panel.no-mesa-selected .footer-outcomes-col,
+  .scoreboard-footer-panel.no-mesa-selected .footer-undo-col {
     filter: grayscale(1) contrast(0.8);
     opacity: 0.35;
     pointer-events: none;
@@ -6219,17 +5844,10 @@
     border: 3px solid #f59e0b !important;
     box-shadow: 0 0 20px rgba(245, 158, 11, 0.4), 0 4px 14px rgba(0, 0, 0, 0.08) !important;
   }
-  .theme-light .footer-group-input {
-    border-color: #cbd5e1;
-  }
-
   .theme-light .scoreboard-stats-bar {
     background: #ffffff;
     border: 2px solid #cbd5e1;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-  }
-  .theme-light .stats-group-counters {
-    border-color: #cbd5e1;
   }
 
   .theme-light .pred-pill {
