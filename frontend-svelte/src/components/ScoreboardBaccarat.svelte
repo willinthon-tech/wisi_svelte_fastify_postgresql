@@ -2223,22 +2223,6 @@
           </div>
         {/if}
 
-        {#if isMonitorMode}
-          <button
-            type="button"
-            class="sb-monitor-badge-pill is-btn"
-            on:click={toggleMonitorMode}
-            title="Modo Monitor Activo (Clic para Salir de Monitor y mostrar botonera)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-              <line x1="8" y1="21" x2="16" y2="21"></line>
-              <line x1="12" y1="17" x2="12" y2="21"></line>
-            </svg>
-            <span>Monitor</span>
-            <span class="sb-monitor-badge-exit">✕</span>
-          </button>
-        {/if}
 
         <div class="sb-shoe-pill shoe-pill">
           <button
