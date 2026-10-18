@@ -897,16 +897,25 @@
 
   $: isStandaloneScoreboard = (() => {
     const raw = String($currentRouteStore || '').replace(/^#\/?/, '').replace(/^\//, '').split('?')[0];
-    if (!raw.startsWith('herramientas/scoreboard-baccarat')) return false;
-    const parts = raw.split('/').filter(Boolean);
-    return Boolean(parts.length >= 4 && parts[2] && parts[3]);
+    return raw.startsWith('herramientas/scoreboard-baccarat');
   })();
 
   $: standaloneScoreboardParams = (() => {
-    if (!isStandaloneScoreboard) return { salaId: null, mesaId: null };
-    const raw = String($currentRouteStore || '').replace(/^#\/?/, '').replace(/^\//, '').split('?')[0];
-    const parts = raw.split('/').filter(Boolean);
-    return { salaId: parts[2], mesaId: parts[3] };
+    if (!isStandaloneScoreboard) return { salaId: null, mesaId: null, modo: null, isMonitor: false };
+    const rawWithQuery = String($currentRouteStore || '').replace(/^#\/?/, '').replace(/^\//, '');
+    const [rawPath, rawQuery] = rawWithQuery.split('?');
+    const parts = (rawPath || '').split('/').filter(Boolean);
+    const sp = new URLSearchParams(rawQuery || (typeof window !== 'undefined' ? (window.location.search || window.location.hash.split('?')[1] || '') : ''));
+    
+    const isMonitor = parts.includes('monitor') || sp.get('monitor') === 'true' || sp.get('modo') === 'monitor';
+    const meaningfulSegments = parts.slice(2).filter(p => p.toLowerCase() !== 'monitor');
+
+    return { 
+      salaId: meaningfulSegments[0] || sp.get('sala') || null, 
+      mesaId: meaningfulSegments[1] || sp.get('mesa') || null,
+      modo: sp.get('modo') || sp.get('mode') || null,
+      isMonitor
+    };
   })();
 </script>
 
@@ -935,11 +944,13 @@
 {:else if $isAuthenticatedStore}
   {#if isStandaloneScoreboard}
     <!-- Standalone Fullscreen Live Casino Scoreboard View (Abre completa, sin barras ni menús) -->
-    <div class="standalone-scoreboard-wrapper" style="position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 999999; background: transparent; overflow-y: auto;">
+    <div class="standalone-scoreboard-wrapper" style="position: fixed; inset: 0; width: 100vw; width: 100dvw; height: 100vh; height: 100dvh; z-index: 999999; background: transparent; overflow: hidden;">
       <ScoreboardBaccarat 
         salaId={standaloneScoreboardParams.salaId} 
         mesaId={standaloneScoreboardParams.mesaId} 
-        on:close={() => navigateToRoute(`herramientas/scoreboard-baccarat/${standaloneScoreboardParams.salaId}`)} 
+        modo={standaloneScoreboardParams.modo}
+        initialMonitorMode={standaloneScoreboardParams.isMonitor}
+        on:close={() => navigateToRoute('herramientas')} 
       />
     </div>
   {:else}

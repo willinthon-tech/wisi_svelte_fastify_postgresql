@@ -1,8 +1,16 @@
 <script>
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
-  import { selectedSalaStore, userSalasStore } from '../controllers/auth.store.js';
-  import { masterSalasStore, masterMesasStore } from '../controllers/master.store.js';
-  import { navigateToRoute } from '../controllers/router.store.js';
+  import { selectedSalaStore, currentUserStore, userSalasStore as authUserSalasStore } from '../controllers/auth.store.js';
+  import { 
+    masterSalasStore, 
+    masterMesasStore, 
+    masterJuegosStore, 
+    userSalasStore as masterUserSalasStore, 
+    loadMasterStoresFromBackend,
+    currentRoutePermissionsStore,
+    getUserModuleActions
+  } from '../controllers/master.store.js';
+  import { navigateToRoute, currentRouteStore } from '../controllers/router.store.js';
   import { toBackendUrl } from '../config/api.config.js';
   import {
     getLocalItems,
@@ -22,6 +30,8 @@
   export let salaId = null;
   export let mesaId = null;
   export let isModal = false;
+  export let modo = null; // 'observar' | 'jugar'
+  export let initialMonitorMode = false;
   const dispatch = createEventDispatcher();
 
   // Unique client identifier for real-time WebSocket synchronization
@@ -73,31 +83,34 @@
   // Solo la última sesión permite jugar y editar (sesiones anteriores son histórico de solo lectura)
   $: isLatestSession = sessions.length > 0 && selectedSessionIndex === (sessions.length - 1);
 
+  // Local overrides for dynamically selected sala and mesa
+  let localSalaId = null;
+  let localMesaId = null;
+
   // Selected Sala Context
-  $: currentSalaId = salaId || (() => {
+  $: currentSalaId = localSalaId || salaId || (() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
       const parts = hash.split('/').filter(Boolean);
-      if (parts[0] === 'herramientas' && parts[1] === 'scoreboard-baccarat' && parts[2]) {
-        return parts[2];
+      if (parts[0] === 'herramientas' && parts[1] === 'scoreboard-baccarat') {
+        const segs = parts.slice(2).filter(p => p.toLowerCase() !== 'monitor');
+        if (segs[0]) return segs[0];
       }
       const sp = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
       const s = sp.get('sala');
       if (s) return s;
     }
-    return $selectedSalaStore;
+    return null;
   })();
 
-  $: currentSalaUuid = currentSalaObj?.uuid || currentSalaId;
-  $: currentMesaUuid = currentMesaObj?.uuid || currentMesaId;
-
   // Selected Mesa Context
-  $: currentMesaId = mesaId || (() => {
+  $: currentMesaId = localMesaId || mesaId || (() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
       const parts = hash.split('/').filter(Boolean);
-      if (parts[0] === 'herramientas' && parts[1] === 'scoreboard-baccarat' && parts[3]) {
-        return parts[3];
+      if (parts[0] === 'herramientas' && parts[1] === 'scoreboard-baccarat') {
+        const segs = parts.slice(2).filter(p => p.toLowerCase() !== 'monitor');
+        if (segs[1]) return segs[1];
       }
       const sp = new URLSearchParams(window.location.search || window.location.hash.split('?')[1] || '');
       const m = sp.get('mesa');
@@ -106,15 +119,18 @@
     return null;
   })();
 
+  $: hasSelectedMesa = Boolean(currentMesaId && currentSalaId);
+
   $: currentSalaObj = (() => {
-    const sId = currentSalaId || $selectedSalaStore;
+    const sId = currentSalaId;
+    if (!sId) return null;
     const all = $masterSalasStore || [];
     const found = all.find(s => String(s.uuid || s.id) === String(sId));
     if (found) return found;
-    const authSalas = $userSalasStore || [];
+    const authSalas = $authUserSalasStore || [];
     const foundAuth = authSalas.find(s => typeof s === 'object' && String(s.uuid || s.id) === String(sId));
     if (foundAuth) return foundAuth;
-    return { id: sId, nombre: sId ? `Sala #${String(sId).slice(0, 8)}` : 'Sala Principal' };
+    return { id: sId, nombre: `Sala #${String(sId).slice(0, 8)}` };
   })();
 
   $: currentMesaObj = (() => {
@@ -125,8 +141,244 @@
     return { id: currentMesaId, nombre: `Mesa #${String(currentMesaId).slice(0, 8)}` };
   })();
 
-  $: currentSalaName = currentSalaObj?.nombre || currentSalaObj?.name || '';
-  $: currentMesaName = currentMesaObj?.nombre || (currentMesaId ? `Mesa #${currentMesaId}` : 'Mesa 01');
+  $: currentSalaUuid = currentSalaObj?.uuid || currentSalaId;
+  $: currentMesaUuid = currentMesaObj?.uuid || currentMesaId;
+
+  $: currentSalaName = hasSelectedMesa
+    ? (currentSalaObj?.nombre || currentSalaObj?.name || '')
+    : (currentSalaObj?.nombre || currentSalaObj?.name || 'Seleccione Sala');
+
+  $: currentMesaName = hasSelectedMesa
+    ? (currentMesaObj?.nombre || (currentMesaId ? `Mesa #${currentMesaId}` : ''))
+    : 'Seleccionar Mesa';
+
+  // 1. Resolve Salas assigned to current user strictly of type "SALA" (not GALPÓN)
+  $: userSalasMap = $masterUserSalasStore || {};
+  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id)
+    ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || [])
+    : [];
+
+  $: rawAssignedSalas = (function () {
+    const user = $currentUserStore;
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas;
+    }
+    if ($authUserSalasStore && Array.isArray($authUserSalasStore) && $authUserSalasStore.length > 0) {
+      return $authUserSalasStore;
+    }
+    return [];
+  })();
+
+  $: assignedSalaIds = (currentUserSalas.length > 0
+    ? currentUserSalas
+    : rawAssignedSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
+  ).filter(Boolean).map(String);
+
+  $: detailedSalas = (function () {
+    const allSalas = $masterSalasStore || [];
+    let list = [];
+    if (assignedSalaIds.length === 0) {
+      list = allSalas.length > 0 ? allSalas : (rawAssignedSalas.length > 0 ? rawAssignedSalas : [{ id: 1, nombre: 'Sala Principal', grupo_id: 1 }]);
+    } else {
+      list = assignedSalaIds.map((id) => {
+        const found = allSalas.find((s) => String(s.uuid || s.id) === String(id));
+        const fallback = rawAssignedSalas.find((s) => typeof s === 'object' && String(s.uuid || s.id) === String(id));
+        return found || fallback || { id, uuid: id, nombre: `Sala #${String(id).slice(0, 8)}`, grupo_id: 1 };
+      });
+    }
+
+    // Filtrar estrictamente solo salas tipo 1 (tipo SALA, no tipo GALPÓN)
+    return list.filter((sala) => {
+      if (sala.grupo_id !== undefined && sala.grupo_id !== null) {
+        if (Number(sala.grupo_id) === 2 || Number(sala.grupo_id) !== 1) return false;
+      }
+      if (sala.grupo_nombre) {
+        const gn = String(sala.grupo_nombre).toLowerCase().trim();
+        if (gn.includes('galpon') || gn.includes('galpón')) return false;
+      }
+      if (sala.tipo_id !== undefined && sala.tipo_id !== null) {
+        if (Number(sala.tipo_id) === 2 || Number(sala.tipo_id) !== 1) return false;
+      }
+      if (sala.tipo !== undefined && sala.tipo !== null) {
+        const t = String(sala.tipo).toLowerCase().trim();
+        if (t === '2' || t.includes('galpon') || t.includes('galpón')) return false;
+      }
+      const nom = String(sala.nombre || sala.name || '').toLowerCase().trim();
+      if (nom.includes('galpon') || nom.includes('galpón')) {
+        return false;
+      }
+      return true;
+    });
+  })();
+
+  // 2. Mesas grouped by room for the user assigned rooms
+  $: userAssignedSalasWithMesas = (function () {
+    const allMesas = ($masterMesasStore || []).filter(m => (m.active ?? 1) === 1);
+    const juegos = $masterJuegosStore || [];
+
+    return detailedSalas.map(sala => {
+      const sId = String(sala.uuid || sala.id || '');
+      const sNombre = sala.nombre || sala.name || `Sala #${sId.slice(0, 8)}`;
+
+      // Mesas de esta sala
+      const forThisSala = allMesas.filter(m => {
+        const mSala = String(m.sala_uuid || m.sala_id || '');
+        return mSala === sId;
+      });
+
+      // Búsqueda de mesas de Baccarat / Punto y Banca
+      const bacc = forThisSala.filter(m => {
+        const jName = String(m.juego_nombre || '').toLowerCase();
+        const mName = String(m.nombre || '').toLowerCase();
+        const jObj = juegos.find(j => String(j.uuid || j.id) === String(m.juego_uuid || m.juego_id));
+        const jFoundName = String(jObj?.nombre || '').toLowerCase();
+
+        return jName.includes('baccarat') || jName.includes('punto') ||
+               mName.includes('baccarat') || mName.includes('punto') ||
+               jFoundName.includes('baccarat') || jFoundName.includes('punto');
+      });
+
+      let mesasFinal = [];
+      if (bacc.length > 0) {
+        mesasFinal = bacc;
+      } else if (forThisSala.length > 0) {
+        mesasFinal = forThisSala;
+      } else {
+        // Fallback mesas si no hay registradas en BD para que la sala tenga opciones funcionales
+        mesasFinal = [
+          { id: 1, uuid: 'mesa-01', nombre: 'Mesa 01 - Baccarat', sala_uuid: sId },
+          { id: 2, uuid: 'mesa-02', nombre: 'Mesa 02 - Baccarat VIP', sala_uuid: sId }
+        ];
+      }
+
+      return {
+        id: sala.id,
+        uuid: sala.uuid || sala.id,
+        nombre: sNombre,
+        mesas: mesasFinal
+      };
+    });
+  })();
+
+  $: currentSelectedValue = (currentSalaUuid && currentMesaUuid)
+    ? `${currentSalaUuid}::${currentMesaUuid}`
+    : ((currentSalaId && currentMesaId) ? `${currentSalaId}::${currentMesaId}` : '');
+
+  function handleMesaSelectChange(e) {
+    const val = e?.target?.value;
+    if (!val) return;
+    const [targetSala, targetMesa] = val.split('::');
+    if (!targetSala || !targetMesa) return;
+
+    if (isCurrentShoeActive) {
+      saveShoe(true);
+    }
+
+    localSalaId = targetSala;
+    localMesaId = targetMesa;
+    selectedSalaStore.set(targetSala);
+
+    const monitorSuffix = isMonitorMode ? '/monitor' : '';
+    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(targetSala)}/${encodeURIComponent(targetMesa)}${monitorSuffix}`);
+
+    isOptionsModalOpen = false;
+  }
+
+  function handleGoToHerramientas() {
+    if (isCurrentShoeActive) {
+      saveShoe(true);
+    }
+    exitAppFullscreen();
+    isOptionsModalOpen = false;
+    navigateToRoute('herramientas');
+    dispatch('close');
+  }
+
+  $: modulePermissions = (function() {
+    const routePerms = $currentRoutePermissionsStore || getUserModuleActions('herramientas') || getUserModuleActions('mod-otros-herramientas');
+    if (routePerms) return routePerms;
+    const user = $currentUserStore;
+    const username = (user?.usuario || '').trim().toLowerCase();
+    const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
+    if (isAdmin) return { canView: true, canEdit: true };
+    return { canView: true, canEdit: false };
+  })();
+
+  $: canViewPerm = Boolean(modulePermissions?.canView ?? true);
+  $: canEditPerm = Boolean(modulePermissions?.canEdit ?? false);
+
+  // Modo Observador automático: si no tiene permiso de edición, la botonera queda en modo observador (solo lectura)
+  $: isObserverMode = !canEditPerm;
+
+  // Modo Monitor (Exclusivo visual para pantallas/TV: oculta la botonera completa y maximiza cuadrillas)
+  function checkRouteHasMonitor() {
+    if (typeof window === 'undefined') return false;
+    const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0];
+    const parts = hash.split('/').filter(Boolean);
+    if (parts[0] === 'herramientas' && parts[1] === 'scoreboard-baccarat') {
+      return parts.includes('monitor');
+    }
+    const path = window.location.pathname.replace(/^\//, '').split('?')[0];
+    const pathParts = path.split('/').filter(Boolean);
+    if (pathParts[0] === 'herramientas' && pathParts[1] === 'scoreboard-baccarat') {
+      return pathParts.includes('monitor');
+    }
+    return false;
+  }
+
+  let isMonitorMode = initialMonitorMode || checkRouteHasMonitor() || (() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('wisi_scoreboard_monitor_mode') === 'true';
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  })();
+
+  $: if (initialMonitorMode !== undefined && initialMonitorMode !== null) {
+    if (initialMonitorMode !== isMonitorMode) {
+      isMonitorMode = initialMonitorMode;
+    }
+  }
+
+  $: if ($currentRouteStore) {
+    const routeHasMonitor = checkRouteHasMonitor();
+    if (routeHasMonitor !== isMonitorMode) {
+      isMonitorMode = routeHasMonitor;
+    }
+  }
+
+  function updateMonitorRoute(monitorActive) {
+    const salaParam = currentSalaUuid || currentSalaId || '';
+    const mesaParam = currentMesaUuid || currentMesaId || '';
+    
+    let base = 'herramientas/scoreboard-baccarat';
+    if (salaParam && mesaParam) {
+      base = `herramientas/scoreboard-baccarat/${encodeURIComponent(salaParam)}/${encodeURIComponent(mesaParam)}`;
+    } else if (salaParam) {
+      base = `herramientas/scoreboard-baccarat/${encodeURIComponent(salaParam)}`;
+    }
+    
+    const targetRoute = monitorActive ? `${base}/monitor` : base;
+    navigateToRoute(targetRoute);
+  }
+
+  function toggleMonitorMode() {
+    isMonitorMode = !isMonitorMode;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('wisi_scoreboard_monitor_mode', isMonitorMode ? 'true' : 'false');
+      } catch (e) {}
+    }
+
+    // Actualiza la ruta URL agregando o quitando /monitor al final
+    updateMonitorRoute(isMonitorMode);
+
+    showFeedback(isMonitorMode ? 'Modo Monitor activado: Botonera oculta' : 'Modo Monitor desactivado: Botonera visible');
+  }
+
   $: sessionUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
   $: storageKey = `wisi_baccarat_shoe_v3_${currentSalaUuid || 'default'}_${currentMesaUuid || 'default'}${sessionUuid ? `_sess_${sessionUuid}` : ''}`;
 
@@ -214,9 +466,43 @@
   let shoes = [{ shoe_number: 1, history: [], tie_mode: 'slash' }];
   let history = []; // [{ id, winner: 'PUNTO'|'BANCA'|'EMPATE', bPair, pPair, natural, special, time }]
 
+  $: isObserverMode = (() => {
+    // 1. Prop directa (pasada desde App.svelte)
+    if (modo) {
+      const m = String(modo).toLowerCase().trim();
+      if (m === 'observar' || m === 'observe' || m === 'view' || m === 'ver') return true;
+      if (m === 'jugar' || m === 'play' || m === 'edit') return false;
+    }
+    // 2. Ruta activa en el router store ($currentRouteStore)
+    const route = String($currentRouteStore || '');
+    if (route.includes('modo=observar') || route.includes('mode=observe') || route.includes('modo=ver') || route.includes('mode=view')) {
+      return true;
+    }
+    // 3. Fallback a window.location (search o hash)
+    if (typeof window !== 'undefined') {
+      const href = String(window.location.href || '').toLowerCase();
+      if (href.includes('modo=observar') || href.includes('mode=observe') || href.includes('modo=ver') || href.includes('mode=view')) {
+        return true;
+      }
+      const hash = String(window.location.hash || '');
+      const search = String(window.location.search || '');
+      const sp = new URLSearchParams(search.replace(/^\?/, '') || hash.split('?')[1] || '');
+      const paramModo = (sp.get('modo') || sp.get('mode') || '').toLowerCase();
+      if (paramModo === 'observar' || paramModo === 'observe' || paramModo === 'view' || paramModo === 'ver') {
+        return true;
+      }
+    }
+    // 4. Permisos de usuario: Si no tiene permiso de edición, siempre entra como observador
+    const perms = $currentRoutePermissionsStore || getUserModuleActions('herramientas') || getUserModuleActions('mod-otros-herramientas');
+    if (perms && perms.canEdit === false) {
+      return true;
+    }
+    return false;
+  })();
+
   $: maxShoeNumber = shoes.length > 0 ? Math.max(...shoes.map(s => Number(s.shoe_number) || 1), 1) : 1;
   $: isViewingPastShoe = activeShoeNumber < maxShoeNumber;
-  $: isCurrentShoeActive = isLatestSession && !isViewingPastShoe;
+  $: isCurrentShoeActive = !isObserverMode && hasSelectedMesa && isLatestSession && !isViewingPastShoe;
 
   // Keypad Staging Modifiers & Score
   let activePPair = false;
@@ -260,17 +546,17 @@
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 6;
 
-  // Dynamic roadmap sizing: scales with available height (e.g. 24px - 50px depending on monitor)
-  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 20);
+  // Dynamic roadmap sizing: scales seamlessly across all screen resolutions
+  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 11);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 18);
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 10);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads: cuadrículas aún más pequeñas y compactas (~10px)
-  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 40);
-  $: derivedRows = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / 10), 6);
-  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / derivedRows), 7);
+  // Derived roads (Gran Ojo, Camino Pequeño, Cucaracha): estándar internacional canónico de 6 filas exactas
+  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 24);
+  $: derivedRows = DERIVED_ROWS; // Exactamente 6 filas siempre
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / DERIVED_ROWS), 6);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 40);
 
   function safeJsonParse(val, fallback = []) {
@@ -864,6 +1150,13 @@
   }
 
   onMount(() => {
+    loadMasterStoresFromBackend().catch(() => {});
+
+    // Si no hay mesa seleccionada, abrir modal de opciones para seleccionar mesa
+    if (!hasSelectedMesa) {
+      isOptionsModalOpen = true;
+    }
+
     // 1. Limpiar claves legacy y cachés locales antiguos para evitar que contaminen nuevas sesiones
     try {
       if (typeof localStorage !== 'undefined') {
@@ -878,7 +1171,6 @@
       }
     } catch (e) {}
 
-
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
       const qIdx = hash.indexOf('?');
@@ -886,14 +1178,16 @@
         const params = new URLSearchParams(hash.slice(qIdx));
         const s = params.get('sala');
         if (s) {
-          currentSalaId = s;
+          localSalaId = s;
           selectedSalaStore.set(s);
+        }
+        const m = params.get('mesa');
+        if (m) {
+          localMesaId = m;
         }
       }
     } catch (e) {}
-    if (!currentSalaId) {
-      currentSalaId = $selectedSalaStore;
-    }
+
     if (currentSalaId) {
       fetchSessions(currentSalaId);
     } else {
@@ -1267,6 +1561,82 @@
     }
   }
 
+  $: isEditingHand = selectedHandIndex !== null && selectedHand !== null;
+
+  function handleKeypadNumber(num) {
+    if (!isCurrentShoeActive) return;
+    if (isEditingHand) {
+      updateSelectedScore(num);
+    } else {
+      selectScore(num);
+    }
+  }
+
+  function handleTogglePPair() {
+    if (!isCurrentShoeActive) return;
+    if (isEditingHand) {
+      toggleSelectedMod('pPair');
+    } else {
+      togglePPair();
+    }
+  }
+
+  function handleToggleBPair() {
+    if (!isCurrentShoeActive) return;
+    if (isEditingHand) {
+      toggleSelectedMod('bPair');
+    } else {
+      toggleBPair();
+    }
+  }
+
+  function handleToggleNatural() {
+    if (!isCurrentShoeActive) return;
+    if (isEditingHand) {
+      toggleSelectedMod('natural');
+    } else {
+      toggleNatural();
+    }
+  }
+
+  function handleToggleWin() {
+    if (!isCurrentShoeActive) return;
+    if (isEditingHand) {
+      toggleSelectedMod('win');
+    } else {
+      toggleWin();
+    }
+  }
+
+  function handleSelectOutcome(winner) {
+    if (!isCurrentShoeActive) return;
+    if (isEditingHand) {
+      updateSelectedWinner(winner);
+    } else {
+      recordOutcome(winner);
+    }
+  }
+
+  function handleBackOrUndo() {
+    if (isEditingHand) {
+      playSound('click');
+      selectedHandIndex = null;
+    } else {
+      undoLast();
+    }
+  }
+
+  function handleConfirmEditOrTieToggle() {
+    if (isEditingHand) {
+      playSound('win');
+      saveShoe();
+      showFeedback(`Mano #${selectedHand.id || (selectedHandIndex + 1)} editada correctamente`);
+      selectedHandIndex = null;
+    } else {
+      toggleTieMode();
+    }
+  }
+
   // ==========================================
   // ROADMAPS GENERATION (BEAD, BIG ROAD & DERIVED)
   // ==========================================
@@ -1434,7 +1804,7 @@
   })();
 
   // 4. DERIVED ROADS ALGORITHM (Big Eye Boy: k=1, Small Road: k=2, Cockroach Road: k=3)
-  function buildDerivedRoad(columns, k, minCols = 28, rowsCount = derivedRows) {
+  function buildDerivedRoad(columns, k, minCols = 28, rowsCount = DERIVED_ROWS) {
     const marks = [];
 
     for (let c = 0; c < columns.length; c++) {
@@ -1529,9 +1899,9 @@
     return { marks, grid, totalCols, redCount, blueCount };
   }
 
-  $: bigEyeGrid = buildDerivedRoad(bigRoadLogicalColumns, 1, derivedColsNeeded, derivedRows);
-  $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, derivedColsNeeded, derivedRows);
-  $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, derivedColsNeeded, derivedRows);
+  $: bigEyeGrid = buildDerivedRoad(bigRoadLogicalColumns, 1, derivedColsNeeded, DERIVED_ROWS);
+  $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, derivedColsNeeded, DERIVED_ROWS);
+  $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, derivedColsNeeded, DERIVED_ROWS);
 
   // 5. PREDICCIÓN DE CAMINOS DERIVADOS ("ASK BANKER" / "ASK PLAYER" / "NEXT")
   // Simula matemáticamente qué color (rojo o azul) se generaría en cada camino derivado (Gran Ojo, Camino Pequeño, Cucaracha)
@@ -1787,14 +2157,7 @@
   }
 
   function handleClose() {
-    exitAppFullscreen();
-    const sId = currentSalaId || currentSalaObj?.uuid || currentSalaObj?.id;
-    if (sId) {
-      navigateToRoute(`herramientas/scoreboard-baccarat/${sId}`);
-    } else {
-      navigateToRoute('herramientas');
-    }
-    dispatch('close');
+    handleGoToHerramientas();
   }
 
   function handleKeydown(e) {
@@ -1819,23 +2182,62 @@
   class="scoreboard-container"
   class:fullscreen-mode={isFullscreen}
   class:theme-light={currentTheme === 'light'}
+  class:is-monitor-mode={isMonitorMode}
 >
   <!-- TOP CASINO HEADER -->
   <header class="sb-header">
     <div class="sb-header-left">
       <div class="sb-pills-row">
-        {#if currentSalaName || currentMesaName}
-          <div class="sb-table-title" title="{currentSalaName || ''} - {currentMesaName || ''}">
-            {#if currentSalaName && currentMesaName}
-              <span class="loc-part"><span class="loc-label">Sala</span> <strong class="loc-val">{currentSalaName}</strong></span>
-              <span class="loc-sep">-</span>
-              <span class="loc-part"><span class="loc-label">Mesa</span> <strong class="loc-val">{currentMesaName}</strong></span>
-            {:else if currentSalaName}
-              <span class="loc-part"><span class="loc-label">Sala</span> <strong class="loc-val">{currentSalaName}</strong></span>
-            {:else if currentMesaName}
-              <span class="loc-part"><span class="loc-label">Mesa</span> <strong class="loc-val">{currentMesaName}</strong></span>
-            {/if}
+        {#if hasSelectedMesa}
+          <button
+            type="button"
+            class="sb-btn-table-info"
+            on:click={openOptionsMenu}
+            title="Opciones de la mesa ({currentSalaName} • {currentMesaName})"
+          >
+            <strong class="loc-val">{currentSalaName}</strong>
+            <span class="loc-sep">•</span>
+            <strong class="loc-val">{currentMesaName}</strong>
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="sb-btn-table-info is-unselected"
+            on:click={openOptionsMenu}
+            title="Clic para seleccionar sala y mesa"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+              <path d="M4 6h16M4 12h16m-7 6h7"/>
+            </svg>
+            <strong class="loc-val">👉 Seleccionar Mesa</strong>
+          </button>
+        {/if}
+
+        {#if isObserverMode}
+          <div class="sb-observer-badge-pill" title="Usted está en modo Observador (Solo Lectura)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span>Observador</span>
           </div>
+        {/if}
+
+        {#if isMonitorMode}
+          <button
+            type="button"
+            class="sb-monitor-badge-pill is-btn"
+            on:click={toggleMonitorMode}
+            title="Modo Monitor Activo (Clic para Salir de Monitor y mostrar botonera)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <span>Monitor</span>
+            <span class="sb-monitor-badge-exit">✕</span>
+          </button>
         {/if}
 
         <div class="sb-shoe-pill shoe-pill">
@@ -1890,8 +2292,8 @@
       </div>
     </div>
 
-    <!-- NAVEGADOR DE SESIONES EN EL MEDIO SUPERIOR -->
-    <div class="sb-header-center">
+    <!-- NAVEGADOR DE SESIONES EN LA DERECHA (EN REEMPLAZO DEL BOTÓN OPCIONES) -->
+    <div class="sb-header-right">
       {#if currentSession}
         <div class="sb-session-navigator" class:is-past={!isLatestSession}>
           <button
@@ -1931,18 +2333,6 @@
           </button>
         </div>
       {/if}
-    </div>
-
-    <!-- BOTONES SUPERIORES SIN ICONOS -->
-    <div class="sb-header-right">
-      <button
-        type="button"
-        class="sb-btn sb-btn-options"
-        on:click={openOptionsMenu}
-        title="Opciones de la mesa y zapato"
-      >
-        Opciones
-      </button>
     </div>
   </header>
 
@@ -2140,109 +2530,10 @@
     </div>
   </section>
 
-  <!-- INLINE CELL EDIT TOOLBAR (En una sola línea) -->
-  {#if selectedHandIndex !== null && selectedHand}
-    <div class="edit-toolbar-box">
-      <div class="edit-single-line">
-        <span class="edit-badge">EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
-
-        <div class="edit-group">
-          <span class="edit-group-label">GANADOR:</span>
-          <button
-            type="button"
-            class="edit-choice-btn punto"
-            class:chosen={selectedHand.winner === 'PUNTO'}
-            on:click={() => updateSelectedWinner('PUNTO')}
-          >
-            PUNTO
-          </button>
-          <button
-            type="button"
-            class="edit-choice-btn banca"
-            class:chosen={selectedHand.winner === 'BANCA'}
-            on:click={() => updateSelectedWinner('BANCA')}
-          >
-            BANCA
-          </button>
-          <button
-            type="button"
-            class="edit-choice-btn empate"
-            class:chosen={selectedHand.winner === 'EMPATE'}
-            on:click={() => updateSelectedWinner('EMPATE')}
-          >
-            EMPATE
-          </button>
-        </div>
-
-        <div class="edit-group">
-          <span class="edit-group-label">PARES Y ATRIBUTOS:</span>
-          <button
-            type="button"
-            class="edit-pill-toggle pill-ppair"
-            class:active-pill={selectedHand.pPair}
-            on:click={() => toggleSelectedMod('pPair')}
-          >
-            P.Pair
-          </button>
-          <button
-            type="button"
-            class="edit-pill-toggle pill-bpair"
-            class:active-pill={selectedHand.bPair}
-            on:click={() => toggleSelectedMod('bPair')}
-          >
-            B.Pair
-          </button>
-          <button
-            type="button"
-            class="edit-pill-toggle pill-natural"
-            class:active-pill={selectedHand.natural}
-            disabled={!isCurrentShoeActive || (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9)}
-            on:click={() => toggleSelectedMod('natural')}
-            title={selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9 ? 'Natural solo aplica a puntajes 8 ó 9' : 'Alternar Victoria Natural'}
-          >
-            Natural
-          </button>
-          <button
-            type="button"
-            class="edit-pill-toggle pill-win"
-            class:active-pill={selectedHand.win}
-            on:click={() => toggleSelectedMod('win')}
-          >
-            Win
-          </button>
-        </div>
-
-        <div class="edit-group">
-          <span class="edit-group-label">VALOR:</span>
-          {#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
-            <button
-              type="button"
-              class="edit-choice-btn edit-score-btn"
-              class:chosen={selectedHand.score === num}
-              disabled={!isCurrentShoeActive || (selectedHand.natural && num !== 8 && num !== 9)}
-              on:click={() => updateSelectedScore(num)}
-            >
-              {num}
-            </button>
-          {/each}
-        </div>
-
-        <div class="edit-quick-actions">
-          <button type="button" class="btn-tool-del" on:click={deleteSelectedHand} title="Borrar esta mano del zapato">
-            Borrar
-          </button>
-          <button type="button" class="btn-tool-done" on:click={() => selectedHandIndex = null} title="Guardar cambios">
-            Guardar
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- FRANJA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) -->
+  <!-- FRANJA DE ESTADÍSTICAS Y PREDICCIÓN (GRUPO 1: CONTADORES | GRUPO 2: PREDICCIÓN Y PORCENTAJES) -->
   <section class="scoreboard-stats-bar">
-    <!-- COLUMNA 1 (col-4): CONTADORES DE JUEGO -->
-    <div class="stats-bar-col col-counters">
+    <!-- GRUPO 1: CONTADORES GLOBALES DE ZAPATO -->
+    <div class="stats-bar-group stats-group-counters">
       <div class="stats-strip-counters">
         <!-- Total manos # -->
         <div class="counter-item" title="Total de manos jugadas en este zapato">
@@ -2292,44 +2583,43 @@
       </div>
     </div>
 
-    <!-- COLUMNA 2 (col-4): PREDICCIÓN / NEXT (ASK BANKER & ASK PLAYER) -->
-    <div class="stats-bar-col col-prediction">
-      <span class="pred-title">Next</span>
-      <div class="prediction-pills-row">
-        <!-- Pill Ask Banker (B) -->
-        <button
-          type="button"
-          class="pred-pill pred-pill-banker"
-          on:click={() => handlePredictionClick('BANCA')}
-          title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextBankerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextBankerPrediction.cockroach || 'pendiente'})"
-        >
-          <span class="pred-badge-circle b">B</span>
-          <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextBankerPrediction.bigEye || 'pendiente'}"></span>
-          <span class="pred-symbol pred-dot {nextBankerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextBankerPrediction.smallRoad || 'pendiente'}"></span>
-          <svg class="pred-symbol pred-slash {nextBankerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextBankerPrediction.cockroach || 'pendiente'}">
-            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
-          </svg>
-        </button>
+    <!-- GRUPO 2: PREDICCIÓN (NEXT) + RESUMEN DE PORCENTAJES -->
+    <div class="stats-bar-group stats-group-prediction">
+      <div class="prediction-block">
+        <span class="pred-title">Next</span>
+        <div class="prediction-pills-row">
+          <!-- Pill Ask Banker (B) -->
+          <button
+            type="button"
+            class="pred-pill pred-pill-banker"
+            on:click={() => handlePredictionClick('BANCA')}
+            title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextBankerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextBankerPrediction.cockroach || 'pendiente'})"
+          >
+            <span class="pred-badge-circle b">B</span>
+            <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextBankerPrediction.bigEye || 'pendiente'}"></span>
+            <span class="pred-symbol pred-dot {nextBankerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextBankerPrediction.smallRoad || 'pendiente'}"></span>
+            <svg class="pred-symbol pred-slash {nextBankerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextBankerPrediction.cockroach || 'pendiente'}">
+              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+            </svg>
+          </button>
 
-        <!-- Pill Ask Player (P) -->
-        <button
-          type="button"
-          class="pred-pill pred-pill-player"
-          on:click={() => handlePredictionClick('PUNTO')}
-          title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextPlayerPrediction.cockroach || 'pendiente'})"
-        >
-          <span class="pred-badge-circle p">P</span>
-          <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextPlayerPrediction.bigEye || 'pendiente'}"></span>
-          <span class="pred-symbol pred-dot {nextPlayerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextPlayerPrediction.smallRoad || 'pendiente'}"></span>
-          <svg class="pred-symbol pred-slash {nextPlayerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextPlayerPrediction.cockroach || 'pendiente'}">
-            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
-          </svg>
-        </button>
+          <!-- Pill Ask Player (P) -->
+          <button
+            type="button"
+            class="pred-pill pred-pill-player"
+            on:click={() => handlePredictionClick('PUNTO')}
+            title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextPlayerPrediction.cockroach || 'pendiente'})"
+          >
+            <span class="pred-badge-circle p">P</span>
+            <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextPlayerPrediction.bigEye || 'pendiente'}"></span>
+            <span class="pred-symbol pred-dot {nextPlayerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextPlayerPrediction.smallRoad || 'pendiente'}"></span>
+            <svg class="pred-symbol pred-slash {nextPlayerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextPlayerPrediction.cockroach || 'pendiente'}">
+              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
-    </div>
 
-    <!-- COLUMNA 3 (col-4): RESUMEN DE PORCENTAJES -->
-    <div class="stats-bar-col col-percentages">
       <div class="stats-strip-pct-box">
         <span class="pct-tag b">B: {pctBanca}%</span>
         <span class="pct-tag p">P: {pctPunto}%</span>
@@ -2339,205 +2629,279 @@
   </section>
 
   <!-- PANEL OPERATIVO DE CONTROLES (SEPARADO Y MÁS GRANDE) -->
-  <footer class="scoreboard-footer-panel">
-    <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
-    <div class="footer-score-col">
-      <div class="score-keypad-box">
-        <div class="score-keypad-grid">
-          {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
+  {#if !isMonitorMode}
+    <footer
+      class="scoreboard-footer-panel"
+      class:is-editing={isEditingHand}
+      class:no-mesa-selected={!hasSelectedMesa}
+      class:is-observer-mode={isObserverMode}
+    >
+    {#if isObserverMode}
+      <div class="footer-observer-strip" title="Modo Observador en Vivo: Solo Lectura">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <span>Modo Observador: Botones deshabilitados (Solo Lectura en Vivo)</span>
+      </div>
+    {:else if !hasSelectedMesa}
+      <div class="footer-no-mesa-banner">
+        <div class="no-mesa-message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span>Botonera bloqueada: Seleccione una mesa para registrar jugadas</span>
+          <button type="button" class="btn-select-mesa-alert" on:click={openOptionsMenu}>
+            Seleccionar Mesa
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if isEditingHand}
+      <div class="footer-edit-banner">
+        <div class="footer-edit-info">
+          <span class="footer-edit-badge">EDITANDO MANO #{selectedHand.id || (selectedHandIndex + 1)}</span>
+          <span class="footer-edit-text">Modifica el ganador, valor o pares en la botonera y pulsa <strong>Editar</strong> para guardar</span>
+        </div>
+        <button
+          type="button"
+          class="footer-btn-del-hand"
+          on:click={deleteSelectedHand}
+          title="Eliminar esta mano del zapato"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          Borrar Mano
+        </button>
+      </div>
+    {/if}
+
+    <div class="footer-controls-row">
+      <!-- BLOQUE 1 (IZQUIERDA): ENTRADA Y MODIFICADORES (TECLADO NUMÉRICO + PAIRS/NATURAL/WIN) -->
+      <div class="footer-group footer-group-input">
+        <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
+        <div class="footer-score-col">
+          <div class="score-keypad-box">
+            <div class="score-keypad-grid">
+              {#each [1, 2, 3, 4, 5, 6, 7, 8, 9] as num}
+                <button
+                  type="button"
+                  class="btn-num-key btn-num-{num}"
+                  class:active={isEditingHand ? selectedHand.score === num : activeScore === num}
+                  disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.natural && num !== 8 && num !== 9) : (activeNatural && num !== 8 && num !== 9))}
+                  on:click={() => handleKeypadNumber(num)}
+                  title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) && num !== 8 && num !== 9 ? 'Con Natural activo solo se permiten 8 y 9' : `Seleccionar valor ${num} para la mano`))}
+                >
+                  {num}
+                </button>
+              {/each}
+              <!-- 0 al lado del 3, 6, 9 abarcando todo el largo de las 3 filas -->
+              <button
+                type="button"
+                class="btn-num-key btn-num-zero"
+                class:active={isEditingHand ? selectedHand.score === 0 : activeScore === 0}
+                disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.natural : activeNatural)}
+                on:click={() => handleKeypadNumber(0)}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano'))}
+              >
+                0
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO -->
+        <div class="footer-modifiers-col">
+          <div class="modifiers-subgrid">
+            <div class="modifiers-left-stack">
+              <button
+                type="button"
+                class="keypad-pill pill-ppair"
+                class:active={isEditingHand ? selectedHand.pPair : activePPair}
+                disabled={isObserverMode || !isCurrentShoeActive}
+                on:click={handleTogglePPair}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Punto (P.Pair)')}
+              >
+                P.Pair
+              </button>
+
+              <button
+                type="button"
+                class="keypad-pill pill-bpair"
+                class:active={isEditingHand ? selectedHand.bPair : activeBPair}
+                disabled={isObserverMode || !isCurrentShoeActive}
+                on:click={handleToggleBPair}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Banca (B.Pair)')}
+              >
+                B.Pair
+              </button>
+
+              <button
+                type="button"
+                class="keypad-pill pill-natural"
+                class:active={isEditingHand ? selectedHand.natural : activeNatural}
+                disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
+                on:click={handleToggleNatural}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)'))}
+              >
+                Natural
+              </button>
+            </div>
+
+            <div class="modifiers-right-stack">
+              <button
+                type="button"
+                class="keypad-pill pill-win"
+                class:active={isEditingHand ? selectedHand.win : activeWin}
+                disabled={isObserverMode || !isCurrentShoeActive}
+                on:click={handleToggleWin}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Victoria WIN (Círculo sólido en Gran Camino con letras blancas)')}
+              >
+                Win
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BLOQUE 2 (DERECHA): RESULTADOS PRINCIPALES + ACCIONES RETROCEDER Y TIE -->
+      <div class="footer-group footer-group-actions">
+        <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
+        <div class="footer-outcomes-col">
+          <div class="outcomes-grid-3col">
+            <!-- PUNTO BUTTON -->
+            <div class="action-btn-item">
+              <button
+                type="button"
+                class="keypad-btn-circle btn-punto"
+                class:is-chosen-winner={isEditingHand && selectedHand.winner === 'PUNTO'}
+                disabled={isObserverMode || !isCurrentShoeActive}
+                on:click={() => handleSelectOutcome('PUNTO')}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'))}
+              >
+                {#if isEditingHand ? selectedHand.bPair : activeBPair}
+                  <span class="badge-corner-tl" title="B.Pair activo"></span>
+                {/if}
+                {#if isEditingHand ? selectedHand.pPair : activePPair}
+                  <span class="badge-corner-br" title="P.Pair activo"></span>
+                {/if}
+                <div class="btn-inner-gloss">
+                  <span class="btn-letter">P</span>
+                </div>
+              </button>
+              <span class="btn-caption punto-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'PUNTO'}>PUNTO</span>
+            </div>
+
+            <!-- BANCA BUTTON -->
+            <div class="action-btn-item">
+              <button
+                type="button"
+                class="keypad-btn-circle btn-banca"
+                class:is-chosen-winner={isEditingHand && selectedHand.winner === 'BANCA'}
+                disabled={isObserverMode || !isCurrentShoeActive}
+                on:click={() => handleSelectOutcome('BANCA')}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'))}
+              >
+                {#if isEditingHand ? selectedHand.bPair : activeBPair}
+                  <span class="badge-corner-tl" title="B.Pair activo"></span>
+                {/if}
+                {#if isEditingHand ? selectedHand.pPair : activePPair}
+                  <span class="badge-corner-br" title="P.Pair activo"></span>
+                {/if}
+                <div class="btn-inner-gloss">
+                  <span class="btn-letter">B</span>
+                </div>
+              </button>
+              <span class="btn-caption banca-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'BANCA'}>BANCA</span>
+            </div>
+
+            <!-- EMPATE BUTTON -->
+            <div class="action-btn-item">
+              <button
+                type="button"
+                class="keypad-btn-circle btn-tie"
+                class:is-chosen-winner={isEditingHand && selectedHand.winner === 'EMPATE'}
+                disabled={isObserverMode || !isCurrentShoeActive}
+                on:click={() => handleSelectOutcome('EMPATE')}
+                title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a EMPATE (Tie)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'))}
+              >
+                {#if isEditingHand ? selectedHand.bPair : activeBPair}
+                  <span class="badge-corner-tl" title="B.Pair activo"></span>
+                {/if}
+                {#if isEditingHand ? selectedHand.pPair : activePPair}
+                  <span class="badge-corner-br" title="P.Pair activo"></span>
+                {/if}
+                <div class="btn-inner-gloss">
+                  <span class="btn-letter">T</span>
+                </div>
+              </button>
+              <span class="btn-caption tie-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'EMPATE'}>EMPATE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- GRUPO 4: ACCIÓN RETROCEDER / ATRÁS Y BOTÓN VISUALIZAR TIE / EDITAR -->
+        <div class="footer-undo-col">
+          <div class="action-btn-item">
             <button
               type="button"
-              class="btn-num-key btn-num-{num}"
-              class:active={activeScore === num}
-              disabled={!isCurrentShoeActive || (activeNatural && num !== 8 && num !== 9)}
-              on:click={() => selectScore(num)}
-              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (activeNatural && num !== 8 && num !== 9 ? 'Con Natural activo solo se permiten 8 y 9' : `Seleccionar valor ${num} para la mano`)}
+              class="keypad-btn-circle btn-undo"
+              class:is-btn-atras={isEditingHand}
+              on:click={handleBackOrUndo}
+              disabled={isObserverMode || !isCurrentShoeActive || (!isEditingHand && history.length === 0)}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'))}
             >
-              {num}
+              <div class="btn-inner-gloss">
+                <svg class="btn-arrow-icon" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 12H5m0 0l6-6M5 12l6 6" />
+                </svg>
+              </div>
             </button>
-          {/each}
-          <!-- 0 al lado del 3, 6, 9 abarcando todo el largo de las 3 filas -->
-          <button
-            type="button"
-            class="btn-num-key btn-num-zero"
-            class:active={activeScore === 0}
-            disabled={!isCurrentShoeActive || activeNatural}
-            on:click={() => selectScore(0)}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (activeNatural ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano')}
-          >
-            0
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO -->
-    <div class="footer-modifiers-col">
-      <div class="modifiers-subgrid">
-        <div class="modifiers-left-stack">
-          <button
-            type="button"
-            class="keypad-pill pill-ppair"
-            class:active={activePPair}
-            disabled={!isCurrentShoeActive}
-            on:click={togglePPair}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Punto (P.Pair)'}
-          >
-            P.Pair
-          </button>
-
-          <button
-            type="button"
-            class="keypad-pill pill-bpair"
-            class:active={activeBPair}
-            disabled={!isCurrentShoeActive}
-            on:click={toggleBPair}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Banca (B.Pair)'}
-          >
-            B.Pair
-          </button>
-
-          <button
-            type="button"
-            class="keypad-pill pill-natural"
-            class:active={activeNatural}
-            disabled={!isCurrentShoeActive || (activeScore !== null && activeScore !== 8 && activeScore !== 9)}
-            on:click={toggleNatural}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (activeScore !== null && activeScore !== 8 && activeScore !== 9 ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar Victoria Natural (8 ó 9)')}
-          >
-            Natural
-          </button>
-        </div>
-
-        <div class="modifiers-right-stack">
-          <button
-            type="button"
-            class="keypad-pill pill-win"
-            class:active={activeWin}
-            disabled={!isCurrentShoeActive}
-            on:click={toggleWin}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria WIN (Círculo sólido en Gran Camino con letras blancas)'}
-          >
-            Win
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
-    <div class="footer-outcomes-col">
-      <div class="outcomes-grid-3col">
-        <!-- PUNTO BUTTON -->
-        <div class="action-btn-item">
-          <button
-            type="button"
-            class="keypad-btn-circle btn-punto"
-            disabled={!isCurrentShoeActive}
-            on:click={() => recordOutcome('PUNTO')}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'}
-          >
-            {#if activeBPair}
-              <span class="badge-corner-tl" title="B.Pair activo"></span>
-            {/if}
-            {#if activePPair}
-              <span class="badge-corner-br" title="P.Pair activo"></span>
-            {/if}
-            <div class="btn-inner-gloss">
-              <span class="btn-letter">P</span>
-            </div>
-          </button>
-          <span class="btn-caption punto-caption">PUNTO</span>
-        </div>
-
-        <!-- BANCA BUTTON -->
-        <div class="action-btn-item">
-          <button
-            type="button"
-            class="keypad-btn-circle btn-banca"
-            disabled={!isCurrentShoeActive}
-            on:click={() => recordOutcome('BANCA')}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'}
-          >
-            {#if activeBPair}
-              <span class="badge-corner-tl" title="B.Pair activo"></span>
-            {/if}
-            {#if activePPair}
-              <span class="badge-corner-br" title="P.Pair activo"></span>
-            {/if}
-            <div class="btn-inner-gloss">
-              <span class="btn-letter">B</span>
-            </div>
-          </button>
-          <span class="btn-caption banca-caption">BANCA</span>
-        </div>
-
-        <!-- EMPATE BUTTON -->
-        <div class="action-btn-item">
-          <button
-            type="button"
-            class="keypad-btn-circle btn-tie"
-            disabled={!isCurrentShoeActive}
-            on:click={() => recordOutcome('EMPATE')}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'}
-          >
-            {#if activeBPair}
-              <span class="badge-corner-tl" title="B.Pair activo"></span>
-            {/if}
-            {#if activePPair}
-              <span class="badge-corner-br" title="P.Pair activo"></span>
-            {/if}
-            <div class="btn-inner-gloss">
-              <span class="btn-letter">T</span>
-            </div>
-          </button>
-          <span class="btn-caption tie-caption">EMPATE</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- GRUPO 4: ACCIÓN RETROCEDER Y BOTÓN VISUALIZAR TIE -->
-    <div class="footer-undo-col">
-      <div class="action-btn-item">
-        <button
-          type="button"
-          class="keypad-btn-circle btn-undo"
-          on:click={undoLast}
-          disabled={!isCurrentShoeActive || history.length === 0}
-          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'}
-        >
-          <div class="btn-inner-gloss">
-            <svg class="btn-arrow-icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 12H5m0 0l6-6M5 12l6 6" />
-            </svg>
+            <span class="btn-caption undo-caption" class:is-atras-caption={isEditingHand}>
+              {isEditingHand ? 'Atrás' : 'RETROCEDER'}
+            </span>
           </div>
-        </button>
-        <span class="btn-caption undo-caption">RETROCEDER</span>
-      </div>
 
-      <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) -->
-      <div class="action-btn-item">
-        <button
-          type="button"
-          class="keypad-btn-tie-toggle"
-          on:click={toggleTieMode}
-          title={tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])'}
-        >
-          <div class="tie-toggle-box">
-            {#if tieMode === 'slash'}
-              <svg width="44" height="44" viewBox="0 0 32 32" class="tie-toggle-svg">
-                <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="4" stroke-linecap="round" />
-              </svg>
-            {:else}
-              <svg width="44" height="44" viewBox="0 0 32 32" class="tie-toggle-svg">
-                <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="4" fill="none" />
-              </svg>
-            {/if}
+          <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) O GUARDAR EDICIÓN -->
+          <div class="action-btn-item">
+            <button
+              type="button"
+              class="keypad-btn-tie-toggle"
+              class:is-btn-editar={isEditingHand}
+              on:click={handleConfirmEditOrTieToggle}
+              title={isEditingHand ? 'Guardar y confirmar cambios de la mano' : (tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])')}
+            >
+              <div class="tie-toggle-box">
+                {#if isEditingHand}
+                  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="editar-icon-svg">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                {:else if tieMode === 'slash'}
+                  <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
+                    <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="4" stroke-linecap="round" />
+                  </svg>
+                {:else}
+                  <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
+                    <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="4" fill="none" />
+                  </svg>
+                {/if}
+              </div>
+            </button>
+            <span class="btn-caption tie-toggle-caption" class:is-editar-caption={isEditingHand}>
+              {isEditingHand ? 'Editar' : 'Tie'}
+            </span>
           </div>
-        </button>
-        <span class="btn-caption tie-toggle-caption">Tie</span>
+        </div>
       </div>
     </div>
   </footer>
+  {/if}
 
   <!-- MODAL DE OPCIONES DE MESA -->
   {#if isOptionsModalOpen}
@@ -2658,17 +3022,79 @@
               {/if}
             </button>
 
-            <!-- COL-12: Volver a la Lista de Mesas -->
+            <!-- COL-12: MODO MONITOR (ENTRAR / SALIR) -->
             <button
               type="button"
-              class="btn-opt col-12 btn-opt-back-mesas"
-              on:click={handleClose}
-              title="Volver a la lista de mesas de la sala"
+              class="btn-opt col-12 btn-opt-monitor"
+              class:is-active={isMonitorMode}
+              on:click={toggleMonitorMode}
+              title={isMonitorMode ? 'Salir de Modo Monitor (Mostrar botonera)' : 'Entrar a Modo Monitor (Ocultar botonera y maximizar cuadrillas para pantalla o TV)'}
+            >
+              <div class="btn-opt-monitor-inner">
+                <div class="btn-opt-monitor-title">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; flex-shrink: 0;">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                  </svg>
+                  <span>{isMonitorMode ? 'Salir de Modo Monitor' : 'Entrar a Modo Monitor'}</span>
+                </div>
+                <span class="btn-opt-monitor-sub">
+                  {isMonitorMode ? 'Mostrar botonera de control' : 'Ocultar botonera y maximizar cuadrillas para pantalla'}
+                </span>
+                {#if isMonitorMode}
+                  <span class="btn-opt-mode-badge is-active">● Activo</span>
+                {:else}
+                  <span class="btn-opt-mode-badge">Activar</span>
+                {/if}
+              </div>
+            </button>
+
+            <!-- COL-12: SECCIÓN SELECCIONAR MESA (OPTGROUP POR SALA) -->
+            <div class="col-12 opt-select-mesa-container">
+              <label for="sb-opt-mesa-select" class="opt-select-label">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 6h16M4 12h16m-7 6h7"/>
+                </svg>
+                <span>Seleccionar Mesa</span>
+              </label>
+              <div class="opt-select-wrapper">
+                <select
+                  id="sb-opt-mesa-select"
+                  class="opt-mesa-select"
+                  value={currentSelectedValue}
+                  on:change={handleMesaSelectChange}
+                >
+                  <option value="" disabled selected={!hasSelectedMesa}>-- Seleccione una mesa --</option>
+                  {#each userAssignedSalasWithMesas as sGroup}
+                    <optgroup label="Sala: {sGroup.nombre}">
+                      {#each sGroup.mesas as mItem}
+                        <option value="{sGroup.uuid || sGroup.id}::{mItem.uuid || mItem.id}">
+                          {mItem.nombre || `Mesa ${mItem.id}`}
+                        </option>
+                      {/each}
+                    </optgroup>
+                  {/each}
+                </select>
+                <div class="opt-select-arrow">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- COL-12: VOLVER A HERRAMIENTAS (DIRECTAMENTE DEBAJO DEL SELECT) -->
+            <button
+              type="button"
+              class="btn-opt col-12 btn-opt-back-herramientas"
+              on:click={handleGoToHerramientas}
+              title="Volver a la vista de Herramientas"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; flex-shrink: 0;">
                 <path d="M19 12H5M12 19l-7-7 7-7"/>
               </svg>
-              Volver a Mesas
+              Volver a Herramientas
             </button>
           </div>
         </div>
@@ -2724,14 +3150,19 @@
     background: #090d16;
     color: #f8fafc;
     height: 100vh;
+    height: 100dvh;
     max-height: 100vh;
+    max-height: 100dvh;
     width: 100vw;
+    width: 100dvw;
+    max-width: 100vw;
+    max-width: 100dvw;
     box-sizing: border-box;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: clamp(2px, 0.5vh, 6px);
+    padding: clamp(2px, 0.5vh, 6px) clamp(4px, 0.8vw, 10px);
     overflow: hidden;
   }
 
@@ -2739,9 +3170,15 @@
     position: fixed;
     inset: 0;
     z-index: 9999999;
-    padding: 8px 12px;
+    padding: clamp(2px, 0.5vh, 6px) clamp(4px, 0.8vw, 10px);
     height: 100vh;
+    height: 100dvh;
     max-height: 100vh;
+    max-height: 100dvh;
+    width: 100vw;
+    width: 100dvw;
+    max-width: 100vw;
+    max-width: 100dvw;
     overflow: hidden;
   }
 
@@ -2751,9 +3188,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    padding-bottom: 8px;
+    padding: 4px 2px 6px 2px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-wrap: wrap;
+    flex-shrink: 0;
   }
 
   .sb-header-left {
@@ -2770,34 +3208,46 @@
     flex-wrap: wrap;
   }
 
-  /* TEXTO SALA Y MESA (SIN BURBUJAS) */
-  .sb-table-title {
+  /* BOTÓN SALA Y MESA EN ESQUINA IZQUIERDA (ABRE MODAL DE OPCIONES) */
+  .sb-btn-table-info {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    background: #1e293b;
+    border: 1.5px solid #334155;
+    padding: 3px 14px;
+    min-height: 36px;
+    box-sizing: border-box;
+    border-radius: 9999px;
+    color: #f1f5f9;
+    font-family: inherit;
     font-size: 14.5px;
     font-weight: 700;
-    color: #f1f5f9;
-    padding: 0 4px;
+    cursor: pointer;
     white-space: nowrap;
     user-select: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  .sb-table-title .loc-part {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+
+  .sb-btn-table-info:hover {
+    background: #334155;
+    border-color: #475569;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
   }
-  .sb-table-title .loc-label {
-    color: #94a3b8;
-    font-weight: 600;
-    font-size: 13.5px;
+
+  .sb-btn-table-info:active {
+    transform: translateY(0);
   }
-  .sb-table-title .loc-val {
+
+  .sb-btn-table-info .loc-val {
     color: #ffffff;
     font-weight: 800;
     font-size: 14.5px;
   }
-  .sb-table-title .loc-sep {
+
+  .sb-btn-table-info .loc-sep {
     color: #475569;
     font-weight: bold;
     margin: 0 3px;
@@ -2812,10 +3262,10 @@
     background: #1e293b;
     border: 1.5px solid #334155;
     padding: 3px 5px;
-    min-height: 38px;
+    min-height: 36px;
     box-sizing: border-box;
     border-radius: 9999px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
     transition: all 0.2s ease;
   }
 
@@ -3084,18 +3534,19 @@
   }
 
   .bead-circle-badge {
-    width: 28px;
-    height: 28px;
+    width: clamp(22px, 1.8vw, 28px);
+    height: clamp(22px, 1.8vw, 28px);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: clamp(11px, 0.9vw, 13.5px);
     font-weight: 900;
     color: #ffffff;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25), inset 0 2px 2px rgba(255, 255, 255, 0.6);
+    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.25), inset 0 1.5px 1.5px rgba(255, 255, 255, 0.6);
     position: relative;
     user-select: none;
+    flex-shrink: 0;
   }
 
   .bead-gray { background: radial-gradient(circle at 35% 30%, #9ca3af, #4b5563); }
@@ -3105,9 +3556,10 @@
   .bead-orange { background: radial-gradient(circle at 35% 30%, #f97316, #c2410c); }
   
   .bead-white {
-    background: radial-gradient(circle at 35% 30%, #ffffff, #e2e8f0);
-    border: 2px solid #cbd5e1;
+    background: radial-gradient(circle at 35% 30%, #ffffff, #f1f5f9);
+    border: 1.5px solid #cbd5e1;
     color: #1e293b;
+    overflow: visible;
   }
 
   .bead-gold { background: radial-gradient(circle at 35% 30%, #facc15, #ca8a04); color: #000; font-size: 11px; }
@@ -3124,15 +3576,17 @@
     height: 8px;
     border-radius: 50%;
     border: 1.5px solid #ffffff;
+    box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
   .dot-tl.red-dot {
-    top: 1px;
-    left: 1px;
+    top: 2px;
+    left: 2px;
     background: #ef4444;
   }
   .dot-br.blue-dot {
-    bottom: 1px;
-    right: 1px;
+    bottom: 2px;
+    right: 2px;
     background: #2563eb;
   }
 
@@ -3162,22 +3616,25 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-10 IZQUIERDA Y COL-2 DERECHA) */
+  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-10 IZQUIERDA Y COL-2 DERECHA INVARIANTE) */
   .sb-roadmaps-master {
+    --roadmap-gap: clamp(3px, 0.5vw, 6px);
+    --derived-card-h: calc((100% - (2 * var(--roadmap-gap))) / 3);
     display: grid;
-    grid-template-columns: minmax(0, 10fr) minmax(0, 2fr);
-    gap: 8px;
-    flex: 1 1 auto;
-    min-height: 260px;
+    grid-template-columns: minmax(0, 10fr) minmax(clamp(80px, 15vw, 260px), 2fr);
+    gap: var(--roadmap-gap);
+    flex: 1 1 0%;
+    min-height: 0;
     width: 100%;
+    max-width: 100%;
     align-items: stretch;
   }
 
-  /* COLUMNA IZQUIERDA (COL-9): GRAN CAMINO ARRIBA Y PLATO DE BOLAS ABAJO */
+  /* COLUMNA IZQUIERDA (COL-10): GRAN CAMINO ARRIBA (ABARCA 2 DERIVADAS) Y PLATO DE BOLAS ABAJO (ABARCA 1) */
   .sb-roadmaps-left-col {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-rows: calc(var(--derived-card-h) * 2 + var(--roadmap-gap)) var(--derived-card-h);
+    gap: var(--roadmap-gap);
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -3193,27 +3650,27 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
-  /* CUADRILLA PRINCIPAL (ROJO): GRAN CAMINO - MÁS GRANDE Y DOMINANTE */
+  /* CUADRILLA PRINCIPAL (ROJO): GRAN CAMINO - ABARCA EXACTAMENTE 2 DE LAS 3 DERIVADAS */
   .bigroad-card {
-    flex: 2 1 66%;
-    min-height: 160px;
+    min-height: 0;
+    height: 100%;
     width: 100%;
     display: flex;
   }
 
-  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - 4 FILAS MÁS GRANDES Y AMPLIAS */
+  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - ABARCA EXACTAMENTE LA 3RA DERIVADA */
   .bead-card {
-    flex: 1 1 34%;
-    min-height: 110px;
+    min-height: 0;
+    height: 100%;
     width: 100%;
     display: flex;
   }
 
-  /* COLUMNA DERECHA (COL-2): 3 CUADRILLAS DERIVADAS - APILADAS CON SEPARACIÓN IDÉNTICA A LAS OTRAS (GAP: 8PX) */
+  /* COLUMNA DERECHA (COL-2): 3 CUADRILLAS DERIVADAS - APILADAS EN 3 FILAS IGUALES */
   .derived-roads-column {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    gap: var(--roadmap-gap);
     height: 100%;
     min-height: 0;
     min-width: 0;
@@ -3221,8 +3678,8 @@
   }
 
   .derived-band {
-    flex: 1;
     min-height: 0;
+    height: 100%;
     width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
@@ -3266,19 +3723,21 @@
 
   /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-table tr {
-    height: var(--derived-cell-size, 10px);
+    height: var(--derived-cell-size, 12px);
   }
 
   .derived-cell {
-    width: var(--derived-cell-size, 10px);
-    min-width: var(--derived-cell-size, 10px);
-    max-width: var(--derived-cell-size, 10px);
-    height: var(--derived-cell-size, 10px);
+    width: var(--derived-cell-size, 12px);
+    min-width: var(--derived-cell-size, 12px);
+    max-width: var(--derived-cell-size, 12px);
+    height: var(--derived-cell-size, 12px);
     box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
     text-align: center;
     vertical-align: middle;
+    line-height: 0;
+    font-size: 0;
     cursor: pointer;
     transition: background 0.15s ease;
   }
@@ -3290,12 +3749,13 @@
   }
 
   .derived-ring {
-    display: block;
-    width: max(4.5px, calc(var(--derived-cell-size, 7px) * 0.68));
-    height: max(4.5px, calc(var(--derived-cell-size, 7px) * 0.68));
-    margin: auto;
+    display: inline-block;
+    vertical-align: middle;
+    width: max(6px, calc(var(--derived-cell-size, 12px) * 0.68));
+    height: max(6px, calc(var(--derived-cell-size, 12px) * 0.68));
+    margin: 0 auto;
     border-radius: 50%;
-    border: 1.2px solid transparent;
+    border: 1.6px solid transparent;
     box-sizing: border-box;
   }
   .derived-ring.red { border-color: #ef4444; }
@@ -3303,21 +3763,23 @@
 
   /* 2. Small Road: Punto sólido rojo / azul */
   .derived-dot {
-    display: block;
-    width: max(3px, calc(var(--derived-cell-size, 7px) * 0.52));
-    height: max(3px, calc(var(--derived-cell-size, 7px) * 0.52));
-    margin: auto;
+    display: inline-block;
+    vertical-align: middle;
+    width: max(4px, calc(var(--derived-cell-size, 12px) * 0.52));
+    height: max(4px, calc(var(--derived-cell-size, 12px) * 0.52));
+    margin: 0 auto;
     border-radius: 50%;
   }
   .derived-dot.red { background: #ef4444; }
   .derived-dot.blue { background: #3b82f6; }
 
-  /* 3. Cockroach Pig: Línea diagonal roja / azul */
+  /* 3. Cockroach Pig (Cucaracha): Línea diagonal roja / azul prolija y definida */
   .derived-slash {
-    display: block;
-    width: max(4.5px, calc(var(--derived-cell-size, 7px) * 0.78));
-    height: 1.4px;
-    margin: auto;
+    display: inline-block;
+    vertical-align: middle;
+    width: max(7px, calc(var(--derived-cell-size, 12px) * 0.74));
+    height: 2px;
+    margin: 0 auto;
     transform: rotate(-45deg);
     border-radius: 1px;
   }
@@ -3393,8 +3855,8 @@
     position: absolute;
     top: 0px;
     left: 0px;
-    width: 10px;
-    height: 10px;
+    width: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
+    height: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
     background: radial-gradient(circle at 35% 35%, #ff4d4d, #dc2626);
     border: 1.5px solid #ffffff;
     border-radius: 50%;
@@ -3407,8 +3869,8 @@
     position: absolute;
     bottom: 0px;
     right: 0px;
-    width: 10px;
-    height: 10px;
+    width: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
+    height: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
     background: radial-gradient(circle at 35% 35%, #60a5fa, #2563eb);
     border: 1.5px solid #ffffff;
     border-radius: 50%;
@@ -3595,334 +4057,179 @@
   }
 
   .bigroad-ring .dot-b-pair {
-    width: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
-    height: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
+    width: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
+    height: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
     top: -1px;
     left: -1px;
     border: 1.5px solid #ffffff;
   }
   .bigroad-ring .dot-p-pair {
-    width: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
-    height: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
+    width: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
+    height: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
     bottom: -1px;
     right: -1px;
     border: 1.5px solid #ffffff;
   }
 
-  /* RESPONSIVE: CUANDO NO ES 16:9 O EN PANTALLAS PEQUEÑAS / MÓVILES */
-  @media (max-width: 960px), (max-aspect-ratio: 4/3) {
+  /* RESPONSIVE: ADAPTACIÓN SUAVE PARA TODAS LAS RESOLUCIONES PRESERVANDO EL ORDEN INVARIANTE */
+  @media (max-height: 768px) {
     .scoreboard-container, .fullscreen-mode {
-      height: auto;
-      max-height: none;
-      min-height: 100vh;
-      overflow-y: auto;
+      padding: 4px 8px;
+      gap: 4px;
     }
-    .sb-roadmaps-master {
-      grid-template-columns: 1fr;
-      flex: none;
+    .sb-header {
+      padding: 2px 2px 4px 2px;
     }
-    .sb-roadmaps-left-col {
-      height: auto;
-      flex: none;
+    .scoreboard-stats-bar {
+      padding: 4px 10px;
+      min-height: 38px;
     }
-    .bigroad-card {
-      height: 260px;
-      flex: none;
+    .scoreboard-footer-panel {
+      padding: 6px 12px;
+      gap: 10px;
     }
-    .bead-card {
-      height: 140px;
-      flex: none;
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, 38px);
     }
-    .derived-roads-column {
-      height: 270px;
-      flex: none;
+    .modifiers-left-stack .keypad-pill {
+      height: 36px;
+      font-size: 13px;
+    }
+    .modifiers-right-stack .keypad-pill.pill-win {
+      min-height: 125px;
+      font-size: 17px;
+    }
+    .keypad-btn-tie-toggle {
+      width: 82px;
+      height: 82px;
+    }
+    .footer-edit-banner {
+      padding: 2px 8px;
     }
   }
 
-  /* INLINE EDIT TOOLBAR (En una sola línea) */
-  .edit-toolbar-box {
-    background: #0f172a;
-    border: 1.5px solid #f59e0b;
-    border-radius: 8px;
-    padding: 6px 12px;
-    display: flex;
-    align-items: center;
-    box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
-    animation: slideDown 0.2s ease;
+  @media (max-height: 640px) {
+    .scoreboard-container, .fullscreen-mode {
+      padding: 2px 6px;
+      gap: 3px;
+    }
+    .scoreboard-stats-bar {
+      padding: 2px 8px;
+      min-height: 32px;
+      font-size: 12px;
+    }
+    .scoreboard-footer-panel {
+      padding: 4px 8px;
+      gap: 6px;
+    }
+    .footer-edit-banner {
+      padding: 2px 6px;
+    }
+    .footer-edit-badge {
+      font-size: 9.5px;
+      padding: 1px 5px;
+    }
+    .footer-edit-text {
+      font-size: 10px;
+    }
+    .footer-btn-del-hand {
+      font-size: 9.5px;
+      padding: 1px 6px;
+    }
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, 30px);
+    }
+    .modifiers-left-stack .keypad-pill {
+      height: 28px;
+      font-size: 11px;
+    }
+    .modifiers-right-stack .keypad-pill.pill-win {
+      min-height: 100px;
+      font-size: 14px;
+    }
+    .keypad-btn-tie-toggle {
+      width: 68px;
+      height: 68px;
+    }
   }
 
-  @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
 
-  .edit-single-line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .edit-badge {
-    background: #f59e0b;
-    color: #0f172a;
-    font-size: 11px;
-    font-weight: 900;
-    padding: 3px 8px;
-    border-radius: 5px;
-    letter-spacing: 0.5px;
-    white-space: nowrap;
-  }
-
-  .edit-quick-actions {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .btn-tool-nav, .btn-tool-del, .btn-tool-done {
-    border: none;
-    border-radius: 5px;
-    padding: 4px 10px;
-    font-size: 11px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    white-space: nowrap;
-  }
-
-  .btn-tool-nav {
-    background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
-  }
-  .btn-tool-nav:hover:not(:disabled) {
-    background: #334155;
-    color: #ffffff;
-  }
-  .btn-tool-nav:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .btn-tool-del {
-    background: #7f1d1d;
-    color: #fee2e2;
-  }
-  .btn-tool-del:hover {
-    background: #991b1b;
-  }
-
-  .btn-tool-done {
-    background: #16a34a;
-    color: #ffffff;
-  }
-  .btn-tool-done:hover {
-    background: #22c55e;
-  }
-
-  .edit-group {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .edit-group-label {
-    font-size: 10px;
-    font-weight: 800;
-    color: #eab308;
-    margin-right: 2px;
-  }
-
-  .edit-choice-btn {
-    border: 1.5px solid transparent;
-    border-radius: 6px;
-    padding: 4px 12px;
-    font-size: 11px;
-    font-weight: 800;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    opacity: 0.65;
-    user-select: none;
-  }
-
-  .edit-choice-btn.punto {
-    background: #1d4ed8;
-    color: #ffffff;
-    border-color: #3b82f6;
-  }
-  .edit-choice-btn.banca {
-    background: #b91c1c;
-    color: #ffffff;
-    border-color: #ef4444;
-  }
-  .edit-choice-btn.empate {
-    background: #15803d;
-    color: #ffffff;
-    border-color: #22c55e;
-  }
-
-  .edit-choice-btn.chosen {
-    opacity: 1;
-    transform: scale(1.06);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-    outline: 2px solid #ffffff;
-  }
-
-  .edit-choice-btn.edit-score-btn {
-    min-width: 20px;
-    padding: 3px 6px;
-    font-size: 11px;
-    background: #1e293b;
-    color: #cbd5e1;
-    border: 1px solid #334155;
-  }
-  .edit-choice-btn.edit-score-btn.chosen {
-    background: radial-gradient(circle at 45% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%);
-    color: #000000;
-    border-color: #a16207;
-    font-weight: 900;
-    outline: 1.5px solid #ffffff;
-  }
-
-  .edit-pill-toggle {
-    background: #1e293b;
-    border-radius: 999px;
-    padding: 3px 10px;
-    font-size: 10.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    user-select: none;
-  }
-
-  .edit-pill-toggle.pill-ppair {
-    border: 1.5px solid #2563eb;
-    color: #93c5fd;
-    background: rgba(37, 99, 235, 0.18);
-  }
-  .edit-pill-toggle.pill-ppair.active-pill {
-    background: #2563eb;
-    color: #ffffff;
-    border-color: #93c5fd;
-    box-shadow: 0 0 8px rgba(37, 99, 235, 0.6);
-  }
-
-  .edit-pill-toggle.pill-bpair {
-    border: 1.5px solid #dc2626;
-    color: #fca5a5;
-    background: rgba(220, 38, 38, 0.18);
-  }
-  .edit-pill-toggle.pill-bpair.active-pill {
-    background: #dc2626;
-    color: #ffffff;
-    border-color: #fca5a5;
-    box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
-  }
-
-  .edit-pill-toggle.pill-natural {
-    border: 1.5px solid #ea580c;
-    color: #fdba74;
-    background: rgba(234, 88, 12, 0.18);
-  }
-  .edit-pill-toggle.pill-natural.active-pill {
-    background: #ea580c;
-    color: #ffffff;
-    border-color: #fed7aa;
-    box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
-  }
-
-  .edit-pill-toggle.pill-win {
-    border: 1.5px solid #7c3aed;
-    color: #c4b5fd;
-    background: rgba(124, 58, 237, 0.18);
-  }
-  .edit-pill-toggle.pill-win.active-pill {
-    background: #7c3aed;
-    color: #ffffff;
-    border-color: #ddd6fe;
-    box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
-  }
-
-  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) */
+  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (GRUPO 1: CONTADORES | GRUPO 2: PREDICCIÓN Y PORCENTAJES) */
   .scoreboard-stats-bar {
     background: #ffffff;
     border-radius: 12px;
-    padding: 10px 22px;
+    padding: clamp(3px, 0.5vh, 6px) clamp(8px, 1.2vw, 18px);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     border: 2px solid #e2e8f0;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
     align-items: center;
-    gap: 16px;
+    justify-content: space-between;
+    gap: clamp(8px, 1.2vw, 16px);
     width: 100%;
     box-sizing: border-box;
     flex-shrink: 0;
+    min-height: clamp(36px, 4.5vh, 44px);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scoreboard-stats-bar::-webkit-scrollbar {
+    display: none;
   }
 
-  .stats-bar-col {
+  .stats-bar-group {
     display: flex;
     align-items: center;
-    min-width: 0;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
   }
 
-  .stats-bar-col.col-counters {
+  .stats-group-counters {
     justify-content: flex-start;
   }
 
-  .stats-bar-col.col-prediction {
-    justify-content: center;
-    gap: 14px;
-  }
-
-  .stats-bar-col.col-percentages {
+  .stats-group-prediction {
     justify-content: flex-end;
+    gap: clamp(8px, 1vw, 16px);
+    flex-wrap: nowrap;
   }
 
   .stats-strip-counters {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: clamp(8px, 0.9vw, 14px);
     flex-wrap: nowrap;
-    overflow-x: auto;
+    overflow: visible;
   }
 
   .counter-item {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 8px;
-  }
-
-  .bead-circle-badge {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-    font-weight: 900;
-    color: #ffffff;
-    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.6);
-    position: relative;
-    user-select: none;
+    gap: clamp(4px, 0.4vw, 6px);
+    flex-shrink: 0;
   }
 
   .counter-digit {
-    font-size: 18px;
+    font-size: clamp(13px, 1vw, 16px);
     font-weight: 900;
     color: #0f172a;
     line-height: 1;
-    min-width: 14px;
+    min-width: 12px;
   }
 
   /* PREDICCIÓN (NEXT / ASK BANKER & ASK PLAYER) */
+  .prediction-block {
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(6px, 0.7vw, 10px);
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
   .pred-title {
-    font-size: 17px;
+    font-size: clamp(12px, 0.9vw, 15px);
     font-weight: 900;
     color: #1e293b;
     letter-spacing: 0.4px;
@@ -3932,22 +4239,24 @@
   .prediction-pills-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: clamp(6px, 0.7vw, 10px);
+    flex-wrap: nowrap;
   }
 
   .pred-pill {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: clamp(6px, 0.6vw, 10px);
     background: #ffffff;
     border: 1.5px solid #cbd5e1;
     border-radius: 999px;
-    padding: 4px 14px 4px 8px;
+    padding: clamp(2px, 0.3vh, 4px) clamp(8px, 0.8vw, 14px) clamp(2px, 0.3vh, 4px) clamp(5px, 0.5vw, 8px);
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     transition: all 0.15s ease;
     user-select: none;
     line-height: 1;
+    flex-shrink: 0;
   }
 
   .pred-pill:hover {
@@ -3962,13 +4271,13 @@
   }
 
   .pred-badge-circle {
-    width: 25px;
-    height: 25px;
+    width: clamp(20px, 1.6vw, 25px);
+    height: clamp(20px, 1.6vw, 25px);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: clamp(11px, 0.9vw, 14px);
     font-weight: 900;
     color: #ffffff;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -3992,10 +4301,10 @@
 
   /* 1. Gran Ojo (Hollow Ring) */
   .pred-symbol.pred-ring {
-    width: 15px;
-    height: 15px;
+    width: clamp(11px, 0.9vw, 15px);
+    height: clamp(11px, 0.9vw, 15px);
     border-radius: 50%;
-    border: 2.6px solid transparent;
+    border: clamp(1.8px, 0.18vw, 2.6px) solid transparent;
     box-sizing: border-box;
   }
   .pred-symbol.pred-ring.red {
@@ -4010,8 +4319,8 @@
 
   /* 2. Camino Pequeño (Solid Dot) */
   .pred-symbol.pred-dot {
-    width: 12px;
-    height: 12px;
+    width: clamp(9px, 0.75vw, 12px);
+    height: clamp(9px, 0.75vw, 12px);
     border-radius: 50%;
   }
   .pred-symbol.pred-dot.red {
@@ -4026,8 +4335,8 @@
 
   /* 3. Cucaracha (Diagonal Slash) */
   .pred-symbol.pred-slash {
-    width: 16px;
-    height: 16px;
+    width: clamp(12px, 0.9vw, 16px);
+    height: clamp(12px, 0.9vw, 16px);
   }
   .pred-symbol.pred-slash.red {
     color: #dc2626;
@@ -4042,42 +4351,142 @@
   .stats-strip-pct-box {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: clamp(8px, 1vw, 16px);
     background: #f1f5f9;
-    padding: 6px 18px;
+    padding: clamp(3px, 0.4vh, 6px) clamp(8px, 0.9vw, 18px);
     border-radius: 999px;
     border: 1px solid #cbd5e1;
-    font-size: 13.5px;
+    font-size: clamp(11px, 0.85vw, 13.5px);
     font-weight: 800;
     white-space: nowrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    flex-shrink: 0;
   }
 
-  @media (max-width: 1180px) {
-    .scoreboard-stats-bar {
-      grid-template-columns: 1fr;
-      gap: 12px;
-      padding: 10px 14px;
-    }
-    .stats-bar-col.col-counters,
-    .stats-bar-col.col-prediction,
-    .stats-bar-col.col-percentages {
-      justify-content: center;
-    }
-  }
-
-  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN MÁS GRANDE */
+  /* PANEL OPERATIVO DE CONTROLES */
   .scoreboard-footer-panel {
     background: #ffffff;
-    border-radius: 14px;
-    padding: 16px 24px;
+    border-radius: 16px;
+    padding: clamp(6px, 1vh, 12px) clamp(12px, 1.5vw, 20px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
-    display: grid;
-    grid-template-columns: minmax(185px, 1.15fr) minmax(215px, 1.35fr) minmax(410px, 2.7fr) minmax(220px, 1.4fr);
-    gap: 26px;
-    align-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 8px;
     flex-shrink: 0;
+    box-sizing: border-box;
+    width: 100%;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
+  .scoreboard-footer-panel.is-editing {
+    border: 3px solid #f59e0b !important;
+    box-shadow: 0 0 22px rgba(245, 158, 11, 0.45), 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+  }
+
+  .footer-controls-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(14px, 1.8vw, 24px);
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* BANNER SUPERIOR DE EDICIÓN EN EL FOOTER */
+  .footer-edit-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 3px 12px;
+    background: #fef3c7;
+    border: 1.5px solid #f59e0b;
+    border-radius: 8px;
+    box-sizing: border-box;
+    animation: fadeInEdit 0.15s ease-out;
+  }
+
+  @keyframes fadeInEdit {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .footer-edit-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .footer-edit-badge {
+    background: #f59e0b;
+    color: #0f172a;
+    font-size: 11px;
+    font-weight: 900;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .footer-edit-text {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #92400e;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .footer-btn-del-hand {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #dc2626;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .footer-btn-del-hand:hover {
+    background: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+  }
+
+  .footer-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+  }
+
+  /* BLOQUE 1 (IZQUIERDA): ENTRADA (TECLADO NUMÉRICO + PAIRS/NATURAL/WIN) */
+  .footer-group-input {
+    justify-content: center;
+    gap: clamp(12px, 1.5vw, 22px);
+    flex: 1 1 auto;
+    padding-right: clamp(14px, 1.8vw, 24px);
+    border-right: 2px solid #cbd5e1;
+  }
+
+  /* BLOQUE 2 (DERECHA): RESULTADOS (PUNTO, BANCA, EMPATE) + RETROCEDER Y TIE */
+  .footer-group-actions {
+    justify-content: center;
+    gap: clamp(16px, 2vw, 32px);
+    flex: 1.25 1 auto;
   }
 
   /* GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) */
@@ -4086,7 +4495,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 22px;
+    padding-right: 18px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -4097,7 +4506,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 225px;
+    max-width: 245px;
   }
 
   .score-keypad-grid {
@@ -4124,17 +4533,17 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: 28px;
+    font-size: 32px;
     font-weight: 900;
   }
 
   .btn-num-key {
-    border-radius: 8px;
+    border-radius: 9px;
     border: 1.5px solid #cbd5e1;
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: 21px;
+    font-size: 24px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4173,35 +4582,32 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding-right: 22px;
-    border-right: 2px solid #cbd5e1;
     min-width: 0;
-    width: 100%;
   }
 
   .modifiers-subgrid {
     display: flex;
     align-items: stretch;
     justify-content: center;
-    gap: 12px;
+    gap: 14px;
     width: 100%;
-    max-width: 250px;
+    max-width: 270px;
   }
 
   .modifiers-left-stack {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 8px;
+    gap: 9px;
     flex: 1 1 auto;
     min-width: 0;
   }
 
   .modifiers-left-stack .keypad-pill {
     width: 100%;
-    max-width: 130px;
-    height: 42px;
-    font-size: 14px;
+    max-width: 145px;
+    height: 48px;
+    font-size: 16px;
     font-weight: 800;
     letter-spacing: 0.3px;
     margin: 0 auto;
@@ -4212,15 +4618,15 @@
     flex-direction: column;
     justify-content: stretch;
     flex: 0 0 auto;
-    width: 82px;
+    width: 92px;
   }
 
   .modifiers-right-stack .keypad-pill.pill-win {
     width: 100%;
     height: 100%;
-    min-height: 142px;
-    border-radius: 24px;
-    font-size: 19px;
+    min-height: 165px;
+    border-radius: 26px;
+    font-size: 22px;
     font-weight: 900;
     letter-spacing: 0.5px;
     display: flex;
@@ -4243,9 +4649,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 30px;
+    gap: 28px;
     width: 100%;
-    max-width: 520px;
+    max-width: 560px;
   }
 
   /* GRUPO 4: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
@@ -4267,11 +4673,11 @@
 
   /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]) */
   .keypad-btn-tie-toggle {
-    width: 94px;
-    height: 94px;
+    width: 108px;
+    height: 108px;
     background: #ffffff;
-    border: 3px solid #0f172a;
-    border-radius: 14px;
+    border: 3.5px solid #0f172a;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4312,39 +4718,359 @@
     letter-spacing: 0.5px;
   }
 
-  @media (max-width: 1024px) {
-    .scoreboard-footer-panel {
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
+  /* BOTÓN EDITAR EN MODO EDICIÓN */
+  .keypad-btn-tie-toggle.is-btn-editar {
+    border: 3.5px solid #f59e0b;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+  }
+
+  .keypad-btn-tie-toggle.is-btn-editar:hover {
+    background: #fde047;
+    border-color: #d97706;
+    color: #78350f;
+    transform: translateY(-2px);
+    box-shadow: 0 0 18px rgba(245, 158, 11, 0.65);
+  }
+
+  .editar-icon-svg {
+    stroke: #b45309;
+  }
+
+  .is-editar-caption, .is-atras-caption {
+    color: #b45309 !important;
+    font-weight: 900 !important;
+  }
+
+  /* GANADOR SELECCIONADO EN MODO EDICIÓN */
+  .keypad-btn-circle.is-chosen-winner {
+    outline: 4.5px solid #f59e0b !important;
+    outline-offset: 3px !important;
+    transform: scale(1.08) !important;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.8), 0 8px 16px rgba(0, 0, 0, 0.35) !important;
+    filter: brightness(1.12) !important;
+    z-index: 3;
+  }
+
+  .scoreboard-footer-panel.is-editing .keypad-btn-circle:not(.is-chosen-winner) {
+    opacity: 0.55;
+    filter: grayscale(0.2);
+  }
+
+  .scoreboard-footer-panel.is-editing .keypad-btn-circle:not(.is-chosen-winner):hover {
+    opacity: 0.95;
+    filter: none;
+    transform: scale(1.03);
+  }
+
+  .btn-caption.is-chosen-caption {
+    color: #f59e0b !important;
+    font-weight: 900 !important;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  }
+
+  /* RESPONSIVE: EN PANTALLAS PEQUEÑAS / MENOR ANCHO, LOS 2 GRUPOS SE COLOCAN UNO ARRIBA Y OTRO ABAJO (COL-6 / COL-6 APILADOS) */
+  @media (max-width: 1260px) {
+    /* 1. FRANJA DE ESTADÍSTICAS: Contadores (arriba) y Predicción/Porcentajes (abajo) */
+    .scoreboard-stats-bar {
+      flex-direction: column;
+      align-items: stretch;
+      padding: clamp(3px, 0.5vh, 6px) clamp(8px, 1.2vw, 14px);
+      gap: clamp(3px, 0.5vh, 6px);
+      min-height: auto;
+      overflow-x: visible;
     }
-    .footer-score-col, .footer-modifiers-col, .footer-outcomes-col {
+
+    .stats-bar-group {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .stats-group-counters {
+      border-bottom: 1.5px solid #cbd5e1;
+      padding-bottom: clamp(3px, 0.5vh, 5px);
+    }
+
+    .stats-strip-counters {
+      width: 100%;
+      justify-content: center;
+      gap: clamp(6px, 1.2vw, 14px);
+      flex-wrap: wrap;
+    }
+
+    .stats-group-prediction {
+      justify-content: center;
+      padding-top: clamp(2px, 0.3vh, 3px);
+      gap: clamp(8px, 1.8vw, 20px);
+      flex-wrap: wrap;
+    }
+
+    /* 2. PANEL OPERATIVO DE CONTROLES: Entrada/Teclado (arriba) y Acciones/Resultados (abajo) */
+    .scoreboard-footer-panel {
+      flex-direction: column;
+      align-items: stretch;
+      padding: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
+      gap: clamp(6px, 1vh, 10px);
+    }
+
+    .footer-controls-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: clamp(6px, 1vh, 10px);
+    }
+
+    .footer-group {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .footer-group-input {
       border-right: none;
       border-bottom: 2px solid #cbd5e1;
       padding-right: 0;
-      padding-bottom: 14px;
+      padding-bottom: clamp(6px, 0.9vh, 10px);
+      gap: clamp(12px, 2vw, 24px);
     }
-    .footer-modifiers-col {
-      justify-content: center;
-      padding-bottom: 14px;
+
+    .score-keypad-box {
+      max-width: clamp(170px, 20vw, 240px);
+    }
+
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, clamp(26px, 3.8vh, 42px));
+      gap: clamp(3px, 0.5vh, 6px);
+    }
+
+    .btn-num-key {
+      font-size: clamp(15px, 2.2vh, 22px);
+    }
+
+    .btn-num-zero {
+      font-size: clamp(20px, 2.8vh, 28px);
+    }
+
+    .modifiers-subgrid {
+      gap: clamp(6px, 1vw, 12px);
+      max-width: clamp(180px, 22vw, 250px);
+    }
+
+    .modifiers-left-stack {
+      gap: clamp(3px, 0.5vh, 7px);
+    }
+
+    .modifiers-left-stack .keypad-pill {
+      height: clamp(26px, 3.8vh, 42px);
+      font-size: clamp(12px, 1.6vh, 15px);
+    }
+
+    .modifiers-right-stack {
+      width: clamp(60px, 7vw, 84px);
+    }
+
+    .modifiers-right-stack .keypad-pill.pill-win {
+      min-height: clamp(84px, 12.5vh, 140px);
+      font-size: clamp(14px, 2vh, 19px);
+    }
+
+    .footer-group-actions {
+      padding-top: clamp(2px, 0.4vh, 4px);
+      gap: clamp(12px, 2vw, 28px);
+    }
+
+    .outcomes-grid-3col {
+      gap: clamp(10px, 1.6vw, 22px);
+      max-width: none;
+    }
+
+    .keypad-btn-circle {
+      width: clamp(56px, 9vh, 96px);
+      height: clamp(56px, 9vh, 96px);
+    }
+
+    .keypad-btn-circle.btn-undo {
+      width: clamp(52px, 8.2vh, 88px);
+      height: clamp(52px, 8.2vh, 88px);
+    }
+
+    .keypad-btn-tie-toggle {
+      width: clamp(48px, 7.6vh, 80px);
+      height: clamp(48px, 7.6vh, 80px);
+    }
+
+    .action-btn-item {
+      gap: clamp(2px, 0.4vh, 5px);
+    }
+
+    .btn-caption {
+      font-size: clamp(10px, 1.3vh, 13px);
+    }
+
+    .btn-arrow-icon {
+      width: clamp(24px, 4vh, 40px);
+      height: clamp(24px, 4vh, 40px);
+    }
+
+    .tie-toggle-svg {
+      width: clamp(24px, 4vh, 40px);
+      height: clamp(24px, 4vh, 40px);
+    }
+  }
+
+  @media (max-width: 860px) {
+    .keypad-btn-circle {
+      width: clamp(52px, 8.5vh, 80px);
+      height: clamp(52px, 8.5vh, 80px);
+    }
+    .keypad-btn-circle.btn-undo {
+      width: clamp(48px, 7.8vh, 76px);
+      height: clamp(48px, 7.8vh, 76px);
+    }
+    .keypad-btn-tie-toggle {
+      width: clamp(44px, 7.2vh, 70px);
+      height: clamp(44px, 7.2vh, 70px);
+    }
+    .outcomes-grid-3col {
+      gap: 12px;
+    }
+    .footer-undo-col {
+      gap: 10px;
+    }
+    .footer-outcomes-col {
+      padding-right: 10px;
+    }
+  }
+
+  @media (max-width: 680px) {
+    .scoreboard-stats-bar {
+      padding: 4px 6px;
+      gap: 4px;
+    }
+    .stats-group-counters {
+      padding-bottom: 4px;
+    }
+    .stats-strip-counters {
+      gap: 5px;
+    }
+    .stats-group-prediction {
+      gap: 6px;
+    }
+    .stats-strip-pct-box {
+      font-size: 10.5px;
+      padding: 2px 6px;
+    }
+
+    .scoreboard-footer-panel {
+      padding: 4px 6px;
+      gap: 6px;
+    }
+    .footer-group-input {
+      gap: 8px;
+      padding-bottom: 6px;
+    }
+    .footer-group-actions {
+      gap: 8px;
+    }
+    .outcomes-grid-3col {
+      gap: 8px;
+    }
+    .footer-undo-col {
+      gap: 6px;
     }
   }
 
   @media (max-width: 600px) {
     .outcomes-grid-3col {
-      gap: 14px;
+      gap: 10px;
     }
     .modifiers-subgrid {
-      gap: 6px;
+      gap: 4px;
     }
     .modifiers-left-stack .keypad-pill {
-      height: 38px;
-      font-size: 13px;
+      height: 32px;
+      font-size: 12px;
     }
     .modifiers-right-stack {
-      width: 65px;
+      width: 58px;
     }
     .modifiers-right-stack .keypad-pill.pill-win {
-      font-size: 16px;
+      font-size: 14px;
+    }
+  }
+
+  /* RESPONSIVE POR ALTURA: GARANTIZA QUE EN RESOLUCIONES CON POCA ALTURA NADA SE DESBORDE DE 100VH */
+  @media (max-height: 800px) {
+    .scoreboard-container {
+      gap: 2px;
+      padding: 2px 6px;
+    }
+    .sb-header {
+      padding: 2px 2px;
+      gap: 6px;
+    }
+    .sb-btn-table-info,
+    .sb-shoe-pill,
+    .sb-session-navigator,
+    .sb-btn-new-shoe {
+      min-height: 28px;
+      padding: 1px 8px;
+      font-size: 12px;
+    }
+    .scoreboard-stats-bar {
+      padding: 2px 8px;
+      min-height: 30px;
+      gap: 6px;
+    }
+    .scoreboard-footer-panel {
+      padding: 4px 8px;
+      gap: 6px;
+    }
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, 30px);
+    }
+    .modifiers-left-stack .keypad-pill {
+      height: 30px;
+    }
+    .modifiers-right-stack .keypad-pill.pill-win {
+      min-height: 100px;
+    }
+    .keypad-btn-circle {
+      width: 72px;
+      height: 72px;
+    }
+    .keypad-btn-circle.btn-undo {
+      width: 66px;
+      height: 66px;
+    }
+    .keypad-btn-tie-toggle {
+      width: 60px;
+      height: 60px;
+    }
+  }
+
+  @media (max-height: 640px) {
+    .keypad-btn-circle {
+      width: 56px;
+      height: 56px;
+    }
+    .keypad-btn-circle.btn-undo {
+      width: 50px;
+      height: 50px;
+    }
+    .keypad-btn-tie-toggle {
+      width: 46px;
+      height: 46px;
+    }
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, 24px);
+    }
+    .modifiers-left-stack .keypad-pill {
+      height: 24px;
+      font-size: 11px;
+    }
+    .modifiers-right-stack .keypad-pill.pill-win {
+      min-height: 80px;
+      font-size: 12px;
     }
   }
 
@@ -4430,8 +5156,8 @@
 
   /* 3D CIRCULAR CASINO BUTTONS */
   .keypad-btn-circle {
-    width: 118px;
-    height: 118px;
+    width: 136px;
+    height: 136px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -4440,15 +5166,15 @@
     cursor: pointer;
     border: none;
     background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
-    padding: 5px;
-    box-shadow: 0 7px 20px rgba(0, 0, 0, 0.38), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    padding: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
   }
 
   .keypad-btn-circle.btn-undo {
-    width: 106px;
-    height: 106px;
+    width: 120px;
+    height: 120px;
   }
 
   @media (max-width: 600px) {
@@ -4488,7 +5214,7 @@
   }
 
   .btn-letter {
-    font-size: 58px;
+    font-size: 68px;
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -4539,10 +5265,10 @@
   /* CORNER BADGES ON P, B, T */
   .badge-corner-tl {
     position: absolute;
-    top: 0px;
-    left: 0px;
-    width: 19px;
-    height: 19px;
+    top: 2px;
+    left: 2px;
+    width: 23px;
+    height: 23px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #ff4d4d, #b91c1c);
     border: 2px solid #ffffff;
@@ -4553,10 +5279,10 @@
 
   .badge-corner-br {
     position: absolute;
-    bottom: 0px;
-    right: 0px;
-    width: 19px;
-    height: 19px;
+    bottom: 2px;
+    right: 2px;
+    width: 23px;
+    height: 23px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8);
     border: 2px solid #ffffff;
@@ -4837,19 +5563,305 @@
     box-shadow: 0 4px 10px rgba(190, 18, 60, 0.35);
   }
 
-  .btn-opt-back-mesas {
+  /* SELECTOR DE MESA EN MODAL CON OPTGROUP POR SALA */
+  .opt-select-mesa-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    margin-top: 6px;
+    margin-bottom: 2px;
+  }
+
+  .opt-select-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .opt-select-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  .opt-mesa-select {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: #1e293b;
+    color: #f8fafc;
+    border: 2px solid #3b82f6;
+    border-radius: 10px;
+    padding: 12px 38px 12px 14px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .opt-mesa-select:hover {
+    border-color: #60a5fa;
+    background: #243248;
+  }
+
+  .opt-mesa-select:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.35);
+  }
+
+  .opt-mesa-select optgroup {
+    background: #0f172a;
+    color: #38bdf8;
+    font-weight: 800;
+    font-size: 13px;
+    padding: 6px;
+  }
+
+  .opt-mesa-select option {
+    background: #1e293b;
+    color: #f8fafc;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+
+  .opt-select-arrow {
+    position: absolute;
+    right: 14px;
+    pointer-events: none;
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* BOTÓN VOLVER A HERRAMIENTAS (DIRECTAMENTE DEBAJO DEL SELECT) */
+  .btn-opt-back-herramientas {
     background: #1e293b;
     color: #f1f5f9;
     border: 1.5px solid #334155;
     margin-top: 4px;
     font-size: 14px;
-    padding: 14px 16px;
+    font-weight: 700;
+    padding: 13px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
   }
-  .btn-opt-back-mesas:hover {
+  .btn-opt-back-herramientas:hover {
     background: #334155;
     color: #ffffff;
     border-color: #475569;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  /* BOTÓN DE CABECERA CUANDO NO HAY MESA SELECCIONADA */
+  .sb-btn-table-info.is-unselected {
+    background: #0284c7;
+    color: #ffffff;
+    border: 1.5px solid #38bdf8;
+    animation: sb-pulse-btn 2s infinite ease-in-out;
+  }
+  .sb-btn-table-info.is-unselected:hover {
+    background: #0369a1;
+    border-color: #7dd3fc;
+  }
+  @keyframes sb-pulse-btn {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.6);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(2, 132, 199, 0);
+    }
+  }
+
+  /* MODO OBSERVADOR */
+  .sb-observer-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(2, 132, 199, 0.18);
+    border: 1.5px solid #0284c7;
+    color: #38bdf8;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 11.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* MODO MONITOR */
+  .sb-monitor-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(139, 92, 246, 0.18);
+    border: 1.5px solid #8b5cf6;
+    color: #c4b5fd;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 11.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    user-select: none;
+    transition: all 0.2s ease;
+  }
+
+  .sb-monitor-badge-pill.is-btn {
+    cursor: pointer;
+    background: rgba(139, 92, 246, 0.22);
+  }
+
+  .sb-monitor-badge-pill.is-btn:hover {
+    background: #7c3aed;
+    border-color: #a78bfa;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+  }
+
+  .sb-monitor-badge-exit {
+    font-size: 10px;
+    opacity: 0.75;
+    margin-left: 2px;
+  }
+
+  .scoreboard-container.is-monitor-mode {
+    padding-bottom: clamp(4px, 0.8vh, 10px);
+  }
+
+  .scoreboard-container.is-monitor-mode .scoreboard-footer-panel {
+    display: none !important;
+  }
+
+  .scoreboard-footer-panel.is-observer-mode {
+    position: relative;
+    border-color: rgba(2, 132, 199, 0.45) !important;
+  }
+
+  .scoreboard-footer-panel.is-observer-mode .footer-controls-row {
+    filter: grayscale(1) contrast(0.85);
+    opacity: 0.38;
+    pointer-events: none;
+    user-select: none;
+    cursor: not-allowed;
+  }
+
+  .scoreboard-footer-panel.is-observer-mode .btn-num-key,
+  .scoreboard-footer-panel.is-observer-mode .keypad-pill,
+  .scoreboard-footer-panel.is-observer-mode .keypad-btn-circle,
+  .scoreboard-footer-panel.is-observer-mode .btn-undo,
+  .scoreboard-footer-panel.is-observer-mode .keypad-btn-tie-toggle {
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    box-shadow: none !important;
+    opacity: 0.32 !important;
+    filter: grayscale(100%) !important;
+  }
+
+  .scoreboard-footer-panel.is-observer-mode .btn-caption {
+    opacity: 0.4 !important;
+    filter: grayscale(100%) !important;
+    color: #94a3b8 !important;
+  }
+
+  .footer-observer-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    background: rgba(2, 132, 199, 0.12);
+    border: 1px solid rgba(2, 132, 199, 0.3);
+    border-radius: 6px;
+    padding: 3px 12px;
+    margin-bottom: 4px;
+    color: #38bdf8;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+
+  .footer-observer-strip svg {
+    color: #38bdf8;
+    flex-shrink: 0;
+  }
+
+  /* BOTONERA EN GRIS SI NO HAY MESA SELECCIONADA */
+  .scoreboard-footer-panel.no-mesa-selected {
+    position: relative;
+  }
+
+  .scoreboard-footer-panel.no-mesa-selected .footer-controls-row {
+    filter: grayscale(1) contrast(0.8);
+    opacity: 0.35;
+    pointer-events: none;
+    user-select: none;
+    cursor: not-allowed;
+  }
+
+  .footer-no-mesa-banner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    pointer-events: auto;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(2px);
+    border-radius: 8px;
+    padding: 8px;
+  }
+
+  .no-mesa-message {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: #0f172a;
+    color: #f8fafc;
+    padding: 8px 18px;
+    border-radius: 9999px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .no-mesa-message svg {
+    color: #f59e0b;
+    flex-shrink: 0;
+  }
+
+  .btn-select-mesa-alert {
+    background: #0284c7;
+    color: #ffffff;
+    border: none;
+    padding: 5px 14px;
+    border-radius: 9999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-select-mesa-alert:hover {
+    background: #0369a1;
+    transform: scale(1.04);
   }
 
   .btn-opt:disabled {
@@ -4933,6 +5945,73 @@
     box-shadow: 0 4px 10px rgba(30, 41, 59, 0.35);
   }
 
+  .btn-opt-mode-badge {
+    font-size: 10.5px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .btn-opt-mode-badge.is-active {
+    background: #10b981;
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  }
+
+  /* BOTÓN MODO MONITOR EN MODAL */
+  .btn-opt-monitor {
+    background: #1e1b4b;
+    color: #c4b5fd;
+    border: 1.5px solid #6366f1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    gap: 8px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-opt-monitor:hover {
+    background: #312e81;
+    color: #e0e7ff;
+    border-color: #818cf8;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+  }
+
+  .btn-opt-monitor.is-active {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: #ffffff;
+    border-color: #a5b4fc;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
+  }
+
+  .btn-opt-monitor-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .btn-opt-monitor-title {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13.5px;
+    font-weight: 800;
+  }
+
+  .btn-opt-monitor-sub {
+    font-size: 11px;
+    opacity: 0.8;
+    font-weight: 500;
+    margin-left: auto;
+    margin-right: 8px;
+  }
+
   /* ========================================== */
   /* TEMA CLARO (LIGHT THEME CASINO SPEC)       */
   /* ========================================== */
@@ -4943,6 +6022,7 @@
 
   .theme-light .sb-header {
     border-bottom: 1px solid #cbd5e1;
+    padding: 4px 2px 6px 2px;
   }
 
   .theme-light .sb-shoe-pill {
@@ -4962,7 +6042,7 @@
     color: #0f172a;
   }
   .theme-light .sb-table-title .loc-sep {
-    color: #cbd5e1;
+    color: #94a3b8;
   }
 
   /* TEMA CLARO: PILLS ESTANDARIZADAS ZAPATO Y SESIÓN */
@@ -5044,6 +6124,25 @@
     color: #0f172a;
   }
 
+  .theme-light .sb-btn-table-info {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .theme-light .sb-btn-table-info:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #000000;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  }
+  .theme-light .sb-btn-table-info .loc-val {
+    color: #0f172a;
+  }
+  .theme-light .sb-btn-table-info .loc-sep {
+    color: #94a3b8;
+  }
+
   .theme-light .sb-btn-options {
     background: #ffffff;
     color: #0f172a;
@@ -5111,39 +6210,26 @@
     border: 1.5px solid #ffffff;
   }
 
-  .theme-light .edit-toolbar-box {
-    background: #ffffff;
-    border: 1.5px solid #f59e0b;
-    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.2);
-  }
-  .theme-light .btn-tool-nav {
-    background: #f1f5f9;
-    color: #334155;
-    border: 1px solid #cbd5e1;
-  }
-  .theme-light .btn-tool-nav:hover:not(:disabled) {
-    background: #e2e8f0;
-    color: #0f172a;
-  }
-  .theme-light .edit-choice-btn.edit-score-btn {
-    background: #f8fafc;
-    color: #1e293b;
-    border: 1px solid #cbd5e1;
-  }
-  .theme-light .edit-pill-toggle {
-    background: #f8fafc;
-  }
-
   .theme-light .scoreboard-footer-panel {
     background: #ffffff;
     border: 2px solid #cbd5e1;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+  .theme-light .scoreboard-footer-panel.is-editing {
+    border: 3px solid #f59e0b !important;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.4), 0 4px 14px rgba(0, 0, 0, 0.08) !important;
+  }
+  .theme-light .footer-group-input {
+    border-color: #cbd5e1;
   }
 
   .theme-light .scoreboard-stats-bar {
     background: #ffffff;
     border: 2px solid #cbd5e1;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+  .theme-light .stats-group-counters {
+    border-color: #cbd5e1;
   }
 
   .theme-light .pred-pill {
@@ -5165,15 +6251,113 @@
     background: rgba(15, 23, 42, 0.5);
   }
 
-  .theme-light .btn-opt-back-mesas {
+  .theme-light .opt-select-label {
+    color: #475569;
+  }
+
+  .theme-light .opt-mesa-select {
+    background: #ffffff;
+    color: #0f172a;
+    border: 2px solid #0284c7;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  }
+
+  .theme-light .opt-mesa-select:hover {
+    background: #f8fafc;
+    border-color: #0369a1;
+  }
+
+  .theme-light .opt-mesa-select optgroup {
+    background: #f1f5f9;
+    color: #0369a1;
+  }
+
+  .theme-light .opt-mesa-select option {
+    background: #ffffff;
+    color: #0f172a;
+  }
+
+  .theme-light .opt-select-arrow {
+    color: #0284c7;
+  }
+
+  .theme-light .btn-opt-back-herramientas {
     background: #f1f5f9;
     color: #0f172a;
     border: 1.5px solid #cbd5e1;
   }
-  .theme-light .btn-opt-back-mesas:hover {
+  .theme-light .btn-opt-back-herramientas:hover {
     background: #e2e8f0;
     color: #000000;
     border-color: #94a3b8;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  .theme-light .footer-no-mesa-banner {
+    background: rgba(241, 245, 249, 0.65);
+  }
+
+  .theme-light .no-mesa-message {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  }
+
+  .theme-light .sb-observer-badge-pill {
+    background: #e0f2fe;
+    border-color: #0284c7;
+    color: #0369a1;
+  }
+
+  .theme-light .scoreboard-footer-panel.is-observer-mode {
+    border-color: #93c5fd !important;
+  }
+
+  .theme-light .footer-observer-strip {
+    background: #e0f2fe;
+    border-color: #bae6fd;
+    color: #0369a1;
+  }
+
+  .theme-light .footer-observer-strip svg {
+    color: #0284c7;
+  }
+
+  .theme-light .scoreboard-footer-panel.is-observer-mode .btn-caption {
+    color: #64748b !important;
+  }
+
+  .theme-light .sb-monitor-badge-pill {
+    background: #ede9fe;
+    border-color: #8b5cf6;
+    color: #6d28d9;
+  }
+
+  .theme-light .sb-monitor-badge-pill.is-btn:hover {
+    background: #7c3aed;
+    border-color: #6d28d9;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+  }
+
+  .theme-light .btn-opt-monitor {
+    background: #f5f3ff;
+    color: #5b21b6;
+    border: 1.5px solid #c4b5fd;
+  }
+
+  .theme-light .btn-opt-monitor:hover {
+    background: #ede9fe;
+    color: #4c1d95;
+    border-color: #8b5cf6;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+  }
+
+  .theme-light .btn-opt-monitor.is-active {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: #ffffff;
+    border-color: #8b5cf6;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
   }
 </style>

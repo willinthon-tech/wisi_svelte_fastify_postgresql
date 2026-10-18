@@ -2,7 +2,12 @@
   import { onMount } from 'svelte';
   import { navigateToRoute } from '../controllers/router.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore, selectedSalaStore } from '../controllers/auth.store.js';
-  import { masterSalasStore, userSalasStore as masterUserSalasStore } from '../controllers/master.store.js';
+  import { 
+    masterSalasStore, 
+    userSalasStore as masterUserSalasStore, 
+    currentRoutePermissionsStore, 
+    getUserModuleActions 
+  } from '../controllers/master.store.js';
 
   // State
   let searchQuery = '';
@@ -141,12 +146,27 @@
     selectedIds = new Set(selectedIds);
   }
 
-  function openGame(sala) {
+  // Permisología para acciones: "VER" habilita "Observar", "EDITAR" habilita "Jugar"
+  $: permissions = (function() {
+    const routePerms = $currentRoutePermissionsStore || getUserModuleActions('herramientas') || getUserModuleActions('mod-otros-herramientas');
+    if (routePerms) return routePerms;
+    const user = $currentUserStore;
+    const username = (user?.usuario || '').trim().toLowerCase();
+    const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
+    if (isAdmin) return { canView: true, canEdit: true };
+    return { canView: false, canEdit: false };
+  })();
+
+  $: canView = Boolean(permissions?.canView);
+  $: canEdit = Boolean(permissions?.canEdit);
+
+  function openGame(sala, modo = 'jugar') {
     if (sala?.id || sala?.uuid) {
       selectedSalaStore.set(sala.uuid || sala.id);
     }
     const salaParam = sala?.uuid || sala?.id;
-    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(salaParam)}`);
+    const qs = modo === 'observar' ? '?modo=observar' : '';
+    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(salaParam)}${qs}`);
   }
 </script>
 
@@ -241,17 +261,31 @@
                   </span>
                 </td>
 
-                <!-- Acciones: Botón Ver mesas -->
-                <td style="padding: 10px 14px; text-align: right; min-width: 110px;">
-                  <button
-                    type="button"
-                    on:click={() => openGame(item.salaObj)}
-                    class="btn-flow"
-                    style="padding: 6px 16px; font-size: 12.5px; font-weight: 800; border-radius: 7px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; border: none; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s ease;"
-                    title="Ver mesas de Baccarat para {item.salaName}"
-                  >
-                    Ver mesas
-                  </button>
+                <!-- Acciones: Botones Observar y Jugar -->
+                <td style="padding: 10px 14px; text-align: right; white-space: nowrap;">
+                  <div style="display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px;">
+                    {#if canView}
+                      <button
+                        type="button"
+                        on:click={() => openGame(item.salaObj, 'observar')}
+                        class="btn-flow btn-action-observar"
+                        title="Observar mesas de Baccarat para {item.salaName} (Solo Lectura)"
+                      >
+                        Observar
+                      </button>
+                    {/if}
+
+                    {#if canEdit}
+                      <button
+                        type="button"
+                        on:click={() => openGame(item.salaObj, 'jugar')}
+                        class="btn-flow btn-action-jugar"
+                        title="Jugar y registrar jugadas de Baccarat para {item.salaName}"
+                      >
+                        Jugar
+                      </button>
+                    {/if}
+                  </div>
                 </td>
               </tr>
             {/each}
@@ -314,5 +348,49 @@
   .herramientas-page-container {
     width: 100%;
     margin-bottom: 24px;
+  }
+
+  .btn-action-observar {
+    padding: 6px 14px;
+    font-size: 12.5px;
+    font-weight: 800;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #0284c7;
+    border: 1.5px solid #0284c7;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.12);
+  }
+  .btn-action-observar:hover {
+    background: #f0f9ff;
+    border-color: #0369a1;
+    color: #0369a1;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(2, 132, 199, 0.22);
+  }
+
+  .btn-action-jugar {
+    padding: 6px 18px;
+    font-size: 12.5px;
+    font-weight: 800;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    border: none;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .btn-action-jugar:hover {
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.45);
   }
 </style>
