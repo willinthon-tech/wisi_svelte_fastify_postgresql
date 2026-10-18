@@ -256,7 +256,7 @@
   let derivedWidth = 700;
   let derivedHeight = 260;
 
-  const BEAD_ROWS = 6;
+  const BEAD_ROWS = 5;
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 6;
 
@@ -264,7 +264,7 @@
   $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 20);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.max(Math.floor(((beadHeight || 180) - 2) / 6), 20);
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 16);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
   // Derived roads: cuadrículas más pequeñas y densas (~14px)
@@ -3193,18 +3193,18 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
-  /* CUADRILLA PRINCIPAL (ROJO): GRAN CAMINO - MÁS GRANDE Y ABARCA MÁS HACIA ABAJO */
+  /* CUADRILLA PRINCIPAL (ROJO): GRAN CAMINO - MÁS GRANDE Y DOMINANTE */
   .bigroad-card {
-    flex: 1.35 1 58%;
-    min-height: 130px;
+    flex: 3.2 1 76%;
+    min-height: 160px;
     width: 100%;
     display: flex;
   }
 
-  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - ABAJO DE LA PRINCIPAL */
+  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - MÁS PEQUEÑA, MENOS LÍNEAS (5 FILAS) Y CELDAS MÁS COMPACTAS */
   .bead-card {
-    flex: 1 1 42%;
-    min-height: 100px;
+    flex: 1 1 24%;
+    min-height: 75px;
     width: 100%;
     display: flex;
   }
@@ -3391,35 +3391,45 @@
 
   .dot-b-pair {
     position: absolute;
-    top: 1px;
-    left: 1px;
-    width: 6px;
-    height: 6px;
-    background: #ef4444;
-    border: 1px solid #ffffff;
+    top: 0px;
+    left: 0px;
+    width: 10px;
+    height: 10px;
+    background: radial-gradient(circle at 35% 35%, #ff4d4d, #dc2626);
+    border: 1.5px solid #ffffff;
     border-radius: 50%;
-    z-index: 3;
+    z-index: 4;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    box-sizing: border-box;
   }
 
   .dot-p-pair {
     position: absolute;
-    bottom: 1px;
-    right: 1px;
-    width: 6px;
-    height: 6px;
-    background: #3b82f6;
-    border: 1px solid #ffffff;
+    bottom: 0px;
+    right: 0px;
+    width: 10px;
+    height: 10px;
+    background: radial-gradient(circle at 35% 35%, #60a5fa, #2563eb);
+    border: 1.5px solid #ffffff;
     border-radius: 50%;
-    z-index: 3;
+    z-index: 4;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    box-sizing: border-box;
   }
 
   .bead-circle .dot-b-pair {
-    top: 1px;
-    left: 1px;
+    width: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
+    height: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
+    top: 0px;
+    left: 0px;
+    border: 1.5px solid #ffffff;
   }
   .bead-circle .dot-p-pair {
-    bottom: 1px;
-    right: 1px;
+    width: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
+    height: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
+    bottom: 0px;
+    right: 0px;
+    border: 1.5px solid #ffffff;
   }
 
   .bead-empty, .bigroad-empty {
@@ -3505,7 +3515,7 @@
 
   /* CÍRCULO SÓLIDO CUANDO SE PRESIONA WIN (Fondo completo y letras blancas) */
   .bigroad-ring.is-win-solid {
-    border: none;
+    border: 2px solid transparent;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   }
 
@@ -3585,12 +3595,18 @@
   }
 
   .bigroad-ring .dot-b-pair {
-    top: 0px;
-    left: 0px;
+    width: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
+    height: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
+    top: -1px;
+    left: -1px;
+    border: 1.5px solid #ffffff;
   }
   .bigroad-ring .dot-p-pair {
-    bottom: 0px;
-    right: 0px;
+    width: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
+    height: clamp(11px, calc(var(--big-cell-size, 28px) * 0.28), 16px);
+    bottom: -1px;
+    right: -1px;
+    border: 1.5px solid #ffffff;
   }
 
   /* RESPONSIVE: CUANDO NO ES 16:9 O EN PANTALLAS PEQUEÑAS / MÓVILES */
@@ -3610,11 +3626,11 @@
       flex: none;
     }
     .bigroad-card {
-      height: 240px;
+      height: 280px;
       flex: none;
     }
     .bead-card {
-      height: 180px;
+      height: 120px;
       flex: none;
     }
     .derived-roads-column {
