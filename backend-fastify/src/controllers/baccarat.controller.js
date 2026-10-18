@@ -34,6 +34,18 @@ function getTodayStr() {
   return `${y}-${m}-${d}`;
 }
 
+export function getNextDateStr(dateStr) {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return getTodayStr();
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + 1));
+  const ny = date.getUTCFullYear();
+  const nm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const nd = String(date.getUTCDate()).padStart(2, '0');
+  return `${ny}-${nm}-${nd}`;
+}
+
 /**
  * Obtener lista de sesiones para una sala ordenadas cronológicamente
  */
@@ -47,18 +59,6 @@ export async function getSessions(req, reply) {
     const todayStr = getTodayStr();
 
     if (isPgConnected && sql) {
-      // AUTO-LIMPIEZA DE BASE DE DATOS: Purgar automáticamente registros de sesiones con fechas futuras
-      await sql`
-        DELETE FROM record_libro_score_baccarat_mesa
-        WHERE record_libro_score_baccarat_uuid IN (
-          SELECT uuid FROM record_libro_score_baccarat WHERE sala_uuid = ${salaUuid} AND fecha > ${todayStr}
-        );
-      `.catch(() => {});
-      await sql`
-        DELETE FROM record_libro_score_baccarat
-        WHERE sala_uuid = ${salaUuid} AND fecha > ${todayStr};
-      `.catch(() => {});
-
       let sessions = await sql`
         SELECT uuid, sala_uuid, fecha, estado, created_at, updated_at
         FROM record_libro_score_baccarat
@@ -87,7 +87,6 @@ export async function getSessions(req, reply) {
     }
 
     // Fallback en memoria
-    memorySessions = memorySessions.filter(s => s.fecha <= todayStr);
     let salaSessions = memorySessions.filter(s => String(s.sala_uuid || s.sala_id) === salaUuid);
     if (salaSessions.length === 0) {
       const newSession = {
@@ -111,7 +110,7 @@ export async function getSessions(req, reply) {
 }
 
 /**
- * Crear una nueva sesión para la sala (Fecha de HOY, sin saltos inventados hacia el futuro)
+ * Crear una nueva sesión para la sala calculando la fecha adecuada
  */
 export async function createSession(req, reply) {
   try {
@@ -123,14 +122,26 @@ export async function createSession(req, reply) {
     const clientUuid = req.body?.uuid ? String(req.body.uuid).trim() : null;
     const targetUuid = (clientUuid && isUuid(clientUuid)) ? clientUuid : randomUUID();
 
-    // La fecha de la sesión es SIEMPRE la fecha real actual (hoy). NUNCA permitir fechas en el futuro.
     const todayStr = getTodayStr();
-    let fecha = req.body?.fecha ? String(req.body.fecha).trim() : todayStr;
-    if (fecha > todayStr) {
-      fecha = todayStr;
-    }
+    let fecha = req.body?.fecha ? String(req.body.fecha).trim() : '';
 
     if (isPgConnected && sql) {
+      if (!fecha) {
+        const lastSession = await sql`
+          SELECT uuid, fecha
+          FROM record_libro_score_baccarat
+          WHERE sala_uuid = ${salaUuid}
+          ORDER BY fecha DESC, created_at DESC
+          LIMIT 1;
+        `;
+        if (lastSession.length > 0 && lastSession[0].fecha) {
+          const lastFecha = lastSession[0].fecha;
+          fecha = (lastFecha < todayStr) ? todayStr : getNextDateStr(lastFecha);
+        } else {
+          fecha = todayStr;
+        }
+      }
+
       const [created] = await sql`
         INSERT INTO record_libro_score_baccarat (uuid, sala_uuid, fecha, estado)
         VALUES (${targetUuid}::uuid, ${salaUuid}, ${fecha}, 'abierta')
@@ -148,6 +159,16 @@ export async function createSession(req, reply) {
     }
 
     // Fallback en memoria
+    if (!fecha) {
+      const salaSessions = memorySessions.filter(s => String(s.sala_uuid || s.sala_id) === salaUuid);
+      const lastSession = salaSessions[salaSessions.length - 1];
+      if (lastSession && lastSession.fecha) {
+        fecha = (lastSession.fecha < todayStr) ? todayStr : getNextDateStr(lastSession.fecha);
+      } else {
+        fecha = todayStr;
+      }
+    }
+
     const created = {
       uuid: targetUuid,
       sala_uuid: salaUuid,

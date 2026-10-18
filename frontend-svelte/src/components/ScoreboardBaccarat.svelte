@@ -45,11 +45,30 @@
     return `${y}-${m}-${d}`;
   }
 
+  function getNextDateStr(dateStr) {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return getTodayStr();
+    }
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d + 1));
+    const ny = date.getUTCFullYear();
+    const nm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const nd = String(date.getUTCDate()).padStart(2, '0');
+    return `${ny}-${nm}-${nd}`;
+  }
+
   $: currentSession = (sessions && selectedSessionIndex >= 0 && selectedSessionIndex < sessions.length)
     ? sessions[selectedSessionIndex]
     : null;
 
   $: latestSessionInList = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+  $: nextSessionDateStr = (() => {
+    const today = getTodayStr();
+    if (!latestSessionInList || !latestSessionInList.fecha) return today;
+    if (latestSessionInList.fecha < today) return today;
+    return getNextDateStr(latestSessionInList.fecha);
+  })();
 
   // Solo la última sesión permite jugar y editar (sesiones anteriores son histórico de solo lectura)
   $: isLatestSession = sessions.length > 0 && selectedSessionIndex === (sessions.length - 1);
@@ -372,7 +391,6 @@
   async function loadSessionsFromLocalDb(sId) {
     if (!sId) return false;
     const sUuid = String(currentSalaUuid || sId);
-    const todayStr = getTodayStr();
     try {
       const local = await getLocalItems(
         'record_libro_score_baccarat',
@@ -381,28 +399,8 @@
         'asc'
       );
 
-      // PURGA ACTIVA DE INDEXEDDB: Eliminar cualquier sesión y mesa con fecha futura generada durante pruebas
-      for (const item of local) {
-        if (item.fecha && item.fecha > todayStr) {
-          if (item.uuid) await deleteLocalItem('record_libro_score_baccarat', item.uuid);
-          if (item._local_key) await deleteLocalItem('record_libro_score_baccarat', item._local_key);
-          const sessKey = String(item.uuid || item.id || '');
-          if (sessKey) {
-            const orphanMesas = await getLocalItems(
-              'record_libro_score_baccarat_mesa',
-              m => String(m.record_libro_score_baccarat_uuid || m.session_uuid || m.session_id) === sessKey
-            );
-            for (const om of orphanMesas) {
-              if (om.uuid) await deleteLocalItem('record_libro_score_baccarat_mesa', om.uuid);
-              if (om._local_key) await deleteLocalItem('record_libro_score_baccarat_mesa', om._local_key);
-            }
-          }
-        }
-      }
-
-      const validLocal = local.filter(item => !item.fecha || item.fecha <= todayStr);
-      if (Array.isArray(validLocal) && validLocal.length > 0) {
-        sessions = validLocal;
+      if (Array.isArray(local) && local.length > 0) {
+        sessions = local;
         if (selectedSessionIndex === -1 || selectedSessionIndex >= sessions.length) {
           selectedSessionIndex = sessions.length - 1;
         }
@@ -421,7 +419,6 @@
   async function fetchSessions(sId, selectLatest = true) {
     if (!sId) return;
     const sUuid = String(currentSalaUuid || sId);
-    const todayStr = getTodayStr();
 
     // 1. Cargar sesiones desde la base de datos interna local (Local-First)
     await loadSessionsFromLocalDb(sUuid);
@@ -432,15 +429,14 @@
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          // Filtrar en frontend cualquier fecha futura
-          const serverSessions = json.data.filter(s => !s.fecha || s.fecha <= todayStr);
+          const serverSessions = json.data;
           sessions = serverSessions;
 
           // RECONCILIACIÓN ESTRICTA: Purgar de IndexedDB cualquier sesión local que ya no exista en el servidor
           const localSessions = await getLocalItems('record_libro_score_baccarat', item => String(item.sala_uuid || item.sala_id) === sUuid);
           const serverUuids = new Set(serverSessions.map(s => String(s.uuid)));
           for (const loc of localSessions) {
-            if (!serverUuids.has(String(loc.uuid)) || (loc.fecha && loc.fecha > todayStr)) {
+            if (!serverUuids.has(String(loc.uuid))) {
               if (loc.uuid) await deleteLocalItem('record_libro_score_baccarat', loc.uuid);
               if (loc._local_key) await deleteLocalItem('record_libro_score_baccarat', loc._local_key);
               // Purgar también sus registros de mesas huérfanas en IndexedDB
@@ -608,6 +604,7 @@
       // Guardar la sesión y zapato actuales antes de crear la nueva sesión
       saveShoe(true);
 
+      const targetFecha = nextSessionDateStr || getTodayStr();
       const clientGeneratedUuid = generateSafeUuid();
       const res = await fetch(toBackendUrl('/api/baccarat/sessions'), {
         method: 'POST',
@@ -615,12 +612,18 @@
         body: JSON.stringify({
           sala_uuid: currentSalaUuid,
           sala_id: currentSalaUuid,
-          fecha: getTodayStr(),
+          fecha: targetFecha,
           uuid: clientGeneratedUuid
         })
       });
-      const json = await res.json();
-      if (json.success && json.data) {
+      let json = null;
+      try {
+        json = await res.json();
+      } catch (err) {
+        console.error('Error parseando respuesta de nueva sesión:', err);
+      }
+
+      if (res.ok && json && json.success && json.data) {
         const newSession = json.data;
 
         // Guardar en la base de datos interna local (IndexedDB)
@@ -645,13 +648,14 @@
 
         // Persistir explícitamente el nuevo registro de mesa con el UUID de la NUEVA sesión
         const newSessUuid = newSession.uuid || newSession.id;
+        const targetMesaUuid = currentMesaUuid || currentMesaId || 'mesa_default';
         const newMesaRecord = {
           uuid: generateSafeUuid(),
           record_libro_score_baccarat_uuid: newSessUuid,
-          mesa_uuid: currentMesaUuid,
+          mesa_uuid: targetMesaUuid,
           session_uuid: newSessUuid,
           session_id: newSessUuid,
-          mesa_id: currentMesaUuid,
+          mesa_id: targetMesaUuid,
           shoe_number: 1,
           tie_mode: 'slash',
           history: [],
@@ -662,7 +666,7 @@
         await upsertLocalItem('record_libro_score_baccarat_mesa', newMesaRecord).catch(() => {});
 
         // Clave de almacenamiento aislada para la nueva sesión
-        const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaUuid}_${currentMesaUuid}_sess_${newSessUuid}`;
+        const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaUuid}_${targetMesaUuid}_sess_${newSessUuid}`;
         lastLoadedStorageKey = newStorageKey;
         try {
           localStorage.setItem(newStorageKey, JSON.stringify({
@@ -683,7 +687,7 @@
         closeOptionsMenu();
         showFeedback(`¡Nueva sesión creada! (${newSession.fecha})`);
       } else {
-        alert(json.message || 'Error al crear nueva sesión');
+        alert((json && json.message) || `Error del servidor (${res.status}): no se pudo crear la sesión`);
       }
     } catch (e) {
       console.error('Error al crear nueva sesión:', e);
@@ -875,35 +879,6 @@
       }
     } catch (e) {}
 
-    // 2. PURGA ACTIVA DE DATOS CORRUPTOS EN INDEXEDDB (Sesiones futuras, outbox pendiente corrupto)
-    (async () => {
-      try {
-        const today = getTodayStr();
-        // Limpiar outbox pendiente con fechas futuras
-        const baccQueue = await getLocalItems('outbox_sync_queue', item => item.entity && item.entity.includes('baccarat'));
-        for (const q of baccQueue) {
-          if (q.payload?.fecha && q.payload.fecha > today) {
-            if (q._local_key) await deleteLocalItem('outbox_sync_queue', q._local_key);
-          }
-        }
-        // Limpiar sesiones locales con fechas futuras
-        const baccSessions = await getLocalItems('record_libro_score_baccarat');
-        for (const bs of baccSessions) {
-          if (bs.fecha && bs.fecha > today) {
-            if (bs.uuid) await deleteLocalItem('record_libro_score_baccarat', bs.uuid);
-            if (bs._local_key) await deleteLocalItem('record_libro_score_baccarat', bs._local_key);
-            const sessKey = String(bs.uuid || bs.id || '');
-            if (sessKey) {
-              const ms = await getLocalItems('record_libro_score_baccarat_mesa', m => String(m.record_libro_score_baccarat_uuid || m.session_uuid || m.session_id) === sessKey);
-              for (const m of ms) {
-                if (m.uuid) await deleteLocalItem('record_libro_score_baccarat_mesa', m.uuid);
-                if (m._local_key) await deleteLocalItem('record_libro_score_baccarat_mesa', m._local_key);
-              }
-            }
-          }
-        }
-      } catch (_) {}
-    })();
 
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
@@ -2510,9 +2485,9 @@
               class="btn-opt col-6 btn-opt-new-session"
               on:click={handleCreateNewSession}
               disabled={isSessionsLoading || !isLatestSession}
-              title={!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : 'Crear una nueva sesión de juego'}
+              title={!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear nueva sesión (${nextSessionDateStr})`}
             >
-              Crear Nueva Sesión
+              Crear Nueva Sesión ({nextSessionDateStr})
             </button>
 
             <!-- COL-6: Borrar Última Sesión -->
