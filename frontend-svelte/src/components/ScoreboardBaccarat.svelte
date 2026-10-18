@@ -3290,6 +3290,13 @@
     box-shadow: none;
   }
 
+  /* Ocultar botón directo Nuevo Zapato cuando la cabecera se empiece a amontonar (accesible desde modal de opciones) */
+  @media (max-width: 1280px) {
+    .sb-btn-new-shoe {
+      display: none !important;
+    }
+  }
+
   /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE Y ATRÁS) */
   .nav-arrow-btn {
     width: 30px;
