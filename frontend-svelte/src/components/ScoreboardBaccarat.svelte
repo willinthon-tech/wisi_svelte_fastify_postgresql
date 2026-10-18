@@ -2184,75 +2184,78 @@
   class:theme-light={currentTheme === 'light'}
   class:is-monitor-mode={isMonitorMode}
 >
-  <!-- TOP CASINO HEADER -->
+  <!-- TOP CASINO HEADER: 3 COLUMNAS FIJAS (COL-4 / COL-4 / COL-4) -->
   <header class="sb-header">
-    <div class="sb-header-left">
-      <div class="sb-pills-row">
-        {#if hasSelectedMesa}
-          <button
-            type="button"
-            class="sb-btn-table-info"
-            on:click={openOptionsMenu}
-            title="Opciones de la mesa ({currentSalaName} • {currentMesaName})"
-          >
-            <strong class="loc-val">{currentSalaName}</strong>
-            <span class="loc-sep">•</span>
-            <strong class="loc-val">{currentMesaName}</strong>
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="sb-btn-table-info is-unselected"
-            on:click={openOptionsMenu}
-            title="Clic para seleccionar sala y mesa"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
-              <path d="M4 6h16M4 12h16m-7 6h7"/>
-            </svg>
-            <strong class="loc-val">👉 Seleccionar Mesa</strong>
-          </button>
-        {/if}
+    <!-- COL-4 IZQUIERDA: MESA / SALA -->
+    <div class="sb-header-col col-mesa">
+      {#if hasSelectedMesa}
+        <button
+          type="button"
+          class="sb-btn-table-info"
+          on:click={openOptionsMenu}
+          title="Opciones de la mesa ({currentSalaName} • {currentMesaName})"
+        >
+          <strong class="loc-val">{currentSalaName}</strong>
+          <span class="loc-sep">•</span>
+          <strong class="loc-val">{currentMesaName}</strong>
+        </button>
+      {:else}
+        <button
+          type="button"
+          class="sb-btn-table-info is-unselected"
+          on:click={openOptionsMenu}
+          title="Clic para seleccionar sala y mesa"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+            <path d="M4 6h16M4 12h16m-7 6h7"/>
+          </svg>
+          <strong class="loc-val">👉 Seleccionar Mesa</strong>
+        </button>
+      {/if}
 
-        {#if isObserverMode}
-          <div class="sb-observer-badge-pill" title="Usted está en modo Observador (Solo Lectura)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-            <span>Observador</span>
-          </div>
-        {/if}
+      {#if isObserverMode}
+        <div class="sb-observer-badge-pill" title="Usted está en modo Observador (Solo Lectura)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <span>Observador</span>
+        </div>
+      {/if}
+    </div>
 
+    <!-- COL-4 CENTRO: ZAPATO Y MANOS (CON BOTÓN 'N' INTEGRADO PARA NUEVO ZAPATO) -->
+    <div class="sb-header-col col-zapato">
+      <div class="sb-shoe-pill shoe-pill">
+        <button
+          type="button"
+          class="nav-arrow-btn btn-prev-shoe"
+          disabled={shoes.length <= 1 || activeShoeIndex <= 0}
+          on:click={goToPrevShoe}
+          title="Ver zapato anterior"
+          aria-label="Zapato anterior"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
 
-        <div class="sb-shoe-pill shoe-pill">
-          <button
-            type="button"
-            class="nav-arrow-btn btn-prev-shoe"
-            disabled={shoes.length <= 1 || activeShoeIndex <= 0}
-            on:click={goToPrevShoe}
-            title="Ver zapato anterior"
-            aria-label="Zapato anterior"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-          </button>
+        <div class="shoe-pill-content">
+          <span class="pill-label">ZAPATO</span>
+          <span class="pill-value">#{activeShoeNumber}</span>
+          {#if shoes.length > 1}
+            <span class="pill-sub">({activeShoeIndex + 1}/{shoes.length})</span>
+          {/if}
+          <span class="pill-sep">•</span>
+          <span class="pill-label">MANOS</span>
+          <span class="pill-value">#{totalHands}</span>
+        </div>
 
-          <div class="shoe-pill-content">
-            <span class="pill-label">ZAPATO</span>
-            <span class="pill-value">#{activeShoeNumber}</span>
-            {#if shoes.length > 1}
-              <span class="pill-sub">({activeShoeIndex + 1}/{shoes.length})</span>
-            {/if}
-            <span class="pill-sep">•</span>
-            <span class="pill-label">MANOS</span>
-            <span class="pill-value">#{totalHands}</span>
-          </div>
-
+        {#if activeShoeIndex < shoes.length - 1}
+          <!-- Flecha Siguiente para navegar zapatos históricos -->
           <button
             type="button"
             class="nav-arrow-btn btn-next-shoe"
-            disabled={shoes.length <= 1 || activeShoeIndex >= shoes.length - 1}
             on:click={goToNextShoe}
             title="Ver zapato siguiente"
             aria-label="Zapato siguiente"
@@ -2261,23 +2264,25 @@
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </button>
-        </div>
-
-        <!-- BOTÓN NUEVO ZAPATO DIRECTO -->
-        <button
-          type="button"
-          class="sb-btn-new-shoe"
-          disabled={!isLatestSession || history.length === 0}
-          on:click={handleDirectNewShoe}
-          title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
-        >
-          Nuevo Zapato
-        </button>
+        {:else}
+          <!-- Botón 'N' para Crear Nuevo Zapato en el último zapato -->
+          <button
+            type="button"
+            class="nav-arrow-btn btn-new-shoe-n"
+            class:is-active={isLatestSession && history.length > 0}
+            disabled={!isLatestSession || history.length === 0}
+            on:click={handleDirectNewShoe}
+            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
+            aria-label="Crear Nuevo Zapato"
+          >
+            <span class="btn-n-letter">N</span>
+          </button>
+        {/if}
       </div>
     </div>
 
-    <!-- NAVEGADOR DE SESIONES EN LA DERECHA (EN REEMPLAZO DEL BOTÓN OPCIONES) -->
-    <div class="sb-header-right">
+    <!-- COL-4 DERECHA: NAVEGADOR DE SESIONES -->
+    <div class="sb-header-col col-sesion">
       {#if currentSession}
         <div class="sb-session-navigator" class:is-past={!isLatestSession}>
           <button
@@ -3158,52 +3163,64 @@
     overflow: hidden;
   }
 
-  /* HEADER */
+  /* HEADER: 3 COLUMNAS FIJAS EXACTAS (COL-4 / COL-4 / COL-4) NUNCA SE DESBORDA HACIA ABAJO */
   .sb-header {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 4px 2px 6px 2px;
+    gap: clamp(4px, 0.8vw, 12px);
+    padding: clamp(2px, 0.4vh, 4px) 2px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    flex-wrap: wrap;
     flex-shrink: 0;
+    width: 100%;
+    box-sizing: border-box;
   }
 
-  .sb-header-left {
+  .sb-header-col {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    min-width: 0;
+    width: 100%;
   }
 
-  .sb-pills-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
+  .sb-header-col.col-mesa {
+    grid-column: 1;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .sb-header-col.col-zapato {
+    grid-column: 2;
+    justify-content: center;
+  }
+
+  .sb-header-col.col-sesion {
+    grid-column: 3;
+    justify-content: flex-end;
   }
 
   /* BOTÓN SALA Y MESA EN ESQUINA IZQUIERDA (ABRE MODAL DE OPCIONES) */
   .sb-btn-table-info {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: clamp(4px, 0.6vw, 8px);
     background: #1e293b;
     border: 1.5px solid #334155;
-    padding: 3px 14px;
-    min-height: 36px;
+    padding: 3px clamp(8px, 1vw, 14px);
+    min-height: 34px;
     box-sizing: border-box;
     border-radius: 9999px;
     color: #f1f5f9;
     font-family: inherit;
-    font-size: 14.5px;
+    font-size: clamp(11.5px, 0.9vw, 14.5px);
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
     user-select: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .sb-btn-table-info:hover {
@@ -3220,13 +3237,31 @@
   .sb-btn-table-info .loc-val {
     color: #ffffff;
     font-weight: 800;
-    font-size: 14.5px;
+    font-size: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .sb-btn-table-info .loc-sep {
     color: #475569;
     font-weight: bold;
-    margin: 0 3px;
+    margin: 0 2px;
+  }
+
+  .sb-observer-badge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid #f59e0b;
+    color: #f59e0b;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   /* CONTENEDORES ESTANDARIZADOS: ZAPATO Y SESIÓN */
@@ -3234,77 +3269,28 @@
   .sb-session-navigator {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: clamp(3px, 0.5vw, 6px);
     background: #1e293b;
     border: 1.5px solid #334155;
-    padding: 3px 5px;
-    min-height: 36px;
+    padding: 2px clamp(3px, 0.4vw, 5px);
+    min-height: 34px;
     box-sizing: border-box;
     border-radius: 9999px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
     transition: all 0.2s ease;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .sb-session-navigator.is-past {
     border-color: #475569;
   }
 
-  /* BOTÓN NUEVO ZAPATO DIRECTO */
-  .sb-btn-new-shoe {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    background: linear-gradient(135deg, rgba(2, 132, 199, 0.35) 0%, rgba(14, 165, 233, 0.2) 100%);
-    border: 1.5px solid #0284c7;
-    color: #38bdf8;
-    padding: 0 16px;
-    min-height: 38px;
-    box-sizing: border-box;
-    border-radius: 9999px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    line-height: 1;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-    user-select: none;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-  }
-
-  .sb-btn-new-shoe:hover:not(:disabled) {
-    background: #0284c7;
-    border-color: #38bdf8;
-    color: #ffffff;
-    transform: translateY(-1px);
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
-  }
-
-  .sb-btn-new-shoe:active:not(:disabled) {
-    transform: translateY(0);
-  }
-
-  .sb-btn-new-shoe:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-    background: #1e293b;
-    border-color: #334155;
-    color: #64748b;
-    transform: none;
-    box-shadow: none;
-  }
-
-  /* Ocultar botón directo Nuevo Zapato cuando la cabecera se empiece a amontonar (accesible desde modal de opciones) */
-  @media (max-width: 1280px) {
-    .sb-btn-new-shoe {
-      display: none !important;
-    }
-  }
-
-  /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE Y ATRÁS) */
+  /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE, ATRÁS Y 'N') */
   .nav-arrow-btn {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
+    width: clamp(26px, 2vw, 30px);
+    height: clamp(26px, 2vw, 30px);
+    min-width: clamp(26px, 2vw, 30px);
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.08);
     border: 1.5px solid rgba(255, 255, 255, 0.18);
@@ -3315,6 +3301,7 @@
     cursor: pointer;
     padding: 0;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
   }
 
   .nav-arrow-btn:hover:not(:disabled) {
@@ -3339,17 +3326,45 @@
     box-shadow: none;
   }
 
+  /* BOTÓN 'N' PARA CREAR NUEVO ZAPATO EN EL ÚLTIMO ZAPATO */
+  .nav-arrow-btn.btn-new-shoe-n {
+    font-weight: 900;
+  }
+  .nav-arrow-btn.btn-new-shoe-n.is-active {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.45) 0%, rgba(14, 165, 233, 0.3) 100%);
+    border-color: #38bdf8;
+    color: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+  }
+  .nav-arrow-btn.btn-new-shoe-n.is-active:hover {
+    background: #0284c7;
+    border-color: #38bdf8;
+    color: #ffffff;
+    transform: scale(1.12);
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.8);
+  }
+  .btn-n-letter {
+    font-size: clamp(12px, 1vw, 14px);
+    font-weight: 900;
+    line-height: 1;
+    display: block;
+    user-select: none;
+    letter-spacing: -0.2px;
+  }
+
   /* CONTENIDO DE ZAPATO */
   .shoe-pill-content {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 6px;
+    gap: clamp(3px, 0.5vw, 7px);
+    padding: 0 clamp(2px, 0.4vw, 5px);
     user-select: none;
+    white-space: nowrap;
+    font-size: clamp(10px, 0.8vw, 12px);
   }
 
   .pill-sub {
-    font-size: 11px;
+    font-size: clamp(9.5px, 0.75vw, 11px);
     color: #94a3b8;
     font-weight: 600;
   }
@@ -3357,70 +3372,36 @@
   .pill-label {
     color: #94a3b8;
     font-weight: 700;
-    font-size: 11px;
-    letter-spacing: 0.5px;
+    font-size: clamp(9.5px, 0.75vw, 11px);
+    letter-spacing: 0.4px;
   }
 
   .pill-value {
     color: #38bdf8;
     font-weight: 800;
-    font-size: 13.5px;
+    font-size: clamp(11.5px, 0.9vw, 13.5px);
   }
 
   .pill-sep {
     color: #475569;
     font-weight: bold;
+    margin: 0 1px;
   }
 
-  /* ICONO PANTALLA COMPLETA AL LADO DE ZAPATO (SOLO EL ICONO) */
-  .sb-icon-btn-fullscreen {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: #1e293b;
-    border: 1.5px solid #0284c7;
-    color: #38bdf8;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    padding: 0;
-  }
-  .sb-icon-btn-fullscreen:hover {
-    background: #0284c7;
-    color: #ffffff;
-    transform: scale(1.08);
-  }
-  .sb-icon-btn-fullscreen.active {
-    background: #0284c7;
-    color: #ffffff;
-    border-color: #38bdf8;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
-  }
-
-
-  /* HEADER CENTER / NAVEGADOR DE SESIONES */
-  .sb-header-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    min-width: 220px;
-  }
-
+  /* NAVEGADOR DE SESIONES */
   .session-label-wrapper {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 6px;
+    gap: clamp(3px, 0.5vw, 6px);
+    padding: 0 clamp(2px, 0.4vw, 5px);
     user-select: none;
+    white-space: nowrap;
   }
 
   .session-label-text {
-    font-size: 13.5px;
+    font-size: clamp(11px, 0.85vw, 13px);
     font-weight: 800;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
     white-space: nowrap;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
@@ -3435,19 +3416,27 @@
 
   .session-date-text {
     color: #f1f5f9;
-    font-size: 13.5px;
+    font-size: clamp(11px, 0.85vw, 13px);
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 
-  /* BOTONES SUPERIORES */
-  .sb-header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+  @media (max-width: 640px) {
+    .sb-header {
+      gap: 3px;
+      padding: 2px 1px;
+    }
+    .pill-label {
+      display: none;
+    }
+    .session-date-text {
+      display: none;
+    }
+    .sb-observer-badge-pill span {
+      display: none;
+    }
   }
 
   .sb-btn {
