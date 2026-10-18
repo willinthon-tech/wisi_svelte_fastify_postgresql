@@ -2671,7 +2671,7 @@
       </div>
     {/if}
 
-    <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) -->
+    <!-- GRUPO 1: TECLADO NUMÉRICO (0 AL 9) - COL-3 EN MODO DOBLE -->
     <div class="footer-score-col">
       <div class="score-keypad-box">
         <div class="score-keypad-grid">
@@ -2702,13 +2702,13 @@
       </div>
     </div>
 
-    <!-- GRUPO 2: MODIFICADORES (2 COL-6 ARRIBA: P.PAIR Y B.PAIR / 2 COL-6 ABAJO: NATURAL Y WIN) -->
-    <div class="footer-modifiers-col">
-      <div class="modifiers-grid-2x2">
-        <!-- Fila 1 (Arriba): P.Pair y B.Pair (ambos col-6) -->
+    <!-- CONTENEDOR DE CONTROLES: COL-9 EN MODO DOBLE -->
+    <div class="footer-main-controls-col">
+      <!-- FILA 1 (COL-12): 4 MODIFICADORES (P.PAIR, B.PAIR, NATURAL, WIN) CADA UNO EN COL-3 -->
+      <div class="footer-modifiers-row">
         <button
           type="button"
-          class="keypad-pill pill-ppair col-6"
+          class="keypad-pill pill-ppair"
           class:active={isEditingHand ? selectedHand.pPair : activePPair}
           disabled={isObserverMode || !isCurrentShoeActive}
           on:click={handleTogglePPair}
@@ -2719,7 +2719,7 @@
 
         <button
           type="button"
-          class="keypad-pill pill-bpair col-6"
+          class="keypad-pill pill-bpair"
           class:active={isEditingHand ? selectedHand.bPair : activeBPair}
           disabled={isObserverMode || !isCurrentShoeActive}
           on:click={handleToggleBPair}
@@ -2728,10 +2728,9 @@
           B.Pair
         </button>
 
-        <!-- Fila 2 (Abajo): Natural y Win (ambos col-6) -->
         <button
           type="button"
-          class="keypad-pill pill-natural col-6"
+          class="keypad-pill pill-natural"
           class:active={isEditingHand ? selectedHand.natural : activeNatural}
           disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
           on:click={handleToggleNatural}
@@ -2742,7 +2741,7 @@
 
         <button
           type="button"
-          class="keypad-pill pill-win col-6"
+          class="keypad-pill pill-win"
           class:active={isEditingHand ? selectedHand.win : activeWin}
           disabled={isObserverMode || !isCurrentShoeActive}
           on:click={handleToggleWin}
@@ -2751,133 +2750,135 @@
           Win
         </button>
       </div>
-    </div>
 
-    <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO -->
-    <div class="footer-outcomes-col">
-      <div class="outcomes-grid-3col">
-        <!-- PUNTO BUTTON -->
-        <div class="action-btn-item">
-          <button
-            type="button"
-            class="keypad-btn-circle btn-punto"
-            class:is-chosen-winner={isEditingHand && selectedHand.winner === 'PUNTO'}
-            disabled={isObserverMode || !isCurrentShoeActive}
-            on:click={() => handleSelectOutcome('PUNTO')}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'))}
-          >
-            {#if isEditingHand ? selectedHand.bPair : activeBPair}
-              <span class="badge-corner-tl" title="B.Pair activo"></span>
-            {/if}
-            {#if isEditingHand ? selectedHand.pPair : activePPair}
-              <span class="badge-corner-br" title="P.Pair activo"></span>
-            {/if}
-            <div class="btn-inner-gloss">
-              <span class="btn-letter">P</span>
-            </div>
-          </button>
-          <span class="btn-caption punto-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'PUNTO'}>PUNTO</span>
-        </div>
-
-        <!-- BANCA BUTTON -->
-        <div class="action-btn-item">
-          <button
-            type="button"
-            class="keypad-btn-circle btn-banca"
-            class:is-chosen-winner={isEditingHand && selectedHand.winner === 'BANCA'}
-            disabled={isObserverMode || !isCurrentShoeActive}
-            on:click={() => handleSelectOutcome('BANCA')}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'))}
-          >
-            {#if isEditingHand ? selectedHand.bPair : activeBPair}
-              <span class="badge-corner-tl" title="B.Pair activo"></span>
-            {/if}
-            {#if isEditingHand ? selectedHand.pPair : activePPair}
-              <span class="badge-corner-br" title="P.Pair activo"></span>
-            {/if}
-            <div class="btn-inner-gloss">
-              <span class="btn-letter">B</span>
-            </div>
-          </button>
-          <span class="btn-caption banca-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'BANCA'}>BANCA</span>
-        </div>
-
-        <!-- EMPATE BUTTON -->
-        <div class="action-btn-item">
-          <button
-            type="button"
-            class="keypad-btn-circle btn-tie"
-            class:is-chosen-winner={isEditingHand && selectedHand.winner === 'EMPATE'}
-            disabled={isObserverMode || !isCurrentShoeActive}
-            on:click={() => handleSelectOutcome('EMPATE')}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a EMPATE (Tie)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'))}
-          >
-            {#if isEditingHand ? selectedHand.bPair : activeBPair}
-              <span class="badge-corner-tl" title="B.Pair activo"></span>
-            {/if}
-            {#if isEditingHand ? selectedHand.pPair : activePPair}
-              <span class="badge-corner-br" title="P.Pair activo"></span>
-            {/if}
-            <div class="btn-inner-gloss">
-              <span class="btn-letter">T</span>
-            </div>
-          </button>
-          <span class="btn-caption tie-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'EMPATE'}>EMPATE</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- GRUPO 4: ACCIÓN RETROCEDER / ATRÁS Y BOTÓN VISUALIZAR TIE / EDITAR (MISMO TAMAÑO) -->
-    <div class="footer-undo-col">
-      <div class="action-btn-item">
-        <button
-          type="button"
-          class="keypad-btn-circle btn-undo"
-          class:is-btn-atras={isEditingHand}
-          on:click={handleBackOrUndo}
-          disabled={isObserverMode || !isCurrentShoeActive || (!isEditingHand && history.length === 0)}
-          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'))}
-        >
-          <div class="btn-inner-gloss">
-            <svg class="btn-arrow-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 12H5m0 0l6-6M5 12l6 6" />
-            </svg>
+      <!-- FILA 2 (COL-12): 2 COL-6 (RESULTADOS COL-6 Y ACCIONES COL-6) -->
+      <div class="footer-actions-row">
+        <!-- COL-6 IZQUIERDA: PUNTO, BANCA, EMPATE (CADA UNO EN COL-4) -->
+        <div class="footer-outcomes-col">
+          <!-- PUNTO BUTTON -->
+          <div class="action-btn-item">
+            <button
+              type="button"
+              class="keypad-btn-circle btn-punto"
+              class:is-chosen-winner={isEditingHand && selectedHand.winner === 'PUNTO'}
+              disabled={isObserverMode || !isCurrentShoeActive}
+              on:click={() => handleSelectOutcome('PUNTO')}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'))}
+            >
+              {#if isEditingHand ? selectedHand.bPair : activeBPair}
+                <span class="badge-corner-tl" title="B.Pair activo"></span>
+              {/if}
+              {#if isEditingHand ? selectedHand.pPair : activePPair}
+                <span class="badge-corner-br" title="P.Pair activo"></span>
+              {/if}
+              <div class="btn-inner-gloss">
+                <span class="btn-letter">P</span>
+              </div>
+            </button>
+            <span class="btn-caption punto-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'PUNTO'}>PUNTO</span>
           </div>
-        </button>
-        <span class="btn-caption undo-caption" class:is-atras-caption={isEditingHand}>
-          {isEditingHand ? 'Atrás' : 'RETROCEDER'}
-        </span>
-      </div>
 
-      <!-- BOTÓN VISUALIZAR TIE (SLASH [/] vs CIRCLE [O]) O GUARDAR EDICIÓN -->
-      <div class="action-btn-item">
-        <button
-          type="button"
-          class="keypad-btn-tie-toggle"
-          class:is-btn-editar={isEditingHand}
-          on:click={handleConfirmEditOrTieToggle}
-          title={isEditingHand ? 'Guardar y confirmar cambios de la mano' : (tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])')}
-        >
-          <div class="tie-toggle-box">
-            {#if isEditingHand}
-              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="editar-icon-svg">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            {:else if tieMode === 'slash'}
-              <svg width="42" height="42" viewBox="0 0 32 32" class="tie-toggle-svg">
-                <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="3.8" stroke-linecap="round" />
-              </svg>
-            {:else}
-              <svg width="42" height="42" viewBox="0 0 32 32" class="tie-toggle-svg">
-                <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="3.8" fill="none" />
-              </svg>
-            {/if}
+          <!-- BANCA BUTTON -->
+          <div class="action-btn-item">
+            <button
+              type="button"
+              class="keypad-btn-circle btn-banca"
+              class:is-chosen-winner={isEditingHand && selectedHand.winner === 'BANCA'}
+              disabled={isObserverMode || !isCurrentShoeActive}
+              on:click={() => handleSelectOutcome('BANCA')}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'))}
+            >
+              {#if isEditingHand ? selectedHand.bPair : activeBPair}
+                <span class="badge-corner-tl" title="B.Pair activo"></span>
+              {/if}
+              {#if isEditingHand ? selectedHand.pPair : activePPair}
+                <span class="badge-corner-br" title="P.Pair activo"></span>
+              {/if}
+              <div class="btn-inner-gloss">
+                <span class="btn-letter">B</span>
+              </div>
+            </button>
+            <span class="btn-caption banca-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'BANCA'}>BANCA</span>
           </div>
-        </button>
-        <span class="btn-caption tie-toggle-caption" class:is-editar-caption={isEditingHand}>
-          {isEditingHand ? 'Editar' : 'Tie'}
-        </span>
+
+          <!-- EMPATE BUTTON -->
+          <div class="action-btn-item">
+            <button
+              type="button"
+              class="keypad-btn-circle btn-tie"
+              class:is-chosen-winner={isEditingHand && selectedHand.winner === 'EMPATE'}
+              disabled={isObserverMode || !isCurrentShoeActive}
+              on:click={() => handleSelectOutcome('EMPATE')}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a EMPATE (Tie)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'))}
+            >
+              {#if isEditingHand ? selectedHand.bPair : activeBPair}
+                <span class="badge-corner-tl" title="B.Pair activo"></span>
+              {/if}
+              {#if isEditingHand ? selectedHand.pPair : activePPair}
+                <span class="badge-corner-br" title="P.Pair activo"></span>
+              {/if}
+              <div class="btn-inner-gloss">
+                <span class="btn-letter">T</span>
+              </div>
+            </button>
+            <span class="btn-caption tie-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'EMPATE'}>EMPATE</span>
+          </div>
+        </div>
+
+        <!-- COL-6 DERECHA: RETROCEDER Y TIE / EDITAR (CADA UNO EN COL-6) -->
+        <div class="footer-undo-col">
+          <!-- RETROCEDER BUTTON -->
+          <div class="action-btn-item">
+            <button
+              type="button"
+              class="keypad-btn-circle btn-undo"
+              class:is-btn-atras={isEditingHand}
+              on:click={handleBackOrUndo}
+              disabled={isObserverMode || !isCurrentShoeActive || (!isEditingHand && history.length === 0)}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'))}
+            >
+              <div class="btn-inner-gloss">
+                <svg class="btn-arrow-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 12H5m0 0l6-6M5 12l6 6" />
+                </svg>
+              </div>
+            </button>
+            <span class="btn-caption undo-caption" class:is-atras-caption={isEditingHand}>
+              {isEditingHand ? 'Atrás' : 'RETROCEDER'}
+            </span>
+          </div>
+
+          <!-- BOTÓN VISUALIZAR TIE / EDITAR -->
+          <div class="action-btn-item">
+            <button
+              type="button"
+              class="keypad-btn-tie-toggle"
+              class:is-btn-editar={isEditingHand}
+              on:click={handleConfirmEditOrTieToggle}
+              title={isEditingHand ? 'Guardar y confirmar cambios de la mano' : (tieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para cambiar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para cambiar a Raya diagonal [/])')}
+            >
+              <div class="tie-toggle-box">
+                {#if isEditingHand}
+                  <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="editar-icon-svg">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                {:else if tieMode === 'slash'}
+                  <svg width="42" height="42" viewBox="0 0 32 32" class="tie-toggle-svg">
+                    <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="3.8" stroke-linecap="round" />
+                  </svg>
+                {:else}
+                  <svg width="42" height="42" viewBox="0 0 32 32" class="tie-toggle-svg">
+                    <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="3.8" fill="none" />
+                  </svg>
+                {/if}
+              </div>
+            </button>
+            <span class="btn-caption tie-toggle-caption" class:is-editar-caption={isEditingHand}>
+              {isEditingHand ? 'Editar' : 'Tie'}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   </footer>
@@ -4364,11 +4365,11 @@
     }
   }
 
-  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA */
+  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA (MÁS GRANDE HACIA ARRIBA) */
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 14px;
-    padding: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
+    padding: clamp(6px, 1vh, 12px) clamp(10px, 1.4vw, 18px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
     display: grid;
@@ -4381,7 +4382,7 @@
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
-    --footer-btn-size: clamp(64px, 9.2vh, 92px);
+    --footer-btn-size: clamp(70px, 10.5vh, 98px);
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -4550,20 +4551,13 @@
     z-index: 2;
   }
 
-  /* GRUPO 2: MODIFICADORES (P.PAIR, B.PAIR, NATURAL, WIN) */
-  .footer-modifiers-col {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding-right: clamp(10px, 1.4vw, 18px);
-    border-right: 2px solid #cbd5e1;
-    min-width: 0;
-    width: 100%;
-    height: 100%;
+  /* CONTENEDOR PRINCIPAL DE CONTROLES (EN MODO 1 FILA: DISPLAY CONTENTS) */
+  .footer-main-controls-col {
+    display: contents;
   }
 
-  .modifiers-grid-2x2 {
+  /* FILA 1: MODIFICADORES (EN MODO 1 FILA: GRID 2X2 A LA IZQUIERDA DE RESULTADOS) */
+  .footer-modifiers-row {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     grid-template-rows: repeat(2, 1fr);
@@ -4572,9 +4566,11 @@
     max-width: calc(var(--footer-btn-size, 92px) * 2.45);
     height: calc(var(--footer-btn-size, 92px) * 1.32);
     align-items: stretch;
+    border-right: 2px solid #cbd5e1;
+    padding-right: clamp(10px, 1.4vw, 18px);
   }
 
-  .modifiers-grid-2x2 .keypad-pill {
+  .footer-modifiers-row .keypad-pill {
     width: 100%;
     max-width: none;
     height: 100%;
@@ -4590,27 +4586,24 @@
     box-sizing: border-box;
   }
 
-  /* GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO EXACTO */
+  /* FILA 2: ACCIONES (EN MODO 1 FILA: DISPLAY CONTENTS) */
+  .footer-actions-row {
+    display: contents;
+  }
+
+  /* RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO */
   .footer-outcomes-col {
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: clamp(8px, 1.3vw, 18px);
     padding-right: clamp(10px, 1.4vw, 18px);
     border-right: 2px solid #cbd5e1;
     min-width: 0;
     height: 100%;
   }
 
-  .outcomes-grid-3col {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: clamp(8px, 1.3vw, 18px);
-    width: 100%;
-    max-width: calc(var(--footer-btn-size, 92px) * 3 + 40px);
-  }
-
-  /* GRUPO 4: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
+  /* ACCIÓN RETROCEDER Y VISUALIZAR TIE */
   .footer-undo-col {
     display: flex;
     justify-content: center;
@@ -4740,100 +4733,136 @@
     text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
   }
 
-  /* 2 GRUPOS DE COL-6: PANTALLAS MEDIANAS / TABLET (MAX-WIDTH: 1180PX) */
-  @media (max-width: 1180px) {
+  /* MODO DOBLE FILA: CUANDO ESTÉ PEQUEÑO (COL-3 NUMÉRICO + COL-9 CONTROLES) */
+  @media (max-width: 1280px) {
     .scoreboard-footer-panel {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
-      padding: clamp(4px, 0.8vh, 10px) clamp(8px, 1.2vw, 16px);
-      --footer-btn-size: clamp(52px, 7.6vh, 82px);
+      grid-template-columns: minmax(130px, 3fr) minmax(0, 9fr);
+      gap: clamp(8px, 1.2vw, 18px);
+      padding: clamp(8px, 1.2vh, 14px) clamp(10px, 1.4vw, 18px);
+      --footer-btn-size: clamp(66px, 9.8vh, 92px);
+      align-items: stretch;
     }
 
-    /* FILA 1 (ARRIBA):
-       Col 1: Teclado Numérico (col-6) - Centrado
-       Col 2: Modificadores P.Pair, B.Pair, Natural, Win (col-6) - Centrado
-    */
+    /* COL-3 IZQUIERDA: TECLADO NUMÉRICO (ABARCANDO TODA LA ALTURA DE ARRIBA A ABAJO) */
     .footer-score-col {
       grid-column: 1;
-      grid-row: 1;
       border-right: 2px solid #cbd5e1;
-      border-bottom: 2px solid #cbd5e1;
-      padding-right: 12px;
-      padding-bottom: clamp(4px, 0.6vh, 8px);
+      border-bottom: none;
+      padding-right: clamp(10px, 1.4vw, 18px);
+      padding-left: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
+      height: 100%;
+      min-height: 100%;
       width: 100%;
     }
+
     .score-keypad-box {
-      margin: 0 auto;
-      max-width: calc(var(--footer-btn-size) * 1.84);
-    }
-    .score-keypad-grid {
-      grid-template-rows: repeat(3, 1fr);
-      gap: 3px;
-      height: calc(var(--footer-btn-size) * 1.32);
+      width: 100%;
+      max-width: 190px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
 
-    .footer-modifiers-col {
+    .score-keypad-grid {
+      height: 100%;
+      min-height: calc(var(--footer-btn-size) * 1.55);
+      max-height: calc(var(--footer-btn-size) * 1.85);
+      gap: clamp(3px, 0.6vh, 6px);
+    }
+
+    /* COL-9 DERECHA: CONTENEDOR PRINCIPAL (2 FILAS COL-12) */
+    .footer-main-controls-col {
       grid-column: 2;
-      grid-row: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: clamp(8px, 1.2vh, 14px);
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+    }
+
+    /* FILA 1 (COL-12): 4 BOTONES MODIFICADORES CADA UNO EN COL-3 */
+    .footer-modifiers-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-rows: auto;
+      gap: clamp(6px, 1vw, 12px);
+      width: 100%;
+      max-width: none;
+      height: auto;
       border-right: none;
       border-bottom: 2px solid #cbd5e1;
-      padding-left: 12px;
+      padding-bottom: clamp(6px, 1vh, 12px);
       padding-right: 0;
-      padding-bottom: clamp(4px, 0.6vh, 8px);
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-    }
-    .modifiers-grid-2x2 {
-      margin: 0 auto;
-      max-width: calc(var(--footer-btn-size) * 2.45);
-      height: calc(var(--footer-btn-size) * 1.32);
-      gap: 5px;
-    }
-    .modifiers-grid-2x2 .keypad-pill {
-      font-size: clamp(10.5px, calc(var(--footer-btn-size) * 0.16), 13px);
     }
 
-    /* FILA 2 (ABAJO):
-       Col 1: Resultados Punto, Banca, Empate (col-6) - Centrado
-       Col 2: Acciones Retroceder y Tie/Editar (col-6) - Centrado
-    */
+    .footer-modifiers-row .keypad-pill {
+      width: 100%;
+      max-width: none;
+      height: clamp(34px, 4.8vh, 42px);
+      font-size: clamp(12px, calc(var(--footer-btn-size) * 0.17), 15px);
+    }
+
+    /* FILA 2 (COL-12): 2 COL-6 (RESULTADOS Y ACCIONES) */
+    .footer-actions-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(8px, 1.5vw, 20px);
+      width: 100%;
+      align-items: center;
+    }
+
+    /* COL-6 IZQUIERDA: PUNTO, BANCA, EMPATE CADA UNO EN COL-4 */
     .footer-outcomes-col {
-      grid-column: 1;
-      grid-row: 2;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: clamp(6px, 1vw, 14px);
+      justify-items: center;
+      align-items: center;
       border-right: 2px solid #cbd5e1;
       border-bottom: none;
-      padding-right: 12px;
-      padding-top: clamp(4px, 0.6vh, 8px);
-      justify-content: center;
-      align-items: center;
+      padding-right: clamp(8px, 1.2vw, 16px);
+      padding-left: 0;
+      padding-top: 0;
+      padding-bottom: 0;
       width: 100%;
-    }
-    .outcomes-grid-3col {
-      margin: 0 auto;
-      gap: clamp(6px, 1.2vw, 14px);
-      max-width: calc(var(--footer-btn-size) * 3 + 36px);
+      height: 100%;
     }
 
+    /* COL-6 DERECHA: RETROCEDER Y TIE / EDITAR CADA UNO EN COL-6 */
     .footer-undo-col {
-      grid-column: 2;
-      grid-row: 2;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(8px, 1.5vw, 18px);
+      justify-items: center;
+      align-items: center;
       border-right: none;
       border-bottom: none;
-      padding-left: 12px;
-      padding-top: clamp(4px, 0.6vh, 8px);
-      justify-content: center;
-      align-items: center;
+      padding-left: clamp(4px, 0.8vw, 12px);
+      padding-right: 0;
+      padding-top: 0;
+      padding-bottom: 0;
       width: 100%;
-      gap: clamp(8px, 1.4vw, 16px);
+      height: 100%;
     }
 
     .action-btn-item {
-      width: var(--footer-btn-size);
-      gap: clamp(2px, 0.4vh, 4px);
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(2px, 0.4vh, 5px);
     }
+
     .btn-letter {
       font-size: calc(var(--footer-btn-size) * 0.48);
     }
@@ -4850,78 +4879,77 @@
       height: calc(var(--footer-btn-size) * 0.4);
     }
     .btn-caption, .tie-toggle-caption {
-      font-size: clamp(10.5px, calc(var(--footer-btn-size) * 0.14), 12.5px);
+      font-size: clamp(10.5px, calc(var(--footer-btn-size) * 0.14), 13px);
     }
   }
 
-  /* PANTALLAS PEQUEÑAS / MÓVIL (MAX-WIDTH: 680PX) - CUANDO PASA A COL-12 */
+  /* PANTALLAS PEQUEÑAS / MÓVIL (MAX-WIDTH: 680PX) */
   @media (max-width: 680px) {
     .scoreboard-footer-panel {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(110px, 3.2fr) minmax(0, 8.8fr);
       gap: 6px;
-      padding: 4px 8px;
-      --footer-btn-size: clamp(40px, 5.8vh, 52px);
+      padding: 4px 6px;
+      --footer-btn-size: clamp(44px, 6.2vh, 58px);
     }
-    .footer-score-col,
-    .footer-modifiers-col,
+    .footer-score-col {
+      padding-right: 6px;
+    }
+    .footer-main-controls-col {
+      gap: 6px;
+    }
+    .footer-modifiers-row {
+      gap: 4px;
+      padding-bottom: 4px;
+    }
+    .footer-modifiers-row .keypad-pill {
+      height: 28px;
+      font-size: 11px;
+    }
     .footer-outcomes-col {
-      border-right: none;
-      border-bottom: 1.5px solid #cbd5e1;
-      padding-left: 0;
-      padding-right: 0;
-      padding-bottom: 6px;
-      padding-top: 0;
+      gap: 4px;
+      padding-right: 6px;
     }
     .footer-undo-col {
-      border-right: none;
-      border-bottom: none;
-      padding-left: 0;
-      padding-right: 0;
-      padding-top: 0;
-      gap: 12px;
-    }
-    .action-btn-item {
-      width: var(--footer-btn-size);
-      gap: 2px;
-    }
-    .btn-letter {
-      font-size: calc(var(--footer-btn-size) * 0.48);
-    }
-    .btn-arrow-icon {
-      width: calc(var(--footer-btn-size) * 0.4);
-      height: calc(var(--footer-btn-size) * 0.4);
-    }
-    .tie-toggle-svg {
-      width: calc(var(--footer-btn-size) * 0.44);
-      height: calc(var(--footer-btn-size) * 0.44);
+      gap: 6px;
+      padding-left: 4px;
     }
     .btn-caption, .tie-toggle-caption {
       font-size: 10px;
     }
-    .outcomes-grid-3col {
-      gap: 10px;
-    }
-    .modifiers-grid-2x2 {
-      height: calc(var(--footer-btn-size) * 1.34);
-      max-width: 180px;
-      gap: 4px;
-    }
-    .modifiers-grid-2x2 .keypad-pill {
-      font-size: 11px;
-    }
-    .score-keypad-box {
-      max-width: 144px;
-    }
     .score-keypad-grid {
-      grid-template-rows: repeat(3, 1fr);
-      gap: 3px;
-      height: calc(var(--footer-btn-size) * 1.34);
+      gap: 2px;
+      min-height: calc(var(--footer-btn-size) * 1.4);
     }
     .btn-num-key {
-      font-size: 13px;
+      font-size: 12px;
     }
     .btn-num-zero {
-      font-size: 15px;
+      font-size: 14px;
+    }
+  }
+
+  /* AJUSTE PARA PANTALLAS CON ALTURA REDUCIDA (LAPTOPS / TABLETS) */
+  @media (max-height: 768px) {
+    .scoreboard-footer-panel {
+      --footer-btn-size: clamp(56px, 8.8vh, 74px);
+      padding: clamp(4px, 0.8vh, 8px) clamp(8px, 1vw, 14px);
+    }
+    .footer-modifiers-row .keypad-pill {
+      height: clamp(28px, 3.8vh, 34px);
+    }
+  }
+
+  @media (max-height: 600px) {
+    .scoreboard-footer-panel {
+      --footer-btn-size: clamp(44px, 7.5vh, 56px);
+      padding: 3px 6px;
+    }
+    .footer-modifiers-row .keypad-pill {
+      height: 26px;
+      font-size: 10.5px;
+    }
+    .score-keypad-grid {
+      gap: 2px;
     }
   }
 
