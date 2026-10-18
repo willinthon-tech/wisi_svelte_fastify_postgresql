@@ -228,6 +228,7 @@
 
   function selectScore(num) {
     if (!isCurrentShoeActive) return;
+    if (activeNatural && num !== 8 && num !== 9) return;
     playSound('click');
     if (activeScore === num) {
       activeScore = null;
@@ -266,9 +267,10 @@
   $: beadCellSize = Math.max(Math.floor(((beadHeight || 180) - 2) / 6), 20);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads: each of the 3 bands has 6 rows (total 18 rows)
+  // Derived roads: cuadrículas más pequeñas y densas (~14px)
   $: derivedBandHeight = (derivedHeight || 180) / 3;
-  $: derivedCellSize = Math.max(Math.floor((derivedBandHeight - 2) / 6), 8);
+  $: derivedRows = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / 14), 6);
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / derivedRows), 8);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / derivedCellSize) + 1, 50);
 
   function safeJsonParse(val, fallback = []) {
@@ -1018,8 +1020,14 @@
 
   function toggleNatural() {
     if (!isCurrentShoeActive) return;
+    if (!activeNatural && activeScore !== null && activeScore !== 8 && activeScore !== 9) {
+      return;
+    }
     playSound('click');
     activeNatural = !activeNatural;
+    if (activeNatural && activeScore !== null && activeScore !== 8 && activeScore !== 9) {
+      activeScore = null;
+    }
   }
 
   function toggleSpecial() {
@@ -1210,14 +1218,27 @@
 
   function toggleSelectedMod(field) {
     if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (field === 'natural') {
+      const curScore = history[selectedHandIndex].score;
+      if (!history[selectedHandIndex].natural && curScore !== null && curScore !== undefined && curScore !== 8 && curScore !== 9) {
+        return;
+      }
+    }
     playSound('click');
     history[selectedHandIndex][field] = !history[selectedHandIndex][field];
+    if (field === 'natural' && history[selectedHandIndex].natural) {
+      const curScore = history[selectedHandIndex].score;
+      if (curScore !== null && curScore !== undefined && curScore !== 8 && curScore !== 9) {
+        history[selectedHandIndex].score = null;
+      }
+    }
     history = [...history];
     saveShoe();
   }
 
   function updateSelectedScore(num) {
     if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if (history[selectedHandIndex].natural && num !== 8 && num !== 9) return;
     playSound('click');
     history[selectedHandIndex].score = history[selectedHandIndex].score === num ? null : num;
     history = [...history];
@@ -1413,7 +1434,7 @@
   })();
 
   // 4. DERIVED ROADS ALGORITHM (Big Eye Boy: k=1, Small Road: k=2, Cockroach Road: k=3)
-  function buildDerivedRoad(columns, k, minCols = 28) {
+  function buildDerivedRoad(columns, k, minCols = 28, rowsCount = derivedRows) {
     const marks = [];
 
     for (let c = 0; c < columns.length; c++) {
@@ -1447,7 +1468,7 @@
       }
     }
 
-    const ROWS = DERIVED_ROWS;
+    const ROWS = rowsCount || 6;
     let totalCols = Math.max(minCols, 24);
     let grid = Array.from({ length: ROWS }, () => Array(totalCols).fill(null));
 
@@ -1508,9 +1529,9 @@
     return { marks, grid, totalCols, redCount, blueCount };
   }
 
-  $: bigEyeGrid = buildDerivedRoad(bigRoadLogicalColumns, 1, derivedColsNeeded);
-  $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, derivedColsNeeded);
-  $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, derivedColsNeeded);
+  $: bigEyeGrid = buildDerivedRoad(bigRoadLogicalColumns, 1, derivedColsNeeded, derivedRows);
+  $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, derivedColsNeeded, derivedRows);
+  $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, derivedColsNeeded, derivedRows);
 
   // 5. PREDICCIÓN DE CAMINOS DERIVADOS ("ASK BANKER" / "ASK PLAYER" / "NEXT")
   // Simula matemáticamente qué color (rojo o azul) se generaría en cada camino derivado (Gran Ojo, Camino Pequeño, Cucaracha)
@@ -1958,11 +1979,11 @@
                           class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && !cell.win && cell.score === null}
                           class:is-win-solid={cell.win}
                         >
-                          {#if cell.natural && !cell.win && (cell.score === undefined || cell.score === null)}
+                          {#if cell.natural && (cell.score === undefined || cell.score === null)}
                             <span class="dot-natural" title="Victoria Natural (8 ó 9)"></span>
                           {/if}
                           {#if cell.score !== undefined && cell.score !== null}
-                            <span class="bigroad-score">{cell.score}</span>
+                            <span class="bigroad-score" class:is-natural-score={cell.natural}>{cell.score}</span>
                           {/if}
                           {#if cell.tieCount > 0 && tieMode === 'slash'}
                             <span class="bigroad-tie-slash"></span>
@@ -2175,7 +2196,9 @@
             type="button"
             class="edit-pill-toggle pill-natural"
             class:active-pill={selectedHand.natural}
+            disabled={!isCurrentShoeActive || (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9)}
             on:click={() => toggleSelectedMod('natural')}
+            title={selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9 ? 'Natural solo aplica a puntajes 8 ó 9' : 'Alternar Victoria Natural'}
           >
             Natural
           </button>
@@ -2196,6 +2219,7 @@
               type="button"
               class="edit-choice-btn edit-score-btn"
               class:chosen={selectedHand.score === num}
+              disabled={!isCurrentShoeActive || (selectedHand.natural && num !== 8 && num !== 9)}
               on:click={() => updateSelectedScore(num)}
             >
               {num}
@@ -2325,9 +2349,9 @@
               type="button"
               class="btn-num-key btn-num-{num}"
               class:active={activeScore === num}
-              disabled={!isCurrentShoeActive}
+              disabled={!isCurrentShoeActive || (activeNatural && num !== 8 && num !== 9)}
               on:click={() => selectScore(num)}
-              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : `Seleccionar valor ${num} para la mano`}
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (activeNatural && num !== 8 && num !== 9 ? 'Con Natural activo solo se permiten 8 y 9' : `Seleccionar valor ${num} para la mano`)}
             >
               {num}
             </button>
@@ -2337,9 +2361,9 @@
             type="button"
             class="btn-num-key btn-num-zero"
             class:active={activeScore === 0}
-            disabled={!isCurrentShoeActive}
+            disabled={!isCurrentShoeActive || activeNatural}
             on:click={() => selectScore(0)}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Seleccionar valor 0 para la mano'}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (activeNatural ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano')}
           >
             0
           </button>
@@ -2377,9 +2401,9 @@
             type="button"
             class="keypad-pill pill-natural"
             class:active={activeNatural}
-            disabled={!isCurrentShoeActive}
+            disabled={!isCurrentShoeActive || (activeScore !== null && activeScore !== 8 && activeScore !== 9)}
             on:click={toggleNatural}
-            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria Natural (8 ó 9)'}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (activeScore !== null && activeScore !== 8 && activeScore !== 9 ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar Victoria Natural (8 ó 9)')}
           >
             Natural
           </button>
@@ -3500,7 +3524,8 @@
   /* NÚMEROS MÁS GRANDES EN GRAN CAMINO */
   .bigroad-score {
     font-size: calc(var(--big-cell-size, 23px) * 0.66);
-    font-weight: 800;
+    font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     color: #0f172a;
     line-height: 1;
     position: relative;
@@ -3511,15 +3536,22 @@
     justify-content: center;
   }
 
-  .scoreboard-container:not(.theme-light) .bigroad-ring:not(.is-win-solid) .bigroad-score {
+  .scoreboard-container:not(.theme-light) .bigroad-ring:not(.is-win-solid) .bigroad-score:not(.is-natural-score) {
     color: #f8fafc;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   }
 
   /* EN CÍRCULOS SÓLIDOS DE WIN: TEXTO EN BLANCO BRILLANTE */
-  .bigroad-ring.is-win-solid .bigroad-score {
+  .bigroad-ring.is-win-solid .bigroad-score:not(.is-natural-score) {
     color: #ffffff !important;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  }
+
+  /* SI TIENE NATURAL ACOMPAÑADO CON NÚMERO (8 Ó 9): COLOR DORADO / NARANJA CASINO */
+  .bigroad-score.is-natural-score {
+    color: #f89210 !important;
+    font-weight: 600 !important;
+    text-shadow: none !important;
   }
 
   .bigroad-tie-slash {
@@ -4819,10 +4851,13 @@
   }
 
   .btn-num-key:disabled,
-  .keypad-pill:disabled {
+  .keypad-pill:disabled,
+  .edit-choice-btn:disabled,
+  .edit-pill-toggle:disabled {
     opacity: 0.35;
     cursor: not-allowed;
     pointer-events: none;
+    filter: grayscale(0.6);
   }
 
   .modal-backdrop {
@@ -5045,13 +5080,17 @@
     background: rgba(0, 0, 0, 0.04);
   }
 
-  .theme-light .bigroad-ring:not(.is-win-solid) .bigroad-score {
+  .theme-light .bigroad-ring:not(.is-win-solid) .bigroad-score:not(.is-natural-score) {
     color: #0f172a;
     text-shadow: none;
   }
-  .theme-light .bigroad-ring.is-win-solid .bigroad-score {
+  .theme-light .bigroad-ring.is-win-solid .bigroad-score:not(.is-natural-score) {
     color: #ffffff !important;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  }
+  .theme-light .bigroad-score.is-natural-score {
+    color: #f89210 !important;
+    text-shadow: none !important;
   }
 
   .theme-light .tie-badge-num {
