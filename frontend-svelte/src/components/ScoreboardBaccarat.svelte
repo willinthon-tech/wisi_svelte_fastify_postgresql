@@ -2713,12 +2713,13 @@
       </div>
     </div>
 
-    <!-- GRUPO 2: MODIFICADORES (P.PAIR, B.PAIR, NATURAL) -->
+    <!-- GRUPO 2: MODIFICADORES (2 COL-6 ARRIBA: P.PAIR Y B.PAIR / 2 COL-6 ABAJO: NATURAL Y WIN) -->
     <div class="footer-modifiers-col">
-      <div class="modifiers-stack">
+      <div class="modifiers-grid-2x2">
+        <!-- Fila 1 (Arriba): P.Pair y B.Pair (ambos col-6) -->
         <button
           type="button"
-          class="keypad-pill pill-ppair"
+          class="keypad-pill pill-ppair col-6"
           class:active={isEditingHand ? selectedHand.pPair : activePPair}
           disabled={isObserverMode || !isCurrentShoeActive}
           on:click={handleTogglePPair}
@@ -2729,7 +2730,7 @@
 
         <button
           type="button"
-          class="keypad-pill pill-bpair"
+          class="keypad-pill pill-bpair col-6"
           class:active={isEditingHand ? selectedHand.bPair : activeBPair}
           disabled={isObserverMode || !isCurrentShoeActive}
           on:click={handleToggleBPair}
@@ -2738,15 +2739,27 @@
           B.Pair
         </button>
 
+        <!-- Fila 2 (Abajo): Natural y Win (ambos col-6) -->
         <button
           type="button"
-          class="keypad-pill pill-natural"
+          class="keypad-pill pill-natural col-6"
           class:active={isEditingHand ? selectedHand.natural : activeNatural}
           disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
           on:click={handleToggleNatural}
           title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)'))}
         >
           Natural
+        </button>
+
+        <button
+          type="button"
+          class="keypad-pill pill-win col-6"
+          class:active={isEditingHand ? selectedHand.win : activeWin}
+          disabled={isObserverMode || !isCurrentShoeActive}
+          on:click={handleToggleWin}
+          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Victoria WIN (Círculo sólido en Gran Camino)')}
+        >
+          Win
         </button>
       </div>
     </div>
@@ -4278,7 +4291,7 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(150px, 1.1fr) minmax(125px, 0.95fr) minmax(290px, 2.5fr) minmax(180px, 1.45fr);
+    grid-template-columns: minmax(150px, 1.1fr) minmax(190px, 1.25fr) minmax(290px, 2.5fr) minmax(180px, 1.45fr);
     gap: 16px;
     align-items: center;
     justify-content: center;
@@ -4467,26 +4480,31 @@
     height: 100%;
   }
 
-  .modifiers-stack {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    gap: 5px;
+  .modifiers-grid-2x2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 6px;
     width: 100%;
-    max-width: 125px;
+    max-width: 210px;
     height: 112px;
+    align-items: stretch;
   }
 
-  .modifiers-stack .keypad-pill {
+  .modifiers-grid-2x2 .keypad-pill {
     width: 100%;
-    max-width: 125px;
-    height: 34px;
-    border-radius: 999px;
-    font-size: 13px;
+    max-width: none;
+    height: 100%;
+    border-radius: 9999px;
+    font-size: 13.5px;
     font-weight: 800;
     letter-spacing: 0.3px;
-    margin: 0 auto;
+    margin: 0;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
   }
 
   /* GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO EXACTO */
@@ -4659,19 +4677,14 @@
       padding-left: 0;
     }
     .footer-modifiers-col {
-      flex-direction: row;
-      justify-content: center;
       padding-bottom: 10px;
     }
-    .modifiers-stack {
-      flex-direction: row;
-      max-width: 320px;
-      height: auto;
-      gap: 8px;
+    .modifiers-grid-2x2 {
+      height: 92px;
+      max-width: 200px;
+      gap: 5px;
     }
-    .modifiers-stack .keypad-pill {
-      max-width: 95px;
-      height: 30px;
+    .modifiers-grid-2x2 .keypad-pill {
       font-size: 12px;
     }
     .score-keypad-box {
@@ -4779,9 +4792,12 @@
     .footer-undo-col {
       gap: 10px;
     }
-    .modifiers-stack .keypad-pill {
-      max-width: 85px;
-      height: 28px;
+    .modifiers-grid-2x2 {
+      height: 84px;
+      max-width: 180px;
+      gap: 4px;
+    }
+    .modifiers-grid-2x2 .keypad-pill {
       font-size: 11px;
     }
     .score-keypad-grid {
@@ -4829,13 +4845,13 @@
     .footer-undo-col {
       gap: 6px;
     }
-    .modifiers-stack {
-      gap: 4px;
+    .modifiers-grid-2x2 {
+      height: 70px;
+      max-width: 160px;
+      gap: 3px;
     }
-    .modifiers-stack .keypad-pill {
-      height: 24px;
+    .modifiers-grid-2x2 .keypad-pill {
       font-size: 10px;
-      max-width: 75px;
     }
     .score-keypad-grid {
       grid-template-rows: repeat(3, 22px);
@@ -4907,6 +4923,20 @@
     color: #ffffff;
     border-color: #9a3412;
     box-shadow: 0 0 12px rgba(234, 88, 12, 0.5);
+  }
+
+  .keypad-pill.pill-win {
+    border: 2.5px solid #8b5cf6;
+    color: #7c3aed;
+  }
+  .keypad-pill.pill-win:hover:not(.active):not(:disabled) {
+    background: rgba(139, 92, 246, 0.08);
+  }
+  .keypad-pill.pill-win.active {
+    background: radial-gradient(circle at 50% 30%, #8b5cf6, #6d28d9);
+    color: #ffffff;
+    border-color: #5b21b6;
+    box-shadow: 0 0 12px rgba(124, 58, 237, 0.55);
   }
 
   /* 3D CIRCULAR CASINO BUTTONS: TODOS DEL MISMO TAMAÑO EXACTO */
