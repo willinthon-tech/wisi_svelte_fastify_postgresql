@@ -2572,8 +2572,8 @@
       </div>
     </div>
 
-    <!-- COLUMNA 2 (col-6): PREDICCIÓN / NEXT (ASK BANKER & ASK PLAYER) -->
-    <div class="stats-bar-col col-prediction col-6">
+    <!-- COLUMNA 2: PREDICCIÓN / NEXT (CENTRO) -->
+    <div class="stats-bar-col col-prediction">
       <span class="pred-title">Next</span>
       <div class="prediction-pills-row">
         <!-- Pill Ask Banker (B) -->
@@ -2608,8 +2608,8 @@
       </div>
     </div>
 
-    <!-- COLUMNA 3 (col-6): RESUMEN DE PORCENTAJES -->
-    <div class="stats-bar-col col-percentages col-6">
+    <!-- COLUMNA 3: RESUMEN DE PORCENTAJES (DERECHA) -->
+    <div class="stats-bar-col col-percentages">
       <div class="stats-strip-pct-box">
         <span class="pct-tag b">B: {pctBanca}%</span>
         <span class="pct-tag p">P: {pctPunto}%</span>
@@ -3417,9 +3417,9 @@
 
   .session-date-text {
     color: #f1f5f9;
-    font-size: clamp(11px, 0.85vw, 13px);
+    font-size: clamp(9.5px, 0.85vw, 12.5px);
     font-weight: 700;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.2px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
@@ -3433,7 +3433,8 @@
       display: none;
     }
     .session-date-text {
-      display: none;
+      font-size: clamp(8.5px, 2vw, 10.5px);
+      display: inline-block;
     }
     .sb-observer-badge-pill span {
       display: none;
@@ -4043,17 +4044,17 @@
     border: 1.5px solid #ffffff;
   }
 
-  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) */
+  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (SIN SOMBRA, ESQUINAS ALINEADAS A SUS LADOS Y CENTRO EN EL MEDIO) */
   .scoreboard-stats-bar {
     background: #ffffff;
     border-radius: 12px;
-    padding: clamp(3px, 0.6vh, 6px) clamp(10px, 1.4vw, 18px);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-    border: 2px solid #e2e8f0;
+    padding: clamp(4px, 0.7vh, 8px) clamp(12px, 1.6vw, 24px);
+    box-shadow: none !important;
+    border: 1.5px solid #cbd5e1;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: clamp(8px, 1.2vw, 14px);
+    gap: clamp(8px, 1.2vw, 16px);
     width: 100%;
     box-sizing: border-box;
     flex-shrink: 0;
@@ -4065,26 +4066,30 @@
     min-width: 0;
   }
 
+  /* ESQUINA IZQUIERDA: CONTADORES ALINEADOS A SU IZQUIERDA */
   .stats-bar-col.col-counters {
     justify-content: flex-start;
+    width: 100%;
   }
 
+  /* CENTRO: PREDICCIÓN CENTRADA EN EL MEDIO */
   .stats-bar-col.col-prediction {
     justify-content: center;
-    gap: 14px;
+    align-items: center;
+    gap: 12px;
     width: 100%;
+    text-align: center;
   }
 
+  /* ESQUINA DERECHA: PORCENTAJES ALINEADOS A SU DERECHA */
   .stats-bar-col.col-percentages {
-    justify-content: center;
-    width: 100%;
-  }
-
-  .stats-bar-col.col-6 {
-    justify-content: center;
+    justify-content: flex-end;
     align-items: center;
     width: 100%;
-    margin: 0 auto;
+  }
+
+  .stats-bar-col.col-percentages .stats-strip-pct-box {
+    margin-left: auto;
   }
 
   .stats-strip-counters {
@@ -4154,6 +4159,8 @@
     transition: all 0.15s ease;
     user-select: none;
     line-height: 1;
+    min-height: 35px;
+    box-sizing: border-box;
   }
 
   .pred-pill:hover {
@@ -4243,77 +4250,87 @@
     color: #cbd5e1;
   }
 
+  /* RESUMEN DE PORCENTAJES: EXACTO MISMO DISEÑO QUE LAS PASTILLAS DE PREDICCIÓN */
   .stats-strip-pct-box {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 14px;
-    background: #f1f5f9;
-    padding: 6px 16px;
+    justify-content: center;
+    gap: clamp(8px, 1.2vw, 14px);
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
     border-radius: 999px;
-    border: 1px solid #cbd5e1;
+    padding: 4px 16px;
+    min-height: 35px;
     font-size: 13.5px;
     font-weight: 800;
     white-space: nowrap;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+    line-height: 1;
+    user-select: none;
+    transition: all 0.15s ease;
   }
 
+  .pct-tag {
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    line-height: 1;
+  }
   .pct-tag.b { color: #dc2626; }
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  @media (max-width: 860px) {
+  /* MODO RESPONSIVE: FILA 1 (COL-12 CONTADORES) Y FILA 2 (2 COL-6 PREDICCIÓN Y PORCENTAJES) */
+  @media (max-width: 960px) {
     .scoreboard-stats-bar {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
-      padding: 4px 10px;
+      row-gap: clamp(6px, 1vh, 10px);
+      column-gap: clamp(8px, 1.5vw, 16px);
+      padding: clamp(6px, 1vh, 10px) clamp(14px, 2.5vw, 24px);
     }
-    .stats-bar-col.col-counters {
-      grid-column: 1 / -1;
-      justify-content: center;
-      width: 100%;
-    }
-    .stats-strip-counters {
-      justify-content: center;
-      margin: 0 auto;
-      gap: 12px;
-    }
-    .stats-bar-col.col-prediction {
-      grid-column: 1;
-      grid-row: 2;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      margin: 0 auto;
-    }
-    .stats-bar-col.col-percentages {
-      grid-column: 2;
-      grid-row: 2;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      margin: 0 auto;
-    }
-    .stats-strip-pct-box {
-      margin: 0 auto;
-    }
-  }
 
-  /* RESOLUCIONES PEQUEÑAS: PREDICCIÓN Y PORCENTAJES VAN UNA AL LADO DE LA OTRA (2 COL-6) */
-  @media (max-width: 580px) {
-    .scoreboard-stats-bar {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 4px 6px;
-      padding: 3px 6px;
-    }
+    /* FILA 1 (COL-12): CONTADORES DE JUEGO RESPETANDO MÁRGENES Y CON TAMAÑO REDUCIDO */
     .stats-bar-col.col-counters {
       grid-column: 1 / -1;
       grid-row: 1;
       justify-content: center;
       width: 100%;
+      padding: 0 4px;
+      box-sizing: border-box;
     }
+
     .stats-strip-counters {
-      gap: clamp(6px, 1.4vw, 10px);
+      width: 100%;
+      max-width: 580px;
+      justify-content: space-between;
+      margin: 0 auto;
+      gap: clamp(4px, 1.4vw, 12px);
+      padding: 0 4px;
+      box-sizing: border-box;
     }
+
+    .counter-item {
+      gap: clamp(3px, 0.6vw, 6px);
+    }
+
+    /* TAMAÑO REDUCIDO EN CONTADORES PARA QUE RESPETEN MÁRGENES Y NO SE AMONTONEN */
+    .bead-circle-badge {
+      width: clamp(21px, 2.6vw, 25px);
+      height: clamp(21px, 2.6vw, 25px);
+      font-size: clamp(10.5px, 1.3vw, 12.5px);
+    }
+
+    .counter-digit {
+      font-size: clamp(12.5px, 1.6vw, 15px);
+      min-width: 10px;
+    }
+
+    .bead-circle-badge .bead-dot {
+      width: 6px;
+      height: 6px;
+    }
+
+    /* FILA 2: 2 COL-6 (PREDICCIÓN CENTRADA EN SU COL-6 Y PORCENTAJES CENTRADOS EN SU COL-6) */
     .stats-bar-col.col-prediction {
       grid-column: 1;
       grid-row: 2;
@@ -4321,8 +4338,9 @@
       align-items: center;
       width: 100%;
       margin: 0 auto;
-      gap: 6px;
+      gap: clamp(6px, 1vw, 12px);
     }
+
     .stats-bar-col.col-percentages {
       grid-column: 2;
       grid-row: 2;
@@ -4331,37 +4349,91 @@
       width: 100%;
       margin: 0 auto;
     }
-    .pred-title {
-      font-size: clamp(11.5px, 1.2vw, 13.5px);
+
+    .stats-bar-col.col-percentages .stats-strip-pct-box {
+      margin: 0 auto;
     }
+  }
+
+  /* RESOLUCIONES PEQUEÑAS: PREDICCIÓN Y PORCENTAJES EN 2 COL-6 Y CONTADORES AÚN MÁS COMPACTOS */
+  @media (max-width: 580px) {
+    .scoreboard-stats-bar {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      row-gap: 5px;
+      column-gap: 6px;
+      padding: 4px clamp(8px, 2vw, 14px);
+    }
+
+    .stats-strip-counters {
+      width: 100%;
+      max-width: 100%;
+      justify-content: space-between;
+      gap: clamp(2px, 0.8vw, 6px);
+      padding: 0 2px;
+    }
+
+    .counter-item {
+      gap: 2px;
+    }
+
+    .bead-circle-badge {
+      width: clamp(18px, 4.6vw, 21px);
+      height: clamp(18px, 4.6vw, 21px);
+      font-size: clamp(9px, 2.4vw, 11px);
+    }
+
+    .counter-digit {
+      font-size: clamp(11.5px, 2.8vw, 13px);
+      min-width: 8px;
+    }
+
+    .bead-circle-badge .bead-dot {
+      width: 5px;
+      height: 5px;
+    }
+
+    .pred-title {
+      font-size: clamp(11.5px, 1.2vw, 13px);
+    }
+
     .prediction-pills-row {
       gap: 4px;
     }
+
     .pred-pill {
-      padding: 2px 6px;
+      padding: 2px 7px;
       gap: 4px;
+      min-height: 28px;
     }
+
     .pred-badge-circle {
       width: 20px;
       height: 20px;
       font-size: 11px;
     }
+
     .pred-symbol.pred-ring {
-      width: 11px;
-      height: 11px;
+      width: 10px;
+      height: 10px;
+      border-width: 2px;
     }
+
     .pred-symbol.pred-dot {
-      width: 9px;
-      height: 9px;
+      width: 8px;
+      height: 8px;
     }
+
     .pred-symbol.pred-slash {
-      width: 11px;
-      height: 11px;
+      width: 10px;
+      height: 10px;
     }
+
     .stats-strip-pct-box {
       padding: 3px 8px;
       gap: 6px;
+      min-height: 28px;
       font-size: 11px;
+      margin: 0 auto;
     }
   }
 
@@ -4383,8 +4455,8 @@
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
-    /* MUCHO MÁS GRANDE HACIA ARRIBA EN PANTALLAS GRANDES */
-    --footer-btn-size: clamp(86px, 13.5vh, 130px);
+    /* MÁS GRANDE HACIA ARRIBA EN PANTALLAS GRANDES */
+    --footer-btn-size: clamp(96px, 15vh, 146px);
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -4799,22 +4871,22 @@
   /* AJUSTE PARA PANTALLAS CON ALTURA REDUCIDA (LAPTOPS / TABLETS) */
   @media (max-height: 768px) {
     .scoreboard-footer-panel {
-      --footer-btn-size: clamp(56px, 8.8vh, 74px);
-      padding: clamp(4px, 0.8vh, 8px) clamp(8px, 1vw, 14px);
+      --footer-btn-size: clamp(70px, 11.5vh, 94px);
+      padding: clamp(5px, 0.9vh, 9px) clamp(8px, 1vw, 16px);
     }
     .footer-modifiers-row .keypad-pill {
-      height: clamp(28px, 3.8vh, 34px);
+      height: clamp(34px, 4.8vh, 44px);
     }
   }
 
   @media (max-height: 600px) {
     .scoreboard-footer-panel {
-      --footer-btn-size: clamp(44px, 7.5vh, 56px);
+      --footer-btn-size: clamp(48px, 8.2vh, 60px);
       padding: 3px 6px;
     }
     .footer-modifiers-row .keypad-pill {
-      height: 26px;
-      font-size: 10.5px;
+      height: 28px;
+      font-size: 11px;
     }
     .score-keypad-grid {
       gap: 2px;
