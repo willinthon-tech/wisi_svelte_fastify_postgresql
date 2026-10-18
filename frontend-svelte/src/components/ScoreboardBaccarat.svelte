@@ -999,11 +999,18 @@
         }
       }
     });
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+    }
   });
 
   onDestroy(() => {
     if (unsubscribeWs) {
       unsubscribeWs();
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }
     if (isFullscreen) {
       exitAppFullscreen();
@@ -1661,6 +1668,34 @@
   let isFullscreen = false;
   let rootElement;
 
+  // Modo de tema: 'dark' (predeterminado) | 'light'
+  let currentTheme = 'dark';
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const savedTheme = localStorage.getItem('wisi_baccarat_theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        currentTheme = savedTheme;
+      }
+    }
+  } catch (e) {}
+
+  function toggleTheme() {
+    playSound('click');
+    currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('wisi_baccarat_theme', currentTheme);
+      }
+    } catch (e) {}
+  }
+
+  function handleFullscreenChange() {
+    if (typeof document !== 'undefined') {
+      isFullscreen = !!document.fullscreenElement;
+    }
+  }
+
   function exitAppFullscreen() {
     if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
       try { window.Capacitor?.Plugins?.KioskPlugin?.setFullscreen?.({ enable: false }); } catch (e) {}
@@ -1756,6 +1791,7 @@
   bind:this={rootElement}
   class="scoreboard-container"
   class:fullscreen-mode={isFullscreen}
+  class:theme-light={currentTheme === 'light'}
 >
   <!-- TOP CASINO HEADER -->
   <header class="sb-header">
@@ -1819,25 +1855,6 @@
           title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
         >
           Nuevo Zapato
-        </button>
-
-        <!-- FULLSCREEN ICON BUTTON (SOLO EL ICONO) -->
-        <button
-          type="button"
-          class="sb-icon-btn-fullscreen"
-          class:active={isFullscreen}
-          on:click={toggleFullscreen}
-          title={isFullscreen ? 'Salir de Pantalla Completa' : 'Pantalla Completa'}
-        >
-          {#if isFullscreen}
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-            </svg>
-          {:else}
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-            </svg>
-          {/if}
         </button>
 
         {#if feedbackMessage}
@@ -2507,6 +2524,56 @@
               title={!isLatestSession ? 'Solo se puede borrar la última sesión' : sessions.length <= 1 ? 'Debe existir al menos una sesión' : 'Borrar última sesión registrada y seleccionar la anterior'}
             >
               Borrar Última Sesión
+            </button>
+
+            <!-- COL-6: Alternar Pantalla Completa -->
+            <button
+              type="button"
+              class="btn-opt col-6 btn-opt-fullscreen"
+              class:is-active={isFullscreen}
+              on:click={toggleFullscreen}
+              title={isFullscreen ? 'Salir de Pantalla Completa' : 'Entrar a Pantalla Completa'}
+            >
+              {#if isFullscreen}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+                </svg>
+                Salir Pantalla Completa
+              {:else}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+                Pantalla Completa
+              {/if}
+            </button>
+
+            <!-- COL-6: Alternar Tema Claro / Oscuro -->
+            <button
+              type="button"
+              class="btn-opt col-6 btn-opt-theme"
+              class:is-light={currentTheme === 'light'}
+              on:click={toggleTheme}
+              title={currentTheme === 'light' ? 'Cambiar a Tema Oscuro' : 'Cambiar a Tema Claro'}
+            >
+              {#if currentTheme === 'light'}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+                Tema Oscuro
+              {:else}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+                  <circle cx="12" cy="12" r="5"></circle>
+                  <line x1="12" y1="1" x2="12" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="23"></line>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                  <line x1="1" y1="12" x2="3" y2="12"></line>
+                  <line x1="21" y1="12" x2="23" y2="12"></line>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                Tema Claro
+              {/if}
             </button>
           </div>
         </div>
@@ -4424,7 +4491,266 @@
     pointer-events: none;
   }
 
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 10000005;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
   .modal-backdrop-confirm {
-    z-index: 1000000;
+    z-index: 10000010;
+  }
+
+  .btn-opt-fullscreen {
+    background: #334155;
+    color: #f1f5f9;
+    border: 1.5px solid #475569;
+  }
+  .btn-opt-fullscreen:hover {
+    background: #475569;
+    color: #ffffff;
+    border-color: #64748b;
+    box-shadow: 0 4px 10px rgba(51, 65, 85, 0.35);
+  }
+  .btn-opt-fullscreen.is-active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #38bdf8;
+    box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35);
+  }
+
+  .btn-opt-theme {
+    background: #b45309;
+    color: #fef3c7;
+    border: 1.5px solid #f59e0b;
+  }
+  .btn-opt-theme:hover {
+    background: #92400e;
+    color: #ffffff;
+    border-color: #fbbf24;
+    box-shadow: 0 4px 10px rgba(245, 158, 11, 0.35);
+  }
+  .btn-opt-theme.is-light {
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1.5px solid #475569;
+  }
+  .btn-opt-theme.is-light:hover {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #64748b;
+    box-shadow: 0 4px 10px rgba(30, 41, 59, 0.35);
+  }
+
+  /* ========================================== */
+  /* TEMA CLARO (LIGHT THEME CASINO SPEC)       */
+  /* ========================================== */
+  .scoreboard-container.theme-light {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+
+  .theme-light .sb-header {
+    border-bottom: 1px solid #cbd5e1;
+  }
+
+  .theme-light .sb-shoe-pill {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .theme-light .sala-pill {
+    background: #eff6ff;
+    border-color: #3b82f6;
+  }
+  .theme-light .sala-pill .pill-label { color: #2563eb; font-weight: 700; }
+  .theme-light .sala-pill .pill-value { color: #1d4ed8; font-weight: 800; }
+
+  .theme-light .mesa-pill {
+    background: #ecfdf5;
+    border-color: #10b981;
+  }
+  .theme-light .mesa-pill .pill-label { color: #059669; font-weight: 700; }
+  .theme-light .mesa-pill .pill-value { color: #047857; font-weight: 800; }
+
+  .theme-light .shoe-pill {
+    background: #ffffff;
+    border-color: #cbd5e1;
+  }
+  .theme-light .shoe-pill .pill-label { color: #64748b; font-weight: 700; }
+  .theme-light .shoe-pill .pill-value { color: #0284c7; font-weight: 800; }
+  .theme-light .pill-sub { color: #64748b; }
+  .theme-light .pill-sep { color: #94a3b8; }
+
+  .theme-light .shoe-pill-arrow {
+    background: #e0f2fe;
+    border: 1px solid #7dd3fc;
+    color: #0284c7;
+  }
+  .theme-light .shoe-pill-arrow:hover:not(:disabled) {
+    background: #0284c7;
+    color: #ffffff;
+  }
+  .theme-light .shoe-pill-arrow:disabled {
+    opacity: 0.3;
+    border-color: #e2e8f0;
+  }
+
+  .theme-light .sb-btn-new-shoe {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    border: 1.5px solid #0284c7;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+  }
+  .theme-light .sb-btn-new-shoe:hover:not(:disabled) {
+    background: #0369a1;
+    border-color: #075985;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(2, 132, 199, 0.5);
+  }
+  .theme-light .sb-btn-new-shoe:disabled {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #94a3b8;
+  }
+
+  .theme-light .sb-session-navigator {
+    background: #ffffff;
+    border: 1.5px solid #ef4444;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 0 12px rgba(239, 68, 68, 0.15);
+  }
+  .theme-light .sb-session-navigator.is-past {
+    border-color: #94a3b8;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+  .theme-light .session-nav-arrow {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+  }
+  .theme-light .session-nav-arrow:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #b91c1c;
+  }
+  .theme-light .session-label-text.actual {
+    color: #dc2626;
+    text-shadow: none;
+  }
+  .theme-light .session-label-text.past {
+    color: #64748b;
+    text-shadow: none;
+  }
+  .theme-light .session-date-text {
+    color: #0f172a;
+  }
+
+  .theme-light .sb-btn-options {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .theme-light .sb-btn-options:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #000000;
+  }
+
+  .theme-light .sb-btn-back {
+    background: #f8fafc;
+    color: #334155;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .theme-light .sb-btn-back:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .theme-light .roadmap-card,
+  .theme-light .derived-roads-column,
+  .theme-light .bead-card {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  .theme-light .derived-band {
+    background: #ffffff;
+    border-bottom: 2px solid #cbd5e1;
+  }
+
+  .theme-light .grid-scrollable {
+    background: #ffffff;
+  }
+
+  .theme-light .bigroad-cell,
+  .theme-light .bead-cell,
+  .theme-light .derived-cell {
+    border: 1px solid #e2e8f0;
+  }
+
+  .theme-light .bigroad-cell.has-hand:hover,
+  .theme-light .bead-cell.has-hand:hover,
+  .theme-light .derived-cell:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .theme-light .bigroad-ring.banca .bigroad-score {
+    color: #dc2626;
+    text-shadow: none;
+  }
+  .theme-light .bigroad-ring.punto .bigroad-score {
+    color: #2563eb;
+    text-shadow: none;
+  }
+  .theme-light .bigroad-ring.empate .bigroad-score {
+    color: #16a34a;
+    text-shadow: none;
+  }
+
+  .theme-light .tie-badge-num {
+    border: 1.5px solid #ffffff;
+  }
+
+  .theme-light .edit-toolbar-box {
+    background: #ffffff;
+    border: 1.5px solid #f59e0b;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.2);
+  }
+  .theme-light .btn-tool-nav {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+  }
+  .theme-light .btn-tool-nav:hover:not(:disabled) {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+  .theme-light .edit-choice-btn.edit-score-btn {
+    background: #f8fafc;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+  }
+  .theme-light .edit-pill-toggle {
+    background: #f8fafc;
+  }
+
+  .theme-light .scoreboard-footer-panel {
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+
+  .theme-light .modal-backdrop {
+    background: rgba(15, 23, 42, 0.5);
   }
 </style>

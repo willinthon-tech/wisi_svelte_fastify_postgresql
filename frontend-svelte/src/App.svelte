@@ -935,7 +935,7 @@
 {:else if $isAuthenticatedStore}
   {#if isStandaloneScoreboard}
     <!-- Standalone Fullscreen Live Casino Scoreboard View (Abre completa, sin barras ni menús) -->
-    <div class="standalone-scoreboard-wrapper" style="position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 999999; background: #090d16; overflow-y: auto;">
+    <div class="standalone-scoreboard-wrapper" style="position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 999999; background: transparent; overflow-y: auto;">
       <ScoreboardBaccarat 
         salaId={standaloneScoreboardParams.salaId} 
         mesaId={standaloneScoreboardParams.mesaId} 
