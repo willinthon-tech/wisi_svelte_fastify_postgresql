@@ -544,7 +544,7 @@
 
   const BEAD_ROWS = 4;
   const BIG_ROWS = 6;
-  const DERIVED_ROWS = 6;
+  const DERIVED_ROWS = 12;
 
   // Dynamic roadmap sizing: scales with available height (e.g. 24px - 50px depending on monitor)
   $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 20);
@@ -553,10 +553,10 @@
   $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 18);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads: cuadrículas pequeñas y compactas estándar de casino (~8px a 9px, 6 filas)
+  // Derived roads: cuadrículas compactas de casino (12 filas, ~9px a 12px de celda para cubrir la tarjeta)
   $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 36);
-  $: derivedRows = 6;
-  $: derivedCellSize = Math.min(Math.max(Math.floor(((derivedBandHeight || 90) - 4) / 6), 6), 9);
+  $: derivedRows = DERIVED_ROWS;
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 8);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 45);
 
   function safeJsonParse(val, fallback = []) {
@@ -1838,7 +1838,7 @@
       }
     }
 
-    const ROWS = rowsCount || 6;
+    const ROWS = rowsCount || DERIVED_ROWS;
     let totalCols = Math.max(minCols, 24);
     let grid = Array.from({ length: ROWS }, () => Array(totalCols).fill(null));
 
