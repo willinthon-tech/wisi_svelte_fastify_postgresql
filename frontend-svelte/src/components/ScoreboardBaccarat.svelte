@@ -258,16 +258,16 @@
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 6;
 
-  // Compact roadmap sizing (6 rows each, ~20-22px per cell)
-  $: bigRoadCellSize = Math.min(Math.max(Math.floor(((bigRoadHeight || 136) - 2) / 6), 18), 23);
+  // Dynamic roadmap sizing: scales with available height (e.g. 24px - 50px depending on monitor)
+  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 20);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.min(Math.max(Math.floor(((beadHeight || 136) - 2) / 6), 18), 23);
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 180) - 2) / 6), 20);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
   // Derived roads: each of the 3 bands has 6 rows (total 18 rows)
-  $: derivedBandHeight = (derivedHeight || 136) / 3;
-  $: derivedCellSize = Math.min(Math.max(Math.floor((derivedBandHeight - 2) / 6), 7), 9);
+  $: derivedBandHeight = (derivedHeight || 180) / 3;
+  $: derivedCellSize = Math.max(Math.floor((derivedBandHeight - 2) / 6), 8);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / derivedCellSize) + 1, 50);
 
   function safeJsonParse(val, fallback = []) {
@@ -3145,13 +3145,13 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  /* OFFICIAL CASINO ROADMAPS MASTER SECTION */
+  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (EXPAND TO FILL ALL AVAILABLE SPACE) */
   .sb-roadmaps-master {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    flex: 0 0 auto;
-    min-height: 0;
+    flex: 1 1 auto;
+    min-height: 260px;
   }
 
   .col-full {
@@ -3174,10 +3174,8 @@
   }
 
   .bigroad-card {
-    height: 136px;
-    min-height: 125px;
-    max-height: 142px;
-    flex: 0 0 auto;
+    flex: 1 1 50%;
+    min-height: 130px;
     width: 100%;
     display: flex;
   }
@@ -3187,10 +3185,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    height: 136px;
-    min-height: 125px;
-    max-height: 142px;
-    flex: 0 0 auto;
+    flex: 1 1 50%;
+    min-height: 130px;
     align-items: stretch;
   }
 
@@ -3818,7 +3814,7 @@
   .scoreboard-stats-bar {
     background: #ffffff;
     border-radius: 12px;
-    padding: 7px 18px;
+    padding: 10px 22px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     border: 2px solid #e2e8f0;
     display: grid;
@@ -3842,7 +3838,7 @@
 
   .stats-bar-col.col-prediction {
     justify-content: center;
-    gap: 12px;
+    gap: 14px;
   }
 
   .stats-bar-col.col-percentages {
@@ -3852,7 +3848,7 @@
   .stats-strip-counters {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 18px;
     flex-wrap: nowrap;
     overflow-x: auto;
   }
@@ -3861,17 +3857,17 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
   }
 
   .bead-circle-badge {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 900;
     color: #ffffff;
     box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.6);
@@ -3880,16 +3876,16 @@
   }
 
   .counter-digit {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 900;
     color: #0f172a;
     line-height: 1;
-    min-width: 12px;
+    min-width: 14px;
   }
 
   /* PREDICCIÓN (NEXT / ASK BANKER & ASK PLAYER) */
   .pred-title {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 900;
     color: #1e293b;
     letter-spacing: 0.4px;
@@ -3899,17 +3895,17 @@
   .prediction-pills-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
   }
 
   .pred-pill {
     display: inline-flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     background: #ffffff;
     border: 1.5px solid #cbd5e1;
     border-radius: 999px;
-    padding: 3px 12px 3px 6px;
+    padding: 4px 14px 4px 8px;
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     transition: all 0.15s ease;
@@ -3929,13 +3925,13 @@
   }
 
   .pred-badge-circle {
-    width: 22px;
-    height: 22px;
+    width: 25px;
+    height: 25px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12.5px;
+    font-size: 14px;
     font-weight: 900;
     color: #ffffff;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -3959,10 +3955,10 @@
 
   /* 1. Gran Ojo (Hollow Ring) */
   .pred-symbol.pred-ring {
-    width: 13px;
-    height: 13px;
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
-    border: 2.4px solid transparent;
+    border: 2.6px solid transparent;
     box-sizing: border-box;
   }
   .pred-symbol.pred-ring.red {
@@ -3977,8 +3973,8 @@
 
   /* 2. Camino Pequeño (Solid Dot) */
   .pred-symbol.pred-dot {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
   }
   .pred-symbol.pred-dot.red {
@@ -3993,8 +3989,8 @@
 
   /* 3. Cucaracha (Diagonal Slash) */
   .pred-symbol.pred-slash {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   .pred-symbol.pred-slash.red {
     color: #dc2626;
@@ -4009,12 +4005,12 @@
   .stats-strip-pct-box {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
     background: #f1f5f9;
-    padding: 4px 16px;
+    padding: 6px 18px;
     border-radius: 999px;
     border: 1px solid #cbd5e1;
-    font-size: 12px;
+    font-size: 13.5px;
     font-weight: 800;
     white-space: nowrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -4037,14 +4033,13 @@
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 14px;
-    padding: 14px 22px;
+    padding: 16px 24px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(180px, 1.25fr) minmax(150px, 1.05fr) minmax(400px, 2.9fr) minmax(210px, 1.5fr);
-    gap: 24px;
+    grid-template-columns: minmax(195px, 1.25fr) minmax(165px, 1.05fr) minmax(430px, 2.9fr) minmax(230px, 1.5fr);
+    gap: 26px;
     align-items: center;
-    margin-top: auto;
     flex-shrink: 0;
   }
 
@@ -4054,7 +4049,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 20px;
+    padding-right: 22px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -4065,13 +4060,13 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 210px;
+    max-width: 225px;
   }
 
   .score-keypad-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr) 1.25fr;
-    grid-template-rows: repeat(3, 44px);
+    grid-template-rows: repeat(3, 48px);
     grid-template-areas:
       "n1 n2 n3 n0"
       "n4 n5 n6 n0"
@@ -4092,7 +4087,7 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 900;
   }
 
@@ -4102,7 +4097,7 @@
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: 19px;
+    font-size: 21px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4142,17 +4137,17 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 10px;
-    padding-right: 20px;
+    gap: 12px;
+    padding-right: 22px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
 
   .footer-modifiers-col .keypad-pill {
     width: 100%;
-    max-width: 155px;
-    height: 42px;
-    font-size: 14.5px;
+    max-width: 165px;
+    height: 46px;
+    font-size: 15.5px;
     font-weight: 800;
     letter-spacing: 0.3px;
     margin: 0 auto;
@@ -4163,7 +4158,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding-right: 20px;
+    padding-right: 22px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -4172,9 +4167,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 28px;
+    gap: 30px;
     width: 100%;
-    max-width: 480px;
+    max-width: 520px;
   }
 
   /* GRUPO 4: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
@@ -4182,7 +4177,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 20px;
+    gap: 22px;
     min-width: 0;
   }
 
@@ -4191,16 +4186,16 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 7px;
+    gap: 8px;
   }
 
   /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]) */
   .keypad-btn-tie-toggle {
-    width: 86px;
-    height: 86px;
+    width: 94px;
+    height: 94px;
     background: #ffffff;
     border: 3px solid #0f172a;
-    border-radius: 12px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4235,7 +4230,7 @@
   }
 
   .tie-toggle-caption {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 900;
     color: #1e293b;
     letter-spacing: 0.5px;
@@ -4335,8 +4330,8 @@
 
   /* 3D CIRCULAR CASINO BUTTONS */
   .keypad-btn-circle {
-    width: 108px;
-    height: 108px;
+    width: 118px;
+    height: 118px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -4345,25 +4340,25 @@
     cursor: pointer;
     border: none;
     background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
-    padding: 4.5px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    padding: 5px;
+    box-shadow: 0 7px 20px rgba(0, 0, 0, 0.38), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
   }
 
   .keypad-btn-circle.btn-undo {
-    width: 98px;
-    height: 98px;
+    width: 106px;
+    height: 106px;
   }
 
   @media (max-width: 600px) {
     .keypad-btn-circle {
-      width: 72px;
-      height: 72px;
+      width: 76px;
+      height: 76px;
     }
     .keypad-btn-circle.btn-undo {
-      width: 72px;
-      height: 72px;
+      width: 76px;
+      height: 76px;
     }
   }
 
@@ -4393,7 +4388,7 @@
   }
 
   .btn-letter {
-    font-size: 52px;
+    font-size: 58px;
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -4402,7 +4397,7 @@
 
   @media (max-width: 600px) {
     .btn-letter {
-      font-size: 32px;
+      font-size: 34px;
     }
   }
 
@@ -4426,8 +4421,8 @@
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
   .btn-arrow-icon {
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
     display: block;
     color: #ffffff;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65));
@@ -4436,8 +4431,8 @@
 
   @media (max-width: 600px) {
     .btn-arrow-icon {
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
     }
   }
 
@@ -4477,7 +4472,7 @@
   }
 
   .btn-caption {
-    font-size: 14.5px;
+    font-size: 16px;
     font-weight: 900;
     letter-spacing: 0.6px;
     user-select: none;
