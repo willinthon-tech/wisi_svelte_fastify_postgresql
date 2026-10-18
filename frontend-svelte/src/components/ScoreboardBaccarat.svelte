@@ -239,16 +239,11 @@
   let selectedHandIndex = null;
   $: selectedHand = selectedHandIndex !== null && history[selectedHandIndex] ? history[selectedHandIndex] : null;
 
-  // Notification message
+  // Notificaciones silenciadas
   let feedbackMessage = "";
-  let feedbackTimer = null;
 
   function showFeedback(msg) {
-    feedbackMessage = msg;
-    if (feedbackTimer) clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => {
-      feedbackMessage = "";
-    }, 3000);
+    // Notificaciones silenciadas según preferencia del usuario
   }
 
   // Dynamic dimensions for 100% edge-to-edge coverage of grids
@@ -1831,12 +1826,6 @@
         >
           Nuevo Zapato
         </button>
-
-        {#if feedbackMessage}
-          <div class="feedback-toast">
-            {feedbackMessage}
-          </div>
-        {/if}
       </div>
     </div>
 
@@ -2487,7 +2476,8 @@
               disabled={isSessionsLoading || !isLatestSession}
               title={!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear nueva sesión (${nextSessionDateStr})`}
             >
-              Crear Nueva Sesión ({nextSessionDateStr})
+              <span>Crear Nueva Sesión</span>
+              <span class="btn-opt-date-badge">Fecha: {nextSessionDateStr}</span>
             </button>
 
             <!-- COL-6: Borrar Última Sesión -->
@@ -2796,21 +2786,6 @@
     box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
   }
 
-  .feedback-toast {
-    background: #1e3a8a;
-    border: 1px solid #3b82f6;
-    color: #e0f2fe;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 999px;
-    animation: fadeIn 0.2s ease;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-3px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
 
   /* HEADER CENTER / NAVEGADOR DE SESIONES */
   .sb-header-center {
@@ -4427,11 +4402,24 @@
     background: #0369a1;
     color: #e0f2fe;
     border: 1.5px solid #0284c7;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 8px;
   }
   .btn-opt-new-session:hover:not(:disabled) {
     background: #0284c7;
     color: #ffffff;
     box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35);
+  }
+  .btn-opt-new-session .btn-opt-date-badge {
+    font-size: 11px;
+    font-weight: 800;
+    color: #bae6fd;
+    background: rgba(14, 116, 144, 0.45);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    letter-spacing: 0.3px;
   }
 
   .btn-opt-delete-session {
