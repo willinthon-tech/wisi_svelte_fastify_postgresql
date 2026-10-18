@@ -256,7 +256,7 @@
   let derivedWidth = 700;
   let derivedHeight = 260;
 
-  const BEAD_ROWS = 5;
+  const BEAD_ROWS = 4;
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 6;
 
@@ -264,14 +264,14 @@
   $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 20);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 16);
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 18);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads: cuadrículas más pequeñas y densas (~14px)
-  $: derivedBandHeight = (derivedHeight || 180) / 3;
-  $: derivedRows = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / 14), 6);
-  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / derivedRows), 8);
-  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 600) / derivedCellSize) + 1, 50);
+  // Derived roads: cuadrículas aún más pequeñas y compactas (~10px)
+  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 40);
+  $: derivedRows = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / 10), 6);
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 150) - 2) / derivedRows), 7);
+  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 40);
 
   function safeJsonParse(val, fallback = []) {
     if (val === null || val === undefined) return fallback;
@@ -2059,15 +2059,15 @@
       </div>
     </div>
 
-    <!-- COL-3 DERECHA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (NARANJA, TODO HASTA ABAJO) -->
+    <!-- COL-2 DERECHA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (CADA UNO COMO UNA TARJETA INDIVIDUAL) -->
     <div
-      class="roadmap-card derived-roads-column"
+      class="derived-roads-column"
       bind:clientWidth={derivedWidth}
       bind:clientHeight={derivedHeight}
       style="--derived-cell-size: {derivedCellSize}px;"
     >
       <!-- 1. BIG EYE BOY (GRAN OJO) -->
-      <div class="derived-band" bind:this={bigEyeScrollEl}>
+      <div class="roadmap-card derived-band" bind:this={bigEyeScrollEl}>
         <table class="derived-table">
           <tbody>
             {#each bigEyeGrid.grid as row}
@@ -2091,7 +2091,7 @@
       </div>
 
       <!-- 2. SMALL ROAD (CAMINO PEQUEÑO) -->
-      <div class="derived-band" bind:this={smallRoadScrollEl}>
+      <div class="roadmap-card derived-band" bind:this={smallRoadScrollEl}>
         <table class="derived-table">
           <tbody>
             {#each smallRoadGrid.grid as row}
@@ -2115,7 +2115,7 @@
       </div>
 
       <!-- 3. COCKROACH ROAD (CUCARACHA) -->
-      <div class="derived-band" bind:this={cockroachScrollEl}>
+      <div class="roadmap-card derived-band" bind:this={cockroachScrollEl}>
         <table class="derived-table">
           <tbody>
             {#each cockroachGrid.grid as row}
@@ -3162,10 +3162,10 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-9 IZQUIERDA Y COL-3 DERECHA) */
+  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-10 IZQUIERDA Y COL-2 DERECHA) */
   .sb-roadmaps-master {
     display: grid;
-    grid-template-columns: minmax(0, 9fr) minmax(0, 3fr);
+    grid-template-columns: minmax(0, 10fr) minmax(0, 2fr);
     gap: 8px;
     flex: 1 1 auto;
     min-height: 260px;
@@ -3195,35 +3195,29 @@
 
   /* CUADRILLA PRINCIPAL (ROJO): GRAN CAMINO - MÁS GRANDE Y DOMINANTE */
   .bigroad-card {
-    flex: 3.2 1 76%;
+    flex: 2 1 66%;
     min-height: 160px;
     width: 100%;
     display: flex;
   }
 
-  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - MÁS PEQUEÑA, MENOS LÍNEAS (5 FILAS) Y CELDAS MÁS COMPACTAS */
+  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - 4 FILAS MÁS GRANDES Y AMPLIAS */
   .bead-card {
-    flex: 1 1 24%;
-    min-height: 75px;
+    flex: 1 1 34%;
+    min-height: 110px;
     width: 100%;
     display: flex;
   }
 
-  /* COLUMNA DERECHA (COL-3): 3 CUADRILLAS DERIVADAS - ABARCA TODO HASTA ABAJO (NARANJA) */
+  /* COLUMNA DERECHA (COL-2): 3 CUADRILLAS DERIVADAS - APILADAS CON SEPARACIÓN IDÉNTICA A LAS OTRAS (GAP: 8PX) */
   .derived-roads-column {
     display: flex;
     flex-direction: column;
+    gap: 8px;
     height: 100%;
     min-height: 0;
     min-width: 0;
     width: 100%;
-    background: #020617;
-    border: 1.5px solid #1e293b;
-    border-radius: 8px;
-    padding: 0;
-    margin: 0;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
   .derived-band {
@@ -3234,11 +3228,12 @@
     overflow-y: hidden;
     display: flex;
     align-items: center;
-    border-bottom: 2px solid #334155;
     background: #020617;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
-  .derived-band:last-child {
-    border-bottom: none;
+  .derived-band::-webkit-scrollbar {
+    display: none;
   }
 
   .grid-scrollable {
@@ -3253,6 +3248,11 @@
     align-items: center;
     padding: 0;
     margin: 0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .grid-scrollable::-webkit-scrollbar {
+    display: none;
   }
 
   /* TABLES: DO NOT STRETCH CELLS INTO RECTANGLES, PRESERVE EXACT 1:1 SQUARES */
@@ -3266,14 +3266,14 @@
 
   /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-table tr {
-    height: var(--derived-cell-size, 13px);
+    height: var(--derived-cell-size, 10px);
   }
 
   .derived-cell {
-    width: var(--derived-cell-size, 13px);
-    min-width: var(--derived-cell-size, 13px);
-    max-width: var(--derived-cell-size, 13px);
-    height: var(--derived-cell-size, 13px);
+    width: var(--derived-cell-size, 10px);
+    min-width: var(--derived-cell-size, 10px);
+    max-width: var(--derived-cell-size, 10px);
+    height: var(--derived-cell-size, 10px);
     box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
@@ -3291,11 +3291,11 @@
 
   .derived-ring {
     display: block;
-    width: max(5px, calc(var(--derived-cell-size, 8px) * 0.7));
-    height: max(5px, calc(var(--derived-cell-size, 8px) * 0.7));
+    width: max(4.5px, calc(var(--derived-cell-size, 7px) * 0.68));
+    height: max(4.5px, calc(var(--derived-cell-size, 7px) * 0.68));
     margin: auto;
     border-radius: 50%;
-    border: 1.5px solid transparent;
+    border: 1.2px solid transparent;
     box-sizing: border-box;
   }
   .derived-ring.red { border-color: #ef4444; }
@@ -3304,8 +3304,8 @@
   /* 2. Small Road: Punto sólido rojo / azul */
   .derived-dot {
     display: block;
-    width: max(3.5px, calc(var(--derived-cell-size, 8px) * 0.55));
-    height: max(3.5px, calc(var(--derived-cell-size, 8px) * 0.55));
+    width: max(3px, calc(var(--derived-cell-size, 7px) * 0.52));
+    height: max(3px, calc(var(--derived-cell-size, 7px) * 0.52));
     margin: auto;
     border-radius: 50%;
   }
@@ -3315,8 +3315,8 @@
   /* 3. Cockroach Pig: Línea diagonal roja / azul */
   .derived-slash {
     display: block;
-    width: max(5px, calc(var(--derived-cell-size, 8px) * 0.8));
-    height: 1.8px;
+    width: max(4.5px, calc(var(--derived-cell-size, 7px) * 0.78));
+    height: 1.4px;
     margin: auto;
     transform: rotate(-45deg);
     border-radius: 1px;
@@ -3418,17 +3418,17 @@
   }
 
   .bead-circle .dot-b-pair {
-    width: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
-    height: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
-    top: 0px;
-    left: 0px;
+    width: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
+    height: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
+    top: -1px;
+    left: -1px;
     border: 1.5px solid #ffffff;
   }
   .bead-circle .dot-p-pair {
-    width: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
-    height: clamp(8px, calc(var(--bead-cell-size, 20px) * 0.34), 11px);
-    bottom: 0px;
-    right: 0px;
+    width: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
+    height: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
+    bottom: -1px;
+    right: -1px;
     border: 1.5px solid #ffffff;
   }
 
@@ -3626,11 +3626,11 @@
       flex: none;
     }
     .bigroad-card {
-      height: 280px;
+      height: 260px;
       flex: none;
     }
     .bead-card {
-      height: 120px;
+      height: 140px;
       flex: none;
     }
     .derived-roads-column {
@@ -5068,7 +5068,6 @@
   }
 
   .theme-light .roadmap-card,
-  .theme-light .derived-roads-column,
   .theme-light .bead-card {
     background: #ffffff;
     border: 1.5px solid #cbd5e1;
@@ -5077,7 +5076,6 @@
 
   .theme-light .derived-band {
     background: #ffffff;
-    border-bottom: 2px solid #cbd5e1;
   }
 
   .theme-light .grid-scrollable {
