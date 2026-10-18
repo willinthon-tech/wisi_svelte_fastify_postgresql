@@ -1540,6 +1540,70 @@
   $: smallRoadGrid = buildDerivedRoad(bigRoadLogicalColumns, 2, derivedColsNeeded);
   $: cockroachGrid = buildDerivedRoad(bigRoadLogicalColumns, 3, derivedColsNeeded);
 
+  // 5. PREDICCIÓN DE CAMINOS DERIVADOS ("ASK BANKER" / "ASK PLAYER" / "NEXT")
+  // Simula matemáticamente qué color (rojo o azul) se generaría en cada camino derivado (Gran Ojo, Camino Pequeño, Cucaracha)
+  // si la siguiente mano la gana BANCA o PUNTO, siguiendo las reglas oficiales internacionales de Baccarat.
+  function predictNextDerivedColor(cols, candidateWinner, k) {
+    if (!cols || cols.length === 0) return null;
+
+    const L = cols.length;
+    const lastCol = cols[L - 1];
+    let c, r;
+
+    if (lastCol[0].winner === candidateWinner) {
+      c = L - 1;
+      r = lastCol.length;
+    } else {
+      c = L;
+      r = 0;
+    }
+
+    if (c < k || (c === k && r === 0)) {
+      return null;
+    }
+
+    let isRed = false;
+    if (r === 0) {
+      const lenPrev = cols[c - 1].length;
+      const lenRef = cols[c - 1 - k] ? cols[c - 1 - k].length : 0;
+      isRed = (lenPrev === lenRef);
+    } else {
+      const refCol = cols[c - k];
+      const lenRef = refCol ? refCol.length : 0;
+      if (r < lenRef) {
+        isRed = true;
+      } else if (r === lenRef) {
+        isRed = false;
+      } else {
+        isRed = true;
+      }
+    }
+
+    return isRed ? 'red' : 'blue';
+  }
+
+  $: nextBankerPrediction = {
+    bigEye: predictNextDerivedColor(bigRoadLogicalColumns, 'BANCA', 1),
+    smallRoad: predictNextDerivedColor(bigRoadLogicalColumns, 'BANCA', 2),
+    cockroach: predictNextDerivedColor(bigRoadLogicalColumns, 'BANCA', 3)
+  };
+
+  $: nextPlayerPrediction = {
+    bigEye: predictNextDerivedColor(bigRoadLogicalColumns, 'PUNTO', 1),
+    smallRoad: predictNextDerivedColor(bigRoadLogicalColumns, 'PUNTO', 2),
+    cockroach: predictNextDerivedColor(bigRoadLogicalColumns, 'PUNTO', 3)
+  };
+
+  function handlePredictionClick(candidateWinner) {
+    playSound('click');
+    const pred = candidateWinner === 'BANCA' ? nextBankerPrediction : nextPlayerPrediction;
+    const name = candidateWinner === 'BANCA' ? 'BANCA' : 'PUNTO';
+    const be = pred.bigEye === 'red' ? 'Rojo (Simetría)' : pred.bigEye === 'blue' ? 'Azul (Caos)' : 'Pendiente';
+    const sr = pred.smallRoad === 'red' ? 'Rojo (Simetría)' : pred.smallRoad === 'blue' ? 'Azul (Caos)' : 'Pendiente';
+    const cr = pred.cockroach === 'red' ? 'Rojo (Simetría)' : pred.cockroach === 'blue' ? 'Azul (Caos)' : 'Pendiente';
+    showFeedback(`Predicción si gana ${name}: Gran Ojo = ${be}, Camino Pequeño = ${sr}, Cucaracha = ${cr}`);
+  }
+
   // Smart auto-scroll: Solo desplazar cuando las jugadas realmente se desbordan de la pantalla visible
   let bigRoadScrollEl;
   let beadScrollEl;
@@ -2175,61 +2239,102 @@
     </div>
   {/if}
 
-  <!-- FRANJA DE ESTADÍSTICAS INDEPENDIENTE (APARTE) -->
+  <!-- FRANJA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) -->
   <section class="scoreboard-stats-bar">
-    <div class="stats-strip-counters">
-      <!-- Total manos # -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-gray">#</div>
-        <div class="counter-digit">{totalHands}</div>
-      </div>
-
-      <!-- Banker B -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-red">B</div>
-        <div class="counter-digit">{countBanca}</div>
-      </div>
-
-      <!-- Player P -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-blue">P</div>
-        <div class="counter-digit">{countPunto}</div>
-      </div>
-
-      <!-- Tie T -->
-      <div class="counter-item">
-        <div class="bead-circle-badge bead-green">T</div>
-        <div class="counter-digit">{countEmpate}</div>
-      </div>
-
-      <!-- Natural N -->
-      <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
-        <div class="bead-circle-badge bead-orange">N</div>
-        <div class="counter-digit">{countNatural}</div>
-      </div>
-
-      <!-- Banker Pair -->
-      <div class="counter-item" title="Parejas de Banca (B.Pair)">
-        <div class="bead-circle-badge bead-white">
-          <span class="bead-dot dot-tl red-dot"></span>
+    <!-- COLUMNA 1 (col-4): CONTADORES DE JUEGO -->
+    <div class="stats-bar-col col-counters">
+      <div class="stats-strip-counters">
+        <!-- Total manos # -->
+        <div class="counter-item" title="Total de manos jugadas en este zapato">
+          <div class="bead-circle-badge bead-gray">#</div>
+          <div class="counter-digit">{totalHands}</div>
         </div>
-        <div class="counter-digit">{countBPair}</div>
-      </div>
 
-      <!-- Player Pair -->
-      <div class="counter-item" title="Parejas de Punto (P.Pair)">
-        <div class="bead-circle-badge bead-white">
-          <span class="bead-dot dot-br blue-dot"></span>
+        <!-- Banker B -->
+        <div class="counter-item" title="Victorias de Banca (Banker)">
+          <div class="bead-circle-badge bead-red">B</div>
+          <div class="counter-digit">{countBanca}</div>
         </div>
-        <div class="counter-digit">{countPPair}</div>
+
+        <!-- Player P -->
+        <div class="counter-item" title="Victorias de Punto (Player)">
+          <div class="bead-circle-badge bead-blue">P</div>
+          <div class="counter-digit">{countPunto}</div>
+        </div>
+
+        <!-- Tie T -->
+        <div class="counter-item" title="Empates (Tie)">
+          <div class="bead-circle-badge bead-green">T</div>
+          <div class="counter-digit">{countEmpate}</div>
+        </div>
+
+        <!-- Natural N -->
+        <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
+          <div class="bead-circle-badge bead-orange">N</div>
+          <div class="counter-digit">{countNatural}</div>
+        </div>
+
+        <!-- Banker Pair -->
+        <div class="counter-item" title="Parejas de Banca (B.Pair)">
+          <div class="bead-circle-badge bead-white">
+            <span class="bead-dot dot-tl red-dot"></span>
+          </div>
+          <div class="counter-digit">{countBPair}</div>
+        </div>
+
+        <!-- Player Pair -->
+        <div class="counter-item" title="Parejas de Punto (P.Pair)">
+          <div class="bead-circle-badge bead-white">
+            <span class="bead-dot dot-br blue-dot"></span>
+          </div>
+          <div class="counter-digit">{countPPair}</div>
+        </div>
       </div>
     </div>
 
-    <!-- Resumen de porcentajes -->
-    <div class="stats-strip-pct-box">
-      <span class="pct-tag b">B: {pctBanca}%</span>
-      <span class="pct-tag p">P: {pctPunto}%</span>
-      <span class="pct-tag t">T: {pctEmpate}%</span>
+    <!-- COLUMNA 2 (col-4): PREDICCIÓN / NEXT (ASK BANKER & ASK PLAYER) -->
+    <div class="stats-bar-col col-prediction">
+      <span class="pred-title">Next</span>
+      <div class="prediction-pills-row">
+        <!-- Pill Ask Banker (B) -->
+        <button
+          type="button"
+          class="pred-pill pred-pill-banker"
+          on:click={() => handlePredictionClick('BANCA')}
+          title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextBankerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextBankerPrediction.cockroach || 'pendiente'})"
+        >
+          <span class="pred-badge-circle b">B</span>
+          <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextBankerPrediction.bigEye || 'pendiente'}"></span>
+          <span class="pred-symbol pred-dot {nextBankerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextBankerPrediction.smallRoad || 'pendiente'}"></span>
+          <svg class="pred-symbol pred-slash {nextBankerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextBankerPrediction.cockroach || 'pendiente'}">
+            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+          </svg>
+        </button>
+
+        <!-- Pill Ask Player (P) -->
+        <button
+          type="button"
+          class="pred-pill pred-pill-player"
+          on:click={() => handlePredictionClick('PUNTO')}
+          title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextPlayerPrediction.cockroach || 'pendiente'})"
+        >
+          <span class="pred-badge-circle p">P</span>
+          <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextPlayerPrediction.bigEye || 'pendiente'}"></span>
+          <span class="pred-symbol pred-dot {nextPlayerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextPlayerPrediction.smallRoad || 'pendiente'}"></span>
+          <svg class="pred-symbol pred-slash {nextPlayerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextPlayerPrediction.cockroach || 'pendiente'}">
+            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- COLUMNA 3 (col-4): RESUMEN DE PORCENTAJES -->
+    <div class="stats-bar-col col-percentages">
+      <div class="stats-strip-pct-box">
+        <span class="pct-tag b">B: {pctBanca}%</span>
+        <span class="pct-tag p">P: {pctPunto}%</span>
+        <span class="pct-tag t">T: {pctEmpate}%</span>
+      </div>
     </div>
   </section>
 
@@ -3709,26 +3814,45 @@
     box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
   }
 
-  /* BARRA DE ESTADÍSTICAS INDEPENDIENTE (APARTE) */
+  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) */
   .scoreboard-stats-bar {
     background: #ffffff;
     border-radius: 12px;
     padding: 7px 18px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
     border: 2px solid #e2e8f0;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    justify-content: space-between;
     gap: 16px;
     width: 100%;
     box-sizing: border-box;
     flex-shrink: 0;
   }
 
+  .stats-bar-col {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .stats-bar-col.col-counters {
+    justify-content: flex-start;
+  }
+
+  .stats-bar-col.col-prediction {
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .stats-bar-col.col-percentages {
+    justify-content: flex-end;
+  }
+
   .stats-strip-counters {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
     flex-wrap: nowrap;
     overflow-x: auto;
   }
@@ -3763,6 +3887,125 @@
     min-width: 12px;
   }
 
+  /* PREDICCIÓN (NEXT / ASK BANKER & ASK PLAYER) */
+  .pred-title {
+    font-size: 16px;
+    font-weight: 900;
+    color: #1e293b;
+    letter-spacing: 0.4px;
+    user-select: none;
+  }
+
+  .prediction-pills-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .pred-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 3px 12px 3px 6px;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: all 0.15s ease;
+    user-select: none;
+    line-height: 1;
+  }
+
+  .pred-pill:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  .pred-pill:active {
+    transform: scale(0.96);
+  }
+
+  .pred-badge-circle {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12.5px;
+    font-weight: 900;
+    color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
+  }
+
+  .pred-badge-circle.b {
+    background: radial-gradient(circle at 35% 30%, #ef4444 0%, #dc2626 60%, #991b1b 100%);
+  }
+
+  .pred-badge-circle.p {
+    background: radial-gradient(circle at 35% 30%, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%);
+  }
+
+  .pred-symbol {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* 1. Gran Ojo (Hollow Ring) */
+  .pred-symbol.pred-ring {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2.4px solid transparent;
+    box-sizing: border-box;
+  }
+  .pred-symbol.pred-ring.red {
+    border-color: #dc2626;
+  }
+  .pred-symbol.pred-ring.blue {
+    border-color: #2563eb;
+  }
+  .pred-symbol.pred-ring.neutral {
+    border-color: #cbd5e1;
+  }
+
+  /* 2. Camino Pequeño (Solid Dot) */
+  .pred-symbol.pred-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .pred-symbol.pred-dot.red {
+    background-color: #dc2626;
+  }
+  .pred-symbol.pred-dot.blue {
+    background-color: #2563eb;
+  }
+  .pred-symbol.pred-dot.neutral {
+    background-color: #cbd5e1;
+  }
+
+  /* 3. Cucaracha (Diagonal Slash) */
+  .pred-symbol.pred-slash {
+    width: 14px;
+    height: 14px;
+  }
+  .pred-symbol.pred-slash.red {
+    color: #dc2626;
+  }
+  .pred-symbol.pred-slash.blue {
+    color: #2563eb;
+  }
+  .pred-symbol.pred-slash.neutral {
+    color: #cbd5e1;
+  }
+
   .stats-strip-pct-box {
     display: flex;
     align-items: center;
@@ -3775,6 +4018,19 @@
     font-weight: 800;
     white-space: nowrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+
+  @media (max-width: 1180px) {
+    .scoreboard-stats-bar {
+      grid-template-columns: 1fr;
+      gap: 12px;
+      padding: 10px 14px;
+    }
+    .stats-bar-col.col-counters,
+    .stats-bar-col.col-prediction,
+    .stats-bar-col.col-percentages {
+      justify-content: center;
+    }
   }
 
   /* PANEL OPERATIVO DE CONTROLES: SECCIÓN MÁS GRANDE */
@@ -4792,6 +5048,16 @@
     background: #ffffff;
     border: 2px solid #cbd5e1;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+
+  .theme-light .pred-pill {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .theme-light .pred-pill:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
   }
 
   .theme-light .stats-strip-pct-box {
