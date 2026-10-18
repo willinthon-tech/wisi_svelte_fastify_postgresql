@@ -4267,13 +4267,14 @@
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 14px;
-    padding: 14px 20px;
+    padding: 10px 16px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(160px, 1.1fr) minmax(140px, 0.95fr) minmax(360px, 2.5fr) minmax(200px, 1.35fr);
-    gap: 20px;
+    grid-template-columns: minmax(150px, 1.1fr) minmax(125px, 0.95fr) minmax(290px, 2.5fr) minmax(180px, 1.45fr);
+    gap: 16px;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     position: relative;
     box-sizing: border-box;
@@ -4362,7 +4363,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 18px;
+    padding-right: 16px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
     height: 100%;
@@ -4374,20 +4375,20 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 176px;
+    max-width: 156px;
   }
 
   .score-keypad-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: repeat(3, 38px);
+    grid-template-rows: repeat(3, 34px);
     grid-template-areas:
       "n1 n2 n3 n0"
       "n4 n5 n6 n0"
       "n7 n8 n9 n0";
-    gap: 6px;
+    gap: 5px;
     width: 100%;
-    height: 126px;
+    height: 112px;
   }
 
   .btn-num-1 { grid-area: n1; }
@@ -4402,17 +4403,17 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 900;
   }
 
   .btn-num-key {
-    border-radius: 8px;
+    border-radius: 6px;
     border: 1.5px solid #cbd5e1;
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4452,7 +4453,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 18px;
+    padding-right: 16px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
     width: 100%;
@@ -4464,18 +4465,18 @@
     flex-direction: column;
     justify-content: space-between;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     width: 100%;
-    max-width: 135px;
-    height: 126px;
+    max-width: 125px;
+    height: 112px;
   }
 
   .modifiers-stack .keypad-pill {
     width: 100%;
-    max-width: 135px;
-    height: 38px;
+    max-width: 125px;
+    height: 34px;
     border-radius: 999px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
     letter-spacing: 0.3px;
     margin: 0 auto;
@@ -4486,7 +4487,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding-right: 18px;
+    padding-right: 16px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
     height: 100%;
@@ -4496,9 +4497,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 20px;
+    gap: 16px;
     width: 100%;
-    max-width: 440px;
+    max-width: 380px;
   }
 
   /* GRUPO 4: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
@@ -4506,7 +4507,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
     min-width: 0;
     height: 100%;
   }
@@ -4516,22 +4517,22 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    width: 96px;
+    gap: 4px;
+    width: 78px;
   }
 
-  /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]): MISMO TAMAÑO EXACTO (96px x 96px) */
+  /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]): MISMO TAMAÑO EXACTO (78px x 78px) */
   .keypad-btn-tie-toggle {
-    width: 96px;
-    height: 96px;
+    width: 78px;
+    height: 78px;
     background: #ffffff;
-    border: 3px solid #0f172a;
-    border-radius: 16px;
+    border: 2.5px solid #0f172a;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     padding: 0;
     box-sizing: border-box;
@@ -4539,14 +4540,14 @@
 
   .keypad-btn-tie-toggle:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 16px -2px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 14px -2px rgba(0, 0, 0, 0.28);
     background: #f8fafc;
     border-color: #000000;
   }
 
   .keypad-btn-tie-toggle:active {
     transform: translateY(2px) scale(0.97);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22);
   }
 
   .tie-toggle-box {
@@ -4558,11 +4559,18 @@
   }
 
   .tie-toggle-svg {
+    width: 34px;
+    height: 34px;
     display: block;
   }
 
+  .editar-icon-svg {
+    width: 30px;
+    height: 30px;
+  }
+
   .tie-toggle-caption {
-    font-size: 13.5px;
+    font-size: 12px;
     font-weight: 900;
     color: #1e293b;
     letter-spacing: 0.5px;
@@ -4627,53 +4635,217 @@
   @media (max-width: 1024px) {
     .scoreboard-footer-panel {
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      gap: 12px;
+      padding: 8px 12px;
     }
-    .footer-score-col, .footer-modifiers-col, .footer-outcomes-col {
+    .footer-score-col, .footer-modifiers-col {
       border-right: none;
-      border-bottom: 2px solid #cbd5e1;
+      border-bottom: 1.5px solid #cbd5e1;
       padding-right: 0;
-      padding-bottom: 14px;
+      padding-bottom: 10px;
+    }
+    .footer-outcomes-col {
+      border-right: 1.5px solid #cbd5e1;
+      padding-right: 12px;
+    }
+    .footer-undo-col {
+      padding-left: 0;
     }
     .footer-modifiers-col {
       flex-direction: row;
       justify-content: center;
-      padding-bottom: 14px;
+      padding-bottom: 10px;
     }
     .modifiers-stack {
       flex-direction: row;
-      max-width: 340px;
+      max-width: 320px;
+      height: auto;
+      gap: 8px;
+    }
+    .modifiers-stack .keypad-pill {
+      max-width: 95px;
+      height: 30px;
+      font-size: 12px;
+    }
+    .score-keypad-box {
+      max-width: 140px;
+    }
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, 28px);
+      gap: 4px;
+      height: 92px;
+    }
+    .btn-num-key {
+      font-size: 14px;
+    }
+    .btn-num-zero {
+      font-size: 16px;
+    }
+    .keypad-btn-circle {
+      width: 66px;
+      height: 66px;
+    }
+    .keypad-btn-circle.btn-undo {
+      width: 66px;
+      height: 66px;
+    }
+    .keypad-btn-tie-toggle {
+      width: 66px;
+      height: 66px;
+      border-radius: 12px;
+    }
+    .action-btn-item {
+      width: 66px;
+      gap: 3px;
+    }
+    .btn-letter {
+      font-size: 32px;
+    }
+    .btn-arrow-icon {
+      width: 26px;
+      height: 26px;
+    }
+    .tie-toggle-svg {
+      width: 28px;
+      height: 28px;
+    }
+    .btn-caption, .tie-toggle-caption {
+      font-size: 11px;
+    }
+    .outcomes-grid-3col {
+      gap: 12px;
+    }
+    .footer-undo-col {
+      gap: 12px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .scoreboard-footer-panel {
+      grid-template-columns: 1fr;
+      gap: 10px;
+      padding: 6px 10px;
+    }
+    .footer-score-col, .footer-modifiers-col, .footer-outcomes-col {
+      border-right: none;
+      border-bottom: 1.5px solid #cbd5e1;
+      padding-right: 0;
+      padding-bottom: 8px;
+    }
+    .footer-undo-col {
+      border-right: none;
+    }
+    .keypad-btn-circle {
+      width: 58px;
+      height: 58px;
+    }
+    .keypad-btn-circle.btn-undo {
+      width: 58px;
+      height: 58px;
+    }
+    .keypad-btn-tie-toggle {
+      width: 58px;
+      height: 58px;
+      border-radius: 10px;
+    }
+    .action-btn-item {
+      width: 58px;
+      gap: 2px;
+    }
+    .btn-letter {
+      font-size: 28px;
+    }
+    .btn-arrow-icon {
+      width: 22px;
+      height: 22px;
+    }
+    .tie-toggle-svg {
+      width: 24px;
+      height: 24px;
+    }
+    .btn-caption, .tie-toggle-caption {
+      font-size: 10px;
+    }
+    .outcomes-grid-3col {
+      gap: 10px;
+    }
+    .footer-undo-col {
       gap: 10px;
     }
     .modifiers-stack .keypad-pill {
-      max-width: 100px;
-      height: 36px;
+      max-width: 85px;
+      height: 28px;
+      font-size: 11px;
+    }
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, 26px);
+      gap: 3px;
+      height: 84px;
     }
   }
 
   @media (max-width: 600px) {
-    .outcomes-grid-3col {
-      gap: 12px;
+    .keypad-btn-circle {
+      width: 48px;
+      height: 48px;
     }
-    .modifiers-stack {
+    .keypad-btn-circle.btn-undo {
+      width: 48px;
+      height: 48px;
+    }
+    .keypad-btn-tie-toggle {
+      width: 48px;
+      height: 48px;
+      border-radius: 9px;
+    }
+    .action-btn-item {
+      width: 48px;
+      gap: 2px;
+    }
+    .btn-letter {
+      font-size: 22px;
+    }
+    .btn-arrow-icon {
+      width: 18px;
+      height: 18px;
+    }
+    .tie-toggle-svg {
+      width: 20px;
+      height: 20px;
+    }
+    .btn-caption, .tie-toggle-caption {
+      font-size: 9px;
+    }
+    .outcomes-grid-3col {
       gap: 6px;
     }
+    .footer-undo-col {
+      gap: 6px;
+    }
+    .modifiers-stack {
+      gap: 4px;
+    }
     .modifiers-stack .keypad-pill {
-      height: 34px;
-      font-size: 12px;
-      max-width: 85px;
+      height: 24px;
+      font-size: 10px;
+      max-width: 75px;
+    }
+    .score-keypad-grid {
+      grid-template-rows: repeat(3, 22px);
+      gap: 2px;
+      height: 70px;
     }
   }
 
   /* MODIFIER PILLS ROW */
   .keypad-pill {
     width: 100%;
-    max-width: 135px;
-    height: 38px;
+    max-width: 125px;
+    height: 34px;
     border-radius: 999px;
     background: #ffffff;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
     cursor: pointer;
     display: inline-flex;
@@ -4732,8 +4904,8 @@
 
   /* 3D CIRCULAR CASINO BUTTONS: TODOS DEL MISMO TAMAÑO EXACTO */
   .keypad-btn-circle {
-    width: 96px;
-    height: 96px;
+    width: 78px;
+    height: 78px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -4742,33 +4914,15 @@
     cursor: pointer;
     border: none;
     background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
-    padding: 4px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    padding: 3px;
+    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
   }
 
   .keypad-btn-circle.btn-undo {
-    width: 96px;
-    height: 96px;
-  }
-
-  @media (max-width: 600px) {
-    .keypad-btn-circle {
-      width: 72px;
-      height: 72px;
-    }
-    .keypad-btn-circle.btn-undo {
-      width: 72px;
-      height: 72px;
-    }
-    .keypad-btn-tie-toggle {
-      width: 72px;
-      height: 72px;
-    }
-    .action-btn-item {
-      width: 72px;
-    }
+    width: 78px;
+    height: 78px;
   }
 
   .keypad-btn-circle:hover {
@@ -4776,8 +4930,8 @@
   }
 
   .keypad-btn-circle:active {
-    transform: translateY(3px) scale(0.96);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    transform: translateY(2px) scale(0.96);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
   }
 
   .keypad-btn-circle:disabled {
@@ -4793,21 +4947,15 @@
     align-items: center;
     justify-content: center;
     position: relative;
-    box-shadow: inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -4px 6px rgba(0, 0, 0, 0.4);
+    box-shadow: inset 0 3px 5px rgba(255, 255, 255, 0.5), inset 0 -3px 5px rgba(0, 0, 0, 0.4);
   }
 
   .btn-letter {
-    font-size: 46px;
+    font-size: 38px;
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
     line-height: 1;
-  }
-
-  @media (max-width: 600px) {
-    .btn-letter {
-      font-size: 32px;
-    }
   }
 
   /* P Button: Royal Blue */
@@ -4830,22 +4978,13 @@
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
   .btn-arrow-icon {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     display: block;
     color: #ffffff;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65));
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.65));
     transition: transform 0.1s ease;
   }
-
-  @media (max-width: 600px) {
-    .btn-arrow-icon {
-      width: 28px;
-      height: 28px;
-    }
-  }
-
-
 
   /* CORNER BADGES ON P, B, T */
   .badge-corner-tl {
@@ -4883,7 +5022,7 @@
   }
 
   .btn-caption {
-    font-size: 13.5px;
+    font-size: 12px;
     font-weight: 900;
     letter-spacing: 0.5px;
     user-select: none;
