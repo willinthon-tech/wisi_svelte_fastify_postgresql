@@ -221,8 +221,9 @@
   // Keypad Staging Modifiers & Score
   let activePPair = false;
   let activeBPair = false;
-  let activeSpecial = false;
+  let activeNatural = false;
   let activeWin = false;
+  let activeSpecial = false;
   let activeScore = null; // null | 0..9
 
   function selectScore(num) {
@@ -637,6 +638,7 @@
         activeScore = null;
         activePPair = false;
         activeBPair = false;
+        activeNatural = false;
         activeSpecial = false;
         activeWin = false;
         selectedHandIndex = null;
@@ -1014,6 +1016,12 @@
     activeBPair = !activeBPair;
   }
 
+  function toggleNatural() {
+    if (!isCurrentShoeActive) return;
+    playSound('click');
+    activeNatural = !activeNatural;
+  }
+
   function toggleSpecial() {
     if (!isCurrentShoeActive) return;
     playSound('click');
@@ -1035,7 +1043,8 @@
       score: activeScore,
       bPair: activeBPair,
       pPair: activePPair,
-      natural: Boolean(activeWin),
+      natural: Boolean(activeNatural),
+      win: Boolean(activeWin),
       special: activeSpecial,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     };
@@ -1046,8 +1055,9 @@
     // Reset modifier pills and score for the next hand
     activePPair = false;
     activeBPair = false;
-    activeSpecial = false;
+    activeNatural = false;
     activeWin = false;
+    activeSpecial = false;
     activeScore = null;
   }
 
@@ -1263,7 +1273,6 @@
     let row = 0;
     let prevWinner = null;
     let lastPlaced = null;
-    let currentRun = []; // Array de { r, c, cell } pertenecientes a la corrida actual
 
     history.forEach((h, idx) => {
       if (h.winner === 'EMPATE') {
@@ -1273,7 +1282,6 @@
           } else {
             grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 1 };
             lastPlaced = grid[0][0];
-            currentRun = [{ r: 0, c: 0, cell: grid[0][0] }];
           }
           return;
         } else {
@@ -1283,14 +1291,12 @@
             lastPlaced = grid[0][0];
             row = 1;
             col = 0;
-            currentRun = [{ r: 0, c: 0, cell: grid[0][0] }];
             return;
           }
 
           if (row < BIG_ROWS && !grid[row][col]) {
             grid[row][col] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
             lastPlaced = grid[row][col];
-            currentRun.push({ r: row, c: col, cell: grid[row][col] });
             row++;
           } else {
             let dragonCol = col + 1;
@@ -1308,7 +1314,6 @@
             }
             grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
             lastPlaced = grid[dragonRow][dragonCol];
-            currentRun.push({ r: dragonRow, c: dragonCol, cell: grid[dragonRow][dragonCol] });
           }
           return;
         }
@@ -1319,14 +1324,12 @@
           if (row < BIG_ROWS && !grid[row][col]) {
             grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
             lastPlaced = grid[row][col];
-            currentRun.push({ r: row, c: col, cell: grid[row][col] });
             row++;
           } else {
             col++;
             row = 0;
             grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
             lastPlaced = grid[0][col];
-            currentRun = [{ r: 0, c: col, cell: grid[0][col] }];
             row = 1;
           }
           prevWinner = h.winner;
@@ -1336,14 +1339,12 @@
         grid[0][0] = { ...h, historyIndex: idx, tieCount: 0 };
         lastPlaced = grid[0][0];
         prevWinner = h.winner;
-        currentRun = [{ r: 0, c: 0, cell: grid[0][0] }];
         row = 1;
         col = 0;
       } else if (h.winner === prevWinner) {
         if (row < BIG_ROWS && !grid[row][col]) {
           grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
           lastPlaced = grid[row][col];
-          currentRun.push({ r: row, c: col, cell: grid[row][col] });
           row++;
         } else {
           let dragonCol = col + 1;
@@ -1361,7 +1362,6 @@
           }
           grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, tieCount: 0 };
           lastPlaced = grid[dragonRow][dragonCol];
-          currentRun.push({ r: dragonRow, c: dragonCol, cell: grid[dragonRow][dragonCol] });
         }
       } else {
         col++;
@@ -1379,38 +1379,10 @@
         row = 0;
         grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
         lastPlaced = grid[0][col];
-        currentRun = [{ r: 0, c: col, cell: grid[0][col] }];
         row = 1;
         prevWinner = h.winner;
       }
     });
-
-    // La raya de corrida SOLO se visualiza en la última jugada (la corrida actual en curso),
-    // si ya lleva 3 o más de 3, y siguiendo la corrida completa (columnas verticales y dragon tails horizontales)
-    if (currentRun.length >= 3) {
-      for (let i = 0; i < currentRun.length; i++) {
-        const item = currentRun[i];
-        const cell = item.cell;
-        cell.hasStreakLine = true;
-
-        const prev = i > 0 ? currentRun[i - 1] : null;
-        const next = i < currentRun.length - 1 ? currentRun[i + 1] : null;
-
-        if (prev) {
-          if (prev.r === item.r - 1 && prev.c === item.c) cell.streakTop = true;
-          if (prev.r === item.r + 1 && prev.c === item.c) cell.streakBottom = true;
-          if (prev.r === item.r && prev.c === item.c - 1) cell.streakLeft = true;
-          if (prev.r === item.r && prev.c === item.c + 1) cell.streakRight = true;
-        }
-
-        if (next) {
-          if (next.r === item.r - 1 && next.c === item.c) cell.streakTop = true;
-          if (next.r === item.r + 1 && next.c === item.c) cell.streakBottom = true;
-          if (next.r === item.r && next.c === item.c - 1) cell.streakLeft = true;
-          if (next.r === item.r && next.c === item.c + 1) cell.streakRight = true;
-        }
-      }
-    }
 
     return { grid, totalCols };
   })();
@@ -1974,21 +1946,16 @@
                     class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
                     class:has-hand={!!cell}
                     on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}${cell.natural ? ' [Natural]' : ''} (Clic para editar)` : ''}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}${cell.natural ? ' [Natural]' : ''}${cell.win ? ' [WIN]' : ''} (Clic para editar)` : ''}
                   >
                     {#if cell}
-                      {#if cell.hasStreakLine}
-                        {#if cell.streakTop}<span class="streak-seg streak-seg-top"></span>{/if}
-                        {#if cell.streakBottom}<span class="streak-seg streak-seg-bottom"></span>{/if}
-                        {#if cell.streakLeft}<span class="streak-seg streak-seg-left"></span>{/if}
-                        {#if cell.streakRight}<span class="streak-seg streak-seg-right"></span>{/if}
-                      {/if}
                       <div
                         class="bigroad-ring {cell.winner.toLowerCase()}"
                         class:is-tie={cell.isTieOnly}
-                        class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && cell.score === null}
+                        class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && !cell.win && cell.score === null}
+                        class:is-win-solid={cell.win}
                       >
-                        {#if cell.natural}
+                        {#if cell.natural && !cell.win && (cell.score === undefined || cell.score === null)}
                           <span class="dot-natural" title="Victoria Natural (8 ó 9)"></span>
                         {/if}
                         {#if cell.score !== undefined && cell.score !== null}
@@ -2211,6 +2178,14 @@
           >
             Natural
           </button>
+          <button
+            type="button"
+            class="edit-pill-toggle pill-win"
+            class:active-pill={selectedHand.win}
+            on:click={() => toggleSelectedMod('win')}
+          >
+            Win
+          </button>
         </div>
 
         <div class="edit-group">
@@ -2371,40 +2346,57 @@
       </div>
     </div>
 
-    <!-- GRUPO 2: MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) -->
+    <!-- GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO -->
     <div class="footer-modifiers-col">
-      <button
-        type="button"
-        class="keypad-pill pill-ppair"
-        class:active={activePPair}
-        disabled={!isCurrentShoeActive}
-        on:click={togglePPair}
-        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Punto (P.Pair)'}
-      >
-        P.Pair
-      </button>
+      <div class="modifiers-subgrid">
+        <div class="modifiers-left-stack">
+          <button
+            type="button"
+            class="keypad-pill pill-ppair"
+            class:active={activePPair}
+            disabled={!isCurrentShoeActive}
+            on:click={togglePPair}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Punto (P.Pair)'}
+          >
+            P.Pair
+          </button>
 
-      <button
-        type="button"
-        class="keypad-pill pill-bpair"
-        class:active={activeBPair}
-        disabled={!isCurrentShoeActive}
-        on:click={toggleBPair}
-        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Banca (B.Pair)'}
-      >
-        B.Pair
-      </button>
+          <button
+            type="button"
+            class="keypad-pill pill-bpair"
+            class:active={activeBPair}
+            disabled={!isCurrentShoeActive}
+            on:click={toggleBPair}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Pareja de Banca (B.Pair)'}
+          >
+            B.Pair
+          </button>
 
-      <button
-        type="button"
-        class="keypad-pill pill-win"
-        class:active={activeWin}
-        disabled={!isCurrentShoeActive}
-        on:click={toggleWin}
-        title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria Natural (8 ó 9)'}
-      >
-        Natural
-      </button>
+          <button
+            type="button"
+            class="keypad-pill pill-natural"
+            class:active={activeNatural}
+            disabled={!isCurrentShoeActive}
+            on:click={toggleNatural}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria Natural (8 ó 9)'}
+          >
+            Natural
+          </button>
+        </div>
+
+        <div class="modifiers-right-stack">
+          <button
+            type="button"
+            class="keypad-pill pill-win"
+            class:active={activeWin}
+            disabled={!isCurrentShoeActive}
+            on:click={toggleWin}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar Victoria WIN (Círculo sólido en Gran Camino con letras blancas)'}
+          >
+            Win
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
@@ -3446,48 +3438,7 @@
     background: rgba(255, 255, 255, 0.08);
   }
 
-  /* RAYA CONTINUA DE CORRIDA EN JUGADA ACTUAL (Soporta columnas verticales y Dragon Tails horizontales) */
-  .streak-seg {
-    position: absolute;
-    background: #f59e0b;
-    z-index: 1;
-    pointer-events: none;
-    box-shadow: 0 0 5px rgba(245, 158, 11, 0.6);
-  }
-
-  .streak-seg.streak-seg-top {
-    left: 50%;
-    top: -1px;
-    bottom: 50%;
-    width: 3.5px;
-    transform: translateX(-50%);
-  }
-
-  .streak-seg.streak-seg-bottom {
-    left: 50%;
-    top: 50%;
-    bottom: -1px;
-    width: 3.5px;
-    transform: translateX(-50%);
-  }
-
-  .streak-seg.streak-seg-left {
-    top: 50%;
-    left: -1px;
-    right: 50%;
-    height: 3.5px;
-    transform: translateY(-50%);
-  }
-
-  .streak-seg.streak-seg-right {
-    top: 50%;
-    left: 50%;
-    right: -1px;
-    height: 3.5px;
-    transform: translateY(-50%);
-  }
-
-  /* PUNTICO 3D ESFÉRICO DE VICTORIA NATURAL (Referencia Imagen 4) */
+  /* PUNTICO 3D ESFÉRICO DE VICTORIA NATURAL */
   .dot-natural {
     position: absolute;
     top: 50%;
@@ -3507,11 +3458,11 @@
   }
 
   .bigroad-ring {
-    width: calc(var(--big-cell-size, 23px) - 4px);
-    height: calc(var(--big-cell-size, 23px) - 4px);
+    width: calc(var(--big-cell-size, 23px) - 3px);
+    height: calc(var(--big-cell-size, 23px) - 3px);
     border-radius: 50%;
     margin: auto;
-    border: 2.5px solid transparent;
+    border: 2px solid transparent;
     position: relative;
     display: flex;
     align-items: center;
@@ -3524,7 +3475,7 @@
     border-color: #ef4444;
   }
   .bigroad-ring.punto {
-    border-color: #3b82f6;
+    border-color: #2563eb;
   }
   .bigroad-ring.empate {
     border-color: #22c55e;
@@ -3536,14 +3487,47 @@
     background: transparent;
   }
 
+  /* CÍRCULO SÓLIDO CUANDO SE PRESIONA WIN (Fondo completo y letras blancas) */
+  .bigroad-ring.is-win-solid {
+    border: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  }
+
+  .bigroad-ring.is-win-solid.banca {
+    background: radial-gradient(circle at 35% 30%, #ef4444 0%, #dc2626 60%, #991b1b 100%);
+  }
+
+  .bigroad-ring.is-win-solid.punto {
+    background: radial-gradient(circle at 35% 30%, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%);
+  }
+
+  .bigroad-ring.is-win-solid.empate {
+    background: radial-gradient(circle at 35% 30%, #22c55e 0%, #16a34a 60%, #15803d 100%);
+  }
+
+  /* NÚMEROS MÁS GRANDES EN GRAN CAMINO */
   .bigroad-score {
-    font-size: calc(var(--big-cell-size, 23px) * 0.44);
-    font-weight: 900;
-    color: #ffffff;
+    font-size: calc(var(--big-cell-size, 23px) * 0.66);
+    font-weight: 800;
+    color: #0f172a;
     line-height: 1;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
     position: relative;
     z-index: 2;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .scoreboard-container:not(.theme-light) .bigroad-ring:not(.is-win-solid) .bigroad-score {
+    color: #f8fafc;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  }
+
+  /* EN CÍRCULOS SÓLIDOS DE WIN: TEXTO EN BLANCO BRILLANTE */
+  .bigroad-ring.is-win-solid .bigroad-score {
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
   }
 
   .bigroad-tie-slash {
@@ -3810,6 +3794,18 @@
     box-shadow: 0 0 8px rgba(234, 88, 12, 0.6);
   }
 
+  .edit-pill-toggle.pill-win {
+    border: 1.5px solid #7c3aed;
+    color: #c4b5fd;
+    background: rgba(124, 58, 237, 0.18);
+  }
+  .edit-pill-toggle.pill-win.active-pill {
+    background: #7c3aed;
+    color: #ffffff;
+    border-color: #ddd6fe;
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
+  }
+
   /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) */
   .scoreboard-stats-bar {
     background: #ffffff;
@@ -4037,7 +4033,7 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(195px, 1.25fr) minmax(165px, 1.05fr) minmax(430px, 2.9fr) minmax(230px, 1.5fr);
+    grid-template-columns: minmax(185px, 1.15fr) minmax(215px, 1.35fr) minmax(410px, 2.7fr) minmax(220px, 1.4fr);
     gap: 26px;
     align-items: center;
     flex-shrink: 0;
@@ -4131,26 +4127,65 @@
     z-index: 2;
   }
 
-  /* GRUPO 2: MODIFIERS APILADOS (P.PAIR, B.PAIR, NATURAL) */
+  /* GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO */
   .footer-modifiers-col {
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 12px;
     padding-right: 22px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
+    width: 100%;
   }
 
-  .footer-modifiers-col .keypad-pill {
+  .modifiers-subgrid {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 12px;
     width: 100%;
-    max-width: 165px;
-    height: 46px;
-    font-size: 15.5px;
+    max-width: 250px;
+  }
+
+  .modifiers-left-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .modifiers-left-stack .keypad-pill {
+    width: 100%;
+    max-width: 130px;
+    height: 42px;
+    font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.3px;
     margin: 0 auto;
+  }
+
+  .modifiers-right-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: stretch;
+    flex: 0 0 auto;
+    width: 82px;
+  }
+
+  .modifiers-right-stack .keypad-pill.pill-win {
+    width: 100%;
+    height: 100%;
+    min-height: 142px;
+    border-radius: 24px;
+    font-size: 19px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
   }
 
   /* GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - MÁS GRANDES */
@@ -4248,18 +4283,27 @@
       padding-bottom: 14px;
     }
     .footer-modifiers-col {
-      flex-direction: row;
       justify-content: center;
-      gap: 10px;
-    }
-    .footer-modifiers-col .keypad-pill {
-      max-width: 120px;
+      padding-bottom: 14px;
     }
   }
 
   @media (max-width: 600px) {
     .outcomes-grid-3col {
       gap: 14px;
+    }
+    .modifiers-subgrid {
+      gap: 6px;
+    }
+    .modifiers-left-stack .keypad-pill {
+      height: 38px;
+      font-size: 13px;
+    }
+    .modifiers-right-stack {
+      width: 65px;
+    }
+    .modifiers-right-stack .keypad-pill.pill-win {
+      font-size: 16px;
     }
   }
 
@@ -4290,7 +4334,7 @@
     border: 2.5px solid #0000ff;
     color: #0000ff;
   }
-  .keypad-pill.pill-ppair:hover:not(.active) {
+  .keypad-pill.pill-ppair:hover:not(.active):not(:disabled) {
     background: rgba(0, 0, 255, 0.06);
   }
   .keypad-pill.pill-ppair.active {
@@ -4304,7 +4348,7 @@
     border: 2.5px solid #dc2626;
     color: #dc2626;
   }
-  .keypad-pill.pill-bpair:hover:not(.active) {
+  .keypad-pill.pill-bpair:hover:not(.active):not(:disabled) {
     background: rgba(220, 38, 38, 0.06);
   }
   .keypad-pill.pill-bpair.active {
@@ -4314,18 +4358,33 @@
     box-shadow: 0 0 12px rgba(220, 38, 38, 0.5);
   }
 
-  .keypad-pill.pill-win {
+  .keypad-pill.pill-natural {
     border: 2.5px solid #ea580c;
     color: #ea580c;
   }
-  .keypad-pill.pill-win:hover:not(.active) {
+  .keypad-pill.pill-natural:hover:not(.active):not(:disabled) {
     background: rgba(234, 88, 12, 0.06);
   }
-  .keypad-pill.pill-win.active {
+  .keypad-pill.pill-natural.active {
     background: radial-gradient(circle at 50% 30%, #f97316, #c2410c);
     color: #ffffff;
     border-color: #9a3412;
     box-shadow: 0 0 12px rgba(234, 88, 12, 0.5);
+  }
+
+  /* BOTÓN WIN MORADO (Referencia Imagen 3 y 4) */
+  .keypad-pill.pill-win {
+    border: 2.5px solid #7c3aed;
+    color: #7c3aed;
+  }
+  .keypad-pill.pill-win:hover:not(.active):not(:disabled) {
+    background: rgba(124, 58, 237, 0.08);
+  }
+  .keypad-pill.pill-win.active {
+    background: radial-gradient(circle at 50% 30%, #8b5cf6, #6d28d9);
+    color: #ffffff;
+    border-color: #5b21b6;
+    box-shadow: 0 0 14px rgba(124, 58, 237, 0.55);
   }
 
   /* 3D CIRCULAR CASINO BUTTONS */
@@ -4993,17 +5052,13 @@
     background: rgba(0, 0, 0, 0.04);
   }
 
-  .theme-light .bigroad-ring.banca .bigroad-score {
-    color: #dc2626;
+  .theme-light .bigroad-ring:not(.is-win-solid) .bigroad-score {
+    color: #0f172a;
     text-shadow: none;
   }
-  .theme-light .bigroad-ring.punto .bigroad-score {
-    color: #2563eb;
-    text-shadow: none;
-  }
-  .theme-light .bigroad-ring.empate .bigroad-score {
-    color: #16a34a;
-    text-shadow: none;
+  .theme-light .bigroad-ring.is-win-solid .bigroad-score {
+    color: #ffffff !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
   }
 
   .theme-light .tie-badge-num {
