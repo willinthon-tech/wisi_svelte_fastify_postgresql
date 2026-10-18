@@ -1819,6 +1819,21 @@
             </svg>
           </button>
         </div>
+
+        <!-- BOTÓN NUEVO ZAPATO DIRECTO -->
+        <button
+          type="button"
+          class="sb-btn-new-shoe"
+          disabled={!isLatestSession || history.length === 0}
+          on:click={handleDirectNewShoe}
+          title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Nuevo Zapato</span>
+        </button>
       </div>
     </div>
 
@@ -2688,6 +2703,50 @@
 
   .sb-session-navigator.is-past {
     border-color: #475569;
+  }
+
+  /* BOTÓN NUEVO ZAPATO DIRECTO */
+  .sb-btn-new-shoe {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.35) 0%, rgba(14, 165, 233, 0.2) 100%);
+    border: 1.5px solid #0284c7;
+    color: #38bdf8;
+    padding: 0 16px;
+    min-height: 38px;
+    box-sizing: border-box;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    user-select: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  }
+
+  .sb-btn-new-shoe:hover:not(:disabled) {
+    background: #0284c7;
+    border-color: #38bdf8;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+  }
+
+  .sb-btn-new-shoe:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .sb-btn-new-shoe:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #1e293b;
+    border-color: #334155;
+    color: #64748b;
+    transform: none;
+    box-shadow: none;
   }
 
   /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE Y ATRÁS) */
@@ -4519,6 +4578,26 @@
 
   .theme-light .sb-session-navigator.is-past {
     border-color: #94a3b8;
+  }
+
+  .theme-light .sb-btn-new-shoe {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    border: 1.5px solid #0284c7;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+  }
+  .theme-light .sb-btn-new-shoe:hover:not(:disabled) {
+    background: #0369a1;
+    border-color: #075985;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(2, 132, 199, 0.5);
+  }
+  .theme-light .sb-btn-new-shoe:disabled {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #94a3b8;
+    opacity: 0.7;
+    box-shadow: none;
   }
 
   /* TEMA CLARO: BOTONES DE NAVEGACIÓN UNIFICADOS */
