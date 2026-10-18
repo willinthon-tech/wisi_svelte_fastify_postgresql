@@ -553,10 +553,10 @@
   $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 18);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads: cuadrículas pequeñas y compactas estándar de casino (~9px a 10px, 6 filas)
+  // Derived roads: cuadrículas pequeñas y compactas estándar de casino (~8px a 9px, 6 filas)
   $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 36);
   $: derivedRows = 6;
-  $: derivedCellSize = Math.min(Math.max(Math.floor(((derivedBandHeight || 90) - 4) / 6), 7), 10);
+  $: derivedCellSize = Math.min(Math.max(Math.floor(((derivedBandHeight || 90) - 4) / 6), 6), 9);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 45);
 
   function safeJsonParse(val, fallback = []) {
@@ -2713,60 +2713,45 @@
       </div>
     </div>
 
-    <!-- GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO -->
+    <!-- GRUPO 2: MODIFICADORES (P.PAIR, B.PAIR, NATURAL) -->
     <div class="footer-modifiers-col">
-      <div class="modifiers-subgrid">
-        <div class="modifiers-left-stack">
-          <button
-            type="button"
-            class="keypad-pill pill-ppair"
-            class:active={isEditingHand ? selectedHand.pPair : activePPair}
-            disabled={isObserverMode || !isCurrentShoeActive}
-            on:click={handleTogglePPair}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Punto (P.Pair)')}
-          >
-            P.Pair
-          </button>
+      <div class="modifiers-stack">
+        <button
+          type="button"
+          class="keypad-pill pill-ppair"
+          class:active={isEditingHand ? selectedHand.pPair : activePPair}
+          disabled={isObserverMode || !isCurrentShoeActive}
+          on:click={handleTogglePPair}
+          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Punto (P.Pair)')}
+        >
+          P.Pair
+        </button>
 
-          <button
-            type="button"
-            class="keypad-pill pill-bpair"
-            class:active={isEditingHand ? selectedHand.bPair : activeBPair}
-            disabled={isObserverMode || !isCurrentShoeActive}
-            on:click={handleToggleBPair}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Banca (B.Pair)')}
-          >
-            B.Pair
-          </button>
+        <button
+          type="button"
+          class="keypad-pill pill-bpair"
+          class:active={isEditingHand ? selectedHand.bPair : activeBPair}
+          disabled={isObserverMode || !isCurrentShoeActive}
+          on:click={handleToggleBPair}
+          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Banca (B.Pair)')}
+        >
+          B.Pair
+        </button>
 
-          <button
-            type="button"
-            class="keypad-pill pill-natural"
-            class:active={isEditingHand ? selectedHand.natural : activeNatural}
-            disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
-            on:click={handleToggleNatural}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)'))}
-          >
-            Natural
-          </button>
-        </div>
-
-        <div class="modifiers-right-stack">
-          <button
-            type="button"
-            class="keypad-pill pill-win"
-            class:active={isEditingHand ? selectedHand.win : activeWin}
-            disabled={isObserverMode || !isCurrentShoeActive}
-            on:click={handleToggleWin}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Victoria WIN (Círculo sólido en Gran Camino con letras blancas)')}
-          >
-            Win
-          </button>
-        </div>
+        <button
+          type="button"
+          class="keypad-pill pill-natural"
+          class:active={isEditingHand ? selectedHand.natural : activeNatural}
+          disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
+          on:click={handleToggleNatural}
+          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)'))}
+        >
+          Natural
+        </button>
       </div>
     </div>
 
-    <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - BOTONES GRANDES -->
+    <!-- GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO -->
     <div class="footer-outcomes-col">
       <div class="outcomes-grid-3col">
         <!-- PUNTO BUTTON -->
@@ -2840,7 +2825,7 @@
       </div>
     </div>
 
-    <!-- GRUPO 4: ACCIÓN RETROCEDER / ATRÁS Y BOTÓN VISUALIZAR TIE / EDITAR -->
+    <!-- GRUPO 4: ACCIÓN RETROCEDER / ATRÁS Y BOTÓN VISUALIZAR TIE / EDITAR (MISMO TAMAÑO) -->
     <div class="footer-undo-col">
       <div class="action-btn-item">
         <button
@@ -2852,7 +2837,7 @@
           title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'))}
         >
           <div class="btn-inner-gloss">
-            <svg class="btn-arrow-icon" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="btn-arrow-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 12H5m0 0l6-6M5 12l6 6" />
             </svg>
           </div>
@@ -2873,17 +2858,17 @@
         >
           <div class="tie-toggle-box">
             {#if isEditingHand}
-              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="editar-icon-svg">
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" class="editar-icon-svg">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
             {:else if tieMode === 'slash'}
-              <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
-                <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="4" stroke-linecap="round" />
+              <svg width="42" height="42" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <line x1="5" y1="27" x2="27" y2="5" stroke="#0f172a" stroke-width="3.8" stroke-linecap="round" />
               </svg>
             {:else}
-              <svg width="52" height="52" viewBox="0 0 32 32" class="tie-toggle-svg">
-                <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="4" fill="none" />
+              <svg width="42" height="42" viewBox="0 0 32 32" class="tie-toggle-svg">
+                <circle cx="16" cy="16" r="11" stroke="#0f172a" stroke-width="3.8" fill="none" />
               </svg>
             {/if}
           </div>
@@ -3708,14 +3693,14 @@
 
   /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-table tr {
-    height: var(--derived-cell-size, 9.5px);
+    height: var(--derived-cell-size, 8.5px);
   }
 
   .derived-cell {
-    width: var(--derived-cell-size, 9.5px);
-    min-width: var(--derived-cell-size, 9.5px);
-    max-width: var(--derived-cell-size, 9.5px);
-    height: var(--derived-cell-size, 9.5px);
+    width: var(--derived-cell-size, 8.5px);
+    min-width: var(--derived-cell-size, 8.5px);
+    max-width: var(--derived-cell-size, 8.5px);
+    height: var(--derived-cell-size, 8.5px);
     box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
@@ -3736,11 +3721,11 @@
   .derived-ring {
     display: inline-block;
     vertical-align: middle;
-    width: max(5px, calc(var(--derived-cell-size, 9.5px) * 0.68));
-    height: max(5px, calc(var(--derived-cell-size, 9.5px) * 0.68));
+    width: max(4.6px, calc(var(--derived-cell-size, 8.5px) * 0.65));
+    height: max(4.6px, calc(var(--derived-cell-size, 8.5px) * 0.65));
     margin: 0 auto;
     border-radius: 50%;
-    border: 1.4px solid transparent;
+    border: 1.2px solid transparent;
     box-sizing: border-box;
   }
   .derived-ring.red { border-color: #ef4444; }
@@ -3750,8 +3735,8 @@
   .derived-dot {
     display: inline-block;
     vertical-align: middle;
-    width: max(3.5px, calc(var(--derived-cell-size, 9.5px) * 0.52));
-    height: max(3.5px, calc(var(--derived-cell-size, 9.5px) * 0.52));
+    width: max(3.2px, calc(var(--derived-cell-size, 8.5px) * 0.48));
+    height: max(3.2px, calc(var(--derived-cell-size, 8.5px) * 0.48));
     margin: 0 auto;
     border-radius: 50%;
   }
@@ -3762,8 +3747,8 @@
   .derived-slash {
     display: inline-block;
     vertical-align: middle;
-    width: max(5.5px, calc(var(--derived-cell-size, 9.5px) * 0.78));
-    height: 1.5px;
+    width: max(5px, calc(var(--derived-cell-size, 8.5px) * 0.72));
+    height: 1.3px;
     margin: 0 auto;
     transform: rotate(-45deg);
     border-radius: 1px;
@@ -4278,16 +4263,16 @@
     }
   }
 
-  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN MÁS GRANDE */
+  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA */
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 14px;
-    padding: 16px 24px;
+    padding: 14px 20px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     border: 2px solid #e2e8f0;
     display: grid;
-    grid-template-columns: minmax(185px, 1.15fr) minmax(215px, 1.35fr) minmax(410px, 2.7fr) minmax(220px, 1.4fr);
-    gap: 26px;
+    grid-template-columns: minmax(160px, 1.1fr) minmax(140px, 0.95fr) minmax(360px, 2.5fr) minmax(200px, 1.35fr);
+    gap: 20px;
     align-items: center;
     flex-shrink: 0;
     position: relative;
@@ -4377,7 +4362,7 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 22px;
+    padding-right: 18px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -4388,13 +4373,13 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: 225px;
+    max-width: 175px;
   }
 
   .score-keypad-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr) 1.25fr;
-    grid-template-rows: repeat(3, 48px);
+    grid-template-columns: repeat(3, 1fr) 1.2fr;
+    grid-template-rows: repeat(3, 38px);
     grid-template-areas:
       "n1 n2 n3 n0"
       "n4 n5 n6 n0"
@@ -4415,7 +4400,7 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 900;
   }
 
@@ -4425,7 +4410,7 @@
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: 21px;
+    font-size: 18px;
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4459,73 +4444,45 @@
     z-index: 2;
   }
 
-  /* GRUPO 2: MODIFIERS (P.PAIR, B.PAIR, NATURAL) Y BOTÓN WIN MORADO AL LADO */
+  /* GRUPO 2: MODIFICADORES (P.PAIR, B.PAIR, NATURAL) */
   .footer-modifiers-col {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: 22px;
+    padding-right: 18px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
     width: 100%;
   }
 
-  .modifiers-subgrid {
-    display: flex;
-    align-items: stretch;
-    justify-content: center;
-    gap: 12px;
-    width: 100%;
-    max-width: 250px;
-  }
-
-  .modifiers-left-stack {
+  .modifiers-stack {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    align-items: center;
     gap: 8px;
-    flex: 1 1 auto;
-    min-width: 0;
+    width: 100%;
+    max-width: 140px;
   }
 
-  .modifiers-left-stack .keypad-pill {
+  .modifiers-stack .keypad-pill {
     width: 100%;
-    max-width: 130px;
-    height: 42px;
+    max-width: 135px;
+    height: 38px;
+    border-radius: 999px;
     font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.3px;
     margin: 0 auto;
   }
 
-  .modifiers-right-stack {
-    display: flex;
-    flex-direction: column;
-    justify-content: stretch;
-    flex: 0 0 auto;
-    width: 82px;
-  }
-
-  .modifiers-right-stack .keypad-pill.pill-win {
-    width: 100%;
-    height: 100%;
-    min-height: 142px;
-    border-radius: 24px;
-    font-size: 19px;
-    font-weight: 900;
-    letter-spacing: 0.5px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - MÁS GRANDES */
+  /* GRUPO 3: RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO */
   .footer-outcomes-col {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding-right: 22px;
+    padding-right: 18px;
     border-right: 2px solid #cbd5e1;
     min-width: 0;
   }
@@ -4534,9 +4491,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 30px;
+    gap: 22px;
     width: 100%;
-    max-width: 520px;
+    max-width: 440px;
   }
 
   /* GRUPO 4: ACCIÓN RETROCEDER Y VISUALIZAR TIE */
@@ -4544,7 +4501,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 22px;
+    gap: 18px;
     min-width: 0;
   }
 
@@ -4553,16 +4510,16 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
   }
 
-  /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]) */
+  /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]): MISMO ALTO/PROPORCIÓN VISUAL */
   .keypad-btn-tie-toggle {
-    width: 94px;
-    height: 94px;
+    width: 88px;
+    height: 88px;
     background: #ffffff;
-    border: 3px solid #0f172a;
-    border-radius: 14px;
+    border: 2.5px solid #0f172a;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4667,34 +4624,39 @@
       padding-bottom: 14px;
     }
     .footer-modifiers-col {
+      flex-direction: row;
       justify-content: center;
       padding-bottom: 14px;
+    }
+    .modifiers-stack {
+      flex-direction: row;
+      max-width: 340px;
+      gap: 10px;
+    }
+    .modifiers-stack .keypad-pill {
+      max-width: 100px;
+      height: 36px;
     }
   }
 
   @media (max-width: 600px) {
     .outcomes-grid-3col {
-      gap: 14px;
+      gap: 12px;
     }
-    .modifiers-subgrid {
+    .modifiers-stack {
       gap: 6px;
     }
-    .modifiers-left-stack .keypad-pill {
-      height: 38px;
-      font-size: 13px;
-    }
-    .modifiers-right-stack {
-      width: 65px;
-    }
-    .modifiers-right-stack .keypad-pill.pill-win {
-      font-size: 16px;
+    .modifiers-stack .keypad-pill {
+      height: 34px;
+      font-size: 12px;
+      max-width: 85px;
     }
   }
 
   /* MODIFIER PILLS ROW */
   .keypad-pill {
     width: 100%;
-    max-width: 110px;
+    max-width: 135px;
     height: 38px;
     border-radius: 999px;
     background: #ffffff;
@@ -4756,25 +4718,10 @@
     box-shadow: 0 0 12px rgba(234, 88, 12, 0.5);
   }
 
-  /* BOTÓN WIN MORADO (Referencia Imagen 3 y 4) */
-  .keypad-pill.pill-win {
-    border: 2.5px solid #7c3aed;
-    color: #7c3aed;
-  }
-  .keypad-pill.pill-win:hover:not(.active):not(:disabled) {
-    background: rgba(124, 58, 237, 0.08);
-  }
-  .keypad-pill.pill-win.active {
-    background: radial-gradient(circle at 50% 30%, #8b5cf6, #6d28d9);
-    color: #ffffff;
-    border-color: #5b21b6;
-    box-shadow: 0 0 14px rgba(124, 58, 237, 0.55);
-  }
-
-  /* 3D CIRCULAR CASINO BUTTONS */
+  /* 3D CIRCULAR CASINO BUTTONS: TODOS DEL MISMO TAMAÑO EXACTO */
   .keypad-btn-circle {
-    width: 118px;
-    height: 118px;
+    width: 96px;
+    height: 96px;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -4783,25 +4730,25 @@
     cursor: pointer;
     border: none;
     background: linear-gradient(145deg, #ffffff, #94a3b8, #cbd5e1);
-    padding: 5px;
-    box-shadow: 0 7px 20px rgba(0, 0, 0, 0.38), inset 0 2px 2px rgba(255, 255, 255, 0.9);
+    padding: 4px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.9);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     user-select: none;
   }
 
   .keypad-btn-circle.btn-undo {
-    width: 106px;
-    height: 106px;
+    width: 96px;
+    height: 96px;
   }
 
   @media (max-width: 600px) {
     .keypad-btn-circle {
-      width: 76px;
-      height: 76px;
+      width: 72px;
+      height: 72px;
     }
     .keypad-btn-circle.btn-undo {
-      width: 76px;
-      height: 76px;
+      width: 72px;
+      height: 72px;
     }
   }
 
@@ -4831,7 +4778,7 @@
   }
 
   .btn-letter {
-    font-size: 58px;
+    font-size: 46px;
     font-weight: 900;
     color: #ffffff;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
@@ -4840,7 +4787,7 @@
 
   @media (max-width: 600px) {
     .btn-letter {
-      font-size: 34px;
+      font-size: 32px;
     }
   }
 
@@ -4864,8 +4811,8 @@
     background: radial-gradient(circle at 35% 30%, #fde047 0%, #eab308 50%, #854d0e 100%);
   }
   .btn-arrow-icon {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     display: block;
     color: #ffffff;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.65));
@@ -4874,10 +4821,12 @@
 
   @media (max-width: 600px) {
     .btn-arrow-icon {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
     }
   }
+
+
 
   /* CORNER BADGES ON P, B, T */
   .badge-corner-tl {
