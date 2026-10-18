@@ -1882,15 +1882,6 @@
       >
         Opciones
       </button>
-
-      <button
-        type="button"
-        class="sb-btn sb-btn-back"
-        on:click={handleClose}
-        title="Volver a la lista de mesas de la sala"
-      >
-        Volver a Mesas
-      </button>
     </div>
   </header>
 
@@ -2539,6 +2530,19 @@
                 </svg>
                 Tema Claro
               {/if}
+            </button>
+
+            <!-- COL-12: Volver a la Lista de Mesas -->
+            <button
+              type="button"
+              class="btn-opt col-12 btn-opt-back-mesas"
+              on:click={handleClose}
+              title="Volver a la lista de mesas de la sala"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; flex-shrink: 0;">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              Volver a Mesas
             </button>
           </div>
         </div>
@@ -4433,6 +4437,21 @@
     box-shadow: 0 4px 10px rgba(190, 18, 60, 0.35);
   }
 
+  .btn-opt-back-mesas {
+    background: #1e293b;
+    color: #f1f5f9;
+    border: 1.5px solid #334155;
+    margin-top: 4px;
+    font-size: 14px;
+    padding: 14px 16px;
+  }
+  .btn-opt-back-mesas:hover {
+    background: #334155;
+    color: #ffffff;
+    border-color: #475569;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
   .btn-opt:disabled {
     opacity: 0.35;
     cursor: not-allowed;
@@ -4715,5 +4734,17 @@
 
   .theme-light .modal-backdrop {
     background: rgba(15, 23, 42, 0.5);
+  }
+
+  .theme-light .btn-opt-back-mesas {
+    background: #f1f5f9;
+    color: #0f172a;
+    border: 1.5px solid #cbd5e1;
+  }
+  .theme-light .btn-opt-back-mesas:hover {
+    background: #e2e8f0;
+    color: #000000;
+    border-color: #94a3b8;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   }
 </style>
