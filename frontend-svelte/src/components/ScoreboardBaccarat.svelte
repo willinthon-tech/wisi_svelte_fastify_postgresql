@@ -4262,7 +4262,7 @@
 
   @media (max-width: 860px) {
     .scoreboard-stats-bar {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 6px;
       padding: 4px 10px;
     }
@@ -4278,6 +4278,7 @@
     }
     .stats-bar-col.col-prediction {
       grid-column: 1;
+      grid-row: 2;
       justify-content: center;
       align-items: center;
       width: 100%;
@@ -4285,6 +4286,7 @@
     }
     .stats-bar-col.col-percentages {
       grid-column: 2;
+      grid-row: 2;
       justify-content: center;
       align-items: center;
       width: 100%;
@@ -4295,18 +4297,70 @@
     }
   }
 
+  /* RESOLUCIONES PEQUEÑAS: PREDICCIÓN Y PORCENTAJES VAN UNA AL LADO DE LA OTRA (2 COL-6) */
   @media (max-width: 580px) {
     .scoreboard-stats-bar {
-      grid-template-columns: 1fr;
-      gap: 4px;
-      padding: 4px 6px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 6px;
+      padding: 3px 6px;
     }
-    .stats-bar-col.col-counters,
-    .stats-bar-col.col-prediction,
-    .stats-bar-col.col-percentages {
-      grid-column: 1;
+    .stats-bar-col.col-counters {
+      grid-column: 1 / -1;
+      grid-row: 1;
       justify-content: center;
       width: 100%;
+    }
+    .stats-strip-counters {
+      gap: clamp(6px, 1.4vw, 10px);
+    }
+    .stats-bar-col.col-prediction {
+      grid-column: 1;
+      grid-row: 2;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      margin: 0 auto;
+      gap: 6px;
+    }
+    .stats-bar-col.col-percentages {
+      grid-column: 2;
+      grid-row: 2;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .pred-title {
+      font-size: clamp(11.5px, 1.2vw, 13.5px);
+    }
+    .prediction-pills-row {
+      gap: 4px;
+    }
+    .pred-pill {
+      padding: 2px 6px;
+      gap: 4px;
+    }
+    .pred-badge-circle {
+      width: 20px;
+      height: 20px;
+      font-size: 11px;
+    }
+    .pred-symbol.pred-ring {
+      width: 11px;
+      height: 11px;
+    }
+    .pred-symbol.pred-dot {
+      width: 9px;
+      height: 9px;
+    }
+    .pred-symbol.pred-slash {
+      width: 11px;
+      height: 11px;
+    }
+    .stats-strip-pct-box {
+      padding: 3px 8px;
+      gap: 6px;
+      font-size: 11px;
     }
   }
 
