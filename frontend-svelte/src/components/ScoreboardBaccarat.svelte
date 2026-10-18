@@ -546,17 +546,17 @@
   const BIG_ROWS = 6;
   const DERIVED_ROWS = 12;
 
-  // Dynamic roadmap sizing: scales with available height (e.g. 24px - 50px depending on monitor)
-  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 20);
+  // Dynamic roadmap sizing: scales with available height (e.g. 14px - 45px depending on monitor)
+  $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 14);
   $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
 
-  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 18);
+  $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 14);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads: cuadrículas compactas de casino (12 filas, ~9px a 12px de celda para cubrir la tarjeta)
-  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 36);
+  // Derived roads: cuadrículas compactas de casino (12 filas, adaptativas para cubrir la tarjeta)
+  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 24);
   $: derivedRows = DERIVED_ROWS;
-  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 8);
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 6);
   $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 45);
 
   function safeJsonParse(val, fallback = []) {
