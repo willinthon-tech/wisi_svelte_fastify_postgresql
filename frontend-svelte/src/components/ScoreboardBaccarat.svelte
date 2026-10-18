@@ -4365,24 +4365,26 @@
     }
   }
 
-  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA (MÁS GRANDE HACIA ARRIBA) */
+  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA (MÁS GRANDE HACIA ARRIBA EN TODAS LAS RESOLUCIONES) */
   .scoreboard-footer-panel {
     background: #ffffff;
-    border-radius: 14px;
-    padding: clamp(6px, 1vh, 12px) clamp(10px, 1.4vw, 18px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    border: 2px solid #e2e8f0;
+    border-radius: 16px;
+    padding: clamp(8px, 1.3vh, 16px) clamp(12px, 1.5vw, 22px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    border: 2.5px solid #cbd5e1;
     display: grid;
-    grid-template-columns: minmax(130px, 1fr) minmax(170px, 1.25fr) minmax(280px, 2.5fr) minmax(170px, 1.45fr);
-    gap: clamp(6px, 1vw, 16px);
-    align-items: center;
-    justify-content: center;
+    /* COL-3 IZQUIERDA (TECLADO NUMÉRICO) Y COL-9 DERECHA (CONTROLES) EN TODAS LAS RESOLUCIONES */
+    grid-template-columns: minmax(160px, 3fr) minmax(0, 9fr);
+    gap: clamp(10px, 1.4vw, 22px);
+    align-items: stretch;
+    justify-content: stretch;
     flex-shrink: 0;
     position: relative;
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
-    --footer-btn-size: clamp(70px, 10.5vh, 98px);
+    /* MUCHO MÁS GRANDE HACIA ARRIBA EN PANTALLAS GRANDES */
+    --footer-btn-size: clamp(86px, 13.5vh, 130px);
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -4461,16 +4463,17 @@
     box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
   }
 
-  /* GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - VALOR/PUNTAJE COMODÍN) */
+  /* GRUPO 1: TECLADO NUMÉRICO (0 AL 9 - COL-3 ABARCA TODA LA ALTURA A LA IZQUIERDA) */
   .footer-score-col {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: clamp(10px, 1.4vw, 18px);
-    border-right: 2px solid #cbd5e1;
+    padding-right: clamp(10px, 1.4vw, 20px);
+    border-right: 2.5px solid #cbd5e1;
     min-width: 0;
     height: 100%;
+    width: 100%;
   }
 
   .score-keypad-box {
@@ -4479,20 +4482,23 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: calc(var(--footer-btn-size, 92px) * 1.84);
+    max-width: clamp(170px, 16vw, 250px);
+    height: 100%;
   }
 
   .score-keypad-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr) 1.15fr;
     grid-template-rows: repeat(3, 1fr);
     grid-template-areas:
       "n1 n2 n3 n0"
       "n4 n5 n6 n0"
       "n7 n8 n9 n0";
-    gap: clamp(3px, 0.5vh, 6px);
+    gap: clamp(4px, 0.7vh, 8px);
     width: 100%;
-    height: calc(var(--footer-btn-size, 92px) * 1.32);
+    height: 100%;
+    min-height: calc(var(--footer-btn-size) * 1.55);
+    max-height: calc(var(--footer-btn-size) * 1.85);
   }
 
   .btn-num-1 { grid-area: n1; }
@@ -4507,17 +4513,17 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: clamp(16px, calc(var(--footer-btn-size, 92px) * 0.23), 22px);
+    font-size: clamp(20px, calc(var(--footer-btn-size) * 0.28), 32px);
     font-weight: 900;
   }
 
   .btn-num-key {
-    border-radius: 8px;
-    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    border: 2px solid #cbd5e1;
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: clamp(13px, calc(var(--footer-btn-size, 92px) * 0.19), 18px);
+    font-size: clamp(15px, calc(var(--footer-btn-size) * 0.22), 24px);
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4527,7 +4533,7 @@
     line-height: 1;
     transition: all 0.12s ease;
     user-select: none;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   }
 
   .btn-num-key:hover:not(.active) {
@@ -4551,75 +4557,85 @@
     z-index: 2;
   }
 
-  /* CONTENEDOR PRINCIPAL DE CONTROLES (EN MODO 1 FILA: DISPLAY CONTENTS) */
+  /* COL-9: CONTENEDOR PRINCIPAL DE CONTROLES (2 FILAS COL-12) EN TODAS LAS RESOLUCIONES */
   .footer-main-controls-col {
-    display: contents;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: clamp(8px, 1.4vh, 16px);
+    width: 100%;
+    height: 100%;
+    min-width: 0;
   }
 
-  /* FILA 1: MODIFICADORES (EN MODO 1 FILA: GRID 2X2 A LA IZQUIERDA DE RESULTADOS) */
+  /* FILA 1 (COL-12): 4 MODIFICADORES (P.PAIR, B.PAIR, NATURAL, WIN) CADA UNO EN COL-3 */
   .footer-modifiers-row {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: repeat(2, 1fr);
-    gap: clamp(4px, 0.7vh, 8px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: clamp(8px, 1.2vw, 16px);
     width: 100%;
-    max-width: calc(var(--footer-btn-size, 92px) * 2.45);
-    height: calc(var(--footer-btn-size, 92px) * 1.32);
-    align-items: stretch;
-    border-right: 2px solid #cbd5e1;
-    padding-right: clamp(10px, 1.4vw, 18px);
+    border-bottom: 2.5px solid #cbd5e1;
+    padding-bottom: clamp(6px, 1.1vh, 12px);
   }
 
   .footer-modifiers-row .keypad-pill {
     width: 100%;
     max-width: none;
-    height: 100%;
+    height: clamp(38px, 5.4vh, 52px);
     border-radius: 9999px;
-    font-size: clamp(11.5px, calc(var(--footer-btn-size, 92px) * 0.15), 14.5px);
+    font-size: clamp(13px, calc(var(--footer-btn-size) * 0.165), 18px);
     font-weight: 800;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.4px;
     margin: 0;
-    padding: 0 6px;
+    padding: 0 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   }
 
-  /* FILA 2: ACCIONES (EN MODO 1 FILA: DISPLAY CONTENTS) */
+  /* FILA 2 (COL-12): 2 COL-6 (RESULTADOS Y ACCIONES) */
   .footer-actions-row {
-    display: contents;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 1.8vw, 28px);
+    width: 100%;
+    align-items: center;
   }
 
-  /* RESULTADOS PRINCIPALES (PUNTO, BANCA, EMPATE) - TODOS DEL MISMO TAMAÑO */
+  /* MITAD IZQUIERDA (COL-6): PUNTO, BANCA, EMPATE (CADA UNO EN COL-4) */
   .footer-outcomes-col {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(8px, 1.4vw, 20px);
+    justify-items: center;
     align-items: center;
-    gap: clamp(8px, 1.3vw, 18px);
-    padding-right: clamp(10px, 1.4vw, 18px);
-    border-right: 2px solid #cbd5e1;
-    min-width: 0;
+    border-right: 2.5px solid #cbd5e1;
+    padding-right: clamp(10px, 1.6vw, 24px);
+    width: 100%;
     height: 100%;
   }
 
-  /* ACCIÓN RETROCEDER Y VISUALIZAR TIE */
+  /* MITAD DERECHA (COL-6): RETROCEDER Y TIE / EDITAR (CADA UNO EN COL-6) */
   .footer-undo-col {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 1.8vw, 24px);
+    justify-items: center;
     align-items: center;
-    gap: clamp(8px, 1.3vw, 18px);
-    min-width: 0;
+    padding-left: clamp(4px, 0.8vw, 14px);
+    width: 100%;
     height: 100%;
   }
 
   .action-btn-item {
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: clamp(2px, 0.5vh, 5px);
-    width: var(--footer-btn-size, 92px);
+    gap: clamp(3px, 0.6vh, 7px);
   }
 
   /* BOTÓN CUADRADO TOGGLE DE TIE (SLASH [/] vs CÍRCULO [O]): MISMO TAMAÑO EXACTO */
@@ -4733,155 +4749,7 @@
     text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
   }
 
-  /* MODO DOBLE FILA: CUANDO ESTÉ PEQUEÑO (COL-3 NUMÉRICO + COL-9 CONTROLES) */
-  @media (max-width: 1280px) {
-    .scoreboard-footer-panel {
-      grid-template-columns: minmax(130px, 3fr) minmax(0, 9fr);
-      gap: clamp(8px, 1.2vw, 18px);
-      padding: clamp(8px, 1.2vh, 14px) clamp(10px, 1.4vw, 18px);
-      --footer-btn-size: clamp(66px, 9.8vh, 92px);
-      align-items: stretch;
-    }
 
-    /* COL-3 IZQUIERDA: TECLADO NUMÉRICO (ABARCANDO TODA LA ALTURA DE ARRIBA A ABAJO) */
-    .footer-score-col {
-      grid-column: 1;
-      border-right: 2px solid #cbd5e1;
-      border-bottom: none;
-      padding-right: clamp(10px, 1.4vw, 18px);
-      padding-left: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      height: 100%;
-      min-height: 100%;
-      width: 100%;
-    }
-
-    .score-keypad-box {
-      width: 100%;
-      max-width: 190px;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-
-    .score-keypad-grid {
-      height: 100%;
-      min-height: calc(var(--footer-btn-size) * 1.55);
-      max-height: calc(var(--footer-btn-size) * 1.85);
-      gap: clamp(3px, 0.6vh, 6px);
-    }
-
-    /* COL-9 DERECHA: CONTENEDOR PRINCIPAL (2 FILAS COL-12) */
-    .footer-main-controls-col {
-      grid-column: 2;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: clamp(8px, 1.2vh, 14px);
-      width: 100%;
-      height: 100%;
-      min-width: 0;
-    }
-
-    /* FILA 1 (COL-12): 4 BOTONES MODIFICADORES CADA UNO EN COL-3 */
-    .footer-modifiers-row {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      grid-template-rows: auto;
-      gap: clamp(6px, 1vw, 12px);
-      width: 100%;
-      max-width: none;
-      height: auto;
-      border-right: none;
-      border-bottom: 2px solid #cbd5e1;
-      padding-bottom: clamp(6px, 1vh, 12px);
-      padding-right: 0;
-    }
-
-    .footer-modifiers-row .keypad-pill {
-      width: 100%;
-      max-width: none;
-      height: clamp(34px, 4.8vh, 42px);
-      font-size: clamp(12px, calc(var(--footer-btn-size) * 0.17), 15px);
-    }
-
-    /* FILA 2 (COL-12): 2 COL-6 (RESULTADOS Y ACCIONES) */
-    .footer-actions-row {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: clamp(8px, 1.5vw, 20px);
-      width: 100%;
-      align-items: center;
-    }
-
-    /* COL-6 IZQUIERDA: PUNTO, BANCA, EMPATE CADA UNO EN COL-4 */
-    .footer-outcomes-col {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: clamp(6px, 1vw, 14px);
-      justify-items: center;
-      align-items: center;
-      border-right: 2px solid #cbd5e1;
-      border-bottom: none;
-      padding-right: clamp(8px, 1.2vw, 16px);
-      padding-left: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-      width: 100%;
-      height: 100%;
-    }
-
-    /* COL-6 DERECHA: RETROCEDER Y TIE / EDITAR CADA UNO EN COL-6 */
-    .footer-undo-col {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: clamp(8px, 1.5vw, 18px);
-      justify-items: center;
-      align-items: center;
-      border-right: none;
-      border-bottom: none;
-      padding-left: clamp(4px, 0.8vw, 12px);
-      padding-right: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-      width: 100%;
-      height: 100%;
-    }
-
-    .action-btn-item {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: clamp(2px, 0.4vh, 5px);
-    }
-
-    .btn-letter {
-      font-size: calc(var(--footer-btn-size) * 0.48);
-    }
-    .btn-arrow-icon {
-      width: calc(var(--footer-btn-size) * 0.4);
-      height: calc(var(--footer-btn-size) * 0.4);
-    }
-    .tie-toggle-svg {
-      width: calc(var(--footer-btn-size) * 0.46);
-      height: calc(var(--footer-btn-size) * 0.46);
-    }
-    .editar-icon-svg {
-      width: calc(var(--footer-btn-size) * 0.4);
-      height: calc(var(--footer-btn-size) * 0.4);
-    }
-    .btn-caption, .tie-toggle-caption {
-      font-size: clamp(10.5px, calc(var(--footer-btn-size) * 0.14), 13px);
-    }
-  }
 
   /* PANTALLAS PEQUEÑAS / MÓVIL (MAX-WIDTH: 680PX) */
   @media (max-width: 680px) {
