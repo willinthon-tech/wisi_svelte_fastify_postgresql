@@ -1929,135 +1929,56 @@
 
   <!-- OFFICIAL CASINO ROADMAPS MASTER SECTION -->
   <section class="sb-roadmaps-master">
-    <div
-      class="roadmap-card col-full bigroad-card"
-      bind:clientWidth={bigRoadWidth}
-      bind:clientHeight={bigRoadHeight}
-      style="--big-cell-size: {bigRoadCellSize}px;"
-    >
-      <div class="grid-scrollable" bind:this={bigRoadScrollEl}>
-        <table class="bigroad-table">
-          <tbody>
-            {#each bigRoadGrid.grid as row, rIdx}
-              <tr>
-                {#each row as cell, cIdx}
-                  <td
-                    class="bigroad-cell"
-                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                    class:has-hand={!!cell}
-                    on:click={() => cell && selectHand(cell.historyIndex)}
-                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}${cell.natural ? ' [Natural]' : ''}${cell.win ? ' [WIN]' : ''} (Clic para editar)` : ''}
-                  >
-                    {#if cell}
-                      <div
-                        class="bigroad-ring {cell.winner.toLowerCase()}"
-                        class:is-tie={cell.isTieOnly}
-                        class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && !cell.win && cell.score === null}
-                        class:is-win-solid={cell.win}
-                      >
-                        {#if cell.natural && !cell.win && (cell.score === undefined || cell.score === null)}
-                          <span class="dot-natural" title="Victoria Natural (8 ó 9)"></span>
-                        {/if}
-                        {#if cell.score !== undefined && cell.score !== null}
-                          <span class="bigroad-score">{cell.score}</span>
-                        {/if}
-                        {#if cell.tieCount > 0 && tieMode === 'slash'}
-                          <span class="bigroad-tie-slash"></span>
-                          {#if cell.tieCount > 1}
-                            <span class="tie-badge-num">{cell.tieCount}</span>
-                          {/if}
-                        {/if}
-                        {#if cell.bPair}
-                          <span class="dot-b-pair"></span>
-                        {/if}
-                        {#if cell.pPair}
-                          <span class="dot-p-pair"></span>
-                        {/if}
-                      </div>
-                    {:else}
-                      <div class="bigroad-empty"></div>
-                    {/if}
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- INFERIOR: 2 COLUMNAS (COL-6 IZQUIERDA Y COL-6 DERECHA) -->
-    <div class="sb-roadmaps-bottom-split">
-      <!-- COL-6 IZQUIERDA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (1/3 CADA UNO) -->
+    <!-- COL-9 IZQUIERDA: GRAN CAMINO (PRINCIPAL - ROJO) Y PLATO DE BOLAS (VERDE, ABAJO) -->
+    <div class="sb-roadmaps-left-col">
+      <!-- 1. BIG ROAD (CUADRILLA PRINCIPAL - ROJO) -->
       <div
-        class="roadmap-card col-half derived-roads-column"
-        bind:clientWidth={derivedWidth}
-        bind:clientHeight={derivedHeight}
-        style="--derived-cell-size: {derivedCellSize}px;"
+        class="roadmap-card bigroad-card"
+        bind:clientWidth={bigRoadWidth}
+        bind:clientHeight={bigRoadHeight}
+        style="--big-cell-size: {bigRoadCellSize}px;"
       >
-        <!-- 1. BIG EYE BOY (GRAN OJO) -->
-        <div class="derived-band" bind:this={bigEyeScrollEl}>
-          <table class="derived-table">
+        <div class="grid-scrollable" bind:this={bigRoadScrollEl}>
+          <table class="bigroad-table">
             <tbody>
-              {#each bigEyeGrid.grid as row}
+              {#each bigRoadGrid.grid as row, rIdx}
                 <tr>
-                  {#each row as cell}
+                  {#each row as cell, cIdx}
                     <td
-                      class="derived-cell"
+                      class="bigroad-cell"
                       class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                      on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                      title={cell ? `Gran Ojo - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                      class:has-hand={!!cell}
+                      on:click={() => cell && selectHand(cell.historyIndex)}
+                      title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}${cell.natural ? ' [Natural]' : ''}${cell.win ? ' [WIN]' : ''} (Clic para editar)` : ''}
                     >
                       {#if cell}
-                        <span class="derived-ring {cell.color}"></span>
-                      {/if}
-                    </td>
-                  {/each}
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 2. SMALL ROAD (CAMINO PEQUEÑO) -->
-        <div class="derived-band" bind:this={smallRoadScrollEl}>
-          <table class="derived-table">
-            <tbody>
-              {#each smallRoadGrid.grid as row}
-                <tr>
-                  {#each row as cell}
-                    <td
-                      class="derived-cell"
-                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                      on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                      title={cell ? `Camino Pequeño - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                    >
-                      {#if cell}
-                        <span class="derived-dot {cell.color}"></span>
-                      {/if}
-                    </td>
-                  {/each}
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 3. COCKROACH ROAD (CUCARACHA) -->
-        <div class="derived-band" bind:this={cockroachScrollEl}>
-          <table class="derived-table">
-            <tbody>
-              {#each cockroachGrid.grid as row}
-                <tr>
-                  {#each row as cell}
-                    <td
-                      class="derived-cell"
-                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                      on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                      title={cell ? `Cucaracha - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                    >
-                      {#if cell}
-                        <span class="derived-slash {cell.color}"></span>
+                        <div
+                          class="bigroad-ring {cell.winner.toLowerCase()}"
+                          class:is-tie={cell.isTieOnly}
+                          class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && !cell.win && cell.score === null}
+                          class:is-win-solid={cell.win}
+                        >
+                          {#if cell.natural && !cell.win && (cell.score === undefined || cell.score === null)}
+                            <span class="dot-natural" title="Victoria Natural (8 ó 9)"></span>
+                          {/if}
+                          {#if cell.score !== undefined && cell.score !== null}
+                            <span class="bigroad-score">{cell.score}</span>
+                          {/if}
+                          {#if cell.tieCount > 0 && tieMode === 'slash'}
+                            <span class="bigroad-tie-slash"></span>
+                            {#if cell.tieCount > 1}
+                              <span class="tie-badge-num">{cell.tieCount}</span>
+                            {/if}
+                          {/if}
+                          {#if cell.bPair}
+                            <span class="dot-b-pair"></span>
+                          {/if}
+                          {#if cell.pPair}
+                            <span class="dot-p-pair"></span>
+                          {/if}
+                        </div>
+                      {:else}
+                        <div class="bigroad-empty"></div>
                       {/if}
                     </td>
                   {/each}
@@ -2068,9 +1989,9 @@
         </div>
       </div>
 
-      <!-- COL-6 DERECHA: BEAD PLATE (PLATO DE CUENTAS) -->
+      <!-- 2. BEAD PLATE (OTRA CUADRILLA - VERDE, ABAJO DE LA PRINCIPAL) -->
       <div
-        class="roadmap-card col-half bead-card"
+        class="roadmap-card bead-card"
         bind:clientWidth={beadWidth}
         bind:clientHeight={beadHeight}
         style="--bead-cell-size: {beadCellSize}px;"
@@ -2114,6 +2035,86 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- COL-3 DERECHA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (NARANJA, TODO HASTA ABAJO) -->
+    <div
+      class="roadmap-card derived-roads-column"
+      bind:clientWidth={derivedWidth}
+      bind:clientHeight={derivedHeight}
+      style="--derived-cell-size: {derivedCellSize}px;"
+    >
+      <!-- 1. BIG EYE BOY (GRAN OJO) -->
+      <div class="derived-band" bind:this={bigEyeScrollEl}>
+        <table class="derived-table">
+          <tbody>
+            {#each bigEyeGrid.grid as row}
+              <tr>
+                {#each row as cell}
+                  <td
+                    class="derived-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                    title={cell ? `Gran Ojo - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                  >
+                    {#if cell}
+                      <span class="derived-ring {cell.color}"></span>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 2. SMALL ROAD (CAMINO PEQUEÑO) -->
+      <div class="derived-band" bind:this={smallRoadScrollEl}>
+        <table class="derived-table">
+          <tbody>
+            {#each smallRoadGrid.grid as row}
+              <tr>
+                {#each row as cell}
+                  <td
+                    class="derived-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                    title={cell ? `Camino Pequeño - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                  >
+                    {#if cell}
+                      <span class="derived-dot {cell.color}"></span>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 3. COCKROACH ROAD (CUCARACHA) -->
+      <div class="derived-band" bind:this={cockroachScrollEl}>
+        <table class="derived-table">
+          <tbody>
+            {#each cockroachGrid.grid as row}
+              <tr>
+                {#each row as cell}
+                  <td
+                    class="derived-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                    title={cell ? `Cucaracha - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                  >
+                    {#if cell}
+                      <span class="derived-slash {cell.color}"></span>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -3137,21 +3138,24 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (EXPAND TO FILL ALL AVAILABLE SPACE) */
+  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-9 IZQUIERDA Y COL-3 DERECHA) */
   .sb-roadmaps-master {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 9fr) minmax(0, 3fr);
     gap: 8px;
     flex: 1 1 auto;
     min-height: 260px;
-  }
-
-  .col-full {
     width: 100%;
-    box-sizing: border-box;
+    align-items: stretch;
   }
 
-  .col-half {
+  /* COLUMNA IZQUIERDA (COL-9): GRAN CAMINO ARRIBA Y PLATO DE BOLAS ABAJO */
+  .sb-roadmaps-left-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    min-height: 0;
     min-width: 0;
   }
 
@@ -3165,29 +3169,30 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
+  /* CUADRILLA PRINCIPAL (ROJO): GRAN CAMINO - MÁS GRANDE Y ABARCA MÁS HACIA ABAJO */
   .bigroad-card {
-    flex: 1 1 50%;
+    flex: 1.35 1 58%;
     min-height: 130px;
     width: 100%;
     display: flex;
   }
 
-  /* SPLIT BOTTOM SECTION: COL-6 DERIVED ROADS & COL-6 BEAD PLATE */
-  .sb-roadmaps-bottom-split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    flex: 1 1 50%;
-    min-height: 130px;
-    align-items: stretch;
+  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - ABAJO DE LA PRINCIPAL */
+  .bead-card {
+    flex: 1 1 42%;
+    min-height: 100px;
+    width: 100%;
+    display: flex;
   }
 
-  /* GRUPO IZQUIERDO: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (1/3 CADA UNO) */
+  /* COLUMNA DERECHA (COL-3): 3 CUADRILLAS DERIVADAS - ABARCA TODO HASTA ABAJO (NARANJA) */
   .derived-roads-column {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
     background: #020617;
     border: 1.5px solid #1e293b;
     border-radius: 8px;
@@ -3204,25 +3209,12 @@
     overflow-x: auto;
     overflow-y: hidden;
     display: flex;
-    align-items: stretch;
+    align-items: center;
     border-bottom: 2px solid #334155;
     background: #020617;
   }
   .derived-band:last-child {
     border-bottom: none;
-  }
-
-  .bead-card {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-    background: #020617;
-    border: 1.5px solid #1e293b;
-    border-radius: 8px;
-    padding: 0;
-    margin: 0;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 
   .grid-scrollable {
@@ -3343,8 +3335,8 @@
   }
 
   .bead-circle {
-    width: calc(var(--bead-cell-size, 23px) - 4px);
-    height: calc(var(--bead-cell-size, 23px) - 4px);
+    width: calc(var(--bead-cell-size, 23px) - 3px);
+    height: calc(var(--bead-cell-size, 23px) - 3px);
     border-radius: 50%;
     margin: auto;
     display: flex;
@@ -3362,13 +3354,13 @@
   .bead-circle.empate { background: #16a34a; }
 
   .bead-letter {
-    font-size: calc(var(--bead-cell-size, 23px) * 0.46);
+    font-size: calc(var(--bead-cell-size, 23px) * 0.52);
     font-weight: 900;
     line-height: 1;
     color: #ffffff;
   }
   .bead-letter.has-score {
-    font-size: calc(var(--bead-cell-size, 23px) * 0.48);
+    font-size: calc(var(--bead-cell-size, 23px) * 0.54);
     font-weight: 900;
     color: #ffffff;
   }
@@ -3578,22 +3570,23 @@
       overflow-y: auto;
     }
     .sb-roadmaps-master {
+      grid-template-columns: 1fr;
+      flex: none;
+    }
+    .sb-roadmaps-left-col {
+      height: auto;
       flex: none;
     }
     .bigroad-card {
-      height: 220px;
+      height: 240px;
       flex: none;
     }
-    .sb-roadmaps-bottom-split {
-      grid-template-columns: 1fr;
+    .bead-card {
+      height: 180px;
       flex: none;
     }
     .derived-roads-column {
       height: 270px;
-      flex: none;
-    }
-    .bead-card {
-      height: 220px;
       flex: none;
     }
   }
