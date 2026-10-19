@@ -1799,24 +1799,16 @@
             currentStreakWinner = h.winner;
           }
 
-          if (!isDragonTailing) {
-            if (row + 1 < BIG_ROWS && !grid[row + 1][col]) {
-              row++;
-              placeCell(row, col, h, idx);
-            } else {
-              isDragonTailing = true;
-              col++;
-              ensureCol(col);
-              while (row < BIG_ROWS - 1 && !grid[row + 1][col]) {
-                row++;
-              }
-              placeCell(row, col, h, idx);
-            }
+          if (row + 1 < BIG_ROWS && !grid[row + 1][col]) {
+            row++;
+            placeCell(row, col, h, idx);
           } else {
+            isDragonTailing = true;
             col++;
             ensureCol(col);
-            while (row < BIG_ROWS - 1 && !grid[row + 1][col]) {
-              row++;
+            while (col < totalCols && grid[row][col]) {
+              col++;
+              ensureCol(col);
             }
             placeCell(row, col, h, idx);
           }
@@ -1881,26 +1873,48 @@
       const firstTurnIdx = streak.findIndex(p => p.c > streak[0].c);
       if (firstTurnIdx <= 0) return;
 
-      const pTurn = streak[firstTurnIdx - 1];
-      const cxTurn = (pTurn.c + 0.5) * cellSize;
-      const cyTurn = (pTurn.r + 0.5) * cellSize;
-      const rArc = cellSize * 0.42;
+      const tailPoints = streak.slice(firstTurnIdx - 1);
+      if (tailPoints.length < 2) return;
 
-      let d = `M ${cxTurn},${cyTurn - rArc} Q ${cxTurn},${cyTurn} ${cxTurn + cellSize * 0.5},${cyTurn}`;
+      const rArc = Math.min(cellSize * 0.42, cellSize * 0.5);
 
-      for (let k = firstTurnIdx; k < streak.length; k++) {
-        const pPrev = streak[k - 1];
-        const pNext = streak[k];
-        const cxNext = (pNext.c + 0.5) * cellSize;
-        const cyNext = (pNext.r + 0.5) * cellSize;
-        const cxPrev = (pPrev.c + 0.5) * cellSize;
-        const cyPrev = (pPrev.r + 0.5) * cellSize;
+      const p0 = tailPoints[0];
+      const cx0 = (p0.c + 0.5) * cellSize;
+      const cy0 = (p0.r + 0.5) * cellSize;
 
-        if (pNext.r === pPrev.r) {
-          d += ` L ${cxNext},${cyNext}`;
+      let d = `M ${cx0},${cy0 - rArc}`;
+
+      for (let i = 0; i < tailPoints.length; i++) {
+        const curr = tailPoints[i];
+        const cx = (curr.c + 0.5) * cellSize;
+        const cy = (curr.r + 0.5) * cellSize;
+
+        const prev = i > 0 ? tailPoints[i - 1] : { r: curr.r - 1, c: curr.c };
+        const next = i < tailPoints.length - 1 ? tailPoints[i + 1] : null;
+
+        const inDir = {
+          dr: Math.sign(curr.r - prev.r),
+          dc: Math.sign(curr.c - prev.c)
+        };
+        const outDir = next ? {
+          dr: Math.sign(next.r - curr.r),
+          dc: Math.sign(next.c - curr.c)
+        } : null;
+
+        if (!outDir) {
+          d += ` L ${cx},${cy}`;
+        } else if (inDir.dr === outDir.dr && inDir.dc === outDir.dc) {
+          // Continuación recta
         } else {
-          const dxHalf = (cxNext - cxPrev) * 0.5;
-          d += ` C ${cxPrev + dxHalf},${cyPrev} ${cxNext - dxHalf},${cyNext} ${cxNext},${cyNext}`;
+          const entryX = cx - inDir.dc * rArc;
+          const entryY = cy - inDir.dr * rArc;
+          const exitX = cx + outDir.dc * rArc;
+          const exitY = cy + outDir.dr * rArc;
+
+          if (i > 0) {
+            d += ` L ${entryX},${entryY}`;
+          }
+          d += ` Q ${cx},${cy} ${exitX},${exitY}`;
         }
       }
 
