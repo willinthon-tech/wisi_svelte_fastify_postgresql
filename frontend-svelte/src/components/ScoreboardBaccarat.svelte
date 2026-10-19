@@ -544,7 +544,7 @@
 
   const BEAD_ROWS = 4;
   const BIG_ROWS = 6;
-  const DERIVED_ROWS = 12;
+  const DERIVED_ROWS = 8;
 
   // Dynamic roadmap sizing: scales with available height (e.g. 12px - 45px depending on monitor)
   $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 12);
@@ -553,11 +553,11 @@
   $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 12);
   $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
 
-  // Derived roads: cuadrículas compactas de casino (12 filas, adaptativas para cubrir la tarjeta)
+  // Derived roads: cuadrículas de 8 filas (más grandes, adaptativas para cubrir la tarjeta)
   $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 20);
   $: derivedRows = DERIVED_ROWS;
-  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 5);
-  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 45);
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 8);
+  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 35);
 
   function safeJsonParse(val, fallback = []) {
     if (val === null || val === undefined) return fallback;
@@ -3696,14 +3696,14 @@
 
   /* 1. Big Eye Boy: Anillo hueco rojo / azul */
   .derived-table tr {
-    height: var(--derived-cell-size, 8.5px);
+    height: var(--derived-cell-size, 12px);
   }
 
   .derived-cell {
-    width: var(--derived-cell-size, 8.5px);
-    min-width: var(--derived-cell-size, 8.5px);
-    max-width: var(--derived-cell-size, 8.5px);
-    height: var(--derived-cell-size, 8.5px);
+    width: var(--derived-cell-size, 12px);
+    min-width: var(--derived-cell-size, 12px);
+    max-width: var(--derived-cell-size, 12px);
+    height: var(--derived-cell-size, 12px);
     box-sizing: border-box;
     border: 1px solid #1e293b;
     padding: 0;
@@ -3724,11 +3724,11 @@
   .derived-ring {
     display: inline-block;
     vertical-align: middle;
-    width: max(4.6px, calc(var(--derived-cell-size, 8.5px) * 0.65));
-    height: max(4.6px, calc(var(--derived-cell-size, 8.5px) * 0.65));
+    width: max(5.5px, calc(var(--derived-cell-size, 12px) * 0.68));
+    height: max(5.5px, calc(var(--derived-cell-size, 12px) * 0.68));
     margin: 0 auto;
     border-radius: 50%;
-    border: 1.2px solid transparent;
+    border: max(1.5px, calc(var(--derived-cell-size, 12px) * 0.14)) solid transparent;
     box-sizing: border-box;
   }
   .derived-ring.red { border-color: #ef4444; }
@@ -3738,8 +3738,8 @@
   .derived-dot {
     display: inline-block;
     vertical-align: middle;
-    width: max(3.2px, calc(var(--derived-cell-size, 8.5px) * 0.48));
-    height: max(3.2px, calc(var(--derived-cell-size, 8.5px) * 0.48));
+    width: max(4px, calc(var(--derived-cell-size, 12px) * 0.52));
+    height: max(4px, calc(var(--derived-cell-size, 12px) * 0.52));
     margin: 0 auto;
     border-radius: 50%;
   }
@@ -3750,8 +3750,8 @@
   .derived-slash {
     display: inline-block;
     vertical-align: middle;
-    width: max(5px, calc(var(--derived-cell-size, 8.5px) * 0.72));
-    height: 1.3px;
+    width: max(6.5px, calc(var(--derived-cell-size, 12px) * 0.72));
+    height: max(1.8px, calc(var(--derived-cell-size, 12px) * 0.14));
     margin: 0 auto;
     transform: rotate(-45deg);
     border-radius: 1px;
@@ -4452,26 +4452,27 @@
     }
   }
 
-  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA (MÁS GRANDE HACIA ARRIBA EN TODAS LAS RESOLUCIONES) */
+  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA (SE AJUSTA A SU CONTENEDOR EN PANTALLAS PEQUEÑAS SIN DESBORDAR) */
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 16px;
-    padding: clamp(10px, 1.6vh, 20px) clamp(16px, 2.2vw, 32px);
+    padding: clamp(8px, 1.4vh, 18px) clamp(12px, 1.8vw, 28px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     border: 2.5px solid #cbd5e1;
     display: grid;
     /* COL-3 IZQUIERDA (TECLADO NUMÉRICO) Y COL-9 DERECHA (CONTROLES) EN TODAS LAS RESOLUCIONES */
-    grid-template-columns: minmax(210px, 3.2fr) minmax(0, 8.8fr);
-    gap: clamp(14px, 2vw, 30px);
-    align-items: stretch;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
+    gap: clamp(10px, 1.6vw, 24px);
+    align-items: center;
     justify-content: stretch;
     flex-shrink: 0;
     position: relative;
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
-    /* MÁS GRANDE HACIA ARRIBA EN PANTALLAS GRANDES */
-    --footer-btn-size: clamp(112px, 18vh, 175px);
+    overflow: hidden;
+    /* AJUSTE FLUIDO A SU CONTENEDOR: GRANDE EN MONITOR, ESCALA PROPORCIONAL SIN DESBORDAR EN PANTALLAS PEQUEÑAS */
+    --footer-btn-size: clamp(48px, min(8.2vw, 14.5vh), 140px);
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -4556,8 +4557,8 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding-right: clamp(10px, 1.4vw, 20px);
-    border-right: 2.5px solid #cbd5e1;
+    padding-right: clamp(6px, 1vw, 16px);
+    border-right: none;
     min-width: 0;
     height: 100%;
     width: 100%;
@@ -4569,7 +4570,8 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: clamp(210px, 20vw, 340px);
+    max-width: calc(var(--footer-btn-size) * 2.2);
+    min-width: 0;
     height: 100%;
   }
 
@@ -4581,11 +4583,12 @@
       "n1 n2 n3 n0"
       "n4 n5 n6 n0"
       "n7 n8 n9 n0";
-    gap: clamp(4px, 0.7vh, 8px);
+    gap: clamp(3px, 0.6vh, 7px);
     width: 100%;
+    min-width: 0;
     height: 100%;
-    min-height: calc(var(--footer-btn-size) * 1.6);
-    max-height: calc(var(--footer-btn-size) * 2.0);
+    min-height: calc(var(--footer-btn-size) * 1.35);
+    max-height: calc(var(--footer-btn-size) * 1.75);
   }
 
   .btn-num-1 { grid-area: n1; }
@@ -4600,7 +4603,7 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: clamp(24px, calc(var(--footer-btn-size) * 0.28), 42px);
+    font-size: clamp(20px, calc(var(--footer-btn-size) * 0.28), 38px);
     font-weight: 900;
   }
 
@@ -4610,7 +4613,7 @@
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: clamp(18px, calc(var(--footer-btn-size) * 0.22), 32px);
+    font-size: clamp(14px, calc(var(--footer-btn-size) * 0.22), 28px);
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4649,7 +4652,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: clamp(10px, 1.8vh, 22px);
+    gap: clamp(8px, 1.4vh, 18px);
     width: 100%;
     height: 100%;
     min-width: 0;
@@ -4659,22 +4662,23 @@
   .footer-modifiers-row {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: clamp(10px, 1.5vw, 20px);
+    gap: clamp(8px, 1.4vw, 18px);
     width: 100%;
-    border-bottom: 2.5px solid #cbd5e1;
-    padding-bottom: clamp(8px, 1.4vh, 16px);
+    min-width: 0;
+    border-bottom: none;
+    padding-bottom: clamp(4px, 0.8vh, 10px);
   }
 
   .footer-modifiers-row .keypad-pill {
     width: 100%;
     max-width: none;
-    height: clamp(44px, 6.4vh, 64px);
+    height: clamp(32px, calc(var(--footer-btn-size) * 0.38), 54px);
     border-radius: 9999px;
-    font-size: clamp(14px, calc(var(--footer-btn-size) * 0.165), 22px);
+    font-size: clamp(11.5px, calc(var(--footer-btn-size) * 0.155), 18px);
     font-weight: 800;
     letter-spacing: 0.4px;
     margin: 0;
-    padding: 0 8px;
+    padding: 0 6px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4686,8 +4690,9 @@
   .footer-actions-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: clamp(10px, 1.8vw, 28px);
+    gap: clamp(8px, 1.5vw, 24px);
     width: 100%;
+    min-width: 0;
     align-items: center;
   }
 
@@ -4695,25 +4700,27 @@
   .footer-outcomes-col {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: clamp(8px, 1.4vw, 20px);
+    gap: clamp(6px, 1.2vw, 18px);
     justify-items: center;
     align-items: center;
-    border-right: 2.5px solid #cbd5e1;
-    padding-right: clamp(10px, 1.6vw, 24px);
+    border-right: none;
+    padding-right: clamp(4px, 1vw, 16px);
     width: 100%;
     height: 100%;
+    min-width: 0;
   }
 
   /* MITAD DERECHA (COL-6): RETROCEDER Y TIE / EDITAR (CADA UNO EN COL-6) */
   .footer-undo-col {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: clamp(10px, 1.8vw, 24px);
+    gap: clamp(8px, 1.4vw, 20px);
     justify-items: center;
     align-items: center;
     padding-left: clamp(4px, 0.8vw, 14px);
     width: 100%;
     height: 100%;
+    min-width: 0;
   }
 
   .action-btn-item {
@@ -4729,6 +4736,8 @@
   .keypad-btn-tie-toggle {
     width: var(--footer-btn-size, 92px);
     height: var(--footer-btn-size, 92px);
+    max-width: 100%;
+    aspect-ratio: 1 / 1;
     background: #ffffff;
     border: 2.5px solid #0f172a;
     border-radius: calc(var(--footer-btn-size, 92px) * 0.18);
@@ -4740,6 +4749,7 @@
     transition: transform 0.1s ease, box-shadow 0.1s ease;
     padding: 0;
     box-sizing: border-box;
+    flex-shrink: 0;
   }
 
   .keypad-btn-tie-toggle:hover {
@@ -4841,92 +4851,100 @@
   /* PANTALLAS PEQUEÑAS / MÓVIL (MAX-WIDTH: 768PX): MÁRGENES Y PADDING CUIDADOS PARA NO ESTAR AMONTONADO */
   @media (max-width: 768px) {
     .scoreboard-footer-panel {
-      grid-template-columns: minmax(115px, 3.2fr) minmax(0, 8.8fr);
-      gap: clamp(8px, 1.8vw, 16px);
-      padding: clamp(8px, 1.4vh, 14px) clamp(14px, 3.2vw, 24px);
-      --footer-btn-size: clamp(56px, 9vh, 76px);
+      grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
+      gap: clamp(6px, 1.5vw, 14px);
+      padding: clamp(6px, 1.2vh, 12px) clamp(10px, 2.5vw, 18px);
+      --footer-btn-size: clamp(40px, min(8vw, 11vh), 68px);
     }
     .footer-score-col {
-      padding-right: clamp(8px, 1.5vw, 14px);
+      padding-right: clamp(4px, 1vw, 10px);
+      border-right: none;
     }
     .footer-main-controls-col {
-      gap: clamp(6px, 1.2vh, 10px);
+      gap: clamp(4px, 1vh, 8px);
     }
     .footer-modifiers-row {
-      gap: clamp(5px, 1.2vw, 10px);
-      padding-bottom: clamp(6px, 1vh, 10px);
+      gap: clamp(4px, 1vw, 8px);
+      padding-bottom: clamp(4px, 0.8vh, 8px);
+      border-bottom: none;
     }
     .footer-modifiers-row .keypad-pill {
-      height: clamp(34px, 4.8vh, 42px);
-      font-size: clamp(12px, 2vw, 14.5px);
+      height: clamp(28px, 4.2vh, 36px);
+      font-size: clamp(10.5px, 1.8vw, 13px);
       padding: 0 4px;
     }
     .footer-outcomes-col {
-      gap: clamp(6px, 1.5vw, 14px);
-      padding-right: clamp(8px, 1.8vw, 16px);
+      gap: clamp(4px, 1.2vw, 12px);
+      padding-right: clamp(4px, 1.2vw, 12px);
+      border-right: none;
     }
     .footer-undo-col {
-      gap: clamp(8px, 1.8vw, 18px);
-      padding-left: clamp(6px, 1.5vw, 12px);
+      gap: clamp(6px, 1.5vw, 14px);
+      padding-left: clamp(4px, 1.2vw, 10px);
     }
     .btn-caption, .tie-toggle-caption {
-      font-size: clamp(10px, 1.8vw, 12px);
+      font-size: clamp(9px, 1.6vw, 11px);
     }
     .score-keypad-grid {
-      gap: clamp(3px, 0.6vh, 5px);
-      min-height: calc(var(--footer-btn-size) * 1.5);
+      gap: clamp(2px, 0.5vh, 4px);
+      min-height: calc(var(--footer-btn-size) * 1.35);
     }
     .btn-num-key {
-      font-size: clamp(13px, 2.2vw, 17px);
+      font-size: clamp(12px, 2vw, 15px);
     }
     .btn-num-zero {
-      font-size: clamp(16px, 2.8vw, 22px);
+      font-size: clamp(14px, 2.5vw, 18px);
     }
   }
 
   @media (max-width: 480px) {
     .scoreboard-footer-panel {
-      grid-template-columns: minmax(95px, 3fr) minmax(0, 9fr);
-      gap: 6px;
-      padding: 6px clamp(10px, 3vw, 14px);
-      --footer-btn-size: clamp(48px, 8vh, 62px);
+      grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
+      gap: 5px;
+      padding: 5px clamp(6px, 2vw, 10px);
+      --footer-btn-size: clamp(32px, min(7.5vw, 9.5vh), 50px);
     }
     .footer-score-col {
-      padding-right: 6px;
+      padding-right: 4px;
+      border-right: none;
     }
     .footer-outcomes-col {
-      gap: 4px;
-      padding-right: 6px;
+      gap: 3px;
+      padding-right: 4px;
+      border-right: none;
     }
     .footer-undo-col {
-      gap: 6px;
-      padding-left: 4px;
+      gap: 4px;
+      padding-left: 3px;
+    }
+    .footer-modifiers-row {
+      border-bottom: none;
     }
     .footer-modifiers-row .keypad-pill {
-      height: 30px;
-      font-size: 11px;
+      height: 26px;
+      font-size: 9.5px;
     }
   }
 
   /* AJUSTE PARA PANTALLAS CON ALTURA REDUCIDA (LAPTOPS / TABLETS) */
   @media (max-height: 850px) {
     .scoreboard-footer-panel {
-      --footer-btn-size: clamp(88px, 14vh, 120px);
-      padding: clamp(6px, 1vh, 12px) clamp(10px, 1.5vw, 20px);
+      --footer-btn-size: clamp(48px, min(8vw, 13vh), 110px);
+      padding: clamp(6px, 1vh, 10px) clamp(10px, 1.5vw, 18px);
     }
     .footer-modifiers-row .keypad-pill {
-      height: clamp(36px, 5vh, 46px);
+      height: clamp(32px, 4.5vh, 40px);
     }
   }
 
   @media (max-height: 650px) {
     .scoreboard-footer-panel {
-      --footer-btn-size: clamp(62px, 11vh, 80px);
+      --footer-btn-size: clamp(36px, min(7.5vw, 10vh), 75px);
       padding: 4px 8px;
     }
     .footer-modifiers-row .keypad-pill {
-      height: 32px;
-      font-size: 11.5px;
+      height: 28px;
+      font-size: 10.5px;
     }
     .score-keypad-grid {
       gap: 2px;
@@ -5016,6 +5034,8 @@
   .keypad-btn-circle {
     width: var(--footer-btn-size, 92px);
     height: var(--footer-btn-size, 92px);
+    max-width: 100%;
+    aspect-ratio: 1 / 1;
     border-radius: 50%;
     position: relative;
     display: flex;
