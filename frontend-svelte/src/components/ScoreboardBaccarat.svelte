@@ -2892,17 +2892,6 @@
 
         <div class="modal-body options-modal-body">
           <div class="options-grid">
-            <!-- COL-6: Borrar Registros del Zapato #{activeShoeNumber} (Acción directa) -->
-            <button
-              type="button"
-              class="btn-opt col-6 btn-opt-clear"
-              on:click={handleDirectClearShoe}
-              disabled={!isLatestSession || isViewingPastShoe || history.length === 0}
-              title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : history.length === 0 ? 'No hay registros en el zapato actual para borrar' : `Borrar registros del Zapato #${activeShoeNumber}`}
-            >
-              Borrar Registros del Zapato #{activeShoeNumber}
-            </button>
-
             <!-- COL-6: Crear Nuevo Zapato #{maxShoeNumber + 1} (Acción directa) -->
             <button
               type="button"
@@ -2914,10 +2903,10 @@
               Crear Nuevo Zapato #{maxShoeNumber + 1}
             </button>
 
-            <!-- COL-12: Borrar Zapato #{shoeNumber} (Acción con confirmación) -->
+            <!-- COL-6: Borrar Zapato #{shoeNumber} (Acción con confirmación) -->
             <button
               type="button"
-              class="btn-opt col-12 btn-opt-reset"
+              class="btn-opt col-6 btn-opt-reset"
               on:click={openDeleteCurrentShoeModal}
               disabled={!isLatestSession || shoeNumber <= 1 || history.length > 0}
               title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : shoeNumber <= 1 ? 'No se puede borrar el primer zapato de la mesa' : history.length > 0 ? 'No se puede borrar si el zapato tiene jugadas registradas' : `Borrar Zapato #${shoeNumber}`}
@@ -2943,47 +2932,49 @@
               class="btn-opt col-6 btn-opt-delete-session"
               on:click={handleConfirmDeleteLastSession}
               disabled={sessions.length <= 1 || isSessionsLoading || !isLatestSession}
-              title={!isLatestSession ? 'Solo se puede borrar la última sesión' : sessions.length <= 1 ? 'Debe existir al menos una sesión' : 'Borrar última sesión registrada y seleccionar la anterior'}
+              title={!isLatestSession ? 'Solo se puede borrar la última sesión' : sessions.length <= 1 ? 'Debe existir al menos una sesión' : `Borrar última sesión registrada (${latestSessionInList?.fecha || ''})`}
             >
-              Borrar Última Sesión
-            </button>
-
-            <!-- COL-6: Alternar Pantalla Completa -->
-            <button
-              type="button"
-              class="btn-opt col-6 btn-opt-fullscreen"
-              class:is-active={isFullscreen}
-              on:click={toggleFullscreen}
-              title={isFullscreen ? 'Salir de Pantalla Completa' : 'Entrar a Pantalla Completa'}
-            >
-              {#if isFullscreen}
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
-                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-                </svg>
-                Salir Pantalla Completa
-              {:else}
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
-                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                </svg>
-                Pantalla Completa
+              <span>Borrar Última Sesión</span>
+              {#if latestSessionInList?.fecha}
+                <span class="btn-opt-date-badge">Fecha: {latestSessionInList.fecha}</span>
               {/if}
             </button>
 
-            <!-- COL-6: Alternar Tema Claro / Oscuro -->
+            <!-- COL-4: Alternar Pantalla Completa (Solo Ícono) -->
             <button
               type="button"
-              class="btn-opt col-6 btn-opt-theme"
+              class="btn-opt col-4 btn-opt-fullscreen"
+              class:is-active={isFullscreen}
+              on:click={toggleFullscreen}
+              title={isFullscreen ? 'Salir de Pantalla Completa' : 'Entrar a Pantalla Completa'}
+              aria-label={isFullscreen ? 'Salir de Pantalla Completa' : 'Entrar a Pantalla Completa'}
+            >
+              {#if isFullscreen}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+                </svg>
+              {:else}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+              {/if}
+            </button>
+
+            <!-- COL-4: Alternar Tema Luna / Sol (Solo Ícono) -->
+            <button
+              type="button"
+              class="btn-opt col-4 btn-opt-theme"
               class:is-light={currentTheme === 'light'}
               on:click={toggleTheme}
               title={currentTheme === 'light' ? 'Cambiar a Tema Oscuro' : 'Cambiar a Tema Claro'}
+              aria-label={currentTheme === 'light' ? 'Cambiar a Tema Oscuro' : 'Cambiar a Tema Claro'}
             >
               {#if currentTheme === 'light'}
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                 </svg>
-                Tema Oscuro
               {:else}
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="5"></circle>
                   <line x1="12" y1="1" x2="12" y2="3"></line>
                   <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -2994,36 +2985,32 @@
                   <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
                   <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                 </svg>
-                Tema Claro
               {/if}
             </button>
 
-            <!-- COL-12: MODO MONITOR (ENTRAR / SALIR) -->
+            <!-- COL-4: MODO MONITOR / SALIDA (Solo Ícono) -->
             <button
               type="button"
-              class="btn-opt col-12 btn-opt-monitor"
+              class="btn-opt col-4 btn-opt-monitor"
               class:is-active={isMonitorMode}
               on:click={toggleMonitorMode}
-              title={isMonitorMode ? 'Salir de Modo Monitor (Mostrar botonera)' : 'Entrar a Modo Monitor (Ocultar botonera y maximizar cuadrillas para pantalla o TV)'}
+              title={isMonitorMode ? 'Salir de Modo Monitor (Mostrar botonera)' : 'Entrar a Modo Monitor (Ocultar botonera)'}
+              aria-label={isMonitorMode ? 'Salir de Modo Monitor' : 'Entrar a Modo Monitor'}
             >
-              <div class="btn-opt-monitor-inner">
-                <div class="btn-opt-monitor-title">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; flex-shrink: 0;">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                    <line x1="8" y1="21" x2="16" y2="21"></line>
-                    <line x1="12" y1="17" x2="12" y2="21"></line>
-                  </svg>
-                  <span>{isMonitorMode ? 'Salir de Modo Monitor' : 'Entrar a Modo Monitor'}</span>
-                </div>
-                <span class="btn-opt-monitor-sub">
-                  {isMonitorMode ? 'Mostrar botonera de control' : 'Ocultar botonera y maximizar cuadrillas para pantalla'}
-                </span>
-                {#if isMonitorMode}
-                  <span class="btn-opt-mode-badge is-active">● Activo</span>
-                {:else}
-                  <span class="btn-opt-mode-badge">Activar</span>
-                {/if}
-              </div>
+              {#if isMonitorMode}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                  <line x1="7" y1="10" x2="17" y2="10" stroke-width="2.6"></line>
+                </svg>
+              {:else}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+              {/if}
             </button>
 
             <!-- COL-12: SECCIÓN SELECCIONAR MESA (OPTGROUP POR SALA) -->
@@ -5324,7 +5311,7 @@
 
   .options-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(12, 1fr);
     gap: 12px;
     width: 100%;
     box-sizing: border-box;
@@ -5333,7 +5320,7 @@
   .btn-opt {
     border: none;
     border-radius: 8px;
-    padding: 15px 12px;
+    padding: 12px 10px;
     font-size: 13px;
     font-weight: 800;
     cursor: pointer;
@@ -5344,25 +5331,20 @@
     text-align: center;
     line-height: 1.35;
     user-select: none;
+    min-height: 48px;
+    box-sizing: border-box;
   }
 
-  .btn-opt.col-6 {
-    /* Ocupa 1 columna de las 2 */
+  .col-6 {
+    grid-column: span 6;
   }
 
-  .btn-opt.col-12 {
-    grid-column: 1 / -1;
+  .col-4 {
+    grid-column: span 4;
   }
 
-  .btn-opt-clear {
-    background: #78350f;
-    color: #fef3c7;
-    border: 1.5px solid #b45309;
-  }
-  .btn-opt-clear:hover {
-    background: #92400e;
-    color: #ffffff;
-    box-shadow: 0 4px 10px rgba(180, 83, 9, 0.35);
+  .col-12 {
+    grid-column: span 12;
   }
 
   .btn-opt-new {
@@ -5415,11 +5397,24 @@
     background: #881337;
     color: #ffe4e6;
     border: 1.5px solid #be123c;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 8px;
   }
   .btn-opt-delete-session:hover:not(:disabled) {
     background: #be123c;
     color: #ffffff;
     box-shadow: 0 4px 10px rgba(190, 18, 60, 0.35);
+  }
+  .btn-opt-delete-session .btn-opt-date-badge {
+    font-size: 11px;
+    font-weight: 800;
+    color: #fecdd3;
+    background: rgba(159, 18, 57, 0.45);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(244, 63, 94, 0.3);
+    letter-spacing: 0.3px;
   }
 
   /* SELECTOR DE MESA EN MODAL CON OPTGROUP POR SALA */
