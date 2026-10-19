@@ -1671,6 +1671,8 @@
       let prevWinner = null;
       let lastPlaced = null;
       let initialTies = 0;
+      const placedStreaks = [];
+      let currentStreak = [];
 
       history.forEach((h, idx) => {
         if (h.winner === 'EMPATE') {
@@ -1697,10 +1699,13 @@
           prevWinner = h.winner;
           row = 1;
           col = 0;
+          currentStreak = [{ r: 0, c: 0, winner: h.winner }];
+          placedStreaks.push(currentStreak);
         } else if (h.winner === prevWinner) {
           if (row < BIG_ROWS && !grid[row][col]) {
             grid[row][col] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
             lastPlaced = grid[row][col];
+            currentStreak.push({ r: row, c: col, winner: h.winner });
             row++;
           } else {
             let dCol = col + 1;
@@ -1718,6 +1723,7 @@
             }
             grid[dRow][dCol] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
             lastPlaced = grid[dRow][dCol];
+            currentStreak.push({ r: dRow, c: dCol, winner: h.winner });
           }
         } else {
           col++;
@@ -1735,12 +1741,14 @@
           row = 0;
           grid[0][col] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
           lastPlaced = grid[0][col];
+          currentStreak = [{ r: 0, c: col, winner: h.winner }];
+          placedStreaks.push(currentStreak);
           row = 1;
           prevWinner = h.winner;
         }
       });
 
-      return { grid, totalCols };
+      return { grid, totalCols, placedStreaks };
     } else {
       // tieMode === 'circle': El empate se dibuja como su propia celda en el Gran Camino
       let col = 0;
@@ -1748,6 +1756,8 @@
       let currentStreakWinner = null;
       let isDragonTailing = false;
       let headCol = 0;
+      const placedStreaks = [];
+      let currentStreak = [];
 
       function ensureCol(targetCol) {
         while (targetCol >= totalCols) {
@@ -1764,10 +1774,13 @@
           isTieOnly: h.winner === 'EMPATE',
           tieCount: 0
         };
+        currentStreak.push({ r, c, winner: h.winner });
       }
 
       history.forEach((h, idx) => {
         if (idx === 0) {
+          currentStreak = [];
+          placedStreaks.push(currentStreak);
           placeCell(0, 0, h, idx);
           col = 0;
           row = 0;
@@ -1820,11 +1833,13 @@
           }
           col = headCol;
           row = 0;
+          currentStreak = [];
+          placedStreaks.push(currentStreak);
           placeCell(row, col, h, idx);
         }
       });
 
-      return { grid, totalCols };
+      return { grid, totalCols, placedStreaks };
     }
   })();
 
@@ -1851,6 +1866,137 @@
     });
 
     return columns;
+  })();
+
+  // 3.1 OVERLAY DE LÍNEAS DE SECUENCIA (COLA DE DRAGÓN) Y LÍNEAS DE PATRÓN (COINCIDENCIAS / FIGURAS)
+  $: bigRoadOverlay = (() => {
+    const cellSize = bigRoadCellSize || 23;
+    const sequencePaths = [];
+    const patternLines = [];
+
+    // 1. Curvas y líneas de secuencia en negro cuando la racha dobla o hace cola de dragón
+    const streaks = bigRoadGrid.placedStreaks || [];
+    streaks.forEach((streak) => {
+      if (!streak || streak.length < 2) return;
+      const firstTurnIdx = streak.findIndex(p => p.c > streak[0].c);
+      if (firstTurnIdx <= 0) return;
+
+      const pTurn = streak[firstTurnIdx - 1];
+      const cxTurn = (pTurn.c + 0.5) * cellSize;
+      const cyTurn = (pTurn.r + 0.5) * cellSize;
+      const rArc = cellSize * 0.42;
+
+      let d = `M ${cxTurn},${cyTurn - rArc} Q ${cxTurn},${cyTurn} ${cxTurn + cellSize * 0.5},${cyTurn}`;
+
+      for (let k = firstTurnIdx; k < streak.length; k++) {
+        const pPrev = streak[k - 1];
+        const pNext = streak[k];
+        const cxNext = (pNext.c + 0.5) * cellSize;
+        const cyNext = (pNext.r + 0.5) * cellSize;
+        const cxPrev = (pPrev.c + 0.5) * cellSize;
+        const cyPrev = (pPrev.r + 0.5) * cellSize;
+
+        if (pNext.r === pPrev.r) {
+          d += ` L ${cxNext},${cyNext}`;
+        } else {
+          const dxHalf = (cxNext - cxPrev) * 0.5;
+          d += ` C ${cxPrev + dxHalf},${cyPrev} ${cxNext - dxHalf},${cyNext} ${cxNext},${cyNext}`;
+        }
+      }
+
+      sequencePaths.push(d);
+    });
+
+    // 2. Líneas de patrón de Chop (Ping-pong horizontal en fila 0: 3=Cyan, 4=Naranja, 5+=Púrpura)
+    const cols = bigRoadLogicalColumns || [];
+    let chopStart = null;
+    let chopLen = 0;
+
+    for (let c = 0; c < cols.length; c++) {
+      if (cols[c].length === 1) {
+        if (chopStart === null) {
+          chopStart = c;
+          chopLen = 1;
+        } else {
+          chopLen++;
+        }
+      } else {
+        if (chopLen >= 3) {
+          const color = chopLen === 3 ? '#00bcd4' : chopLen === 4 ? '#ff9800' : '#a855f7';
+          patternLines.push({
+            type: 'line',
+            x1: (chopStart + 0.5) * cellSize,
+            y1: 0.5 * cellSize,
+            x2: (chopStart + chopLen - 1 + 0.5) * cellSize,
+            y2: 0.5 * cellSize,
+            color
+          });
+        }
+        chopStart = null;
+        chopLen = 0;
+      }
+    }
+    if (chopLen >= 3) {
+      const color = chopLen === 3 ? '#00bcd4' : chopLen === 4 ? '#ff9800' : '#a855f7';
+      patternLines.push({
+        type: 'line',
+        x1: (chopStart + 0.5) * cellSize,
+        y1: 0.5 * cellSize,
+        x2: (chopStart + chopLen - 1 + 0.5) * cellSize,
+        y2: 0.5 * cellSize,
+        color
+      });
+    }
+
+    // 3. Líneas de patrón en "V" cuando hay rachas de 3, 4, 5+ coincidencias (3=Cyan, 4=Naranja, 5+=Púrpura)
+    for (let c = 2; c < cols.length; c++) {
+      const colC = cols[c];
+      const colA = cols[c - 2];
+      const colB = cols[c - 1];
+
+      if (
+        colC &&
+        colC.length >= 3 &&
+        colA &&
+        colA.length > 0 &&
+        colA[0].winner === colC[0].winner &&
+        colB &&
+        colB.length > 0 &&
+        colB[0].winner !== colC[0].winner
+      ) {
+        const H = colC.length;
+        const color = H === 3 ? '#00bcd4' : H === 4 ? '#ff9800' : '#a855f7';
+
+        // Punto 1: Cabeza de colA (c - 2, fila 0)
+        const x1 = (c - 2 + 0.5) * cellSize;
+        const y1 = 0.5 * cellSize;
+
+        // Punto 2: Base de la racha actual en colC (en la cuadrícula)
+        const streakCells = streaks[c] || [];
+        let bottomCol = c;
+        let bottomRow = Math.min(H - 1, BIG_ROWS - 1);
+        if (streakCells.length > 0) {
+          const lastCell = streakCells[streakCells.length - 1];
+          bottomCol = lastCell.c;
+          bottomRow = lastCell.r;
+        }
+
+        const x2 = (bottomCol + 0.5) * cellSize;
+        const y2 = (bottomRow + 0.5) * cellSize;
+
+        // Punto 3: Cabeza de colC (c, fila 0)
+        const x3 = (c + 0.5) * cellSize;
+        const y3 = 0.5 * cellSize;
+
+        patternLines.push({
+          type: 'path',
+          d: `M ${x1},${y1} L ${x2},${y2} L ${x3},${y3}`,
+          color
+        });
+      }
+    }
+
+    return { sequencePaths, patternLines };
   })();
 
   // 4. DERIVED ROADS ALGORITHM (Big Eye Boy: k=1, Small Road: k=2, Cockroach Road: k=3)
@@ -2374,7 +2520,52 @@
         style="--big-cell-size: {bigRoadCellSize}px;"
       >
         <div class="grid-scrollable" bind:this={bigRoadScrollEl}>
-          <table class="bigroad-table">
+          <div class="bigroad-table-wrapper">
+            <!-- OVERLAY DE CURVAS DE SECUENCIA (COLA DE DRAGÓN) Y LÍNEAS DE PATRÓN -->
+            <svg
+              class="bigroad-svg-overlay"
+              width={bigRoadGrid.totalCols * bigRoadCellSize}
+              height={BIG_ROWS * bigRoadCellSize}
+              viewBox="0 0 {bigRoadGrid.totalCols * bigRoadCellSize} {BIG_ROWS * bigRoadCellSize}"
+            >
+              <!-- 1. Curvas y líneas de secuencia en negro cuando la racha dobla o hace cola de dragón -->
+              {#each bigRoadOverlay.sequencePaths as pathData}
+                <path
+                  class="bigroad-seq-path"
+                  d={pathData}
+                  fill="none"
+                  stroke-width="2.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              {/each}
+
+              <!-- 2. Líneas de patrón (Chop horizontal y figuras en V) -->
+              {#each bigRoadOverlay.patternLines as pat}
+                {#if pat.type === 'line'}
+                  <line
+                    x1={pat.x1}
+                    y1={pat.y1}
+                    x2={pat.x2}
+                    y2={pat.y2}
+                    stroke={pat.color}
+                    stroke-width="3.8"
+                    stroke-linecap="round"
+                  />
+                {:else if pat.type === 'path'}
+                  <path
+                    d={pat.d}
+                    fill="none"
+                    stroke={pat.color}
+                    stroke-width="3.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                {/if}
+              {/each}
+            </svg>
+
+            <table class="bigroad-table">
             <tbody>
               {#each bigRoadGrid.grid as row, rIdx}
                 <tr>
@@ -2430,6 +2621,7 @@
             </tbody>
           </table>
         </div>
+      </div>
       </div>
 
       <!-- 2. BEAD PLATE (OTRA CUADRILLA - VERDE, ABAJO DE LA PRINCIPAL) -->
@@ -3909,7 +4101,29 @@
     height: 100%;
   }
 
-  /* BIG ROAD TABLE (EXACT SQUARES & COMPACT SCALED RINGS) */
+  /* BIG ROAD TABLE & SVG OVERLAYS */
+  .bigroad-table-wrapper {
+    position: relative;
+    display: inline-block;
+    min-width: 100%;
+    vertical-align: top;
+  }
+
+  .bigroad-svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .bigroad-seq-path {
+    stroke: #0f172a;
+  }
+  .scoreboard-container:not(.theme-light) .bigroad-seq-path {
+    stroke: #ffffff;
+  }
+
   .bigroad-table tr {
     height: var(--big-cell-size, 23px);
   }
