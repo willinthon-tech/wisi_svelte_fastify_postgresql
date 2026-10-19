@@ -4380,18 +4380,18 @@
   }
 
   .bigroad-ring .dot-b-pair {
-    width: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
-    height: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
-    top: 0px;
-    left: 0px;
-    border: 1px solid #ffffff;
+    width: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
+    height: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
+    top: -1px;
+    left: -1px;
+    border: 1.5px solid #ffffff;
   }
   .bigroad-ring .dot-p-pair {
-    width: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
-    height: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
-    bottom: 0px;
-    right: 0px;
-    border: 1px solid #ffffff;
+    width: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
+    height: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
+    bottom: -1px;
+    right: -1px;
+    border: 1.5px solid #ffffff;
   }
 
   /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (SIN SOMBRA, ESQUINAS ALINEADAS A SUS LADOS Y CENTRO EN EL MEDIO) */
