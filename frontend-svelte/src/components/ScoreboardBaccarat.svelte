@@ -542,9 +542,9 @@
   let derivedWidth = 700;
   let derivedHeight = 260;
 
-  const BEAD_ROWS = 4;
+  const BEAD_ROWS = 6;
   const BIG_ROWS = 6;
-  const DERIVED_ROWS = 8;
+  const DERIVED_ROWS = 6;
 
   // Dynamic roadmap sizing: scales with available height (e.g. 12px - 45px depending on monitor)
   $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 12);
@@ -1665,122 +1665,167 @@
     let totalCols = Math.max(bigRoadColsNeeded, 52);
     let grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
 
-    let col = 0;
-    let row = 0;
-    let prevWinner = null;
-    let lastPlaced = null;
+    if (tieMode === 'slash') {
+      let col = 0;
+      let row = 0;
+      let prevWinner = null;
+      let lastPlaced = null;
+      let initialTies = 0;
 
-    history.forEach((h, idx) => {
-      if (h.winner === 'EMPATE') {
-        if (tieMode === 'slash') {
-          if (lastPlaced) {
-            lastPlaced.tieCount = (lastPlaced.tieCount || 0) + 1;
+      history.forEach((h, idx) => {
+        if (h.winner === 'EMPATE') {
+          if (!lastPlaced) {
+            initialTies++;
           } else {
-            grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 1 };
-            lastPlaced = grid[0][0];
+            lastPlaced.tieAfterCount = (lastPlaced.tieAfterCount || 0) + 1;
+            lastPlaced.tieCount = (lastPlaced.tieCount || 0) + 1;
           }
           return;
-        } else {
-          // tieMode === 'circle': El empate ocupa su propia celda en la columna actual
-          if (!prevWinner && !lastPlaced) {
-            grid[0][0] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
-            lastPlaced = grid[0][0];
-            row = 1;
-            col = 0;
-            return;
-          }
+        }
 
+        // Mano PUNTO o BANCA
+        if (!prevWinner) {
+          // Primera mano no-empate del zapato
+          grid[0][0] = {
+            ...h,
+            historyIndex: idx,
+            tieBeforeCount: initialTies,
+            tieCount: initialTies,
+            tieAfterCount: 0
+          };
+          lastPlaced = grid[0][0];
+          prevWinner = h.winner;
+          row = 1;
+          col = 0;
+        } else if (h.winner === prevWinner) {
           if (row < BIG_ROWS && !grid[row][col]) {
-            grid[row][col] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
+            grid[row][col] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
             lastPlaced = grid[row][col];
             row++;
           } else {
-            let dragonCol = col + 1;
-            const dragonRow = row >= BIG_ROWS ? BIG_ROWS - 1 : row - 1;
-            while (dragonCol >= totalCols) {
+            let dCol = col + 1;
+            const dRow = row >= BIG_ROWS ? BIG_ROWS - 1 : row - 1;
+            while (dCol >= totalCols) {
               grid.forEach(rArr => rArr.push(null));
               totalCols++;
             }
-            while (grid[dragonRow][dragonCol]) {
-              dragonCol++;
-              if (dragonCol >= totalCols) {
+            while (grid[dRow][dCol]) {
+              dCol++;
+              if (dCol >= totalCols) {
                 grid.forEach(rArr => rArr.push(null));
                 totalCols++;
               }
             }
-            grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, isTieOnly: true, tieCount: 0 };
-            lastPlaced = grid[dragonRow][dragonCol];
+            grid[dRow][dCol] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
+            lastPlaced = grid[dRow][dCol];
           }
-          return;
-        }
-      }
-
-      if (!prevWinner) {
-        if (grid[0][0] && grid[0][0].isTieOnly && tieMode === 'circle') {
-          if (row < BIG_ROWS && !grid[row][col]) {
-            grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
-            lastPlaced = grid[row][col];
-            row++;
-          } else {
-            col++;
-            row = 0;
-            grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
-            lastPlaced = grid[0][col];
-            row = 1;
-          }
-          prevWinner = h.winner;
-          return;
-        }
-
-        grid[0][0] = { ...h, historyIndex: idx, tieCount: 0 };
-        lastPlaced = grid[0][0];
-        prevWinner = h.winner;
-        row = 1;
-        col = 0;
-      } else if (h.winner === prevWinner) {
-        if (row < BIG_ROWS && !grid[row][col]) {
-          grid[row][col] = { ...h, historyIndex: idx, tieCount: 0 };
-          lastPlaced = grid[row][col];
-          row++;
         } else {
-          let dragonCol = col + 1;
-          const dragonRow = row >= BIG_ROWS ? BIG_ROWS - 1 : row - 1;
-          while (dragonCol >= totalCols) {
+          col++;
+          while (col >= totalCols) {
             grid.forEach(rArr => rArr.push(null));
             totalCols++;
           }
-          while (grid[dragonRow][dragonCol]) {
-            dragonCol++;
-            if (dragonCol >= totalCols) {
+          while (col < totalCols && grid[0][col]) {
+            col++;
+            if (col >= totalCols) {
               grid.forEach(rArr => rArr.push(null));
               totalCols++;
             }
           }
-          grid[dragonRow][dragonCol] = { ...h, historyIndex: idx, tieCount: 0 };
-          lastPlaced = grid[dragonRow][dragonCol];
+          row = 0;
+          grid[0][col] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
+          lastPlaced = grid[0][col];
+          row = 1;
+          prevWinner = h.winner;
         }
-      } else {
-        col++;
-        while (col >= totalCols) {
+      });
+
+      return { grid, totalCols };
+    } else {
+      // tieMode === 'circle': El empate se dibuja como su propia celda en el Gran Camino
+      let col = 0;
+      let row = 0;
+      let currentStreakWinner = null;
+      let isDragonTailing = false;
+      let headCol = 0;
+
+      function ensureCol(targetCol) {
+        while (targetCol >= totalCols) {
           grid.forEach(rArr => rArr.push(null));
           totalCols++;
         }
-        while (col < totalCols && grid[0][col]) {
-          col++;
-          if (col >= totalCols) {
-            grid.forEach(rArr => rArr.push(null));
-            totalCols++;
-          }
-        }
-        row = 0;
-        grid[0][col] = { ...h, historyIndex: idx, tieCount: 0 };
-        lastPlaced = grid[0][col];
-        row = 1;
-        prevWinner = h.winner;
       }
-    });
 
-    return { grid, totalCols };
+      function placeCell(r, c, h, idx) {
+        ensureCol(c);
+        grid[r][c] = {
+          ...h,
+          historyIndex: idx,
+          isTieOnly: h.winner === 'EMPATE',
+          tieCount: 0
+        };
+      }
+
+      history.forEach((h, idx) => {
+        if (idx === 0) {
+          placeCell(0, 0, h, idx);
+          col = 0;
+          row = 0;
+          headCol = 0;
+          isDragonTailing = false;
+          currentStreakWinner = h.winner === 'EMPATE' ? null : h.winner;
+          return;
+        }
+
+        const isTie = h.winner === 'EMPATE';
+        const isInitialWinner = currentStreakWinner === null && !isTie;
+        const isSameWinner = !isTie && h.winner === currentStreakWinner;
+
+        if (isTie || isInitialWinner || isSameWinner) {
+          if (isInitialWinner) {
+            currentStreakWinner = h.winner;
+          }
+
+          if (!isDragonTailing) {
+            if (row + 1 < BIG_ROWS && !grid[row + 1][col]) {
+              row++;
+              placeCell(row, col, h, idx);
+            } else {
+              isDragonTailing = true;
+              col++;
+              ensureCol(col);
+              while (row < BIG_ROWS - 1 && !grid[row + 1][col]) {
+                row++;
+              }
+              placeCell(row, col, h, idx);
+            }
+          } else {
+            col++;
+            ensureCol(col);
+            while (row < BIG_ROWS - 1 && !grid[row + 1][col]) {
+              row++;
+            }
+            placeCell(row, col, h, idx);
+          }
+        } else {
+          // Cambio real de ganador (BANCA -> PUNTO o PUNTO -> BANCA)
+          currentStreakWinner = h.winner;
+          isDragonTailing = false;
+
+          headCol++;
+          ensureCol(headCol);
+          while (headCol < totalCols && grid[0][headCol]) {
+            headCol++;
+            ensureCol(headCol);
+          }
+          col = headCol;
+          row = 0;
+          placeCell(row, col, h, idx);
+        }
+      });
+
+      return { grid, totalCols };
+    }
   })();
 
   // 3. LOGICAL COLUMNS FOR DERIVED ROADS
@@ -1824,15 +1869,8 @@
           const lenRef = columns[c - 1 - k].length;
           isRed = (lenPrev === lenRef);
         } else {
-          const refCol = columns[c - k];
-          const lenRef = refCol ? refCol.length : 0;
-          if (r < lenRef) {
-            isRed = true;
-          } else if (r === lenRef) {
-            isRed = false;
-          } else {
-            isRed = true;
-          }
+          // Continuación de racha en la misma columna o cola de dragón (siempre rojo en Baccarat)
+          isRed = true;
         }
 
         marks.push({
@@ -1936,15 +1974,7 @@
       const lenRef = cols[c - 1 - k] ? cols[c - 1 - k].length : 0;
       isRed = (lenPrev === lenRef);
     } else {
-      const refCol = cols[c - k];
-      const lenRef = refCol ? refCol.length : 0;
-      if (r < lenRef) {
-        isRed = true;
-      } else if (r === lenRef) {
-        isRed = false;
-      } else {
-        isRed = true;
-      }
+      isRed = true;
     }
 
     return isRed ? 'red' : 'blue';
@@ -2369,10 +2399,18 @@
                           {#if cell.score !== undefined && cell.score !== null}
                             <span class="bigroad-score" class:is-natural-score={cell.natural}>{cell.score}</span>
                           {/if}
-                          {#if cell.tieCount > 0 && tieMode === 'slash'}
-                            <span class="bigroad-tie-slash"></span>
-                            {#if cell.tieCount > 1}
-                              <span class="tie-badge-num">{cell.tieCount}</span>
+                          {#if tieMode === 'slash'}
+                            {#if cell.tieBeforeCount > 0}
+                              <span class="bigroad-tie-slash is-before" title="{cell.tieBeforeCount} empate(s) antes de esta mano"></span>
+                              {#if cell.tieBeforeCount > 1}
+                                <span class="tie-badge-num is-before">{cell.tieBeforeCount}</span>
+                              {/if}
+                            {/if}
+                            {#if cell.tieAfterCount > 0 || (!cell.tieBeforeCount && cell.tieCount > 0)}
+                              <span class="bigroad-tie-slash is-after" title="{cell.tieAfterCount || cell.tieCount} empate(s) después de esta mano"></span>
+                              {#if (cell.tieAfterCount || cell.tieCount) > 1}
+                                <span class="tie-badge-num is-after">{cell.tieAfterCount || cell.tieCount}</span>
+                              {/if}
                             {/if}
                           {/if}
                           {#if cell.bPair}
@@ -2589,11 +2627,17 @@
           title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextBankerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextBankerPrediction.cockroach || 'pendiente'})"
         >
           <span class="pred-badge-circle b">B</span>
-          <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextBankerPrediction.bigEye || 'pendiente'}"></span>
-          <span class="pred-symbol pred-dot {nextBankerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextBankerPrediction.smallRoad || 'pendiente'}"></span>
-          <svg class="pred-symbol pred-slash {nextBankerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextBankerPrediction.cockroach || 'pendiente'}">
-            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
-          </svg>
+          {#if nextBankerPrediction.bigEye}
+            <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye}" title="Gran Ojo: {nextBankerPrediction.bigEye}"></span>
+          {/if}
+          {#if nextBankerPrediction.smallRoad}
+            <span class="pred-symbol pred-dot {nextBankerPrediction.smallRoad}" title="Camino Pequeño: {nextBankerPrediction.smallRoad}"></span>
+          {/if}
+          {#if nextBankerPrediction.cockroach}
+            <svg class="pred-symbol pred-slash {nextBankerPrediction.cockroach}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextBankerPrediction.cockroach}">
+              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+            </svg>
+          {/if}
         </button>
 
         <!-- Pill Ask Player (P) -->
@@ -2604,11 +2648,17 @@
           title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextPlayerPrediction.cockroach || 'pendiente'})"
         >
           <span class="pred-badge-circle p">P</span>
-          <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye || 'neutral'}" title="Gran Ojo: {nextPlayerPrediction.bigEye || 'pendiente'}"></span>
-          <span class="pred-symbol pred-dot {nextPlayerPrediction.smallRoad || 'neutral'}" title="Camino Pequeño: {nextPlayerPrediction.smallRoad || 'pendiente'}"></span>
-          <svg class="pred-symbol pred-slash {nextPlayerPrediction.cockroach || 'neutral'}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextPlayerPrediction.cockroach || 'pendiente'}">
-            <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
-          </svg>
+          {#if nextPlayerPrediction.bigEye}
+            <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye}" title="Gran Ojo: {nextPlayerPrediction.bigEye}"></span>
+          {/if}
+          {#if nextPlayerPrediction.smallRoad}
+            <span class="pred-symbol pred-dot {nextPlayerPrediction.smallRoad}" title="Camino Pequeño: {nextPlayerPrediction.smallRoad}"></span>
+          {/if}
+          {#if nextPlayerPrediction.cockroach}
+            <svg class="pred-symbol pred-slash {nextPlayerPrediction.cockroach}" width="14" height="14" viewBox="0 0 14 14" title="Cucaracha: {nextPlayerPrediction.cockroach}">
+              <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+            </svg>
+          {/if}
         </button>
       </div>
     </div>
@@ -3988,32 +4038,56 @@
 
   .bigroad-tie-slash {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: calc(var(--big-cell-size, 23px) * 0.7);
     height: 2.5px;
-    background: #22c55e;
-    transform: translate(-50%, -50%) rotate(45deg);
-    z-index: 1;
+    background: #16a34a;
+    z-index: 3;
     border-radius: 1px;
+    pointer-events: none;
+  }
+
+  /* Slash cuando el empate ocurrió ANTES de la mano (esquina superior izquierda) */
+  .bigroad-tie-slash.is-before {
+    top: 28%;
+    left: 28%;
+    width: calc(var(--big-cell-size, 23px) * 0.65);
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+
+  /* Slash cuando el empate ocurrió DESPUÉS de la mano (un pelo por debajo del centro) */
+  .bigroad-tie-slash.is-after {
+    top: 68%;
+    left: 68%;
+    width: calc(var(--big-cell-size, 23px) * 0.65);
+    transform: translate(-50%, -50%) rotate(-45deg);
   }
 
   .tie-badge-num {
     position: absolute;
-    top: -5px;
-    right: -5px;
     background: #16a34a;
     color: #ffffff;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 900;
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 2px;
+    border-radius: 999px;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 3;
-    border: 1.5px solid #0f172a;
+    line-height: 1;
+    z-index: 4;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+  }
+
+  .tie-badge-num.is-before {
+    top: -2px;
+    left: -2px;
+  }
+
+  .tie-badge-num.is-after {
+    bottom: -2px;
+    right: -2px;
   }
 
   .bigroad-ring .dot-b-pair {
