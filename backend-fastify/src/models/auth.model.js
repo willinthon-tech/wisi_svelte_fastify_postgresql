@@ -9,7 +9,9 @@ export async function findUserByUsername(usuario) {
   }
 
   const rows = await sql`
-    SELECT uuid, uuid AS id, nombre_apellido, usuario, password 
+    SELECT uuid, uuid AS id, nombre_apellido, usuario, password,
+           COALESCE(recibe_notificaciones, true) AS recibe_notificaciones,
+           COALESCE(ruta_defecto, '/dashboard') AS ruta_defecto
     FROM usuarios 
     WHERE LOWER(TRIM(usuario)) = ${cleanInput}
     LIMIT 1

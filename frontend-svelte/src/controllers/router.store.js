@@ -74,7 +74,7 @@ export function isDashboardRoute(route = null) {
 export function initRouter() {
   if (typeof window === 'undefined') return;
 
-  function parseLocation() {
+  function parseLocation(isInitial = false) {
     let hashRoute = window.location.hash.replace(/^#\/?/, '').trim();
     const pathname = window.location.pathname.replace(/^\//, '').trim();
     const search = window.location.search || '';
@@ -99,22 +99,36 @@ export function initRouter() {
         route = pathname + search;
       }
     }
-    if (!route) {
-      if (pathname && window.history && window.history.replaceState) {
-        window.history.replaceState({}, '', '/#/dashboard');
-      } else {
-        window.location.hash = '#/dashboard';
+
+    // Obtener ruta por defecto configurada para el usuario si existe
+    let defaultRoute = 'dashboard';
+    try {
+      const stored = localStorage.getItem('wisi_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.ruta_defecto && parsed.ruta_defecto.trim()) {
+          defaultRoute = parsed.ruta_defecto.trim().replace(/^#\/?/, '').replace(/^\//, '');
+        }
       }
-      currentRouteStore.set('dashboard');
+    } catch (e) {}
+
+    if (!route || (isInitial && (route === '' || route === 'dashboard'))) {
+      const target = defaultRoute || 'dashboard';
+      if (pathname && window.history && window.history.replaceState) {
+        window.history.replaceState({}, '', `/#/${target}`);
+      } else {
+        window.location.hash = `#/${target}`;
+      }
+      currentRouteStore.set(target);
     } else {
       currentRouteStore.set(route);
     }
   }
 
-  parseLocation();
+  parseLocation(true);
 
-  window.addEventListener('hashchange', parseLocation);
-  window.addEventListener('popstate', parseLocation);
+  window.addEventListener('hashchange', () => parseLocation(false));
+  window.addEventListener('popstate', () => parseLocation(false));
 }
 
 export function navigateToRoute(route) {

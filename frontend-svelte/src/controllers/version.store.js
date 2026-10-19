@@ -387,12 +387,6 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           peso: winData.peso,
           fecha: winData.fecha
         });
-        if (isDashboardRoute()) {
-          isVersionModalOpenStore.set(true);
-        } else {
-          console.log('[VersionStore] 🤫 Aviso de actualización Windows silenciado por no estar en /dashboard.');
-          isVersionModalOpenStore.set(false);
-        }
       } else {
         availableUpdateStore.set(null);
         isVersionModalOpenStore.set(false);
@@ -422,12 +416,6 @@ export async function checkSystemVersion(options = { isSilent: false }) {
           peso: androidData.peso,
           fecha: androidData.fecha
         });
-        if (isDashboardRoute()) {
-          isVersionModalOpenStore.set(true);
-        } else {
-          console.log('[VersionStore] 🤫 Aviso de actualización Android silenciado por no estar en /dashboard.');
-          isVersionModalOpenStore.set(false);
-        }
       } else {
         availableUpdateStore.set(null);
         isVersionModalOpenStore.set(false);

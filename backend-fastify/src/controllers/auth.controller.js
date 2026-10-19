@@ -54,6 +54,8 @@ export async function loginController(request, reply) {
         uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,
+        recibe_notificaciones: user.recibe_notificaciones !== false,
+        ruta_defecto: user.ruta_defecto || '/dashboard',
         salas,
         permissions
       },
@@ -120,6 +122,8 @@ export async function getMeController(request, reply) {
         uuid: userUuid,
         nombre_apellido: user.nombre_apellido,
         usuario: user.usuario,
+        recibe_notificaciones: user.recibe_notificaciones !== false,
+        ruta_defecto: user.ruta_defecto || '/dashboard',
         salas,
         permissions
       },

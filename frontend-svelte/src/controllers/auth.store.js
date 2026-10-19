@@ -146,7 +146,8 @@ export async function loginUserStore(usuario, password) {
       localStorage.setItem('wisi_user', JSON.stringify(data.user));
       if (data.token) localStorage.setItem('wisi_token', data.token);
     }
-    navigateToRoute('dashboard');
+    const targetRoute = (data.user?.ruta_defecto && data.user.ruta_defecto.trim()) ? data.user.ruta_defecto.trim() : 'dashboard';
+    navigateToRoute(targetRoute);
     return data;
   } catch (err) {
     console.warn('Backend login API fallback to master store users:', err.message);
@@ -178,6 +179,8 @@ export async function loginUserStore(usuario, password) {
           localStorage.setItem('wisi_user', JSON.stringify(userObj));
           localStorage.setItem('wisi_token', `token_wisi_${userObj.uuid}_${Date.now()}`);
         }
+        const fallbackTarget = (matchedUser.ruta_defecto && matchedUser.ruta_defecto.trim()) ? matchedUser.ruta_defecto.trim() : 'dashboard';
+        navigateToRoute(fallbackTarget);
         return { success: true, user: userObj };
       }
     }

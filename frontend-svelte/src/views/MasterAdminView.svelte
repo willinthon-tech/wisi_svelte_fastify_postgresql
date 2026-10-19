@@ -32,6 +32,7 @@
   import BlockedDeleteModal from "../components/modals/BlockedDeleteModal.svelte";
   import OrderModulosModal from "../components/modals/OrderModulosModal.svelte";
   import { navigateToRoute } from "../controllers/router.store.js";
+  import { currentUserStore } from "../controllers/auth.store.js";
   import { triggerToast } from "../controllers/ui.store.js";
   import JSZip from "jszip";
   import {
@@ -1485,6 +1486,106 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       "success",
     );
   }
+
+  $: currentSelectedUser = $masterUsuariosStore.find(
+    (u) => String(u.uuid || u.id) === String(selectedUserId)
+  ) || null;
+
+  let currentSelectedUserRuta = '/dashboard';
+  let lastLoadedUserKey = null;
+
+  $: if (currentSelectedUser) {
+    const key = String(currentSelectedUser.uuid || currentSelectedUser.id);
+    if (key !== lastLoadedUserKey) {
+      lastLoadedUserKey = key;
+      currentSelectedUserRuta = currentSelectedUser.ruta_defecto || '/dashboard';
+    }
+  }
+
+  async function handleToggleUserNotifications() {
+    if (!currentSelectedUser) return;
+    const uKey = currentSelectedUser.uuid || currentSelectedUser.id;
+    const currentVal = currentSelectedUser.recibe_notificaciones !== false;
+    const newVal = !currentVal;
+
+    masterUsuariosStore.update((list) =>
+      list.map((u) => {
+        if (String(u.uuid || u.id) === String(uKey)) {
+          return { ...u, recibe_notificaciones: newVal };
+        }
+        return u;
+      })
+    );
+
+    if (String($currentUserStore?.uuid || $currentUserStore?.id) === String(uKey)) {
+      currentUserStore.update((u) => ({ ...u, recibe_notificaciones: newVal }));
+      try {
+        const stored = JSON.parse(localStorage.getItem('wisi_user') || '{}');
+        stored.recibe_notificaciones = newVal;
+        localStorage.setItem('wisi_user', JSON.stringify(stored));
+      } catch (e) {}
+    }
+
+    try {
+      const endpoint = toBackendUrl(`/api/master/usuarios/${uKey}`);
+      await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recibe_notificaciones: newVal })
+      });
+      triggerToast(
+        newVal
+          ? `Notificaciones activadas para ${currentSelectedUser.nombre_apellido}`
+          : `Notificaciones desactivadas para ${currentSelectedUser.nombre_apellido}`,
+        'info'
+      );
+    } catch (e) {
+      console.warn('Error al guardar estado de notificaciones:', e);
+      triggerToast('Error guardando configuración de notificaciones en el servidor', 'error');
+    }
+  }
+
+  async function handleSaveUserRutaDefecto() {
+    if (!currentSelectedUser) return;
+    const uKey = currentSelectedUser.uuid || currentSelectedUser.id;
+    const cleanRuta = (currentSelectedUserRuta && currentSelectedUserRuta.trim())
+      ? currentSelectedUserRuta.trim()
+      : '/dashboard';
+
+    masterUsuariosStore.update((list) =>
+      list.map((u) => {
+        if (String(u.uuid || u.id) === String(uKey)) {
+          return { ...u, ruta_defecto: cleanRuta };
+        }
+        return u;
+      })
+    );
+
+    if (String($currentUserStore?.uuid || $currentUserStore?.id) === String(uKey)) {
+      currentUserStore.update((u) => ({ ...u, ruta_defecto: cleanRuta }));
+      try {
+        const stored = JSON.parse(localStorage.getItem('wisi_user') || '{}');
+        stored.ruta_defecto = cleanRuta;
+        localStorage.setItem('wisi_user', JSON.stringify(stored));
+      } catch (e) {}
+    }
+
+    try {
+      const endpoint = toBackendUrl(`/api/master/usuarios/${uKey}`);
+      await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruta_defecto: cleanRuta })
+      });
+      triggerToast(
+        `Ruta de inicio para ${currentSelectedUser.nombre_apellido} establecida en: ${cleanRuta}`,
+        'success'
+      );
+    } catch (e) {
+      console.warn('Error al guardar ruta de inicio:', e);
+      triggerToast('Error guardando ruta de inicio en el servidor', 'error');
+    }
+  }
 </script>
 
 {#if !isUnlocked}
@@ -1829,27 +1930,77 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     <div
       style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 24px; color: #0f172a;"
     >
-      <!-- Top Selector de Usuario -->
+      <!-- Top Selector de Usuario y Controles de Notificaciones y Ruta URL -->
       <div
-        style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap;"
+        style="display: flex; align-items: flex-end; justify-content: flex-start; gap: 20px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap;"
       >
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div>
-            <label
-              style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 2px;"
+        <!-- 1. Selector de Usuario -->
+        <div>
+          <label
+            style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 4px;"
+          >
+            Seleccionar Usuario a Configurar
+            <select
+              bind:value={selectedUserId}
+              style="padding: 9px 14px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; cursor: pointer; min-width: 270px; outline: none; margin-top: 4px; display: block;"
             >
-              Seleccionar Usuario a Configurar
-              <select
-                bind:value={selectedUserId}
-                style="padding: 8px 14px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; cursor: pointer; min-width: 280px; outline: none; margin-top: 4px; display: block;"
-              >
-                {#each $masterUsuariosStore as u}
-                  <option value={u.uuid || u.id}
-                    >{u.nombre_apellido} (@{u.usuario})</option
-                  >
-                {/each}
-              </select>
-            </label>
+              {#each $masterUsuariosStore as u}
+                <option value={u.uuid || u.id}
+                  >{u.nombre_apellido} (@{u.usuario})</option
+                >
+              {/each}
+            </select>
+          </label>
+        </div>
+
+        <!-- 2. Checkbox Notificaciones de Marcaje -->
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 4px;">
+            Notificaciones de Marcaje
+          </span>
+          <label
+            style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: {currentSelectedUser?.recibe_notificaciones !== false ? '#f0fdf4' : '#fff5f5'}; border: 1.5px solid {currentSelectedUser?.recibe_notificaciones !== false ? '#22c55e' : '#ef4444'}; border-radius: 8px; cursor: pointer; transition: all 0.15s ease; min-height: 40px; box-sizing: border-box;"
+            title="Activar o desactivar el envío de notificaciones de marcaje para este usuario">
+            <input
+              type="checkbox"
+              checked={currentSelectedUser?.recibe_notificaciones !== false}
+              on:change={handleToggleUserNotifications}
+              style="width: 17px; height: 17px; accent-color: #16a34a; cursor: pointer;"
+            />
+            <span style="font-size: 13px; font-weight: 700; color: {currentSelectedUser?.recibe_notificaciones !== false ? '#15803d' : '#dc2626'};">
+              {currentSelectedUser?.recibe_notificaciones !== false ? 'Notificaciones Habilitadas' : 'Notificaciones Desactivadas'}
+            </span>
+          </label>
+        </div>
+
+        <!-- 3. RUTA URL por Defecto -->
+        <div style="display: flex; flex-direction: column;">
+          <span style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 4px;">
+            RUTA URL
+          </span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="position: relative; display: flex; align-items: center;">
+              <span class="material-icons" style="position: absolute; left: 10px; font-size: 16px; color: #64748b; pointer-events: none;">
+                link
+              </span>
+              <input
+                type="text"
+                bind:value={currentSelectedUserRuta}
+                on:keydown={(e) => e.key === 'Enter' && handleSaveUserRutaDefecto()}
+                placeholder="/dashboard"
+                style="padding: 9px 14px 9px 32px; font-size: 13px; font-weight: 700; border-radius: 8px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; outline: none; min-width: 280px; box-sizing: border-box;"
+                title="Ruta que cargará por defecto al iniciar sesión o abrir la app (ej: /dashboard o /herramientas/scoreboard-baccarat)"
+              />
+            </div>
+            <button
+              type="button"
+              on:click={handleSaveUserRutaDefecto}
+              class="btn-flow"
+              style="display: inline-flex; align-items: center; gap: 5px; padding: 9px 14px; font-size: 13px; font-weight: 700; border-radius: 8px; background: #2563eb; color: #ffffff; border: none; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 1px 3px rgba(37,99,235,0.2);"
+              title="Guardar ruta de inicio por defecto para este usuario">
+              <span class="material-icons" style="font-size: 16px;">save</span>
+              <span>Guardar</span>
+            </button>
           </div>
         </div>
       </div>

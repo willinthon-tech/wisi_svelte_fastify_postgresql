@@ -151,7 +151,9 @@
 
   // Registrar Notificaciones Push nativas cuando el usuario está autenticado en Android
   $: if ($isAuthenticatedStore && ($currentUserStore?.uuid || $currentUserStore?.id)) {
-    initPushNotifications($currentUserStore.uuid || $currentUserStore.id);
+    if ($currentUserStore?.recibe_notificaciones !== false) {
+      initPushNotifications($currentUserStore.uuid || $currentUserStore.id);
+    }
   }
 
   $: assignedSalaIds = (function () {
@@ -402,24 +404,13 @@
     }
   }
 
-  // El modal de actualización de versión SOLO se muestra en /dashboard; en cualquier otra ruta se cierra
-  $: if (!isDashboardRoute($currentRouteStore)) {
-    if ($isVersionModalOpenStore) {
-      isVersionModalOpenStore.set(false);
-    }
-  }
-
-  // Al entrar a /dashboard, si hay una actualización disponible esperando, abrir el modal
-  $: if (isDashboardRoute($currentRouteStore)) {
-    if ($availableUpdateStore && !$isVersionModalOpenStore) {
-      isVersionModalOpenStore.set(true);
-    }
-  }
-
   // Alerta única global (Top-Right): Entrada, Salida o Puerta / Otros
   function triggerGlobalMarcajeToast(rec, base, isSync = false) {
     // Silenciar por completo las notificaciones de marcaje en /herramientas y sus subrutas
     if (isHerramientasRoute($currentRouteStore)) return;
+
+    // Respetar si el usuario tiene desactivadas las notificaciones de marcaje
+    if ($currentUserStore && $currentUserStore.recibe_notificaciones === false) return;
 
     const empFoto = rec.empleado_foto || rec.foto || (rec.empleado_id ? `/empleados/${rec.empleado_id}.jpg` : null);
     globalMarcajeAlert = {

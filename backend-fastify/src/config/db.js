@@ -212,6 +212,16 @@ export async function initDb() {
       console.warn('Advertencia migrando tablas baccarat:', eBacc.message);
     }
 
+    // Garantizar columnas de notificaciones y ruta por defecto en usuarios
+    try {
+      await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS recibe_notificaciones BOOLEAN DEFAULT true;`;
+      await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ruta_defecto VARCHAR(255) DEFAULT '/dashboard';`;
+      await sql`UPDATE usuarios SET recibe_notificaciones = true WHERE recibe_notificaciones IS NULL;`;
+      await sql`UPDATE usuarios SET ruta_defecto = '/dashboard' WHERE ruta_defecto IS NULL OR TRIM(ruta_defecto) = '';`;
+    } catch (eUserCol) {
+      console.warn('Advertencia migrando columnas de usuarios:', eUserCol.message);
+    }
+
     isPgConnected = true;
     console.log(`\x1b[32m[CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {

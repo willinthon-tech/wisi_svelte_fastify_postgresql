@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { currentUserStore } from '../controllers/auth.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
-  import { executeHardRefresh } from '../controllers/version.store.js';
+  import { executeHardRefresh, availableUpdateStore, isVersionModalOpenStore } from '../controllers/version.store.js';
 
   const dispatch = createEventDispatcher();
 
@@ -38,6 +38,18 @@
   </div>
 
   <div class="header-right" style="display: flex; align-items: center; gap: 12px;">
+    <!-- Botón Titilando NEW ACT cuando hay actualización disponible -->
+    {#if $availableUpdateStore}
+      <button 
+        type="button" 
+        class="btn-new-act-pulse" 
+        on:click={() => isVersionModalOpenStore.set(true)} 
+        title="¡Nueva actualización disponible! ({$availableUpdateStore.remoteVersion || ''}). Clic para ver detalles e instalar.">
+        <span class="pulse-dot"></span>
+        <span class="new-act-text">NEW ACT</span>
+      </button>
+    {/if}
+
     <!-- Botón Recargar / Hard Refresh (Ctrl + F5) -->
     <button 
       type="button" 
@@ -125,6 +137,67 @@
     }
     to {
       transform: rotate(360deg);
+    }
+  }
+
+  .btn-new-act-pulse {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #fff5f5;
+    color: #dc2626;
+    border: 1.5px solid #ef4444;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(239, 68, 68, 0.2);
+    animation: pulseGlow 1.8s infinite ease-in-out;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    outline: none;
+  }
+
+  .btn-new-act-pulse:hover {
+    background: #fee2e2;
+    transform: scale(1.05);
+  }
+
+  .btn-new-act-pulse:active {
+    transform: scale(0.95);
+  }
+
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #ef4444;
+    display: inline-block;
+    animation: blinkDot 0.8s infinite alternate ease-in-out;
+  }
+
+  @keyframes pulseGlow {
+    0% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+  }
+
+  @keyframes blinkDot {
+    0% {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1.25);
     }
   }
 </style>

@@ -83,7 +83,7 @@
   }
 </script>
 
-{#if $isVersionModalOpenStore && update && isOnlyInDashboard}
+{#if $isVersionModalOpenStore && update}
   <div class="version-modal-backdrop" on:click|stopPropagation>
     <div class="version-modal-card" on:click|stopPropagation>
       

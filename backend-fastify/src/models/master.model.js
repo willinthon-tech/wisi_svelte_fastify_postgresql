@@ -202,16 +202,24 @@ export async function deleteEntityDynamic(tableName, entityTypeLabel, id) {
 // --- USUARIOS ---
 export async function getUsuariosModel() {
   if (isPgConnected && sql) {
-    return await sql`SELECT uuid, uuid AS id, nombre_apellido, usuario, password FROM usuarios ORDER BY nombre_apellido ASC`;
+    return await sql`
+      SELECT uuid, uuid AS id, nombre_apellido, usuario, password,
+             COALESCE(recibe_notificaciones, true) AS recibe_notificaciones,
+             COALESCE(ruta_defecto, '/dashboard') AS ruta_defecto
+      FROM usuarios 
+      ORDER BY nombre_apellido ASC
+    `;
   }
   return inMemoryData.usuarios;
 }
 
 export async function createUsuarioModel(data) {
-  const { nombre_apellido, usuario, password } = data || {};
+  const { nombre_apellido, usuario, password, recibe_notificaciones, ruta_defecto } = data || {};
   const cleanUser = (usuario || '').trim();
   const cleanPass = (password || '').trim();
   const cleanName = (nombre_apellido || cleanUser).trim();
+  const notif = recibe_notificaciones !== false;
+  const defRoute = (ruta_defecto && String(ruta_defecto).trim()) ? String(ruta_defecto).trim() : '/dashboard';
 
   if (!cleanUser || !cleanPass) {
     throw new Error('El usuario y la contraseña son obligatorios');
@@ -219,9 +227,11 @@ export async function createUsuarioModel(data) {
 
   if (isPgConnected && sql) {
     const rows = await sql`
-      INSERT INTO usuarios (nombre_apellido, usuario, password)
-      VALUES (${cleanName}, ${cleanUser}, ${cleanPass})
-      RETURNING uuid, uuid AS id, nombre_apellido, usuario, password
+      INSERT INTO usuarios (nombre_apellido, usuario, password, recibe_notificaciones, ruta_defecto)
+      VALUES (${cleanName}, ${cleanUser}, ${cleanPass}, ${notif}, ${defRoute})
+      RETURNING uuid, uuid AS id, nombre_apellido, usuario, password,
+                COALESCE(recibe_notificaciones, true) AS recibe_notificaciones,
+                COALESCE(ruta_defecto, '/dashboard') AS ruta_defecto
     `;
     return rows[0];
   } else {
@@ -231,7 +241,9 @@ export async function createUsuarioModel(data) {
       uuid: `user-${Date.now()}`,
       nombre_apellido: cleanName,
       usuario: cleanUser,
-      password: cleanPass
+      password: cleanPass,
+      recibe_notificaciones: notif,
+      ruta_defecto: defRoute
     };
     inMemoryData.usuarios.unshift(newUser);
     return newUser;
@@ -241,14 +253,22 @@ export async function createUsuarioModel(data) {
 export async function updateUsuarioModel(id, data) {
   if (!id) throw new Error('ID inválido');
   const isU = isUuid(id);
-  const { nombre_apellido, usuario, password } = data || {};
+  const { nombre_apellido, usuario, password, recibe_notificaciones, ruta_defecto } = data || {};
 
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE usuarios
-      SET nombre_apellido = ${nombre_apellido}, usuario = ${usuario}, password = ${password}, updated_at = CURRENT_TIMESTAMP
+      SET 
+        nombre_apellido = COALESCE(${nombre_apellido !== undefined ? nombre_apellido : null}, nombre_apellido),
+        usuario = COALESCE(${usuario !== undefined ? usuario : null}, usuario),
+        password = COALESCE(${password !== undefined ? password : null}, password),
+        recibe_notificaciones = COALESCE(${recibe_notificaciones !== undefined ? Boolean(recibe_notificaciones) : null}, recibe_notificaciones, true),
+        ruta_defecto = COALESCE(${ruta_defecto !== undefined ? String(ruta_defecto).trim() : null}, ruta_defecto, '/dashboard'),
+        updated_at = CURRENT_TIMESTAMP
       WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`uuid::text = ${String(id)}`}
-      RETURNING uuid, uuid AS id, nombre_apellido, usuario, password
+      RETURNING uuid, uuid AS id, nombre_apellido, usuario, password,
+                COALESCE(recibe_notificaciones, true) AS recibe_notificaciones,
+                COALESCE(ruta_defecto, '/dashboard') AS ruta_defecto
     `;
     return rows[0];
   } else {

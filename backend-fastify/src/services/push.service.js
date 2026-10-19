@@ -201,9 +201,11 @@ export async function sendPushNotificationForAttlog({ salaId = null, sala_uuid =
         SELECT DISTINCT ft.token 
         FROM fcm_tokens ft
         INNER JOIN user_salas us ON us.user_uuid = ft.user_uuid
+        INNER JOIN usuarios u ON u.uuid = ft.user_uuid
         WHERE ft.activo = TRUE 
           AND ft.user_uuid IS NOT NULL
           AND us.sala_uuid = ${targetSalaUuid}::uuid
+          AND COALESCE(u.recibe_notificaciones, true) = TRUE
       `;
       tokens = rows.map(r => r.token).filter(Boolean);
     } catch (err) {
