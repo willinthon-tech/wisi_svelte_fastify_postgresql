@@ -507,6 +507,26 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
+        public void forceExit() {
+            runOnUiThread(() -> {
+                try {
+                    isKiosk = false;
+                    isFullscreenMode = false;
+                    setKioskEnabledInPrefs(false);
+                    try {
+                        stopLockTask();
+                    } catch (Exception ignored) {}
+
+                    finishAffinity();
+                    android.os.Process.killProcess(android.os.Process.myPid());
+                    System.exit(0);
+                } catch (Exception e) {
+                    try { finish(); } catch (Exception ignored) {}
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void setKiosk(boolean enable) {
             runOnUiThread(() -> enableKioskMode(enable));
         }
@@ -612,6 +632,29 @@ public class MainActivity extends BridgeActivity {
             com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
             ret.put("active", active);
             call.resolve(ret);
+        }
+
+        @PluginMethod
+        public void forceExit(PluginCall call) {
+            MainActivity activity = (MainActivity) getActivity();
+            if (activity != null) {
+                activity.runOnUiThread(() -> {
+                    try {
+                        activity.isKiosk = false;
+                        activity.isFullscreenMode = false;
+                        activity.setKioskEnabledInPrefs(false);
+                        try {
+                            activity.stopLockTask();
+                        } catch (Exception ignored) {}
+                        activity.finishAffinity();
+                        android.os.Process.killProcess(android.os.Process.myPid());
+                        System.exit(0);
+                    } catch (Exception e) {
+                        try { activity.finish(); } catch (Exception ignored) {}
+                    }
+                });
+            }
+            call.resolve();
         }
     }
 }

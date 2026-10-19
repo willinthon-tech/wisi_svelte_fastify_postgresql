@@ -126,3 +126,63 @@ export function handleKioskToggleClick() {
 export function toggleKioskMode() {
   handleKioskToggleClick();
 }
+
+/**
+ * Salida Forzada / Emergencia:
+ * Desactiva inmediatamente el modo kiosco y cierra/mata la aplicación para volver al sistema operativo
+ */
+export async function forceExitApp() {
+  // 1. Limpiar flags locales de kiosco
+  isKioskModeStore.set(false);
+  try {
+    localStorage.removeItem('wisi_kiosk_mode');
+    localStorage.removeItem('wisi_kiosk_active');
+  } catch (e) {}
+
+  // 2. Salir de pantalla completa web si estuviese
+  if (typeof document !== 'undefined' && document.fullscreenElement) {
+    try { document.exitFullscreen().catch(() => {}); } catch (e) {}
+  }
+
+  // 3. Puente nativo AndroidKiosk (desactiva kiosco y mata la app directamente en Java)
+  if (typeof window !== 'undefined' && window.AndroidKiosk) {
+    try {
+      if (typeof window.AndroidKiosk.exitKiosk === 'function') {
+        window.AndroidKiosk.exitKiosk();
+      }
+      if (typeof window.AndroidKiosk.forceExit === 'function') {
+        window.AndroidKiosk.forceExit();
+        return;
+      }
+    } catch (e) {
+      console.warn('Error en AndroidKiosk forceExit:', e);
+    }
+  }
+
+  // 4. Plugin Capacitor KioskPlugin o App
+  try {
+    if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.KioskPlugin?.forceExit) {
+      await window.Capacitor.Plugins.KioskPlugin.forceExit();
+      return;
+    }
+    if (typeof window !== 'undefined' && window.Capacitor?.Plugins?.App?.exitApp) {
+      await window.Capacitor.Plugins.App.exitApp();
+      return;
+    }
+  } catch (e) {}
+
+  // 5. Tauri (Desktop)
+  try {
+    if (typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__)) {
+      if (window.__TAURI__?.process?.exit) {
+        await window.__TAURI__.process.exit(0);
+        return;
+      }
+    }
+  } catch (e) {}
+
+  // 6. Web Fallback
+  try {
+    window.close();
+  } catch (e) {}
+}

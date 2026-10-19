@@ -11,6 +11,7 @@
   import { triggerToast } from '../controllers/ui.store.js';
   import { toBackendUrl } from '../config/api.config.js';
   import { handleDownloadApp } from '../utils/download.utils.js';
+  import { forceExitApp } from '../controllers/kiosk.store.js';
 
   export let healthStatus = {};
 
@@ -211,6 +212,10 @@
     logoutUserStore();
     triggerToast('Sesión cerrada correctamente', 'info');
   }
+
+  async function handleForceExitClick() {
+    await forceExitApp();
+  }
 </script>
 
 <div style="display: flex; flex-direction: column; gap: 20px; max-width: 1400px; margin: 0 auto; width: 100%;">
@@ -245,8 +250,18 @@
         </div>
       </div>
 
-      <!-- Exactly the 3 Buttons Requested by User -->
+      <!-- Action Buttons Row (Salida Forzada, Info, Descarga, Administración, Cerrar Sesión) -->
       <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <!-- Botón Salida Forzada (Salida de Emergencia para Android / Kiosco) -->
+        <button 
+          type="button"
+          on:click={handleForceExitClick} 
+          class="btn-flow-sec"
+          style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 800; border-radius: 8px; cursor: pointer; background: #fff5f5; color: #dc2626; border: 1.5px solid #ef4444; box-shadow: 0 1px 3px rgba(220,38,38,0.1); transition: all 0.15s ease;"
+          title="Salida forzada / Salida de emergencia: Desactiva el modo kiosco y cierra la aplicación por completo">
+          <span>SALIDA FORZADA</span>
+        </button>
+
         <!-- 1. Botón Info (Principal y Activo por defecto) -->
         <button 
           type="button"
