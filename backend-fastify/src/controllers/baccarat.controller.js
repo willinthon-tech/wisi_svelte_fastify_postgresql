@@ -136,8 +136,7 @@ export async function createSession(req, reply) {
           LIMIT 1;
         `;
         if (lastSession.length > 0 && lastSession[0].fecha) {
-          const lastFecha = lastSession[0].fecha;
-          fecha = (lastFecha < todayStr) ? todayStr : getNextDateStr(lastFecha);
+          fecha = getNextDateStr(lastSession[0].fecha);
         } else {
           fecha = todayStr;
         }
@@ -171,7 +170,7 @@ export async function createSession(req, reply) {
       const salaSessions = memorySessions.filter(s => String(s.sala_uuid || s.sala_id) === salaUuid);
       const lastSession = salaSessions[salaSessions.length - 1];
       if (lastSession && lastSession.fecha) {
-        fecha = (lastSession.fecha < todayStr) ? todayStr : getNextDateStr(lastSession.fecha);
+        fecha = getNextDateStr(lastSession.fecha);
       } else {
         fecha = todayStr;
       }

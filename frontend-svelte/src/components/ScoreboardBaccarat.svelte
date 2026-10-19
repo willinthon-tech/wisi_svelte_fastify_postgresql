@@ -74,9 +74,7 @@
   $: latestSessionInList = sessions.length > 0 ? sessions[sessions.length - 1] : null;
 
   $: nextSessionDateStr = (() => {
-    const today = getTodayStr();
-    if (!latestSessionInList || !latestSessionInList.fecha) return today;
-    if (latestSessionInList.fecha < today) return today;
+    if (!latestSessionInList || !latestSessionInList.fecha) return getTodayStr();
     return getNextDateStr(latestSessionInList.fecha);
   })();
 
