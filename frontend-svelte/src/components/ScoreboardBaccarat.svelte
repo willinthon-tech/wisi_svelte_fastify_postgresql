@@ -2816,7 +2816,7 @@
                 <span class="btn-letter">T</span>
               </div>
             </button>
-            <span class="btn-caption tie-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'EMPATE'}>EMPATE</span>
+            <span class="btn-caption tie-caption" class:is-chosen-caption={isEditingHand && selectedHand.winner === 'EMPATE'}>TIE</span>
           </div>
         </div>
 
