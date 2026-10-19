@@ -1338,6 +1338,7 @@
 
   function recordOutcome(winner) {
     if (!isCurrentShoeActive) return;
+    if ((winner === 'PUNTO' || winner === 'BANCA') && activeScore === 0) return;
     playSound('win');
     const newRecord = {
       id: history.length + 1,
@@ -1504,6 +1505,9 @@
 
   function updateSelectedWinner(newWinner) {
     if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
+    if ((newWinner === 'PUNTO' || newWinner === 'BANCA') && history[selectedHandIndex].score === 0) {
+      history[selectedHandIndex].score = null;
+    }
     playSound('win');
     history[selectedHandIndex].winner = newWinner;
     history = [...history];
@@ -1533,6 +1537,7 @@
   function updateSelectedScore(num) {
     if (!isCurrentShoeActive || selectedHandIndex === null || !history[selectedHandIndex]) return;
     if (history[selectedHandIndex].natural && num !== 8 && num !== 9) return;
+    if (num === 0 && (history[selectedHandIndex].winner === 'PUNTO' || history[selectedHandIndex].winner === 'BANCA')) return;
     playSound('click');
     history[selectedHandIndex].score = history[selectedHandIndex].score === num ? null : num;
     history = [...history];
@@ -2687,9 +2692,9 @@
             type="button"
             class="btn-num-key btn-num-zero"
             class:active={isEditingHand ? selectedHand.score === 0 : activeScore === 0}
-            disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.natural : activeNatural)}
+            disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.natural || selectedHand.winner === 'PUNTO' || selectedHand.winner === 'BANCA') : activeNatural)}
             on:click={() => handleKeypadNumber(0)}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano'))}
+            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (isEditingHand && (selectedHand.winner === 'PUNTO' || selectedHand.winner === 'BANCA') ? 'PUNTO y BANCA no se ganan con valor 0' : ((isEditingHand ? selectedHand.natural : activeNatural) ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano')))}
           >
             0
           </button>
@@ -2756,9 +2761,9 @@
               type="button"
               class="keypad-btn-circle btn-punto"
               class:is-chosen-winner={isEditingHand && selectedHand.winner === 'PUNTO'}
-              disabled={isObserverMode || !isCurrentShoeActive}
+              disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.score === 0 : activeScore === 0)}
               on:click={() => handleSelectOutcome('PUNTO')}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de PUNTO (Player)'))}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.score === 0 : activeScore === 0) ? 'PUNTO no se gana con valor 0' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : 'Registrar victoria de PUNTO (Player)')))}
             >
               {#if isEditingHand ? selectedHand.bPair : activeBPair}
                 <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -2779,9 +2784,9 @@
               type="button"
               class="keypad-btn-circle btn-banca"
               class:is-chosen-winner={isEditingHand && selectedHand.winner === 'BANCA'}
-              disabled={isObserverMode || !isCurrentShoeActive}
+              disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.score === 0 : activeScore === 0)}
               on:click={() => handleSelectOutcome('BANCA')}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar victoria de BANCA (Banker)'))}
+              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.score === 0 : activeScore === 0) ? 'BANCA no se gana con valor 0' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : 'Registrar victoria de BANCA (Banker)')))}
             >
               {#if isEditingHand ? selectedHand.bPair : activeBPair}
                 <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -5161,6 +5166,11 @@
   .banca-caption { color: #dc2626; }
   .tie-caption { color: #16a34a; }
   .undo-caption { color: #854d0e; }
+
+  .keypad-btn-circle:disabled + .btn-caption {
+    opacity: 0.35;
+    filter: grayscale(80%);
+  }
 
 
   /* MODAL DE CONFIRMACIÓN (ESTILO OFICIAL WISI) */
