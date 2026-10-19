@@ -2460,15 +2460,6 @@
         </button>
       {/if}
 
-      {#if isObserverMode}
-        <div class="sb-observer-badge-pill" title="Usted está en modo Observador (Solo Lectura)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-          <span>Observador</span>
-        </div>
-      {/if}
     </div>
 
     <!-- COL-4 CENTRO: ZAPATO Y MANOS (CON BOTÓN 'N' INTEGRADO PARA NUEVO ZAPATO) -->
@@ -2516,10 +2507,10 @@
           <button
             type="button"
             class="nav-arrow-btn btn-new-shoe-n"
-            class:is-active={isLatestSession && history.length > 0}
-            disabled={!isLatestSession || history.length === 0}
+            class:is-active={hasFullBaccaratPerms && isLatestSession && history.length > 0}
+            disabled={!hasFullBaccaratPerms || !isLatestSession || history.length === 0}
             on:click={handleDirectNewShoe}
-            title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
+            title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para operar el zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`)}
             aria-label="Crear Nuevo Zapato"
           >
             <span class="btn-n-letter">N</span>
@@ -2963,17 +2954,8 @@
       class="scoreboard-footer-panel"
       class:is-editing={isEditingHand}
       class:no-mesa-selected={!hasSelectedMesa}
-      class:is-observer-mode={isObserverMode}
     >
-    {#if isObserverMode}
-      <div class="footer-observer-strip" title="Modo Observador en Vivo: Solo Lectura">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-          <circle cx="12" cy="12" r="3"></circle>
-        </svg>
-        <span>Modo Observador: Botones deshabilitados (Solo Lectura en Vivo)</span>
-      </div>
-    {:else if !hasSelectedMesa}
+    {#if !hasSelectedMesa}
       <div class="footer-no-mesa-banner">
         <div class="no-mesa-message">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -3014,9 +2996,9 @@
               type="button"
               class="btn-num-key btn-num-{num}"
               class:active={isEditingHand ? selectedHand.score === num : activeScore === num}
-              disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.natural && num !== 8 && num !== 9) : (activeNatural && num !== 8 && num !== 9))}
+              disabled={!isCurrentShoeActive || (isEditingHand ? (selectedHand.natural && num !== 8 && num !== 9) : (activeNatural && num !== 8 && num !== 9))}
               on:click={() => handleKeypadNumber(num)}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) && num !== 8 && num !== 9 ? 'Con Natural activo solo se permiten 8 y 9' : `Seleccionar valor ${num} para la mano`))}
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : ((isEditingHand ? selectedHand.natural : activeNatural) && num !== 8 && num !== 9 ? 'Con Natural activo solo se permiten 8 y 9' : `Seleccionar valor ${num} para la mano`)}
             >
               {num}
             </button>
@@ -3026,9 +3008,9 @@
             type="button"
             class="btn-num-key btn-num-zero"
             class:active={isEditingHand ? selectedHand.score === 0 : activeScore === 0}
-            disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.natural || selectedHand.winner === 'PUNTO' || selectedHand.winner === 'BANCA') : activeNatural)}
+            disabled={!isCurrentShoeActive || (isEditingHand ? (selectedHand.natural || selectedHand.winner === 'PUNTO' || selectedHand.winner === 'BANCA') : activeNatural)}
             on:click={() => handleKeypadNumber(0)}
-            title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : (isEditingHand && (selectedHand.winner === 'PUNTO' || selectedHand.winner === 'BANCA') ? 'PUNTO y BANCA no se ganan con valor 0' : ((isEditingHand ? selectedHand.natural : activeNatural) ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano')))}
+            title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : (isEditingHand && (selectedHand.winner === 'PUNTO' || selectedHand.winner === 'BANCA') ? 'PUNTO y BANCA no se ganan con valor 0' : ((isEditingHand ? selectedHand.natural : activeNatural) ? 'Con Natural activo solo se permiten 8 y 9' : 'Seleccionar valor 0 para la mano'))}
           >
             0
           </button>
@@ -3044,9 +3026,9 @@
           type="button"
           class="keypad-pill pill-ppair"
           class:active={isEditingHand ? selectedHand.pPair : activePPair}
-          disabled={isObserverMode || !isCurrentShoeActive}
+          disabled={!isCurrentShoeActive}
           on:click={handleTogglePPair}
-          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Punto (P.Pair)')}
+          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : 'Activar/Desactivar Pareja de Punto (P.Pair)'}
         >
           P.Pair
         </button>
@@ -3055,9 +3037,9 @@
           type="button"
           class="keypad-pill pill-bpair"
           class:active={isEditingHand ? selectedHand.bPair : activeBPair}
-          disabled={isObserverMode || !isCurrentShoeActive}
+          disabled={!isCurrentShoeActive}
           on:click={handleToggleBPair}
-          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Pareja de Banca (B.Pair)')}
+          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : 'Activar/Desactivar Pareja de Banca (B.Pair)'}
         >
           B.Pair
         </button>
@@ -3066,9 +3048,9 @@
           type="button"
           class="keypad-pill pill-natural"
           class:active={isEditingHand ? selectedHand.natural : activeNatural}
-          disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
+          disabled={!isCurrentShoeActive || (isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9))}
           on:click={handleToggleNatural}
-          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)'))}
+          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : ((isEditingHand ? (selectedHand.score !== null && selectedHand.score !== undefined && selectedHand.score !== 8 && selectedHand.score !== 9) : (activeScore !== null && activeScore !== 8 && activeScore !== 9)) ? 'Natural solo aplica a puntajes 8 ó 9' : 'Activar/Desactivar Victoria Natural (8 ó 9)')}
         >
           Natural
         </button>
@@ -3077,9 +3059,9 @@
           type="button"
           class="keypad-pill pill-win"
           class:active={isEditingHand ? selectedHand.win : activeWin}
-          disabled={isObserverMode || !isCurrentShoeActive}
+          disabled={!isCurrentShoeActive}
           on:click={handleToggleWin}
-          title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Activar/Desactivar Victoria WIN (Círculo sólido en Gran Camino)')}
+          title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : 'Activar/Desactivar Victoria WIN (Círculo sólido en Gran Camino)'}
         >
           Win
         </button>
@@ -3095,9 +3077,9 @@
               type="button"
               class="keypad-btn-circle btn-punto"
               class:is-chosen-winner={isEditingHand && selectedHand.winner === 'PUNTO'}
-              disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.score === 0 : activeScore === 0)}
+              disabled={!isCurrentShoeActive || (isEditingHand ? selectedHand.score === 0 : activeScore === 0)}
               on:click={() => handleSelectOutcome('PUNTO')}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.score === 0 : activeScore === 0) ? 'PUNTO no se gana con valor 0' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : 'Registrar victoria de PUNTO (Player)')))}
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : ((isEditingHand ? selectedHand.score === 0 : activeScore === 0) ? 'PUNTO no se gana con valor 0' : (isEditingHand ? 'Cambiar ganador a PUNTO (Player)' : 'Registrar victoria de PUNTO (Player)'))}
             >
               {#if isEditingHand ? selectedHand.bPair : activeBPair}
                 <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -3118,9 +3100,9 @@
               type="button"
               class="keypad-btn-circle btn-banca"
               class:is-chosen-winner={isEditingHand && selectedHand.winner === 'BANCA'}
-              disabled={isObserverMode || !isCurrentShoeActive || (isEditingHand ? selectedHand.score === 0 : activeScore === 0)}
+              disabled={!isCurrentShoeActive || (isEditingHand ? selectedHand.score === 0 : activeScore === 0)}
               on:click={() => handleSelectOutcome('BANCA')}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : ((isEditingHand ? selectedHand.score === 0 : activeScore === 0) ? 'BANCA no se gana con valor 0' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : 'Registrar victoria de BANCA (Banker)')))}
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : ((isEditingHand ? selectedHand.score === 0 : activeScore === 0) ? 'BANCA no se gana con valor 0' : (isEditingHand ? 'Cambiar ganador a BANCA (Banker)' : 'Registrar victoria de BANCA (Banker)'))}
             >
               {#if isEditingHand ? selectedHand.bPair : activeBPair}
                 <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -3141,9 +3123,9 @@
               type="button"
               class="keypad-btn-circle btn-tie"
               class:is-chosen-winner={isEditingHand && selectedHand.winner === 'EMPATE'}
-              disabled={isObserverMode || !isCurrentShoeActive}
+              disabled={!isCurrentShoeActive}
               on:click={() => handleSelectOutcome('EMPATE')}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Cambiar ganador a EMPATE (Tie)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : 'Registrar EMPATE (Tie)'))}
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : (isEditingHand ? 'Cambiar ganador a EMPATE (Tie)' : 'Registrar EMPATE (Tie)')}
             >
               {#if isEditingHand ? selectedHand.bPair : activeBPair}
                 <span class="badge-corner-tl" title="B.Pair activo"></span>
@@ -3168,8 +3150,8 @@
               class="keypad-btn-circle btn-undo"
               class:is-btn-atras={isEditingHand}
               on:click={handleBackOrUndo}
-              disabled={isObserverMode || !isCurrentShoeActive || (!isEditingHand && history.length === 0)}
-              title={isObserverMode ? 'Modo Observador: Botón deshabilitado (Solo Lectura)' : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : (!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : 'Sesión histórica en modo solo lectura') : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada'))}
+              disabled={!isCurrentShoeActive || (!isEditingHand && history.length === 0)}
+              title={!isCurrentShoeActive ? (isViewingPastShoe ? 'Zapato histórico en modo solo lectura' : !isLatestSession ? 'Sesión histórica en modo solo lectura' : 'Modo solo lectura') : (isEditingHand ? 'Salir del modo edición sin guardar más cambios (Atrás)' : history.length === 0 ? 'No hay manos para retroceder' : 'Retroceder / Deshacer última mano registrada')}
             >
               <div class="btn-inner-gloss">
                 <svg class="btn-arrow-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
@@ -3571,20 +3553,6 @@
     margin: 0 2px;
   }
 
-  .sb-observer-badge-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: rgba(245, 158, 11, 0.15);
-    border: 1px solid #f59e0b;
-    color: #f59e0b;
-    padding: 2px 8px;
-    border-radius: 9999px;
-    font-size: 11px;
-    font-weight: 700;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
 
   /* CONTENEDORES ESTANDARIZADOS: ZAPATO Y SESIÓN */
   .sb-shoe-pill,
@@ -3756,9 +3724,6 @@
     .session-date-text {
       font-size: clamp(8.5px, 2vw, 10.5px);
       display: inline-block;
-    }
-    .sb-observer-badge-pill span {
-      display: none;
     }
   }
 
@@ -5956,22 +5921,6 @@
     }
   }
 
-  /* MODO OBSERVADOR */
-  .sb-observer-badge-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(2, 132, 199, 0.18);
-    border: 1.5px solid #0284c7;
-    color: #38bdf8;
-    padding: 3px 10px;
-    border-radius: 9999px;
-    font-size: 11.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
   /* MODO MONITOR */
   .sb-monitor-badge-pill {
     display: inline-flex;
@@ -6015,65 +5964,6 @@
 
   .scoreboard-container.is-monitor-mode .scoreboard-footer-panel {
     display: none !important;
-  }
-
-  .scoreboard-footer-panel.is-observer-mode {
-    position: relative;
-    border-color: rgba(2, 132, 199, 0.45) !important;
-  }
-
-  .scoreboard-footer-panel.is-observer-mode .footer-score-col,
-  .scoreboard-footer-panel.is-observer-mode .footer-modifiers-col,
-  .scoreboard-footer-panel.is-observer-mode .footer-outcomes-col,
-  .scoreboard-footer-panel.is-observer-mode .footer-undo-col {
-    filter: grayscale(1) contrast(0.85);
-    opacity: 0.38;
-    pointer-events: none;
-    user-select: none;
-    cursor: not-allowed;
-  }
-
-  .scoreboard-footer-panel.is-observer-mode .btn-num-key,
-  .scoreboard-footer-panel.is-observer-mode .keypad-pill,
-  .scoreboard-footer-panel.is-observer-mode .keypad-btn-circle,
-  .scoreboard-footer-panel.is-observer-mode .btn-undo,
-  .scoreboard-footer-panel.is-observer-mode .keypad-btn-tie-toggle {
-    cursor: not-allowed !important;
-    pointer-events: none !important;
-    box-shadow: none !important;
-    opacity: 0.32 !important;
-    filter: grayscale(100%) !important;
-  }
-
-  .scoreboard-footer-panel.is-observer-mode .btn-caption {
-    opacity: 0.4 !important;
-    filter: grayscale(100%) !important;
-    color: #94a3b8 !important;
-  }
-
-  .footer-observer-strip {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    box-sizing: border-box;
-    background: rgba(2, 132, 199, 0.12);
-    border: 1px solid rgba(2, 132, 199, 0.3);
-    border-radius: 6px;
-    padding: 3px 12px;
-    margin-bottom: 4px;
-    color: #38bdf8;
-    font-size: 11.5px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-  }
-
-  .footer-observer-strip svg {
-    color: #38bdf8;
-    flex-shrink: 0;
   }
 
   /* BOTONERA EN GRIS SI NO HAY MESA SELECCIONADA */
@@ -6545,30 +6435,6 @@
     color: #0f172a;
     border: 1.5px solid #cbd5e1;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
-  }
-
-  .theme-light .sb-observer-badge-pill {
-    background: #e0f2fe;
-    border-color: #0284c7;
-    color: #0369a1;
-  }
-
-  .theme-light .scoreboard-footer-panel.is-observer-mode {
-    border-color: #93c5fd !important;
-  }
-
-  .theme-light .footer-observer-strip {
-    background: #e0f2fe;
-    border-color: #bae6fd;
-    color: #0369a1;
-  }
-
-  .theme-light .footer-observer-strip svg {
-    color: #0284c7;
-  }
-
-  .theme-light .scoreboard-footer-panel.is-observer-mode .btn-caption {
-    color: #64748b !important;
   }
 
   .theme-light .sb-monitor-badge-pill {
