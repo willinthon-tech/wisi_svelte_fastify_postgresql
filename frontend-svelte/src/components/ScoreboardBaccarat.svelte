@@ -1699,13 +1699,13 @@
           prevWinner = h.winner;
           row = 1;
           col = 0;
-          currentStreak = [{ r: 0, c: 0, winner: h.winner }];
+          currentStreak = [{ r: 0, c: 0, winner: h.winner, historyIndex: idx }];
           placedStreaks.push(currentStreak);
         } else if (h.winner === prevWinner) {
           if (row < BIG_ROWS && !grid[row][col]) {
             grid[row][col] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
             lastPlaced = grid[row][col];
-            currentStreak.push({ r: row, c: col, winner: h.winner });
+            currentStreak.push({ r: row, c: col, winner: h.winner, historyIndex: idx });
             row++;
           } else {
             let dCol = col + 1;
@@ -1723,7 +1723,7 @@
             }
             grid[dRow][dCol] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
             lastPlaced = grid[dRow][dCol];
-            currentStreak.push({ r: dRow, c: dCol, winner: h.winner });
+            currentStreak.push({ r: dRow, c: dCol, winner: h.winner, historyIndex: idx });
           }
         } else {
           col++;
@@ -1741,7 +1741,7 @@
           row = 0;
           grid[0][col] = { ...h, historyIndex: idx, tieCount: 0, tieBeforeCount: 0, tieAfterCount: 0 };
           lastPlaced = grid[0][col];
-          currentStreak = [{ r: 0, c: col, winner: h.winner }];
+          currentStreak = [{ r: 0, c: col, winner: h.winner, historyIndex: idx }];
           placedStreaks.push(currentStreak);
           row = 1;
           prevWinner = h.winner;
@@ -1774,7 +1774,7 @@
           isTieOnly: h.winner === 'EMPATE',
           tieCount: 0
         };
-        currentStreak.push({ r, c, winner: h.winner });
+        currentStreak.push({ r, c, winner: h.winner, historyIndex: idx });
       }
 
       history.forEach((h, idx) => {
@@ -1926,80 +1926,104 @@
       sequencePaths.push(d);
     });
 
-    // 2. Líneas de patrón de Chop y coincidencias (SÓLO para la jugada en curso / seleccionada)
-    const cols = bigRoadLogicalColumns || [];
-    let targetColIdx = cols.length - 1;
-    if (selectedHandIndex !== null && selectedHandIndex >= 0) {
-      const foundCol = cols.findIndex(colArr => colArr.some(h => h.historyIndex === selectedHandIndex));
-      if (foundCol >= 0) {
-        targetColIdx = foundCol;
+    // 2. Líneas de patrón de Chop y racha activa (SÓLO para la jugada en curso / seleccionada)
+    const placed = bigRoadGrid.placedStreaks || [];
+    if (placed.length > 0) {
+      let targetStreakIdx = placed.length - 1;
+      if (selectedHandIndex !== null && selectedHandIndex >= 0) {
+        const foundIdx = placed.findIndex(st => st.some(p => p.historyIndex === selectedHandIndex));
+        if (foundIdx >= 0) {
+          targetStreakIdx = foundIdx;
+        }
       }
-    }
 
-    if (targetColIdx >= 0 && cols[targetColIdx]) {
-      // 2.1 Patrón de Chop (Ping-pong horizontal en fila 0: 3=Cyan, 4=Naranja, 5+=Púrpura)
-      if (cols[targetColIdx].length === 1) {
-        let chopStart = targetColIdx;
-        while (chopStart > 0 && cols[chopStart - 1].length === 1) {
+      const currentStreakCells = placed[targetStreakIdx] || [];
+      const H = currentStreakCells.length;
+
+      // 2.1 Patrón de Chop Horizontal en fila 0 (cuando 3 o más columnas consecutivas son de longitud 1 en fila 0)
+      if (H === 1 && currentStreakCells[0].r === 0) {
+        let chopStart = targetStreakIdx;
+        while (
+          chopStart > 0 &&
+          placed[chopStart - 1] &&
+          placed[chopStart - 1][0] &&
+          placed[chopStart - 1][0].r === 0 &&
+          placed[chopStart - 1].filter(p => p.winner !== 'EMPATE').length === 1
+        ) {
           chopStart--;
         }
-        const chopLen = targetColIdx - chopStart + 1;
+        const chopLen = targetStreakIdx - chopStart + 1;
         if (chopLen >= 3) {
           const color = chopLen === 3 ? '#00bcd4' : chopLen === 4 ? '#ff9800' : '#a855f7';
           patternLines.push({
             type: 'line',
-            x1: (chopStart + 0.5) * cellSize,
+            x1: (placed[chopStart][0].c + 0.5) * cellSize,
             y1: 0.5 * cellSize,
-            x2: (targetColIdx + 0.5) * cellSize,
+            x2: (placed[targetStreakIdx][0].c + 0.5) * cellSize,
             y2: 0.5 * cellSize,
             color
           });
         }
       }
 
-      // 2.2 Patrón en "V" de coincidencias (3=Cyan, 4=Naranja, 5+=Púrpura)
-      if (targetColIdx >= 2) {
-        const colC = cols[targetColIdx];
-        const colA = cols[targetColIdx - 2];
-        const colB = cols[targetColIdx - 1];
+      // 2.2 Racha en la jugada en curso (3=Azul, 4=Naranja, 5+=Morado)
+      if (H >= 3) {
+        const color = H === 3 ? '#00bcd4' : H === 4 ? '#ff9800' : '#a855f7';
 
-        if (
-          colC &&
-          colC.length >= 3 &&
-          colA &&
-          colA.length > 0 &&
-          colA[0].winner === colC[0].winner &&
-          colB &&
-          colB.length > 0 &&
-          colB[0].winner !== colC[0].winner
-        ) {
-          const H = colC.length;
-          const color = H === 3 ? '#00bcd4' : H === 4 ? '#ff9800' : '#a855f7';
+        // Caso especial de Ruptura de Chop en "V" (1-1-3):
+        // Ocurre ÚNICAMENTE cuando la racha actual tiene exactamente 3 jugadas (H === 3),
+        // sin cola de dragón (r: 0, 1, 2 en la misma columna c),
+        // y viene precedida inmediatamente por dos columnas alternadas de 1 sola jugada principal en fila 0 (c - 2 y c - 1).
+        let isVBreakout = false;
+        if (H === 3 && targetStreakIdx >= 2) {
+          const streakA = placed[targetStreakIdx - 2];
+          const streakB = placed[targetStreakIdx - 1];
+          const nonTieA = streakA ? streakA.filter(p => p.winner !== 'EMPATE') : [];
+          const nonTieB = streakB ? streakB.filter(p => p.winner !== 'EMPATE') : [];
 
-          // Punto 1: Cabeza de colA (c - 2, fila 0)
-          const x1 = (targetColIdx - 2 + 0.5) * cellSize;
-          const y1 = 0.5 * cellSize;
+          if (
+            streakA && nonTieA.length === 1 && streakA[0].r === 0 &&
+            streakB && nonTieB.length === 1 && streakB[0].r === 0 &&
+            currentStreakCells.length === 3 &&
+            currentStreakCells[0].r === 0 && currentStreakCells[2].r === 2 &&
+            currentStreakCells[0].c === currentStreakCells[2].c &&
+            streakA[0].c === currentStreakCells[0].c - 2 &&
+            streakB[0].c === currentStreakCells[0].c - 1 &&
+            streakA[0].winner === currentStreakCells[0].winner &&
+            streakB[0].winner !== currentStreakCells[0].winner
+          ) {
+            isVBreakout = true;
+            const x1 = (streakA[0].c + 0.5) * cellSize;
+            const y1 = 0.5 * cellSize;
+            const x2 = (currentStreakCells[2].c + 0.5) * cellSize;
+            const y2 = (currentStreakCells[2].r + 0.5) * cellSize;
+            const x3 = (currentStreakCells[0].c + 0.5) * cellSize;
+            const y3 = 0.5 * cellSize;
 
-          // Punto 2: Base / posición de la racha actual en colC (en la cuadrícula)
-          const streakCells = streaks[targetColIdx] || [];
-          let currentCellCol = targetColIdx;
-          let currentCellRow = Math.min(H - 1, BIG_ROWS - 1);
-          if (streakCells.length > 0) {
-            const lastCell = streakCells[streakCells.length - 1];
-            currentCellCol = lastCell.c;
-            currentCellRow = lastCell.r;
+            patternLines.push({
+              type: 'path',
+              d: `M ${x1},${y1} L ${x2},${y2} L ${x3},${y3}`,
+              color: '#00bcd4'
+            });
           }
+        }
 
-          const x2 = (currentCellCol + 0.5) * cellSize;
-          const y2 = (currentCellRow + 0.5) * cellSize;
-
-          // Punto 3: Cabeza de colC (c, fila 0)
-          const x3 = (targetColIdx + 0.5) * cellSize;
-          const y3 = 0.5 * cellSize;
+        // Si no es la figura en V especial de ruptura de chop, es UNA SOLA LÍNEA continua a lo largo de la racha actual
+        if (!isVBreakout) {
+          let d = '';
+          currentStreakCells.forEach((cell, i) => {
+            const cx = (cell.c + 0.5) * cellSize;
+            const cy = (cell.r + 0.5) * cellSize;
+            if (i === 0) {
+              d = `M ${cx},${cy}`;
+            } else {
+              d += ` L ${cx},${cy}`;
+            }
+          });
 
           patternLines.push({
             type: 'path',
-            d: `M ${x1},${y1} L ${x2},${y2} L ${x3},${y3}`,
+            d,
             color
           });
         }
