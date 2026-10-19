@@ -1020,13 +1020,16 @@
               await loadMesaDataForSession(activeSessionId, currentMesaUuid);
               showFeedback(`Última sesión eliminada. Sesión activa: ${activeSess.fecha}`);
             }
+            closeConfirmModal();
             closeOptionsMenu();
           } else {
             alert(json.message || 'Error al borrar última sesión');
+            closeConfirmModal();
           }
         } catch (e) {
           console.error('Error al borrar última sesión:', e);
           alert('Error de conexión al borrar última sesión');
+          closeConfirmModal();
         } finally {
           isSessionsLoading = false;
         }
