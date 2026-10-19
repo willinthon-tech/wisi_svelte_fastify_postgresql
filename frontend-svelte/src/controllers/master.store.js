@@ -60,7 +60,9 @@ const ROUTE_ALIASES = {
   'configuracion/plantillas': 'configuracion/horarios',
   'rrhh/plantillas': 'configuracion/horarios',
   'excepciones': 'configuracion/excepciones',
-  'fechas-patrias': 'configuracion/fechas-patrias'
+  'fechas-patrias': 'configuracion/fechas-patrias',
+  'herramientas/scoreboard-baccarat': 'herramientas',
+  'otros/herramientas': 'herramientas'
 };
 
 const NON_MODULE_ROUTES = [

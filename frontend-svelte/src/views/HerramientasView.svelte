@@ -160,13 +160,12 @@
   $: canView = Boolean(permissions?.canView);
   $: canEdit = Boolean(permissions?.canEdit);
 
-  function openGame(sala, modo = 'jugar') {
+  function openGame(sala) {
     if (sala?.id || sala?.uuid) {
       selectedSalaStore.set(sala.uuid || sala.id);
     }
     const salaParam = sala?.uuid || sala?.id;
-    const qs = modo === 'observar' ? '?modo=observar' : '';
-    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(salaParam)}${qs}`);
+    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(salaParam)}`);
   }
 </script>
 
@@ -261,26 +260,15 @@
                   </span>
                 </td>
 
-                <!-- Acciones: Botones Observar y Jugar -->
+                <!-- Acciones: Botón Jugar -->
                 <td style="padding: 10px 14px; text-align: right; white-space: nowrap;">
                   <div style="display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px;">
                     {#if canView}
                       <button
                         type="button"
-                        on:click={() => openGame(item.salaObj, 'observar')}
-                        class="btn-flow btn-action-observar"
-                        title="Observar mesas de Baccarat para {item.salaName} (Solo Lectura)"
-                      >
-                        Observar
-                      </button>
-                    {/if}
-
-                    {#if canEdit}
-                      <button
-                        type="button"
-                        on:click={() => openGame(item.salaObj, 'jugar')}
+                        on:click={() => openGame(item.salaObj)}
                         class="btn-flow btn-action-jugar"
-                        title="Jugar y registrar jugadas de Baccarat para {item.salaName}"
+                        title="Scoreboard Baccarat para {item.salaName}"
                       >
                         Jugar
                       </button>

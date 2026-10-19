@@ -295,20 +295,25 @@
   }
 
   $: modulePermissions = (function() {
-    const routePerms = $currentRoutePermissionsStore || getUserModuleActions('herramientas') || getUserModuleActions('mod-otros-herramientas');
-    if (routePerms) return routePerms;
     const user = $currentUserStore;
     const username = (user?.usuario || '').trim().toLowerCase();
     const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
-    if (isAdmin) return { canView: true, canEdit: true };
-    return { canView: true, canEdit: false };
+    if (isAdmin) return { canView: true, canAdd: true, canEdit: true, canDelete: true, isAdmin: true };
+
+    const routePerms = getUserModuleActions('herramientas') || getUserModuleActions('mod-otros-herramientas') || $currentRoutePermissionsStore;
+    if (routePerms) return routePerms;
+
+    return { canView: false, canAdd: false, canEdit: false, canDelete: false };
   })();
 
-  $: canViewPerm = Boolean(modulePermissions?.canView ?? true);
+  $: canViewPerm = Boolean(modulePermissions?.canView ?? false);
+  $: canAddPerm = Boolean(modulePermissions?.canAdd ?? false);
   $: canEditPerm = Boolean(modulePermissions?.canEdit ?? false);
+  $: canDeletePerm = Boolean(modulePermissions?.canDelete ?? false);
 
-  // Modo Observador automático: si no tiene permiso de edición, la botonera queda en modo observador (solo lectura)
-  $: isObserverMode = !canEditPerm;
+  // En Baccarat, para habilitar la botonera (operar/jugar) se requiere OBLIGATORIAMENTE tener todos los permisos activos: VER, AGREGAR, EDITAR, ELIMINAR.
+  // Si solo tiene VER (o le falta alguno de los 4), queda en modo observador con la botonera deshabilitada.
+  $: hasFullBaccaratPerms = Boolean(canViewPerm && canAddPerm && canEditPerm && canDeletePerm);
 
   // Modo Monitor (Exclusivo visual para pantallas/TV: oculta la botonera completa y maximiza cuadrillas)
   function checkRouteHasMonitor() {
@@ -467,18 +472,26 @@
   let history = []; // [{ id, winner: 'PUNTO'|'BANCA'|'EMPATE', bPair, pPair, natural, special, time }]
 
   $: isObserverMode = (() => {
-    // 1. Prop directa (pasada desde App.svelte)
+    // 1. Permisología estricta de Baccarat: Para habilitar la botonera se requiere tener TODOS los permisos (VER, AGREGAR, EDITAR, ELIMINAR).
+    // Si solo tiene VER (o le falta cualquiera de los otros 3 permisos), la botonera queda en modo observador (deshabilitada).
+    if (!hasFullBaccaratPerms) {
+      return true;
+    }
+
+    // 2. Prop directa (pasada desde App.svelte)
     if (modo) {
       const m = String(modo).toLowerCase().trim();
       if (m === 'observar' || m === 'observe' || m === 'view' || m === 'ver') return true;
       if (m === 'jugar' || m === 'play' || m === 'edit') return false;
     }
-    // 2. Ruta activa en el router store ($currentRouteStore)
+
+    // 3. Ruta activa en el router store ($currentRouteStore)
     const route = String($currentRouteStore || '');
     if (route.includes('modo=observar') || route.includes('mode=observe') || route.includes('modo=ver') || route.includes('mode=view')) {
       return true;
     }
-    // 3. Fallback a window.location (search o hash)
+
+    // 4. Fallback a window.location (search o hash)
     if (typeof window !== 'undefined') {
       const href = String(window.location.href || '').toLowerCase();
       if (href.includes('modo=observar') || href.includes('mode=observe') || href.includes('modo=ver') || href.includes('mode=view')) {
@@ -492,11 +505,7 @@
         return true;
       }
     }
-    // 4. Permisos de usuario: Si no tiene permiso de edición, siempre entra como observador
-    const perms = $currentRoutePermissionsStore || getUserModuleActions('herramientas') || getUserModuleActions('mod-otros-herramientas');
-    if (perms && perms.canEdit === false) {
-      return true;
-    }
+
     return false;
   })();
 
@@ -3227,8 +3236,8 @@
               type="button"
               class="btn-opt col-6 btn-opt-new"
               on:click={handleDirectNewShoe}
-              disabled={!isLatestSession || history.length === 0}
-              title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`}
+              disabled={!hasFullBaccaratPerms || !isLatestSession || history.length === 0}
+              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para operar el zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`)}
             >
               Crear Nuevo Zapato #{maxShoeNumber + 1}
             </button>
@@ -3238,8 +3247,8 @@
               type="button"
               class="btn-opt col-6 btn-opt-reset"
               on:click={openDeleteCurrentShoeModal}
-              disabled={!isLatestSession || shoeNumber <= 1 || history.length > 0}
-              title={!isLatestSession ? 'Sesión histórica en modo solo lectura' : shoeNumber <= 1 ? 'No se puede borrar el primer zapato de la mesa' : history.length > 0 ? 'No se puede borrar si el zapato tiene jugadas registradas' : `Borrar Zapato #${shoeNumber}`}
+              disabled={!hasFullBaccaratPerms || !isLatestSession || shoeNumber <= 1 || history.length > 0}
+              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para borrar el zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : shoeNumber <= 1 ? 'No se puede borrar el primer zapato de la mesa' : history.length > 0 ? 'No se puede borrar si el zapato tiene jugadas registradas' : `Borrar Zapato #${shoeNumber}`)}
             >
               Borrar Zapato #{shoeNumber}
             </button>
@@ -3249,8 +3258,8 @@
               type="button"
               class="btn-opt col-6 btn-opt-new-session"
               on:click={handleCreateNewSession}
-              disabled={isSessionsLoading || !isLatestSession}
-              title={!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear nueva sesión (${nextSessionDateStr})`}
+              disabled={!hasFullBaccaratPerms || isSessionsLoading || !isLatestSession}
+              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para crear sesiones' : (!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear nueva sesión (${nextSessionDateStr})`)}
             >
               <span>Crear Nueva Sesión</span>
               <span class="btn-opt-date-badge">Fecha: {nextSessionDateStr}</span>
@@ -3261,8 +3270,8 @@
               type="button"
               class="btn-opt col-6 btn-opt-delete-session"
               on:click={handleConfirmDeleteLastSession}
-              disabled={sessions.length <= 1 || isSessionsLoading || !isLatestSession}
-              title={!isLatestSession ? 'Solo se puede borrar la última sesión' : sessions.length <= 1 ? 'Debe existir al menos una sesión' : `Borrar última sesión registrada (${latestSessionInList?.fecha || ''})`}
+              disabled={!hasFullBaccaratPerms || sessions.length <= 1 || isSessionsLoading || !isLatestSession}
+              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para borrar sesiones' : (!isLatestSession ? 'Solo se puede borrar la última sesión' : sessions.length <= 1 ? 'Debe existir al menos una sesión' : `Borrar última sesión registrada (${latestSessionInList?.fecha || ''})`)}
             >
               <span>Borrar Última Sesión</span>
               {#if latestSessionInList?.fecha}
