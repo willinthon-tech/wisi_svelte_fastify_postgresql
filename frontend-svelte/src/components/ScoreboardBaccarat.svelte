@@ -2020,13 +2020,24 @@
         }
 
         let isRed = false;
-        if (r === 0) {
+        if (c === k) {
+          // En la columna de inicio del camino derivado, toda la racha es consistente (Rojo)
+          isRed = true;
+        } else if (r === 0) {
+          // Cambio de columna: Compara la profundidad de (c - 1) con (c - 1 - k)
           const lenPrev = columns[c - 1].length;
           const lenRef = columns[c - 1 - k].length;
           isRed = (lenPrev === lenRef);
         } else {
-          // Continuación de racha en la misma columna o cola de dragón (siempre rojo en Baccarat)
-          isRed = true;
+          // Continuador (r > 0): Compara profundidad contra columna de referencia (c - k)
+          const refLen = columns[c - k].length;
+          if (r < refLen) {
+            isRed = true; // Sigue dentro de la profundidad previa -> Consistencia (Rojo)
+          } else if (r === refLen) {
+            isRed = false; // Exactamente 1 más largo que la columna de referencia -> Ruptura (Azul)
+          } else {
+            isRed = true; // Más de 1 de diferencia (cola de dragón continua) -> Consistencia (Rojo)
+          }
         }
 
         marks.push({
@@ -2125,12 +2136,21 @@
     }
 
     let isRed = false;
-    if (r === 0) {
+    if (c === k) {
+      isRed = true;
+    } else if (r === 0) {
       const lenPrev = cols[c - 1].length;
       const lenRef = cols[c - 1 - k] ? cols[c - 1 - k].length : 0;
       isRed = (lenPrev === lenRef);
     } else {
-      isRed = true;
+      const refLen = cols[c - k] ? cols[c - k].length : 0;
+      if (r < refLen) {
+        isRed = true;
+      } else if (r === refLen) {
+        isRed = false;
+      } else {
+        isRed = true;
+      }
     }
 
     return isRed ? 'red' : 'blue';
