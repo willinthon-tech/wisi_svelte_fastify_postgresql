@@ -4445,7 +4445,7 @@
     /* COL-3 IZQUIERDA (TECLADO NUMÉRICO) Y COL-9 DERECHA (CONTROLES) EN TODAS LAS RESOLUCIONES */
     grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
     gap: clamp(10px, 1.6vw, 24px);
-    align-items: center;
+    align-items: stretch;
     justify-content: stretch;
     flex-shrink: 0;
     position: relative;
@@ -4537,9 +4537,10 @@
   .footer-score-col {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding-right: clamp(6px, 1vw, 16px);
+    justify-content: stretch;
+    align-items: stretch;
+    align-self: stretch;
+    padding-right: clamp(4px, 1vw, 12px);
     border-right: none;
     min-width: 0;
     height: 100%;
@@ -4549,12 +4550,13 @@
   .score-keypad-box {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: stretch;
     width: 100%;
-    max-width: calc(var(--footer-btn-size) * 2.2);
     min-width: 0;
+    max-width: none;
     height: 100%;
+    flex: 1;
   }
 
   .score-keypad-grid {
@@ -4569,8 +4571,8 @@
     width: 100%;
     min-width: 0;
     height: 100%;
-    min-height: calc(var(--footer-btn-size) * 1.35);
-    max-height: calc(var(--footer-btn-size) * 1.75);
+    min-height: 0;
+    flex: 1;
   }
 
   .btn-num-1 { grid-area: n1; }
@@ -4584,18 +4586,21 @@
   .btn-num-9 { grid-area: n9; }
   .btn-num-zero {
     grid-area: n0;
+    width: 100%;
     height: 100%;
-    font-size: clamp(20px, calc(var(--footer-btn-size) * 0.28), 38px);
+    font-size: clamp(18px, 3.2vh, 38px);
     font-weight: 900;
+    border-radius: clamp(5px, 0.8vh, 10px);
+    box-sizing: border-box;
   }
 
   .btn-num-key {
-    border-radius: 10px;
+    border-radius: clamp(5px, 0.8vh, 10px);
     border: 2px solid #cbd5e1;
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: clamp(14px, calc(var(--footer-btn-size) * 0.22), 28px);
+    font-size: clamp(14px, 2.5vh, 28px);
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4606,6 +4611,9 @@
     transition: all 0.12s ease;
     user-select: none;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
   }
 
   .btn-num-key:hover:not(.active) {
@@ -4869,7 +4877,8 @@
     }
     .score-keypad-grid {
       gap: clamp(2px, 0.5vh, 4px);
-      min-height: calc(var(--footer-btn-size) * 1.35);
+      height: 100%;
+      min-height: 0;
     }
     .btn-num-key {
       font-size: clamp(12px, 2vw, 15px);
