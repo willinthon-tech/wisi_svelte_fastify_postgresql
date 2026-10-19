@@ -3517,7 +3517,7 @@
     font-size: clamp(11px, 0.9vw, 13.5px);
     font-weight: 900;
     color: #ffffff;
-    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.25), inset 0 1.5px 1.5px rgba(255, 255, 255, 0.6);
+    box-shadow: none !important;
     position: relative;
     user-select: none;
     flex-shrink: 0;
@@ -4048,7 +4048,7 @@
   .scoreboard-stats-bar {
     background: #ffffff;
     border-radius: 12px;
-    padding: clamp(4px, 0.7vh, 8px) clamp(12px, 1.6vw, 24px);
+    padding: clamp(6px, 1vh, 10px) clamp(22px, 3.2vw, 42px);
     box-shadow: none !important;
     border: 1.5px solid #cbd5e1;
     display: grid;
@@ -4066,10 +4066,11 @@
     min-width: 0;
   }
 
-  /* ESQUINA IZQUIERDA: CONTADORES ALINEADOS A SU IZQUIERDA */
+  /* ESQUINA IZQUIERDA: CONTADORES ALINEADOS A SU IZQUIERDA CON MARGEN DESDE EL BORDE */
   .stats-bar-col.col-counters {
     justify-content: flex-start;
     width: 100%;
+    padding-left: clamp(4px, 1vw, 12px);
   }
 
   /* CENTRO: PREDICCIÓN CENTRADA EN EL MEDIO */
@@ -4081,11 +4082,12 @@
     text-align: center;
   }
 
-  /* ESQUINA DERECHA: PORCENTAJES ALINEADOS A SU DERECHA */
+  /* ESQUINA DERECHA: PORCENTAJES ALINEADOS A SU DERECHA CON MARGEN DESDE EL BORDE */
   .stats-bar-col.col-percentages {
     justify-content: flex-end;
     align-items: center;
     width: 100%;
+    padding-right: clamp(4px, 1vw, 12px);
   }
 
   .stats-bar-col.col-percentages .stats-strip-pct-box {
@@ -4117,7 +4119,7 @@
     font-size: 15px;
     font-weight: 900;
     color: #ffffff;
-    box-shadow: 0 1.5px 3px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+    box-shadow: none !important;
     position: relative;
     user-select: none;
   }
@@ -4155,7 +4157,7 @@
     border-radius: 999px;
     padding: 4px 14px 4px 8px;
     cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: none !important;
     transition: all 0.15s ease;
     user-select: none;
     line-height: 1;
@@ -4167,7 +4169,6 @@
     background: #f8fafc;
     border-color: #94a3b8;
     transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12);
   }
 
   .pred-pill:active {
@@ -4184,7 +4185,7 @@
     font-size: 14px;
     font-weight: 900;
     color: #ffffff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    box-shadow: none !important;
   }
 
   .pred-badge-circle.b {
@@ -4264,7 +4265,7 @@
     font-size: 13.5px;
     font-weight: 800;
     white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: none !important;
     box-sizing: border-box;
     line-height: 1;
     user-select: none;
@@ -4284,9 +4285,10 @@
   @media (max-width: 960px) {
     .scoreboard-stats-bar {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      row-gap: clamp(6px, 1vh, 10px);
-      column-gap: clamp(8px, 1.5vw, 16px);
-      padding: clamp(6px, 1vh, 10px) clamp(14px, 2.5vw, 24px);
+      row-gap: clamp(8px, 1.4vh, 12px);
+      column-gap: clamp(12px, 2.5vw, 24px);
+      padding: clamp(8px, 1.4vh, 12px) clamp(20px, 4vw, 36px);
+      box-shadow: none !important;
     }
 
     /* FILA 1 (COL-12): CONTADORES DE JUEGO RESPETANDO MÁRGENES Y CON TAMAÑO REDUCIDO */
@@ -4295,16 +4297,16 @@
       grid-row: 1;
       justify-content: center;
       width: 100%;
-      padding: 0 4px;
+      padding: 0 clamp(8px, 2vw, 16px);
       box-sizing: border-box;
     }
 
     .stats-strip-counters {
       width: 100%;
-      max-width: 580px;
-      justify-content: space-between;
+      max-width: 520px;
+      justify-content: space-evenly;
       margin: 0 auto;
-      gap: clamp(4px, 1.4vw, 12px);
+      gap: clamp(4px, 1.2vw, 10px);
       padding: 0 4px;
       box-sizing: border-box;
     }
@@ -4315,19 +4317,20 @@
 
     /* TAMAÑO REDUCIDO EN CONTADORES PARA QUE RESPETEN MÁRGENES Y NO SE AMONTONEN */
     .bead-circle-badge {
-      width: clamp(21px, 2.6vw, 25px);
-      height: clamp(21px, 2.6vw, 25px);
-      font-size: clamp(10.5px, 1.3vw, 12.5px);
+      width: clamp(20px, 2.4vw, 24px);
+      height: clamp(20px, 2.4vw, 24px);
+      font-size: clamp(10px, 1.2vw, 12px);
+      box-shadow: none !important;
     }
 
     .counter-digit {
-      font-size: clamp(12.5px, 1.6vw, 15px);
+      font-size: clamp(12px, 1.5vw, 14.5px);
       min-width: 10px;
     }
 
     .bead-circle-badge .bead-dot {
-      width: 6px;
-      height: 6px;
+      width: 5.5px;
+      height: 5.5px;
     }
 
     /* FILA 2: 2 COL-6 (PREDICCIÓN CENTRADA EN SU COL-6 Y PORCENTAJES CENTRADOS EN SU COL-6) */
@@ -4339,6 +4342,7 @@
       width: 100%;
       margin: 0 auto;
       gap: clamp(6px, 1vw, 12px);
+      padding-left: clamp(4px, 1vw, 12px);
     }
 
     .stats-bar-col.col-percentages {
@@ -4348,10 +4352,12 @@
       align-items: center;
       width: 100%;
       margin: 0 auto;
+      padding-right: clamp(4px, 1vw, 12px);
     }
 
     .stats-bar-col.col-percentages .stats-strip-pct-box {
       margin: 0 auto;
+      box-shadow: none !important;
     }
   }
 
@@ -4359,15 +4365,20 @@
   @media (max-width: 580px) {
     .scoreboard-stats-bar {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      row-gap: 5px;
-      column-gap: 6px;
-      padding: 4px clamp(8px, 2vw, 14px);
+      row-gap: 6px;
+      column-gap: 8px;
+      padding: 6px clamp(12px, 3.5vw, 20px);
+      box-shadow: none !important;
+    }
+
+    .stats-bar-col.col-counters {
+      padding: 0 4px;
     }
 
     .stats-strip-counters {
       width: 100%;
       max-width: 100%;
-      justify-content: space-between;
+      justify-content: space-evenly;
       gap: clamp(2px, 0.8vw, 6px);
       padding: 0 2px;
     }
@@ -4377,13 +4388,14 @@
     }
 
     .bead-circle-badge {
-      width: clamp(18px, 4.6vw, 21px);
-      height: clamp(18px, 4.6vw, 21px);
-      font-size: clamp(9px, 2.4vw, 11px);
+      width: clamp(18px, 4.4vw, 21px);
+      height: clamp(18px, 4.4vw, 21px);
+      font-size: clamp(9px, 2.2vw, 11px);
+      box-shadow: none !important;
     }
 
     .counter-digit {
-      font-size: clamp(11.5px, 2.8vw, 13px);
+      font-size: clamp(11px, 2.6vw, 13px);
       min-width: 8px;
     }
 
@@ -4393,7 +4405,7 @@
     }
 
     .pred-title {
-      font-size: clamp(11.5px, 1.2vw, 13px);
+      font-size: clamp(11px, 1.2vw, 12.5px);
     }
 
     .prediction-pills-row {
@@ -4404,12 +4416,14 @@
       padding: 2px 7px;
       gap: 4px;
       min-height: 28px;
+      box-shadow: none !important;
     }
 
     .pred-badge-circle {
       width: 20px;
       height: 20px;
       font-size: 11px;
+      box-shadow: none !important;
     }
 
     .pred-symbol.pred-ring {
@@ -4434,6 +4448,7 @@
       min-height: 28px;
       font-size: 11px;
       margin: 0 auto;
+      box-shadow: none !important;
     }
   }
 
@@ -4441,13 +4456,13 @@
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 16px;
-    padding: clamp(8px, 1.3vh, 16px) clamp(12px, 1.5vw, 22px);
+    padding: clamp(10px, 1.6vh, 20px) clamp(16px, 2.2vw, 32px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     border: 2.5px solid #cbd5e1;
     display: grid;
     /* COL-3 IZQUIERDA (TECLADO NUMÉRICO) Y COL-9 DERECHA (CONTROLES) EN TODAS LAS RESOLUCIONES */
-    grid-template-columns: minmax(160px, 3fr) minmax(0, 9fr);
-    gap: clamp(10px, 1.4vw, 22px);
+    grid-template-columns: minmax(210px, 3.2fr) minmax(0, 8.8fr);
+    gap: clamp(14px, 2vw, 30px);
     align-items: stretch;
     justify-content: stretch;
     flex-shrink: 0;
@@ -4456,7 +4471,7 @@
     width: 100%;
     max-width: 100%;
     /* MÁS GRANDE HACIA ARRIBA EN PANTALLAS GRANDES */
-    --footer-btn-size: clamp(96px, 15vh, 146px);
+    --footer-btn-size: clamp(112px, 18vh, 175px);
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -4554,7 +4569,7 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-width: clamp(170px, 16vw, 250px);
+    max-width: clamp(210px, 20vw, 340px);
     height: 100%;
   }
 
@@ -4569,8 +4584,8 @@
     gap: clamp(4px, 0.7vh, 8px);
     width: 100%;
     height: 100%;
-    min-height: calc(var(--footer-btn-size) * 1.55);
-    max-height: calc(var(--footer-btn-size) * 1.85);
+    min-height: calc(var(--footer-btn-size) * 1.6);
+    max-height: calc(var(--footer-btn-size) * 2.0);
   }
 
   .btn-num-1 { grid-area: n1; }
@@ -4585,7 +4600,7 @@
   .btn-num-zero {
     grid-area: n0;
     height: 100%;
-    font-size: clamp(20px, calc(var(--footer-btn-size) * 0.28), 32px);
+    font-size: clamp(24px, calc(var(--footer-btn-size) * 0.28), 42px);
     font-weight: 900;
   }
 
@@ -4595,7 +4610,7 @@
     background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
     color: #0f172a;
     font-family: inherit;
-    font-size: clamp(15px, calc(var(--footer-btn-size) * 0.22), 24px);
+    font-size: clamp(18px, calc(var(--footer-btn-size) * 0.22), 32px);
     font-weight: 800;
     cursor: pointer;
     display: flex;
@@ -4634,7 +4649,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: clamp(8px, 1.4vh, 16px);
+    gap: clamp(10px, 1.8vh, 22px);
     width: 100%;
     height: 100%;
     min-width: 0;
@@ -4644,18 +4659,18 @@
   .footer-modifiers-row {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: clamp(8px, 1.2vw, 16px);
+    gap: clamp(10px, 1.5vw, 20px);
     width: 100%;
     border-bottom: 2.5px solid #cbd5e1;
-    padding-bottom: clamp(6px, 1.1vh, 12px);
+    padding-bottom: clamp(8px, 1.4vh, 16px);
   }
 
   .footer-modifiers-row .keypad-pill {
     width: 100%;
     max-width: none;
-    height: clamp(38px, 5.4vh, 52px);
+    height: clamp(44px, 6.4vh, 64px);
     border-radius: 9999px;
-    font-size: clamp(13px, calc(var(--footer-btn-size) * 0.165), 18px);
+    font-size: clamp(14px, calc(var(--footer-btn-size) * 0.165), 22px);
     font-weight: 800;
     letter-spacing: 0.4px;
     margin: 0;
@@ -4823,27 +4838,61 @@
 
 
 
-  /* PANTALLAS PEQUEÑAS / MÓVIL (MAX-WIDTH: 680PX) */
-  @media (max-width: 680px) {
+  /* PANTALLAS PEQUEÑAS / MÓVIL (MAX-WIDTH: 768PX): MÁRGENES Y PADDING CUIDADOS PARA NO ESTAR AMONTONADO */
+  @media (max-width: 768px) {
     .scoreboard-footer-panel {
-      grid-template-columns: minmax(110px, 3.2fr) minmax(0, 8.8fr);
+      grid-template-columns: minmax(115px, 3.2fr) minmax(0, 8.8fr);
+      gap: clamp(8px, 1.8vw, 16px);
+      padding: clamp(8px, 1.4vh, 14px) clamp(14px, 3.2vw, 24px);
+      --footer-btn-size: clamp(56px, 9vh, 76px);
+    }
+    .footer-score-col {
+      padding-right: clamp(8px, 1.5vw, 14px);
+    }
+    .footer-main-controls-col {
+      gap: clamp(6px, 1.2vh, 10px);
+    }
+    .footer-modifiers-row {
+      gap: clamp(5px, 1.2vw, 10px);
+      padding-bottom: clamp(6px, 1vh, 10px);
+    }
+    .footer-modifiers-row .keypad-pill {
+      height: clamp(34px, 4.8vh, 42px);
+      font-size: clamp(12px, 2vw, 14.5px);
+      padding: 0 4px;
+    }
+    .footer-outcomes-col {
+      gap: clamp(6px, 1.5vw, 14px);
+      padding-right: clamp(8px, 1.8vw, 16px);
+    }
+    .footer-undo-col {
+      gap: clamp(8px, 1.8vw, 18px);
+      padding-left: clamp(6px, 1.5vw, 12px);
+    }
+    .btn-caption, .tie-toggle-caption {
+      font-size: clamp(10px, 1.8vw, 12px);
+    }
+    .score-keypad-grid {
+      gap: clamp(3px, 0.6vh, 5px);
+      min-height: calc(var(--footer-btn-size) * 1.5);
+    }
+    .btn-num-key {
+      font-size: clamp(13px, 2.2vw, 17px);
+    }
+    .btn-num-zero {
+      font-size: clamp(16px, 2.8vw, 22px);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .scoreboard-footer-panel {
+      grid-template-columns: minmax(95px, 3fr) minmax(0, 9fr);
       gap: 6px;
-      padding: 4px 6px;
-      --footer-btn-size: clamp(44px, 6.2vh, 58px);
+      padding: 6px clamp(10px, 3vw, 14px);
+      --footer-btn-size: clamp(48px, 8vh, 62px);
     }
     .footer-score-col {
       padding-right: 6px;
-    }
-    .footer-main-controls-col {
-      gap: 6px;
-    }
-    .footer-modifiers-row {
-      gap: 4px;
-      padding-bottom: 4px;
-    }
-    .footer-modifiers-row .keypad-pill {
-      height: 28px;
-      font-size: 11px;
     }
     .footer-outcomes-col {
       gap: 4px;
@@ -4853,40 +4902,31 @@
       gap: 6px;
       padding-left: 4px;
     }
-    .btn-caption, .tie-toggle-caption {
-      font-size: 10px;
-    }
-    .score-keypad-grid {
-      gap: 2px;
-      min-height: calc(var(--footer-btn-size) * 1.4);
-    }
-    .btn-num-key {
-      font-size: 12px;
-    }
-    .btn-num-zero {
-      font-size: 14px;
+    .footer-modifiers-row .keypad-pill {
+      height: 30px;
+      font-size: 11px;
     }
   }
 
   /* AJUSTE PARA PANTALLAS CON ALTURA REDUCIDA (LAPTOPS / TABLETS) */
-  @media (max-height: 768px) {
+  @media (max-height: 850px) {
     .scoreboard-footer-panel {
-      --footer-btn-size: clamp(70px, 11.5vh, 94px);
-      padding: clamp(5px, 0.9vh, 9px) clamp(8px, 1vw, 16px);
+      --footer-btn-size: clamp(88px, 14vh, 120px);
+      padding: clamp(6px, 1vh, 12px) clamp(10px, 1.5vw, 20px);
     }
     .footer-modifiers-row .keypad-pill {
-      height: clamp(34px, 4.8vh, 44px);
+      height: clamp(36px, 5vh, 46px);
     }
   }
 
-  @media (max-height: 600px) {
+  @media (max-height: 650px) {
     .scoreboard-footer-panel {
-      --footer-btn-size: clamp(48px, 8.2vh, 60px);
-      padding: 3px 6px;
+      --footer-btn-size: clamp(62px, 11vh, 80px);
+      padding: 4px 8px;
     }
     .footer-modifiers-row .keypad-pill {
-      height: 28px;
-      font-size: 11px;
+      height: 32px;
+      font-size: 11.5px;
     }
     .score-keypad-grid {
       gap: 2px;
@@ -5111,41 +5151,6 @@
   .tie-caption { color: #16a34a; }
   .undo-caption { color: #854d0e; }
 
-  /* REGLAS DE ESCALADO PARA PANTALLAS CON ALTURA COMPACTA (< 768px DE ALTO) */
-  @media (max-height: 768px) {
-    .scoreboard-container {
-      gap: 3px;
-      padding: 3px 6px;
-    }
-    .scoreboard-stats-bar {
-      padding: 2px 8px;
-      gap: 8px;
-    }
-    .scoreboard-footer-panel {
-      padding: 3px 8px;
-      --footer-btn-size: clamp(48px, 7.4vh, 72px);
-    }
-  }
-
-  @media (max-height: 600px) {
-    .sb-btn-table-info {
-      min-height: 28px;
-      font-size: 12px;
-      padding: 2px 10px;
-    }
-    .scoreboard-container {
-      gap: 2px;
-      padding: 2px 4px;
-    }
-    .scoreboard-stats-bar {
-      padding: 2px 6px;
-      gap: 6px;
-    }
-    .scoreboard-footer-panel {
-      padding: 2px 6px;
-      --footer-btn-size: clamp(38px, 6vh, 54px);
-    }
-  }
 
   /* MODAL DE CONFIRMACIÓN (ESTILO OFICIAL WISI) */
   .modal-backdrop {
