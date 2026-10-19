@@ -4137,13 +4137,13 @@
     position: absolute;
     top: 0px;
     left: 0px;
-    width: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
-    height: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
+    width: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
+    height: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
     background: radial-gradient(circle at 35% 35%, #ff4d4d, #dc2626);
-    border: 1.5px solid #ffffff;
+    border: 1px solid #ffffff;
     border-radius: 50%;
     z-index: 4;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     box-sizing: border-box;
   }
 
@@ -4151,29 +4151,29 @@
     position: absolute;
     bottom: 0px;
     right: 0px;
-    width: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
-    height: clamp(6px, calc(var(--bead-cell-size, 23px) * 0.36), 11px);
+    width: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
+    height: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
     background: radial-gradient(circle at 35% 35%, #60a5fa, #2563eb);
-    border: 1.5px solid #ffffff;
+    border: 1px solid #ffffff;
     border-radius: 50%;
     z-index: 4;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     box-sizing: border-box;
   }
 
   .bead-circle .dot-b-pair {
-    width: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
-    height: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
-    top: -1px;
-    left: -1px;
-    border: 1.5px solid #ffffff;
+    width: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
+    height: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
+    top: 0px;
+    left: 0px;
+    border: 1px solid #ffffff;
   }
   .bead-circle .dot-p-pair {
-    width: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
-    height: clamp(10px, calc(var(--bead-cell-size, 26px) * 0.32), 14px);
-    bottom: -1px;
-    right: -1px;
-    border: 1.5px solid #ffffff;
+    width: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
+    height: clamp(5px, calc(var(--bead-cell-size, 23px) * 0.22), 7px);
+    bottom: 0px;
+    right: 0px;
+    border: 1px solid #ffffff;
   }
 
   .bead-empty, .bigroad-empty {
@@ -4403,18 +4403,18 @@
   }
 
   .bigroad-ring .dot-b-pair {
-    width: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
-    height: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
-    top: -1px;
-    left: -1px;
-    border: 1.5px solid #ffffff;
+    width: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
+    height: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
+    top: 0px;
+    left: 0px;
+    border: 1px solid #ffffff;
   }
   .bigroad-ring .dot-p-pair {
-    width: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
-    height: clamp(7px, calc(var(--big-cell-size, 28px) * 0.28), 14px);
-    bottom: -1px;
-    right: -1px;
-    border: 1.5px solid #ffffff;
+    width: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
+    height: clamp(5px, calc(var(--big-cell-size, 28px) * 0.20), 7px);
+    bottom: 0px;
+    right: 0px;
+    border: 1px solid #ffffff;
   }
 
   /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (SIN SOMBRA, ESQUINAS ALINEADAS A SUS LADOS Y CENTRO EN EL MEDIO) */
