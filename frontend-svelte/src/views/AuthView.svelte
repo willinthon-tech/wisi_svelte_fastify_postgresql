@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte';
   import { 
     currentUserStore, 
     userSalasStore, 
@@ -10,11 +11,53 @@
 
   import { triggerToast } from '../controllers/ui.store.js';
   import { navigateToRoute } from '../controllers/router.store.js';
-  import { getCloudBaseUrl } from '../config/api.config.js';
+  import { getCloudBaseUrl, toBackendUrl } from '../config/api.config.js';
+  import { handleDownloadApp } from '../utils/download.utils.js';
 
   let usuario = '';
   let password = '';
   let loading = false;
+
+  let latestDownloads = {
+    android: null,
+    windows: null
+  };
+
+  $: androidFile = latestDownloads.android?.archivo || 'app-wisi.apk';
+  $: androidVer = latestDownloads.android?.version_str || (latestDownloads.android?.version_num ? `v${latestDownloads.android.version_num}` : '');
+
+  $: windowsFile = latestDownloads.windows?.archivo || 'app-wisi.exe';
+  $: windowsVer = latestDownloads.windows?.version_str || (latestDownloads.windows?.version_num ? `v${latestDownloads.windows.version_num}` : '');
+
+  async function loadLatestDownloads() {
+    try {
+      const res = await fetch(toBackendUrl('/api/master/descargas/latest'));
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && json.data) {
+          latestDownloads = json.data;
+        }
+      }
+    } catch (e) {
+      console.warn('Error cargando últimas descargas en AuthView:', e);
+    }
+  }
+
+  onMount(() => {
+    loadLatestDownloads();
+  });
+
+  function handleDownloadWindows() {
+    const filename = windowsFile;
+    const url = toBackendUrl(latestDownloads.windows?.archivo_url || `/api/downloads/${filename}`);
+    handleDownloadApp(url, filename, 'application/vnd.microsoft.portable-executable');
+  }
+
+  function handleDownloadAndroid() {
+    const filename = androidFile;
+    const url = toBackendUrl(latestDownloads.android?.archivo_url || `/api/downloads/${filename}`);
+    handleDownloadApp(url, filename, 'application/vnd.android.package-archive');
+  }
 
   $: currentServerHost = (function() {
     try {
@@ -119,22 +162,59 @@
       <span>Cloud API: <strong style="color: #334155;">{currentServerHost}</strong></span>
     </div>
 
-    <!-- Sección de Versión Anterior & Soporte WhatsApp -->
+    <!-- Sección de Descarga de la Aplicación & Soporte WhatsApp -->
     <div style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed #e2e8f0; display: flex; flex-direction: column; gap: 10px; font-size: 12px; text-align: center;">
-      <!-- Nota sitio anterior -->
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; color: #475569; font-size: 12px; line-height: 1.4;">
-        <span style="font-weight: 600; color: #1e293b; display: block; margin-bottom: 2px;">
-          🌐 Versión anterior aún en línea
-        </span>
-        Si requieres ingresar a la plataforma previa: 
-        <a 
-          href="https://before.wisi.space" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          style="color: #2563eb; font-weight: 700; text-decoration: underline; word-break: break-all;"
+      <!-- Título de sección de Descargas -->
+      <div style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: #475569; letter-spacing: 0.3px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span>DESCARGAR ÚLTIMA VERSIÓN</span>
+      </div>
+
+      <!-- 2 Botones: Windows y Android -->
+      <div class="download-buttons-grid">
+        <!-- Botón Windows -->
+        <button 
+          type="button" 
+          class="download-btn download-btn-windows" 
+          on:click={handleDownloadWindows}
+          title="Descargar Wisi Space para Windows (.exe)"
         >
-          before.wisi.space &nearr;
-        </a>
+          <div class="download-btn-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.551H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.051-1.701"/>
+            </svg>
+          </div>
+          <div class="download-btn-text">
+            <span class="download-btn-title">Windows</span>
+            <span class="download-btn-sub">
+              {windowsVer ? `${windowsVer} • .exe` : 'Descargar .exe'}
+            </span>
+          </div>
+        </button>
+
+        <!-- Botón Android -->
+        <button 
+          type="button" 
+          class="download-btn download-btn-android" 
+          on:click={handleDownloadAndroid}
+          title="Descargar Wisi Space para Android (.apk)"
+        >
+          <div class="download-btn-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.4116 13.8533 8.1 12 8.1s-3.5902.3116-5.1367.8497L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/>
+            </svg>
+          </div>
+          <div class="download-btn-text">
+            <span class="download-btn-title">Android</span>
+            <span class="download-btn-sub">
+              {androidVer ? `${androidVer} • .apk` : 'Descargar .apk'}
+            </span>
+          </div>
+        </button>
       </div>
 
       <!-- Contacto Soporte WhatsApp -->
@@ -154,6 +234,90 @@
 </div>
 
 <style>
+  .download-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .download-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    box-sizing: border-box;
+  }
+
+  .download-btn-windows {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    box-shadow: 0 3px 10px rgba(2, 132, 199, 0.3);
+  }
+
+  .download-btn-windows:hover {
+    background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(2, 132, 199, 0.4);
+  }
+
+  .download-btn-windows:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 5px rgba(2, 132, 199, 0.25);
+  }
+
+  .download-btn-android {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: #ffffff;
+    box-shadow: 0 3px 10px rgba(5, 150, 105, 0.3);
+  }
+
+  .download-btn-android:hover {
+    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(5, 150, 105, 0.4);
+  }
+
+  .download-btn-android:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 5px rgba(5, 150, 105, 0.25);
+  }
+
+  .download-btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .download-btn-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .download-btn-title {
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.2px;
+  }
+
+  .download-btn-sub {
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.92;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .whatsapp-support-btn {
     display: inline-flex;
     align-items: center;
@@ -173,5 +337,11 @@
     background: #22bf5b;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(37, 211, 102, 0.35);
+  }
+
+  @media (max-width: 360px) {
+    .download-buttons-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
