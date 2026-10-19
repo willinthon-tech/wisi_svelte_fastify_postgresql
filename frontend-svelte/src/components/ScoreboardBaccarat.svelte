@@ -5824,17 +5824,11 @@
     box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
   }
 
-  /* BOTÓN MODO MONITOR EN MODAL */
+  /* BOTÓN MODO MONITOR EN MODAL (COL-4 SOLO ÍCONO) */
   .btn-opt-monitor {
     background: #1e1b4b;
     color: #c4b5fd;
     border: 1.5px solid #6366f1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 14px;
-    gap: 8px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .btn-opt-monitor:hover {
@@ -5849,29 +5843,6 @@
     color: #ffffff;
     border-color: #a5b4fc;
     box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
-  }
-
-  .btn-opt-monitor-inner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    gap: 10px;
-  }
-
-  .btn-opt-monitor-title {
-    display: inline-flex;
-    align-items: center;
-    font-size: 13.5px;
-    font-weight: 800;
-  }
-
-  .btn-opt-monitor-sub {
-    font-size: 11px;
-    opacity: 0.8;
-    font-weight: 500;
-    margin-left: auto;
-    margin-right: 8px;
   }
 
   /* ========================================== */
