@@ -25,9 +25,11 @@
 
   $: androidFile = latestDownloads.android?.archivo || 'app-wisi.apk';
   $: androidVer = latestDownloads.android?.version_str || (latestDownloads.android?.version_num ? `v${latestDownloads.android.version_num}` : '');
+  $: androidPeso = latestDownloads.android?.peso || '';
 
   $: windowsFile = latestDownloads.windows?.archivo || 'app-wisi.exe';
   $: windowsVer = latestDownloads.windows?.version_str || (latestDownloads.windows?.version_num ? `v${latestDownloads.windows.version_num}` : '');
+  $: windowsPeso = latestDownloads.windows?.peso || '';
 
   async function loadLatestDownloads() {
     try {
@@ -191,7 +193,7 @@
           <div class="download-btn-text">
             <span class="download-btn-title">Windows</span>
             <span class="download-btn-sub">
-              {windowsVer ? `${windowsVer} • .exe` : 'Descargar .exe'}
+              {windowsVer ? `${windowsVer} • ${windowsPeso || '.exe'}` : 'Descargar .exe'}
             </span>
           </div>
         </button>
@@ -211,7 +213,7 @@
           <div class="download-btn-text">
             <span class="download-btn-title">Android</span>
             <span class="download-btn-sub">
-              {androidVer ? `${androidVer} • .apk` : 'Descargar .apk'}
+              {androidVer ? `${androidVer} • ${androidPeso || '.apk'}` : 'Descargar .apk'}
             </span>
           </div>
         </button>
