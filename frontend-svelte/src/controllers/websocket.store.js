@@ -158,6 +158,8 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
           });
         } else if (payload.type === 'BACCARAT_TABLE_UPDATE' && payload.data) {
           latestBaccaratUpdateStore.set(payload.data);
+        } else if (payload.type === 'BACCARAT_SESSION_UPDATE') {
+          latestBaccaratUpdateStore.set({ isSessionUpdate: true, ...(payload.data || payload) });
         }
       } catch (err) {
         console.warn('Error parseando mensaje WebSocket:', err);

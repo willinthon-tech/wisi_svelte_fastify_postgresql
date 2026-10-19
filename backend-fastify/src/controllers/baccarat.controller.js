@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { sql, isPgConnected } from '../config/db.js';
+import { broadcastBaccaratTableUpdate, broadcastBaccaratSessionUpdate } from '../config/websocket.js';
 
 // In-Memory Fallback cuando la base de datos esté en modo offline/desconectada
 let memorySessions = [];
@@ -149,6 +150,13 @@ export async function createSession(req, reply) {
         RETURNING uuid, sala_uuid, fecha, estado, created_at, updated_at;
       `;
 
+      broadcastBaccaratSessionUpdate({
+        action: 'CREATE',
+        salaUuid: created.sala_uuid,
+        salaId: created.sala_uuid,
+        session: created
+      });
+
       return reply.send({
         success: true,
         data: {
@@ -223,6 +231,14 @@ export async function deleteLastSession(req, reply) {
         DELETE FROM record_libro_score_baccarat
         WHERE uuid = ${targetToDelete.uuid}::uuid;
       `;
+
+      broadcastBaccaratSessionUpdate({
+        action: 'DELETE',
+        salaUuid: targetToDelete.sala_uuid,
+        salaId: targetToDelete.sala_uuid,
+        deleted: targetToDelete,
+        previous: previousSession
+      });
 
       return reply.send({
         success: true,
@@ -469,6 +485,20 @@ export async function saveMesaData(req, reply) {
                   mesa_uuid,
                   shoe_number, tie_mode, history, shoes, updated_at;
       `;
+
+      broadcastBaccaratTableUpdate({
+        sessionId: sUuidStr,
+        sessionUuid: sUuidStr,
+        salaId: sUuidStr,
+        mesaId: mUuidStr,
+        mesaUuid: mUuidStr,
+        shoeNumber: sNumber,
+        tieMode: tMode,
+        history: handsArray,
+        shoes: shoesList,
+        isLatestSession: true,
+        updatedAt: Date.now()
+      });
 
       return reply.send({
         success: true,

@@ -57,6 +57,7 @@ export async function initWebsockets(fastify) {
               const shoesList = Array.isArray(data.shoes) && data.shoes.length > 0 ? data.shoes : [
                 { shoe_number: sNum, tie_mode: tMode, history: hands }
               ];
+              const isUuidVal = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sIdStr);
               if (isUuidVal) {
                 sql`
                   INSERT INTO record_libro_score_baccarat_mesa (
@@ -96,6 +97,23 @@ export async function initWebsockets(fastify) {
           data: stateData
         });
 
+        for (const client of activeClients) {
+          if (client !== socket && client.readyState === 1) {
+            try {
+              client.send(payloadStr);
+            } catch (e) {
+              activeClients.delete(client);
+            }
+          }
+        }
+        return;
+      }
+
+      if (data.type === 'BACCARAT_SESSION_UPDATE') {
+        const payloadStr = JSON.stringify({
+          type: 'BACCARAT_SESSION_UPDATE',
+          data: data
+        });
         for (const client of activeClients) {
           if (client !== socket && client.readyState === 1) {
             try {
@@ -253,6 +271,48 @@ export function broadcastSystemVersionUpdate(versionData) {
     type: 'SYSTEM_VERSION_UPDATE',
     data: versionData || {},
     timestamp: new Date().toISOString()
+  });
+
+  for (const client of activeClients) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch (err) {
+        activeClients.delete(client);
+      }
+    }
+  }
+}
+
+/**
+ * Broadcasts Baccarat table updates to all connected clients
+ */
+export function broadcastBaccaratTableUpdate(stateData) {
+  if (activeClients.size === 0) return;
+  const payload = JSON.stringify({
+    type: 'BACCARAT_TABLE_UPDATE',
+    data: stateData
+  });
+
+  for (const client of activeClients) {
+    if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch (err) {
+        activeClients.delete(client);
+      }
+    }
+  }
+}
+
+/**
+ * Broadcasts Baccarat session creation or deletion to all connected clients
+ */
+export function broadcastBaccaratSessionUpdate(sessionData) {
+  if (activeClients.size === 0) return;
+  const payload = JSON.stringify({
+    type: 'BACCARAT_SESSION_UPDATE',
+    data: sessionData
   });
 
   for (const client of activeClients) {

@@ -392,6 +392,14 @@
     lastLoadedStorageKey = storageKey;
     if (sessionUuid && currentMesaUuid) {
       loadMesaDataForSession(sessionUuid, currentMesaUuid);
+      sendWebSocketMessage({
+        type: 'BACCARAT_GET_STATE',
+        storageKey,
+        sessionId: sessionUuid,
+        sessionUuid,
+        mesaId: currentMesaUuid,
+        mesaUuid: currentMesaUuid
+      });
     }
   }
 
@@ -978,6 +986,15 @@
           body: JSON.stringify(newMesaRecord)
         }).catch(e => console.warn('Advertencia guardando nueva mesa:', e));
 
+        sendWebSocketMessage({
+          type: 'BACCARAT_SESSION_UPDATE',
+          salaUuid: currentSalaUuid,
+          action: 'CREATE',
+          session: newSession,
+          senderClientId: myClientId
+        });
+        broadcastTableUpdate();
+
         closeOptionsMenu();
         showFeedback(`¡Nueva sesión creada! (${newSession.fecha})`);
       } else {
@@ -1029,6 +1046,13 @@
               await loadMesaDataForSession(activeSessionId, currentMesaUuid);
               showFeedback(`Última sesión eliminada. Sesión activa: ${activeSess.fecha}`);
             }
+            sendWebSocketMessage({
+              type: 'BACCARAT_SESSION_UPDATE',
+              salaUuid: currentSalaUuid,
+              action: 'DELETE',
+              deletedSession: target,
+              senderClientId: myClientId
+            });
             closeConfirmModal();
             closeOptionsMenu();
           } else {
@@ -1214,39 +1238,55 @@
       if (!update) return;
       if (update.senderClientId === myClientId) return;
 
+      // Verificar si es una actualización de sesiones (nueva sesión creada o sesión borrada)
+      if (update.isSessionUpdate || update.type === 'BACCARAT_SESSION_UPDATE') {
+        const targetSala = update.salaUuid || update.salaId || update.data?.salaUuid || update.data?.salaId;
+        const sId = String(currentSalaUuid || currentSalaId || '');
+        if (targetSala && sId && String(targetSala) === sId) {
+          fetchSessions(currentSalaUuid || currentSalaId);
+        }
+        return;
+      }
+
+      // Identificadores normalizados de sala y mesa
+      const sId = String(currentSalaUuid || currentSalaId || '');
+      const mId = String(currentMesaUuid || currentMesaId || '');
+
       // Verificar si la actualización pertenece a la misma mesa/sala
       const matchesSala = 
+        (update.salaId && String(update.salaId) === sId) ||
+        (update.salaUuid && String(update.salaUuid) === sId) ||
         (update.salaId && String(update.salaId) === String(currentSalaId)) ||
-        (update.salaUuid && currentSalaObj?.uuid && String(update.salaUuid) === String(currentSalaObj.uuid)) ||
-        (update.salaId && currentSalaObj?.uuid && String(update.salaId) === String(currentSalaObj.uuid)) ||
-        (update.salaUuid && String(update.salaUuid) === String(currentSalaId));
+        (update.salaUuid && currentSalaObj?.uuid && String(update.salaUuid) === String(currentSalaObj.uuid));
 
       const matchesMesa = 
+        (update.mesaId && String(update.mesaId) === mId) ||
+        (update.mesaUuid && String(update.mesaUuid) === mId) ||
         (update.mesaId && String(update.mesaId) === String(currentMesaId)) ||
-        (update.mesaUuid && currentMesaObj?.uuid && String(update.mesaUuid) === String(currentMesaObj.uuid)) ||
-        (update.mesaId && currentMesaObj?.uuid && String(update.mesaId) === String(currentMesaObj.uuid)) ||
-        (update.mesaUuid && String(update.mesaUuid) === String(currentMesaId));
+        (update.mesaUuid && currentMesaObj?.uuid && String(update.mesaUuid) === String(currentMesaObj.uuid));
 
       // CRITICAL: Verificar que la actualización pertenece EXACTAMENTE a la sesión actual abierta
       const currentSessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
-      const updateSessUuid = update.sessionUuid || update.sessionId;
+      const updateSessUuid = update.sessionUuid || update.sessionId || update.record_libro_score_baccarat_uuid;
       const matchesSession = Boolean(currentSessUuid && updateSessUuid && String(currentSessUuid) === String(updateSessUuid));
 
       const isCurrentTable = (update.storageKey && update.storageKey === storageKey) || (matchesSala && matchesMesa && matchesSession);
 
       if (isCurrentTable) {
-        // Si el usuario está viendo una sesión histórica o zapato histórico pasado, no sobreescribir la vista actual
-        if (!isCurrentShoeActive && !isSessionsLoading) {
+        // Si el usuario está viendo activamente una sesión histórica o zapato histórico pasado, no sobreescribir la vista actual
+        if ((!isLatestSession || isViewingPastShoe) && !isSessionsLoading) {
           return;
         }
 
+        const prevHistoryLen = history.length;
         let changed = false;
+
         if (Array.isArray(update.shoes) && update.shoes.length > 0) {
-          shoes = update.shoes;
+          shoes = [...update.shoes];
           changed = true;
         }
         if (Array.isArray(update.history)) {
-          history = update.history;
+          history = [...update.history];
           changed = true;
         }
         if (update.shoeNumber !== undefined && update.shoeNumber !== null) {
@@ -1263,9 +1303,14 @@
           }
         }
         if (changed) {
+          // Sonido sutil al entrar una nueva jugada
+          if (update.history && update.history.length > prevHistoryLen) {
+            playSound('click');
+          }
+
           // Guardar en caché para esta sesión específica
           const sessUuid = currentSession?.uuid || update.sessionUuid || update.sessionId;
-          if (sessUuid && currentMesaId) {
+          if (sessUuid && currentMesaUuid) {
             try {
               localStorage.setItem(storageKey, JSON.stringify({
                 shoeNumber,
@@ -1275,6 +1320,19 @@
                 sessionId: sessUuid
               }));
             } catch (e) {}
+
+            upsertLocalItem('record_libro_score_baccarat_mesa', {
+              uuid: `bacc_mesa_${sessUuid}_${currentMesaUuid}`,
+              record_libro_score_baccarat_uuid: sessUuid,
+              mesa_uuid: currentMesaUuid,
+              session_uuid: sessUuid,
+              session_id: sessUuid,
+              mesa_id: currentMesaUuid,
+              shoe_number: shoeNumber,
+              tie_mode: tieMode,
+              history,
+              shoes
+            }).catch(() => {});
           }
         }
       }
