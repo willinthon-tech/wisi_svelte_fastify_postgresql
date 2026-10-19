@@ -1860,13 +1860,14 @@
     return columns;
   })();
 
-  // 3.1 OVERLAY DE LÍNEAS DE SECUENCIA (COLA DE DRAGÓN) Y LÍNEAS DE PATRÓN (COINCIDENCIAS / FIGURAS)
+  // 3.1 OVERLAY DE LÍNEAS DE SECUENCIA (COLA DE DRAGÓN) Y LÍNEAS DE PATRÓN (SÓLO JUGADA EN CURSO)
   $: bigRoadOverlay = (() => {
     const cellSize = bigRoadCellSize || 23;
     const sequencePaths = [];
+    const turnArcs = [];
     const patternLines = [];
 
-    // 1. Curvas y líneas de secuencia en negro cuando la racha dobla o hace cola de dragón
+    // 1. Curvas y líneas de secuencia en negro cuando la racha dobla o hace cola de dragón (PERSISTENTES)
     const streaks = bigRoadGrid.placedStreaks || [];
     streaks.forEach((streak) => {
       if (!streak || streak.length < 2) return;
@@ -1906,6 +1907,7 @@
         } else if (inDir.dr === outDir.dr && inDir.dc === outDir.dc) {
           // Continuación recta
         } else {
+          // Cambio de dirección en este cruce / curva
           const entryX = cx - inDir.dc * rArc;
           const entryY = cy - inDir.dr * rArc;
           const exitX = cx + outDir.dc * rArc;
@@ -1915,102 +1917,96 @@
             d += ` L ${entryX},${entryY}`;
           }
           d += ` Q ${cx},${cy} ${exitX},${exitY}`;
+
+          // Guardamos este arco de cruce para dibujarlo POR ENCIMA de la ficha
+          turnArcs.push(`M ${entryX},${entryY} Q ${cx},${cy} ${exitX},${exitY}`);
         }
       }
 
       sequencePaths.push(d);
     });
 
-    // 2. Líneas de patrón de Chop (Ping-pong horizontal en fila 0: 3=Cyan, 4=Naranja, 5+=Púrpura)
+    // 2. Líneas de patrón de Chop y coincidencias (SÓLO para la jugada en curso / seleccionada)
     const cols = bigRoadLogicalColumns || [];
-    let chopStart = null;
-    let chopLen = 0;
+    let targetColIdx = cols.length - 1;
+    if (selectedHandIndex !== null && selectedHandIndex >= 0) {
+      const foundCol = cols.findIndex(colArr => colArr.some(h => h.historyIndex === selectedHandIndex));
+      if (foundCol >= 0) {
+        targetColIdx = foundCol;
+      }
+    }
 
-    for (let c = 0; c < cols.length; c++) {
-      if (cols[c].length === 1) {
-        if (chopStart === null) {
-          chopStart = c;
-          chopLen = 1;
-        } else {
-          chopLen++;
+    if (targetColIdx >= 0 && cols[targetColIdx]) {
+      // 2.1 Patrón de Chop (Ping-pong horizontal en fila 0: 3=Cyan, 4=Naranja, 5+=Púrpura)
+      if (cols[targetColIdx].length === 1) {
+        let chopStart = targetColIdx;
+        while (chopStart > 0 && cols[chopStart - 1].length === 1) {
+          chopStart--;
         }
-      } else {
+        const chopLen = targetColIdx - chopStart + 1;
         if (chopLen >= 3) {
           const color = chopLen === 3 ? '#00bcd4' : chopLen === 4 ? '#ff9800' : '#a855f7';
           patternLines.push({
             type: 'line',
             x1: (chopStart + 0.5) * cellSize,
             y1: 0.5 * cellSize,
-            x2: (chopStart + chopLen - 1 + 0.5) * cellSize,
+            x2: (targetColIdx + 0.5) * cellSize,
             y2: 0.5 * cellSize,
             color
           });
         }
-        chopStart = null;
-        chopLen = 0;
       }
-    }
-    if (chopLen >= 3) {
-      const color = chopLen === 3 ? '#00bcd4' : chopLen === 4 ? '#ff9800' : '#a855f7';
-      patternLines.push({
-        type: 'line',
-        x1: (chopStart + 0.5) * cellSize,
-        y1: 0.5 * cellSize,
-        x2: (chopStart + chopLen - 1 + 0.5) * cellSize,
-        y2: 0.5 * cellSize,
-        color
-      });
-    }
 
-    // 3. Líneas de patrón en "V" cuando hay rachas de 3, 4, 5+ coincidencias (3=Cyan, 4=Naranja, 5+=Púrpura)
-    for (let c = 2; c < cols.length; c++) {
-      const colC = cols[c];
-      const colA = cols[c - 2];
-      const colB = cols[c - 1];
+      // 2.2 Patrón en "V" de coincidencias (3=Cyan, 4=Naranja, 5+=Púrpura)
+      if (targetColIdx >= 2) {
+        const colC = cols[targetColIdx];
+        const colA = cols[targetColIdx - 2];
+        const colB = cols[targetColIdx - 1];
 
-      if (
-        colC &&
-        colC.length >= 3 &&
-        colA &&
-        colA.length > 0 &&
-        colA[0].winner === colC[0].winner &&
-        colB &&
-        colB.length > 0 &&
-        colB[0].winner !== colC[0].winner
-      ) {
-        const H = colC.length;
-        const color = H === 3 ? '#00bcd4' : H === 4 ? '#ff9800' : '#a855f7';
+        if (
+          colC &&
+          colC.length >= 3 &&
+          colA &&
+          colA.length > 0 &&
+          colA[0].winner === colC[0].winner &&
+          colB &&
+          colB.length > 0 &&
+          colB[0].winner !== colC[0].winner
+        ) {
+          const H = colC.length;
+          const color = H === 3 ? '#00bcd4' : H === 4 ? '#ff9800' : '#a855f7';
 
-        // Punto 1: Cabeza de colA (c - 2, fila 0)
-        const x1 = (c - 2 + 0.5) * cellSize;
-        const y1 = 0.5 * cellSize;
+          // Punto 1: Cabeza de colA (c - 2, fila 0)
+          const x1 = (targetColIdx - 2 + 0.5) * cellSize;
+          const y1 = 0.5 * cellSize;
 
-        // Punto 2: Base de la racha actual en colC (en la cuadrícula)
-        const streakCells = streaks[c] || [];
-        let bottomCol = c;
-        let bottomRow = Math.min(H - 1, BIG_ROWS - 1);
-        if (streakCells.length > 0) {
-          const lastCell = streakCells[streakCells.length - 1];
-          bottomCol = lastCell.c;
-          bottomRow = lastCell.r;
+          // Punto 2: Base / posición de la racha actual en colC (en la cuadrícula)
+          const streakCells = streaks[targetColIdx] || [];
+          let currentCellCol = targetColIdx;
+          let currentCellRow = Math.min(H - 1, BIG_ROWS - 1);
+          if (streakCells.length > 0) {
+            const lastCell = streakCells[streakCells.length - 1];
+            currentCellCol = lastCell.c;
+            currentCellRow = lastCell.r;
+          }
+
+          const x2 = (currentCellCol + 0.5) * cellSize;
+          const y2 = (currentCellRow + 0.5) * cellSize;
+
+          // Punto 3: Cabeza de colC (c, fila 0)
+          const x3 = (targetColIdx + 0.5) * cellSize;
+          const y3 = 0.5 * cellSize;
+
+          patternLines.push({
+            type: 'path',
+            d: `M ${x1},${y1} L ${x2},${y2} L ${x3},${y3}`,
+            color
+          });
         }
-
-        const x2 = (bottomCol + 0.5) * cellSize;
-        const y2 = (bottomRow + 0.5) * cellSize;
-
-        // Punto 3: Cabeza de colC (c, fila 0)
-        const x3 = (c + 0.5) * cellSize;
-        const y3 = 0.5 * cellSize;
-
-        patternLines.push({
-          type: 'path',
-          d: `M ${x1},${y1} L ${x2},${y2} L ${x3},${y3}`,
-          color
-        });
       }
     }
 
-    return { sequencePaths, patternLines };
+    return { sequencePaths, turnArcs, patternLines };
   })();
 
   // 4. DERIVED ROADS ALGORITHM (Big Eye Boy: k=1, Small Road: k=2, Cockroach Road: k=3)
@@ -2535,14 +2531,13 @@
       >
         <div class="grid-scrollable" bind:this={bigRoadScrollEl}>
           <div class="bigroad-table-wrapper">
-            <!-- OVERLAY DE CURVAS DE SECUENCIA (COLA DE DRAGÓN) Y LÍNEAS DE PATRÓN -->
+            <!-- 1. OVERLAY INFERIOR (Z-INDEX 1): Líneas de secuencia completas que pasan por debajo de las fichas -->
             <svg
               class="bigroad-svg-overlay"
               width={bigRoadGrid.totalCols * bigRoadCellSize}
               height={BIG_ROWS * bigRoadCellSize}
               viewBox="0 0 {bigRoadGrid.totalCols * bigRoadCellSize} {BIG_ROWS * bigRoadCellSize}"
             >
-              <!-- 1. Curvas y líneas de secuencia en negro cuando la racha dobla o hace cola de dragón -->
               {#each bigRoadOverlay.sequencePaths as pathData}
                 <path
                   class="bigroad-seq-path"
@@ -2552,30 +2547,6 @@
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
-              {/each}
-
-              <!-- 2. Líneas de patrón (Chop horizontal y figuras en V) -->
-              {#each bigRoadOverlay.patternLines as pat}
-                {#if pat.type === 'line'}
-                  <line
-                    x1={pat.x1}
-                    y1={pat.y1}
-                    x2={pat.x2}
-                    y2={pat.y2}
-                    stroke={pat.color}
-                    stroke-width="3.8"
-                    stroke-linecap="round"
-                  />
-                {:else if pat.type === 'path'}
-                  <path
-                    d={pat.d}
-                    fill="none"
-                    stroke={pat.color}
-                    stroke-width="3.8"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                {/if}
               {/each}
             </svg>
 
@@ -2634,6 +2605,57 @@
               {/each}
             </tbody>
           </table>
+
+          <!-- 2. OVERLAY SUPERIOR (Z-INDEX 3): Curvas en los cruces (por encima de las fichas) y líneas de patrón de la jugada en curso -->
+          <svg
+            class="bigroad-svg-top-overlay"
+            width={bigRoadGrid.totalCols * bigRoadCellSize}
+            height={BIG_ROWS * bigRoadCellSize}
+            viewBox="0 0 {bigRoadGrid.totalCols * bigRoadCellSize} {BIG_ROWS * bigRoadCellSize}"
+          >
+            <!-- Curvas en los cruces: se dibujan por encima con halo para cortar limpiamente el borde de la ficha -->
+            {#each bigRoadOverlay.turnArcs as arc}
+              <path
+                class="bigroad-seq-halo"
+                d={arc}
+                fill="none"
+                stroke-width="4.2"
+                stroke-linecap="round"
+              />
+              <path
+                class="bigroad-seq-path"
+                d={arc}
+                fill="none"
+                stroke-width="2.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            {/each}
+
+            <!-- Líneas de patrón de la jugada en curso (Chop o figuras en V) -->
+            {#each bigRoadOverlay.patternLines as pat}
+              {#if pat.type === 'line'}
+                <line
+                  x1={pat.x1}
+                  y1={pat.y1}
+                  x2={pat.x2}
+                  y2={pat.y2}
+                  stroke={pat.color}
+                  stroke-width="3.8"
+                  stroke-linecap="round"
+                />
+              {:else if pat.type === 'path'}
+                <path
+                  d={pat.d}
+                  fill="none"
+                  stroke={pat.color}
+                  stroke-width="3.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              {/if}
+            {/each}
+          </svg>
         </div>
       </div>
       </div>
@@ -4131,11 +4153,26 @@
     z-index: 1;
   }
 
-  .bigroad-seq-path {
-    stroke: #0f172a;
+  .bigroad-svg-top-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 3;
   }
-  .scoreboard-container:not(.theme-light) .bigroad-seq-path {
+
+  .bigroad-seq-halo {
+    stroke: #020617;
+  }
+  .theme-light .bigroad-seq-halo {
     stroke: #ffffff;
+  }
+
+  .bigroad-seq-path {
+    stroke: #ffffff;
+  }
+  .theme-light .bigroad-seq-path {
+    stroke: #0f172a;
   }
 
   .bigroad-table tr {
@@ -4179,7 +4216,7 @@
     border-radius: 50%;
     background: radial-gradient(circle at 35% 32%, #ffffff 0%, #fed7aa 22%, #f59e0b 58%, #b45309 100%);
     box-shadow: 0 1px 2.5px rgba(0, 0, 0, 0.45), inset 0 0 1.5px rgba(255, 255, 255, 0.8);
-    z-index: 2;
+    z-index: 4;
     pointer-events: none;
   }
 
@@ -4195,6 +4232,10 @@
     justify-content: center;
     box-sizing: border-box;
     z-index: 2;
+    background: #020617;
+  }
+  .theme-light .bigroad-ring {
+    background: #ffffff;
   }
 
   .bigroad-ring.banca {
@@ -4210,7 +4251,6 @@
   .bigroad-ring.empate.tie-solid,
   .bigroad-ring.is-tie {
     border-color: #22c55e;
-    background: transparent;
   }
 
   /* CÍRCULO SÓLIDO CUANDO SE PRESIONA WIN (Fondo completo y letras blancas) */
@@ -4239,7 +4279,7 @@
     color: #0f172a;
     line-height: 1;
     position: relative;
-    z-index: 2;
+    z-index: 4;
     user-select: none;
     display: flex;
     align-items: center;
