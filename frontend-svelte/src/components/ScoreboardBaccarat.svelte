@@ -262,10 +262,46 @@
     ? `${currentSalaUuid}::${currentMesaUuid}`
     : ((currentSalaId && currentMesaId) ? `${currentSalaId}::${currentMesaId}` : '');
 
-  function handleMesaSelectChange(e) {
-    const val = e?.target?.value;
-    if (!val) return;
-    const [targetSala, targetMesa] = val.split('::');
+  // Lista plana de todas las mesas disponibles para navegación paso a paso
+  $: allSelectableMesas = (function () {
+    const list = [];
+    (userAssignedSalasWithMesas || []).forEach(sGroup => {
+      const sId = String(sGroup.uuid || sGroup.id);
+      const sNombre = sGroup.nombre || `Sala #${sId.slice(0, 8)}`;
+      (sGroup.mesas || []).forEach(mItem => {
+        const mId = String(mItem.uuid || mItem.id);
+        const mNombre = mItem.nombre || `Mesa #${mId.slice(0, 8)}`;
+        list.push({
+          salaId: sId,
+          salaNombre: sNombre,
+          mesaId: mId,
+          mesaNombre: mNombre,
+          value: `${sId}::${mId}`,
+          mesaObj: mItem
+        });
+      });
+    });
+    return list;
+  })();
+
+  // Índice de la mesa actual dentro de la lista de mesas seleccionables
+  $: currentMesaIndex = (function () {
+    if (!currentMesaId && !currentMesaUuid) return -1;
+    const targetMesa = String(currentMesaUuid || currentMesaId || '');
+    const targetSala = String(currentSalaUuid || currentSalaId || '');
+    let idx = allSelectableMesas.findIndex(item => 
+      (item.mesaId === targetMesa || String(item.mesaObj?.id) === targetMesa || String(item.mesaObj?.uuid) === targetMesa) &&
+      (item.salaId === targetSala || String(item.salaId) === String(currentSalaId))
+    );
+    if (idx === -1) {
+      idx = allSelectableMesas.findIndex(item => 
+        item.mesaId === targetMesa || String(item.mesaObj?.id) === targetMesa || String(item.mesaObj?.uuid) === targetMesa
+      );
+    }
+    return idx;
+  })();
+
+  function switchToMesa(targetSala, targetMesa) {
     if (!targetSala || !targetMesa) return;
 
     if (isCurrentShoeActive) {
@@ -280,6 +316,31 @@
     navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(targetSala)}/${encodeURIComponent(targetMesa)}${monitorSuffix}`);
 
     isOptionsModalOpen = false;
+  }
+
+  function goToPrevMesa() {
+    if (allSelectableMesas.length <= 1 || currentMesaIndex <= 0) return;
+    const target = allSelectableMesas[currentMesaIndex - 1];
+    if (target) {
+      switchToMesa(target.salaId, target.mesaId);
+    }
+  }
+
+  function goToNextMesa() {
+    if (allSelectableMesas.length <= 1) return;
+    const nextIdx = currentMesaIndex >= 0 ? currentMesaIndex + 1 : 0;
+    if (nextIdx >= allSelectableMesas.length) return;
+    const target = allSelectableMesas[nextIdx];
+    if (target) {
+      switchToMesa(target.salaId, target.mesaId);
+    }
+  }
+
+  function handleMesaSelectChange(e) {
+    const val = e?.target?.value;
+    if (!val) return;
+    const [targetSala, targetMesa] = val.split('::');
+    switchToMesa(targetSala, targetMesa);
   }
 
   function handleGoToHerramientas() {
@@ -549,12 +610,11 @@
     // Notificaciones silenciadas según preferencia del usuario
   }
 
-  // Dynamic dimensions for 100% edge-to-edge coverage of grids
-  let bigRoadWidth = 1400;
+  let bigRoadWidth = 1300;
   let bigRoadHeight = 260;
-  let beadWidth = 700;
+  let beadWidth = 480;
   let beadHeight = 260;
-  let derivedWidth = 700;
+  let derivedWidth = 840;
   let derivedHeight = 260;
 
   const BEAD_ROWS = 6;
@@ -563,16 +623,16 @@
 
   // Dynamic roadmap sizing: scales with available height (e.g. 12px - 45px depending on monitor)
   $: bigRoadCellSize = Math.max(Math.floor(((bigRoadHeight || 180) - 2) / 6), 12);
-  $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1200) / bigRoadCellSize) + 1, 40);
+  $: bigRoadColsNeeded = Math.max(Math.ceil((bigRoadWidth || 1300) / bigRoadCellSize) + 1, 45);
 
   $: beadCellSize = Math.max(Math.floor(((beadHeight || 120) - 2) / BEAD_ROWS), 12);
-  $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 600) / beadCellSize) + 1, 24);
+  $: beadColsNeeded = Math.max(Math.ceil((beadWidth || 480) / beadCellSize) + 1, 18);
 
-  // Derived roads: cuadrículas de 8 filas (más grandes, adaptativas para cubrir la tarjeta)
-  $: derivedBandHeight = Math.max(((derivedHeight || 180) - 16) / 3, 20);
+  // Derived roads: cuadrículas de 6 filas (adaptativas para cubrir la franja)
+  let derivedBandHeight = 80;
   $: derivedRows = DERIVED_ROWS;
-  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 120) - 2) / DERIVED_ROWS), 8);
-  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 300) / derivedCellSize) + 1, 35);
+  $: derivedCellSize = Math.max(Math.floor(((derivedBandHeight || 80) - 2) / DERIVED_ROWS), 8);
+  $: derivedColsNeeded = Math.max(Math.ceil((derivedWidth || 840) / derivedCellSize) + 1, 40);
 
   function safeJsonParse(val, fallback = []) {
     if (val === null || val === undefined) return fallback;
@@ -898,6 +958,7 @@
 
   async function handleCreateNewSession() {
     if (!currentSalaUuid || isSessionsLoading || !isLatestSession) return;
+    playSound('click');
     try {
       isSessionsLoading = true;
       // Guardar la sesión y zapato actuales antes de crear la nueva sesión
@@ -2112,10 +2173,7 @@
         }
 
         let isRed = false;
-        if (c === k) {
-          // En la columna de inicio del camino derivado, toda la racha es consistente (Rojo)
-          isRed = true;
-        } else if (r === 0) {
+        if (r === 0) {
           // Cambio de columna: Compara la profundidad de (c - 1) con (c - 1 - k)
           const lenPrev = columns[c - 1].length;
           const lenRef = columns[c - 1 - k].length;
@@ -2144,54 +2202,53 @@
     let totalCols = Math.max(minCols, 24);
     let grid = Array.from({ length: ROWS }, () => Array(totalCols).fill(null));
 
+    function ensureCol(c) {
+      while (c >= totalCols) {
+        grid.forEach(rArr => rArr.push(null));
+        totalCols++;
+      }
+    }
+
+    let headCol = 0;
     let col = 0;
     let row = 0;
     let prevColor = null;
+    let isDragonTailing = false;
 
     marks.forEach((m) => {
       if (!prevColor) {
         grid[0][0] = m;
         prevColor = m.color;
-        row = 1;
+        row = 0;
         col = 0;
+        headCol = 0;
+        isDragonTailing = false;
       } else if (m.color === prevColor) {
-        if (row < ROWS && !grid[row][col]) {
-          grid[row][col] = m;
+        if (!isDragonTailing && row + 1 < ROWS && !grid[row + 1][col]) {
           row++;
+          grid[row][col] = m;
         } else {
-          let dCol = col + 1;
-          const dRow = row >= ROWS ? ROWS - 1 : row - 1;
-          while (dCol >= totalCols) {
-            grid.forEach(rArr => rArr.push(null));
-            totalCols++;
+          isDragonTailing = true;
+          col++;
+          ensureCol(col);
+          while (col < totalCols && grid[row][col]) {
+            col++;
+            ensureCol(col);
           }
-          while (grid[dRow][dCol]) {
-            dCol++;
-            if (dCol >= totalCols) {
-              grid.forEach(rArr => rArr.push(null));
-              totalCols++;
-            }
-          }
-          grid[dRow][dCol] = m;
+          grid[row][col] = m;
         }
       } else {
-        let nextCol = col + 1;
-        while (nextCol >= totalCols) {
-          grid.forEach(rArr => rArr.push(null));
-          totalCols++;
+        prevColor = m.color;
+        isDragonTailing = false;
+        headCol++;
+        ensureCol(headCol);
+        while (headCol < totalCols && grid[0][headCol]) {
+          headCol++;
+          ensureCol(headCol);
         }
-        while (grid[0][nextCol]) {
-          nextCol++;
-          if (nextCol >= totalCols) {
-            grid.forEach(rArr => rArr.push(null));
-            totalCols++;
-          }
-        }
-        col = nextCol;
+        col = headCol;
         row = 0;
         grid[0][col] = m;
-        row = 1;
-        prevColor = m.color;
       }
     });
 
@@ -2228,9 +2285,7 @@
     }
 
     let isRed = false;
-    if (c === k) {
-      isRed = true;
-    } else if (r === 0) {
+    if (r === 0) {
       const lenPrev = cols[c - 1].length;
       const lenRef = cols[c - 1 - k] ? cols[c - 1 - k].length : 0;
       isRed = (lenPrev === lenRef);
@@ -2489,33 +2544,50 @@
 >
   <!-- TOP CASINO HEADER: 3 COLUMNAS FIJAS (COL-4 / COL-4 / COL-4) -->
   <header class="sb-header">
-    <!-- COL-4 IZQUIERDA: MESA / SALA -->
+    <!-- COL-4 IZQUIERDA: MESA / SALA (NAVEGADOR DE MESAS CON BOTONES DE PASO < Y >) -->
     <div class="sb-header-col col-mesa">
-      {#if hasSelectedMesa}
+      <div class="sb-mesa-navigator" class:is-unselected={!hasSelectedMesa}>
         <button
           type="button"
-          class="sb-btn-table-info"
+          class="nav-arrow-btn btn-prev-mesa"
+          disabled={allSelectableMesas.length <= 1 || currentMesaIndex <= 0}
+          on:click={goToPrevMesa}
+          title={currentMesaIndex > 0 ? `Ir a mesa anterior: ${allSelectableMesas[currentMesaIndex - 1]?.mesaNombre}` : 'No hay mesa anterior'}
+          aria-label="Mesa anterior"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="mesa-label-content"
           on:click={openOptionsMenu}
           title="Opciones de la mesa ({currentSalaName} • {currentMesaName})"
         >
-          <strong class="loc-val">{currentSalaName}</strong>
-          <span class="loc-sep">•</span>
-          <strong class="loc-val">{currentMesaName}</strong>
+          {#if hasSelectedMesa}
+            <strong class="loc-val">{currentSalaName}</strong>
+            <span class="loc-sep">•</span>
+            <strong class="loc-val">{currentMesaName}</strong>
+          {:else}
+            <strong class="loc-val">👉 Seleccionar Mesa</strong>
+          {/if}
         </button>
-      {:else}
+
         <button
           type="button"
-          class="sb-btn-table-info is-unselected"
-          on:click={openOptionsMenu}
-          title="Clic para seleccionar sala y mesa"
+          class="nav-arrow-btn btn-next-mesa"
+          disabled={allSelectableMesas.length <= 1 || currentMesaIndex < 0 || currentMesaIndex >= allSelectableMesas.length - 1}
+          on:click={goToNextMesa}
+          title={currentMesaIndex >= 0 && currentMesaIndex < allSelectableMesas.length - 1 ? `Ir a mesa siguiente: ${allSelectableMesas[currentMesaIndex + 1]?.mesaNombre}` : 'No hay mesa siguiente'}
+          aria-label="Mesa siguiente"
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; flex-shrink: 0;">
-            <path d="M4 6h16M4 12h16m-7 6h7"/>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
-          <strong class="loc-val">👉 Seleccionar Mesa</strong>
         </button>
-      {/if}
-
+      </div>
     </div>
 
     <!-- COL-4 CENTRO: ZAPATO Y MANOS (CON BOTÓN 'N' INTEGRADO PARA NUEVO ZAPATO) -->
@@ -2602,18 +2674,34 @@
             {/if}
           </div>
 
-          <button
-            type="button"
-            class="nav-arrow-btn btn-next-session"
-            disabled={selectedSessionIndex >= sessions.length - 1 || isSessionsLoading}
-            on:click={goToNextSession}
-            title="Ver sesión siguiente"
-            aria-label="Sesión siguiente"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
+          {#if selectedSessionIndex < sessions.length - 1}
+            <!-- Flecha Siguiente para navegar sesiones históricas -->
+            <button
+              type="button"
+              class="nav-arrow-btn btn-next-session"
+              disabled={isSessionsLoading}
+              on:click={goToNextSession}
+              title="Ver sesión siguiente"
+              aria-label="Sesión siguiente"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          {:else}
+            <!-- Botón 'N' para Crear Nueva Sesión en la última sesión -->
+            <button
+              type="button"
+              class="nav-arrow-btn btn-new-shoe-n"
+              class:is-active={hasFullBaccaratPerms && isLatestSession && !isSessionsLoading}
+              disabled={!hasFullBaccaratPerms || !isLatestSession || isSessionsLoading}
+              on:click={handleCreateNewSession}
+              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para crear sesiones' : (!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear Nueva Sesión (${nextSessionDateStr})`)}
+              aria-label="Crear Nueva Sesión"
+            >
+              <span class="btn-n-letter">N</span>
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -2621,13 +2709,11 @@
 
 
 
-  <!-- OFFICIAL CASINO ROADMAPS MASTER SECTION -->
+  <!-- OFFICIAL CASINO ROADMAPS MASTER SECTION (GRID INTEGRAL) -->
   <section class="sb-roadmaps-master">
-    <!-- COL-9 IZQUIERDA: GRAN CAMINO (PRINCIPAL - ROJO) Y PLATO DE BOLAS (VERDE, ABAJO) -->
-    <div class="sb-roadmaps-left-col">
-      <!-- 1. BIG ROAD (CUADRILLA PRINCIPAL - ROJO) -->
-      <div
-        class="roadmap-card bigroad-card"
+    <!-- 1. BIG ROAD (CUADRILLA PRINCIPAL - COLUMNAS 1 A 2, FILA 1) -->
+    <div
+      class="roadmap-card bigroad-card"
         bind:clientWidth={bigRoadWidth}
         bind:clientHeight={bigRoadHeight}
         style="--big-cell-size: {bigRoadCellSize}px;"
@@ -2654,309 +2740,216 @@
             </svg>
 
             <table class="bigroad-table">
-            <tbody>
-              {#each bigRoadGrid.grid as row, rIdx}
-                <tr>
-                  {#each row as cell, cIdx}
-                    <td
-                      class="bigroad-cell"
-                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                      class:has-hand={!!cell}
-                      on:click={() => cell && selectHand(cell.historyIndex)}
-                      title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}${cell.natural ? ' [Natural]' : ''}${cell.win ? ' [WIN]' : ''} (Clic para editar)` : ''}
-                    >
-                      {#if cell}
-                        <div
-                          class="bigroad-ring {cell.winner.toLowerCase()}"
-                          class:is-tie={cell.isTieOnly}
-                          class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && !cell.win && cell.score === null}
-                          class:is-win-solid={cell.win}
-                        >
-                          {#if cell.natural && (cell.score === undefined || cell.score === null)}
-                            <span class="dot-natural" title="Victoria Natural (8 ó 9)"></span>
-                          {/if}
-                          {#if cell.score !== undefined && cell.score !== null}
-                            <span class="bigroad-score" class:is-natural-score={cell.natural}>{cell.score}</span>
-                          {/if}
-                          {#if tieMode === 'slash'}
-                            {#if cell.tieBeforeCount > 0}
-                              <span class="bigroad-tie-slash is-before" title="{cell.tieBeforeCount} empate(s) antes de esta mano"></span>
-                              {#if cell.tieBeforeCount > 1}
-                                <span class="tie-badge-num is-before">{cell.tieBeforeCount}</span>
+              <tbody>
+                {#each bigRoadGrid.grid as row, rIdx}
+                  <tr>
+                    {#each row as cell, cIdx}
+                      <td
+                        class="bigroad-cell"
+                        class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                        class:has-hand={!!cell}
+                        on:click={() => cell && selectHand(cell.historyIndex)}
+                        title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.tieCount > 0 ? ` (+${cell.tieCount} Empates)` : ''}${cell.natural ? ' [Natural]' : ''}${cell.win ? ' [WIN]' : ''} (Clic para editar)` : ''}
+                      >
+                        {#if cell}
+                          <div
+                            class="bigroad-ring {cell.winner.toLowerCase()}"
+                            class:is-tie={cell.isTieOnly}
+                            class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && !cell.win && cell.score === null}
+                            class:is-win-solid={cell.win}
+                          >
+                            {#if cell.natural && (cell.score === undefined || cell.score === null)}
+                              <span class="dot-natural" title="Victoria Natural (8 ó 9)"></span>
+                            {/if}
+                            {#if cell.score !== undefined && cell.score !== null}
+                              <span class="bigroad-score" class:is-natural-score={cell.natural}>{cell.score}</span>
+                            {/if}
+                            {#if tieMode === 'slash'}
+                              {#if cell.tieBeforeCount > 0}
+                                <span class="bigroad-tie-slash is-before" title="{cell.tieBeforeCount} empate(s) antes de esta mano"></span>
+                                {#if cell.tieBeforeCount > 1}
+                                  <span class="tie-badge-num is-before">{cell.tieBeforeCount}</span>
+                                {/if}
+                              {/if}
+                              {#if cell.tieAfterCount > 0 || (!cell.tieBeforeCount && cell.tieCount > 0)}
+                                <span class="bigroad-tie-slash is-after" title="{cell.tieAfterCount || cell.tieCount} empate(s) después de esta mano"></span>
+                                {#if (cell.tieAfterCount || cell.tieCount) > 1}
+                                  <span class="tie-badge-num is-after">{cell.tieAfterCount || cell.tieCount}</span>
+                                {/if}
                               {/if}
                             {/if}
-                            {#if cell.tieAfterCount > 0 || (!cell.tieBeforeCount && cell.tieCount > 0)}
-                              <span class="bigroad-tie-slash is-after" title="{cell.tieAfterCount || cell.tieCount} empate(s) después de esta mano"></span>
-                              {#if (cell.tieAfterCount || cell.tieCount) > 1}
-                                <span class="tie-badge-num is-after">{cell.tieAfterCount || cell.tieCount}</span>
-                              {/if}
+                            {#if cell.bPair}
+                              <span class="dot-b-pair"></span>
                             {/if}
-                          {/if}
-                          {#if cell.bPair}
-                            <span class="dot-b-pair"></span>
-                          {/if}
-                          {#if cell.pPair}
-                            <span class="dot-p-pair"></span>
-                          {/if}
-                        </div>
-                      {:else}
-                        <div class="bigroad-empty"></div>
-                      {/if}
-                    </td>
-                  {/each}
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+                            {#if cell.pPair}
+                              <span class="dot-p-pair"></span>
+                            {/if}
+                          </div>
+                        {:else}
+                          <div class="bigroad-empty"></div>
+                        {/if}
+                      </td>
+                    {/each}
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
 
-          <!-- 2. OVERLAY SUPERIOR (Z-INDEX 3): Curvas en los cruces (por encima de las fichas) y líneas de patrón de la jugada en curso -->
-          <svg
-            class="bigroad-svg-top-overlay"
-            width={bigRoadGrid.totalCols * bigRoadCellSize}
-            height={BIG_ROWS * bigRoadCellSize}
-            viewBox="0 0 {bigRoadGrid.totalCols * bigRoadCellSize} {BIG_ROWS * bigRoadCellSize}"
-          >
-            <!-- Curvas en los cruces: se dibujan por encima con halo para cortar limpiamente el borde de la ficha -->
-            {#each bigRoadOverlay.turnArcs as arc}
-              <path
-                class="bigroad-seq-halo"
-                d={arc}
-                fill="none"
-                stroke-width="4.2"
-                stroke-linecap="round"
-              />
-              <path
-                class="bigroad-seq-path"
-                d={arc}
-                fill="none"
-                stroke-width="2.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            {/each}
-
-            <!-- Líneas de patrón de la jugada en curso (Chop o figuras en V) -->
-            {#each bigRoadOverlay.patternLines as pat}
-              {#if pat.type === 'line'}
-                <line
-                  x1={pat.x1}
-                  y1={pat.y1}
-                  x2={pat.x2}
-                  y2={pat.y2}
-                  stroke={pat.color}
-                  stroke-width="3.8"
+            <!-- 2. OVERLAY SUPERIOR (Z-INDEX 3): Curvas en los cruces (por encima de las fichas) y líneas de patrón de la jugada en curso -->
+            <svg
+              class="bigroad-svg-top-overlay"
+              width={bigRoadGrid.totalCols * bigRoadCellSize}
+              height={BIG_ROWS * bigRoadCellSize}
+              viewBox="0 0 {bigRoadGrid.totalCols * bigRoadCellSize} {BIG_ROWS * bigRoadCellSize}"
+            >
+              <!-- Curvas en los cruces: se dibujan por encima con halo para cortar limpiamente el borde de la ficha -->
+              {#each bigRoadOverlay.turnArcs as arc}
+                <path
+                  class="bigroad-seq-halo"
+                  d={arc}
+                  fill="none"
+                  stroke-width="4.2"
                   stroke-linecap="round"
                 />
-              {:else if pat.type === 'path'}
                 <path
-                  d={pat.d}
+                  class="bigroad-seq-path"
+                  d={arc}
                   fill="none"
-                  stroke={pat.color}
-                  stroke-width="3.8"
+                  stroke-width="2.6"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
-              {/if}
-            {/each}
-          </svg>
-        </div>
-      </div>
-      </div>
-
-      <!-- 2. BEAD PLATE (OTRA CUADRILLA - VERDE, ABAJO DE LA PRINCIPAL) -->
-      <div
-        class="roadmap-card bead-card"
-        bind:clientWidth={beadWidth}
-        bind:clientHeight={beadHeight}
-        style="--bead-cell-size: {beadCellSize}px;"
-      >
-        <div class="grid-scrollable" bind:this={beadScrollEl}>
-          <table class="bead-table">
-            <tbody>
-              {#each beadGrid.grid as row, rIdx}
-                <tr>
-                  {#each row as cell, cIdx}
-                    <td
-                      class="bead-cell"
-                      class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                      class:has-hand={!!cell}
-                      on:click={() => cell && selectHand(cell.historyIndex)}
-                      title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
-                    >
-                      {#if cell}
-                        <div
-                          class="bead-circle {cell.winner.toLowerCase()}"
-                          class:has-b-pair={cell.bPair}
-                          class:has-p-pair={cell.pPair}
-                        >
-                          <span class="bead-letter" class:has-score={cell.score !== undefined && cell.score !== null}>
-                            {cell.score !== undefined && cell.score !== null ? cell.score : (cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T')}
-                          </span>
-                          {#if cell.bPair}
-                            <span class="dot-b-pair" title="Par Banca"></span>
-                          {/if}
-                          {#if cell.pPair}
-                            <span class="dot-p-pair" title="Par Punto"></span>
-                          {/if}
-                        </div>
-                      {:else}
-                        <div class="bead-empty"></div>
-                      {/if}
-                    </td>
-                  {/each}
-                </tr>
               {/each}
-            </tbody>
-          </table>
+
+              <!-- Líneas de patrón de la jugada en curso (Chop o figuras en V) -->
+              {#each bigRoadOverlay.patternLines as pat}
+                {#if pat.type === 'line'}
+                  <line
+                    x1={pat.x1}
+                    y1={pat.y1}
+                    x2={pat.x2}
+                    y2={pat.y2}
+                    stroke={pat.color}
+                    stroke-width="3.8"
+                    stroke-linecap="round"
+                  />
+                {:else if pat.type === 'path'}
+                  <path
+                    d={pat.d}
+                    fill="none"
+                    stroke={pat.color}
+                    stroke-width="3.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                {/if}
+              {/each}
+            </svg>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- COL-2 DERECHA: 3 CAMINOS DERIVADOS APILADOS VERTICALMENTE (CADA UNO COMO UNA TARJETA INDIVIDUAL) -->
+    <!-- 2. GRAN OJO (1RA CUADRILLA DERIVADA - COLUMNA 1, FILA 2) -->
     <div
-      class="derived-roads-column"
+      class="roadmap-card derived-band derived-band-big-eye"
+      bind:this={bigEyeScrollEl}
       bind:clientWidth={derivedWidth}
-      bind:clientHeight={derivedHeight}
+      bind:clientHeight={derivedBandHeight}
       style="--derived-cell-size: {derivedCellSize}px;"
     >
-      <!-- 1. BIG EYE BOY (GRAN OJO) -->
-      <div class="roadmap-card derived-band" bind:this={bigEyeScrollEl}>
-        <table class="derived-table">
-          <tbody>
-            {#each bigEyeGrid.grid as row}
-              <tr>
-                {#each row as cell}
-                  <td
-                    class="derived-cell"
-                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                    on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                    title={cell ? `Gran Ojo - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                  >
-                    {#if cell}
-                      <span class="derived-ring {cell.color}"></span>
-                    {/if}
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 2. SMALL ROAD (CAMINO PEQUEÑO) -->
-      <div class="roadmap-card derived-band" bind:this={smallRoadScrollEl}>
-        <table class="derived-table">
-          <tbody>
-            {#each smallRoadGrid.grid as row}
-              <tr>
-                {#each row as cell}
-                  <td
-                    class="derived-cell"
-                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                    on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                    title={cell ? `Camino Pequeño - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                  >
-                    {#if cell}
-                      <span class="derived-dot {cell.color}"></span>
-                    {/if}
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 3. COCKROACH ROAD (CUCARACHA) -->
-      <div class="roadmap-card derived-band" bind:this={cockroachScrollEl}>
-        <table class="derived-table">
-          <tbody>
-            {#each cockroachGrid.grid as row}
-              <tr>
-                {#each row as cell}
-                  <td
-                    class="derived-cell"
-                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
-                    on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
-                    title={cell ? `Cucaracha - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
-                  >
-                    {#if cell}
-                      <span class="derived-slash {cell.color}"></span>
-                    {/if}
-                  </td>
-                {/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- FRANJA DE ESTADÍSTICAS Y PREDICCIÓN (3 COLUMNAS: COL-4 / COL-4 / COL-4) -->
-  <section class="scoreboard-stats-bar">
-    <!-- COLUMNA 1 (col-4): CONTADORES DE JUEGO -->
-    <div class="stats-bar-col col-counters">
-      <div class="stats-strip-counters">
-        <!-- Total manos # -->
-        <div class="counter-item" title="Total de manos jugadas en este zapato">
-          <div class="bead-circle-badge bead-gray">#</div>
-          <div class="counter-digit">{totalHands}</div>
-        </div>
-
-        <!-- Banker B -->
-        <div class="counter-item" title="Victorias de Banca (Banker)">
-          <div class="bead-circle-badge bead-red">B</div>
-          <div class="counter-digit">{countBanca}</div>
-        </div>
-
-        <!-- Player P -->
-        <div class="counter-item" title="Victorias de Punto (Player)">
-          <div class="bead-circle-badge bead-blue">P</div>
-          <div class="counter-digit">{countPunto}</div>
-        </div>
-
-        <!-- Tie T -->
-        <div class="counter-item" title="Empates (Tie)">
-          <div class="bead-circle-badge bead-green">T</div>
-          <div class="counter-digit">{countEmpate}</div>
-        </div>
-
-        <!-- Natural N -->
-        <div class="counter-item" title="Victorias Naturales (8 ó 9 de mano)">
-          <div class="bead-circle-badge bead-orange">N</div>
-          <div class="counter-digit">{countNatural}</div>
-        </div>
-
-        <!-- Banker Pair -->
-        <div class="counter-item" title="Parejas de Banca (B.Pair)">
-          <div class="bead-circle-badge bead-white">
-            <span class="bead-dot dot-tl red-dot"></span>
-          </div>
-          <div class="counter-digit">{countBPair}</div>
-        </div>
-
-        <!-- Player Pair -->
-        <div class="counter-item" title="Parejas de Punto (P.Pair)">
-          <div class="bead-circle-badge bead-white">
-            <span class="bead-dot dot-br blue-dot"></span>
-          </div>
-          <div class="counter-digit">{countPPair}</div>
-        </div>
-      </div>
+      <table class="derived-table">
+        <tbody>
+          {#each bigEyeGrid.grid as row}
+            <tr>
+              {#each row as cell}
+                <td
+                  class="derived-cell"
+                  class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                  on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                  title={cell ? `Gran Ojo - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                >
+                  {#if cell}
+                    <span class="derived-ring {cell.color}"></span>
+                  {/if}
+                </td>
+              {/each}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     </div>
 
-    <!-- COLUMNA 2: PREDICCIÓN / NEXT (CENTRO) -->
-    <div class="stats-bar-col col-prediction">
-      <span class="pred-title">Next</span>
-      <div class="prediction-pills-row">
-        <!-- Pill Ask Banker (B) -->
-        <button
-          type="button"
-          class="pred-pill pred-pill-banker"
-          on:click={() => handlePredictionClick('BANCA')}
-          title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextBankerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextBankerPrediction.cockroach || 'pendiente'})"
-        >
+    <!-- 3. CAMINO PEQUEÑO (2DA CUADRILLA DERIVADA - COLUMNA 1, FILA 3) -->
+    <div
+      class="roadmap-card derived-band derived-band-small-road"
+      bind:this={smallRoadScrollEl}
+      style="--derived-cell-size: {derivedCellSize}px;"
+    >
+      <table class="derived-table">
+        <tbody>
+          {#each smallRoadGrid.grid as row}
+            <tr>
+              {#each row as cell}
+                <td
+                  class="derived-cell"
+                  class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                  on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                  title={cell ? `Camino Pequeño - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                >
+                  {#if cell}
+                    <span class="derived-dot {cell.color}"></span>
+                  {/if}
+                </td>
+              {/each}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 4. CUCARACHA (3RA CUADRILLA DERIVADA - COLUMNA 1, FILA 4) -->
+    <div
+      class="roadmap-card derived-band derived-band-cockroach"
+      bind:this={cockroachScrollEl}
+      style="--derived-cell-size: {derivedCellSize}px;"
+    >
+      <table class="derived-table">
+        <tbody>
+          {#each cockroachGrid.grid as row}
+            <tr>
+              {#each row as cell}
+                <td
+                  class="derived-cell"
+                  class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                  on:click={() => cell && cell.historyIndex !== undefined && selectHand(cell.historyIndex)}
+                  title={cell ? `Cucaracha - Mano #${cell.handId}: ${cell.color === 'red' ? 'Rojo (Simetría/Repetición)' : 'Azul (Cambio/Caos)'}` : ''}
+                >
+                  {#if cell}
+                    <span class="derived-slash {cell.color}"></span>
+                  {/if}
+                </td>
+              {/each}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 5. BLOQUE INTEGRADO DE PREDICCIÓN (UN SOLO BLOQUE CON 3 FILAS: NEXT, ASK BANKER, ASK PLAYER) -->
+    <div class="roadmap-card pred-unified-block">
+      <!-- 5.1 HEADER NEXT (FILA 1 / SUPERIOR) -->
+      <div class="pred-block-row pred-row-header" title="Predicción de la siguiente jugada">
+        <span class="pred-header-title">NEXT</span>
+      </div>
+
+      <!-- 5.2 ASK BANKER (FILA 2 / INTERMEDIA) -->
+      <button
+        type="button"
+        class="pred-block-row pred-row-btn pred-row-banker"
+        on:click={() => handlePredictionClick('BANCA')}
+        title="Predicción si gana BANCA: Gran Ojo ({nextBankerPrediction.bigEye || '-'}), Camino Pequeño ({nextBankerPrediction.smallRoad || '-'}), Cucaracha ({nextBankerPrediction.cockroach || '-'})"
+      >
+        <div class="pred-pill-content">
           <span class="pred-badge-circle b">B</span>
           {#if nextBankerPrediction.bigEye}
             <span class="pred-symbol pred-ring {nextBankerPrediction.bigEye}" title="Gran Ojo: {nextBankerPrediction.bigEye}"></span>
@@ -2969,15 +2962,17 @@
               <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
             </svg>
           {/if}
-        </button>
+        </div>
+      </button>
 
-        <!-- Pill Ask Player (P) -->
-        <button
-          type="button"
-          class="pred-pill pred-pill-player"
-          on:click={() => handlePredictionClick('PUNTO')}
-          title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || 'pendiente'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || 'pendiente'}), Cucaracha ({nextPlayerPrediction.cockroach || 'pendiente'})"
-        >
+      <!-- 5.3 ASK PLAYER (FILA 3 / INFERIOR) -->
+      <button
+        type="button"
+        class="pred-block-row pred-row-btn pred-row-player"
+        on:click={() => handlePredictionClick('PUNTO')}
+        title="Predicción si gana PUNTO: Gran Ojo ({nextPlayerPrediction.bigEye || '-'}), Camino Pequeño ({nextPlayerPrediction.smallRoad || '-'}), Cucaracha ({nextPlayerPrediction.cockroach || '-'})"
+      >
+        <div class="pred-pill-content">
           <span class="pred-badge-circle p">P</span>
           {#if nextPlayerPrediction.bigEye}
             <span class="pred-symbol pred-ring {nextPlayerPrediction.bigEye}" title="Gran Ojo: {nextPlayerPrediction.bigEye}"></span>
@@ -2990,16 +2985,126 @@
               <line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
             </svg>
           {/if}
-        </button>
+        </div>
+      </button>
+    </div>
+
+    <!-- 6. PLATO DE BOLAS (COLUMNA 3, FILAS 2 A 5) -->
+    <div
+      class="roadmap-card bead-card"
+      bind:clientWidth={beadWidth}
+      bind:clientHeight={beadHeight}
+      style="--bead-cell-size: {beadCellSize}px;"
+    >
+      <div class="grid-scrollable" bind:this={beadScrollEl}>
+        <table class="bead-table">
+          <tbody>
+            {#each beadGrid.grid as row, rIdx}
+              <tr>
+                {#each row as cell, cIdx}
+                  <td
+                    class="bead-cell"
+                    class:selected-cell={cell && cell.historyIndex === selectedHandIndex}
+                    class:has-hand={!!cell}
+                    on:click={() => cell && selectHand(cell.historyIndex)}
+                    title={cell ? `Mano #${cell.id}: ${cell.winner}${cell.score !== undefined && cell.score !== null ? ` (${cell.score})` : ''}${cell.bPair ? ' [B.Pair]' : ''}${cell.pPair ? ' [P.Pair]' : ''} (Clic para editar)` : ''}
+                  >
+                    {#if cell}
+                      <div
+                        class="bead-circle {cell.winner.toLowerCase()}"
+                        class:has-b-pair={cell.bPair}
+                        class:has-p-pair={cell.pPair}
+                      >
+                        <span class="bead-letter" class:has-score={cell.score !== undefined && cell.score !== null}>
+                          {cell.score !== undefined && cell.score !== null ? cell.score : (cell.winner === 'BANCA' ? 'B' : cell.winner === 'PUNTO' ? 'P' : 'T')}
+                        </span>
+                        {#if cell.bPair}
+                          <span class="dot-b-pair" title="Par Banca"></span>
+                        {/if}
+                        {#if cell.pPair}
+                          <span class="dot-p-pair" title="Par Punto"></span>
+                        {/if}
+                      </div>
+                    {:else}
+                      <div class="bead-empty"></div>
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <!-- COLUMNA 3: RESUMEN DE PORCENTAJES (DERECHA) -->
-    <div class="stats-bar-col col-percentages">
-      <div class="stats-strip-pct-box">
-        <span class="pct-tag b">B: {pctBanca}%</span>
-        <span class="pct-tag p">P: {pctPunto}%</span>
-        <span class="pct-tag t">T: {pctEmpate}%</span>
+    <!-- 7. COL-1 DERECHA ARRIBA: 7 CONTADORES DE JUEGO (#, B, P, T, N, BP, PP) -->
+    <div class="roadmap-card stats-col-card counters-col-card">
+      <div class="v-counters-list">
+        <!-- Total manos # -->
+        <div class="v-counter-row" title="Total de manos jugadas en este zapato">
+          <div class="bead-circle-badge bead-gray">#</div>
+          <div class="v-counter-digit">{totalHands}</div>
+        </div>
+
+        <!-- Banker B -->
+        <div class="v-counter-row" title="Victorias de Banca (Banker)">
+          <div class="bead-circle-badge bead-red">B</div>
+          <div class="v-counter-digit is-banca">{countBanca}</div>
+        </div>
+
+        <!-- Player P -->
+        <div class="v-counter-row" title="Victorias de Punto (Player)">
+          <div class="bead-circle-badge bead-blue">P</div>
+          <div class="v-counter-digit is-punto">{countPunto}</div>
+        </div>
+
+        <!-- Tie T -->
+        <div class="v-counter-row" title="Empates (Tie)">
+          <div class="bead-circle-badge bead-green">T</div>
+          <div class="v-counter-digit is-tie">{countEmpate}</div>
+        </div>
+
+        <!-- Natural N -->
+        <div class="v-counter-row" title="Victorias Naturales (8 ó 9 de mano)">
+          <div class="bead-circle-badge bead-orange">N</div>
+          <div class="v-counter-digit">{countNatural}</div>
+        </div>
+
+        <!-- Banker Pair -->
+        <div class="v-counter-row" title="Parejas de Banca (B.Pair)">
+          <div class="bead-circle-badge bead-white">
+            <span class="bead-dot dot-tl red-dot"></span>
+          </div>
+          <div class="v-counter-digit">{countBPair}</div>
+        </div>
+
+        <!-- Player Pair -->
+        <div class="v-counter-row" title="Parejas de Punto (P.Pair)">
+          <div class="bead-circle-badge bead-white">
+            <span class="bead-dot dot-br blue-dot"></span>
+          </div>
+          <div class="v-counter-digit">{countPPair}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. COL-1 DERECHA ABAJO: 3 PORCENTAJES EN COLUMNA VERTICAL (BANCA %, PUNTO %, EMPATE %) -->
+    <div class="roadmap-card stats-col-card pct-col-card">
+      <div class="v-pct-list">
+        <!-- Banker B % -->
+        <div class="v-pct-row" title="Porcentaje de victorias de Banca ({pctBanca}%)">
+          <div class="v-pct-digit is-banca">{pctBanca}%</div>
+        </div>
+
+        <!-- Player P % -->
+        <div class="v-pct-row" title="Porcentaje de victorias de Punto ({pctPunto}%)">
+          <div class="v-pct-digit is-punto">{pctPunto}%</div>
+        </div>
+
+        <!-- Tie T % -->
+        <div class="v-pct-row" title="Porcentaje de empates ({pctEmpate}%)">
+          <div class="v-pct-digit is-tie">{pctEmpate}%</div>
+        </div>
       </div>
     </div>
   </section>
@@ -3523,43 +3628,121 @@
     overflow: hidden;
   }
 
-  /* HEADER: 3 COLUMNAS FIJAS EXACTAS (COL-4 / COL-4 / COL-4) NUNCA SE DESBORDA HACIA ABAJO */
+  /* HEADER: BARRA FLUIDA RESPONSIVA ADAPTABLE A CUALQUIER RESOLUCIÓN */
   .sb-header {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: clamp(4px, 0.8vw, 12px);
-    padding: clamp(2px, 0.4vh, 4px) 2px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: clamp(6px, 1.2vw, 16px);
+    padding: clamp(4px, 0.8vh, 10px) clamp(4px, 0.8vw, 12px);
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
     width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
+    overflow: hidden;
+  }
+  .theme-light .sb-header {
+    border-bottom-color: #e2e8f0;
   }
 
   .sb-header-col {
     display: flex;
     align-items: center;
     min-width: 0;
-    width: 100%;
+    box-sizing: border-box;
   }
 
+  /* COLUMNA 1 (MESA / SALA): ALINEADA A LA IZQUIERDA */
   .sb-header-col.col-mesa {
-    grid-column: 1;
     justify-content: flex-start;
-    gap: 6px;
+    justify-self: start;
+    min-width: 0;
   }
 
+  /* COLUMNA 2 (ZAPATO Y MANOS): EXACTAMENTE EN EL CENTRO HORIZONTAL */
   .sb-header-col.col-zapato {
-    grid-column: 2;
     justify-content: center;
+    justify-self: center;
+    min-width: 0;
   }
 
+  /* COLUMNA 3 (SESIÓN): ALINEADA A LA DERECHA */
   .sb-header-col.col-sesion {
-    grid-column: 3;
     justify-content: flex-end;
+    justify-self: end;
+    min-width: 0;
   }
 
-  /* BOTÓN SALA Y MESA EN ESQUINA IZQUIERDA (ABRE MODAL DE OPCIONES) */
+  /* CONTENEDORES ESTANDARIZADOS: MESA, ZAPATO Y SESIÓN */
+  .sb-mesa-navigator,
+  .sb-shoe-pill,
+  .sb-session-navigator {
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(4px, 0.5vw, 8px);
+    background: #1e293b;
+    border: 1.5px solid #334155;
+    padding: clamp(3px, 0.45vh, 6px) clamp(4px, 0.5vw, 8px);
+    min-height: clamp(34px, 4.5vh, 46px);
+    box-sizing: border-box;
+    border-radius: 9999px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: all 0.2s ease;
+    max-width: 100%;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .sb-mesa-navigator {
+    flex-shrink: 1;
+  }
+
+  .sb-mesa-navigator.is-unselected {
+    border-color: #0284c7;
+    animation: sb-pulse-btn 2s infinite ease-in-out;
+  }
+
+  .mesa-label-content {
+    background: transparent;
+    border: none;
+    color: #f1f5f9;
+    font-family: inherit;
+    font-size: clamp(12.5px, 0.95vw, 16px);
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(3px, 0.4vw, 6px);
+    padding: 0 clamp(4px, 0.5vw, 10px);
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    min-width: 0;
+    border-radius: 9999px;
+    transition: background 0.15s ease;
+  }
+
+  .mesa-label-content:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .mesa-label-content .loc-val {
+    color: #ffffff;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .mesa-label-content .loc-sep {
+    color: #64748b;
+    font-weight: bold;
+    margin: 0 2px;
+    flex-shrink: 0;
+  }
+
   .sb-btn-table-info {
     display: inline-flex;
     align-items: center;
@@ -3567,12 +3750,12 @@
     background: #1e293b;
     border: 1.5px solid #334155;
     padding: 3px clamp(8px, 1vw, 14px);
-    min-height: 34px;
+    min-height: 38px;
     box-sizing: border-box;
     border-radius: 9999px;
     color: #f1f5f9;
     font-family: inherit;
-    font-size: clamp(11.5px, 0.9vw, 14.5px);
+    font-size: clamp(12.5px, 1vw, 15px);
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
@@ -3583,60 +3766,15 @@
     overflow: hidden;
   }
 
-  .sb-btn-table-info:hover {
-    background: #334155;
-    border-color: #475569;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-  }
-
-  .sb-btn-table-info:active {
-    transform: translateY(0);
-  }
-
-  .sb-btn-table-info .loc-val {
-    color: #ffffff;
-    font-weight: 800;
-    font-size: inherit;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .sb-btn-table-info .loc-sep {
-    color: #475569;
-    font-weight: bold;
-    margin: 0 2px;
-  }
-
-
-  /* CONTENEDORES ESTANDARIZADOS: ZAPATO Y SESIÓN */
-  .sb-shoe-pill,
-  .sb-session-navigator {
-    display: inline-flex;
-    align-items: center;
-    gap: clamp(3px, 0.5vw, 6px);
-    background: #1e293b;
-    border: 1.5px solid #334155;
-    padding: 2px clamp(3px, 0.4vw, 5px);
-    min-height: 34px;
-    box-sizing: border-box;
-    border-radius: 9999px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-    transition: all 0.2s ease;
-    max-width: 100%;
-    overflow: hidden;
-  }
-
   .sb-session-navigator.is-past {
     border-color: #475569;
   }
 
   /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE, ATRÁS Y 'N') */
   .nav-arrow-btn {
-    width: clamp(26px, 2vw, 30px);
-    height: clamp(26px, 2vw, 30px);
-    min-width: clamp(26px, 2vw, 30px);
+    width: clamp(26px, 2.2vw, 38px);
+    height: clamp(26px, 2.2vw, 38px);
+    min-width: clamp(26px, 2.2vw, 38px);
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.08);
     border: 1.5px solid rgba(255, 255, 255, 0.18);
@@ -3648,6 +3786,13 @@
     padding: 0;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
+    box-sizing: border-box;
+  }
+
+  .nav-arrow-btn svg {
+    width: clamp(13px, 1.1vw, 19px);
+    height: clamp(13px, 1.1vw, 19px);
+    flex-shrink: 0;
   }
 
   .nav-arrow-btn:hover:not(:disabled) {
@@ -3655,7 +3800,7 @@
     border-color: #38bdf8;
     color: #ffffff;
     transform: scale(1.08);
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
   }
 
   .nav-arrow-btn:active:not(:disabled) {
@@ -3687,10 +3832,10 @@
     border-color: #38bdf8;
     color: #ffffff;
     transform: scale(1.12);
-    box-shadow: 0 0 14px rgba(56, 189, 248, 0.8);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
   }
   .btn-n-letter {
-    font-size: clamp(12px, 1vw, 14px);
+    font-size: clamp(12px, 1vw, 16px);
     font-weight: 900;
     line-height: 1;
     display: block;
@@ -3702,15 +3847,15 @@
   .shoe-pill-content {
     display: inline-flex;
     align-items: center;
-    gap: clamp(3px, 0.5vw, 7px);
-    padding: 0 clamp(2px, 0.4vw, 5px);
+    gap: clamp(3px, 0.45vw, 8px);
+    padding: 0 clamp(3px, 0.4vw, 8px);
     user-select: none;
     white-space: nowrap;
-    font-size: clamp(10px, 0.8vw, 12px);
+    font-size: clamp(12px, 0.95vw, 15px);
   }
 
   .pill-sub {
-    font-size: clamp(9.5px, 0.75vw, 11px);
+    font-size: clamp(10px, 0.75vw, 12.5px);
     color: #94a3b8;
     font-weight: 600;
   }
@@ -3718,36 +3863,37 @@
   .pill-label {
     color: #94a3b8;
     font-weight: 700;
-    font-size: clamp(9.5px, 0.75vw, 11px);
-    letter-spacing: 0.4px;
+    font-size: clamp(10.5px, 0.78vw, 13px);
+    letter-spacing: 0.3px;
   }
 
   .pill-value {
     color: #38bdf8;
     font-weight: 800;
-    font-size: clamp(11.5px, 0.9vw, 13.5px);
+    font-size: clamp(12.5px, 1.05vw, 16.5px);
   }
 
   .pill-sep {
     color: #475569;
     font-weight: bold;
-    margin: 0 1px;
+    margin: 0 2px;
+    flex-shrink: 0;
   }
 
   /* NAVEGADOR DE SESIONES */
   .session-label-wrapper {
     display: inline-flex;
     align-items: center;
-    gap: clamp(3px, 0.5vw, 6px);
-    padding: 0 clamp(2px, 0.4vw, 5px);
+    gap: clamp(3px, 0.45vw, 8px);
+    padding: 0 clamp(3px, 0.4vw, 8px);
     user-select: none;
     white-space: nowrap;
   }
 
   .session-label-text {
-    font-size: clamp(11px, 0.85vw, 13px);
+    font-size: clamp(12.5px, 0.95vw, 16px);
     font-weight: 800;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.3px;
     white-space: nowrap;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   }
@@ -3762,24 +3908,130 @@
 
   .session-date-text {
     color: #f1f5f9;
-    font-size: clamp(9.5px, 0.85vw, 12.5px);
+    font-size: clamp(11.5px, 0.9vw, 15px);
     font-weight: 700;
     letter-spacing: 0.2px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 
-  @media (max-width: 640px) {
-    .sb-header {
-      gap: 3px;
-      padding: 2px 1px;
+  /* RESOLUCIONES PEQUEÑAS / TABLETS / VENTANAS REDUCIDAS:
+     Fila 1: Sala/Mesa col-12 (100% full width)
+     Fila 2: Zapato col-6 + Sesión col-6 (50% cada una) */
+  @media (max-width: 1024px) {
+    .sb-header,
+    .theme-light .sb-header {
+      grid-template-columns: 1fr 1fr;
+      row-gap: clamp(4px, 0.8vh, 8px);
+      column-gap: clamp(6px, 1.2vw, 12px);
+      padding: clamp(4px, 0.8vh, 8px) clamp(6px, 1.2vw, 12px);
     }
-    .pill-label {
-      display: none;
+
+    /* FILA 1 - COL-12 COMPLETO: MESA / SALA */
+    .sb-header-col.col-mesa {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      width: 100%;
+      justify-content: center;
+      justify-self: stretch;
+    }
+
+    /* FILA 2 - COL-6 IZQUIERDA: ZAPATO Y MANOS */
+    .sb-header-col.col-zapato {
+      grid-column: 1 / 2;
+      grid-row: 2;
+      width: 100%;
+      justify-content: flex-start;
+      justify-self: stretch;
+    }
+
+    /* FILA 2 - COL-6 DERECHA: SESIÓN */
+    .sb-header-col.col-sesion {
+      grid-column: 2 / 3;
+      grid-row: 2;
+      width: 100%;
+      justify-content: flex-end;
+      justify-self: stretch;
+    }
+
+    /* Adaptar los navegadores para que ocupen su celda de forma balanceada */
+    .sb-header-col.col-mesa .sb-mesa-navigator {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      justify-content: space-between;
+    }
+
+    .sb-header-col.col-zapato .sb-shoe-pill {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .sb-header-col.col-sesion .sb-session-navigator {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .mesa-label-content {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
+      min-width: 0;
+    }
+
+    .shoe-pill-content {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
+      min-width: 0;
+    }
+
+    .session-label-wrapper {
+      flex: 1;
+      justify-content: center;
+      text-align: center;
+      min-width: 0;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .sb-header,
+    .theme-light .sb-header {
+      row-gap: 4px;
+      column-gap: 6px;
+      padding: 3px 4px;
+    }
+    .sb-mesa-navigator,
+    .sb-shoe-pill,
+    .sb-session-navigator {
+      min-height: 32px;
+      padding: 2px 4px;
+    }
+    .nav-arrow-btn {
+      width: 26px;
+      height: 26px;
+      min-width: 26px;
+    }
+    .nav-arrow-btn svg {
+      width: 13px;
+      height: 13px;
     }
     .session-date-text {
-      font-size: clamp(8.5px, 2vw, 10.5px);
-      display: inline-block;
+      font-size: 11px;
+    }
+    .sb-header-col.col-mesa .sb-mesa-navigator {
+      max-width: 100%;
+    }
+    .mesa-label-content {
+      font-size: 12px;
+      padding: 0 4px;
+    }
+    .shoe-pill-content {
+      font-size: 12px;
+      padding: 0 4px;
+    }
+    .session-label-text {
+      font-size: 12px;
     }
   }
 
@@ -3932,10 +4184,19 @@
   .pct-tag.p { color: #2563eb; }
   .pct-tag.t { color: #16a34a; }
 
-  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (COL-10 IZQUIERDA Y COL-2 DERECHA) */
+  /* OFFICIAL CASINO ROADMAPS MASTER SECTION (3 COLUMNAS X 4 FILAS INTEGRAL)
+     Columna 1: 3 Cuadrillas Derivadas (7fr)
+     Columna 2: Plato de Bolas (4fr)
+     Columna 3: Contadores y Porcentajes (1fr)
+     Fila 1: Gran Camino Principal (3fr)
+     Fila 2: Gran Ojo (1fr)  <--- Límite inferior de la tarjeta de Contadores
+     Fila 3: Camino Pequeño (1fr) <--- Límite superior de la tarjeta de Porcentajes
+     Fila 4: Cucaracha (1fr)
+  */
   .sb-roadmaps-master {
     display: grid;
-    grid-template-columns: minmax(0, 10fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 7fr) auto minmax(0, 4fr) clamp(64px, 4.2vw, 84px);
+    grid-template-rows: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
     gap: clamp(4px, 0.8vh, 8px);
     flex: 1 1 0px;
     min-height: 0;
@@ -3943,16 +4204,6 @@
     width: 100%;
     align-items: stretch;
     overflow: hidden;
-  }
-
-  /* COLUMNA IZQUIERDA (COL-10): GRAN CAMINO ARRIBA (ABARCA 2 DERIVADAS) Y PLATO DE BOLAS ABAJO (ABARCA 1) */
-  .sb-roadmaps-left-col {
-    display: grid;
-    grid-template-rows: 2fr 1fr;
-    gap: clamp(4px, 0.8vh, 8px);
-    height: 100%;
-    min-height: 0;
-    min-width: 0;
   }
 
   .roadmap-card {
@@ -3964,32 +4215,278 @@
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
+  .theme-light .roadmap-card {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
 
-  /* CUADRILLA PRINCIPAL (ROJO): GRAN CAMINO - ABARCA EXACTAMENTE 2 DE LAS 3 DERIVADAS */
+  /* 1. GRAN CAMINO: ABARCA COLUMNAS 1 A 3 (DERIVADAS + PREDICCIÓN + PLATO DE BOLAS), FILA 1 */
   .bigroad-card {
+    grid-column: 1 / 4;
+    grid-row: 1 / 2;
     min-height: 0;
     height: 100%;
     width: 100%;
     display: flex;
   }
 
-  /* OTRA CUADRILLA (VERDE): PLATO DE BOLAS - ABARCA EXACTAMENTE LA 3RA DERIVADA */
+  /* 2. GRAN OJO (1RA CUADRILLA DERIVADA): COLUMNA 1, FILA 2 */
+  .derived-band-big-eye {
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+  }
+
+  /* 3. CAMINO PEQUEÑO (2DA CUADRILLA DERIVADA): COLUMNA 1, FILA 3 */
+  .derived-band-small-road {
+    grid-column: 1 / 2;
+    grid-row: 3 / 4;
+  }
+
+  /* 4. CUCARACHA (3RA CUADRILLA DERIVADA): COLUMNA 1, FILA 4 */
+  .derived-band-cockroach {
+    grid-column: 1 / 2;
+    grid-row: 4 / 5;
+  }
+
+  /* 5. PLATO DE BOLAS: COLUMNA 3 (4fr), FILAS 2 A 4 */
   .bead-card {
+    grid-column: 3 / 4;
+    grid-row: 2 / 5;
     min-height: 0;
     height: 100%;
     width: 100%;
     display: flex;
   }
 
-  /* COLUMNA DERECHA (COL-2): 3 CUADRILLAS DERIVADAS - APILADAS CON SEPARACIÓN IDÉNTICA A LAS OTRAS (GAP: 8PX) */
-  .derived-roads-column {
-    display: grid;
-    grid-template-rows: repeat(3, minmax(0, 1fr));
-    gap: clamp(4px, 0.8vh, 8px);
+  /* COL-1 DERECHA: TARJETAS LATERALES DE ESTADÍSTICAS */
+  .stats-col-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     height: 100%;
     min-height: 0;
-    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    justify-content: center;
+  }
+
+  /* PANEL SUPERIOR: 7 CONTADORES (#, B, P, T, N, BP, PP)
+     COLUMNA 4, FILA 1 Y FILA 2 (HASTA EL LÍMITE DE LA 1RA CUADRILLA DERIVADA)
+  */
+  .counters-col-card {
+    grid-column: 4 / 5;
+    grid-row: 1 / 3;
+    padding: clamp(4px, 0.9vh, 10px) 5px;
+  }
+
+  .v-counters-list {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: stretch;
+    height: 100%;
     width: 100%;
+    gap: clamp(1px, 0.3vh, 5px);
+    min-height: 0;
+  }
+
+  .v-counter-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(5px, 0.45vw, 9px);
+    width: 100%;
+    padding: 0 2px;
+    min-height: 0;
+    white-space: nowrap;
+  }
+
+  .v-counter-row .bead-circle-badge {
+    width: clamp(17px, 1.1vw, 22px);
+    height: clamp(17px, 1.1vw, 22px);
+    font-size: clamp(9px, 0.6vw, 11.5px);
+    flex-shrink: 0;
+  }
+
+  .v-counter-row .bead-dot {
+    width: clamp(4.5px, 0.35vw, 6.5px);
+    height: clamp(4.5px, 0.35vw, 6.5px);
+    border-width: 1px;
+  }
+  .v-counter-row .dot-tl.red-dot {
+    top: 1px;
+    left: 1px;
+  }
+  .v-counter-row .dot-br.blue-dot {
+    bottom: 1px;
+    right: 1px;
+  }
+
+  .v-counter-digit {
+    font-size: clamp(12px, 0.9vw, 16px);
+    font-weight: 900;
+    line-height: 1;
+    color: #f8fafc;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    min-width: clamp(16px, 1.1vw, 22px);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .theme-light .v-counter-digit {
+    color: #0f172a;
+  }
+  .v-counter-digit.is-banca {
+    color: #f87171;
+  }
+  .theme-light .v-counter-digit.is-banca {
+    color: #dc2626;
+  }
+  .v-counter-digit.is-punto {
+    color: #60a5fa;
+  }
+  .theme-light .v-counter-digit.is-punto {
+    color: #2563eb;
+  }
+  .v-counter-digit.is-tie {
+    color: #4ade80;
+  }
+  .theme-light .v-counter-digit.is-tie {
+    color: #16a34a;
+  }
+
+  /* PANEL INFERIOR: LOS 3 PORCENTAJES EN COLUMNA (B %, P %, T %)
+     COLUMNA 4, FILA 3 Y FILA 4 (LAS 2 CUADRILLAS RESTANTES)
+  */
+  .pct-col-card {
+    grid-column: 4 / 5;
+    grid-row: 3 / 5;
+    padding: clamp(6px, 1.2vh, 12px) 5px;
+  }
+
+  .v-pct-list {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: stretch;
+    height: 100%;
+    width: 100%;
+    gap: clamp(2px, 0.6vh, 8px);
+    min-height: 0;
+  }
+
+  .v-pct-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0 1px;
+    min-height: 0;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .v-pct-digit {
+    font-size: clamp(13px, 1vw, 18px);
+    font-weight: 900;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+    letter-spacing: 0.3px;
+  }
+  .v-pct-digit.is-banca {
+    color: #f87171;
+  }
+  .theme-light .v-pct-digit.is-banca {
+    color: #dc2626;
+  }
+  .v-pct-digit.is-punto {
+    color: #60a5fa;
+  }
+  .theme-light .v-pct-digit.is-punto {
+    color: #2563eb;
+  }
+  .v-pct-digit.is-tie {
+    color: #4ade80;
+  }
+  .theme-light .v-pct-digit.is-tie {
+    color: #16a34a;
+  }
+
+  /* REGLAS RESPONSIVAS PARA RESOLUCIONES PEQUEÑAS / PANTALLAS COMPACTAS */
+  @media (max-width: 1200px) {
+    .sb-roadmaps-master {
+      grid-template-columns: minmax(0, 7fr) auto minmax(0, 4fr) clamp(60px, 4.2vw, 76px);
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .sb-roadmaps-master {
+      grid-template-columns: minmax(0, 7fr) auto minmax(0, 4fr) clamp(56px, 4.4vw, 68px);
+    }
+    .counters-col-card {
+      padding: 4px 3px;
+    }
+    .pct-col-card {
+      padding: 6px 3px;
+    }
+    .v-counter-row .bead-circle-badge {
+      width: clamp(15px, 1.4vw, 18px);
+      height: clamp(15px, 1.4vw, 18px);
+      font-size: 9.5px;
+    }
+    .v-counter-digit {
+      font-size: clamp(11px, 1vw, 13.5px);
+    }
+    .v-pct-digit {
+      font-size: clamp(11.5px, 1.1vw, 14.5px);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .sb-roadmaps-master {
+      grid-template-columns: minmax(0, 7fr) auto minmax(0, 4fr) 52px;
+    }
+    .counters-col-card {
+      padding: 3px 2px;
+    }
+    .pct-col-card {
+      padding: 4px 2px;
+    }
+    .v-counter-row .bead-circle-badge {
+      width: 14px;
+      height: 14px;
+      font-size: 8px;
+    }
+    .v-counter-digit {
+      font-size: 10.5px;
+    }
+    .v-pct-digit {
+      font-size: 11px;
+    }
+  }
+
+  @media (max-height: 750px) {
+    .counters-col-card {
+      padding: 3px 4px;
+    }
+    .pct-col-card {
+      padding: 4px 4px;
+    }
+    .v-counter-row .bead-circle-badge {
+      width: clamp(15px, 2.2vh, 19px);
+      height: clamp(15px, 2.2vh, 19px);
+      font-size: 9.5px;
+    }
+    .v-counter-digit {
+      font-size: clamp(11px, 1.8vh, 14px);
+    }
+    .v-pct-digit {
+      font-size: clamp(11.5px, 2vh, 15px);
+    }
   }
 
   .derived-band {
@@ -4006,6 +4503,9 @@
   }
   .derived-band::-webkit-scrollbar {
     display: none;
+  }
+  .theme-light .derived-band {
+    background: #ffffff;
   }
 
   .grid-scrollable {
@@ -4025,6 +4525,9 @@
   }
   .grid-scrollable::-webkit-scrollbar {
     display: none;
+  }
+  .theme-light .grid-scrollable {
+    background: #ffffff;
   }
 
   /* TABLES: DO NOT STRETCH CELLS INTO RECTANGLES, PRESERVE EXACT 1:1 SQUARES */
@@ -4450,148 +4953,112 @@
     border: 1.5px solid #ffffff;
   }
 
-  /* BARRA DE ESTADÍSTICAS Y PREDICCIÓN (SIN SOMBRA, ESQUINAS ALINEADAS A SUS LADOS Y CENTRO EN EL MEDIO) */
-  .scoreboard-stats-bar {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: clamp(6px, 1vh, 10px) clamp(22px, 3.2vw, 42px);
-    box-shadow: none !important;
-    border: 1.5px solid #cbd5e1;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: clamp(8px, 1.2vw, 16px);
+  /* 5. BLOQUE INTEGRADO DE PREDICCIÓN (UN SOLO BLOQUE, 3 FILAS) */
+  .pred-unified-block {
+    grid-column: 2 / 3;
+    grid-row: 2 / 5;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     width: 100%;
+    min-height: 0;
+    min-width: clamp(96px, 7vw, 130px);
     box-sizing: border-box;
-    flex-shrink: 0;
+    overflow: hidden;
+    background: #020617;
+    border: 1.5px solid #1e293b;
+    border-radius: 8px;
   }
-
-  .stats-bar-col {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-  }
-
-  /* ESQUINA IZQUIERDA: CONTADORES ALINEADOS A SU IZQUIERDA CON MARGEN DESDE EL BORDE */
-  .stats-bar-col.col-counters {
-    justify-content: flex-start;
-    width: 100%;
-    padding-left: clamp(4px, 1vw, 12px);
-  }
-
-  /* CENTRO: PREDICCIÓN CENTRADA EN EL MEDIO */
-  .stats-bar-col.col-prediction {
-    justify-content: center;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    text-align: center;
-  }
-
-  /* ESQUINA DERECHA: PORCENTAJES ALINEADOS A SU DERECHA CON MARGEN DESDE EL BORDE */
-  .stats-bar-col.col-percentages {
-    justify-content: flex-end;
-    align-items: center;
-    width: 100%;
-    padding-right: clamp(4px, 1vw, 12px);
-  }
-
-  .stats-bar-col.col-percentages .stats-strip-pct-box {
-    margin-left: auto;
-  }
-
-  .stats-strip-counters {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-  }
-
-  .counter-item {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .bead-circle-badge {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 15px;
-    font-weight: 900;
-    color: #ffffff;
-    box-shadow: none !important;
-    position: relative;
-    user-select: none;
-  }
-
-  .counter-digit {
-    font-size: 18px;
-    font-weight: 900;
-    color: #0f172a;
-    line-height: 1;
-    min-width: 14px;
-  }
-
-  /* PREDICCIÓN (NEXT / ASK BANKER & ASK PLAYER) */
-  .pred-title {
-    font-size: 17px;
-    font-weight: 900;
-    color: #1e293b;
-    letter-spacing: 0.4px;
-    user-select: none;
-  }
-
-  .prediction-pills-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: nowrap;
-  }
-
-  .pred-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+  .theme-light .pred-unified-block {
     background: #ffffff;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 999px;
-    padding: 4px 14px 4px 8px;
+    border-color: #cbd5e1;
+  }
+
+  .pred-block-row {
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: clamp(2px, 0.4vh, 6px);
+  }
+
+  /* Líneas divisorias internas entre las 3 filas */
+  .pred-row-header,
+  .pred-row-banker {
+    border-bottom: 1.5px solid #1e293b;
+  }
+  .theme-light .pred-row-header,
+  .theme-light .pred-row-banker {
+    border-bottom: 1.5px solid #e2e8f0;
+  }
+
+  /* TEXTO NEXT EN NEGRO */
+  .pred-header-title {
+    font-size: clamp(12px, 1vw, 16px);
+    font-weight: 900;
+    color: #f8fafc;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    user-select: none;
+    line-height: 1;
+    padding: 0 clamp(8px, 1vw, 16px);
+  }
+  .theme-light .pred-header-title {
+    color: #000000; /* NEGRO EN TEMA CLARO */
+  }
+
+  /* BOTONES INTERACTIVOS (FILAS DE BANCA Y PUNTO) */
+  .pred-row-btn {
     cursor: pointer;
-    box-shadow: none !important;
+    background: transparent;
+    border: none;
+    font-family: inherit;
+    padding: 0;
     transition: all 0.15s ease;
     user-select: none;
-    line-height: 1;
-    min-height: 35px;
+  }
+
+  .pred-row-banker:hover {
+    background: rgba(239, 68, 68, 0.1);
+  }
+  .theme-light .pred-row-banker:hover {
+    background: #fef2f2;
+  }
+
+  .pred-row-player:hover {
+    background: rgba(59, 130, 246, 0.1);
+  }
+  .theme-light .pred-row-player:hover {
+    background: #eff6ff;
+  }
+
+  .pred-pill-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 0.4vw, 7px);
+    padding: 0 clamp(10px, 0.9vw, 18px);
+    width: 100%;
+    height: 100%;
     box-sizing: border-box;
-  }
-
-  .pred-pill:hover {
-    background: #f8fafc;
-    border-color: #94a3b8;
-    transform: translateY(-1px);
-  }
-
-  .pred-pill:active {
-    transform: scale(0.96);
+    white-space: nowrap;
   }
 
   .pred-badge-circle {
-    width: 25px;
-    height: 25px;
+    width: clamp(18px, 1.2vw, 23px);
+    height: clamp(18px, 1.2vw, 23px);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: clamp(10px, 0.75vw, 13px);
     font-weight: 900;
     color: #ffffff;
     box-shadow: none !important;
+    flex-shrink: 0;
   }
 
   .pred-badge-circle.b {
@@ -4606,14 +5073,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
   }
 
   /* 1. Gran Ojo (Hollow Ring) */
   .pred-symbol.pred-ring {
-    width: 14px;
-    height: 14px;
+    width: clamp(10px, 0.75vw, 13px);
+    height: clamp(10px, 0.75vw, 13px);
     border-radius: 50%;
-    border: 2.5px solid transparent;
+    border: 2px solid transparent;
     box-sizing: border-box;
   }
   .pred-symbol.pred-ring.red {
@@ -4628,8 +5096,8 @@
 
   /* 2. Camino Pequeño (Solid Dot) */
   .pred-symbol.pred-dot {
-    width: 12px;
-    height: 12px;
+    width: clamp(8px, 0.6vw, 11px);
+    height: clamp(8px, 0.6vw, 11px);
     border-radius: 50%;
   }
   .pred-symbol.pred-dot.red {
@@ -4644,8 +5112,8 @@
 
   /* 3. Cucaracha (Diagonal Slash) */
   .pred-symbol.pred-slash {
-    width: 14px;
-    height: 14px;
+    width: clamp(9px, 0.7vw, 12px);
+    height: clamp(9px, 0.7vw, 12px);
   }
   .pred-symbol.pred-slash.red {
     color: #dc2626;
@@ -4657,212 +5125,11 @@
     color: #cbd5e1;
   }
 
-  /* RESUMEN DE PORCENTAJES: EXACTO MISMO DISEÑO QUE LAS PASTILLAS DE PREDICCIÓN */
-  .stats-strip-pct-box {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: clamp(8px, 1.2vw, 14px);
-    background: #ffffff;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 999px;
-    padding: 4px 16px;
-    min-height: 35px;
-    font-size: 13.5px;
-    font-weight: 800;
-    white-space: nowrap;
-    box-shadow: none !important;
-    box-sizing: border-box;
-    line-height: 1;
-    user-select: none;
-    transition: all 0.15s ease;
-  }
-
-  .pct-tag {
-    font-weight: 800;
-    letter-spacing: 0.3px;
-    line-height: 1;
-  }
-  .pct-tag.b { color: #dc2626; }
-  .pct-tag.p { color: #2563eb; }
-  .pct-tag.t { color: #16a34a; }
-
-  /* MODO RESPONSIVE: FILA 1 (COL-12 CONTADORES) Y FILA 2 (2 COL-6 PREDICCIÓN Y PORCENTAJES) */
-  @media (max-width: 960px) {
-    .scoreboard-stats-bar {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      row-gap: clamp(8px, 1.4vh, 12px);
-      column-gap: clamp(12px, 2.5vw, 24px);
-      padding: clamp(8px, 1.4vh, 12px) clamp(20px, 4vw, 36px);
-      box-shadow: none !important;
-    }
-
-    /* FILA 1 (COL-12): CONTADORES DE JUEGO RESPETANDO MÁRGENES Y CON TAMAÑO REDUCIDO */
-    .stats-bar-col.col-counters {
-      grid-column: 1 / -1;
-      grid-row: 1;
-      justify-content: center;
-      width: 100%;
-      padding: 0 clamp(8px, 2vw, 16px);
-      box-sizing: border-box;
-    }
-
-    .stats-strip-counters {
-      width: 100%;
-      max-width: 520px;
-      justify-content: space-evenly;
-      margin: 0 auto;
-      gap: clamp(4px, 1.2vw, 10px);
-      padding: 0 4px;
-      box-sizing: border-box;
-    }
-
-    .counter-item {
-      gap: clamp(3px, 0.6vw, 6px);
-    }
-
-    /* TAMAÑO REDUCIDO EN CONTADORES PARA QUE RESPETEN MÁRGENES Y NO SE AMONTONEN */
-    .bead-circle-badge {
-      width: clamp(20px, 2.4vw, 24px);
-      height: clamp(20px, 2.4vw, 24px);
-      font-size: clamp(10px, 1.2vw, 12px);
-      box-shadow: none !important;
-    }
-
-    .counter-digit {
-      font-size: clamp(12px, 1.5vw, 14.5px);
-      min-width: 10px;
-    }
-
-    .bead-circle-badge .bead-dot {
-      width: 5.5px;
-      height: 5.5px;
-    }
-
-    /* FILA 2: 2 COL-6 (PREDICCIÓN CENTRADA EN SU COL-6 Y PORCENTAJES CENTRADOS EN SU COL-6) */
-    .stats-bar-col.col-prediction {
-      grid-column: 1;
-      grid-row: 2;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      margin: 0 auto;
-      gap: clamp(6px, 1vw, 12px);
-      padding-left: clamp(4px, 1vw, 12px);
-    }
-
-    .stats-bar-col.col-percentages {
-      grid-column: 2;
-      grid-row: 2;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      margin: 0 auto;
-      padding-right: clamp(4px, 1vw, 12px);
-    }
-
-    .stats-bar-col.col-percentages .stats-strip-pct-box {
-      margin: 0 auto;
-      box-shadow: none !important;
-    }
-  }
-
-  /* RESOLUCIONES PEQUEÑAS: PREDICCIÓN Y PORCENTAJES EN 2 COL-6 Y CONTADORES AÚN MÁS COMPACTOS */
-  @media (max-width: 580px) {
-    .scoreboard-stats-bar {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      row-gap: 6px;
-      column-gap: 8px;
-      padding: 6px clamp(12px, 3.5vw, 20px);
-      box-shadow: none !important;
-    }
-
-    .stats-bar-col.col-counters {
-      padding: 0 4px;
-    }
-
-    .stats-strip-counters {
-      width: 100%;
-      max-width: 100%;
-      justify-content: space-evenly;
-      gap: clamp(2px, 0.8vw, 6px);
-      padding: 0 2px;
-    }
-
-    .counter-item {
-      gap: 2px;
-    }
-
-    .bead-circle-badge {
-      width: clamp(18px, 4.4vw, 21px);
-      height: clamp(18px, 4.4vw, 21px);
-      font-size: clamp(9px, 2.2vw, 11px);
-      box-shadow: none !important;
-    }
-
-    .counter-digit {
-      font-size: clamp(11px, 2.6vw, 13px);
-      min-width: 8px;
-    }
-
-    .bead-circle-badge .bead-dot {
-      width: 5px;
-      height: 5px;
-    }
-
-    .pred-title {
-      font-size: clamp(11px, 1.2vw, 12.5px);
-    }
-
-    .prediction-pills-row {
-      gap: 4px;
-    }
-
-    .pred-pill {
-      padding: 2px 7px;
-      gap: 4px;
-      min-height: 28px;
-      box-shadow: none !important;
-    }
-
-    .pred-badge-circle {
-      width: 20px;
-      height: 20px;
-      font-size: 11px;
-      box-shadow: none !important;
-    }
-
-    .pred-symbol.pred-ring {
-      width: 10px;
-      height: 10px;
-      border-width: 2px;
-    }
-
-    .pred-symbol.pred-dot {
-      width: 8px;
-      height: 8px;
-    }
-
-    .pred-symbol.pred-slash {
-      width: 10px;
-      height: 10px;
-    }
-
-    .stats-strip-pct-box {
-      padding: 3px 8px;
-      gap: 6px;
-      min-height: 28px;
-      font-size: 11px;
-      margin: 0 auto;
-      box-shadow: none !important;
-    }
-  }
-
-  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA (SE AJUSTA A SU CONTENEDOR EN PANTALLAS PEQUEÑAS SIN DESBORDAR) */
+  /* PANEL OPERATIVO DE CONTROLES: SECCIÓN ESTANDARIZADA (ABARCA EL ESPACIO INFERIOR) */
   .scoreboard-footer-panel {
     background: #ffffff;
     border-radius: 16px;
-    padding: clamp(8px, 1.4vh, 18px) clamp(12px, 1.8vw, 28px);
+    padding: clamp(8px, 1.5vh, 22px) clamp(12px, 1.8vw, 28px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     border: 2.5px solid #cbd5e1;
     display: grid;
@@ -4877,8 +5144,8 @@
     width: 100%;
     max-width: 100%;
     overflow: hidden;
-    /* AJUSTE FLUIDO A SU CONTENEDOR: GRANDE EN MONITOR, ESCALA PROPORCIONAL SIN DESBORDAR EN PANTALLAS PEQUEÑAS */
-    --footer-btn-size: clamp(48px, min(8.2vw, 14.5vh), 140px);
+    /* AJUSTE FLUIDO A SU CONTENEDOR: BOTONES MÁS GRANDES Y CÓMODOS */
+    --footer-btn-size: clamp(52px, min(9vw, 17.5vh), 155px);
   }
 
   /* MODO EDICIÓN ACTIVO: Borde amarillo llamativo */
@@ -6241,12 +6508,26 @@
     color: #94a3b8;
   }
 
-  /* TEMA CLARO: PILLS ESTANDARIZADAS ZAPATO Y SESIÓN */
+  /* TEMA CLARO: PILLS ESTANDARIZADAS MESA, ZAPATO Y SESIÓN */
+  .theme-light .sb-mesa-navigator,
   .theme-light .sb-shoe-pill,
   .theme-light .sb-session-navigator {
     background: #ffffff;
     border: 1.5px solid #cbd5e1;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+
+  .theme-light .mesa-label-content {
+    color: #0f172a;
+  }
+  .theme-light .mesa-label-content:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+  .theme-light .mesa-label-content .loc-val {
+    color: #0f172a;
+  }
+  .theme-light .mesa-label-content .loc-sep {
+    color: #94a3b8;
   }
 
   .theme-light .sb-session-navigator.is-past {
@@ -6415,26 +6696,7 @@
     border: 3px solid #f59e0b !important;
     box-shadow: 0 0 20px rgba(245, 158, 11, 0.4), 0 4px 14px rgba(0, 0, 0, 0.08) !important;
   }
-  .theme-light .scoreboard-stats-bar {
-    background: #ffffff;
-    border: 2px solid #cbd5e1;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-  }
 
-  .theme-light .pred-pill {
-    background: #ffffff;
-    border: 1.5px solid #cbd5e1;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  }
-  .theme-light .pred-pill:hover {
-    background: #f1f5f9;
-    border-color: #94a3b8;
-  }
-
-  .theme-light .stats-strip-pct-box {
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-  }
 
   .theme-light .modal-backdrop {
     background: rgba(15, 23, 42, 0.5);
