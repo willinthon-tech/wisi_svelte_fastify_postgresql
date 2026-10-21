@@ -31,6 +31,7 @@
   import HerramientasView from "./views/HerramientasView.svelte";
   import ScoreboardBaccarat from "./components/ScoreboardBaccarat.svelte";
   import BaccaratMesasView from "./views/BaccaratMesasView.svelte";
+  import BaccaratSessionButton from "./components/BaccaratSessionButton.svelte";
 
   // Import CECOM Views
   import LibroView from "./views/cecom/LibroView.svelte";
@@ -1014,6 +1015,10 @@
                     Sync (Solo Windows)
                   </button>
                 {/if}
+              {/if}
+
+              {#if $currentRouteStore === 'herramientas' || $currentRouteStore === 'otros/herramientas' || $currentRouteStore.startsWith('herramientas/scoreboard-baccarat')}
+                <BaccaratSessionButton />
               {/if}
 
               {#if !isBuiltInTab($currentRouteStore) && !$currentRouteStore.startsWith('herramientas') && $currentRouteStore !== 'otros/herramientas' && $currentRoutePermissionsStore.canAdd}

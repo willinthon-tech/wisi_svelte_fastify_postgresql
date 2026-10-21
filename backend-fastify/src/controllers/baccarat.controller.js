@@ -485,10 +485,23 @@ export async function saveMesaData(req, reply) {
                   shoe_number, tie_mode, history, shoes, updated_at;
       `;
 
+      let effectiveSalaUuid = String(req.body?.sala_uuid || req.body?.sala_id || '').trim();
+      if (!effectiveSalaUuid && isPgConnected && sql) {
+        try {
+          const sessRows = await sql`
+            SELECT sala_uuid FROM record_libro_score_baccarat WHERE uuid = ${sUuidStr}::uuid LIMIT 1;
+          `;
+          if (sessRows.length > 0 && sessRows[0].sala_uuid) {
+            effectiveSalaUuid = String(sessRows[0].sala_uuid);
+          }
+        } catch (e) {}
+      }
+
       broadcastBaccaratTableUpdate({
         sessionId: sUuidStr,
         sessionUuid: sUuidStr,
-        salaId: sUuidStr,
+        salaId: effectiveSalaUuid || null,
+        salaUuid: effectiveSalaUuid || null,
         mesaId: mUuidStr,
         mesaUuid: mUuidStr,
         shoeNumber: sNumber,

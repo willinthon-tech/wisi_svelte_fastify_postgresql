@@ -17,76 +17,100 @@
   let pageSize = 10;
   let selectedIds = new Set();
 
-  // 1. Resolve Salas assigned to current user
-  $: userSalasMap = $masterUserSalasStore || {};
-  $: currentUserSalas = ($currentUserStore?.uuid || $currentUserStore?.id)
-    ? (userSalasMap[$currentUserStore.uuid || $currentUserStore.id] || [])
-    : [];
+  // 1. Resolve Salas assigned to current user (strictly tipo 1 SALAS, strictly user assigned)
+  function isTipo1Sala(sala) {
+    if (!sala) return false;
 
-  $: rawAssignedSalas = (function () {
-    const user = $currentUserStore;
-    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
-      return user.salas;
+    // Grupo UUID check:
+    // 51a3d9bc-76d3-4f08-8dd9-97c7f79ea0e3 and 55d65e8b-09b2-4164-8491-efbdd50433b6 are Galpones / Depósitos
+    const galponGrupoUuids = [
+      '51a3d9bc-76d3-4f08-8dd9-97c7f79ea0e3',
+      '55d65e8b-09b2-4164-8491-efbdd50433b6'
+    ];
+    const gUuid = sala.grupo_uuid ? String(sala.grupo_uuid).toLowerCase().trim() : '';
+    if (gUuid && galponGrupoUuids.includes(gUuid)) return false;
+
+    // Grupo Nombre check:
+    if (sala.grupo_nombre) {
+      const gn = String(sala.grupo_nombre).toLowerCase().trim();
+      if (gn.includes('galpon') || gn.includes('galpón') || gn.includes('deposito') || gn.includes('depósito')) {
+        return false;
+      }
     }
-    if ($authUserSalasStore && Array.isArray($authUserSalasStore) && $authUserSalasStore.length > 0) {
-      return $authUserSalasStore;
+
+    // Name check:
+    const nom = String(sala.nombre || sala.name || '').toLowerCase().trim();
+    if (
+      nom.includes('galpon') || 
+      nom.includes('galpón') || 
+      nom.includes('deposito') || 
+      nom.includes('depósito') || 
+      nom.includes('sótano') || 
+      nom.includes('sotano') || 
+      nom.includes('almacen') || 
+      nom.includes('almacén') || 
+      nom === 'gainer' || 
+      nom.startsWith('darien')
+    ) {
+      return false;
+    }
+
+    // Legacy fields check (if present)
+    if (sala.grupo_id !== undefined && sala.grupo_id !== null && !isNaN(Number(sala.grupo_id))) {
+      if (Number(sala.grupo_id) === 2) return false;
+    }
+    if (sala.tipo_id !== undefined && sala.tipo_id !== null && !isNaN(Number(sala.tipo_id))) {
+      if (Number(sala.tipo_id) === 2) return false;
+    }
+    if (sala.tipo !== undefined && sala.tipo !== null && !isNaN(Number(sala.tipo))) {
+      if (Number(sala.tipo) === 2) return false;
+    }
+
+    return true;
+  }
+
+  function getAssignedSalaUuids(user, authSalas, salasMap) {
+    if (!user) return [];
+    if (Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas.map(s => typeof s === 'object' ? s.uuid : s).filter(Boolean).map(String);
+    }
+    const uUuid = user.uuid ? String(user.uuid) : null;
+    if (uUuid && salasMap && Array.isArray(salasMap[uUuid]) && salasMap[uUuid].length > 0) {
+      return salasMap[uUuid].map(s => typeof s === 'object' ? s.uuid : s).filter(Boolean).map(String);
+    }
+    if (Array.isArray(authSalas) && authSalas.length > 0) {
+      return authSalas.map(s => typeof s === 'object' ? s.uuid : s).filter(Boolean).map(String);
     }
     return [];
-  })();
+  }
 
-  $: assignedSalaIds = (currentUserSalas.length > 0
-    ? currentUserSalas
-    : rawAssignedSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
-  ).filter(Boolean).map(String);
+  $: assignedSalaUuids = getAssignedSalaUuids($currentUserStore, $authUserSalasStore, $masterUserSalasStore);
 
   $: detailedSalas = (function () {
     const allSalas = $masterSalasStore || [];
-    let list = [];
-    if (assignedSalaIds.length === 0) {
-      list = allSalas.length > 0 ? allSalas : (rawAssignedSalas.length > 0 ? rawAssignedSalas : [{ id: 1, nombre: 'Sala Principal', grupo_id: 1 }]);
-    } else {
-      list = assignedSalaIds.map((id) => {
-        const found = allSalas.find((s) => String(s.uuid || s.id) === String(id));
-        const fallback = rawAssignedSalas.find((s) => typeof s === 'object' && String(s.uuid || s.id) === String(id));
-        return found || fallback || { id, uuid: id, nombre: `Sala #${String(id).slice(0, 8)}`, grupo_id: 1 };
-      });
+    const rawUserSalas = ($currentUserStore && Array.isArray($currentUserStore.salas)) ? $currentUserStore.salas : [];
+
+    if (assignedSalaUuids.length === 0) {
+      return [];
     }
 
-    // Filtrar estrictamente solo salas tipo 1 (tipo SALA, no tipo GALPÓN)
-    return list.filter((sala) => {
-      // 1. Si tiene grupo_id: 1 = SALA, 2 = GALPÓN
-      if (sala.grupo_id !== undefined && sala.grupo_id !== null) {
-        if (Number(sala.grupo_id) === 2 || Number(sala.grupo_id) !== 1) return false;
-      }
-      // 2. Si tiene grupo_nombre
-      if (sala.grupo_nombre) {
-        const gn = String(sala.grupo_nombre).toLowerCase().trim();
-        if (gn.includes('galpon') || gn.includes('galpón')) return false;
-      }
-      // 3. Si tiene tipo_id o tipo
-      if (sala.tipo_id !== undefined && sala.tipo_id !== null) {
-        if (Number(sala.tipo_id) === 2 || Number(sala.tipo_id) !== 1) return false;
-      }
-      if (sala.tipo !== undefined && sala.tipo !== null) {
-        const t = String(sala.tipo).toLowerCase().trim();
-        if (t === '2' || t.includes('galpon') || t.includes('galpón')) return false;
-      }
-      // 4. Validación por nombre de instalación (excluir Galpon / Galpón)
-      const nom = String(sala.nombre || sala.name || '').toLowerCase().trim();
-      if (nom.includes('galpon') || nom.includes('galpón')) {
-        return false;
-      }
-      return true;
-    });
+    const candidateSalas = assignedSalaUuids.map(uuid => {
+      const fromMaster = allSalas.find(s => String(s.uuid) === String(uuid));
+      if (fromMaster) return fromMaster;
+      const fromUser = rawUserSalas.find(s => typeof s === 'object' && String(s.uuid) === String(uuid));
+      return fromUser || null;
+    }).filter(Boolean);
+
+    return candidateSalas.filter(isTipo1Sala);
   })();
 
   // 2. Generate a row per assigned sala with "Scoreboard Baccarat"
   $: tools = detailedSalas.map((sala, idx) => ({
     id: idx + 1,
-    uuid: `tool-sb-${sala.uuid || sala.id || idx + 1}`,
+    uuid: `tool-sb-${sala.uuid || idx + 1}`,
     title: 'Scoreboard Baccarat',
-    salaId: sala.uuid || sala.id,
-    salaName: sala.nombre || sala.name || `Sala ${sala.id || idx + 1}`,
+    salaId: sala.uuid,
+    salaName: sala.nombre || sala.name || `Sala ${idx + 1}`,
     category: 'Mesas en Vivo',
     salaObj: sala
   }));
@@ -260,7 +284,7 @@
                   </span>
                 </td>
 
-                <!-- Acciones: Botón Jugar -->
+                <!-- Acciones: Botón Ver Mesas -->
                 <td style="padding: 10px 14px; text-align: right; white-space: nowrap;">
                   <div style="display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px;">
                     {#if canView}
@@ -268,9 +292,9 @@
                         type="button"
                         on:click={() => openGame(item.salaObj)}
                         class="btn-flow btn-action-jugar"
-                        title="Scoreboard Baccarat para {item.salaName}"
+                        title="Ver mesas de Baccarat para {item.salaName}"
                       >
-                        Jugar
+                        Ver Mesas
                       </button>
                     {/if}
                   </div>

@@ -89,6 +89,10 @@ export function normalizeModuleRoute(route) {
     return 'cecom/libro';
   }
 
+  if (clean.startsWith('herramientas') || clean.startsWith('otros/herramientas')) {
+    return 'herramientas';
+  }
+
   if (ROUTE_ALIASES[clean]) {
     return ROUTE_ALIASES[clean];
   }

@@ -84,6 +84,9 @@
   // Local overrides for dynamically selected sala and mesa
   let localSalaId = null;
   let localMesaId = null;
+  let isSalaModalOpen = false;
+  let overviewMesasData = {};
+  let isOverviewLoading = false;
 
   // Selected Sala Context
   $: currentSalaId = localSalaId || salaId || (() => {
@@ -99,7 +102,7 @@
       if (s) return s;
     }
     return null;
-  })();
+  })() || (detailedSalas.length > 0 ? String(detailedSalas[0].uuid || detailedSalas[0].id) : null);
 
   // Selected Mesa Context
   $: currentMesaId = localMesaId || mesaId || (() => {
@@ -172,6 +175,51 @@
     : rawAssignedSalas.map(s => typeof s === 'object' ? (s.uuid || s.id) : s)
   ).filter(Boolean).map(String);
 
+  function isTipo1Sala(sala) {
+    if (!sala) return false;
+    const galponGrupoUuids = [
+      '51a3d9bc-76d3-4f08-8dd9-97c7f79ea0e3',
+      '55d65e8b-09b2-4164-8491-efbdd50433b6'
+    ];
+    const gUuid = sala.grupo_uuid ? String(sala.grupo_uuid).toLowerCase().trim() : '';
+    if (gUuid && galponGrupoUuids.includes(gUuid)) return false;
+
+    if (sala.grupo_nombre) {
+      const gn = String(sala.grupo_nombre).toLowerCase().trim();
+      if (gn.includes('galpon') || gn.includes('galpón') || gn.includes('deposito') || gn.includes('depósito')) {
+        return false;
+      }
+    }
+
+    const nom = String(sala.nombre || sala.name || '').toLowerCase().trim();
+    if (
+      nom.includes('galpon') || 
+      nom.includes('galpón') || 
+      nom.includes('deposito') || 
+      nom.includes('depósito') || 
+      nom.includes('sótano') || 
+      nom.includes('sotano') || 
+      nom.includes('almacen') || 
+      nom.includes('almacén') || 
+      nom === 'gainer' || 
+      nom.startsWith('darien')
+    ) {
+      return false;
+    }
+
+    if (sala.grupo_id !== undefined && sala.grupo_id !== null && !isNaN(Number(sala.grupo_id))) {
+      if (Number(sala.grupo_id) === 2) return false;
+    }
+    if (sala.tipo_id !== undefined && sala.tipo_id !== null && !isNaN(Number(sala.tipo_id))) {
+      if (Number(sala.tipo_id) === 2) return false;
+    }
+    if (sala.tipo !== undefined && sala.tipo !== null && !isNaN(Number(sala.tipo))) {
+      if (Number(sala.tipo) === 2) return false;
+    }
+
+    return true;
+  }
+
   $: detailedSalas = (function () {
     const allSalas = $masterSalasStore || [];
     let list = [];
@@ -181,32 +229,36 @@
       list = assignedSalaIds.map((id) => {
         const found = allSalas.find((s) => String(s.uuid || s.id) === String(id));
         const fallback = rawAssignedSalas.find((s) => typeof s === 'object' && String(s.uuid || s.id) === String(id));
-        return found || fallback || { id, uuid: id, nombre: `Sala #${String(id).slice(0, 8)}`, grupo_id: 1 };
-      });
+        return found || fallback || null;
+      }).filter(Boolean);
     }
 
-    // Filtrar estrictamente solo salas tipo 1 (tipo SALA, no tipo GALPÓN)
-    return list.filter((sala) => {
-      if (sala.grupo_id !== undefined && sala.grupo_id !== null) {
-        if (Number(sala.grupo_id) === 2 || Number(sala.grupo_id) !== 1) return false;
-      }
-      if (sala.grupo_nombre) {
-        const gn = String(sala.grupo_nombre).toLowerCase().trim();
-        if (gn.includes('galpon') || gn.includes('galpón')) return false;
-      }
-      if (sala.tipo_id !== undefined && sala.tipo_id !== null) {
-        if (Number(sala.tipo_id) === 2 || Number(sala.tipo_id) !== 1) return false;
-      }
-      if (sala.tipo !== undefined && sala.tipo !== null) {
-        const t = String(sala.tipo).toLowerCase().trim();
-        if (t === '2' || t.includes('galpon') || t.includes('galpón')) return false;
-      }
-      const nom = String(sala.nombre || sala.name || '').toLowerCase().trim();
-      if (nom.includes('galpon') || nom.includes('galpón')) {
-        return false;
-      }
-      return true;
+    return list.filter(isTipo1Sala);
+  })();
+
+  $: currentSalaMesas = (function () {
+    const sId = String(currentSalaUuid || currentSalaId || '');
+    if (!sId) return [];
+    const allMesas = ($masterMesasStore || []).filter(m => (m.active ?? 1) === 1);
+    const forThisSala = allMesas.filter(m => String(m.sala_uuid || m.sala_id || '') === sId);
+
+    const bacc = forThisSala.filter(m => {
+      const jName = String(m.juego_nombre || '').toLowerCase();
+      const mName = String(m.nombre || '').toLowerCase();
+      const jObj = ($masterJuegosStore || []).find(j => String(j.uuid || j.id) === String(m.juego_uuid || m.juego_id));
+      const jFoundName = String(jObj?.nombre || '').toLowerCase();
+
+      return jName.includes('baccarat') || jName.includes('punto') ||
+             mName.includes('baccarat') || mName.includes('punto') ||
+             jFoundName.includes('baccarat') || jFoundName.includes('punto');
     });
+
+    if (bacc.length > 0) return bacc;
+    if (forThisSala.length > 0) return forThisSala;
+    return [
+      { id: 1, uuid: 'mesa-01', nombre: 'Mesa 01 - Baccarat', sala_uuid: sId },
+      { id: 2, uuid: 'mesa-02', nombre: 'Mesa 02 - Baccarat VIP', sala_uuid: sId }
+    ];
   })();
 
   // 2. Mesas grouped by room for the user assigned rooms
@@ -308,31 +360,40 @@
       saveShoe(true);
     }
 
-    localSalaId = targetSala;
-    localMesaId = targetMesa;
-    selectedSalaStore.set(targetSala);
+    localSalaId = String(targetSala);
+    currentSalaId = String(targetSala);
+    localMesaId = String(targetMesa);
+    currentMesaId = String(targetMesa);
+    selectedSalaStore.set(String(targetSala));
 
     const monitorSuffix = isMonitorMode ? '/monitor' : '';
+    if (typeof window !== 'undefined') {
+      window.location.hash = `#/herramientas/scoreboard-baccarat/${encodeURIComponent(targetSala)}/${encodeURIComponent(targetMesa)}${monitorSuffix}`;
+    }
     navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(targetSala)}/${encodeURIComponent(targetMesa)}${monitorSuffix}`);
 
     isOptionsModalOpen = false;
   }
 
+  $: currentMesaIndexInSala = (function () {
+    if (!currentMesaId && !currentMesaUuid) return -1;
+    const target = String(currentMesaUuid || currentMesaId || '');
+    return currentSalaMesas.findIndex(m => String(m.uuid || m.id) === target);
+  })();
+
   function goToPrevMesa() {
-    if (allSelectableMesas.length <= 1 || currentMesaIndex <= 0) return;
-    const target = allSelectableMesas[currentMesaIndex - 1];
+    if (currentSalaMesas.length <= 1 || currentMesaIndexInSala <= 0) return;
+    const target = currentSalaMesas[currentMesaIndexInSala - 1];
     if (target) {
-      switchToMesa(target.salaId, target.mesaId);
+      switchToMesa(currentSalaUuid, target.uuid || target.id);
     }
   }
 
   function goToNextMesa() {
-    if (allSelectableMesas.length <= 1) return;
-    const nextIdx = currentMesaIndex >= 0 ? currentMesaIndex + 1 : 0;
-    if (nextIdx >= allSelectableMesas.length) return;
-    const target = allSelectableMesas[nextIdx];
+    if (currentSalaMesas.length <= 1 || currentMesaIndexInSala < 0 || currentMesaIndexInSala >= currentSalaMesas.length - 1) return;
+    const target = currentSalaMesas[currentMesaIndexInSala + 1];
     if (target) {
-      switchToMesa(target.salaId, target.mesaId);
+      switchToMesa(currentSalaUuid, target.uuid || target.id);
     }
   }
 
@@ -365,14 +426,16 @@
     return { canView: false, canAdd: false, canEdit: false, canDelete: false };
   })();
 
-  $: canViewPerm = Boolean(modulePermissions?.canView ?? false);
-  $: canAddPerm = Boolean(modulePermissions?.canAdd ?? false);
-  $: canEditPerm = Boolean(modulePermissions?.canEdit ?? false);
-  $: canDeletePerm = Boolean(modulePermissions?.canDelete ?? false);
+  $: isAdmin = Boolean(
+    $currentUserStore?.is_admin === true || 
+    $currentUserStore?.rol === 'admin' ||
+    ['admin', 'willinthon'].includes(($currentUserStore?.usuario || '').toLowerCase())
+  );
 
-  // En Baccarat, para habilitar la botonera (operar/jugar) se requiere OBLIGATORIAMENTE tener todos los permisos activos: VER, AGREGAR, EDITAR, ELIMINAR.
-  // Si solo tiene VER (o le falta alguno de los 4), queda en modo observador con la botonera deshabilitada.
-  $: hasFullBaccaratPerms = Boolean(canViewPerm && canAddPerm && canEditPerm && canDeletePerm);
+  $: canViewPerm = Boolean(isAdmin || modulePermissions?.canView);
+  $: canAddPerm = Boolean(isAdmin || modulePermissions?.canAdd);
+  $: canEditPerm = Boolean(isAdmin || modulePermissions?.canEdit);
+  $: canDeletePerm = Boolean(isAdmin || modulePermissions?.canDelete);
 
   // Modo Monitor (Exclusivo visual para pantallas/TV: oculta la botonera completa y maximiza cuadrillas)
   function checkRouteHasMonitor() {
@@ -539,9 +602,9 @@
   let history = []; // [{ id, winner: 'PUNTO'|'BANCA'|'EMPATE', bPair, pPair, natural, special, time }]
 
   $: isObserverMode = (() => {
-    // 1. Permisología estricta de Baccarat: Para habilitar la botonera se requiere tener TODOS los permisos (VER, AGREGAR, EDITAR, ELIMINAR).
-    // Si solo tiene VER (o le falta cualquiera de los otros 3 permisos), la botonera queda en modo observador (deshabilitada).
-    if (!hasFullBaccaratPerms) {
+    // 1. Permisología de Baccarat: Para hacer jugadas se requiere tener permiso de EDITAR (o ser admin).
+    // Si no tiene permiso de EDITAR (ej: pitplc que solo tiene VER, AGREGAR, ELIMINAR), la botonera queda en modo observador.
+    if (!canEditPerm) {
       return true;
     }
 
@@ -579,6 +642,8 @@
   $: maxShoeNumber = shoes.length > 0 ? Math.max(...shoes.map(s => Number(s.shoe_number) || 1), 1) : 1;
   $: isViewingPastShoe = activeShoeNumber < maxShoeNumber;
   $: isCurrentShoeActive = !isObserverMode && hasSelectedMesa && isLatestSession && !isViewingPastShoe;
+  $: canCreateNewShoe = (canEditPerm || canAddPerm) && isLatestSession && !isViewingPastShoe && history.length > 0;
+  $: canDeleteCurrentEmptyShoe = (canDeletePerm || canEditPerm) && isLatestSession && !isViewingPastShoe && activeShoeNumber > 1 && history.length === 0;
 
   // Keypad Staging Modifiers & Score
   let activePPair = false;
@@ -759,7 +824,7 @@
       );
 
       if (Array.isArray(local) && local.length > 0) {
-        sessions = local;
+        sessions = [...local].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || '') || (a.created_at || '').localeCompare(b.created_at || ''));
         if (selectedSessionIndex === -1 || selectedSessionIndex >= sessions.length) {
           selectedSessionIndex = sessions.length - 1;
         }
@@ -819,7 +884,11 @@
           const activeSess = sessions[selectedSessionIndex];
           if (activeSess) {
             activeSessionId = activeSess.uuid || activeSess.id;
-            await loadMesaDataForSession(activeSessionId, currentMesaUuid);
+            if (hasSelectedMesa && currentMesaUuid) {
+              await loadMesaDataForSession(activeSessionId, currentMesaUuid);
+            } else {
+              await loadOverviewForSala(sUuid, activeSessionId);
+            }
           }
           return;
         }
@@ -927,6 +996,307 @@
     }
   }
 
+  async function loadOverviewForSala(sUuid, sessUuid, isSilent = false) {
+    if (!sUuid) return;
+    try {
+      if (!isSilent) isOverviewLoading = true;
+      const strSessId = sessUuid ? String(sessUuid) : '';
+      const strSalaId = String(sUuid);
+
+      let dataMap = {};
+
+      // 1. Cargar localmente de IndexedDB si hay sesión activa
+      if (strSessId) {
+        try {
+          const localRecords = await getLocalItems(
+            'record_libro_score_baccarat_mesa',
+            item => String(item.record_libro_score_baccarat_uuid || item.session_uuid || item.session_id) === strSessId
+          );
+
+          (localRecords || []).forEach(rec => {
+            const mUuid = String(rec.mesa_uuid || rec.mesa_id || '');
+            if (mUuid) {
+              const sArr = Array.isArray(rec.shoes) && rec.shoes.length > 0
+                ? rec.shoes
+                : [{ shoe_number: rec.shoe_number || 1, history: rec.history || [], tie_mode: rec.tie_mode || 'slash' }];
+              const prevMState = overviewMesasData[mUuid] || {};
+              const isHistoric = Boolean(prevMState.isViewingHistoric) ||
+                (prevMState.activeShoeIndex !== undefined && prevMState.activeShoeIndex < (prevMState.shoes?.length || 1) - 1);
+              let activeIdx;
+              if (isHistoric) {
+                const targetShoeNum = prevMState.viewedShoeNumber ?? prevMState.shoes?.[prevMState.activeShoeIndex]?.shoe_number;
+                const foundIdx = targetShoeNum !== undefined ? sArr.findIndex(s => s.shoe_number === targetShoeNum) : -1;
+                activeIdx = foundIdx >= 0 ? foundIdx : Math.min(prevMState.activeShoeIndex ?? 0, sArr.length - 1);
+              } else {
+                activeIdx = (rec.shoe_number !== undefined && rec.shoe_number !== null)
+                  ? sArr.findIndex(s => s.shoe_number === rec.shoe_number)
+                  : sArr.length - 1;
+              }
+              if (activeIdx < 0) activeIdx = sArr.length - 1;
+
+              dataMap[mUuid] = {
+                shoes: sArr,
+                activeShoeIndex: activeIdx,
+                viewedShoeNumber: sArr[activeIdx]?.shoe_number,
+                isViewingHistoric: isHistoric && activeIdx < sArr.length - 1,
+                tieMode: rec.tie_mode || prevMState.tieMode || 'slash'
+              };
+            }
+          });
+        } catch (e) {
+          console.warn('Error leyendo overview local de IndexedDB:', e);
+        }
+      }
+
+      // Rellenar mesas que no tengan registro local aún (o leer de localStorage)
+      currentSalaMesas.forEach(m => {
+        const mUuid = String(m.uuid || m.id);
+        if (!dataMap[mUuid]) {
+          let fallbackState = null;
+          try {
+            if (typeof localStorage !== 'undefined' && strSessId) {
+              const raw = localStorage.getItem(`wisi_baccarat_shoe_v3_${strSalaId}_${mUuid}_sess_${strSessId}`);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && Array.isArray(parsed.shoes) && parsed.shoes.length > 0) {
+                  const prevMState = overviewMesasData[mUuid] || {};
+                  const isHistoric = Boolean(prevMState.isViewingHistoric) ||
+                    (prevMState.activeShoeIndex !== undefined && prevMState.activeShoeIndex < (prevMState.shoes?.length || 1) - 1);
+                  let activeIdx;
+                  if (isHistoric) {
+                    const targetShoeNum = prevMState.viewedShoeNumber ?? prevMState.shoes?.[prevMState.activeShoeIndex]?.shoe_number;
+                    const foundIdx = targetShoeNum !== undefined ? parsed.shoes.findIndex(s => s.shoe_number === targetShoeNum) : -1;
+                    activeIdx = foundIdx >= 0 ? foundIdx : Math.min(prevMState.activeShoeIndex ?? 0, parsed.shoes.length - 1);
+                  } else {
+                    activeIdx = parsed.shoeNumber ? parsed.shoes.findIndex(s => s.shoe_number === parsed.shoeNumber) : parsed.shoes.length - 1;
+                  }
+                  if (activeIdx < 0) activeIdx = parsed.shoes.length - 1;
+
+                  fallbackState = {
+                    shoes: parsed.shoes,
+                    activeShoeIndex: activeIdx,
+                    viewedShoeNumber: parsed.shoes[activeIdx]?.shoe_number,
+                    isViewingHistoric: isHistoric && activeIdx < parsed.shoes.length - 1,
+                    tieMode: parsed.tieMode || prevMState.tieMode || 'slash'
+                  };
+                }
+              }
+            }
+          } catch (e) {}
+
+          dataMap[mUuid] = fallbackState || {
+            shoes: [{ shoe_number: 1, history: [], tie_mode: 'slash' }],
+            activeShoeIndex: 0,
+            viewedShoeNumber: 1,
+            isViewingHistoric: false,
+            tieMode: 'slash'
+          };
+        }
+      });
+
+      overviewMesasData = { ...dataMap };
+
+      // 2. Sincronizar en segundo plano con el backend
+      if (strSessId) {
+        try {
+          const promises = currentSalaMesas.map(async (m) => {
+            const mUuid = String(m.uuid || m.id);
+            try {
+              const res = await fetch(toBackendUrl(`/api/baccarat/mesa-data?record_libro_score_baccarat_uuid=${encodeURIComponent(strSessId)}&mesa_uuid=${encodeURIComponent(mUuid)}&session_id=${encodeURIComponent(strSessId)}&mesa_id=${encodeURIComponent(mUuid)}`));
+              if (res.ok) {
+                const json = await res.json();
+                if (json && json.success && json.data) {
+                  const sArr = Array.isArray(json.data.shoes) && json.data.shoes.length > 0
+                    ? json.data.shoes
+                    : [{ shoe_number: json.data.shoe_number || 1, history: json.data.history || [], tie_mode: json.data.tie_mode || 'slash' }];
+                  return { mUuid, shoes: sArr, tieMode: json.data.tie_mode || 'slash', shoeNumber: json.data.shoe_number || 1 };
+                }
+              }
+            } catch (e) {}
+            return null;
+          });
+
+          const results = await Promise.all(promises);
+          let updated = false;
+          results.filter(Boolean).forEach(r => {
+            if (r && r.mUuid) {
+              const prevMState = overviewMesasData[r.mUuid] || {};
+              const isHistoric = Boolean(prevMState.isViewingHistoric) ||
+                (prevMState.activeShoeIndex !== undefined && prevMState.activeShoeIndex < (prevMState.shoes?.length || 1) - 1);
+              let activeIdx;
+              if (isHistoric) {
+                const targetShoeNum = prevMState.viewedShoeNumber ?? prevMState.shoes?.[prevMState.activeShoeIndex]?.shoe_number;
+                const foundIdx = targetShoeNum !== undefined ? r.shoes.findIndex(s => s.shoe_number === targetShoeNum) : -1;
+                activeIdx = foundIdx >= 0 ? foundIdx : Math.min(prevMState.activeShoeIndex ?? 0, r.shoes.length - 1);
+              } else {
+                activeIdx = (r.shoeNumber !== undefined && r.shoeNumber !== null)
+                  ? r.shoes.findIndex(s => s.shoe_number === r.shoeNumber)
+                  : r.shoes.length - 1;
+              }
+              if (activeIdx < 0) activeIdx = r.shoes.length - 1;
+
+              overviewMesasData[r.mUuid] = {
+                shoes: r.shoes,
+                activeShoeIndex: activeIdx,
+                viewedShoeNumber: r.shoes[activeIdx]?.shoe_number,
+                isViewingHistoric: isHistoric && activeIdx < r.shoes.length - 1,
+                tieMode: r.tieMode || prevMState.tieMode || 'slash'
+              };
+              updated = true;
+            }
+          });
+          if (updated) {
+            overviewMesasData = { ...overviewMesasData };
+          }
+        } catch (e) {
+          console.warn('Error syncing overview with backend:', e);
+        }
+      }
+    } catch (err) {
+      console.error('Error general cargando overview de mesas:', err);
+    } finally {
+      if (!isSilent) isOverviewLoading = false;
+    }
+  }
+
+  // Reactive trigger para cargar el overview cuando estamos en modo overview
+  let lastOverviewKey = '';
+  let prevHasSelectedMesa = false;
+  $: {
+    if (hasSelectedMesa) {
+      prevHasSelectedMesa = true;
+      lastOverviewKey = '';
+    } else {
+      if (prevHasSelectedMesa) {
+        prevHasSelectedMesa = false;
+        lastOverviewKey = '';
+      }
+      if (currentSalaUuid && (currentSession?.uuid || sessions.length === 0)) {
+        const sessUuid = currentSession?.uuid || 'none';
+        const key = `${currentSalaUuid}_${sessUuid}_${currentSalaMesas.length}`;
+        if (key !== lastOverviewKey) {
+          lastOverviewKey = key;
+          loadOverviewForSala(currentSalaUuid, currentSession?.uuid);
+        }
+      }
+    }
+  }
+
+  function stepShoeForMesa(mUuid, delta) {
+    if (!overviewMesasData[mUuid]) return;
+    const mState = overviewMesasData[mUuid];
+    const shoes = mState.shoes || [];
+    if (shoes.length <= 1) return;
+    const currentIdx = mState.activeShoeIndex ?? (shoes.length - 1);
+    const newIdx = Math.min(Math.max(0, currentIdx + delta), shoes.length - 1);
+    const targetShoe = shoes[newIdx];
+    const isAtLast = (newIdx === shoes.length - 1);
+    overviewMesasData[mUuid] = {
+      ...mState,
+      activeShoeIndex: newIdx,
+      viewedShoeNumber: targetShoe?.shoe_number,
+      isViewingHistoric: !isAtLast
+    };
+    overviewMesasData = { ...overviewMesasData };
+  }
+
+  function toggleTieModeForMesa(mUuid) {
+    playSound('click');
+    if (!overviewMesasData[mUuid]) return;
+    const mState = overviewMesasData[mUuid];
+    const shoes = mState.shoes || [];
+    const currentIdx = mState.activeShoeIndex ?? (shoes.length - 1);
+    const currentShoe = shoes[currentIdx] || {};
+    const curMode = currentShoe.tie_mode || mState.tieMode || 'slash';
+    const nextMode = curMode === 'slash' ? 'circle' : 'slash';
+
+    if (shoes[currentIdx]) {
+      shoes[currentIdx].tie_mode = nextMode;
+    }
+
+    overviewMesasData[mUuid] = {
+      ...mState,
+      tieMode: nextMode,
+      shoes: [...shoes]
+    };
+    overviewMesasData = { ...overviewMesasData };
+
+    if (String(currentMesaUuid || currentMesaId) === String(mUuid)) {
+      tieMode = nextMode;
+    }
+
+    const strSessId = sessionUuid ? String(sessionUuid) : '';
+    const strSalaId = currentSalaUuid ? String(currentSalaUuid) : '';
+    if (strSessId && strSalaId) {
+      try {
+        localStorage.setItem(`wisi_baccarat_tie_mode_${strSalaId}_${mUuid}`, nextMode);
+      } catch (e) {}
+
+      upsertLocalItem('record_libro_score_baccarat_mesa', {
+        record_libro_score_baccarat_uuid: strSessId,
+        session_uuid: strSessId,
+        session_id: strSessId,
+        sala_uuid: strSalaId,
+        sala_id: strSalaId,
+        mesa_uuid: String(mUuid),
+        mesa_id: String(mUuid),
+        shoes: shoes,
+        shoe_number: shoes[currentIdx]?.shoe_number || (currentIdx + 1),
+        history: shoes[currentIdx]?.history || [],
+        tie_mode: nextMode,
+        updated_at: new Date().toISOString()
+      }).catch(() => {});
+    }
+  }
+
+  function goToPrevSala() {
+    if (!detailedSalas || detailedSalas.length <= 1) return;
+    const currentIdx = detailedSalas.findIndex(s => String(s.uuid || s.id) === String(currentSalaUuid));
+    const nextIdx = (currentIdx <= 0) ? detailedSalas.length - 1 : currentIdx - 1;
+    const targetSala = detailedSalas[nextIdx];
+    if (targetSala) {
+      selectSalaFromModal(targetSala);
+    }
+  }
+
+  function goToNextSala() {
+    if (!detailedSalas || detailedSalas.length <= 1) return;
+    const currentIdx = detailedSalas.findIndex(s => String(s.uuid || s.id) === String(currentSalaUuid));
+    const nextIdx = (currentIdx >= detailedSalas.length - 1 || currentIdx < 0) ? 0 : currentIdx + 1;
+    const targetSala = detailedSalas[nextIdx];
+    if (targetSala) {
+      selectSalaFromModal(targetSala);
+    }
+  }
+
+  function selectSalaFromModal(sala) {
+    if (!sala) return;
+    const sUuid = String(sala.uuid || sala.id);
+    localSalaId = sUuid;
+    currentSalaId = sUuid;
+    selectedSalaStore.set(sUuid);
+    isSalaModalOpen = false;
+    if (typeof window !== 'undefined') {
+      window.location.hash = `#/herramientas/scoreboard-baccarat/${encodeURIComponent(sUuid)}`;
+    }
+    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(sUuid)}`);
+    fetchSessions(sUuid);
+  }
+
+  function handleBackToOverview() {
+    if (isCurrentShoeActive) {
+      saveShoe(true);
+    }
+    localMesaId = null;
+    mesaId = null;
+    const sUuid = String(currentSalaUuid || currentSalaId || '');
+    if (typeof window !== 'undefined') {
+      window.location.hash = `#/herramientas/scoreboard-baccarat/${encodeURIComponent(sUuid)}`;
+    }
+    navigateToRoute(`herramientas/scoreboard-baccarat/${encodeURIComponent(sUuid)}`);
+    loadOverviewForSala(sUuid, currentSession?.uuid);
+  }
+
   async function goToPrevSession() {
     if (selectedSessionIndex > 0 && !isSessionsLoading) {
       // Guardar el zapato actual antes de cambiar de sesión
@@ -937,7 +1307,11 @@
       const sess = sessions[selectedSessionIndex];
       if (sess) {
         activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
-        await loadMesaDataForSession(activeSessionId, currentMesaUuid);
+        if (hasSelectedMesa) {
+          await loadMesaDataForSession(activeSessionId, currentMesaUuid);
+        } else {
+          await loadOverviewForSala(currentSalaUuid, activeSessionId);
+        }
       }
     }
   }
@@ -951,49 +1325,113 @@
       const sess = sessions[selectedSessionIndex];
       if (sess) {
         activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
-        await loadMesaDataForSession(activeSessionId, currentMesaUuid);
+        if (hasSelectedMesa) {
+          await loadMesaDataForSession(activeSessionId, currentMesaUuid);
+        } else {
+          await loadOverviewForSala(currentSalaUuid, activeSessionId);
+        }
       }
     }
   }
 
-  async function handleCreateNewSession() {
-    if (!currentSalaUuid || isSessionsLoading || !isLatestSession) return;
+  let isSessionModalOpen = false;
+  let newSessionInputDate = '';
+
+  function openSessionModal() {
+    newSessionInputDate = nextSessionDateStr || getTodayStr();
+    isSessionModalOpen = true;
+  }
+
+  async function selectSessionFromModal(index) {
+    if (index < 0 || index >= sessions.length) return;
+    if (isCurrentShoeActive) {
+      saveShoe(true);
+    }
+    selectedSessionIndex = index;
+    const sess = sessions[selectedSessionIndex];
+    if (sess) {
+      activeSessionId = sess.uuid || (sess.id ? String(sess.id) : null);
+      if (hasSelectedMesa) {
+        await loadMesaDataForSession(activeSessionId, currentMesaUuid);
+      } else {
+        await loadOverviewForSala(currentSalaUuid, activeSessionId);
+      }
+    }
+    isSessionModalOpen = false;
+  }
+
+  async function handleCreateNewSession(customDate = null) {
+    if (!canAddPerm) {
+      showFeedback('Requiere permiso de AGREGAR para crear sesiones');
+      return;
+    }
+    if (!currentSalaUuid || isSessionsLoading) return;
     playSound('click');
     try {
       isSessionsLoading = true;
-      // Guardar la sesión y zapato actuales antes de crear la nueva sesión
-      saveShoe(true);
+      if (isCurrentShoeActive) {
+        saveShoe(true);
+      }
 
-      const targetFecha = nextSessionDateStr || getTodayStr();
+      const targetFecha = (customDate || newSessionInputDate || nextSessionDateStr || getTodayStr()).trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(targetFecha)) {
+        showFeedback('Formato de fecha inválido (debe ser AAAA-MM-DD)');
+        return;
+      }
+      const alreadyExists = sessions.some(s => s.fecha === targetFecha);
+      if (alreadyExists) {
+        showFeedback(`Ya existe una sesión para el ${targetFecha}`);
+        return;
+      }
+
       const clientGeneratedUuid = generateSafeUuid();
-      const res = await fetch(toBackendUrl('/api/baccarat/sessions'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let newSession = null;
+
+      try {
+        const res = await fetch(toBackendUrl('/api/baccarat/sessions'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sala_uuid: currentSalaUuid,
+            sala_id: currentSalaUuid,
+            fecha: targetFecha,
+            uuid: clientGeneratedUuid
+          })
+        });
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json && json.success && json.data) {
+            newSession = json.data;
+          }
+        }
+      } catch (e) {
+        console.warn('Backend no disponible para crear sesión, procediendo en local:', e);
+      }
+
+      if (!newSession) {
+        newSession = {
+          uuid: clientGeneratedUuid,
           sala_uuid: currentSalaUuid,
           sala_id: currentSalaUuid,
           fecha: targetFecha,
-          uuid: clientGeneratedUuid
-        })
-      });
-      let json = null;
-      try {
-        json = await res.json();
-      } catch (err) {
-        console.error('Error parseando respuesta de nueva sesión:', err);
+          estado: 'abierta',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
       }
 
-      if (res.ok && json && json.success && json.data) {
-        const newSession = json.data;
+      // Guardar en la base de datos interna local (IndexedDB)
+      await upsertLocalItem('record_libro_score_baccarat', newSession);
 
-        // Guardar en la base de datos interna local (IndexedDB)
-        await upsertLocalItem('record_libro_score_baccarat', newSession);
+      // Re-ordenar cronológicamente las sesiones
+      sessions = [...sessions.filter(s => s.uuid !== newSession.uuid), newSession].sort(
+        (a, b) => (a.fecha || '').localeCompare(b.fecha || '') || (a.created_at || '').localeCompare(b.created_at || '')
+      );
+      selectedSessionIndex = sessions.findIndex(s => String(s.uuid) === String(newSession.uuid));
+      if (selectedSessionIndex === -1) selectedSessionIndex = sessions.length - 1;
+      activeSessionId = newSession.uuid || newSession.id;
 
-        sessions = [...sessions, newSession];
-        selectedSessionIndex = sessions.length - 1;
-        activeSessionId = newSession.uuid || newSession.id;
-
-        // Inicializar mesa limpia EXCLUSIVAMENTE para la nueva sesión
+      if (hasSelectedMesa) {
         shoeNumber = 1;
         activeShoeNumber = 1;
         activeShoeIndex = 0;
@@ -1007,7 +1445,6 @@
         activeWin = false;
         selectedHandIndex = null;
 
-        // Persistir explícitamente el nuevo registro de mesa con el UUID de la NUEVA sesión
         const newSessUuid = newSession.uuid || newSession.id;
         const targetMesaUuid = currentMesaUuid || currentMesaId || 'mesa_default';
         const newMesaRecord = {
@@ -1023,10 +1460,7 @@
           shoes: [{ shoe_number: 1, history: [], tie_mode: 'slash' }]
         };
 
-        // Guardar mesa limpia [] en la base de datos local interna (IndexedDB)
         await upsertLocalItem('record_libro_score_baccarat_mesa', newMesaRecord).catch(() => {});
-
-        // Clave de almacenamiento aislada para la nueva sesión
         const newStorageKey = `wisi_baccarat_shoe_v3_${currentSalaUuid}_${targetMesaUuid}_sess_${newSessUuid}`;
         lastLoadedStorageKey = newStorageKey;
         try {
@@ -1043,31 +1477,34 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newMesaRecord)
-        }).catch(e => console.warn('Advertencia guardando nueva mesa:', e));
-
-        sendWebSocketMessage({
-          type: 'BACCARAT_SESSION_UPDATE',
-          salaUuid: currentSalaUuid,
-          action: 'CREATE',
-          session: newSession,
-          senderClientId: myClientId
-        });
-        broadcastTableUpdate();
-
-        closeOptionsMenu();
-        showFeedback(`¡Nueva sesión creada! (${newSession.fecha})`);
+        }).catch(() => {});
       } else {
-        alert((json && json.message) || `Error del servidor (${res.status}): no se pudo crear la sesión`);
+        await loadOverviewForSala(currentSalaUuid, activeSessionId);
       }
+
+      sendWebSocketMessage({
+        type: 'BACCARAT_SESSION_UPDATE',
+        salaUuid: currentSalaUuid,
+        action: 'CREATE',
+        session: newSession,
+        senderClientId: myClientId
+      });
+      broadcastTableUpdate();
+
+      isSessionModalOpen = false;
+      showFeedback(`¡Sesión creada! (${newSession.fecha})`);
     } catch (e) {
       console.error('Error al crear nueva sesión:', e);
-      alert('Error de conexión al crear nueva sesión');
     } finally {
       isSessionsLoading = false;
     }
   }
 
   function handleConfirmDeleteLastSession() {
+    if (!canDeletePerm) {
+      showFeedback('Requiere permiso de ELIMINAR para borrar sesiones');
+      return;
+    }
     if (sessions.length <= 1) {
       alert('No se puede borrar la sesión porque debe haber al menos una registrada.');
       return;
@@ -1196,6 +1633,18 @@
       shoes
     }).catch(err => console.warn('Advertencia guardando en base de datos interna local:', err));
 
+    // Mantener overviewMesasData sincronizado de inmediato para este mismo cliente
+    if (currentMesaUuid) {
+      overviewMesasData[currentMesaUuid] = {
+        shoes: [...shoes],
+        activeShoeIndex: shoes.findIndex(s => s.shoe_number === shoeNumber) >= 0
+          ? shoes.findIndex(s => s.shoe_number === shoeNumber)
+          : shoes.length - 1,
+        tieMode
+      };
+      overviewMesasData = { ...overviewMesasData };
+    }
+
     if (!skipBroadcast) {
       broadcastTableUpdate();
     }
@@ -1210,6 +1659,8 @@
         session_id: sessUuid,
         session_uuid: sessUuid,
         mesa_id: currentMesaUuid,
+        sala_uuid: currentSalaUuid,
+        sala_id: currentSalaUuid,
         shoe_number: shoeNumber,
         tie_mode: tieMode,
         history,
@@ -1230,26 +1681,30 @@
   }
 
   // Solicitar estado actualizado de la mesa al conectar o cambiar de mesa (estrictamente por sesión)
-  $: if ($isWsConnectedStore && isLatestSession && currentSalaUuid && currentMesaUuid && sessionUuid) {
-    sendWebSocketMessage({
-      type: 'BACCARAT_GET_STATE',
-      storageKey,
-      sessionId: sessionUuid,
-      sessionUuid: sessionUuid,
-      record_libro_score_baccarat_uuid: sessionUuid,
-      salaId: currentSalaUuid,
-      salaUuid: currentSalaUuid,
-      mesaId: currentMesaUuid,
-      mesaUuid: currentMesaUuid
-    });
+  $: if ($isWsConnectedStore && isLatestSession && currentSalaUuid && sessionUuid) {
+    if (hasSelectedMesa && currentMesaUuid) {
+      sendWebSocketMessage({
+        type: 'BACCARAT_GET_STATE',
+        storageKey,
+        sessionId: sessionUuid,
+        sessionUuid: sessionUuid,
+        record_libro_score_baccarat_uuid: sessionUuid,
+        salaId: currentSalaUuid,
+        salaUuid: currentSalaUuid,
+        mesaId: currentMesaUuid,
+        mesaUuid: currentMesaUuid
+      });
+    } else if (!hasSelectedMesa) {
+      loadOverviewForSala(currentSalaUuid, sessionUuid, true);
+    }
   }
 
   onMount(() => {
     loadMasterStoresFromBackend().catch(() => {});
 
-    // Si no hay mesa seleccionada, abrir modal de opciones para seleccionar mesa
+    // Si no hay mesa seleccionada, el modo overview se muestra directamente
     if (!hasSelectedMesa) {
-      isOptionsModalOpen = true;
+      isOptionsModalOpen = false;
     }
 
     // 1. Limpiar claves legacy y cachés locales antiguos para evitar que contaminen nuevas sesiones
@@ -1312,24 +1767,107 @@
       const mId = String(currentMesaUuid || currentMesaId || '');
 
       // Verificar si la actualización pertenece a la misma mesa/sala
-      const matchesSala = 
+      const matchesSala = Boolean(
+        !update.salaUuid && !update.salaId ||
         (update.salaId && String(update.salaId) === sId) ||
         (update.salaUuid && String(update.salaUuid) === sId) ||
         (update.salaId && String(update.salaId) === String(currentSalaId)) ||
-        (update.salaUuid && currentSalaObj?.uuid && String(update.salaUuid) === String(currentSalaObj.uuid));
+        (update.salaUuid && currentSalaObj?.uuid && String(update.salaUuid) === String(currentSalaObj.uuid))
+      );
 
+      // CRITICAL: Verificar que la actualización pertenece EXACTAMENTE a la sesión actual abierta (o ambas son la última sesión)
+      const currentSessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
+      const updateSessUuid = update.sessionUuid || update.sessionId || update.record_libro_score_baccarat_uuid;
+      const matchesSession = Boolean(
+        (currentSessUuid && updateSessUuid && String(currentSessUuid) === String(updateSessUuid)) ||
+        (isLatestSession && update.isLatestSession)
+      );
+
+      if (!matchesSala || !matchesSession) {
+        return;
+      }
+
+      const updateMesaId = String(update.mesaUuid || update.mesaId || '');
+
+      // ==========================================================
+      // 1. SINCRONIZACIÓN EN TIEMPO REAL DEL OVERVIEW (VISTA DE TODAS LAS MESAS)
+      // ==========================================================
+      if (updateMesaId) {
+        let updShoes = Array.isArray(update.shoes) && update.shoes.length > 0 ? [...update.shoes] : null;
+        if (!updShoes && Array.isArray(update.history)) {
+          const sNum = update.shoeNumber || 1;
+          const prevMState = overviewMesasData[updateMesaId] || {};
+          const prevShoes = Array.isArray(prevMState.shoes) ? [...prevMState.shoes] : [];
+          const sIdx = prevShoes.findIndex(s => s.shoe_number === sNum);
+          if (sIdx >= 0) {
+            prevShoes[sIdx] = { ...prevShoes[sIdx], history: [...update.history], tie_mode: update.tieMode || prevShoes[sIdx].tie_mode || 'slash' };
+            updShoes = prevShoes;
+          } else {
+            updShoes = [...prevShoes, { shoe_number: sNum, history: [...update.history], tie_mode: update.tieMode || 'slash' }];
+          }
+        }
+
+        if (updShoes) {
+          const prevOverview = overviewMesasData[updateMesaId] || {};
+          let activeIdx;
+          let isHistoric = Boolean(prevOverview.isViewingHistoric) ||
+            (prevOverview.activeShoeIndex !== undefined && prevOverview.activeShoeIndex < (prevOverview.shoes?.length || 1) - 1);
+
+          if (isHistoric) {
+            const targetShoeNum = prevOverview.viewedShoeNumber ?? prevOverview.shoes?.[prevOverview.activeShoeIndex]?.shoe_number;
+            const foundIdx = targetShoeNum !== undefined ? updShoes.findIndex(s => s.shoe_number === targetShoeNum) : -1;
+            if (foundIdx >= 0) {
+              activeIdx = foundIdx;
+            } else {
+              activeIdx = Math.min(prevOverview.activeShoeIndex ?? 0, updShoes.length - 1);
+            }
+            isHistoric = activeIdx < (updShoes.length - 1);
+          } else {
+            isHistoric = false;
+            activeIdx = (update.shoeNumber !== undefined && update.shoeNumber !== null)
+              ? updShoes.findIndex(s => s.shoe_number === update.shoeNumber)
+              : updShoes.length - 1;
+            if (activeIdx < 0) activeIdx = updShoes.length - 1;
+          }
+
+          overviewMesasData[updateMesaId] = {
+            shoes: updShoes,
+            activeShoeIndex: activeIdx,
+            viewedShoeNumber: updShoes[activeIdx]?.shoe_number,
+            isViewingHistoric: isHistoric,
+            tieMode: update.tieMode || prevOverview.tieMode || 'slash'
+          };
+          overviewMesasData = { ...overviewMesasData };
+
+          // Actualizar en base de datos interna local (IndexedDB) para consistencia offline
+          const targetSessId = currentSessUuid || updateSessUuid;
+          if (targetSessId) {
+            upsertLocalItem('record_libro_score_baccarat_mesa', {
+              uuid: `bacc_mesa_${targetSessId}_${updateMesaId}`,
+              record_libro_score_baccarat_uuid: targetSessId,
+              mesa_uuid: updateMesaId,
+              session_uuid: targetSessId,
+              session_id: targetSessId,
+              mesa_id: updateMesaId,
+              shoe_number: update.shoeNumber || 1,
+              tie_mode: update.tieMode || 'slash',
+              history: update.history || [],
+              shoes: updShoes
+            }).catch(() => {});
+          }
+        }
+      }
+
+      // ==========================================================
+      // 2. SINCRONIZACIÓN EN TIEMPO REAL DE LA MESA SELECCIONADA ABIERTA
+      // ==========================================================
       const matchesMesa = 
         (update.mesaId && String(update.mesaId) === mId) ||
         (update.mesaUuid && String(update.mesaUuid) === mId) ||
         (update.mesaId && String(update.mesaId) === String(currentMesaId)) ||
         (update.mesaUuid && currentMesaObj?.uuid && String(update.mesaUuid) === String(currentMesaObj.uuid));
 
-      // CRITICAL: Verificar que la actualización pertenece EXACTAMENTE a la sesión actual abierta
-      const currentSessUuid = currentSession?.uuid || (currentSession?.id ? String(currentSession.id) : null);
-      const updateSessUuid = update.sessionUuid || update.sessionId || update.record_libro_score_baccarat_uuid;
-      const matchesSession = Boolean(currentSessUuid && updateSessUuid && String(currentSessUuid) === String(updateSessUuid));
-
-      const isCurrentTable = (update.storageKey && update.storageKey === storageKey) || (matchesSala && matchesMesa && matchesSession);
+      const isCurrentTable = hasSelectedMesa && ((update.storageKey && update.storageKey === storageKey) || matchesMesa);
 
       if (isCurrentTable) {
         // Si el usuario está viendo activamente una sesión histórica o zapato histórico pasado, no sobreescribir la vista actual
@@ -1399,6 +1937,9 @@
 
     if (typeof document !== 'undefined') {
       document.addEventListener('fullscreenchange', handleFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.addEventListener('MSFullscreenChange', handleFullscreenChange);
     }
   });
 
@@ -1408,6 +1949,9 @@
     }
     if (typeof document !== 'undefined') {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     }
     if (isFullscreen) {
       exitAppFullscreen();
@@ -1589,11 +2133,12 @@
   }
 
   function handleConfirmDeleteCurrentShoe() {
-    if (!isLatestSession || shoeNumber <= 1 || history.length > 0) return;
+    const targetNum = activeShoeNumber || shoeNumber;
+    if (!isLatestSession || targetNum <= 1 || history.length > 0) return;
     playSound('undo');
 
     // Quitar el zapato actual
-    shoes = shoes.filter(s => s.shoe_number !== shoeNumber);
+    shoes = shoes.filter(s => s.shoe_number !== targetNum);
     if (shoes.length === 0) {
       shoes = [{ shoe_number: 1, history: [], tie_mode: 'slash' }];
     }
@@ -1789,12 +2334,37 @@
     return { grid, totalCols };
   })();
 
-  // 2. BIG ROAD (GRAN CAMINO) - Columnas de rachas con soporte para turnos (Dragon Tails)
-  $: bigRoadGrid = (() => {
-    let totalCols = Math.max(bigRoadColsNeeded, 52);
+  function computeStatsFromHistory(hist = []) {
+    const totalHands = hist.length;
+    const countBanca = hist.filter(h => h.winner === 'BANCA').length;
+    const countPunto = hist.filter(h => h.winner === 'PUNTO').length;
+    const countEmpate = hist.filter(h => h.winner === 'EMPATE').length;
+    const countNatural = hist.filter(h => h.natural).length;
+    const countBPair = hist.filter(h => h.bPair).length;
+    const countPPair = hist.filter(h => h.pPair).length;
+    const pctBanca = totalHands ? ((countBanca / totalHands) * 100).toFixed(1) : '0.0';
+    const pctPunto = totalHands ? ((countPunto / totalHands) * 100).toFixed(1) : '0.0';
+    const pctEmpate = totalHands ? ((countEmpate / totalHands) * 100).toFixed(1) : '0.0';
+
+    return {
+      totalHands,
+      countBanca,
+      countPunto,
+      countEmpate,
+      countNatural,
+      countBPair,
+      countPPair,
+      pctBanca,
+      pctPunto,
+      pctEmpate
+    };
+  }
+
+  function computeBigRoadGridFromHistory(hist = [], tMode = 'slash', minCols = 32) {
+    let totalCols = Math.max(minCols, 24);
     let grid = Array.from({ length: BIG_ROWS }, () => Array(totalCols).fill(null));
 
-    if (tieMode === 'slash') {
+    if (tMode === 'slash') {
       let col = 0;
       let row = 0;
       let prevWinner = null;
@@ -1803,7 +2373,7 @@
       const placedStreaks = [];
       let currentStreak = [];
 
-      history.forEach((h, idx) => {
+      hist.forEach((h, idx) => {
         if (h.winner === 'EMPATE') {
           if (!lastPlaced) {
             initialTies++;
@@ -1816,7 +2386,6 @@
 
         // Mano PUNTO o BANCA
         if (!prevWinner) {
-          // Primera mano no-empate del zapato
           grid[0][0] = {
             ...h,
             historyIndex: idx,
@@ -1879,7 +2448,6 @@
 
       return { grid, totalCols, placedStreaks };
     } else {
-      // tieMode === 'circle': El empate se dibuja como su propia celda en el Gran Camino
       let col = 0;
       let row = 0;
       let currentStreakWinner = null;
@@ -1906,7 +2474,7 @@
         currentStreak.push({ r, c, winner: h.winner, historyIndex: idx });
       }
 
-      history.forEach((h, idx) => {
+      hist.forEach((h, idx) => {
         if (idx === 0) {
           currentStreak = [];
           placedStreaks.push(currentStreak);
@@ -1942,7 +2510,6 @@
             placeCell(row, col, h, idx);
           }
         } else {
-          // Cambio real de ganador (BANCA -> PUNTO o PUNTO -> BANCA)
           currentStreakWinner = h.winner;
           isDragonTailing = false;
 
@@ -1962,7 +2529,10 @@
 
       return { grid, totalCols, placedStreaks };
     }
-  })();
+  }
+
+  // 2. BIG ROAD (GRAN CAMINO) - Columnas de rachas con soporte para turnos (Dragon Tails)
+  $: bigRoadGrid = computeBigRoadGridFromHistory(history, tieMode, Math.max(bigRoadColsNeeded, 52));
 
   // 3. LOGICAL COLUMNS FOR DERIVED ROADS
   $: bigRoadLogicalColumns = (() => {
@@ -2420,68 +2990,137 @@
     scrollToLatest();
   }
 
-  let isFullscreen = false;
+  let isFullscreen = typeof document !== 'undefined' && !!(
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement
+  );
   let rootElement;
 
-  // Modo de tema: 'dark' (predeterminado) | 'light'
-  let currentTheme = 'dark';
+  // Modo de tema: Solo Claro ('light') permanente
+  let currentTheme = 'light';
 
   try {
     if (typeof localStorage !== 'undefined') {
-      const savedTheme = localStorage.getItem('wisi_baccarat_theme');
-      if (savedTheme === 'light' || savedTheme === 'dark') {
-        currentTheme = savedTheme;
-      }
+      localStorage.setItem('wisi_baccarat_theme', 'light');
     }
   } catch (e) {}
 
-  function toggleTheme() {
-    playSound('click');
-    currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('wisi_baccarat_theme', currentTheme);
-      }
-    } catch (e) {}
-  }
-
   function handleFullscreenChange() {
     if (typeof document !== 'undefined') {
-      isFullscreen = !!document.fullscreenElement;
+      const isDocFs = !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+      isFullscreen = isDocFs;
     }
   }
 
   function exitAppFullscreen() {
+    if (typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__)) {
+      try {
+        import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+          getCurrentWindow()?.setFullscreen(false);
+        }).catch(() => {});
+      } catch (e) {}
+    }
     if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
       try { window.Capacitor?.Plugins?.KioskPlugin?.setFullscreen?.({ enable: false }); } catch (e) {}
     }
     if (typeof window !== 'undefined' && window.AndroidKiosk?.setFullscreen) {
       try { window.AndroidKiosk.setFullscreen(false); } catch (e) {}
     }
-    if (typeof document !== 'undefined' && document.fullscreenElement) {
-      document.exitFullscreen?.().catch(() => {});
+    if (typeof document !== 'undefined') {
+      const isDocFs = !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+      if (isDocFs) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        exit?.call(document)?.catch(() => {});
+      }
     }
     isFullscreen = false;
   }
 
   function toggleFullscreen() {
-    playSound('click');
-    const nextState = !isFullscreen;
-    isFullscreen = nextState;
+    const isDocFs = typeof document !== 'undefined' && !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    );
+    const isNativeApp = typeof window !== 'undefined' && !!(
+      window.__TAURI_INTERNALS__ ||
+      window.__TAURI__ ||
+      window.Capacitor?.isNativePlatform?.() ||
+      window.AndroidKiosk
+    );
 
-    // 1. En Capacitor Android nativo (Plugin Bridge)
-    if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
+    // En navegador web el estado deseado siempre es el inverso del fullscreen real del documento
+    const nextState = isNativeApp ? !isFullscreen : !isDocFs;
+
+    // 1. En Navegadores Web Estándar (HTML5 Fullscreen API) - LLAMADA SÍNCRONA DIRECTA AL GESTO
+    if (typeof document !== 'undefined') {
       try {
-        const KioskPlugin = window.Capacitor?.Plugins?.KioskPlugin;
-        if (KioskPlugin?.setFullscreen) {
-          KioskPlugin.setFullscreen({ enable: nextState });
+        if (nextState) {
+          const docEl = document.documentElement;
+          const target = (docEl && docEl.requestFullscreen) ? docEl : (rootElement || document.body);
+          const req = target?.requestFullscreen ||
+                      target?.webkitRequestFullscreen ||
+                      target?.mozRequestFullScreen ||
+                      target?.msRequestFullscreen;
+
+          if (req) {
+            const p = req.call(target);
+            if (p && typeof p.catch === 'function') {
+              p.catch((err) => {
+                console.warn('HTML5 requestFullscreen rejected:', err);
+                if (rootElement && rootElement !== target && rootElement.requestFullscreen) {
+                  rootElement.requestFullscreen().catch(() => {});
+                }
+              });
+            }
+          }
+        } else {
+          const exit = document.exitFullscreen ||
+                       document.webkitExitFullscreen ||
+                       document.mozCancelFullScreen ||
+                       document.msExitFullscreen;
+          if (exit && (isDocFs || document.fullscreenElement)) {
+            const p = exit.call(document);
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => {});
+            }
+          }
         }
-      } catch (e) {
-        console.warn('Error en Capacitor KioskPlugin:', e);
+      } catch (err) {
+        console.warn('HTML5 Fullscreen error:', err);
       }
     }
 
-    // 2. En Android Nativo: Ocultar/Mostrar el banner del sistema (Status Bar y Navigation Bar)
+    // 2. En Desktop Tauri (v2 / v1)
+    if (typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__)) {
+      try {
+        import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+          getCurrentWindow()?.setFullscreen(nextState).catch(() => {});
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
+    // 3. En Android Capacitor Nativo
+    if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
+      try {
+        window.Capacitor?.Plugins?.KioskPlugin?.setFullscreen?.({ enable: nextState });
+      } catch (e) {}
+    }
+
+    // 4. En Android Kiosk Nativo
     if (typeof window !== 'undefined' && window.AndroidKiosk) {
       try {
         if (typeof window.AndroidKiosk.setFullscreen === 'function') {
@@ -2491,27 +3130,15 @@
         } else if (typeof window.AndroidKiosk.setKiosk === 'function') {
           window.AndroidKiosk.setKiosk(nextState);
         }
-      } catch (e) {
-        console.warn('Error en AndroidKiosk fullscreen:', e);
-      }
-    }
-
-    // 3. En Navegadores Web y Desktop: HTML5 Fullscreen API
-    if (typeof document !== 'undefined') {
-      try {
-        if (nextState) {
-          if (!document.fullscreenElement) {
-            const target = rootElement || document.documentElement;
-            const req = target.requestFullscreen || document.documentElement.requestFullscreen;
-            req?.call(target, { navigationUI: 'hide' })?.catch(() => {});
-          }
-        } else {
-          if (document.fullscreenElement) {
-            document.exitFullscreen?.().catch(() => {});
-          }
-        }
       } catch (e) {}
     }
+
+    isFullscreen = nextState;
+
+    // 5. Sonido táctil diferido a la siguiente macro-tarea para jamás consumir el gesto del usuario
+    try {
+      setTimeout(() => playSound('click'), 0);
+    } catch (e) {}
   }
 
   function handleClose() {
@@ -2537,69 +3164,414 @@
 
 <div
   bind:this={rootElement}
-  class="scoreboard-container"
+  class="scoreboard-container theme-light"
   class:fullscreen-mode={isFullscreen}
-  class:theme-light={currentTheme === 'light'}
   class:is-monitor-mode={isMonitorMode}
 >
-  <!-- TOP CASINO HEADER: 3 COLUMNAS FIJAS (COL-4 / COL-4 / COL-4) -->
-  <header class="sb-header">
-    <!-- COL-4 IZQUIERDA: MESA / SALA (NAVEGADOR DE MESAS CON BOTONES DE PASO < Y >) -->
-    <div class="sb-header-col col-mesa">
-      <div class="sb-mesa-navigator" class:is-unselected={!hasSelectedMesa}>
+{#if !hasSelectedMesa}
+  <!-- VISTA PREVIA MULTI-MESA (OVERVIEW DE TODAS LAS MESAS DE LA SALA) -->
+  <div class="sb-overview-wrapper">
+    <!-- FILA ÚNICA SUPERIOR: COL-1 ATRÁS (/herramientas), COL-6 SALA, COL-5 SESIÓN -->
+    <div class="sb-overview-top-bar">
+      <!-- COL-1: BOTÓN DE IR ATRÁS (/herramientas) -->
+      <div class="overview-top-col overview-col-back">
         <button
           type="button"
-          class="nav-arrow-btn btn-prev-mesa"
-          disabled={allSelectableMesas.length <= 1 || currentMesaIndex <= 0}
-          on:click={goToPrevMesa}
-          title={currentMesaIndex > 0 ? `Ir a mesa anterior: ${allSelectableMesas[currentMesaIndex - 1]?.mesaNombre}` : 'No hay mesa anterior'}
-          aria-label="Mesa anterior"
+          class="btn-overview-back"
+          on:click={handleGoToHerramientas}
+          title="Volver a Herramientas (/herramientas)"
+          aria-label="Volver a Herramientas"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
+          <span class="btn-overview-back-text">Atrás</span>
         </button>
+      </div>
 
-        <button
-          type="button"
-          class="mesa-label-content"
-          on:click={openOptionsMenu}
-          title="Opciones de la mesa ({currentSalaName} • {currentMesaName})"
-        >
-          {#if hasSelectedMesa}
-            <strong class="loc-val">{currentSalaName}</strong>
-            <span class="loc-sep">•</span>
-            <strong class="loc-val">{currentMesaName}</strong>
-          {:else}
-            <strong class="loc-val">👉 Seleccionar Mesa</strong>
-          {/if}
-        </button>
+      <!-- COL-6: SALA -->
+      <div class="overview-top-col overview-col-sala">
+        <div class="sb-mesa-navigator col-12-full">
+          <button
+            type="button"
+            class="nav-arrow-btn btn-prev-sala"
+            disabled={detailedSalas.length <= 1}
+            on:click={goToPrevSala}
+            title="Sala anterior"
+            aria-label="Sala anterior"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
 
-        <button
-          type="button"
-          class="nav-arrow-btn btn-next-mesa"
-          disabled={allSelectableMesas.length <= 1 || currentMesaIndex < 0 || currentMesaIndex >= allSelectableMesas.length - 1}
-          on:click={goToNextMesa}
-          title={currentMesaIndex >= 0 && currentMesaIndex < allSelectableMesas.length - 1 ? `Ir a mesa siguiente: ${allSelectableMesas[currentMesaIndex + 1]?.mesaNombre}` : 'No hay mesa siguiente'}
-          aria-label="Mesa siguiente"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-        </button>
+          <div class="mesa-label-content">
+            <strong class="loc-val">{currentSalaName || 'Seleccionar Sala'}</strong>
+          </div>
+
+          <button
+            type="button"
+            class="nav-arrow-btn btn-next-sala"
+            disabled={detailedSalas.length <= 1}
+            on:click={goToNextSala}
+            title="Sala siguiente"
+            aria-label="Sala siguiente"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- COL-5: SESIÓN -->
+      <div class="overview-top-col overview-col-session">
+        <div class="sb-session-navigator col-12-full" class:is-past={!isLatestSession}>
+          <button
+            type="button"
+            class="nav-arrow-btn btn-prev-session"
+            disabled={selectedSessionIndex <= 0 || isSessionsLoading}
+            on:click={goToPrevSession}
+            title={selectedSessionIndex <= 0 ? 'No hay sesiones anteriores para esta sala' : 'Ver sesión anterior'}
+            aria-label="Sesión anterior"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+
+          <div class="session-label-wrapper">
+            {#if currentSession}
+              {#if isLatestSession}
+                <span class="session-label-text actual">Actual</span>
+                <span class="session-date-text">( {currentSession.fecha} )</span>
+              {:else}
+                <span class="session-label-text past">Sesión</span>
+                <span class="session-date-text">( {currentSession.fecha} )</span>
+              {/if}
+            {:else}
+              <span class="session-label-text">Sin sesiones registradas</span>
+            {/if}
+          </div>
+
+          <button
+            type="button"
+            class="nav-arrow-btn btn-next-session"
+            disabled={selectedSessionIndex >= sessions.length - 1 || isSessionsLoading}
+            on:click={goToNextSession}
+            title={selectedSessionIndex >= sessions.length - 1 ? 'Esta es la sesión más reciente' : 'Ver sesión siguiente'}
+            aria-label="Sesión siguiente"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- COL-4 CENTRO: ZAPATO Y MANOS (CON BOTÓN 'N' INTEGRADO PARA NUEVO ZAPATO) -->
+    <!-- FILA 3: LISTADO EN COL-6 DE CADA MESA DE LA SALA SELECCIONADA -->
+    <div class="overview-mesas-scroll-area">
+      {#if currentSalaMesas.length === 0}
+        <div class="overview-empty-state">
+          <p>No hay mesas de Baccarat registradas para {currentSalaName}.</p>
+        </div>
+      {:else}
+        <div class="overview-mesas-grid">
+          {#each currentSalaMesas as mesa (mesa.uuid || mesa.id)}
+            {@const mUuid = String(mesa.uuid || mesa.id)}
+            {@const mState = overviewMesasData[mUuid] || { shoes: [{ shoe_number: 1, history: [] }], activeShoeIndex: 0 }}
+            {@const shoes = mState.shoes || [{ shoe_number: 1, history: [] }]}
+            {@const activeShoeIdx = Math.min(Math.max(0, mState.activeShoeIndex ?? (shoes.length - 1)), shoes.length - 1)}
+            {@const currentShoe = shoes[activeShoeIdx] || { shoe_number: 1, history: [] }}
+            {@const shoeHistory = currentShoe.history || []}
+            {@const stats = computeStatsFromHistory(shoeHistory)}
+            {@const currentTieMode = currentShoe.tie_mode || mState.tieMode || 'slash'}
+            {@const road = computeBigRoadGridFromHistory(shoeHistory, currentTieMode, 80)}
+
+            <div class="overview-mesa-card col-6">
+              <!-- Header de la tarjeta de la mesa -->
+              <div class="overview-card-header">
+                <div class="overview-mesa-name">
+                  <span class="mesa-status-dot"></span>
+                  <strong>{mesa.nombre || mesa.name || `Mesa #${mUuid.slice(0, 4)}`}</strong>
+                </div>
+
+                <!-- Botón Entrar a la Mesa -->
+                <button
+                  type="button"
+                  class="btn-enter-mesa"
+                  on:click={() => switchToMesa(currentSalaUuid, mUuid)}
+                  title="Entrar al scoreboard de {mesa.nombre || 'esta mesa'}"
+                >
+                  <span>Entrar a la Mesa</span>
+                </button>
+              </div>
+
+              <!-- Cuerpo de la tarjeta: Cuadrícula Big Road (completa de derecha a izquierda) -->
+              <div class="overview-card-body">
+                <div class="overview-roadmap-box">
+                  <div class="overview-road-scroll">
+                    <table class="bigroad-table overview-bigroad-table">
+                      <tbody>
+                        {#each road.grid as row, rIdx}
+                          <tr>
+                            {#each row as cell, cIdx}
+                              <td class="bigroad-cell mini-cell" class:has-hand={!!cell}>
+                                {#if cell}
+                                  <div
+                                    class="bigroad-ring mini-ring {cell.winner.toLowerCase()}"
+                                    class:is-tie={cell.isTieOnly}
+                                    class:tie-solid={cell.winner === 'EMPATE' && !cell.natural && !cell.win && cell.score === null}
+                                    class:is-win-solid={cell.win}
+                                  >
+                                    {#if cell.natural && (cell.score === undefined || cell.score === null)}
+                                      <span class="dot-natural mini-dot"></span>
+                                    {/if}
+                                    {#if cell.score !== undefined && cell.score !== null}
+                                      <span class="bigroad-score mini-score" class:is-natural-score={cell.natural}>{cell.score}</span>
+                                    {/if}
+                                    {#if currentTieMode === 'slash'}
+                                      {#if cell.tieBeforeCount > 0}
+                                        <span class="bigroad-tie-slash is-before mini-slash" title="{cell.tieBeforeCount} empate(s)"></span>
+                                        {#if cell.tieBeforeCount > 1}
+                                          <span class="mini-tie-badge is-before">{cell.tieBeforeCount}</span>
+                                        {/if}
+                                      {/if}
+                                      {#if cell.tieAfterCount > 0 || (!cell.tieBeforeCount && cell.tieCount > 0)}
+                                        <span class="bigroad-tie-slash is-after mini-slash" title="{cell.tieAfterCount || cell.tieCount} empate(s)"></span>
+                                        {#if (cell.tieAfterCount || cell.tieCount) > 1}
+                                          <span class="mini-tie-badge is-after">{cell.tieAfterCount || cell.tieCount}</span>
+                                        {/if}
+                                      {/if}
+                                    {/if}
+                                    {#if cell.bPair}
+                                      <span class="dot-b-pair mini-dot-pair is-bpair"></span>
+                                    {/if}
+                                    {#if cell.pPair}
+                                      <span class="dot-p-pair mini-dot-pair is-ppair"></span>
+                                    {/if}
+                                  </div>
+                                {:else}
+                                  <div class="bigroad-empty mini-empty"></div>
+                                {/if}
+                              </td>
+                            {/each}
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Contadores y Estadística debajo de la cuadrilla -->
+              <div class="overview-stats-bottom-bar">
+                <div class="overview-counters-group">
+                  <div class="overview-counter-item" title="Total Manos">
+                    <div class="bead-circle-badge bead-gray overview-bead">#</div>
+                    <span class="overview-counter-val">{stats.totalHands}</span>
+                  </div>
+                  <div class="overview-counter-item" title="Banca">
+                    <div class="bead-circle-badge bead-red overview-bead">B</div>
+                    <span class="overview-counter-val is-banca">{stats.countBanca}</span>
+                  </div>
+                  <div class="overview-counter-item" title="Punto">
+                    <div class="bead-circle-badge bead-blue overview-bead">P</div>
+                    <span class="overview-counter-val is-punto">{stats.countPunto}</span>
+                  </div>
+                  <div class="overview-counter-item" title="Empate">
+                    <div class="bead-circle-badge bead-green overview-bead">T</div>
+                    <span class="overview-counter-val is-tie">{stats.countEmpate}</span>
+                  </div>
+                  <div class="overview-counter-item" title="Natural">
+                    <div class="bead-circle-badge bead-orange overview-bead">N</div>
+                    <span class="overview-counter-val">{stats.countNatural}</span>
+                  </div>
+                  <div class="overview-counter-item" title="Banca Pair">
+                    <div class="bead-circle-badge bead-white overview-bead">
+                      <span class="bead-dot dot-tl red-dot"></span>
+                    </div>
+                    <span class="overview-counter-val">{stats.countBPair}</span>
+                  </div>
+                  <div class="overview-counter-item" title="Punto Pair">
+                    <div class="bead-circle-badge bead-white overview-bead">
+                      <span class="bead-dot dot-br blue-dot"></span>
+                    </div>
+                    <span class="overview-counter-val">{stats.countPPair}</span>
+                  </div>
+                </div>
+
+                <div class="overview-pct-group">
+                  <span class="overview-pct-badge is-banca">B {stats.pctBanca}%</span>
+                  <span class="overview-pct-badge is-punto">P {stats.pctPunto}%</span>
+                  <span class="overview-pct-badge is-tie">T {stats.pctEmpate}%</span>
+                </div>
+              </div>
+
+              <!-- Navegador de Zapato (col-11) y Botón Alternar Tie (col-1) -->
+              <div class="overview-bottom-shoe-row">
+                <!-- COL-11: NAVEGADOR DE ZAPATO -->
+                <div class="overview-col-11-shoe">
+                  <div class="sb-shoe-pill overview-shoe-pill">
+                    <button
+                      type="button"
+                      class="nav-arrow-btn btn-prev-shoe"
+                      disabled={shoes.length <= 1 || activeShoeIdx <= 0}
+                      on:click={() => stepShoeForMesa(mUuid, -1)}
+                      title="Zapato anterior"
+                      aria-label="Zapato anterior"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                      </svg>
+                    </button>
+
+                    <div class="shoe-pill-content">
+                      <span class="pill-label">ZAPATO</span>
+                      <span class="pill-value">#{currentShoe.shoe_number || (activeShoeIdx + 1)}</span>
+                      {#if shoes.length > 1}
+                        <span class="pill-sub">({activeShoeIdx + 1}/{shoes.length})</span>
+                      {/if}
+                      <span class="pill-sep">•</span>
+                      <span class="pill-label">MANOS</span>
+                      <span class="pill-value">#{shoeHistory.length}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="nav-arrow-btn btn-next-shoe"
+                      disabled={shoes.length <= 1 || activeShoeIdx >= shoes.length - 1}
+                      on:click={() => stepShoeForMesa(mUuid, 1)}
+                      title="Zapato siguiente"
+                      aria-label="Zapato siguiente"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- COL-1: BOTÓN ALTERNAR TIE -->
+                <div class="overview-col-1-tie">
+                  <button
+                    type="button"
+                    class="overview-btn-tie-card"
+                    on:click={() => toggleTieModeForMesa(mUuid)}
+                    title={currentTieMode === 'slash' ? 'Modo Tie actual: Raya diagonal [/] (Clic para alternar a Círculo [O])' : 'Modo Tie actual: Círculo [O] (Clic para alternar a Raya diagonal [/])'}
+                    aria-label="Alternar modo Tie"
+                  >
+                    <div class="overview-tie-icon-box">
+                      {#if currentTieMode === 'circle'}
+                        <svg width="18" height="18" viewBox="0 0 32 32">
+                          <circle cx="16" cy="16" r="10" stroke="#0f172a" stroke-width="4.2" fill="none" />
+                        </svg>
+                      {:else}
+                        <svg width="18" height="18" viewBox="0 0 32 32">
+                          <line x1="6" y1="26" x2="26" y2="6" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" />
+                        </svg>
+                      {/if}
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </div>
+{:else}
+  <!-- TOP CASINO HEADER: 2 FILAS FIJAS (FILA 1: COL-12 SALA/MESA, FILA 2: 2x COL-6 ZAPATO Y SESIÓN) -->
+  <header class="sb-header">
+    <!-- FILA 1: COL-1 ATRÁS (IR A MESAS), COL-1 PANTALLA COMPLETA, COL-10 MESA/SALA -->
+    <div class="sb-header-row-1">
+      <!-- COL-1: BOTÓN DE ATRÁS (IR A MESAS) -->
+      <div class="header-col-back">
+        <button
+          type="button"
+          class="btn-mesa-back"
+          on:click={handleBackToOverview}
+          title="Ir a Mesas ({currentSalaName})"
+          aria-label="Ir a Mesas"
+        >
+          <span>Atrás</span>
+        </button>
+      </div>
+
+      <!-- COL-1: BOTÓN PANTALLA COMPLETA -->
+      <div class="header-col-fullscreen">
+        <button
+          type="button"
+          class="btn-mesa-fullscreen"
+          class:is-active={isFullscreen}
+          on:click={toggleFullscreen}
+          title={isFullscreen ? 'Salir de Pantalla Completa' : 'Pantalla Completa'}
+          aria-label={isFullscreen ? 'Salir de Pantalla Completa' : 'Pantalla Completa'}
+        >
+          {#if isFullscreen}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+            </svg>
+          {:else}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+          {/if}
+        </button>
+      </div>
+
+      <!-- COL-10: NAVEGADOR DE MESAS (GRAN CASINO PLC • Pb 1) -->
+      <div class="header-col-mesa">
+        <div class="sb-mesa-navigator col-12-full" class:is-unselected={!hasSelectedMesa}>
+          <button
+            type="button"
+            class="nav-arrow-btn btn-prev-mesa"
+            disabled={currentSalaMesas.length <= 1 || currentMesaIndexInSala <= 0}
+            on:click={goToPrevMesa}
+            title={currentMesaIndexInSala > 0 ? `Ir a mesa anterior: ${currentSalaMesas[currentMesaIndexInSala - 1]?.nombre || ''}` : 'No hay mesa anterior'}
+            aria-label="Mesa anterior"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+
+          <div class="mesa-label-content">
+            {#if hasSelectedMesa}
+              <strong class="loc-val">{currentSalaName}</strong>
+              <span class="loc-sep">•</span>
+              <strong class="loc-val">{currentMesaName}</strong>
+            {:else}
+              <strong class="loc-val">Seleccionar Mesa</strong>
+            {/if}
+          </div>
+
+          <button
+            type="button"
+            class="nav-arrow-btn btn-next-mesa"
+            disabled={currentSalaMesas.length <= 1 || currentMesaIndexInSala < 0 || currentMesaIndexInSala >= currentSalaMesas.length - 1}
+            on:click={goToNextMesa}
+            title={currentMesaIndexInSala >= 0 && currentMesaIndexInSala < currentSalaMesas.length - 1 ? `Ir a mesa siguiente: ${currentSalaMesas[currentMesaIndexInSala + 1]?.nombre || ''}` : 'No hay mesa siguiente'}
+            aria-label="Mesa siguiente"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- COL-4 CENTRO: ZAPATO Y MANOS (CON BOTÓN DE CREAR ZAPATO NUEVO / BORRAR VACÍO) -->
     <div class="sb-header-col col-zapato">
       <div class="sb-shoe-pill shoe-pill">
         <button
           type="button"
           class="nav-arrow-btn btn-prev-shoe"
-          disabled={shoes.length <= 1 || activeShoeIndex <= 0}
-          on:click={goToPrevShoe}
-          title="Ver zapato anterior"
-          aria-label="Zapato anterior"
+          class:is-delete={canDeleteCurrentEmptyShoe}
+          disabled={!canDeleteCurrentEmptyShoe && (shoes.length <= 1 || activeShoeIndex <= 0)}
+          on:click={canDeleteCurrentEmptyShoe ? handleConfirmDeleteCurrentShoe : goToPrevShoe}
+          title={canDeleteCurrentEmptyShoe ? `Borrar Zapato #${activeShoeNumber} vacío y volver al Zapato #${activeShoeNumber - 1}` : 'Ver zapato anterior'}
+          aria-label={canDeleteCurrentEmptyShoe ? 'Borrar zapato vacío' : 'Zapato anterior'}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
@@ -2631,17 +3603,19 @@
             </svg>
           </button>
         {:else}
-          <!-- Botón 'N' para Crear Nuevo Zapato en el último zapato -->
+          <!-- Flecha para Crear Nuevo Zapato en el último zapato (Verde si está habilitado) -->
           <button
             type="button"
-            class="nav-arrow-btn btn-new-shoe-n"
-            class:is-active={hasFullBaccaratPerms && isLatestSession && history.length > 0}
-            disabled={!hasFullBaccaratPerms || !isLatestSession || history.length === 0}
+            class="nav-arrow-btn btn-next-shoe btn-new-shoe-arrow"
+            class:is-active={canCreateNewShoe}
+            disabled={!canCreateNewShoe}
             on:click={handleDirectNewShoe}
-            title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para operar el zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`)}
+            title={!canEditPerm && !canAddPerm ? 'Requiere permisos para crear zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`)}
             aria-label="Crear Nuevo Zapato"
           >
-            <span class="btn-n-letter">N</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </button>
         {/if}
       </div>
@@ -2674,34 +3648,18 @@
             {/if}
           </div>
 
-          {#if selectedSessionIndex < sessions.length - 1}
-            <!-- Flecha Siguiente para navegar sesiones históricas -->
-            <button
-              type="button"
-              class="nav-arrow-btn btn-next-session"
-              disabled={isSessionsLoading}
-              on:click={goToNextSession}
-              title="Ver sesión siguiente"
-              aria-label="Sesión siguiente"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </button>
-          {:else}
-            <!-- Botón 'N' para Crear Nueva Sesión en la última sesión -->
-            <button
-              type="button"
-              class="nav-arrow-btn btn-new-shoe-n"
-              class:is-active={hasFullBaccaratPerms && isLatestSession && !isSessionsLoading}
-              disabled={!hasFullBaccaratPerms || !isLatestSession || isSessionsLoading}
-              on:click={handleCreateNewSession}
-              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para crear sesiones' : (!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear Nueva Sesión (${nextSessionDateStr})`)}
-              aria-label="Crear Nueva Sesión"
-            >
-              <span class="btn-n-letter">N</span>
-            </button>
-          {/if}
+          <button
+            type="button"
+            class="nav-arrow-btn btn-next-session"
+            disabled={selectedSessionIndex >= sessions.length - 1 || isSessionsLoading}
+            on:click={goToNextSession}
+            title="Ver sesión siguiente"
+            aria-label="Sesión siguiente"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
         </div>
       {/if}
     </div>
@@ -3119,15 +4077,7 @@
     {#if !hasSelectedMesa}
       <div class="footer-no-mesa-banner">
         <div class="no-mesa-message">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
           <span>Botonera bloqueada: Seleccione una mesa para registrar jugadas</span>
-          <button type="button" class="btn-select-mesa-alert" on:click={openOptionsMenu}>
-            Seleccionar Mesa
-          </button>
         </div>
       </div>
     {/if}
@@ -3360,6 +4310,7 @@
     </div>
   </footer>
   {/if}
+{/if}
 
   <!-- MODAL DE OPCIONES DE MESA -->
   {#if isOptionsModalOpen}
@@ -3379,8 +4330,8 @@
               type="button"
               class="btn-opt col-6 btn-opt-new"
               on:click={handleDirectNewShoe}
-              disabled={!hasFullBaccaratPerms || !isLatestSession || history.length === 0}
-              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para operar el zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`)}
+              disabled={(!canEditPerm && !canAddPerm) || !isLatestSession || history.length === 0}
+              title={!canEditPerm && !canAddPerm ? 'Requiere permisos para crear nuevo zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : history.length === 0 ? 'Debe registrar al menos una jugada en el zapato actual para crear uno nuevo' : `Crear Nuevo Zapato #${maxShoeNumber + 1}`)}
             >
               Crear Nuevo Zapato #{maxShoeNumber + 1}
             </button>
@@ -3390,42 +4341,16 @@
               type="button"
               class="btn-opt col-6 btn-opt-reset"
               on:click={openDeleteCurrentShoeModal}
-              disabled={!hasFullBaccaratPerms || !isLatestSession || shoeNumber <= 1 || history.length > 0}
-              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para borrar el zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : shoeNumber <= 1 ? 'No se puede borrar el primer zapato de la mesa' : history.length > 0 ? 'No se puede borrar si el zapato tiene jugadas registradas' : `Borrar Zapato #${shoeNumber}`)}
+              disabled={(!canDeletePerm && !canEditPerm) || !isLatestSession || shoeNumber <= 1 || history.length > 0}
+              title={!canDeletePerm && !canEditPerm ? 'Requiere permisos para borrar el zapato' : (!isLatestSession ? 'Sesión histórica en modo solo lectura' : shoeNumber <= 1 ? 'No se puede borrar el primer zapato de la mesa' : history.length > 0 ? 'No se puede borrar si el zapato tiene jugadas registradas' : `Borrar Zapato #${shoeNumber}`)}
             >
               Borrar Zapato #{shoeNumber}
             </button>
 
-            <!-- COL-6: Crear Nueva Sesión -->
+            <!-- COL-6: Alternar Pantalla Completa (Solo Ícono) -->
             <button
               type="button"
-              class="btn-opt col-6 btn-opt-new-session"
-              on:click={handleCreateNewSession}
-              disabled={!hasFullBaccaratPerms || isSessionsLoading || !isLatestSession}
-              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para crear sesiones' : (!isLatestSession ? 'Solo se puede crear nueva sesión desde la última sesión' : `Crear nueva sesión (${nextSessionDateStr})`)}
-            >
-              <span>Crear Nueva Sesión</span>
-              <span class="btn-opt-date-badge">Fecha: {nextSessionDateStr}</span>
-            </button>
-
-            <!-- COL-6: Borrar Última Sesión -->
-            <button
-              type="button"
-              class="btn-opt col-6 btn-opt-delete-session"
-              on:click={handleConfirmDeleteLastSession}
-              disabled={!hasFullBaccaratPerms || sessions.length <= 1 || isSessionsLoading || !isLatestSession}
-              title={!hasFullBaccaratPerms ? 'Requiere todos los permisos para borrar sesiones' : (!isLatestSession ? 'Solo se puede borrar la última sesión' : sessions.length <= 1 ? 'Debe existir al menos una sesión' : `Borrar última sesión registrada (${latestSessionInList?.fecha || ''})`)}
-            >
-              <span>Borrar Última Sesión</span>
-              {#if latestSessionInList?.fecha}
-                <span class="btn-opt-date-badge">Fecha: {latestSessionInList.fecha}</span>
-              {/if}
-            </button>
-
-            <!-- COL-4: Alternar Pantalla Completa (Solo Ícono) -->
-            <button
-              type="button"
-              class="btn-opt col-4 btn-opt-fullscreen"
+              class="btn-opt col-6 btn-opt-fullscreen"
               class:is-active={isFullscreen}
               on:click={toggleFullscreen}
               title={isFullscreen ? 'Salir de Pantalla Completa' : 'Entrar a Pantalla Completa'}
@@ -3442,38 +4367,10 @@
               {/if}
             </button>
 
-            <!-- COL-4: Alternar Tema Luna / Sol (Solo Ícono) -->
+            <!-- COL-6: MODO MONITOR / SALIDA (Solo Ícono) -->
             <button
               type="button"
-              class="btn-opt col-4 btn-opt-theme"
-              class:is-light={currentTheme === 'light'}
-              on:click={toggleTheme}
-              title={currentTheme === 'light' ? 'Cambiar a Tema Oscuro' : 'Cambiar a Tema Claro'}
-              aria-label={currentTheme === 'light' ? 'Cambiar a Tema Oscuro' : 'Cambiar a Tema Claro'}
-            >
-              {#if currentTheme === 'light'}
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-              {:else}
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="5"></circle>
-                  <line x1="12" y1="1" x2="12" y2="3"></line>
-                  <line x1="12" y1="21" x2="12" y2="23"></line>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                  <line x1="1" y1="12" x2="3" y2="12"></line>
-                  <line x1="21" y1="12" x2="23" y2="12"></line>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                </svg>
-              {/if}
-            </button>
-
-            <!-- COL-4: MODO MONITOR / SALIDA (Solo Ícono) -->
-            <button
-              type="button"
-              class="btn-opt col-4 btn-opt-monitor"
+              class="btn-opt col-6 btn-opt-monitor"
               class:is-active={isMonitorMode}
               on:click={toggleMonitorMode}
               title={isMonitorMode ? 'Salir de Modo Monitor (Mostrar botonera)' : 'Entrar a Modo Monitor (Ocultar botonera)'}
@@ -3495,39 +4392,21 @@
               {/if}
             </button>
 
-            <!-- COL-12: SECCIÓN SELECCIONAR MESA (OPTGROUP POR SALA) -->
-            <div class="col-12 opt-select-mesa-container">
-              <label for="sb-opt-mesa-select" class="opt-select-label">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 6h16M4 12h16m-7 6h7"/>
-                </svg>
-                <span>Seleccionar Mesa</span>
-              </label>
-              <div class="opt-select-wrapper">
-                <select
-                  id="sb-opt-mesa-select"
-                  class="opt-mesa-select"
-                  value={currentSelectedValue}
-                  on:change={handleMesaSelectChange}
-                >
-                  <option value="" disabled selected={!hasSelectedMesa}>-- Seleccione una mesa --</option>
-                  {#each userAssignedSalasWithMesas as sGroup}
-                    <optgroup label="Sala: {sGroup.nombre}">
-                      {#each sGroup.mesas as mItem}
-                        <option value="{sGroup.uuid || sGroup.id}::{mItem.uuid || mItem.id}">
-                          {mItem.nombre || `Mesa ${mItem.id}`}
-                        </option>
-                      {/each}
-                    </optgroup>
-                  {/each}
-                </select>
-                <div class="opt-select-arrow">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </div>
-              </div>
-            </div>
+            <!-- COL-12: IR A MESAS DE ESTA SALA -->
+            <button
+              type="button"
+              class="btn-opt col-12 btn-opt-ver-mesas"
+              on:click={() => { closeOptionsMenu(); handleBackToOverview(); }}
+              title="Ir a las mesas de {currentSalaName}"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; flex-shrink: 0;">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <span>Ir a Mesas ({currentSalaName})</span>
+            </button>
 
             <!-- COL-12: VOLVER A HERRAMIENTAS (DIRECTAMENTE DEBAJO DEL SELECT) -->
             <button
@@ -3588,6 +4467,42 @@
       </div>
     </div>
   {/if}
+
+  <!-- MODAL DE SALA (SOLO BOTÓN DE IR A HERRAMIENTAS) -->
+  {#if isSalaModalOpen}
+    <div class="modal-backdrop modal-backdrop-sala" on:click={() => (isSalaModalOpen = false)}>
+      <div class="modal-container sala-modal-container" on:click|stopPropagation>
+        <div class="modal-header">
+          <div class="modal-title">
+            Opciones
+          </div>
+          <button type="button" class="close-btn" on:click={() => (isSalaModalOpen = false)} title="Cerrar modal">✕</button>
+        </div>
+
+        <div class="modal-body sala-modal-body" style="padding: 24px 20px;">
+          <button
+            type="button"
+            class="btn-opt col-12 btn-opt-back-herramientas"
+            style="width: 100%; display: flex; align-items: center; justify-content: center;"
+            on:click={handleGoToHerramientas}
+            title="Volver a la vista de Herramientas"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 10px; flex-shrink: 0;">
+              <path d="M19 12H5"></path>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            <span>Ir a Herramientas</span>
+          </button>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-cancel" on:click={() => (isSalaModalOpen = false)}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -3628,12 +4543,12 @@
     overflow: hidden;
   }
 
-  /* HEADER: BARRA FLUIDA RESPONSIVA ADAPTABLE A CUALQUIER RESOLUCIÓN */
+  /* HEADER: 2 FILAS FIJAS (FILA 1: COL-12 SALA/MESA, FILA 2: 2x COL-6 ZAPATO Y SESIÓN) */
   .sb-header {
     display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: clamp(6px, 1.2vw, 16px);
+    grid-template-columns: 1fr 1fr;
+    row-gap: clamp(4px, 0.8vh, 8px);
+    column-gap: clamp(6px, 1.2vw, 12px);
     padding: clamp(4px, 0.8vh, 10px) clamp(4px, 0.8vw, 12px);
     border-bottom: 1.5px solid rgba(255, 255, 255, 0.1);
     flex-shrink: 0;
@@ -3651,51 +4566,214 @@
     align-items: center;
     min-width: 0;
     box-sizing: border-box;
+    width: 100%;
   }
 
-  /* COLUMNA 1 (MESA / SALA): ALINEADA A LA IZQUIERDA */
-  .sb-header-col.col-mesa {
-    justify-content: flex-start;
-    justify-self: start;
+  /* FILA 1: COL-1 ATRÁS (IR A MESAS), COL-1 PANTALLA COMPLETA, COL-10 MESA/SALA */
+  .sb-header-row-1 {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 10fr;
+    column-gap: clamp(6px, 1.2vw, 12px);
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
     min-width: 0;
   }
 
-  /* COLUMNA 2 (ZAPATO Y MANOS): EXACTAMENTE EN EL CENTRO HORIZONTAL */
-  .sb-header-col.col-zapato {
+  .header-col-back {
+    grid-column: 1 / 2;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .header-col-fullscreen {
+    grid-column: 2 / 3;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .header-col-mesa {
+    grid-column: 3 / 4;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .btn-mesa-back {
+    width: 100%;
+    height: clamp(34px, 4.5vh, 46px);
+    min-height: clamp(34px, 4.5vh, 46px);
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    justify-self: center;
+    background: #1e293b;
+    border: 1.5px solid #334155;
+    border-radius: 9999px;
+    color: #38bdf8;
+    font-family: inherit;
+    font-size: clamp(12px, 0.9vw, 14px);
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+    padding: 0 10px;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .btn-mesa-back:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+  }
+
+  .btn-mesa-back:active {
+    background: #0369a1;
+  }
+
+  .btn-mesa-fullscreen {
+    width: 100%;
+    height: clamp(34px, 4.5vh, 46px);
+    min-height: clamp(34px, 4.5vh, 46px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #1e293b;
+    border: 1.5px solid #334155;
+    border-radius: 9999px;
+    color: #f1f5f9;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+    padding: 0;
+    user-select: none;
+  }
+
+  .btn-mesa-fullscreen svg {
+    width: clamp(16px, 1.2vw, 20px);
+    height: clamp(16px, 1.2vw, 20px);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-mesa-fullscreen:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+  }
+
+  .btn-mesa-fullscreen:hover svg {
+    transform: scale(1.15);
+  }
+
+  .btn-mesa-fullscreen:active {
+    background: #0369a1;
+  }
+
+  .btn-mesa-fullscreen.is-active {
+    background: rgba(2, 132, 199, 0.25);
+    border-color: #0284c7;
+    color: #38bdf8;
+  }
+
+  /* TEMA CLARO PARA LOS BOTONES DE LA FILA 1 */
+  .theme-light .btn-mesa-back {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #0284c7;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+
+  .theme-light .btn-mesa-back:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+  }
+
+  .theme-light .btn-mesa-back:active {
+    background: #0369a1;
+  }
+
+  .theme-light .btn-mesa-fullscreen {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #475569;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+
+  .theme-light .btn-mesa-fullscreen:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+  }
+
+  .theme-light .btn-mesa-fullscreen:active {
+    background: #0369a1;
+  }
+
+  .theme-light .btn-mesa-fullscreen.is-active {
+    background: rgba(2, 132, 199, 0.15);
+    border-color: #0284c7;
+    color: #0284c7;
+  }
+
+  /* FILA 2 - COL-6 IZQUIERDA: ZAPATO Y MANOS (ABARCA 100% DE SU COLUMNA) */
+  .sb-header-col.col-zapato {
+    grid-column: 1 / 2;
+    grid-row: 2;
+    width: 100%;
+    justify-content: flex-start;
+    justify-self: stretch;
     min-width: 0;
   }
 
-  /* COLUMNA 3 (SESIÓN): ALINEADA A LA DERECHA */
+  /* FILA 2 - COL-6 DERECHA: SESIÓN (ABARCA 100% DE SU COLUMNA) */
   .sb-header-col.col-sesion {
+    grid-column: 2 / 3;
+    grid-row: 2;
+    width: 100%;
     justify-content: flex-end;
-    justify-self: end;
+    justify-self: stretch;
     min-width: 0;
   }
 
-  /* CONTENEDORES ESTANDARIZADOS: MESA, ZAPATO Y SESIÓN */
+  /* CONTENEDORES ESTANDARIZADOS: MESA, ZAPATO Y SESIÓN (ABARCAN 100% DE SU ANCHO) */
   .sb-mesa-navigator,
   .sb-shoe-pill,
   .sb-session-navigator {
-    display: inline-flex;
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
     align-items: center;
-    gap: clamp(4px, 0.5vw, 8px);
+    gap: 0;
     background: #1e293b;
     border: 1.5px solid #334155;
-    padding: clamp(3px, 0.45vh, 6px) clamp(4px, 0.5vw, 8px);
+    padding: 0;
+    height: clamp(34px, 4.5vh, 46px);
     min-height: clamp(34px, 4.5vh, 46px);
     box-sizing: border-box;
     border-radius: 9999px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
     transition: all 0.2s ease;
-    max-width: 100%;
     overflow: hidden;
-    flex-shrink: 0;
   }
 
   .sb-mesa-navigator {
-    flex-shrink: 1;
+    padding: 0;
+    gap: 0;
   }
 
   .sb-mesa-navigator.is-unselected {
@@ -3704,27 +4782,35 @@
   }
 
   .mesa-label-content {
+    flex: 1;
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    box-sizing: border-box;
+    justify-content: center;
+    text-align: center;
     background: transparent;
     border: none;
     color: #f1f5f9;
     font-family: inherit;
     font-size: clamp(12.5px, 0.95vw, 16px);
     font-weight: 700;
-    cursor: pointer;
+    cursor: default;
     display: inline-flex;
     align-items: center;
-    gap: clamp(3px, 0.4vw, 6px);
-    padding: 0 clamp(4px, 0.5vw, 10px);
+    gap: clamp(4px, 0.5vw, 8px);
+    padding: 0 clamp(8px, 1.2vw, 18px);
     user-select: none;
     white-space: nowrap;
     overflow: hidden;
     min-width: 0;
-    border-radius: 9999px;
-    transition: background 0.15s ease;
+    border-radius: 0;
   }
 
-  .mesa-label-content:hover {
-    background: rgba(255, 255, 255, 0.08);
+  .mesa-label-content:hover,
+  .mesa-label-content:active {
+    background: transparent;
   }
 
   .mesa-label-content .loc-val {
@@ -3770,81 +4856,130 @@
     border-color: #475569;
   }
 
-  /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE, ATRÁS Y 'N') */
+  /* BOTONES DE NAVEGACIÓN UNIFICADOS (ADELANTE, ATRÁS Y 'N') - BIEN A LA ESQUINA SIN SEPARACIÓN */
   .nav-arrow-btn {
-    width: clamp(26px, 2.2vw, 38px);
-    height: clamp(26px, 2.2vw, 38px);
-    min-width: clamp(26px, 2.2vw, 38px);
-    border-radius: 50%;
+    height: 100%;
+    aspect-ratio: 1 / 1;
+    width: auto;
+    min-width: unset;
+    border-radius: 0;
     background: rgba(255, 255, 255, 0.08);
-    border: 1.5px solid rgba(255, 255, 255, 0.18);
+    border: none;
     color: #38bdf8;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     padding: 0;
+    margin: 0;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
     box-sizing: border-box;
   }
 
+  .nav-arrow-btn.btn-prev-mesa,
+  .nav-arrow-btn.btn-prev-shoe,
+  .nav-arrow-btn.btn-prev-session {
+    border-top-left-radius: 9999px;
+    border-bottom-left-radius: 9999px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: 1.5px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .nav-arrow-btn.btn-next-mesa,
+  .nav-arrow-btn.btn-next-shoe,
+  .nav-arrow-btn.btn-new-shoe-n,
+  .nav-arrow-btn.btn-new-shoe-arrow,
+  .nav-arrow-btn.btn-next-session {
+    border-top-right-radius: 9999px;
+    border-bottom-right-radius: 9999px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left: 1.5px solid rgba(255, 255, 255, 0.15);
+  }
+
   .nav-arrow-btn svg {
-    width: clamp(13px, 1.1vw, 19px);
-    height: clamp(13px, 1.1vw, 19px);
+    width: clamp(14px, 1.2vw, 20px);
+    height: clamp(14px, 1.2vw, 20px);
     flex-shrink: 0;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .nav-arrow-btn:hover:not(:disabled) {
     background: #0284c7;
-    border-color: #38bdf8;
     color: #ffffff;
-    transform: scale(1.08);
-    box-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .nav-arrow-btn:hover:not(:disabled) svg {
+    transform: scale(1.18);
   }
 
   .nav-arrow-btn:active:not(:disabled) {
-    transform: scale(0.94);
+    background: #0369a1;
+    transform: none;
+  }
+
+  .nav-arrow-btn:active:not(:disabled) svg {
+    transform: scale(0.92);
   }
 
   .nav-arrow-btn:disabled {
     opacity: 0.22;
     cursor: not-allowed;
     background: transparent;
-    border-color: rgba(255, 255, 255, 0.08);
     color: #64748b;
     transform: none;
     box-shadow: none;
   }
 
-  /* BOTÓN 'N' PARA CREAR NUEVO ZAPATO EN EL ÚLTIMO ZAPATO */
-  .nav-arrow-btn.btn-new-shoe-n {
-    font-weight: 900;
-  }
+  /* BOTÓN 'N' / FLECHA PARA CREAR NUEVO ZAPATO EN EL ÚLTIMO ZAPATO (VERDE) */
+  .nav-arrow-btn.btn-new-shoe-arrow.is-active,
   .nav-arrow-btn.btn-new-shoe-n.is-active {
-    background: linear-gradient(135deg, rgba(2, 132, 199, 0.45) 0%, rgba(14, 165, 233, 0.3) 100%);
-    border-color: #38bdf8;
-    color: #38bdf8;
-    box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
-  }
-  .nav-arrow-btn.btn-new-shoe-n.is-active:hover {
-    background: #0284c7;
-    border-color: #38bdf8;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-left-color: #059669;
     color: #ffffff;
-    transform: scale(1.12);
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
   }
-  .btn-n-letter {
-    font-size: clamp(12px, 1vw, 16px);
-    font-weight: 900;
-    line-height: 1;
-    display: block;
-    user-select: none;
-    letter-spacing: -0.2px;
+  .nav-arrow-btn.btn-new-shoe-arrow.is-active:hover,
+  .nav-arrow-btn.btn-new-shoe-n.is-active:hover {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(16, 185, 129, 0.65);
+    transform: none;
+  }
+  .nav-arrow-btn.btn-new-shoe-arrow.is-active:active,
+  .nav-arrow-btn.btn-new-shoe-n.is-active:active {
+    background: #047857;
+    color: #ffffff;
+  }
+
+  /* BOTÓN PARA BORRAR ZAPATO VACÍO > 1 (ROJO) */
+  .nav-arrow-btn.btn-prev-shoe.is-delete {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    border-right-color: #dc2626;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.45);
+  }
+  .nav-arrow-btn.btn-prev-shoe.is-delete:hover:not(:disabled) {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.65);
+    transform: none;
+  }
+  .nav-arrow-btn.btn-prev-shoe.is-delete:active:not(:disabled) {
+    background: #b91c1c;
+    color: #ffffff;
   }
 
   /* CONTENIDO DE ZAPATO */
   .shoe-pill-content {
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     gap: clamp(3px, 0.45vw, 8px);
@@ -3882,12 +5017,24 @@
 
   /* NAVEGADOR DE SESIONES */
   .session-label-wrapper {
+    flex: 1;
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    box-sizing: border-box;
+    justify-content: center;
+    text-align: center;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     gap: clamp(3px, 0.45vw, 8px);
     padding: 0 clamp(3px, 0.4vw, 8px);
     user-select: none;
     white-space: nowrap;
+    border: none;
+    border-radius: 0;
+    background: transparent;
   }
 
   .session-label-text {
@@ -3915,84 +5062,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* RESOLUCIONES PEQUEÑAS / TABLETS / VENTANAS REDUCIDAS:
-     Fila 1: Sala/Mesa col-12 (100% full width)
-     Fila 2: Zapato col-6 + Sesión col-6 (50% cada una) */
-  @media (max-width: 1024px) {
-    .sb-header,
-    .theme-light .sb-header {
-      grid-template-columns: 1fr 1fr;
-      row-gap: clamp(4px, 0.8vh, 8px);
-      column-gap: clamp(6px, 1.2vw, 12px);
-      padding: clamp(4px, 0.8vh, 8px) clamp(6px, 1.2vw, 12px);
-    }
 
-    /* FILA 1 - COL-12 COMPLETO: MESA / SALA */
-    .sb-header-col.col-mesa {
-      grid-column: 1 / -1;
-      grid-row: 1;
-      width: 100%;
-      justify-content: center;
-      justify-self: stretch;
-    }
-
-    /* FILA 2 - COL-6 IZQUIERDA: ZAPATO Y MANOS */
-    .sb-header-col.col-zapato {
-      grid-column: 1 / 2;
-      grid-row: 2;
-      width: 100%;
-      justify-content: flex-start;
-      justify-self: stretch;
-    }
-
-    /* FILA 2 - COL-6 DERECHA: SESIÓN */
-    .sb-header-col.col-sesion {
-      grid-column: 2 / 3;
-      grid-row: 2;
-      width: 100%;
-      justify-content: flex-end;
-      justify-self: stretch;
-    }
-
-    /* Adaptar los navegadores para que ocupen su celda de forma balanceada */
-    .sb-header-col.col-mesa .sb-mesa-navigator {
-      width: 100%;
-      max-width: 520px;
-      margin: 0 auto;
-      justify-content: space-between;
-    }
-
-    .sb-header-col.col-zapato .sb-shoe-pill {
-      width: 100%;
-      justify-content: space-between;
-    }
-
-    .sb-header-col.col-sesion .sb-session-navigator {
-      width: 100%;
-      justify-content: space-between;
-    }
-
-    .mesa-label-content {
-      flex: 1;
-      justify-content: center;
-      text-align: center;
-      min-width: 0;
-    }
-
-    .shoe-pill-content {
-      flex: 1;
-      justify-content: center;
-      text-align: center;
-      min-width: 0;
-    }
-
-    .session-label-wrapper {
-      flex: 1;
-      justify-content: center;
-      text-align: center;
-      min-width: 0;
-    }
-  }
 
   @media (max-width: 768px) {
     .sb-header,
@@ -4005,22 +5075,20 @@
     .sb-shoe-pill,
     .sb-session-navigator {
       min-height: 32px;
-      padding: 2px 4px;
+      padding: 0;
     }
     .nav-arrow-btn {
-      width: 26px;
-      height: 26px;
-      min-width: 26px;
+      height: 100%;
+      aspect-ratio: 1 / 1;
+      width: auto;
+      min-width: unset;
     }
     .nav-arrow-btn svg {
-      width: 13px;
-      height: 13px;
+      width: 14px;
+      height: 14px;
     }
     .session-date-text {
       font-size: 11px;
-    }
-    .sb-header-col.col-mesa .sb-mesa-navigator {
-      max-width: 100%;
     }
     .mesa-label-content {
       font-size: 12px;
@@ -6204,6 +7272,36 @@
     justify-content: center;
   }
 
+  /* BOTÓN IR A MESAS DE ESTA SALA EN MODAL */
+  .btn-opt-ver-mesas {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    border: 1.5px solid #38bdf8;
+    margin-top: 4px;
+    font-size: 14.5px;
+    font-weight: 800;
+    padding: 13px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    user-select: none;
+  }
+  .btn-opt-ver-mesas:hover {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    border-color: #7dd3fc;
+    color: #ffffff;
+    box-shadow: 0 6px 18px rgba(14, 165, 233, 0.45);
+    transform: translateY(-1px);
+  }
+  .btn-opt-ver-mesas:active {
+    transform: translateY(0);
+  }
+
   /* BOTÓN VOLVER A HERRAMIENTAS (DIRECTAMENTE DEBAJO DEL SELECT) */
   .btn-opt-back-herramientas {
     background: #1e293b;
@@ -6519,9 +7617,11 @@
 
   .theme-light .mesa-label-content {
     color: #0f172a;
+    cursor: default;
   }
-  .theme-light .mesa-label-content:hover {
-    background: rgba(0, 0, 0, 0.04);
+  .theme-light .mesa-label-content:hover,
+  .theme-light .mesa-label-content:active {
+    background: transparent;
   }
   .theme-light .mesa-label-content .loc-val {
     color: #0f172a;
@@ -6554,33 +7654,83 @@
     box-shadow: none;
   }
 
-  /* TEMA CLARO: BOTONES DE NAVEGACIÓN UNIFICADOS */
+  /* TEMA CLARO: BOTONES DE NAVEGACIÓN UNIFICADOS - BIEN A LA ESQUINA SIN SEPARACIÓN */
   .theme-light .nav-arrow-btn {
     background: #f8fafc;
-    border: 1.5px solid #cbd5e1;
+    border: none;
     color: #0284c7;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: none;
+  }
+
+  .theme-light .nav-arrow-btn.btn-prev-mesa,
+  .theme-light .nav-arrow-btn.btn-prev-shoe,
+  .theme-light .nav-arrow-btn.btn-prev-session {
+    border-right: 1.5px solid #cbd5e1;
+  }
+
+  .theme-light .nav-arrow-btn.btn-next-mesa,
+  .theme-light .nav-arrow-btn.btn-next-shoe,
+  .theme-light .nav-arrow-btn.btn-new-shoe-n,
+  .theme-light .nav-arrow-btn.btn-new-shoe-arrow,
+  .theme-light .nav-arrow-btn.btn-next-session {
+    border-left: 1.5px solid #cbd5e1;
   }
 
   .theme-light .nav-arrow-btn:hover:not(:disabled) {
     background: #0284c7;
-    border-color: #0369a1;
     color: #ffffff;
-    transform: scale(1.08);
-    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
+    box-shadow: none;
+    transform: none;
   }
 
   .theme-light .nav-arrow-btn:active:not(:disabled) {
-    transform: scale(0.94);
+    background: #0369a1;
+    transform: none;
   }
 
   .theme-light .nav-arrow-btn:disabled {
     opacity: 0.28;
     background: transparent;
-    border-color: #e2e8f0;
     color: #cbd5e1;
     transform: none;
     box-shadow: none;
+  }
+
+  .theme-light .nav-arrow-btn.btn-new-shoe-arrow.is-active,
+  .theme-light .nav-arrow-btn.btn-new-shoe-n.is-active {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-left: 1.5px solid #059669;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+  }
+
+  .theme-light .nav-arrow-btn.btn-new-shoe-arrow.is-active:hover:not(:disabled),
+  .theme-light .nav-arrow-btn.btn-new-shoe-n.is-active:hover:not(:disabled) {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    color: #ffffff;
+    box-shadow: 0 3px 10px rgba(16, 185, 129, 0.45);
+  }
+
+  .theme-light .nav-arrow-btn.btn-new-shoe-arrow.is-active:active:not(:disabled),
+  .theme-light .nav-arrow-btn.btn-new-shoe-n.is-active:active:not(:disabled) {
+    background: #047857;
+  }
+
+  .theme-light .nav-arrow-btn.btn-prev-shoe.is-delete {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    border-right: 1.5px solid #dc2626;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+  }
+
+  .theme-light .nav-arrow-btn.btn-prev-shoe.is-delete:hover:not(:disabled) {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    color: #ffffff;
+    box-shadow: 0 3px 10px rgba(239, 68, 68, 0.45);
+  }
+
+  .theme-light .nav-arrow-btn.btn-prev-shoe.is-delete:active:not(:disabled) {
+    background: #b91c1c;
   }
 
   /* TEMA CLARO: ZAPATO Y SESIÓN CONTENIDO */
@@ -6786,5 +7936,1086 @@
     color: #ffffff;
     border-color: #8b5cf6;
     box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+  }
+
+  /* ========================================================
+     OVERVIEW / VISTA PREVIA MULTI-MESA (COL-6 GRID)
+     ======================================================== */
+  .sb-overview-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    gap: clamp(6px, 1vh, 12px);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  /* FILA ÚNICA SUPERIOR: COL-1 ATRÁS, COL-6 SALA, COL-5 SESIÓN */
+  .sb-overview-top-bar {
+    display: grid !important;
+    grid-template-columns: 1fr 6fr 5fr !important;
+    gap: clamp(6px, 1vw, 12px) !important;
+    align-items: center !important;
+    width: 100% !important;
+    flex-shrink: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .overview-top-col {
+    display: flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: unset !important;
+  }
+
+  .overview-col-back {
+    grid-column: 1 / 2 !important;
+  }
+
+  .overview-col-sala {
+    grid-column: 2 / 3 !important;
+  }
+
+  .overview-col-session {
+    grid-column: 3 / 4 !important;
+  }
+
+  .btn-overview-back {
+    width: 100%;
+    height: clamp(34px, 4.5vh, 46px);
+    min-height: clamp(34px, 4.5vh, 46px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: #1e293b;
+    border: 1.5px solid #334155;
+    border-radius: 9999px;
+    color: #38bdf8;
+    font-family: inherit;
+    font-size: clamp(12px, 0.9vw, 14px);
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+    padding: 0 10px;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .btn-overview-back:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+  }
+
+  .btn-overview-back:active {
+    background: #0369a1;
+  }
+
+  .theme-light .btn-overview-back {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    color: #0284c7;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+
+  .theme-light .btn-overview-back:hover {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0284c7;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
+  }
+
+  .theme-light .btn-overview-back:active {
+    background: #0369a1;
+  }
+
+
+  /* BOTÓN VOLVER A MESAS (EN SCOREBOARD INDIVIDUAL) */
+  .btn-back-to-overview {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1.5px solid #0284c7;
+    color: #38bdf8;
+    border-radius: 9999px;
+    padding: 6px 14px;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-right: 8px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    user-select: none;
+  }
+
+  .btn-back-to-overview:hover {
+    background: #0284c7;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .btn-back-to-overview:active {
+    background: #0369a1;
+    transform: translateY(0);
+  }
+
+  .theme-light .btn-back-to-overview {
+    background: #e0f2fe;
+    border-color: #0284c7;
+    color: #0284c7;
+  }
+
+  .theme-light .btn-back-to-overview:hover {
+    background: #0284c7;
+    color: #ffffff;
+  }
+
+  /* ÁREA SCROLLABLE DE MESAS */
+  .overview-mesas-scroll-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+    box-sizing: border-box;
+  }
+
+  .overview-mesas-scroll-area::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .overview-mesas-scroll-area::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 4px;
+  }
+
+  .overview-mesas-scroll-area::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+  }
+
+  .overview-mesas-scroll-area::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
+  .overview-empty-state {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 40px 20px;
+    background: rgba(30, 41, 59, 0.3);
+    border: 1.5px dashed #334155;
+    border-radius: 12px;
+    margin: 20px 0;
+  }
+
+  /* GRID DE MESAS EN COL-6 */
+  .overview-mesas-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .overview-mesa-card {
+    flex: 0 0 calc(50% - 7px) !important;
+    width: calc(50% - 7px) !important;
+    max-width: calc(50% - 7px) !important;
+    background: #0f172a;
+    border: 1.5px solid #334155;
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
+    min-width: 0;
+    transition: all 0.2s ease;
+  }
+
+  .overview-mesa-card.col-6 {
+    grid-column: unset !important;
+    flex: 0 0 calc(50% - 7px) !important;
+    width: calc(50% - 7px) !important;
+    max-width: calc(50% - 7px) !important;
+  }
+
+  @media (max-width: 768px) {
+    .overview-mesa-card,
+    .overview-mesa-card.col-6 {
+      flex: 0 0 100% !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+  }
+
+  .overview-mesa-card:hover {
+    border-color: #0284c7;
+    box-shadow: 0 6px 20px rgba(2, 132, 199, 0.25);
+  }
+
+  /* HEADER DE CADA TARJETA DE MESA */
+  .overview-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .overview-mesa-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: clamp(13px, 1vw, 15px);
+    font-weight: 800;
+    color: #f8fafc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .mesa-status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+    flex-shrink: 0;
+  }
+
+  /* FILA INFERIOR DE NAVEGACIÓN DE ZAPATO (COL-11) Y BOTÓN DE TIE (COL-1) */
+  .overview-bottom-shoe-row {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    margin-top: 4px;
+    padding: 0;
+  }
+
+  .overview-col-11-shoe {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .overview-col-1-tie {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .overview-shoe-pill {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 34px !important;
+    min-height: 34px !important;
+  }
+
+  .overview-btn-tie-card {
+    width: 38px;
+    height: 34px;
+    background: #ffffff;
+    border: 1.8px solid #0f172a;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+    transition: all 0.15s ease;
+    user-select: none;
+    box-sizing: border-box;
+  }
+
+  .overview-btn-tie-card:hover {
+    border-color: #0284c7;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25);
+    transform: translateY(-1px);
+  }
+
+  .overview-btn-tie-card:active {
+    transform: translateY(0);
+  }
+
+  .overview-tie-icon-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-enter-mesa {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 9999px;
+    padding: 6px 14px;
+    font-size: 12.5px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35);
+    user-select: none;
+  }
+
+  .btn-enter-mesa:hover {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.45);
+  }
+
+  .btn-enter-mesa:active {
+    transform: translateY(0);
+  }
+
+  /* CUERPO DE LA TARJETA: ROADMAP BIG ROAD COMPLETO (EXACTAMENTE 6 CUADRITOS DE ALTO) */
+  .overview-card-body {
+    width: 100%;
+    height: auto;
+    box-sizing: border-box;
+  }
+
+  .overview-roadmap-box {
+    width: 100%;
+    height: fit-content;
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+  }
+
+  .overview-road-scroll {
+    width: 100%;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    display: block;
+    margin: 0;
+    padding: 0;
+  }
+
+  .overview-road-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .overview-bigroad-table {
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+    width: max-content;
+    height: auto;
+    margin: 0;
+    padding: 0;
+  }
+
+  .overview-bigroad-table tr {
+    height: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    line-height: 20px;
+  }
+
+  .mini-cell {
+    width: 20px;
+    min-width: 20px;
+    max-width: 20px;
+    height: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    border: 1px solid #1e293b;
+    padding: 0;
+    margin: 0;
+    text-align: center;
+    vertical-align: middle;
+    position: relative;
+    box-sizing: border-box;
+    line-height: 1;
+  }
+
+  .mini-ring {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    margin: auto;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    background: #ffffff;
+  }
+
+  .mini-ring.banca {
+    border-color: #ef4444;
+  }
+
+  .mini-ring.punto {
+    border-color: #3b82f6;
+  }
+
+  .mini-ring.empate {
+    border-color: #22c55e;
+  }
+
+  .mini-ring.empate.tie-solid,
+  .mini-ring.is-tie,
+  .mini-ring.tie-solid {
+    border-color: #22c55e;
+    background: #ffffff;
+  }
+
+  .mini-score {
+    font-size: 9.5px;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .mini-ring.banca .mini-score {
+    color: #ef4444;
+  }
+
+  .mini-ring.punto .mini-score {
+    color: #3b82f6;
+  }
+
+  .mini-ring.empate .mini-score {
+    color: #22c55e;
+  }
+
+  .mini-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #f97316;
+    position: absolute;
+  }
+
+  .overview-bigroad-table .bigroad-tie-slash,
+  .mini-slash {
+    position: absolute;
+    height: 1.8px !important;
+    background: #16a34a !important;
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .overview-bigroad-table .bigroad-tie-slash.is-before,
+  .mini-slash.is-before {
+    top: 28% !important;
+    left: 28% !important;
+    width: 12px !important;
+    height: 1.8px !important;
+    transform: translate(-50%, -50%) rotate(-45deg) !important;
+  }
+
+  .overview-bigroad-table .bigroad-tie-slash.is-after,
+  .mini-slash.is-after {
+    top: 68% !important;
+    left: 68% !important;
+    width: 12px !important;
+    height: 1.8px !important;
+    transform: translate(-50%, -50%) rotate(-45deg) !important;
+  }
+
+  .mini-tie-badge {
+    position: absolute;
+    background: #16a34a;
+    color: #ffffff;
+    font-size: 8px;
+    font-weight: 900;
+    min-width: 11px;
+    height: 11px;
+    padding: 0 1px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    z-index: 4;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+
+  .mini-tie-badge.is-before {
+    top: -1px;
+    left: -1px;
+  }
+
+  .mini-tie-badge.is-after {
+    top: 48%;
+    left: 48%;
+  }
+
+  .mini-dot-pair {
+    position: absolute;
+    width: 3.5px;
+    height: 3.5px;
+    border-radius: 50%;
+  }
+
+  .mini-dot-pair.is-bpair {
+    background: #ef4444;
+    top: -1px;
+    left: -1px;
+  }
+
+  .mini-dot-pair.is-ppair {
+    background: #3b82f6;
+    bottom: -1px;
+    right: -1px;
+  }
+
+  /* BARRA HORIZONTAL DE ESTADÍSTICAS Y CONTADORES DEBAJO DE LA CUADRILLA */
+  .overview-stats-bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #090d16;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 6px 10px;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .overview-counters-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .overview-counter-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .overview-bead {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    font-size: 10px !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+
+  .overview-bead .bead-dot {
+    width: 6px !important;
+    height: 6px !important;
+    border-width: 1px !important;
+  }
+
+  .overview-bead .dot-tl.red-dot {
+    top: 1px !important;
+    left: 1px !important;
+  }
+
+  .overview-bead .dot-br.blue-dot {
+    bottom: 1px !important;
+    right: 1px !important;
+  }
+
+  .overview-counter-val {
+    font-size: 13px;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1;
+  }
+
+  .overview-counter-val.is-banca {
+    color: #ef4444;
+  }
+
+  .overview-counter-val.is-punto {
+    color: #3b82f6;
+  }
+
+  .overview-counter-val.is-tie {
+    color: #22c55e;
+  }
+
+  .overview-pct-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .overview-pct-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 9999px;
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  .overview-pct-badge.is-banca {
+    background: rgba(239, 68, 68, 0.16);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+  }
+
+  .overview-pct-badge.is-punto {
+    background: rgba(59, 130, 246, 0.16);
+    color: #38bdf8;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+  }
+
+  .overview-pct-badge.is-tie {
+    background: rgba(34, 197, 94, 0.16);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+  }
+
+  /* MODAL DE SELECCIÓN DE SALA */
+  .modal-backdrop-sala {
+    z-index: 1000000;
+  }
+
+  .sala-modal-container {
+    max-width: 520px;
+    width: 90%;
+  }
+
+  .sala-modal-body {
+    padding: 16px;
+  }
+
+  .empty-salas-msg {
+    text-align: center;
+    color: #94a3b8;
+    padding: 24px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .salas-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 10px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .sala-select-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #1e293b;
+    border: 1.5px solid #334155;
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: #f8fafc;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  .sala-select-card:hover {
+    border-color: #0284c7;
+    background: #273549;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+  }
+
+  .sala-select-card.is-active {
+    border-color: #0284c7;
+    background: rgba(2, 132, 199, 0.22);
+    box-shadow: 0 0 12px rgba(2, 132, 199, 0.35);
+  }
+
+  .sala-card-icon {
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .sala-card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .sala-card-name {
+    font-size: 14px;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sala-card-badge {
+    font-size: 10px;
+    background: #0284c7;
+    color: #ffffff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 800;
+    width: fit-content;
+  }
+
+  /* LIGHT THEME OVERRIDES PARA EL OVERVIEW */
+  .theme-light .overview-mesa-card {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+
+  .theme-light .overview-mesa-card:hover {
+    border-color: #0284c7;
+    box-shadow: 0 6px 18px rgba(2, 132, 199, 0.2);
+  }
+
+  .theme-light .overview-mesa-name {
+    color: #0f172a;
+  }
+
+  .theme-light .overview-roadmap-box {
+    background: #ffffff;
+    border-color: #cbd5e1;
+  }
+
+  .theme-light .mini-cell {
+    border-color: #e2e8f0;
+  }
+
+  .theme-light .overview-stats-bottom-bar {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .theme-light .overview-counter-val {
+    color: #0f172a;
+  }
+
+  .theme-light .overview-counter-val.is-banca {
+    color: #dc2626;
+  }
+
+  .theme-light .overview-counter-val.is-punto {
+    color: #2563eb;
+  }
+
+  .theme-light .overview-counter-val.is-tie {
+    color: #16a34a;
+  }
+
+  .theme-light .overview-pct-badge.is-banca {
+    background: #fee2e2;
+    color: #dc2626;
+    border-color: #fca5a5;
+  }
+
+  .theme-light .overview-pct-badge.is-punto {
+    background: #dbeafe;
+    color: #2563eb;
+    border-color: #93c5fd;
+  }
+
+  .theme-light .overview-pct-badge.is-tie {
+    background: #dcfce7;
+    color: #16a34a;
+    border-color: #86efac;
+  }
+
+  .theme-light .sala-select-card {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .theme-light .sala-select-card:hover {
+    background: #e2e8f0;
+    border-color: #0284c7;
+  }
+
+  .theme-light .sala-select-card.is-active {
+    background: #e0f2fe;
+    border-color: #0284c7;
+  }
+
+  /* BOTÓN INTERACTIVO DE SESIÓN EN FILA 2 (ESTRUCTURA PLANA SIN BORDES REDONDEADOS INTERNOS) */
+  .session-label-btn {
+    flex: 1;
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    box-sizing: border-box;
+    justify-content: center;
+    text-align: center;
+    background: transparent;
+    border: none;
+    border-radius: 0 !important;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: clamp(3px, 0.45vw, 8px);
+    padding: 0 clamp(8px, 1.2vw, 18px);
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+
+  .session-label-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .session-label-btn:active {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .theme-light .session-label-btn:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .theme-light .session-label-btn:active {
+    background: rgba(0, 0, 0, 0.08);
+  }
+
+  /* MODAL DE GESTIÓN DE SESIONES */
+  .modal-backdrop-session {
+    z-index: 1000000;
+  }
+
+  .session-modal-container {
+    max-width: 480px;
+    width: 92%;
+  }
+
+  .session-modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .session-create-box {
+    background: rgba(2, 132, 199, 0.08);
+    border: 1px dashed rgba(2, 132, 199, 0.4);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .session-create-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #38bdf8;
+  }
+
+  .session-create-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .session-date-input {
+    flex: 1;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #f8fafc;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .btn-create-session {
+    background: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+
+  .btn-create-session:hover:not(:disabled) {
+    background: #0369a1;
+  }
+
+  .btn-create-session:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .session-list-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .session-list-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+
+  .sessions-list-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .session-item-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1e293b;
+    border: 1.5px solid #334155;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #f8fafc;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+    font-family: inherit;
+  }
+
+  .session-item-card:hover {
+    border-color: #0284c7;
+    background: #273549;
+  }
+
+  .session-item-card.is-active {
+    border-color: #0284c7;
+    background: rgba(2, 132, 199, 0.2);
+  }
+
+  .session-card-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .session-card-date {
+    font-weight: 800;
+    font-size: 13.5px;
+  }
+
+  .session-badge-actual {
+    font-size: 10px;
+    background: #0284c7;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 800;
+  }
+
+  .session-badge-hist {
+    font-size: 10px;
+    background: #475569;
+    color: #cbd5e1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+
+  .session-card-selected-badge {
+    font-size: 11px;
+    color: #38bdf8;
+    font-weight: 800;
+  }
+
+  .empty-sessions-msg {
+    color: #94a3b8;
+    font-size: 13px;
+    text-align: center;
+    padding: 12px;
+  }
+
+  .theme-light .session-create-box {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+  }
+
+  .theme-light .session-create-label {
+    color: #0284c7;
+  }
+
+  .theme-light .session-date-input {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #0f172a;
+  }
+
+  .theme-light .session-item-card {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .theme-light .session-item-card:hover {
+    background: #e2e8f0;
+    border-color: #0284c7;
+  }
+
+  .theme-light .session-item-card.is-active {
+    background: #e0f2fe;
+    border-color: #0284c7;
   }
 </style>
