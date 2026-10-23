@@ -274,7 +274,7 @@ export async function getCamarasModel(params = {}) {
     const list = Array.isArray(sala_uuid) ? sala_uuid : [sala_uuid];
     const validUuids = list.filter(isUuid);
     if (validUuids.length > 0) {
-      conds.push(sql`c.sala_uuid = ANY(${validUuids}::uuid[])`);
+      conds.push(sql`(c.sala_uuid = ANY(${validUuids}::uuid[]) OR d.sala_uuid = ANY(${validUuids}::uuid[]))`);
     }
   }
 

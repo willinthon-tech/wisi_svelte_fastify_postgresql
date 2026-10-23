@@ -476,6 +476,8 @@
     "ia-novedades",
     "cecom/ia-mesas",
     "ia-mesas",
+    "cecom/descargas-video",
+    "descargas-video",
     "herramientas",
     "herramientas/scoreboard-baccarat",
     "otros/herramientas",
