@@ -490,10 +490,25 @@ export function pairDayAttendance({
     }
 
     // Badges de puntualidad si la plantilla tiene hora programada
-    if (matchedPlantilla && matchedPlantilla.hora_entrada) {
+    if (matchedPlantilla && matchedPlantilla.hora_entrada && entradaStr) {
       const schedEntMins = toMinutes(matchedPlantilla.hora_entrada);
       if (schedEntMins !== null) {
-        const diffEnt = entMins - schedEntMins;
+        let diffEnt = null;
+
+        if (selectedEntry && selectedEntry.timestamp && dateStr) {
+          const schedEntParsed = parseAttlogTime(`${dateStr} ${matchedPlantilla.hora_entrada}`);
+          if (schedEntParsed && schedEntParsed.timestamp) {
+            diffEnt = Math.round((selectedEntry.timestamp - schedEntParsed.timestamp) / 60000);
+          }
+        }
+
+        if (diffEnt === null) {
+          let d = entMins - schedEntMins;
+          if (d > 720) d -= 1440;
+          if (d < -720) d += 1440;
+          diffEnt = d;
+        }
+
         if (diffEnt > 0) {
           entBadge = { text: toHHMM(diffEnt), isAlert: true, color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' };
         } else {
@@ -504,8 +519,36 @@ export function pairDayAttendance({
 
     if (matchedPlantilla && matchedPlantilla.hora_salida && salidaStr) {
       const schedSalMins = toMinutes(matchedPlantilla.hora_salida);
+      const schedEntMins = matchedPlantilla.hora_entrada ? toMinutes(matchedPlantilla.hora_entrada) : null;
+
       if (schedSalMins !== null) {
-        const diffSal = schedSalMins - salMins;
+        let diffSal = null;
+        // Turno cruza medianoche si la hora de salida programada es <= hora de entrada programada (ej: 16:00 a 00:00, 18:00 a 02:00)
+        const isShiftCrossDay = schedEntMins !== null && schedSalMins <= schedEntMins;
+
+        if (selectedExit && selectedExit.timestamp && dateStr) {
+          let salDateStr = dateStr;
+          if (isShiftCrossDay) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const nextD = new Date(y, m - 1, d + 1);
+            salDateStr = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, '0')}-${String(nextD.getDate()).padStart(2, '0')}`;
+          }
+          const schedSalParsed = parseAttlogTime(`${salDateStr} ${matchedPlantilla.hora_salida}`);
+          if (schedSalParsed && schedSalParsed.timestamp) {
+            // diffSal = schedSalParsed.timestamp - selectedExit.timestamp:
+            // > 0 => salió antes de la hora (temprana / alerta roja)
+            // <= 0 => salió en o después de la hora (tarde / tiempo extra / verde)
+            diffSal = Math.round((schedSalParsed.timestamp - selectedExit.timestamp) / 60000);
+          }
+        }
+
+        // Fallback matemático por minutos si no hay timestamp disponible
+        if (diffSal === null) {
+          const effectiveSchedSal = isShiftCrossDay ? (schedSalMins + 1440) : schedSalMins;
+          const effectiveActualSal = (isCrossDay || (entMins !== null && salMins < entMins)) ? (salMins + 1440) : salMins;
+          diffSal = effectiveSchedSal - effectiveActualSal;
+        }
+
         if (diffSal > 0) {
           salBadge = { text: toHHMM(diffSal), isAlert: true, color: '#dc2626', bg: '#fff1f2', border: '#fecdd3' };
         } else {

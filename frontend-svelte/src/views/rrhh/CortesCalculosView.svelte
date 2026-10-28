@@ -521,10 +521,19 @@
           if (!salDiffFound && dia.shift && dia.shift.hora_salida && dia.marcajeStr) {
             const times = getEntradaSalidaTimes(dia.marcajeStr);
             if (times.salida) {
-              const schedMins = toMinutes(dia.shift.hora_salida);
-              const realMins = toMinutes(times.salida);
-              if (schedMins !== null && realMins !== null) {
-                const diff = schedMins - realMins;
+              const schedSalMins = toMinutes(dia.shift.hora_salida);
+              const schedEntMins = dia.shift.hora_entrada ? toMinutes(dia.shift.hora_entrada) : null;
+              const realSalMins = toMinutes(times.salida);
+              const realEntMins = times.entrada ? toMinutes(times.entrada) : null;
+
+              if (schedSalMins !== null && realSalMins !== null) {
+                const isShiftCrossDay = schedEntMins !== null && schedSalMins <= schedEntMins;
+                const isActualCrossDay = realEntMins !== null && realSalMins < realEntMins;
+
+                const effectiveSched = isShiftCrossDay ? (schedSalMins + 1440) : schedSalMins;
+                const effectiveReal = isActualCrossDay ? (realSalMins + 1440) : realSalMins;
+
+                const diff = effectiveSched - effectiveReal;
                 if (diff > 0) {
                   salidaTempranaCount++;
                   salidaTempranaMins += diff;
