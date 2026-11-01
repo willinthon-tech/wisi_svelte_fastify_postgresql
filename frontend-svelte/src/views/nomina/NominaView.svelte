@@ -135,19 +135,32 @@
     navigateToRoute(`erp/nomina/${id}`);
   }
 
-  // --- DATOS DEMO / ESTADO V1 PERSONAL Y NÓMINA ---
-  let empleados = [
-    { uuid: 'emp-01', cedula: 'V-18.492.019', nombres: 'Carlos Mendoza', cargo: 'Pitboss / Jefe de Sala', departamento: 'Mesas en Vivo', sala_nombre: 'Casino Principal', sueldo_base_usd: 650.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0821-49-1029384756', estado: 'ACTIVO' },
-    { uuid: 'emp-02', cedula: 'V-20.183.921', nombres: 'Mariana Silva', cargo: 'Croupier Principal Baccarat', departamento: 'Mesas en Vivo', sala_nombre: 'Casino Principal', sueldo_base_usd: 480.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Mercantil', nro_cuenta: '0105-0291-83-9102837465', estado: 'ACTIVO' },
-    { uuid: 'emp-03', cedula: 'V-23.819.284', nombres: 'Alejandro Ramos', cargo: 'Operador de Monitoreo CECOM', departamento: 'Seguridad Integral', sala_nombre: 'Casino Principal', sueldo_base_usd: 420.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0192-38-4920192837', estado: 'ACTIVO' },
-    { uuid: 'emp-04', cedula: 'V-19.384.712', nombres: 'Dayana Gómez', cargo: 'Cajera Bóveda y Canje', departamento: 'Administración y Caja', sala_nombre: 'Casino Principal', sueldo_base_usd: 450.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banco de Venezuela', nro_cuenta: '0102-0938-12-3920194857', estado: 'ACTIVO' },
-    { uuid: 'emp-05', cedula: 'V-25.102.938', nombres: 'José Gregorio Pérez', cargo: 'Técnico de Máquinas y Slots', departamento: 'Mantenimiento Técnico', sala_nombre: 'Casino Principal', sueldo_base_usd: 500.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0928-11-2019485729', estado: 'ACTIVO' }
-  ];
+  // --- PERSONAL REAL DE LA EMPRESA ---
+  let empleados = [];
+
+  $: if (empleados.length === 0 && Array.isArray($masterEmpleadosStore) && $masterEmpleadosStore.length > 0) {
+    empleados = $masterEmpleadosStore.map(e => ({
+      uuid: e.uuid || e.id,
+      cedula: e.cedula || 'V-00000000',
+      nombres: e.nombre || e.nombres || 'Empleado',
+      nombre: e.nombre || e.nombres || 'Empleado',
+      cargo: e.cargo_nombre || e.cargo || 'Operador',
+      departamento: e.departamento_nombre || e.departamento || 'Operaciones de Sala',
+      sala_nombre: e.sala_nombre || 'Principal',
+      sala_uuid: e.sala_uuid || null,
+      sueldo_base_usd: 450.00,
+      cestaticket_usd: 40.00,
+      frecuencia: 'QUINCENAL',
+      banco: 'Banesco',
+      nro_cuenta: '0134-0192-38-4920192837',
+      estado: e.activo === false ? 'INACTIVO' : 'ACTIVO'
+    }));
+  }
 
   let filtroPersonal = '';
   $: personalFiltrado = empleados.filter(e => {
-    const matchTxt = e.nombres.toLowerCase().includes(filtroPersonal.toLowerCase()) ||
-                     e.cedula.toLowerCase().includes(filtroPersonal.toLowerCase()) ||
+    const matchTxt = (e.nombres || e.nombre || '').toLowerCase().includes(filtroPersonal.toLowerCase()) ||
+                     (e.cedula || '').toLowerCase().includes(filtroPersonal.toLowerCase()) ||
                      (e.cargo && e.cargo.toLowerCase().includes(filtroPersonal.toLowerCase()));
     if (!matchTxt) return false;
     if (selectedSalaFiltro !== 'ALL') {
@@ -168,41 +181,56 @@
     { uuid: 'c-07', codigo: 'DED-003', nombre: 'Anticipos de Sueldo / Préstamos', tipo: 'DEDUCCION', formula: 'Cuota Pactada Empleado', gravable_ivss: false }
   ];
 
-  // --- PROCESAMIENTO DE NÓMINA QUINCENAL ---
+  // --- PROCESAMIENTO DE NÓMINA QUINCENAL DESDE CORTES REALES ---
   let periodoNomina = {
-    nombre: '2da Quincena Octubre 2026',
+    nombre: 'Nómina Quincenal en Proceso',
     desde: '2026-10-16',
     hasta: '2026-10-31',
     estado: 'EN_BORRADOR'
   };
 
   let empleadosCalculo = [];
+  let lastLoadedCorteUuid = '';
+
+  $: if (cortesFiltrados && cortesFiltrados.length > 0) {
+    const exists = cortesFiltrados.some(c => String(c.uuid || c.id) === String(selectedCorteUuid));
+    if (!selectedCorteUuid || !exists) {
+      selectedCorteUuid = cortesFiltrados[0].uuid || cortesFiltrados[0].id;
+    }
+    if (selectedCorteUuid && selectedCorteUuid !== lastLoadedCorteUuid) {
+      lastLoadedCorteUuid = selectedCorteUuid;
+      seleccionarCorte(selectedCorteUuid);
+    }
+  }
 
   $: {
-    if (empleadosCalculo.length === 0 && empleados.length > 0) {
+    if (empleadosCalculo.length === 0 && empleados.length > 0 && (!cortesFiltrados || cortesFiltrados.length === 0)) {
       generarCalculoDesdeEmpleados();
     }
   }
 
   function generarCalculoDesdeEmpleados() {
-    empleadosCalculo = empleados.map(emp => {
-      const sueldoQuincena = emp.sueldo_base_usd / 2;
-      const cestaQuincena = emp.cestaticket_usd / 2;
-      const horasExtras = emp.uuid === 'emp-02' ? 35.00 : 0.00;
-      const totalAsignaciones = sueldoQuincena + cestaQuincena + horasExtras;
-      const dedIvss = sueldoQuincena * 0.04;
-      const dedFaov = sueldoQuincena * 0.01;
-      const totalDeducciones = dedIvss + dedFaov;
-      const netoPagarUsd = totalAsignaciones - totalDeducciones;
-      const netoPagarBs = netoPagarUsd * tasaBcv;
+    const pool = personalFiltrado.length > 0 ? personalFiltrado : empleados;
+    if (!pool || pool.length === 0) return;
+    empleadosCalculo = pool.map(emp => {
+      const sueldoMensual = Number(emp.sueldo_base_usd) || 450;
+      const sueldoQuincena = Number((sueldoMensual / 2).toFixed(2));
+      const cestaQuincena = 20.00;
+      const horasExtras = 0.00;
+      const totalAsignaciones = Number((sueldoQuincena + cestaQuincena + horasExtras).toFixed(2));
+      const dedIvss = Number(((sueldoMensual * 12 / 52) * 0.04 * 2).toFixed(2));
+      const dedFaov = Number((sueldoQuincena * 0.01).toFixed(2));
+      const totalDeducciones = Number((dedIvss + dedFaov).toFixed(2));
+      const netoPagarUsd = Number(Math.max(0, totalAsignaciones - totalDeducciones).toFixed(2));
+      const netoPagarBs = Number((netoPagarUsd * tasaBcv).toFixed(2));
 
       return {
         uuid: emp.uuid,
         cedula: emp.cedula,
-        nombres: emp.nombres,
-        nombre: emp.nombres,
-        cargo: emp.cargo,
-        departamento: emp.departamento,
+        nombres: emp.nombres || emp.nombre,
+        nombre: emp.nombres || emp.nombre,
+        cargo: emp.cargo || 'Operador',
+        departamento: emp.departamento || 'Operaciones',
         sala_nombre: emp.sala_nombre || 'Principal',
         dias_trabajados: 15,
         sueldoQuincena,
@@ -216,8 +244,8 @@
         totalDeducciones,
         netoPagarUsd,
         netoPagarBs,
-        banco: emp.banco,
-        nro_cuenta: emp.nro_cuenta
+        banco: emp.banco || 'Banesco',
+        nro_cuenta: emp.nro_cuenta || '0134-0192-38-4920192837'
       };
     });
   }
@@ -225,15 +253,18 @@
   async function seleccionarCorte(corteUuid) {
     if (!corteUuid) return;
     selectedCorteUuid = corteUuid;
+    lastLoadedCorteUuid = corteUuid;
     try {
       const res = await fetch(toBackendUrl(`/api/erp/nomina/cortes/${corteUuid}`));
       const json = await res.json();
       if (json?.success && json.data) {
         const cData = json.data;
+        const cleanDesde = String(cData.fecha_desde || '').slice(0, 10);
+        const cleanHasta = String(cData.fecha_hasta || '').slice(0, 10);
         periodoNomina = {
-          nombre: `Nómina Quincenal (${cData.fecha_desde} al ${cData.fecha_hasta})`,
-          desde: cData.fecha_desde,
-          hasta: cData.fecha_hasta,
+          nombre: `Nómina Quincenal (${cleanDesde} al ${cleanHasta})`,
+          desde: cleanDesde,
+          hasta: cleanHasta,
           estado: 'EN_BORRADOR'
         };
 
@@ -241,17 +272,17 @@
           empleadosCalculo = cData.empleados.map(e => ({
             ...e,
             nombres: e.nombre || e.nombres,
-            sueldoQuincena: Number(e.sueldo_quincenal) || 225,
-            cestaQuincena: Number(e.cestaticket) || 20,
-            horasExtras: Number(e.horas_extras_monto) || 0,
-            bonoAdicional: Number(e.bonos) || 0,
-            totalAsignaciones: Number(e.total_asignaciones) || 245,
-            dedIvss: Number(e.deduccion_ivss) || 9,
-            dedFaov: Number(e.deduccion_faov) || 2.25,
+            sueldoQuincena: Number(e.sueldo_quincenal ?? e.sueldoQuincena) || 225,
+            cestaQuincena: Number(e.cestaticket ?? e.cestaQuincena) || 20,
+            horasExtras: Number(e.horas_extras_monto ?? e.horasExtras) || 0,
+            bonoAdicional: Number(e.bonos ?? e.bonoAdicional) || 0,
+            totalAsignaciones: Number(e.total_asignaciones ?? e.totalAsignaciones) || 245,
+            dedIvss: Number(e.deduccion_ivss ?? e.dedIvss) || 9,
+            dedFaov: Number(e.deduccion_faov ?? e.dedFaov) || 2.25,
             anticipos: Number(e.anticipos) || 0,
-            totalDeducciones: Number(e.total_deducciones) || 11.25,
-            netoPagarUsd: Number(e.neto_pagar_usd) || 233.75,
-            netoPagarBs: Number(((e.neto_pagar_usd || 233.75) * tasaBcv).toFixed(2))
+            totalDeducciones: Number(e.total_deducciones ?? e.totalDeducciones) || 11.25,
+            netoPagarUsd: Number(e.neto_pagar_usd ?? e.netoPagarUsd) || 233.75,
+            netoPagarBs: Number(((e.neto_pagar_usd ?? e.netoPagarUsd ?? 233.75) * tasaBcv).toFixed(2))
           }));
           triggerToast(`Corte cargado con ${empleadosCalculo.length} empleados desde el biométrico.`, 'info');
           return;
@@ -470,7 +501,7 @@
         <div class="kpi-card">
           <div class="kpi-info">
             <span class="kpi-label">TOTAL PERSONAL ACTIVO</span>
-            <span class="kpi-val">{empleados.length}</span>
+            <span class="kpi-val">{personalFiltrado.length}</span>
             <span class="kpi-sub">En plantilla de nómina</span>
           </div>
         </div>
@@ -479,16 +510,16 @@
           <div class="kpi-info">
             <span class="kpi-label">TOTAL SUELDOS BASE (MES)</span>
             <span class="kpi-val">
-              {fmtUsd(empleados.reduce((acc, e) => acc + e.sueldo_base_usd, 0))}
+              {fmtUsd(personalFiltrado.reduce((acc, e) => acc + (Number(e.sueldo_base_usd) || 450), 0))}
             </span>
-            <span class="kpi-sub">{fmtBs(empleados.reduce((acc, e) => acc + e.sueldo_base_usd, 0) * tasaBcv)}</span>
+            <span class="kpi-sub">{fmtBs(personalFiltrado.reduce((acc, e) => acc + (Number(e.sueldo_base_usd) || 450), 0) * tasaBcv)}</span>
           </div>
         </div>
 
         <div class="kpi-card">
           <div class="kpi-info">
             <span class="kpi-label">CESTATICKET MENSUAL</span>
-            <span class="kpi-val">{fmtUsd(empleados.length * 40)}</span>
+            <span class="kpi-val">{fmtUsd(personalFiltrado.length * 40)}</span>
             <span class="kpi-sub">40 USD / trabajador</span>
           </div>
         </div>
@@ -657,7 +688,7 @@
               <option value="">-- Seleccionar Corte de RRHH para procesar nómina --</option>
               {#each cortesFiltrados as c}
                 <option value={c.uuid || c.id}>
-                  Corte: {c.fecha_desde} al {c.fecha_hasta} • {c.total_empleados || 0} Empleados • {c.salas_nombres?.[0] || 'General'}
+                  Corte: {String(c.fecha_desde || '').slice(0, 10)} al {String(c.fecha_hasta || '').slice(0, 10)} • {c.total_empleados || 0} Empleados • {c.salas_nombres?.[0] || 'General'}
                 </option>
               {/each}
             </select>
@@ -792,15 +823,15 @@
             </tr>
           </thead>
           <tbody>
-            {#each empleados as emp, i}
-              {@const salarioDia = (emp.sueldo_base_usd + emp.cestaticket_usd) / 30}
+            {#each (personalFiltrado.length > 0 ? personalFiltrado : empleados) as emp, i}
+              {@const salarioDia = ((Number(emp.sueldo_base_usd) || 450) + (Number(emp.cestaticket_usd) || 40)) / 30}
               {@const dias = (i + 2) * 15}
               {@const acumGarantia = dias * salarioDia}
               {@const intereses = acumGarantia * 0.08}
               <tr>
-                <td><strong>{emp.nombres}</strong></td>
+                <td><strong>{emp.nombres || emp.nombre}</strong></td>
                 <td><code>{emp.cedula}</code></td>
-                <td>2024-03-15</td>
+                <td>{emp.fecha_ingreso || '2024-03-15'}</td>
                 <td style="text-align: right;">{dias} días</td>
                 <td style="text-align: right;">{fmtUsd(salarioDia)}</td>
                 <td style="text-align: right; font-weight: 700;">{fmtUsd(acumGarantia)}</td>

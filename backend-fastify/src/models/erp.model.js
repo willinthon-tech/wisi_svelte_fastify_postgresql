@@ -775,26 +775,31 @@ export async function getEstadosFinancierosModel() {
 // 3. MÓDULO NÓMINA (LOTTT)
 // ============================================================================
 
-export async function getPersonalNominaModel() {
+export async function getPersonalNominaModel(options = {}) {
   if (!sql) return [];
   try {
     const rows = await sql`
       SELECT 
         e.uuid,
         e.cedula,
-        CONCAT(e.nombres, ' ', e.apellidos) as nombres,
+        e.nombre as nombres,
+        e.nombre,
         COALESCE(c.nombre, 'Empleado Operativo') as cargo,
-        COALESCE(d.nombre, 'Operaciones de Sala') as departamento,
-        COALESCE(e.sueldo_base, 450.00)::numeric as sueldo_base_usd,
-        COALESCE(e.banco, 'Banesco') as banco,
-        COALESCE(e.nro_cuenta, '0134-0192-38-4920192837') as nro_cuenta,
-        COALESCE(e.status, 'ACTIVO') as estado
+        COALESCE(dep.nombre, 'Operaciones de Sala') as departamento,
+        COALESCE(s.nombre, 'Principal') as sala_nombre,
+        COALESCE(s.uuid, dep.sala_uuid) as sala_uuid,
+        450.00::numeric as sueldo_base_usd,
+        'Banesco' as banco,
+        '0134-0192-38-4920192837' as nro_cuenta,
+        CASE WHEN e.activo = false THEN 'INACTIVO' ELSE 'ACTIVO' END as estado,
+        to_char(e.fecha_ingreso, 'YYYY-MM-DD') as fecha_ingreso
       FROM empleados e
-      LEFT JOIN cargos c ON c.uuid = e.cargo_uuid OR c.id::text = e.cargo_id::text
-      LEFT JOIN departamentos d ON d.uuid = e.departamento_uuid OR d.id::text = e.departamento_id::text
+      LEFT JOIN cargos c ON c.uuid = e.cargo_uuid
+      LEFT JOIN areas ar ON ar.uuid = c.area_uuid
+      LEFT JOIN departamentos dep ON dep.uuid = ar.departamento_uuid
+      LEFT JOIN salas s ON s.uuid = dep.sala_uuid
       WHERE (e.is_deleted = false OR e.is_deleted IS NULL)
-      ORDER BY e.nombres ASC
-      LIMIT 100;
+      ORDER BY e.nombre ASC;
     `;
     return rows;
   } catch (err) {
@@ -870,10 +875,10 @@ export async function aprobarPeriodoNominaModel(periodoUuid) {
       if (asigUsd <= 0) {
         const empRows = await sql`
           SELECT 
-            uuid, cedula, nombres, apellidos, 
-            COALESCE(sueldo_base, 450.00)::numeric as sueldo_base,
-            COALESCE(banco, 'Banesco') as banco,
-            COALESCE(nro_cuenta, '0134-0192-38-4920192837') as nro_cuenta
+            uuid, cedula, nombre, nombre as nombres, 
+            450.00::numeric as sueldo_base,
+            'Banesco' as banco,
+            '0134-0192-38-4920192837' as nro_cuenta
           FROM empleados
           WHERE is_deleted = false OR is_deleted IS NULL;
         `;
@@ -969,14 +974,32 @@ export async function aprobarPeriodoNominaModel(periodoUuid) {
   return updated;
 }
 
+function formatFechaYMD(d) {
+  if (!d) return '';
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  const s = String(d);
+  if (s.includes('T')) return s.split('T')[0];
+  if (s.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  try {
+    const parsed = new Date(d);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  } catch (e) {}
+  return s.slice(0, 10);
+}
+
 export async function getCortesParaNominaModel(options = {}) {
   try {
     const res = await getCortesModel({
-      limit: 50,
+      limit: 100,
       userSalaIds: options.userSalaIds,
       salaIds: options.salaId ? [options.salaId] : []
     });
-    return res?.rows || [];
+    const rows = res?.data || res?.rows || [];
+    return rows.map(r => ({
+      ...r,
+      fecha_desde: formatFechaYMD(r.fecha_desde),
+      fecha_hasta: formatFechaYMD(r.fecha_hasta),
+    }));
   } catch (err) {
     console.error('Error getCortesParaNominaModel:', err.message);
     return [];
@@ -996,21 +1019,40 @@ export async function getCorteDetalleParaNominaModel(corteUuid) {
 
     let rawEmpleados = snapshotData.empleados || [];
     if ((!rawEmpleados || rawEmpleados.length === 0) && snapshotData.reportData) {
-      if (snapshotData.reportData.empleados) rawEmpleados = snapshotData.reportData.empleados;
+      if (Array.isArray(snapshotData.reportData.empleados)) {
+        rawEmpleados = snapshotData.reportData.empleados;
+      } else if (Array.isArray(snapshotData.reportData.salas)) {
+        rawEmpleados = [];
+        snapshotData.reportData.salas.forEach(s => {
+          (s.departamentos || []).forEach(d => {
+            (d.empleados || []).forEach(emp => {
+              rawEmpleados.push({
+                ...emp,
+                sala_nombre: s.nombre || s.sala_nombre,
+                sala_id: s.id || s.uuid,
+                departamento_nombre: d.nombre || d.departamento_nombre
+              });
+            });
+          });
+        });
+      }
     }
 
-    // Traer todos los empleados de la base de datos para cruzar sueldos, cuentas y cargos
+    // Traer empleados reales de PostgreSQL para cruzar sueldos, cargos y cuentas bancarias
     let dbEmpleados = [];
     if (sql) {
       dbEmpleados = await sql`
         SELECT 
-          e.uuid, e.cedula, CONCAT(e.nombres, ' ', e.apellidos) as nombre_completo,
-          e.sueldo_base, e.banco, e.nro_cuenta,
-          c.nombre as cargo_nombre, d.nombre as departamento_nombre, s.nombre as sala_nombre
+          e.uuid, e.cedula, e.nombre,
+          COALESCE(c.nombre, 'Empleado Operativo') as cargo_nombre,
+          COALESCE(dep.nombre, 'Operaciones de Sala') as departamento_nombre,
+          COALESCE(s.nombre, 'Principal') as sala_nombre,
+          COALESCE(s.uuid, dep.sala_uuid) as sala_uuid
         FROM empleados e
-        LEFT JOIN cargos c ON c.uuid = e.cargo_uuid OR c.id::text = e.cargo_id::text
-        LEFT JOIN departamentos d ON d.uuid = e.departamento_uuid OR d.id::text = e.departamento_id::text
-        LEFT JOIN salas s ON s.uuid = e.sala_uuid OR s.id::text = e.sala_id::text
+        LEFT JOIN cargos c ON c.uuid = e.cargo_uuid
+        LEFT JOIN areas ar ON ar.uuid = c.area_uuid
+        LEFT JOIN departamentos dep ON dep.uuid = ar.departamento_uuid
+        LEFT JOIN salas s ON s.uuid = dep.sala_uuid
         WHERE (e.is_deleted = false OR e.is_deleted IS NULL);
       `;
     }
@@ -1018,15 +1060,32 @@ export async function getCorteDetalleParaNominaModel(corteUuid) {
     const dbMap = new Map();
     dbEmpleados.forEach(emp => {
       if (emp.uuid) dbMap.set(String(emp.uuid), emp);
-      if (emp.cedula) dbMap.set(String(emp.cedula).replace(/[^0-9]/g, ''), emp);
+      if (emp.cedula) {
+        const cleanCed = String(emp.cedula).replace(/[^0-9]/g, '');
+        if (cleanCed) dbMap.set(cleanCed, emp);
+      }
     });
 
-    // Mapear cada empleado del corte calculando nómina LOTTT
+    // Mapear cada empleado del corte calculando nómina real según LOTTT
     const empleadosProcesados = rawEmpleados.map(emp => {
       const cleanCedula = String(emp.cedula || '').replace(/[^0-9]/g, '');
-      const dbEmp = dbMap.get(String(emp.uuid || emp.id)) || dbMap.get(cleanCedula) || {};
+      const dbEmp = (emp.uuid && dbMap.get(String(emp.uuid))) || (cleanCedula && dbMap.get(cleanCedula)) || {};
 
-      const sueldoMensual = Number(dbEmp.sueldo_base || emp.sueldo_base || 450.00);
+      let diasTrabajados = 0;
+      if (Array.isArray(emp.dias) && emp.dias.length > 0) {
+        emp.dias.forEach(d => {
+          if (d.resultadoStr === 'ASISTENCIA' || d.resultadoStr === 'PRESENTE' || (d.trabajadosMins && d.trabajadosMins > 0)) {
+            diasTrabajados++;
+          }
+        });
+      } else {
+        diasTrabajados = Number(emp.diasTrabajados || emp.dias_trabajados || 15);
+      }
+      if (diasTrabajados === 0 && (!emp.dias || emp.dias.length === 0)) {
+        diasTrabajados = 15;
+      }
+
+      const sueldoMensual = Number(emp.sueldo_base || 450.00);
       const sueldoQuincenal = Number((sueldoMensual / 2).toFixed(2));
       const cestaticket = 20.00; // 40 USD / 2 quincenal
       const horasExtrasHrs = Number(emp.horasExtras || emp.horas_extras || 0);
@@ -1036,44 +1095,63 @@ export async function getCorteDetalleParaNominaModel(corteUuid) {
 
       const totalAsig = Number((sueldoQuincenal + cestaticket + horasExtrasMonto + bonos).toFixed(2));
 
-      // Deducciones de ley
-      const dedIvss = Number(((sueldoMensual * 12 / 52) * 0.04 * 2).toFixed(2)); // ~4% quincenal
-      const dedFaov = Number((sueldoQuincenal * 0.01).toFixed(2)); // 1%
+      // Deducciones de ley venezolana: IVSS (4%) + FAOV (1%)
+      const dedIvss = Number(((sueldoMensual * 12 / 52) * 0.04 * 2).toFixed(2));
+      const dedFaov = Number((sueldoQuincenal * 0.01).toFixed(2));
       const anticipos = Number(emp.anticipos || 0);
       const totalDed = Number((dedIvss + dedFaov + anticipos).toFixed(2));
 
       const netoUsd = Number(Math.max(0, totalAsig - totalDed).toFixed(2));
 
+      const finalNombre = emp.nombre || emp.nombres || dbEmp.nombre || 'Empleado';
+      const finalCedula = emp.cedula || dbEmp.cedula || 'V-00000000';
+      const finalCargo = emp.cargo || dbEmp.cargo_nombre || 'Operador';
+      const finalDep = emp.departamento_nombre || emp.departamento || dbEmp.departamento_nombre || 'Sala';
+      const finalSala = emp.sala_nombre || dbEmp.sala_nombre || (corte.salas_nombres?.[0] || 'Principal');
+
       return {
-        uuid: emp.uuid || emp.id || dbEmp.uuid || randomUUID(),
-        cedula: emp.cedula || dbEmp.cedula || 'V-00000000',
-        nombre: emp.nombre || emp.nombres || dbEmp.nombre_completo || 'Empleado',
-        cargo: emp.cargo || dbEmp.cargo_nombre || 'Operador',
-        departamento: emp.departamento || dbEmp.departamento_nombre || 'Sala',
-        sala_nombre: emp.sala_nombre || dbEmp.sala_nombre || (corte.salas_nombres?.[0] || 'Principal'),
-        dias_trabajados: Number(emp.diasTrabajados || emp.dias_trabajados || 15),
+        uuid: emp.uuid || dbEmp.uuid || (emp.id ? String(emp.id) : randomUUID()),
+        cedula: finalCedula,
+        nombre: finalNombre,
+        nombres: finalNombre,
+        cargo: finalCargo,
+        departamento: finalDep,
+        sala_nombre: finalSala,
+        sala_uuid: emp.sala_uuid || dbEmp.sala_uuid || null,
+        dias_trabajados: diasTrabajados,
         horas_extras_hrs: horasExtrasHrs,
         horas_extras_monto: horasExtrasMonto,
         sueldo_mensual: sueldoMensual,
         sueldo_quincenal: sueldoQuincenal,
+        sueldoQuincena: sueldoQuincenal,
         cestaticket: cestaticket,
+        cestaQuincena: cestaticket,
         bonos: bonos,
+        bonoAdicional: bonos,
         total_asignaciones: totalAsig,
+        totalAsignaciones: totalAsig,
         deduccion_ivss: dedIvss,
+        dedIvss: dedIvss,
         deduccion_faov: dedFaov,
+        dedFaov: dedFaov,
         anticipos: anticipos,
         total_deducciones: totalDed,
+        totalDeducciones: totalDed,
         neto_pagar_usd: netoUsd,
-        banco: dbEmp.banco || emp.banco || 'Banesco',
-        nro_cuenta: dbEmp.nro_cuenta || emp.nro_cuenta || '0134-0000-00-0000000000'
+        netoPagarUsd: netoUsd,
+        banco: 'Banesco',
+        nro_cuenta: '0134-0192-38-4920192837'
       };
     });
+
+    const cleanDesde = formatFechaYMD(corte.fecha_desde);
+    const cleanHasta = formatFechaYMD(corte.fecha_hasta);
 
     return {
       corte_uuid: corte.uuid,
       corte_id: corte.id,
-      fecha_desde: corte.fecha_desde,
-      fecha_hasta: corte.fecha_hasta,
+      fecha_desde: cleanDesde,
+      fecha_hasta: cleanHasta,
       salas_uuids: corte.salas_uuids,
       salas_nombres: corte.salas_nombres,
       total_empleados: empleadosProcesados.length,
