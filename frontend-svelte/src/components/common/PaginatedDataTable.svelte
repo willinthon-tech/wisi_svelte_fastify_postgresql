@@ -141,7 +141,12 @@
   import { saveOrShareFile } from '../../utils/fileSaver.js';
   import { triggerToast, globalCreateModalTriggerStore } from '../../controllers/ui.store.js';
   import { 
+    currentUserStore, 
+    userSalasStore as authUserSalasStore 
+  } from '../../controllers/auth.store.js';
+  import { 
     masterCargosStore, 
+    userSalasStore as masterUserSalasStore,
     loadMasterStoresFromBackend, 
     currentRoutePermissionsStore, 
     getUserModuleActions 
@@ -202,9 +207,76 @@
 
   $: effectiveLoading = (isLoading !== undefined) ? Boolean(isLoading) : internalLoading;
 
+  // Extracción reactiva de las salas asignadas al usuario logueado
+  $: userAssignedSalasInfo = (function () {
+    const user = $currentUserStore;
+    const authSalas = $authUserSalasStore;
+    const masterMap = $masterUserSalasStore;
+    const userId = user?.uuid || user?.id;
+
+    let rawList = [];
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      rawList = user.salas;
+    } else if (Array.isArray(authSalas) && authSalas.length > 0) {
+      rawList = authSalas;
+    } else if (masterMap && typeof masterMap === 'object' && !Array.isArray(masterMap)) {
+      const userList = masterMap[userId] || (userId ? masterMap[String(userId)] : null);
+      if (Array.isArray(userList) && userList.length > 0) {
+        rawList = userList;
+      }
+    }
+
+    const idSet = new Set();
+    const nameSet = new Set();
+
+    for (const s of rawList) {
+      if (!s) continue;
+      if (typeof s === 'object') {
+        const id = s.uuid || s.id || s.sala_uuid || s.sala_id;
+        if (id) idSet.add(String(id).toLowerCase().trim());
+        const name = s.nombre || s.sala_nombre;
+        if (name) nameSet.add(String(name).toLowerCase().trim());
+      } else {
+        idSet.add(String(s).toLowerCase().trim());
+      }
+    }
+
+    return { idSet, nameSet, hasRestrictions: idSet.size > 0 || nameSet.size > 0 };
+  })();
+
   let allMasterCargos = [];
   $: allMasterCargos = $masterCargosStore || [];
-  $: activeCargosList = (cargosOptions && cargosOptions.length > 0) ? cargosOptions : allMasterCargos;
+
+  // Lista de cargos activos filtrada estrictamente por las salas asociadas al usuario logueado
+  $: activeCargosList = (function() {
+    const baseList = (cargosOptions && cargosOptions.length > 0) ? cargosOptions : allMasterCargos;
+    const { idSet, nameSet, hasRestrictions } = userAssignedSalasInfo;
+
+    return (baseList || []).filter(c => {
+      if (!c) return false;
+
+      // Descartar galpones y depósitos (Tipo 2)
+      const gName = String(c.grupo_nombre || c.grupo_sala_nombre || '').toLowerCase();
+      if (gName.includes('galpon') || gName.includes('galpón') || gName.includes('deposito') || gName.includes('depósito')) {
+        return false;
+      }
+
+      // Si el usuario tiene salas asignadas, filtrar estrictamente por ellas
+      if (hasRestrictions) {
+        const cSalaId = c.sala_uuid || c.sala_id;
+        const cSalaNombre = c.sala_nombre;
+
+        const matchesId = cSalaId && idSet.has(String(cSalaId).toLowerCase().trim());
+        const matchesName = cSalaNombre && nameSet.has(String(cSalaNombre).toLowerCase().trim());
+
+        return Boolean(matchesId || matchesName);
+      }
+
+      // Si no hay lista explícita, excluir registros sin sala
+      return Boolean(c.sala_uuid || c.sala_id || c.sala_nombre);
+    });
+  })();
+
   $: hasRowActions = actions && (
     (actions.edit !== false && canEdit) || 
     ((actions.delete !== false || actions.reincorporate || actions.desincorporate || actions.restore) && canDelete) ||
@@ -222,7 +294,9 @@
     if (!canDelete) return;
     itemToReincorporar = item;
     reincorporarFecha = new Date().toISOString().split('T')[0];
-    reincorporarCargoId = item.cargo_id || '';
+    const oldCargoId = item.cargo_id || item.cargo_uuid || '';
+    const existsInList = activeCargosList.some(c => String(c.id || c.uuid) === String(oldCargoId));
+    reincorporarCargoId = existsInList ? String(oldCargoId) : '';
     isReincorporarModalOpen = true;
     try {
       await loadMasterStoresFromBackend();
@@ -357,15 +431,15 @@
         const sName = item.sala_nombre ? String(item.sala_nombre).trim() : 'Sin Sala';
         const dName = item.departamento_nombre ? String(item.departamento_nombre).trim() : 'Sin Depto';
         const aName = item.area_nombre ? String(item.area_nombre).trim() : 'Sin Área';
-        gName = `📍 ${sName} — 🏢 ${dName} — 📐 ${aName}`;
+        gName = `${sName} — ${dName} — ${aName}`;
       } else if (hasBoth) {
         const sName = item.sala_nombre ? String(item.sala_nombre).trim() : 'Sin Sala';
         const dName = item.departamento_nombre ? String(item.departamento_nombre).trim() : 'Sin Depto';
-        gName = `📍 ${sName} — 🏢 ${dName}`;
+        gName = `${sName} — ${dName}`;
       } else if (item.subgroup_label || item.marca_nombre || item.grupo_nombre || item.grupo_sala_nombre) {
         gName = String(item.subgroup_label || item.marca_nombre || item.grupo_nombre || item.grupo_sala_nombre).trim();
       } else if (hasSalaGroup) {
-        gName = item.sala_nombre ? `📍 ${String(item.sala_nombre).trim()}` : 'Sin Sala Asignada';
+        gName = item.sala_nombre ? String(item.sala_nombre).trim() : 'Sin Sala Asignada';
       } else {
         gName = item.group ? String(item.group).trim() : 'General';
       }
@@ -3053,7 +3127,7 @@
       <!-- Modal Header -->
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #f0fdf4; border-bottom: 1px solid #bbf7d0;">
         <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #166534; display: flex; align-items: center; gap: 8px;">
-          <span>🔄</span> Reincorporar Empleado
+          Reincorporar Empleado
         </h3>
         <button 
           type="button" 

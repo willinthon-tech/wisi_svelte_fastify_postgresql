@@ -16,10 +16,42 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
-  import { masterCargosStore, masterEmpleadosActions, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { masterCargosStore, userSalasStore as masterUserSalasStore, masterEmpleadosActions, loadMasterStoresFromBackend } from '../../controllers/master.store.js';
+  import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
 
   import { getLocalItems, saveLocalItems } from '../../services/localDb.service.js';
+
+  // Extract assigned sala IDs strictly for the logged-in user
+  $: assignedSalaIds = (function () {
+    const user = $currentUserStore;
+    const userId = user?.uuid || user?.id;
+
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas
+        .map((s) => String(typeof s === "object" ? (s.uuid || s.id || s.sala_uuid || s.sala_id) : s))
+        .filter(Boolean);
+    }
+
+    const authSalas = $authUserSalasStore;
+    if (Array.isArray(authSalas) && authSalas.length > 0) {
+      return authSalas
+        .map((s) => String(typeof s === "object" ? (s.uuid || s.id || s.sala_uuid || s.sala_id) : s))
+        .filter(Boolean);
+    }
+
+    const masterMap = $masterUserSalasStore;
+    if (masterMap && typeof masterMap === "object" && !Array.isArray(masterMap)) {
+      const userList = masterMap[userId] || (userId ? masterMap[String(userId)] : null);
+      if (Array.isArray(userList)) {
+        return userList
+          .map((s) => String(typeof s === "object" ? (s.uuid || s.id || s.sala_uuid || s.sala_id) : s))
+          .filter(Boolean);
+      }
+    }
+
+    return [];
+  })();
 
   // Initialize from persistent store so filters survive page and route transitions
   let initial = {};
@@ -196,7 +228,14 @@
     loadServerData({ page: 1, search: "" });
   }
 
-  $: filteredCargosStore = $masterCargosStore || [];
+  $: filteredCargosStore = ($masterCargosStore || []).filter(c => {
+    if (!c) return false;
+    const gName = String(c.grupo_nombre || c.grupo_sala_nombre || '').toLowerCase();
+    if (gName.includes('galpon') || gName.includes('galpón') || gName.includes('deposito') || gName.includes('depósito')) return false;
+    if (!assignedSalaIds || assignedSalaIds.length === 0) return true;
+    const cSala = c.sala_uuid || c.sala_id;
+    return cSala && assignedSalaIds.includes(String(cSala));
+  });
 
   $: columns = [
     { key: 'foto', label: 'Foto', type: 'photo', sortable: false, editable: false },
@@ -274,6 +313,7 @@
   bind:pageSize
   isServerSide={true}
   {columns}
+  cargosOptions={filteredCargosStore}
   bind:searchQuery
   searchPlaceholder="Buscar desincorporados por nombre, cédula, cargo, sala o ID..."
   entityType="desincorporado"

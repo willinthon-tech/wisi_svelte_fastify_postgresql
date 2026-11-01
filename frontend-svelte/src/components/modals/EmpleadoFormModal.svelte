@@ -60,7 +60,13 @@
     let filtered = list;
     if (assignedSalaIds && assignedSalaIds.length > 0) {
       const assignedSet = new Set(assignedSalaIds.map(String));
-      filtered = list.filter(c => !(c.sala_uuid || c.sala_id) || assignedSet.has(String(c.sala_uuid || c.sala_id)));
+      filtered = list.filter(c => {
+        if (!c) return false;
+        const gName = String(c.grupo_nombre || c.grupo_sala_nombre || '').toLowerCase();
+        if (gName.includes('galpon') || gName.includes('galpón') || gName.includes('deposito') || gName.includes('depósito')) return false;
+        const cSala = c.sala_uuid || c.sala_id;
+        return cSala && assignedSet.has(String(cSala));
+      });
     }
     // Si estamos editando y el cargo del empleado no está en la lista filtrada, ¡lo agregamos para que NUNCA aparezca en blanco!
     const currentCargoUuid = item ? (item.cargo_uuid || item.cargo_id) : null;
