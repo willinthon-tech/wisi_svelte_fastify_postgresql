@@ -134,20 +134,15 @@
 
 <div class="nomina-container">
   <!-- ENCABEZADO -->
-  <div class="nomina-header">
-    <div class="header-left">
-      <div class="header-badge">
-        <span>SISTEMA DE NÓMINA LOTTT V1</span>
-      </div>
-      <h1 class="header-title">Módulo de Nómina y Pasivos Laborales</h1>
-      <p class="header-sub">Cálculo de asignaciones, deducciones de ley venezolana (IVSS, FAOV), prestaciones sociales y recibos.</p>
+  <div class="erp-view-header">
+    <div class="erp-title-box">
+      <h1 class="erp-main-title">Nómina</h1>
+      <p class="erp-main-desc">Cálculo de asignaciones, deducciones de ley venezolana (IVSS, FAOV), prestaciones sociales y recibos.</p>
     </div>
 
     <!-- TASA BCV -->
     <div class="bcv-widget">
-      <div class="bcv-top">
-        <span class="bcv-label">TASA CAMBIO NOMINA</span>
-      </div>
+      <span class="bcv-label">TASA OFICIAL BCV</span>
       <div class="bcv-val-row">
         <span>1 USD = {tasaBcv.toFixed(2)} VES</span>
       </div>
@@ -405,46 +400,46 @@
   <!-- 4. PRESTACIONES SOCIALES LOTTT -->
   {#if activeSubvista === 'prestaciones'}
     <div class="view-content fade-in">
-      <div class="card-flow p-4">
-        <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px;">
-          <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Acumulado de Garantía de Prestaciones Sociales (Art. 142 LOTTT)</h3>
+      <div class="action-bar">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Acumulado de Garantía de Prestaciones Sociales (Art. 142 LOTTT)</h3>
           <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Depósito trimestral de 15 días de salario integral con devengo de intereses a tasa fijada por el Banco Central de Venezuela.</p>
         </div>
+      </div>
 
-        <div class="table-responsive">
-          <table class="table-custom">
-            <thead>
+      <div class="card-flow table-responsive">
+        <table class="table-custom">
+          <thead>
+            <tr>
+              <th>TRABAJADOR</th>
+              <th>CÉDULA</th>
+              <th>FECHA INGRESO</th>
+              <th style="text-align: right;">DÍAS GARANTÍA</th>
+              <th style="text-align: right;">SALARIO INTEGRAL DIARIO</th>
+              <th style="text-align: right;">ACUMULADO GARANTÍA ($)</th>
+              <th style="text-align: right;">INTERESES ACUMULADOS ($)</th>
+              <th style="text-align: right;">TOTAL PRESTACIONES ($)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each empleados as emp, i}
+              {@const salarioDia = (emp.sueldo_base_usd + emp.cestaticket_usd) / 30}
+              {@const dias = (i + 2) * 15}
+              {@const acumGarantia = dias * salarioDia}
+              {@const intereses = acumGarantia * 0.08}
               <tr>
-                <th>TRABAJADOR</th>
-                <th>CÉDULA</th>
-                <th>FECHA INGRESO</th>
-                <th style="text-align: right;">DÍAS GARANTÍA</th>
-                <th style="text-align: right;">SALARIO INTEGRAL DIARIO</th>
-                <th style="text-align: right;">ACUMULADO GARANTÍA ($)</th>
-                <th style="text-align: right;">INTERESES ACUMULADOS ($)</th>
-                <th style="text-align: right;">TOTAL PRESTACIONES ($)</th>
+                <td><strong>{emp.nombres}</strong></td>
+                <td><code>{emp.cedula}</code></td>
+                <td>2024-03-15</td>
+                <td style="text-align: right;">{dias} días</td>
+                <td style="text-align: right;">{fmtUsd(salarioDia)}</td>
+                <td style="text-align: right; font-weight: 700;">{fmtUsd(acumGarantia)}</td>
+                <td style="text-align: right; color: #b45309;">{fmtUsd(intereses)}</td>
+                <td style="text-align: right; font-weight: 800; color: #15803d;">{fmtUsd(acumGarantia + intereses)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#each empleados as emp, i}
-                {@const salarioDia = (emp.sueldo_base_usd + emp.cestaticket_usd) / 30}
-                {@const dias = (i + 2) * 15}
-                {@const acumGarantia = dias * salarioDia}
-                {@const intereses = acumGarantia * 0.08}
-                <tr>
-                  <td><strong>{emp.nombres}</strong></td>
-                  <td><code>{emp.cedula}</code></td>
-                  <td>2024-03-15</td>
-                  <td style="text-align: right;">{dias} días</td>
-                  <td style="text-align: right;">{fmtUsd(salarioDia)}</td>
-                  <td style="text-align: right; font-weight: 700;">{fmtUsd(acumGarantia)}</td>
-                  <td style="text-align: right; color: #b45309;">{fmtUsd(intereses)}</td>
-                  <td style="text-align: right; font-weight: 800; color: #15803d;">{fmtUsd(acumGarantia + intereses)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
   {/if}
@@ -452,11 +447,13 @@
   <!-- 5. RECIBOS Y REPORTES -->
   {#if activeSubvista === 'reportes'}
     <div class="view-content fade-in">
-      <div class="card-flow p-4">
-        <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 8px;">Emisión de Recibos de Pago y Reportes a Entes</h3>
-        <p style="font-size: 13px; color: #64748b; margin-bottom: 20px;">Descarga masiva de recibos individuales en formato imprimible con firma y constancia de retenciones.</p>
+      <div class="card-padded">
+        <div class="card-header-block">
+          <h3 class="card-title-lg">Emisión de Recibos de Pago y Reportes a Entes</h3>
+          <p class="card-desc">Descarga masiva de recibos individuales en formato imprimible con firma y constancia de retenciones.</p>
+        </div>
 
-        <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+        <div class="card-buttons-row">
           <button class="btn-secondary" on:click={() => triggerToast('Generando recibos PDF masivos...', 'info')}>
             <span>Imprimir Todos los Recibos de la Quincena</span>
           </button>
@@ -596,60 +593,49 @@
     gap: 24px;
   }
 
-  .nomina-header {
+  .erp-view-header {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
-    padding: 22px 26px;
+    padding: 18px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     flex-wrap: wrap;
     gap: 16px;
   }
 
-  .header-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: #eff6ff;
-    color: #2563eb;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
+  .erp-title-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .header-title {
+  .erp-main-title {
     font-size: 22px;
     font-weight: 800;
     color: #0f172a;
-    margin: 0 0 6px 0;
+    margin: 0;
+    line-height: 1.2;
   }
 
-  .header-sub {
+  .erp-main-desc {
     font-size: 13.5px;
     color: #64748b;
     margin: 0;
+    line-height: 1.4;
   }
 
   .bcv-widget {
     background: #f0fdf4;
     border: 1px solid #bbf7d0;
     border-radius: 10px;
-    padding: 12px 18px;
+    padding: 10px 16px;
     display: flex;
     flex-direction: column;
     gap: 4px;
-  }
-
-  .bcv-top {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-shrink: 0;
   }
 
   .bcv-label {
@@ -822,15 +808,51 @@
     cursor: pointer;
   }
 
-  /* TABLAS */
+  /* TABLAS Y TARJETAS */
   .card-flow {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    overflow: hidden;
   }
 
-  .table-responsive { overflow-x: auto; }
+  .card-padded, .p-4 {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .card-header-block {
+    margin-bottom: 20px;
+  }
+
+  .card-title-lg {
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 6px 0;
+  }
+
+  .card-desc {
+    font-size: 13.5px;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .card-buttons-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .table-responsive { 
+    overflow-x: auto; 
+    width: 100%;
+  }
 
   .table-custom {
     width: 100%;
@@ -844,13 +866,14 @@
     font-weight: 700;
     font-size: 11.5px;
     letter-spacing: 0.5px;
-    padding: 12px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid #e2e8f0;
     text-align: left;
+    white-space: nowrap;
   }
 
   .table-custom td {
-    padding: 12px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid #f1f5f9;
     color: #334155;
     vertical-align: middle;

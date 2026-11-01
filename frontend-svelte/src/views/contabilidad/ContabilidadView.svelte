@@ -214,20 +214,15 @@
 
 <div class="contab-container">
   <!-- ENCABEZADO -->
-  <div class="contab-header">
-    <div class="header-left">
-      <div class="header-badge">
-        <span>SISTEMA CONTABLE VEN-NIF V1</span>
-      </div>
-      <h1 class="header-title">Módulo de Contabilidad General</h1>
-      <p class="header-sub">Catálogo de cuentas jerárquico, comprobantes de diario por partida doble y balances financieros.</p>
+  <div class="erp-view-header">
+    <div class="erp-title-box">
+      <h1 class="erp-main-title">Contabilidad</h1>
+      <p class="erp-main-desc">Catálogo de cuentas jerárquico VEN-NIF, comprobantes de diario por partida doble y balances financieros.</p>
     </div>
 
     <div class="partida-doble-badge">
-      <div>
-        <span style="font-size: 11px; font-weight: 800; color: #047857;">PARTIDA DOBLE ESTRICTA</span>
-        <div style="font-size: 13px; font-weight: 700; color: #065f46;">Debe ≡ Haber Validado</div>
-      </div>
+      <span class="badge-label">PARTIDA DOBLE ESTRICTA</span>
+      <div class="badge-status-text">Debe ≡ Haber Validado</div>
     </div>
   </div>
 
@@ -341,57 +336,59 @@
         </button>
       </div>
 
-      <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 18px;">
         {#each asientos as asnt (asnt.uuid)}
-          <div class="card-flow p-4">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 12px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span class="badge-code" style="font-size: 13px; padding: 4px 8px;">{asnt.nro}</span>
+          <div class="asiento-card">
+            <div class="asiento-header">
+              <div class="asiento-tags">
+                <span class="badge-code asiento-nro">{asnt.nro}</span>
                 <span class="badge-status active">{asnt.tipo}</span>
-                <span style="font-size: 13px; color: #64748b;">Fecha: <b>{asnt.fecha}</b></span>
+                <span class="asiento-fecha">Fecha: <b>{asnt.fecha}</b></span>
               </div>
-              <span class="text-xs" style="color: #10b981; font-weight: 800; display: flex; align-items: center; gap: 4px;">
+              <span class="asiento-cuadrado-pill">
                 ASIENTO CUADRADO
               </span>
             </div>
 
-            <p style="font-size: 13.5px; color: #334155; margin-bottom: 14px;">
+            <div class="asiento-glosa">
               <b>Glosa / Concepto:</b> {asnt.glosa}
-            </p>
+            </div>
 
-            <table class="table-custom text-xs">
-              <thead>
-                <tr style="background: #f8fafc;">
-                  <th style="width: 140px;">CUENTA</th>
-                  <th>DESCRIPCIÓN</th>
-                  <th style="text-align: right; width: 140px;">DEBE</th>
-                  <th style="text-align: right; width: 140px;">HABER</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each asnt.lineas as linea}
-                  <tr>
-                    <td><code>{linea.cuenta_codigo}</code></td>
-                    <td>{linea.cuenta_nombre}</td>
-                    <td style="text-align: right; font-weight: 700; color: {linea.debe > 0 ? '#0f172a' : '#94a3b8'};">
-                      {linea.debe > 0 ? fmtMoneda(linea.debe) : '-'}
+            <div class="asiento-table-wrap">
+              <table class="table-custom text-xs">
+                <thead>
+                  <tr style="background: #f8fafc;">
+                    <th style="width: 140px;">CUENTA</th>
+                    <th>DESCRIPCIÓN</th>
+                    <th style="text-align: right; width: 140px;">DEBE</th>
+                    <th style="text-align: right; width: 140px;">HABER</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each asnt.lineas as linea}
+                    <tr>
+                      <td><code>{linea.cuenta_codigo}</code></td>
+                      <td>{linea.cuenta_nombre}</td>
+                      <td style="text-align: right; font-weight: 700; color: {linea.debe > 0 ? '#0f172a' : '#94a3b8'};">
+                        {linea.debe > 0 ? fmtMoneda(linea.debe) : '-'}
+                      </td>
+                      <td style="text-align: right; font-weight: 700; color: {linea.haber > 0 ? '#0f172a' : '#94a3b8'};">
+                        {linea.haber > 0 ? fmtMoneda(linea.haber) : '-'}
+                      </td>
+                    </tr>
+                  {/each}
+                  <tr style="background: #f1f5f9; font-weight: 800;">
+                    <td colspan="2" style="text-align: right;">TOTALES DEL COMPROBANTE:</td>
+                    <td style="text-align: right; color: #2563eb;">
+                      {fmtMoneda(asnt.lineas.reduce((acc, l) => acc + l.debe, 0))}
                     </td>
-                    <td style="text-align: right; font-weight: 700; color: {linea.haber > 0 ? '#0f172a' : '#94a3b8'};">
-                      {linea.haber > 0 ? fmtMoneda(linea.haber) : '-'}
+                    <td style="text-align: right; color: #2563eb;">
+                      {fmtMoneda(asnt.lineas.reduce((acc, l) => acc + l.haber, 0))}
                     </td>
                   </tr>
-                {/each}
-                <tr style="background: #f1f5f9; font-weight: 800;">
-                  <td colspan="2" style="text-align: right;">TOTALES DEL COMPROBANTE:</td>
-                  <td style="text-align: right; color: #2563eb;">
-                    {fmtMoneda(asnt.lineas.reduce((acc, l) => acc + l.debe, 0))}
-                  </td>
-                  <td style="text-align: right; color: #2563eb;">
-                    {fmtMoneda(asnt.lineas.reduce((acc, l) => acc + l.haber, 0))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         {/each}
       </div>
@@ -401,36 +398,38 @@
   <!-- 4. LIBROS CONTABLES -->
   {#if activeSubvista === 'libros'}
     <div class="view-content fade-in">
-      <div class="card-flow p-4">
-        <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 8px;">Libro Mayor General</h3>
-        <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">Movimientos acumulados por cuenta analítica durante el ejercicio económico.</p>
-
-        <div class="table-responsive">
-          <table class="table-custom">
-            <thead>
-              <tr>
-                <th>CUENTA</th>
-                <th>NOMBRE</th>
-                <th style="text-align: right;">SALDO INICIAL</th>
-                <th style="text-align: right;">TOTAL DÉBITOS</th>
-                <th style="text-align: right;">TOTAL CRÉDITOS</th>
-                <th style="text-align: right;">SALDO FINAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each planCuentas.filter(c => c.tipo === 'DETALLE') as cta}
-                <tr>
-                  <td><code>{cta.codigo}</code></td>
-                  <td><strong>{cta.nombre}</strong></td>
-                  <td style="text-align: right;">{fmtMoneda(cta.saldo * 0.9)}</td>
-                  <td style="text-align: right; color: #2563eb;">{fmtMoneda(cta.saldo * 0.15)}</td>
-                  <td style="text-align: right; color: #d97706;">{fmtMoneda(cta.saldo * 0.05)}</td>
-                  <td style="text-align: right; font-weight: 800; color: #0f172a;">{fmtMoneda(cta.saldo)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+      <div class="action-bar">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Libro Mayor General</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Movimientos acumulados por cuenta analítica durante el ejercicio económico.</p>
         </div>
+      </div>
+
+      <div class="card-flow table-responsive">
+        <table class="table-custom">
+          <thead>
+            <tr>
+              <th>CUENTA</th>
+              <th>NOMBRE</th>
+              <th style="text-align: right;">SALDO INICIAL</th>
+              <th style="text-align: right;">TOTAL DÉBITOS</th>
+              <th style="text-align: right;">TOTAL CRÉDITOS</th>
+              <th style="text-align: right;">SALDO FINAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each planCuentas.filter(c => c.tipo === 'DETALLE') as cta}
+              <tr>
+                <td><code>{cta.codigo}</code></td>
+                <td><strong>{cta.nombre}</strong></td>
+                <td style="text-align: right;">{fmtMoneda(cta.saldo * 0.9)}</td>
+                <td style="text-align: right; color: #2563eb;">{fmtMoneda(cta.saldo * 0.15)}</td>
+                <td style="text-align: right; color: #d97706;">{fmtMoneda(cta.saldo * 0.05)}</td>
+                <td style="text-align: right; font-weight: 800; color: #0f172a;">{fmtMoneda(cta.saldo)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
   {/if}
@@ -438,47 +437,45 @@
   <!-- 5. BALANCE DE COMPROBACIÓN -->
   {#if activeSubvista === 'reportes'}
     <div class="view-content fade-in">
-      <div class="card-flow p-4">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
-          <div>
-            <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Balance de Comprobación de Sumas y Saldos</h3>
-            <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Corte financiero al cierre contable. Moneda de reporte: USD / Conversión oficial.</p>
-          </div>
-          <button class="btn-secondary" on:click={() => triggerToast('Generando Balance en PDF...', 'info')}>
-            <span>Imprimir Balance</span>
-          </button>
+      <div class="action-bar">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Balance de Comprobación de Sumas y Saldos</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Corte financiero al cierre contable. Moneda de reporte: USD / Conversión oficial.</p>
         </div>
+        <button class="btn-secondary" on:click={() => triggerToast('Generando Balance en PDF...', 'info')}>
+          <span>Imprimir Balance</span>
+        </button>
+      </div>
 
-        <div class="table-responsive">
-          <table class="table-custom">
-            <thead>
+      <div class="card-flow table-responsive">
+        <table class="table-custom">
+          <thead>
+            <tr>
+              <th>CÓDIGO</th>
+              <th>CUENTA</th>
+              <th style="text-align: right;">TOTAL DEBE</th>
+              <th style="text-align: right;">TOTAL HABER</th>
+              <th style="text-align: right;">SALDO DEUDOR</th>
+              <th style="text-align: right;">SALDO ACREEDOR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each planCuentas.filter(c => c.tipo === 'DETALLE') as c}
               <tr>
-                <th>CÓDIGO</th>
-                <th>CUENTA</th>
-                <th style="text-align: right;">TOTAL DEBE</th>
-                <th style="text-align: right;">TOTAL HABER</th>
-                <th style="text-align: right;">SALDO DEUDOR</th>
-                <th style="text-align: right;">SALDO ACREEDOR</th>
+                <td><code>{c.codigo}</code></td>
+                <td>{c.nombre}</td>
+                <td style="text-align: right;">{c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}</td>
+                <td style="text-align: right;">{c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}</td>
+                <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'DEUDORA' ? '#15803d' : '#94a3b8'};">
+                  {c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}
+                </td>
+                <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'ACREEDORA' ? '#15803d' : '#94a3b8'};">
+                  {c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {#each planCuentas.filter(c => c.tipo === 'DETALLE') as c}
-                <tr>
-                  <td><code>{c.codigo}</code></td>
-                  <td>{c.nombre}</td>
-                  <td style="text-align: right;">{c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}</td>
-                  <td style="text-align: right;">{c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}</td>
-                  <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'DEUDORA' ? '#15803d' : '#94a3b8'};">
-                    {c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}
-                  </td>
-                  <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'ACREEDORA' ? '#15803d' : '#94a3b8'};">
-                    {c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
   {/if}
@@ -651,44 +648,38 @@
     gap: 24px;
   }
 
-  .contab-header {
+  .erp-view-header {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
-    padding: 22px 26px;
+    padding: 18px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     flex-wrap: wrap;
     gap: 16px;
   }
 
-  .header-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: #eff6ff;
-    color: #2563eb;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
+  .erp-title-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .header-title {
+  .erp-main-title {
     font-size: 22px;
     font-weight: 800;
     color: #0f172a;
-    margin: 0 0 6px 0;
+    margin: 0;
+    line-height: 1.2;
   }
 
-  .header-sub {
+  .erp-main-desc {
     font-size: 13.5px;
     color: #64748b;
     margin: 0;
+    line-height: 1.4;
   }
 
   .partida-doble-badge {
@@ -697,8 +688,23 @@
     border-radius: 10px;
     padding: 10px 16px;
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 2px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .partida-doble-badge .badge-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: #047857;
+    letter-spacing: 0.5px;
+  }
+
+  .partida-doble-badge .badge-status-text {
+    font-size: 13px;
+    font-weight: 700;
+    color: #065f46;
   }
 
   /* TABS */
@@ -801,15 +807,27 @@
     cursor: pointer;
   }
 
-  /* TABLAS */
+  /* TABLAS Y TARJETAS */
   .card-flow {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    overflow: hidden;
   }
 
-  .table-responsive { overflow-x: auto; }
+  .card-padded, .p-4 {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .table-responsive { 
+    overflow-x: auto; 
+    width: 100%;
+  }
 
   .table-custom {
     width: 100%;
@@ -823,16 +841,75 @@
     font-weight: 700;
     font-size: 11.5px;
     letter-spacing: 0.5px;
-    padding: 12px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid #e2e8f0;
     text-align: left;
+    white-space: nowrap;
   }
 
   .table-custom td {
-    padding: 11px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid #f1f5f9;
     color: #334155;
     vertical-align: middle;
+  }
+
+  /* ASIENTOS CONTABLES CARD */
+  .asiento-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 22px 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .asiento-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .asiento-tags {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .asiento-nro {
+    font-size: 13px;
+    padding: 4px 8px;
+  }
+
+  .asiento-fecha {
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .asiento-cuadrado-pill {
+    color: #059669;
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }
+
+  .asiento-glosa {
+    font-size: 13.5px;
+    color: #334155;
+    line-height: 1.5;
+  }
+
+  .asiento-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
   }
 
   .row-grupo td {

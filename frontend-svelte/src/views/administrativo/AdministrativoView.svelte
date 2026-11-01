@@ -157,20 +157,15 @@
 
 <div class="admin-container">
   <!-- ENCABEZADO PRINCIPAL -->
-  <div class="admin-header">
-    <div class="header-left">
-      <div class="header-badge">
-        <span>SISTEMA ADMINISTRATIVO V1</span>
-      </div>
-      <h1 class="header-title">Módulo Administrativo y Gestión Comercial</h1>
-      <p class="header-sub">Gestión integral de inventario multimoneda, facturación fiscal SENIAT, compras y cuentas corrientes.</p>
+  <div class="erp-view-header">
+    <div class="erp-title-box">
+      <h1 class="erp-main-title">Administrativo</h1>
+      <p class="erp-main-desc">Gestión integral de inventario multimoneda, facturación fiscal SENIAT, compras y cuentas corrientes.</p>
     </div>
 
     <!-- WIDGET TASA BCV -->
     <div class="bcv-widget">
-      <div class="bcv-top">
-        <span class="bcv-label">TASA OFICIAL BCV</span>
-      </div>
+      <span class="bcv-label">TASA OFICIAL BCV</span>
       <div class="bcv-val-row">
         <span class="bcv-currency">1 USD =</span>
         <input 
@@ -481,11 +476,11 @@
   {#if activeSubvista === 'cxc-cxp'}
     <div class="view-content fade-in">
       <div class="cxc-grid">
-        <div class="card-flow p-4">
+        <div class="card-padded">
           <div class="card-header-styled">
-            <h4>Cuentas por Cobrar (Clientes)</h4>
+            <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: #0f172a;">Cuentas por Cobrar (Clientes)</h4>
           </div>
-          <p class="text-sm text-slate-500 mb-4">Saldos pendientes por facturación a crédito de clientes y salas aliadas.</p>
+          <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">Saldos pendientes por facturación a crédito de clientes y salas aliadas.</p>
           <div class="balance-card green">
             <span class="label">TOTAL SALDO POR COBRAR</span>
             <span class="amount">$ 3,420.00 USD</span>
@@ -493,11 +488,11 @@
           </div>
         </div>
 
-        <div class="card-flow p-4">
+        <div class="card-padded">
           <div class="card-header-styled">
-            <h4>Cuentas por Pagar (Proveedores)</h4>
+            <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: #0f172a;">Cuentas por Pagar (Proveedores)</h4>
           </div>
-          <p class="text-sm text-slate-500 mb-4">Compromisos de compras de insumos, servicios de mantenimiento y papelería fiscal.</p>
+          <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">Compromisos de compras de insumos, servicios de mantenimiento y papelería fiscal.</p>
           <div class="balance-card red">
             <span class="label">TOTAL SALDO POR PAGAR</span>
             <span class="amount">{fmtUsd(proveedores.reduce((acc, p) => acc + p.saldo_pendiente_usd, 0))}</span>
@@ -511,51 +506,49 @@
   <!-- CONTENIDO DE SUBVISTA: 5. LIBROS FISCALES SENIAT -->
   {#if activeSubvista === 'reportes-fiscales'}
     <div class="view-content fade-in">
-      <div class="card-flow p-4">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 16px;">
-          <div>
-            <h3 style="font-size: 18px; font-weight: 800; color: #0f172a; margin: 0;">Libro de Ventas Fiscal - Formato SENIAT</h3>
-            <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Período fiscal en curso. Incluye alícuota 16%, IGTF 3% y desglose según providencia administrativa.</p>
-          </div>
-          <button class="btn-secondary" on:click={() => triggerToast('Generando reporte PDF del Libro de Ventas...', 'info')}>
-            <span>Exportar PDF Oficial</span>
-          </button>
+      <div class="action-bar">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Libro de Ventas Fiscal - Formato SENIAT</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Período fiscal en curso. Incluye alícuota 16%, IGTF 3% y desglose según providencia administrativa.</p>
         </div>
+        <button class="btn-secondary" on:click={() => triggerToast('Generando reporte PDF del Libro de Ventas...', 'info')}>
+          <span>Exportar PDF Oficial</span>
+        </button>
+      </div>
 
-        <div class="table-responsive">
-          <table class="table-custom text-xs">
-            <thead>
-              <tr style="background: #f8fafc;">
-                <th>OP</th>
-                <th>FECHA</th>
-                <th>RIF</th>
-                <th>RAZÓN SOCIAL</th>
-                <th>NRO FACT</th>
-                <th>NRO CTRL</th>
-                <th>TOTAL VENTAS BS</th>
-                <th>BASE IMPONIBLE BS</th>
-                <th>IVA 16% BS</th>
-                <th>IGTF 3% BS</th>
+      <div class="card-flow table-responsive">
+        <table class="table-custom text-xs">
+          <thead>
+            <tr style="background: #f8fafc;">
+              <th>OP</th>
+              <th>FECHA</th>
+              <th>RIF</th>
+              <th>RAZÓN SOCIAL</th>
+              <th>NRO FACT</th>
+              <th>NRO CTRL</th>
+              <th>TOTAL VENTAS BS</th>
+              <th>BASE IMPONIBLE BS</th>
+              <th>IVA 16% BS</th>
+              <th>IGTF 3% BS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each facturas as fac, i}
+              <tr>
+                <td>{i + 1}</td>
+                <td>{fac.fecha}</td>
+                <td><code>{fac.rif}</code></td>
+                <td>{fac.cliente}</td>
+                <td><strong>{fac.nro}</strong></td>
+                <td>{fac.control}</td>
+                <td style="text-align: right; font-weight: 700;">{fmtBs(fac.total_usd * tasaBcv)}</td>
+                <td style="text-align: right;">{fmtBs(fac.base_usd * tasaBcv)}</td>
+                <td style="text-align: right;">{fmtBs(fac.iva_usd * tasaBcv)}</td>
+                <td style="text-align: right;">{fmtBs(fac.igtf_usd * tasaBcv)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {#each facturas as fac, i}
-                <tr>
-                  <td>{i + 1}</td>
-                  <td>{fac.fecha}</td>
-                  <td><code>{fac.rif}</code></td>
-                  <td>{fac.cliente}</td>
-                  <td><strong>{fac.nro}</strong></td>
-                  <td>{fac.control}</td>
-                  <td style="text-align: right; font-weight: 700;">{fmtBs(fac.total_usd * tasaBcv)}</td>
-                  <td style="text-align: right;">{fmtBs(fac.base_usd * tasaBcv)}</td>
-                  <td style="text-align: right;">{fmtBs(fac.iva_usd * tasaBcv)}</td>
-                  <td style="text-align: right;">{fmtBs(fac.igtf_usd * tasaBcv)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
   {/if}
@@ -688,54 +681,49 @@
     gap: 24px;
   }
 
-  .admin-header {
+  .erp-view-header {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
-    padding: 22px 26px;
+    padding: 18px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     flex-wrap: wrap;
     gap: 16px;
   }
 
-  .header-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: #eff6ff;
-    color: #2563eb;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
+  .erp-title-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .header-title {
+  .erp-main-title {
     font-size: 22px;
     font-weight: 800;
     color: #0f172a;
-    margin: 0 0 6px 0;
+    margin: 0;
+    line-height: 1.2;
   }
 
-  .header-sub {
+  .erp-main-desc {
     font-size: 13.5px;
     color: #64748b;
     margin: 0;
+    line-height: 1.4;
   }
 
   .bcv-widget {
     background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
     border: 1px solid #86efac;
     border-radius: 10px;
-    padding: 12px 18px;
+    padding: 10px 16px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    flex-shrink: 0;
   }
 
   .bcv-top {
@@ -947,16 +935,26 @@
 
   .btn-secondary:hover { background: #f8fafc; }
 
-  /* TABLAS */
+  /* TABLAS Y TARJETAS */
   .card-flow {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    overflow: hidden;
+  }
+
+  .card-padded, .p-4 {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
 
   .table-responsive {
     overflow-x: auto;
+    width: 100%;
   }
 
   .table-custom {
@@ -971,13 +969,14 @@
     font-weight: 700;
     font-size: 11.5px;
     letter-spacing: 0.5px;
-    padding: 12px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid #e2e8f0;
     text-align: left;
+    white-space: nowrap;
   }
 
   .table-custom td {
-    padding: 12px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid #f1f5f9;
     color: #334155;
     vertical-align: middle;
