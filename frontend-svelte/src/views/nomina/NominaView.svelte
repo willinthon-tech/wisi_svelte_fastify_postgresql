@@ -17,34 +17,103 @@
   let activeSubvista = 'personal';
   let tasaBcv = 62.50;
 
-  // --- AISLAMIENTO MULTI-SALA ---
+  // --- AISLAMIENTO MULTI-SALA Y FILTRADO TIPO 1 (SALAS, NO GALPONES) ---
+  function isTipo1Sala(sala) {
+    if (!sala) return false;
+
+    // Galpones / Depósitos UUIDs
+    const galponGrupoUuids = [
+      '51a3d9bc-76d3-4f08-8dd9-97c7f79ea0e3',
+      '55d65e8b-09b2-4164-8491-efbdd50433b6'
+    ];
+    const gUuid = sala.grupo_uuid ? String(sala.grupo_uuid).toLowerCase().trim() : '';
+    if (gUuid && galponGrupoUuids.includes(gUuid)) return false;
+
+    // Grupo Nombre check
+    if (sala.grupo_nombre) {
+      const gn = String(sala.grupo_nombre).toLowerCase().trim();
+      if (gn.includes('galpon') || gn.includes('galpón') || gn.includes('deposito') || gn.includes('depósito')) {
+        return false;
+      }
+    }
+
+    // Name check
+    const nom = String(sala.nombre || sala.nombre_comercial || sala.name || '').toLowerCase().trim();
+    if (
+      nom.includes('galpon') || 
+      nom.includes('galpón') || 
+      nom.includes('deposito') || 
+      nom.includes('depósito') || 
+      nom.includes('sótano') || 
+      nom.includes('sotano') || 
+      nom.includes('almacen') || 
+      nom.includes('almacén') || 
+      nom === 'gainer' || 
+      nom.startsWith('darien')
+    ) {
+      return false;
+    }
+
+    // Legacy fields check (grupo_id 2 = Galpón, 1 = Sala)
+    if (sala.grupo_id !== undefined && sala.grupo_id !== null && !isNaN(Number(sala.grupo_id))) {
+      if (Number(sala.grupo_id) === 2) return false;
+      if (Number(sala.grupo_id) === 1) return true;
+    }
+    if (sala.tipo_id !== undefined && sala.tipo_id !== null && !isNaN(Number(sala.tipo_id))) {
+      if (Number(sala.tipo_id) === 2) return false;
+      if (Number(sala.tipo_id) === 1) return true;
+    }
+    if (sala.tipo !== undefined && sala.tipo !== null && !isNaN(Number(sala.tipo))) {
+      if (Number(sala.tipo) === 2) return false;
+      if (Number(sala.tipo) === 1) return true;
+    }
+
+    return true;
+  }
+
   $: assignedSalaIds = (function () {
     const user = $currentUserStore;
     const username = (user?.username || '').toLowerCase();
-    const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
+    const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin' || user?.role === 'ADMIN' || user?.is_superuser === true;
     if (isAdmin) return [];
 
     const userId = user?.uuid || user?.id;
     if (!userId) return [];
 
     if (user && Array.isArray(user.salas) && user.salas.length > 0) {
-      return user.salas.map((s) => String(typeof s === "object" ? (s.uuid || s.id) : s)).filter(Boolean);
+      return user.salas.map((s) => String(typeof s === "object" ? (s.sala_id || s.sala_uuid || s.uuid || s.id) : s)).filter(Boolean);
     }
     const authSalas = $authUserSalasStore;
     if (Array.isArray(authSalas) && authSalas.length > 0) {
-      return authSalas.map((s) => String(typeof s === "object" ? (s.uuid || s.id) : s)).filter(Boolean);
+      return authSalas.map((s) => String(typeof s === "object" ? (s.sala_id || s.sala_uuid || s.uuid || s.id) : s)).filter(Boolean);
     }
     return [];
   })();
 
   $: userAvailableSalas = (function () {
-    const all = $masterSalasStore || [];
-    if (!assignedSalaIds || assignedSalaIds.length === 0) return all;
-    const set = new Set(assignedSalaIds.map(String));
-    return all.filter((s) => set.has(String(s.uuid || s.id)));
+    let pool = [];
+    if (assignedSalaIds && assignedSalaIds.length > 0) {
+      const set = new Set(assignedSalaIds.map(String));
+      pool = ($masterSalasStore || []).filter(s => set.has(String(s.uuid || s.id)));
+      if (pool.length === 0 && Array.isArray($authUserSalasStore) && $authUserSalasStore.length > 0) {
+        pool = $authUserSalasStore.filter(s => set.has(String(s.sala_id || s.sala_uuid || s.uuid || s.id)));
+      }
+    } else {
+      pool = $masterSalasStore || [];
+    }
+    return pool.filter(isTipo1Sala);
   })();
 
   let selectedSalaFiltro = 'ALL';
+
+  $: {
+    if (selectedSalaFiltro !== 'ALL' && userAvailableSalas.length > 0) {
+      const exists = userAvailableSalas.some(s => String(s.uuid || s.id) === String(selectedSalaFiltro));
+      if (!exists) {
+        selectedSalaFiltro = 'ALL';
+      }
+    }
+  }
 
   // --- CORTES DE ASISTENCIA / QUINCENA (RRHH) ---
   let cortesList = [];
@@ -52,16 +121,17 @@
 
   $: cortesFiltrados = (function() {
     const list = cortesList.length > 0 ? cortesList : ($masterCortesStore || []);
-    if (selectedSalaFiltro === 'ALL') {
-      if (!assignedSalaIds || assignedSalaIds.length === 0) return list;
-      const allowedSet = new Set(assignedSalaIds.map(String));
-      return list.filter(c => {
-        const sUuids = (c.salas_uuids || c.salas_ids || []).map(String);
-        return sUuids.length === 0 || sUuids.some(sid => allowedSet.has(sid));
-      });
-    }
+    const availableSalaUuids = new Set(userAvailableSalas.map(s => String(s.uuid || s.id)));
+
     return list.filter(c => {
       const sUuids = (c.salas_uuids || c.salas_ids || []).map(String);
+      // Validar que pertenezca a salas tipo 1 asignadas al usuario
+      const belongsToAvailable = sUuids.length === 0 || sUuids.some(sid => availableSalaUuids.has(sid));
+      if (!belongsToAvailable && availableSalaUuids.size > 0) return false;
+
+      if (selectedSalaFiltro === 'ALL') {
+        return true;
+      }
       return sUuids.includes(String(selectedSalaFiltro));
     });
   })();
@@ -163,8 +233,15 @@
                      (e.cedula || '').toLowerCase().includes(filtroPersonal.toLowerCase()) ||
                      (e.cargo && e.cargo.toLowerCase().includes(filtroPersonal.toLowerCase()));
     if (!matchTxt) return false;
+    const availableSalaUuids = new Set(userAvailableSalas.map(s => String(s.uuid || s.id)));
+    const eSala = String(e.sala_uuid || e.sala_id || '');
+
+    // Restringir a las salas tipo 1 asociadas al usuario
+    if (eSala && availableSalaUuids.size > 0 && !availableSalaUuids.has(eSala)) {
+      return false;
+    }
+
     if (selectedSalaFiltro !== 'ALL') {
-      const eSala = String(e.sala_uuid || e.sala_id || '');
       return eSala === String(selectedSalaFiltro);
     }
     return true;

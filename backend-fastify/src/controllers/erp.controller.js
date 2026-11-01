@@ -205,7 +205,8 @@ export async function getEstadosFinancieros(req, reply) {
 
 export async function getPersonalNomina(req, reply) {
   try {
-    const data = await getPersonalNominaModel();
+    const userSalaIds = req.headers['x-user-salas'] ? req.headers['x-user-salas'].split(',').filter(Boolean) : [];
+    const data = await getPersonalNominaModel({ userSalaIds });
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.code(500).send({ success: false, message: err.message });

@@ -778,6 +778,11 @@ export async function getEstadosFinancierosModel() {
 export async function getPersonalNominaModel(options = {}) {
   if (!sql) return [];
   try {
+    const userSalaUuids = Array.isArray(options.userSalaIds) ? options.userSalaIds.filter(Boolean) : [];
+    const salaCond = userSalaUuids.length > 0 
+      ? sql`AND (s.uuid = ANY(${userSalaUuids}::uuid[]) OR dep.sala_uuid = ANY(${userSalaUuids}::uuid[]))`
+      : sql``;
+
     const rows = await sql`
       SELECT 
         e.uuid,
@@ -799,6 +804,8 @@ export async function getPersonalNominaModel(options = {}) {
       LEFT JOIN departamentos dep ON dep.uuid = ar.departamento_uuid
       LEFT JOIN salas s ON s.uuid = dep.sala_uuid
       WHERE (e.is_deleted = false OR e.is_deleted IS NULL)
+        AND (s.grupo_uuid IS NULL OR s.grupo_uuid != '55d65e8b-09b2-4164-8491-efbdd50433b6'::uuid)
+        ${salaCond}
       ORDER BY e.nombre ASC;
     `;
     return rows;
@@ -1053,7 +1060,8 @@ export async function getCorteDetalleParaNominaModel(corteUuid) {
         LEFT JOIN areas ar ON ar.uuid = c.area_uuid
         LEFT JOIN departamentos dep ON dep.uuid = ar.departamento_uuid
         LEFT JOIN salas s ON s.uuid = dep.sala_uuid
-        WHERE (e.is_deleted = false OR e.is_deleted IS NULL);
+        WHERE (e.is_deleted = false OR e.is_deleted IS NULL)
+          AND (s.grupo_uuid IS NULL OR s.grupo_uuid != '55d65e8b-09b2-4164-8491-efbdd50433b6'::uuid);
       `;
     }
 

@@ -18,13 +18,32 @@
   let activeSubvista = 'inventario';
   let tasaBcv = 62.50; // Tasa referencial oficial BCV editable
 
+  function isTipo1Sala(sala) {
+    if (!sala) return false;
+    const galponGrupoUuids = [
+      '51a3d9bc-76d3-4f08-8dd9-97c7f79ea0e3',
+      '55d65e8b-09b2-4164-8491-efbdd50433b6'
+    ];
+    const gUuid = sala.grupo_uuid ? String(sala.grupo_uuid).toLowerCase().trim() : '';
+    if (gUuid && galponGrupoUuids.includes(gUuid)) return false;
+    if (sala.grupo_nombre) {
+      const gn = String(sala.grupo_nombre).toLowerCase().trim();
+      if (gn.includes('galpon') || gn.includes('galpón') || gn.includes('deposito') || gn.includes('depósito')) return false;
+    }
+    const nom = String(sala.nombre || sala.nombre_comercial || sala.name || '').toLowerCase().trim();
+    if (nom.includes('galpon') || nom.includes('galpón') || nom.includes('deposito') || nom.includes('depósito') || nom.includes('almacen')) return false;
+    if (Number(sala.grupo_id) === 2 || Number(sala.tipo_id) === 2 || Number(sala.tipo) === 2) return false;
+    return true;
+  }
+
   // Multi-sala isolation
   let selectedSalaFiltro = 'ALL';
   $: assignedSalaIds = Array.isArray($authUserSalasStore) 
     ? $authUserSalasStore.map(s => String(s.sala_id || s.sala_uuid || s.id || s.uuid)) 
     : [];
   $: userAvailableSalas = ($masterSalasStore || []).filter(s => {
-    if ($currentUserStore?.is_superuser || $currentUserStore?.is_admin || $currentUserStore?.role === 'ADMIN') return true;
+    if (!isTipo1Sala(s)) return false;
+    if ($currentUserStore?.is_superuser || $currentUserStore?.is_admin || $currentUserStore?.role === 'ADMIN' || $currentUserStore?.rol === 'admin') return true;
     return assignedSalaIds.includes(String(s.uuid || s.id));
   });
 
