@@ -10,11 +10,13 @@ import {
   getFacturasComprasModel,
   createFacturaCompraModel,
   getCxcCxpSummaryModel,
+  getReporteFiscalSeniatModel,
   getPlanCuentasModel,
   saveCuentaModel,
   getCentrosCostosModel,
   getAsientosModel,
   createAsientoModel,
+  getEstadosFinancierosModel,
   getPersonalNominaModel,
   getConceptosNominaModel,
   getPeriodosNominaModel,
@@ -126,6 +128,15 @@ export async function getCxcCxp(req, reply) {
   }
 }
 
+export async function getReporteFiscalSeniat(req, reply) {
+  try {
+    const data = await getReporteFiscalSeniatModel();
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.code(500).send({ success: false, message: err.message });
+  }
+}
+
 // ============================================================================
 // 2. CONTROLADORES CONTABILIDAD
 // ============================================================================
@@ -172,6 +183,15 @@ export async function createAsiento(req, reply) {
     return reply.send({ success: true, data, message: 'Comprobante de diario validado y asentado' });
   } catch (err) {
     return reply.code(400).send({ success: false, message: err.message });
+  }
+}
+
+export async function getEstadosFinancieros(req, reply) {
+  try {
+    const data = await getEstadosFinancierosModel();
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.code(500).send({ success: false, message: err.message });
   }
 }
 

@@ -177,6 +177,68 @@
   function fmtBs(val) {
     return 'Bs. ' + Number(val || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+
+  // --- FASE 4: EXPORTACIONES Y FORMATOS LEGALES / BANCARIOS ---
+  function exportarTxtBanco() {
+    let contenido = `H\tJ409182741\tWISI ROYALE ENTERTAINMENT C.A.\t01340821491029384756\t${new Date().toISOString().split('T')[0]}\t${totalNominaBs.toFixed(2)}\r\n`;
+    resumenCalculo.forEach(r => {
+      const cta = (r.nro_cuenta || '01340000000000000000').replace(/-/g, '').padEnd(20, '0').slice(0, 20);
+      const ced = r.cedula.replace(/[^0-9]/g, '').padStart(10, '0');
+      const montoBs = r.netoPagarBs.toFixed(2);
+      contenido += `D\t${cta}\t${montoBs}\t${ced}\t${r.nombres}\r\n`;
+    });
+
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `TXT_PAGO_NOMINA_${periodoNomina.desde.replace(/-/g, '')}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerToast('Archivo TXT para Banco (dispersión masiva) generado con éxito', 'success');
+  }
+
+  function exportarTxtTiuna() {
+    let contenido = `134\tJ409182741\t${periodoNomina.desde.slice(0, 7).replace('-', '')}\r\n`;
+    empleados.forEach(e => {
+      const ced = e.cedula.replace(/[^0-9]/g, '');
+      const sBaseBs = ((e.sueldo_base_usd || 450) * tasaBcv).toFixed(2);
+      contenido += `V\t${ced}\t${e.nombres}\t${sBaseBs}\t20240315\tA\r\n`;
+    });
+
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `TIUNA_IVSS_${periodoNomina.desde.slice(0, 7).replace('-', '')}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerToast('Archivo plano para portal TIUNA (IVSS) generado', 'success');
+  }
+
+  function exportarTxtFaov() {
+    let contenido = `FAOV\tJ409182741\t${periodoNomina.desde.slice(0, 7).replace('-', '')}\r\n`;
+    empleados.forEach(e => {
+      const ced = e.cedula.replace(/[^0-9]/g, '');
+      const sIntegralBs = (((e.sueldo_base_usd || 450) + 40) * tasaBcv).toFixed(2);
+      const aporte1Porc = (sIntegralBs * 0.01).toFixed(2);
+      const aporte2Porc = (sIntegralBs * 0.02).toFixed(2);
+      contenido += `V\t${ced}\t${sIntegralBs}\t${aporte1Porc}\t${aporte2Porc}\r\n`;
+    });
+
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `BANAVIH_FAOV_${periodoNomina.desde.slice(0, 7).replace('-', '')}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerToast('Archivo FAOV (Banavih) generado para declaración mensual', 'success');
+  }
+
+  function imprimirRecibo() {
+    window.print();
+  }
 </script>
 
 <div class="nomina-container">
@@ -381,7 +443,7 @@
               <span>Aprobar y Cerrar Nómina</span>
             </button>
           {:else}
-            <button class="btn-secondary" on:click={() => triggerToast('Generando archivo de texto TXT para el Banco...', 'info')}>
+            <button class="btn-secondary" on:click={exportarTxtBanco}>
               <span>Exportar TXT Banco</span>
             </button>
           {/if}
@@ -501,13 +563,13 @@
         </div>
 
         <div class="card-buttons-row">
-          <button class="btn-secondary" on:click={() => triggerToast('Generando recibos PDF masivos...', 'info')}>
+          <button class="btn-secondary" on:click={imprimirRecibo}>
             <span>Imprimir Todos los Recibos de la Quincena</span>
           </button>
-          <button class="btn-secondary" on:click={() => triggerToast('Exportando nómina al formato TIUNA (IVSS)...', 'info')}>
+          <button class="btn-secondary" on:click={exportarTxtTiuna}>
             <span>Archivo Plano IVSS (TIUNA)</span>
           </button>
-          <button class="btn-secondary" on:click={() => triggerToast('Exportando reporte FAOV Banavih...', 'info')}>
+          <button class="btn-secondary" on:click={exportarTxtFaov}>
             <span>Archivo FAOV (Banavih)</span>
           </button>
         </div>
@@ -622,7 +684,7 @@
 
       <div class="modal-footer">
         <button class="btn-secondary" on:click={() => empleadoRecibo = null}>Cerrar</button>
-        <button class="btn-primary" on:click={() => triggerToast('Enviando a impresión...', 'success')}>
+        <button class="btn-primary" on:click={imprimirRecibo}>
           <span>Imprimir Recibo</span>
         </button>
       </div>
@@ -1087,5 +1149,25 @@
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media print {
+    :global(body) {
+      background: #ffffff !important;
+    }
+    :global(header), :global(aside), :global(nav), .erp-view-header, .tabs-wrapper, .modal-footer, .btn-close {
+      display: none !important;
+    }
+    .modal-backdrop {
+      position: static !important;
+      background: none !important;
+      padding: 0 !important;
+    }
+    .receipt-modal {
+      box-shadow: none !important;
+      border: 1px solid #000 !important;
+      max-width: 100% !important;
+      width: 100% !important;
+    }
   }
 </style>

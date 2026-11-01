@@ -46,16 +46,23 @@
     if (unsubRoute) unsubRoute();
   });
 
+  let facturasCompras = [
+    { uuid: 'fc-01', proveedor_nombre: 'Distribuidora Gaming Venezuela S.A.', proveedor_rif: 'J-29837162-4', nro_factura_proveedor: 'FC-008129', nro_control: '00-19284', fecha: '2026-10-25', base_imponible_usd: 500.00, iva_usd: 80.00, retencion_iva_usd: 60.00, total_usd: 580.00 },
+    { uuid: 'fc-02', proveedor_nombre: 'Papelería e Impresos Caracas C.A.', proveedor_rif: 'J-31092837-1', nro_factura_proveedor: 'FC-003492', nro_control: '00-09283', fecha: '2026-10-28', base_imponible_usd: 125.00, iva_usd: 20.00, retencion_iva_usd: 20.00, total_usd: 145.00 }
+  ];
+
   async function cargarDatosBackend() {
     try {
-      const [resArt, resPrv, resFac] = await Promise.all([
+      const [resArt, resPrv, resFac, resCmp] = await Promise.all([
         fetch(toBackendUrl('/api/erp/articulos')),
         fetch(toBackendUrl('/api/erp/proveedores')),
-        fetch(toBackendUrl('/api/erp/facturas-ventas'))
+        fetch(toBackendUrl('/api/erp/facturas-ventas')),
+        fetch(toBackendUrl('/api/erp/facturas-compras'))
       ]);
       const dataArt = await resArt.json();
       const dataPrv = await resPrv.json();
       const dataFac = await resFac.json();
+      const dataCmp = await resCmp.json();
       if (dataArt?.success && Array.isArray(dataArt.data) && dataArt.data.length > 0) {
         articulos = dataArt.data;
       }
@@ -64,6 +71,9 @@
       }
       if (dataFac?.success && Array.isArray(dataFac.data) && dataFac.data.length > 0) {
         facturas = dataFac.data;
+      }
+      if (dataCmp?.success && Array.isArray(dataCmp.data) && dataCmp.data.length > 0) {
+        facturasCompras = dataCmp.data;
       }
     } catch (e) {
       console.warn('Modo demo/offline administrativo:', e.message);
@@ -312,6 +322,78 @@
 
   function fmtBs(val) {
     return 'Bs. ' + Number(val || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  // --- FASE 4: EXPORTACIÓN Y CUMPLIMIENTO FISCAL SENIAT ---
+  let subvistaFiscal = 'ventas';
+
+  $: totalVentasBaseUsd = facturas.filter(f => f.estado !== 'ANULADA_NC').reduce((acc, f) => acc + (Number(f.base_usd) || 0), 0);
+  $: totalVentasIvaUsd = facturas.filter(f => f.estado !== 'ANULADA_NC').reduce((acc, f) => acc + (Number(f.iva_usd) || 0), 0);
+  $: totalVentasIgtfUsd = facturas.filter(f => f.estado !== 'ANULADA_NC').reduce((acc, f) => acc + (Number(f.igtf_usd) || 0), 0);
+
+  $: totalComprasBaseUsd = facturasCompras.reduce((acc, c) => acc + (Number(c.base_imponible_usd) || 0), 0);
+  $: totalComprasIvaUsd = facturasCompras.reduce((acc, c) => acc + (Number(c.iva_usd) || 0), 0);
+  $: totalRetencionesIvaUsd = facturasCompras.reduce((acc, c) => acc + (Number(c.retencion_iva_usd) || 0), 0);
+
+  $: saldoIvaPeriodoUsd = Number((totalVentasIvaUsd - totalComprasIvaUsd - totalRetencionesIvaUsd).toFixed(2));
+
+  function exportarLibroVentasTxt() {
+    let contenido = `RIF EMPRESA: J-40918274-1\tPERÍODO: 2026-10\tLIBRO DE VENTAS FISCAL SENIAT\r\n`;
+    contenido += `OP\tFECHA\tRIF CLIENTE\tRAZÓN SOCIAL\tNRO FACTURA\tNRO CONTROL\tTOTAL BS\tBASE IMPONIBLE BS\tIVA 16% BS\tIGTF 3% BS\tESTADO\r\n`;
+    facturas.forEach((fac, i) => {
+      const totBs = (fac.total_usd * tasaBcv).toFixed(2);
+      const baseBs = (fac.base_usd * tasaBcv).toFixed(2);
+      const ivaBs = (fac.iva_usd * tasaBcv).toFixed(2);
+      const igtfBs = (fac.igtf_usd * tasaBcv).toFixed(2);
+      contenido += `${i + 1}\t${fac.fecha}\t${fac.rif}\t${fac.cliente}\t${fac.nro}\t${fac.control}\t${totBs}\t${baseBs}\t${ivaBs}\t${igtfBs}\t${fac.estado}\r\n`;
+    });
+
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `LIBRO_VENTAS_SENIAT_202610.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerToast('Libro de Ventas descargado en formato oficial SENIAT (.txt)', 'success');
+  }
+
+  function exportarLibroComprasTxt() {
+    let contenido = `RIF EMPRESA: J-40918274-1\tPERÍODO: 2026-10\tLIBRO DE COMPRAS FISCAL SENIAT\r\n`;
+    contenido += `OP\tFECHA\tRIF PROVEEDOR\tPROVEEDOR\tNRO FACTURA\tNRO CONTROL\tTOTAL BS\tBASE IMPONIBLE BS\tIVA 16% BS\tRETENCIÓN IVA BS\r\n`;
+    facturasCompras.forEach((fc, i) => {
+      const totBs = (fc.total_usd * tasaBcv).toFixed(2);
+      const baseBs = (fc.base_imponible_usd * tasaBcv).toFixed(2);
+      const ivaBs = (fc.iva_usd * tasaBcv).toFixed(2);
+      const retBs = (fc.retencion_iva_usd * tasaBcv).toFixed(2);
+      contenido += `${i + 1}\t${fc.fecha}\t${fc.proveedor_rif}\t${fc.proveedor_nombre}\t${fc.nro_factura_proveedor}\t${fc.nro_control}\t${totBs}\t${baseBs}\t${ivaBs}\t${retBs}\r\n`;
+    });
+
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `LIBRO_COMPRAS_SENIAT_202610.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerToast('Libro de Compras descargado en formato oficial SENIAT (.txt)', 'success');
+  }
+
+  function exportarRetencionesTxt() {
+    let contenido = '';
+    facturasCompras.forEach((fc, i) => {
+      const comprobante = `202610${String(i + 1).padStart(8, '0')}`;
+      contenido += `J409182741\t202610\t${fc.fecha}\tC\t01\t${String(fc.proveedor_rif || 'J000000000').replace(/-/g, '')}\t${fc.nro_factura_proveedor}\t${fc.nro_control}\t${(fc.total_usd * tasaBcv).toFixed(2)}\t${(fc.base_imponible_usd * tasaBcv).toFixed(2)}\t${(fc.retencion_iva_usd * tasaBcv).toFixed(2)}\t${comprobante}\r\n`;
+    });
+
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `RETENCIONES_IVA_SENIAT_202610.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerToast('Archivo plano de Retenciones IVA generado para el Portal SENIAT', 'success');
   }
 </script>
 
@@ -668,50 +750,209 @@
   <!-- CONTENIDO DE SUBVISTA: 5. LIBROS FISCALES SENIAT -->
   {#if activeSubvista === 'reportes-fiscales'}
     <div class="view-content fade-in">
-      <div class="action-bar">
-        <div>
-          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Libro de Ventas Fiscal - Formato SENIAT</h3>
-          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Período fiscal en curso. Incluye alícuota 16%, IGTF 3% y desglose según providencia administrativa.</p>
-        </div>
-        <button class="btn-secondary" on:click={() => triggerToast('Generando reporte PDF del Libro de Ventas...', 'info')}>
-          <span>Exportar PDF Oficial</span>
+      <!-- SUB-BARRA DE NAVEGACIÓN FISCAL -->
+      <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+        <button 
+          type="button" 
+          class="tab-btn {subvistaFiscal === 'ventas' ? 'active' : ''}" 
+          style="padding: 6px 14px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: {subvistaFiscal === 'ventas' ? '#0f172a' : '#ffffff'}; color: {subvistaFiscal === 'ventas' ? '#ffffff' : '#334155'}; cursor: pointer;"
+          on:click={() => subvistaFiscal = 'ventas'}
+        >
+          Libro de Ventas Fiscal
+        </button>
+        <button 
+          type="button" 
+          class="tab-btn {subvistaFiscal === 'compras' ? 'active' : ''}" 
+          style="padding: 6px 14px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: {subvistaFiscal === 'compras' ? '#0f172a' : '#ffffff'}; color: {subvistaFiscal === 'compras' ? '#ffffff' : '#334155'}; cursor: pointer;"
+          on:click={() => subvistaFiscal = 'compras'}
+        >
+          Libro de Compras Fiscal
+        </button>
+        <button 
+          type="button" 
+          class="tab-btn {subvistaFiscal === 'liquidacion' ? 'active' : ''}" 
+          style="padding: 6px 14px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: {subvistaFiscal === 'liquidacion' ? '#0f172a' : '#ffffff'}; color: {subvistaFiscal === 'liquidacion' ? '#ffffff' : '#334155'}; cursor: pointer;"
+          on:click={() => subvistaFiscal = 'liquidacion'}
+        >
+          Liquidación Tributaria IVA / SENIAT
         </button>
       </div>
 
-      <div class="card-flow table-responsive">
-        <table class="table-custom text-xs">
-          <thead>
-            <tr style="background: #f8fafc;">
-              <th>OP</th>
-              <th>FECHA</th>
-              <th>RIF</th>
-              <th>RAZÓN SOCIAL</th>
-              <th>NRO FACT</th>
-              <th>NRO CTRL</th>
-              <th>TOTAL VENTAS BS</th>
-              <th>BASE IMPONIBLE BS</th>
-              <th>IVA 16% BS</th>
-              <th>IGTF 3% BS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each facturas as fac, i}
-              <tr>
-                <td>{i + 1}</td>
-                <td>{fac.fecha}</td>
-                <td><code>{fac.rif}</code></td>
-                <td>{fac.cliente}</td>
-                <td><strong>{fac.nro}</strong></td>
-                <td>{fac.control}</td>
-                <td style="text-align: right; font-weight: 700;">{fmtBs(fac.total_usd * tasaBcv)}</td>
-                <td style="text-align: right;">{fmtBs(fac.base_usd * tasaBcv)}</td>
-                <td style="text-align: right;">{fmtBs(fac.iva_usd * tasaBcv)}</td>
-                <td style="text-align: right;">{fmtBs(fac.igtf_usd * tasaBcv)}</td>
+      {#if subvistaFiscal === 'ventas'}
+        <div class="action-bar">
+          <div>
+            <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Libro de Ventas Fiscal - Formato SENIAT</h3>
+            <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Desglose de alícuota general 16%, percepción IGTF 3% y correlativos fiscales.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-primary" on:click={exportarLibroVentasTxt}>
+              <span>Exportar TXT Oficial SENIAT</span>
+            </button>
+            <button class="btn-secondary" on:click={() => window.print()}>
+              <span>Imprimir Libro</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card-flow table-responsive">
+          <table class="table-custom text-xs">
+            <thead>
+              <tr style="background: #f8fafc;">
+                <th>OP</th>
+                <th>FECHA</th>
+                <th>RIF</th>
+                <th>RAZÓN SOCIAL</th>
+                <th>NRO FACT</th>
+                <th>NRO CTRL</th>
+                <th>TOTAL BS</th>
+                <th>BASE IMP. BS</th>
+                <th>IVA 16% BS</th>
+                <th>IGTF 3% BS</th>
+                <th style="text-align: center;">ESTADO</th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {#each facturas as fac, i}
+                <tr>
+                  <td>{i + 1}</td>
+                  <td>{fac.fecha}</td>
+                  <td><code>{fac.rif}</code></td>
+                  <td>{fac.cliente}</td>
+                  <td><strong>{fac.nro}</strong></td>
+                  <td>{fac.control}</td>
+                  <td style="text-align: right; font-weight: 700;">{fmtBs(fac.total_usd * tasaBcv)}</td>
+                  <td style="text-align: right;">{fmtBs(fac.base_usd * tasaBcv)}</td>
+                  <td style="text-align: right;">{fmtBs(fac.iva_usd * tasaBcv)}</td>
+                  <td style="text-align: right;">{fmtBs(fac.igtf_usd * tasaBcv)}</td>
+                  <td style="text-align: center;">
+                    <span class="badge-status {fac.estado === 'ANULADA_NC' ? 'danger' : 'active'}">{fac.estado}</span>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+            <tfoot>
+              <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1;">
+                <td colspan="6" style="text-align: right;">TOTALES LIBRO DE VENTAS:</td>
+                <td style="text-align: right; color: #0f172a;">{fmtBs((totalVentasBaseUsd + totalVentasIvaUsd + totalVentasIgtfUsd) * tasaBcv)}</td>
+                <td style="text-align: right; color: #2563eb;">{fmtBs(totalVentasBaseUsd * tasaBcv)}</td>
+                <td style="text-align: right; color: #b91c1c;">{fmtBs(totalVentasIvaUsd * tasaBcv)}</td>
+                <td style="text-align: right; color: #d97706;">{fmtBs(totalVentasIgtfUsd * tasaBcv)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {:else if subvistaFiscal === 'compras'}
+        <div class="action-bar">
+          <div>
+            <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Libro de Compras Fiscal - Formato SENIAT</h3>
+            <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Registro de facturas de compras, crédito fiscal deducible y retenciones practicadas.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-primary" on:click={exportarLibroComprasTxt}>
+              <span>Exportar TXT Compras</span>
+            </button>
+            <button class="btn-secondary" on:click={exportarRetencionesTxt}>
+              <span>TXT Retenciones SENIAT</span>
+            </button>
+            <button class="btn-secondary" on:click={() => window.print()}>
+              <span>Imprimir Libro</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card-flow table-responsive">
+          <table class="table-custom text-xs">
+            <thead>
+              <tr style="background: #f8fafc;">
+                <th>OP</th>
+                <th>FECHA</th>
+                <th>RIF PROVEEDOR</th>
+                <th>PROVEEDOR</th>
+                <th>NRO FACT</th>
+                <th>NRO CTRL</th>
+                <th>TOTAL BS</th>
+                <th>BASE IMP. BS</th>
+                <th>CRÉDITO IVA BS</th>
+                <th>RET. IVA BS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each facturasCompras as fc, i}
+                <tr>
+                  <td>{i + 1}</td>
+                  <td>{fc.fecha}</td>
+                  <td><code>{fc.proveedor_rif}</code></td>
+                  <td><strong>{fc.proveedor_nombre}</strong></td>
+                  <td>{fc.nro_factura_proveedor}</td>
+                  <td>{fc.nro_control}</td>
+                  <td style="text-align: right; font-weight: 700;">{fmtBs(fc.total_usd * tasaBcv)}</td>
+                  <td style="text-align: right;">{fmtBs(fc.base_imponible_usd * tasaBcv)}</td>
+                  <td style="text-align: right; color: #15803d;">{fmtBs(fc.iva_usd * tasaBcv)}</td>
+                  <td style="text-align: right; color: #b45309;">-{fmtBs(fc.retencion_iva_usd * tasaBcv)}</td>
+                </tr>
+              {/each}
+            </tbody>
+            <tfoot>
+              <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1;">
+                <td colspan="6" style="text-align: right;">TOTALES LIBRO DE COMPRAS:</td>
+                <td style="text-align: right; color: #0f172a;">{fmtBs((totalComprasBaseUsd + totalComprasIvaUsd) * tasaBcv)}</td>
+                <td style="text-align: right; color: #2563eb;">{fmtBs(totalComprasBaseUsd * tasaBcv)}</td>
+                <td style="text-align: right; color: #15803d;">{fmtBs(totalComprasIvaUsd * tasaBcv)}</td>
+                <td style="text-align: right; color: #b45309;">-{fmtBs(totalRetencionesIvaUsd * tasaBcv)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {:else}
+        <!-- LIQUIDACIÓN TRIBUTARIA SENIAT -->
+        <div class="card-padded" style="margin-bottom: 16px;">
+          <h3 style="font-size: 17px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0;">Liquidación Fiscal y Autodeterminación de IVA (Quincenal / Mensual)</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 0 0 16px 0;">Cálculo oficial de cuota tributaria resultante entre Débitos Fiscales, Créditos Fiscales y Retenciones de IVA.</p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom: 20px;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+              <span style="font-size: 11px; font-weight: 800; color: #64748b;">TOTAL DÉBITO FISCAL (VENTAS)</span>
+              <div style="font-size: 20px; font-weight: 900; color: #dc2626; margin: 4px 0;">+{fmtUsd(totalVentasIvaUsd)}</div>
+              <span style="font-size: 11px; color: #64748b;">{fmtBs(totalVentasIvaUsd * tasaBcv)}</span>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+              <span style="font-size: 11px; font-weight: 800; color: #64748b;">TOTAL CRÉDITO FISCAL (COMPRAS)</span>
+              <div style="font-size: 20px; font-weight: 900; color: #16a34a; margin: 4px 0;">-{fmtUsd(totalComprasIvaUsd)}</div>
+              <span style="font-size: 11px; color: #64748b;">{fmtBs(totalComprasIvaUsd * tasaBcv)}</span>
+            </div>
+
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+              <span style="font-size: 11px; font-weight: 800; color: #64748b;">RETENCIONES IVA SOPORTADAS</span>
+              <div style="font-size: 20px; font-weight: 900; color: #d97706; margin: 4px 0;">-{fmtUsd(totalRetencionesIvaUsd)}</div>
+              <span style="font-size: 11px; color: #64748b;">{fmtBs(totalRetencionesIvaUsd * tasaBcv)}</span>
+            </div>
+
+            <div style="background: {saldoIvaPeriodoUsd >= 0 ? '#fef2f2' : '#f0fdf4'}; border: 1px solid {saldoIvaPeriodoUsd >= 0 ? '#fecaca' : '#bbf7d0'}; border-radius: 8px; padding: 14px;">
+              <span style="font-size: 11px; font-weight: 800; color: {saldoIvaPeriodoUsd >= 0 ? '#991b1b' : '#166534'};">
+                {saldoIvaPeriodoUsd >= 0 ? 'IMPUESTO NETO A ENTERAR (PAGO)' : 'SALDO A FAVOR DEL CONTRIBUYENTE'}
+              </span>
+              <div style="font-size: 22px; font-weight: 900; color: {saldoIvaPeriodoUsd >= 0 ? '#b91c1c' : '#15803d'}; margin: 4px 0;">
+                {fmtUsd(Math.abs(saldoIvaPeriodoUsd))}
+              </div>
+              <span style="font-size: 11px; color: #64748b;">{fmtBs(Math.abs(saldoIvaPeriodoUsd) * tasaBcv)}</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <button class="btn-primary" on:click={exportarRetencionesTxt}>
+              <span>Descargar Archivo TXT Retenciones SENIAT</span>
+            </button>
+            <button class="btn-secondary" on:click={exportarLibroVentasTxt}>
+              <span>Descargar TXT Ventas</span>
+            </button>
+            <button class="btn-secondary" on:click={exportarLibroComprasTxt}>
+              <span>Descargar TXT Compras</span>
+            </button>
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>

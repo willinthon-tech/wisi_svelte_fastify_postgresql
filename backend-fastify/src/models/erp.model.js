@@ -443,6 +443,42 @@ export async function getCxcCxpSummaryModel() {
   }
 }
 
+export async function getReporteFiscalSeniatModel() {
+  if (!sql) return { ventas: [], compras: [], resumen: {} };
+  try {
+    const ventas = await getFacturasVentasModel();
+    const compras = await getFacturasComprasModel();
+
+    const totalVentasBaseUsd = ventas.filter(v => v.estado !== 'ANULADA_NC').reduce((acc, v) => acc + (Number(v.base_usd) || 0), 0);
+    const totalVentasIvaUsd = ventas.filter(v => v.estado !== 'ANULADA_NC').reduce((acc, v) => acc + (Number(v.iva_usd) || 0), 0);
+    const totalIgtfUsd = ventas.filter(v => v.estado !== 'ANULADA_NC').reduce((acc, v) => acc + (Number(v.igtf_usd) || 0), 0);
+
+    const totalComprasBaseUsd = compras.reduce((acc, c) => acc + (Number(c.base_imponible_usd) || 0), 0);
+    const totalComprasIvaUsd = compras.reduce((acc, c) => acc + (Number(c.iva_usd) || 0), 0);
+    const totalRetencionesIvaUsd = compras.reduce((acc, c) => acc + (Number(c.retencion_iva_usd) || 0), 0);
+
+    const saldoIvaUsd = Number((totalVentasIvaUsd - totalComprasIvaUsd - totalRetencionesIvaUsd).toFixed(2));
+
+    return {
+      ventas,
+      compras,
+      resumen: {
+        total_ventas_base_usd: totalVentasBaseUsd,
+        total_debito_fiscal_usd: totalVentasIvaUsd,
+        total_igtf_usd: totalIgtfUsd,
+        total_compras_base_usd: totalComprasBaseUsd,
+        total_credito_fiscal_usd: totalComprasIvaUsd,
+        total_retenciones_iva_usd: totalRetencionesIvaUsd,
+        saldo_iva_usd: saldoIvaUsd,
+        posicion_fiscal: saldoIvaUsd >= 0 ? 'IMPUESTO A ENTERAR (PAGO SENIAT)' : 'SALDO A FAVOR DEL CONTRIBUYENTE'
+      }
+    };
+  } catch (err) {
+    console.error('Error getReporteFiscalSeniatModel:', err.message);
+    return { ventas: [], compras: [], resumen: {} };
+  }
+}
+
 // ============================================================================
 // 2. MÓDULO CONTABILIDAD
 // ============================================================================
@@ -608,6 +644,53 @@ export async function createAsientoModel(data) {
   }
 
   return createdAsnt;
+}
+
+export async function getEstadosFinancierosModel() {
+  if (!sql) return null;
+  try {
+    const cuentas = await getPlanCuentasModel();
+    const activos = cuentas.filter(c => c.codigo.startsWith('1'));
+    const pasivos = cuentas.filter(c => c.codigo.startsWith('2'));
+    const patrimonio = cuentas.filter(c => c.codigo.startsWith('3'));
+    const ingresos = cuentas.filter(c => c.codigo.startsWith('4'));
+    const egresos = cuentas.filter(c => c.codigo.startsWith('5'));
+
+    const totalActivos = activos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+    const totalPasivos = pasivos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+    const totalPatrimonioBase = patrimonio.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+
+    const totalIngresos = ingresos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+    const totalEgresos = egresos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+    const utilidadEjercicio = Number((totalIngresos - totalEgresos).toFixed(2));
+
+    const totalPatrimonioNeto = Number((totalPatrimonioBase + utilidadEjercicio).toFixed(2));
+    const balanceGeneralCuadrado = Math.abs(totalActivos - (totalPasivos + totalPatrimonioNeto)) < 0.05;
+
+    return {
+      estado_resultados: {
+        total_ingresos: totalIngresos,
+        total_egresos: totalEgresos,
+        utilidad_ejercicio: utilidadEjercicio,
+        detalles_ingresos: ingresos,
+        detalles_egresos: egresos
+      },
+      balance_general: {
+        total_activos: totalActivos,
+        total_pasivos: totalPasivos,
+        total_patrimonio_base: totalPatrimonioBase,
+        utilidad_ejercicio: utilidadEjercicio,
+        total_pasivo_patrimonio: totalPasivos + totalPatrimonioNeto,
+        esta_cuadrado: balanceGeneralCuadrado,
+        detalles_activos: activos,
+        detalles_pasivos: pasivos,
+        detalles_patrimonio: patrimonio
+      }
+    };
+  } catch (err) {
+    console.error('Error getEstadosFinancierosModel:', err.message);
+    return null;
+  }
 }
 
 // ============================================================================

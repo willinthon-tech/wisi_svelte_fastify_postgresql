@@ -10,11 +10,13 @@ import {
   getFacturasCompras,
   createFacturaCompra,
   getCxcCxp,
+  getReporteFiscalSeniat,
   getPlanCuentas,
   saveCuenta,
   getCentrosCostos,
   getAsientos,
   createAsiento,
+  getEstadosFinancieros,
   getPersonalNomina,
   getConceptosNomina,
   getPeriodosNomina,
@@ -37,6 +39,7 @@ export async function erpRoutes(fastify, options) {
   fastify.get('/api/erp/facturas-compras', getFacturasCompras);
   fastify.post('/api/erp/facturas-compras', createFacturaCompra);
   fastify.get('/api/erp/cxc-cxp', getCxcCxp);
+  fastify.get('/api/erp/reportes-fiscales', getReporteFiscalSeniat);
 
   // --- CONTABILIDAD ---
   fastify.get('/api/erp/plan-cuentas', getPlanCuentas);
@@ -46,6 +49,7 @@ export async function erpRoutes(fastify, options) {
 
   fastify.get('/api/erp/asientos', getAsientos);
   fastify.post('/api/erp/asientos', createAsiento);
+  fastify.get('/api/erp/estados-financieros', getEstadosFinancieros);
 
   // --- NÓMINA (LOTTT) ---
   fastify.get('/api/erp/nomina/personal', getPersonalNomina);

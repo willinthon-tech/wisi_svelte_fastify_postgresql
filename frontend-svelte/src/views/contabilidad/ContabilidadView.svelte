@@ -9,10 +9,12 @@
     { id: 'centros-costos', label: 'Centros de Costos', desc: 'Unidades de negocio y departamentos analíticos' },
     { id: 'asientos', label: 'Comprobantes y Asientos', desc: 'Asientos de diario por partida doble estricta' },
     { id: 'libros', label: 'Libro Diario y Mayor', desc: 'Libros oficiales y movimientos por cuenta' },
-    { id: 'reportes', label: 'Balance de Comprobación', desc: 'Sumas y saldos, balance y resultados' }
+    { id: 'reportes', label: 'Estados Financieros', desc: 'Balance de comprobación, Estado de Resultados y Situación VEN-NIF' }
   ];
 
   let activeSubvista = 'plan-cuentas';
+  let subvistaReportes = 'comprobacion'; // 'comprobacion' | 'resultados' | 'situacion'
+  let estadosFinancieros = null;
 
   let unsubRoute;
   onMount(() => {
@@ -43,14 +45,16 @@
 
   async function cargarDatosBackend() {
     try {
-      const [resCuentas, resCc, resAsnt] = await Promise.all([
+      const [resCuentas, resCc, resAsnt, resEf] = await Promise.all([
         fetch(toBackendUrl('/api/erp/plan-cuentas')),
         fetch(toBackendUrl('/api/erp/centros-costos')),
-        fetch(toBackendUrl('/api/erp/asientos'))
+        fetch(toBackendUrl('/api/erp/asientos')),
+        fetch(toBackendUrl('/api/erp/estados-financieros'))
       ]);
       const dataCuentas = await resCuentas.json();
       const dataCc = await resCc.json();
       const dataAsnt = await resAsnt.json();
+      const dataEf = await resEf.json();
 
       if (dataCuentas?.success && Array.isArray(dataCuentas.data) && dataCuentas.data.length > 0) {
         planCuentas = dataCuentas.data;
@@ -61,9 +65,16 @@
       if (dataAsnt?.success && Array.isArray(dataAsnt.data) && dataAsnt.data.length > 0) {
         asientos = dataAsnt.data;
       }
+      if (dataEf?.success && dataEf.data) {
+        estadosFinancieros = dataEf.data;
+      }
     } catch (e) {
       console.warn('Modo demo/offline contabilidad:', e.message);
     }
+  }
+
+  function imprimirReporteContable() {
+    window.print();
   }
 
   function cambiarSubvista(id) {
@@ -309,6 +320,24 @@
   $: totalBalanceDebe = ctasDetalle.filter(c => c.naturaleza === 'DEUDORA').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
   $: totalBalanceHaber = ctasDetalle.filter(c => c.naturaleza === 'ACREEDORA').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
   $: balanceCuadrado = Math.abs(totalBalanceDebe - totalBalanceHaber) < 0.01;
+
+  $: ctasActivos = planCuentas.filter(c => c.codigo.startsWith('1'));
+  $: ctasPasivos = planCuentas.filter(c => c.codigo.startsWith('2'));
+  $: ctasPatrimonio = planCuentas.filter(c => c.codigo.startsWith('3'));
+  $: ctasIngresos = planCuentas.filter(c => c.codigo.startsWith('4'));
+  $: ctasGastos = planCuentas.filter(c => c.codigo.startsWith('5'));
+
+  $: totalActivos = ctasActivos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+  $: totalPasivos = ctasPasivos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+  $: totalPatrimonioBase = ctasPatrimonio.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+
+  $: totalIngresos = ctasIngresos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+  $: totalGastos = ctasGastos.filter(c => c.tipo === 'DETALLE').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+  $: utilidadEjercicio = Number((totalIngresos - totalGastos).toFixed(2));
+
+  $: totalPatrimonioNeto = Number((totalPatrimonioBase + utilidadEjercicio).toFixed(2));
+  $: totalPasivoMasPatrimonio = Number((totalPasivos + totalPatrimonioNeto).toFixed(2));
+  $: situacionCuadrada = Math.abs(totalActivos - totalPasivoMasPatrimonio) < 0.05;
 </script>
 
 <div class="contab-container">
@@ -533,58 +562,316 @@
     </div>
   {/if}
 
-  <!-- 5. BALANCE DE COMPROBACIÓN -->
+  <!-- 5. ESTADOS FINANCIEROS VEN-NIF -->
   {#if activeSubvista === 'reportes'}
     <div class="view-content fade-in">
-      <div class="action-bar">
-        <div>
-          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Balance de Comprobación de Sumas y Saldos</h3>
-          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Corte financiero al cierre contable. Moneda de reporte: USD / Conversión oficial.</p>
+      <div class="action-bar" style="margin-bottom: 20px;">
+        <div class="subvista-pills">
+          <button 
+            type="button" 
+            class="subvista-pill {subvistaReportes === 'comprobacion' ? 'active' : ''}" 
+            on:click={() => subvistaReportes = 'comprobacion'}
+          >
+            Balance de Comprobación
+          </button>
+          <button 
+            type="button" 
+            class="subvista-pill {subvistaReportes === 'resultados' ? 'active' : ''}" 
+            on:click={() => subvistaReportes = 'resultados'}
+          >
+            Estado de Resultados (VEN-NIF)
+          </button>
+          <button 
+            type="button" 
+            class="subvista-pill {subvistaReportes === 'situacion' ? 'active' : ''}" 
+            on:click={() => subvistaReportes = 'situacion'}
+          >
+            Situación Financiera (Balance General)
+          </button>
         </div>
-        <button class="btn-secondary" on:click={() => triggerToast('Generando Balance en PDF...', 'info')}>
-          <span>Imprimir Balance</span>
-        </button>
+
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-secondary" on:click={imprimirReporteContable}>
+            <span>Imprimir Informe</span>
+          </button>
+        </div>
       </div>
 
-      <div class="card-flow table-responsive">
-        <table class="table-custom">
-          <thead>
-            <tr>
-              <th>CÓDIGO</th>
-              <th>CUENTA</th>
-              <th style="text-align: right;">TOTAL DEBE</th>
-              <th style="text-align: right;">TOTAL HABER</th>
-              <th style="text-align: right;">SALDO DEUDOR</th>
-              <th style="text-align: right;">SALDO ACREEDOR</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each planCuentas.filter(c => c.tipo === 'DETALLE') as c}
+      <!-- 5.1 BALANCE DE COMPROBACIÓN -->
+      {#if subvistaReportes === 'comprobacion'}
+        <div class="card-padded" style="margin-bottom: 16px;">
+          <h3 class="card-title-lg">Balance de Comprobación de Sumas y Saldos</h3>
+          <p class="card-desc">Corte contable oficial al cierre del período. Moneda funcional: USD con referencia oficial.</p>
+        </div>
+
+        <div class="card-flow table-responsive">
+          <table class="table-custom">
+            <thead>
               <tr>
-                <td><code>{c.codigo}</code></td>
-                <td>{c.nombre}</td>
-                <td style="text-align: right;">{c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}</td>
-                <td style="text-align: right;">{c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}</td>
-                <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'DEUDORA' ? '#15803d' : '#94a3b8'};">
-                  {c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}
-                </td>
-                <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'ACREEDORA' ? '#15803d' : '#94a3b8'};">
-                  {c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}
-                </td>
+                <th>CÓDIGO</th>
+                <th>CUENTA</th>
+                <th style="text-align: right;">TOTAL DEBE</th>
+                <th style="text-align: right;">TOTAL HABER</th>
+                <th style="text-align: right;">SALDO DEUDOR</th>
+                <th style="text-align: right;">SALDO ACREEDOR</th>
               </tr>
-            {/each}
-          </tbody>
-          <tfoot>
-            <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1;">
-              <td colspan="2" style="text-align: right; text-transform: uppercase;">Sumas y Saldos Totales:</td>
-              <td style="text-align: right; color: #2563eb;">{fmtMoneda(totalBalanceDebe)}</td>
-              <td style="text-align: right; color: #2563eb;">{fmtMoneda(totalBalanceHaber)}</td>
-              <td style="text-align: right; color: #15803d;">{fmtMoneda(totalBalanceDebe)}</td>
-              <td style="text-align: right; color: #15803d;">{fmtMoneda(totalBalanceHaber)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {#each planCuentas.filter(c => c.tipo === 'DETALLE') as c}
+                <tr>
+                  <td><code>{c.codigo}</code></td>
+                  <td>{c.nombre}</td>
+                  <td style="text-align: right;">{c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}</td>
+                  <td style="text-align: right;">{c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}</td>
+                  <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'DEUDORA' ? '#15803d' : '#94a3b8'};">
+                    {c.naturaleza === 'DEUDORA' ? fmtMoneda(c.saldo) : '-'}
+                  </td>
+                  <td style="text-align: right; font-weight: 700; color: {c.naturaleza === 'ACREEDORA' ? '#15803d' : '#94a3b8'};">
+                    {c.naturaleza === 'ACREEDORA' ? fmtMoneda(c.saldo) : '-'}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+            <tfoot>
+              <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1;">
+                <td colspan="2" style="text-align: right; text-transform: uppercase;">Sumas y Saldos Totales:</td>
+                <td style="text-align: right; color: #2563eb;">{fmtMoneda(totalBalanceDebe)}</td>
+                <td style="text-align: right; color: #2563eb;">{fmtMoneda(totalBalanceHaber)}</td>
+                <td style="text-align: right; color: #15803d;">{fmtMoneda(totalBalanceDebe)}</td>
+                <td style="text-align: right; color: #15803d;">{fmtMoneda(totalBalanceHaber)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {/if}
+
+      <!-- 5.2 ESTADO DE RESULTADOS (VEN-NIF) -->
+      {#if subvistaReportes === 'resultados'}
+        <div class="card-padded" style="margin-bottom: 16px;">
+          <h3 class="card-title-lg">Estado de Resultados (Ganancias y Pérdidas)</h3>
+          <p class="card-desc">Norma VEN-NIF GE / PYME. Estructura de Ingresos Operacionales y Gastos del Ejercicio.</p>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          <!-- INGRESOS -->
+          <div class="card-flow table-responsive">
+            <div style="padding: 14px 18px; background: #f0fdf4; border-bottom: 1px solid #bbf7d0; font-weight: 800; color: #166534; font-size: 13.5px;">
+              4. INGRESOS OPERACIONALES
+            </div>
+            <table class="table-custom">
+              <thead>
+                <tr>
+                  <th>CÓDIGO</th>
+                  <th>CUENTA DE INGRESO</th>
+                  <th style="text-align: right;">MONTO (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each ctasIngresos.filter(c => c.tipo === 'DETALLE') as c}
+                  <tr>
+                    <td><code>{c.codigo}</code></td>
+                    <td>{c.nombre}</td>
+                    <td style="text-align: right; font-weight: 700; color: #15803d;">{fmtMoneda(c.saldo)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+              <tfoot>
+                <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #bbf7d0;">
+                  <td colspan="2" style="text-align: right;">TOTAL INGRESOS OPERACIONALES:</td>
+                  <td style="text-align: right; color: #15803d; font-size: 15px;">{fmtMoneda(totalIngresos)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- COSTOS Y GASTOS -->
+          <div class="card-flow table-responsive">
+            <div style="padding: 14px 18px; background: #fef2f2; border-bottom: 1px solid #fecaca; font-weight: 800; color: #991b1b; font-size: 13.5px;">
+              5. COSTOS Y GASTOS OPERACIONALES
+            </div>
+            <table class="table-custom">
+              <thead>
+                <tr>
+                  <th>CÓDIGO</th>
+                  <th>CUENTA DE GASTO</th>
+                  <th style="text-align: right;">MONTO (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each ctasGastos.filter(c => c.tipo === 'DETALLE') as c}
+                  <tr>
+                    <td><code>{c.codigo}</code></td>
+                    <td>{c.nombre}</td>
+                    <td style="text-align: right; font-weight: 700; color: #dc2626;">{fmtMoneda(c.saldo)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+              <tfoot>
+                <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #fecaca;">
+                  <td colspan="2" style="text-align: right;">TOTAL COSTOS Y GASTOS:</td>
+                  <td style="text-align: right; color: #dc2626; font-size: 15px;">{fmtMoneda(totalGastos)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- RESULTADO NETO -->
+          <div class="card-padded" style="border: 2px solid {utilidadEjercicio >= 0 ? '#bbf7d0' : '#fecaca'}; background: {utilidadEjercicio >= 0 ? '#f0fdf4' : '#fef2f2'};">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b;">
+                  RESULTADO NETO DEL EJERCICIO
+                </div>
+                <div style="font-size: 22px; font-weight: 900; color: {utilidadEjercicio >= 0 ? '#15803d' : '#dc2626'};">
+                  {utilidadEjercicio >= 0 ? 'UTILIDAD NETA OPERATIVA' : 'PÉRDIDA DEL EJERCICIO'}
+                </div>
+                <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+                  Margen Operativo: {totalIngresos > 0 ? ((utilidadEjercicio / totalIngresos) * 100).toFixed(1) : 0}% sobre ingresos brutos
+                </div>
+              </div>
+              <div style="font-size: 28px; font-weight: 900; color: {utilidadEjercicio >= 0 ? '#15803d' : '#dc2626'};">
+                {fmtMoneda(utilidadEjercicio)}
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- 5.3 SITUACIÓN FINANCIERA (BALANCE GENERAL VEN-NIF) -->
+      {#if subvistaReportes === 'situacion'}
+        <div class="card-padded" style="margin-bottom: 16px;">
+          <h3 class="card-title-lg">Estado de Situación Financiera (Balance General)</h3>
+          <p class="card-desc">Norma VEN-NIF. Verificación estricta de la ecuación contable patrimonial: Activo ≡ Pasivo + Patrimonio.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+          <!-- COLUMNA ACTIVOS -->
+          <div class="card-flow table-responsive">
+            <div style="padding: 14px 18px; background: #eff6ff; border-bottom: 1px solid #bfdbfe; font-weight: 800; color: #1e40af; font-size: 13.5px;">
+              1. ACTIVOS
+            </div>
+            <table class="table-custom">
+              <thead>
+                <tr>
+                  <th>CÓDIGO</th>
+                  <th>CUENTA</th>
+                  <th style="text-align: right;">SALDO (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each ctasActivos.filter(c => c.tipo === 'DETALLE') as c}
+                  <tr>
+                    <td><code>{c.codigo}</code></td>
+                    <td>{c.nombre}</td>
+                    <td style="text-align: right; font-weight: 600;">{fmtMoneda(c.saldo)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+              <tfoot>
+                <tr style="background: #eff6ff; font-weight: 900; border-top: 2px solid #93c5fd;">
+                  <td colspan="2">TOTAL ACTIVO:</td>
+                  <td style="text-align: right; color: #1d4ed8; font-size: 15px;">{fmtMoneda(totalActivos)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- COLUMNA PASIVOS Y PATRIMONIO -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- PASIVOS -->
+            <div class="card-flow table-responsive">
+              <div style="padding: 14px 18px; background: #fffbeb; border-bottom: 1px solid #fde68a; font-weight: 800; color: #92400e; font-size: 13.5px;">
+                2. PASIVOS
+              </div>
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>CÓDIGO</th>
+                    <th>CUENTA</th>
+                    <th style="text-align: right;">SALDO (USD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each ctasPasivos.filter(c => c.tipo === 'DETALLE') as c}
+                    <tr>
+                      <td><code>{c.codigo}</code></td>
+                      <td>{c.nombre}</td>
+                      <td style="text-align: right; font-weight: 600;">{fmtMoneda(c.saldo)}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+                <tfoot>
+                  <tr style="background: #fffbeb; font-weight: 900; border-top: 2px solid #fcd34d;">
+                    <td colspan="2">TOTAL PASIVO:</td>
+                    <td style="text-align: right; color: #b45309; font-size: 15px;">{fmtMoneda(totalPasivos)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <!-- PATRIMONIO -->
+            <div class="card-flow table-responsive">
+              <div style="padding: 14px 18px; background: #f5f3ff; border-bottom: 1px solid #ddd6fe; font-weight: 800; color: #5b21b6; font-size: 13.5px;">
+                3. PATRIMONIO NETO
+              </div>
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>CÓDIGO</th>
+                    <th>CUENTA</th>
+                    <th style="text-align: right;">SALDO (USD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each ctasPatrimonio.filter(c => c.tipo === 'DETALLE') as c}
+                    <tr>
+                      <td><code>{c.codigo}</code></td>
+                      <td>{c.nombre}</td>
+                      <td style="text-align: right; font-weight: 600;">{fmtMoneda(c.saldo)}</td>
+                    </tr>
+                  {/each}
+                  <tr style="background: #faf5ff;">
+                    <td><code>3.3.1.01</code></td>
+                    <td><em>Resultado Neto del Ejercicio en Curso</em></td>
+                    <td style="text-align: right; font-weight: 800; color: {utilidadEjercicio >= 0 ? '#15803d' : '#dc2626'};">
+                      {fmtMoneda(utilidadEjercicio)}
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr style="background: #f5f3ff; font-weight: 900; border-top: 2px solid #c4b5fd;">
+                    <td colspan="2">TOTAL PATRIMONIO:</td>
+                    <td style="text-align: right; color: #6d28d9; font-size: 15px;">{fmtMoneda(totalPatrimonioNeto)}</td>
+                  </tr>
+                  <tr style="background: #0f172a; color: #ffffff; font-weight: 900;">
+                    <td colspan="2">TOTAL PASIVO + PATRIMONIO:</td>
+                    <td style="text-align: right; font-size: 16px; color: #38bdf8;">{fmtMoneda(totalPasivoMasPatrimonio)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- BARRA AUDITORÍA PATRIMONIAL -->
+        <div class="card-padded" style="margin-top: 20px; border-left: 5px solid {situacionCuadrada ? '#16a34a' : '#dc2626'}; background: #ffffff;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div style="font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase;">VERIFICACIÓN DE ECUACIÓN PATRIMONIAL</div>
+              <div style="font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 2px;">
+                Activo ({fmtMoneda(totalActivos)}) ≡ Pasivo ({fmtMoneda(totalPasivos)}) + Patrimonio ({fmtMoneda(totalPatrimonioNeto)})
+              </div>
+            </div>
+            <div>
+              {#if situacionCuadrada}
+                <span class="badge-status-pill badge-green">ECUACIÓN PATRIMONIAL BALANCEADA (CUADRADA)</span>
+              {:else}
+                <span class="badge-status-pill badge-red">DESCUADRE PATRIMONIAL DETECTADO</span>
+              {/if}
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -1209,6 +1496,75 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
 
+  .subvista-pills {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .subvista-pill {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .subvista-pill:hover {
+    background: #f1f5f9;
+  }
+
+  .subvista-pill.active {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+  }
+
+  .card-padded {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+
+  .card-title-lg {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .card-desc {
+    font-size: 13px;
+    color: #64748b;
+    margin: 4px 0 0 0;
+  }
+
+  .badge-status-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+
+  .badge-green {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+
+  .badge-red {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
   .fade-in {
     animation: fadeIn 0.2s ease-in-out;
   }
@@ -1216,5 +1572,22 @@
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media print {
+    :global(body) {
+      background: #ffffff !important;
+    }
+    :global(header), :global(aside), :global(nav), .erp-view-header, .tabs-nav, .action-bar, .modal-backdrop {
+      display: none !important;
+    }
+    .contab-container {
+      padding: 0 !important;
+      max-width: 100% !important;
+    }
+    .card-flow, .card-padded {
+      box-shadow: none !important;
+      border: 1px solid #000 !important;
+    }
   }
 </style>
