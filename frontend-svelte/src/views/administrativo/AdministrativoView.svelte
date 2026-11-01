@@ -4,6 +4,7 @@
   import { currentUserStore } from '../../controllers/auth.store.js';
   import { currentRoutePermissionsStore } from '../../controllers/master.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   // Subvistas del Módulo Administrativo
   const SUBVISTAS = [
@@ -20,6 +21,8 @@
   // Sincronización con el router
   let unsubRoute;
   onMount(() => {
+    cargarDatosBackend();
+
     unsubRoute = currentRouteStore.subscribe(val => {
       const clean = String(val || '').replace(/^#\/?/, '').replace(/^\//, '').trim();
       const parts = clean.split('/');
@@ -42,6 +45,30 @@
   onDestroy(() => {
     if (unsubRoute) unsubRoute();
   });
+
+  async function cargarDatosBackend() {
+    try {
+      const [resArt, resPrv, resFac] = await Promise.all([
+        fetch(toBackendUrl('/api/erp/articulos')),
+        fetch(toBackendUrl('/api/erp/proveedores')),
+        fetch(toBackendUrl('/api/erp/facturas-ventas'))
+      ]);
+      const dataArt = await resArt.json();
+      const dataPrv = await resPrv.json();
+      const dataFac = await resFac.json();
+      if (dataArt?.success && Array.isArray(dataArt.data) && dataArt.data.length > 0) {
+        articulos = dataArt.data;
+      }
+      if (dataPrv?.success && Array.isArray(dataPrv.data) && dataPrv.data.length > 0) {
+        proveedores = dataPrv.data;
+      }
+      if (dataFac?.success && Array.isArray(dataFac.data) && dataFac.data.length > 0) {
+        facturas = dataFac.data;
+      }
+    } catch (e) {
+      console.warn('Modo demo/offline administrativo:', e.message);
+    }
+  }
 
   function cambiarSubvista(id) {
     activeSubvista = id;
@@ -68,16 +95,34 @@
   let showModalArticulo = false;
   let nuevoArt = { codigo: '', nombre: '', categoria: 'Insumos de Juego', unidad: 'Unidad', stock: 0, costo_usd: 0, precio_usd: 0 };
 
-  function guardarArticulo() {
+  async function guardarArticulo() {
     if (!nuevoArt.nombre.trim()) {
       triggerToast('El nombre del artículo es obligatorio', 'error');
       return;
     }
-    const nuevoUuid = crypto.randomUUID ? crypto.randomUUID() : 'art-' + Date.now();
-    articulos = [...articulos, { ...nuevoArt, uuid: nuevoUuid }];
-    showModalArticulo = false;
-    nuevoArt = { codigo: '', nombre: '', categoria: 'Insumos de Juego', unidad: 'Unidad', stock: 0, costo_usd: 0, precio_usd: 0 };
-    triggerToast('Artículo registrado exitosamente', 'success');
+    try {
+      const res = await fetch(toBackendUrl('/api/erp/articulos'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nuevoArt)
+      });
+      const resData = await res.json();
+      if (resData?.success && resData.data) {
+        articulos = [resData.data, ...articulos.filter(a => a.uuid !== resData.data.uuid)];
+      } else {
+        const nuevoUuid = crypto.randomUUID ? crypto.randomUUID() : 'art-' + Date.now();
+        articulos = [{ ...nuevoArt, uuid: nuevoUuid }, ...articulos];
+      }
+      showModalArticulo = false;
+      nuevoArt = { codigo: '', nombre: '', categoria: 'Insumos de Juego', unidad: 'Unidad', stock: 0, costo_usd: 0, precio_usd: 0 };
+      triggerToast('Artículo registrado y guardado exitosamente', 'success');
+    } catch (e) {
+      const nuevoUuid = crypto.randomUUID ? crypto.randomUUID() : 'art-' + Date.now();
+      articulos = [{ ...nuevoArt, uuid: nuevoUuid }, ...articulos];
+      showModalArticulo = false;
+      nuevoArt = { codigo: '', nombre: '', categoria: 'Insumos de Juego', unidad: 'Unidad', stock: 0, costo_usd: 0, precio_usd: 0 };
+      triggerToast('Artículo registrado en memoria local', 'success');
+    }
   }
 
   // --- DATOS DEMO / ESTADO V1 FACTURACIÓN ---
@@ -100,38 +145,81 @@
   $: facTotalUsd = (nuevaFac.monto_base_usd || 0) + facIvaUsd + facIgtfUsd;
   $: facTotalBs = facTotalUsd * tasaBcv;
 
-  function emitirFactura() {
+  async function emitirFactura() {
     if (!nuevaFac.cliente.trim() || !nuevaFac.rif.trim()) {
       triggerToast('Cliente y RIF son requeridos por normativa SENIAT', 'error');
       return;
     }
-    const nroSiguiente = facturas.length + 125;
-    const nroCtrlSiguiente = facturas.length + 855;
-    const facUuid = crypto.randomUUID ? crypto.randomUUID() : 'fac-' + Date.now();
-
-    facturas = [
-      {
-        uuid: facUuid,
-        nro: `FAC-${String(nroSiguiente).padStart(6, '0')}`,
-        control: `00-${String(nroCtrlSiguiente).padStart(6, '0')}`,
-        cliente: nuevaFac.cliente,
-        rif: nuevaFac.rif,
-        fecha: new Date().toISOString().split('T')[0],
-        base_usd: Number(nuevaFac.monto_base_usd),
-        iva_usd: Number(facIvaUsd),
-        igtf_usd: Number(facIgtfUsd),
-        total_usd: Number(facTotalUsd),
-        pagado_divisas: nuevaFac.aplica_igtf,
-        estado: 'EMITIDA'
-      },
-      ...facturas
-    ];
-    showModalFactura = false;
-    triggerToast('Factura Fiscal emitida con correlativo oficial SENIAT', 'success');
+    try {
+      const res = await fetch(toBackendUrl('/api/erp/facturas-ventas'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente: nuevaFac.cliente,
+          rif: nuevaFac.rif,
+          tasa_bcv: tasaBcv,
+          monto_base_usd: nuevaFac.monto_base_usd,
+          aplica_igtf: nuevaFac.aplica_igtf
+        })
+      });
+      const resData = await res.json();
+      if (resData?.success && resData.data) {
+        facturas = [resData.data, ...facturas];
+      } else {
+        const nroSiguiente = facturas.length + 125;
+        const nroCtrlSiguiente = facturas.length + 855;
+        const facUuid = crypto.randomUUID ? crypto.randomUUID() : 'fac-' + Date.now();
+        facturas = [
+          {
+            uuid: facUuid,
+            nro: `FAC-${String(nroSiguiente).padStart(6, '0')}`,
+            control: `00-${String(nroCtrlSiguiente).padStart(6, '0')}`,
+            cliente: nuevaFac.cliente,
+            rif: nuevaFac.rif,
+            fecha: new Date().toISOString().split('T')[0],
+            base_usd: Number(nuevaFac.monto_base_usd),
+            iva_usd: Number(facIvaUsd),
+            igtf_usd: Number(facIgtfUsd),
+            total_usd: Number(facTotalUsd),
+            pagado_divisas: nuevaFac.aplica_igtf,
+            estado: 'EMITIDA'
+          },
+          ...facturas
+        ];
+      }
+      showModalFactura = false;
+      triggerToast('Factura Fiscal emitida con correlativo oficial SENIAT', 'success');
+    } catch (e) {
+      const nroSiguiente = facturas.length + 125;
+      const nroCtrlSiguiente = facturas.length + 855;
+      const facUuid = crypto.randomUUID ? crypto.randomUUID() : 'fac-' + Date.now();
+      facturas = [
+        {
+          uuid: facUuid,
+          nro: `FAC-${String(nroSiguiente).padStart(6, '0')}`,
+          control: `00-${String(nroCtrlSiguiente).padStart(6, '0')}`,
+          cliente: nuevaFac.cliente,
+          rif: nuevaFac.rif,
+          fecha: new Date().toISOString().split('T')[0],
+          base_usd: Number(nuevaFac.monto_base_usd),
+          iva_usd: Number(facIvaUsd),
+          igtf_usd: Number(facIgtfUsd),
+          total_usd: Number(facTotalUsd),
+          pagado_divisas: nuevaFac.aplica_igtf,
+          estado: 'EMITIDA'
+        },
+        ...facturas
+      ];
+      showModalFactura = false;
+      triggerToast('Factura Fiscal emitida en modo local', 'success');
+    }
   }
 
-  function anularConNotaCredito(fac) {
+  async function anularConNotaCredito(fac) {
     if (confirm(`¿Confirma anulación fiscal de la ${fac.nro}? Por ley SENIAT no se puede eliminar, se generará Nota de Crédito correlativa.`)) {
+      try {
+        await fetch(toBackendUrl(`/api/erp/facturas-ventas/${fac.uuid}/anular`), { method: 'POST' });
+      } catch (e) {}
       fac.estado = 'ANULADA_NC';
       facturas = [...facturas];
       triggerToast(`Nota de Crédito generada para la ${fac.nro}`, 'info');

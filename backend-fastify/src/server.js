@@ -11,6 +11,7 @@ import { reportsRoutes } from './routes/reports.routes.js';
 import biometricosSyncRoutes from './routes/biometricos-sync.routes.js';
 import cecomVideoRoutes from './routes/cecom-video.routes.js';
 import { baccaratRoutes } from './routes/baccarat.routes.js';
+import { erpRoutes } from './routes/erp.routes.js';
 import { syncAttlogs } from './controllers/master.controller.js';
 import { initDb } from './config/db.js';
 
@@ -133,6 +134,7 @@ async function startServer() {
     await fastify.register(biometricosSyncRoutes);
     await fastify.register(cecomVideoRoutes);
     await fastify.register(baccaratRoutes);
+    await fastify.register(erpRoutes);
     // Register Biometric Push Endpoints at Root Level (Hikvision ISAPI)
     await fastify.register(async (app) => {
       app.post('/attlogs/sync', syncAttlogs);

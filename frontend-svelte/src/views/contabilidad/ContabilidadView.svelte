@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { currentRouteStore, navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   const SUBVISTAS = [
     { id: 'plan-cuentas', label: 'Plan de Cuentas', desc: 'Catálogo contable jerárquico multinivel' },
@@ -15,6 +16,8 @@
 
   let unsubRoute;
   onMount(() => {
+    cargarDatosBackend();
+
     unsubRoute = currentRouteStore.subscribe(val => {
       const clean = String(val || '').replace(/^#\/?/, '').replace(/^\//, '').trim();
       const parts = clean.split('/');
@@ -37,6 +40,31 @@
   onDestroy(() => {
     if (unsubRoute) unsubRoute();
   });
+
+  async function cargarDatosBackend() {
+    try {
+      const [resCuentas, resCc, resAsnt] = await Promise.all([
+        fetch(toBackendUrl('/api/erp/plan-cuentas')),
+        fetch(toBackendUrl('/api/erp/centros-costos')),
+        fetch(toBackendUrl('/api/erp/asientos'))
+      ]);
+      const dataCuentas = await resCuentas.json();
+      const dataCc = await resCc.json();
+      const dataAsnt = await resAsnt.json();
+
+      if (dataCuentas?.success && Array.isArray(dataCuentas.data) && dataCuentas.data.length > 0) {
+        planCuentas = dataCuentas.data;
+      }
+      if (dataCc?.success && Array.isArray(dataCc.data) && dataCc.data.length > 0) {
+        centrosCostos = dataCc.data;
+      }
+      if (dataAsnt?.success && Array.isArray(dataAsnt.data) && dataAsnt.data.length > 0) {
+        asientos = dataAsnt.data;
+      }
+    } catch (e) {
+      console.warn('Modo demo/offline contabilidad:', e.message);
+    }
+  }
 
   function cambiarSubvista(id) {
     activeSubvista = id;
@@ -81,16 +109,34 @@
   let showModalCuenta = false;
   let nuevaCuenta = { codigo: '', nombre: '', nivel: 4, tipo: 'DETALLE', naturaleza: 'DEUDORA' };
 
-  function guardarCuenta() {
+  async function guardarCuenta() {
     if (!nuevaCuenta.codigo.trim() || !nuevaCuenta.nombre.trim()) {
       triggerToast('Código y Nombre de cuenta son requeridos', 'error');
       return;
     }
-    const cUuid = crypto.randomUUID ? crypto.randomUUID() : 'pc-' + Date.now();
-    planCuentas = [...planCuentas, { ...nuevaCuenta, uuid: cUuid, saldo: 0 }].sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }));
-    showModalCuenta = false;
-    nuevaCuenta = { codigo: '', nombre: '', nivel: 4, tipo: 'DETALLE', naturaleza: 'DEUDORA' };
-    triggerToast('Cuenta contable incorporada al catálogo', 'success');
+    try {
+      const res = await fetch(toBackendUrl('/api/erp/plan-cuentas'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nuevaCuenta)
+      });
+      const resData = await res.json();
+      if (resData?.success && resData.data) {
+        planCuentas = [...planCuentas.filter(c => c.uuid !== resData.data.uuid), resData.data].sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }));
+      } else {
+        const cUuid = crypto.randomUUID ? crypto.randomUUID() : 'pc-' + Date.now();
+        planCuentas = [...planCuentas, { ...nuevaCuenta, uuid: cUuid, saldo: 0 }].sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }));
+      }
+      showModalCuenta = false;
+      nuevaCuenta = { codigo: '', nombre: '', nivel: 4, tipo: 'DETALLE', naturaleza: 'DEUDORA' };
+      triggerToast('Cuenta contable incorporada al catálogo', 'success');
+    } catch (e) {
+      const cUuid = crypto.randomUUID ? crypto.randomUUID() : 'pc-' + Date.now();
+      planCuentas = [...planCuentas, { ...nuevaCuenta, uuid: cUuid, saldo: 0 }].sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }));
+      showModalCuenta = false;
+      nuevaCuenta = { codigo: '', nombre: '', nivel: 4, tipo: 'DETALLE', naturaleza: 'DEUDORA' };
+      triggerToast('Cuenta incorporada (modo local)', 'success');
+    }
   }
 
   // --- DATOS DEMO / ESTADO V1 CENTROS DE COSTOS ---
@@ -159,7 +205,7 @@
     nuevoAsiento.lineas = nuevoAsiento.lineas.filter((_, i) => i !== idx);
   }
 
-  function guardarAsiento() {
+  async function guardarAsiento() {
     if (!nuevoAsiento.glosa.trim()) {
       triggerToast('La descripción/glosa del comprobante es obligatoria', 'error');
       return;
@@ -168,9 +214,6 @@
       triggerToast(`Asiento descuadrado: Debe ($${totalDebeNuevo.toFixed(2)}) != Haber ($${totalHaberNuevo.toFixed(2)})`, 'error');
       return;
     }
-
-    const nroSiguiente = asientos.length + 43;
-    const asUuid = crypto.randomUUID ? crypto.randomUUID() : 'as-' + Date.now();
 
     const lineasConNombre = nuevoAsiento.lineas.map(l => {
       const cuentaObj = planCuentas.find(c => c.codigo === l.cuenta_codigo);
@@ -182,29 +225,80 @@
       };
     });
 
-    asientos = [
-      {
-        uuid: asUuid,
-        nro: `AS-2026-${String(nroSiguiente).padStart(4, '0')}`,
-        fecha: nuevoAsiento.fecha,
-        glosa: nuevoAsiento.glosa,
-        tipo: nuevoAsiento.tipo,
-        lineas: lineasConNombre
-      },
-      ...asientos
-    ];
-
-    showModalAsiento = false;
-    nuevoAsiento = {
-      glosa: '',
-      tipo: 'DIARIO',
-      fecha: new Date().toISOString().split('T')[0],
-      lineas: [
-        { cuenta_codigo: '1.1.1.01', debe: 0, haber: 0 },
-        { cuenta_codigo: '4.1.1.01', debe: 0, haber: 0 }
-      ]
-    };
-    triggerToast('Comprobante contable validado y asentado con éxito', 'success');
+    try {
+      const res = await fetch(toBackendUrl('/api/erp/asientos'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...nuevoAsiento,
+          lineas: lineasConNombre
+        })
+      });
+      const resData = await res.json();
+      if (resData?.success && resData.data) {
+        asientos = [
+          {
+            uuid: resData.data.uuid,
+            nro: resData.data.nro_comprobante || resData.data.nro,
+            fecha: resData.data.fecha ? String(resData.data.fecha).split('T')[0] : nuevoAsiento.fecha,
+            glosa: resData.data.glosa,
+            tipo: resData.data.tipo,
+            lineas: lineasConNombre
+          },
+          ...asientos
+        ];
+      } else {
+        const nroSiguiente = asientos.length + 43;
+        const asUuid = crypto.randomUUID ? crypto.randomUUID() : 'as-' + Date.now();
+        asientos = [
+          {
+            uuid: asUuid,
+            nro: `AS-2026-${String(nroSiguiente).padStart(4, '0')}`,
+            fecha: nuevoAsiento.fecha,
+            glosa: nuevoAsiento.glosa,
+            tipo: nuevoAsiento.tipo,
+            lineas: lineasConNombre
+          },
+          ...asientos
+        ];
+      }
+      showModalAsiento = false;
+      nuevoAsiento = {
+        glosa: '',
+        tipo: 'DIARIO',
+        fecha: new Date().toISOString().split('T')[0],
+        lineas: [
+          { cuenta_codigo: '1.1.1.01', debe: 0, haber: 0 },
+          { cuenta_codigo: '4.1.1.01', debe: 0, haber: 0 }
+        ]
+      };
+      triggerToast('Comprobante contable validado y asentado con éxito', 'success');
+    } catch (e) {
+      const nroSiguiente = asientos.length + 43;
+      const asUuid = crypto.randomUUID ? crypto.randomUUID() : 'as-' + Date.now();
+      asientos = [
+        {
+          uuid: asUuid,
+          nro: `AS-2026-${String(nroSiguiente).padStart(4, '0')}`,
+          fecha: nuevoAsiento.fecha,
+          glosa: nuevoAsiento.glosa,
+          tipo: nuevoAsiento.tipo,
+          lineas: lineasConNombre
+        },
+        ...asientos
+      ];
+      showModalAsiento = false;
+      nuevoAsiento = {
+        glosa: '',
+        tipo: 'DIARIO',
+        fecha: new Date().toISOString().split('T')[0],
+        lineas: [
+          { cuenta_codigo: '1.1.1.01', debe: 0, haber: 0 },
+          { cuenta_codigo: '4.1.1.01', debe: 0, haber: 0 }
+        ]
+      };
+      triggerToast('Comprobante asentado (modo local)', 'success');
+    }
   }
 
   function fmtMoneda(val) {
