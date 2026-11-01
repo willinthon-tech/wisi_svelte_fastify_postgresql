@@ -20,7 +20,11 @@ import {
   getPersonalNomina,
   getConceptosNomina,
   getPeriodosNomina,
-  aprobarPeriodoNomina
+  aprobarPeriodoNomina,
+  registrarPagoProveedor,
+  registrarMovimientoInventario,
+  getCortesParaNomina,
+  getCorteDetalleParaNomina
 } from '../controllers/erp.controller.js';
 
 export async function erpRoutes(fastify, options) {
@@ -28,9 +32,11 @@ export async function erpRoutes(fastify, options) {
   fastify.get('/api/erp/articulos', getArticulos);
   fastify.post('/api/erp/articulos', saveArticulo);
   fastify.delete('/api/erp/articulos/:uuid', deleteArticulo);
+  fastify.post('/api/erp/articulos/movimiento', registrarMovimientoInventario);
 
   fastify.get('/api/erp/proveedores', getProveedores);
   fastify.post('/api/erp/proveedores', saveProveedor);
+  fastify.post('/api/erp/proveedores/:uuid/pagar', registrarPagoProveedor);
 
   fastify.get('/api/erp/facturas-ventas', getFacturasVentas);
   fastify.post('/api/erp/facturas-ventas', createFacturaVenta);
@@ -51,9 +57,11 @@ export async function erpRoutes(fastify, options) {
   fastify.post('/api/erp/asientos', createAsiento);
   fastify.get('/api/erp/estados-financieros', getEstadosFinancieros);
 
-  // --- NÓMINA (LOTTT) ---
+  // --- NÓMINA (LOTTT Y CORTES DE ASISTENCIA) ---
   fastify.get('/api/erp/nomina/personal', getPersonalNomina);
   fastify.get('/api/erp/nomina/conceptos', getConceptosNomina);
   fastify.get('/api/erp/nomina/periodos', getPeriodosNomina);
   fastify.post('/api/erp/nomina/periodos/:uuid/aprobar', aprobarPeriodoNomina);
+  fastify.get('/api/erp/nomina/cortes', getCortesParaNomina);
+  fastify.get('/api/erp/nomina/cortes/:uuid', getCorteDetalleParaNomina);
 }

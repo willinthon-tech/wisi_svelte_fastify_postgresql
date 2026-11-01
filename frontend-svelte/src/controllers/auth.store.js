@@ -20,6 +20,7 @@ const initialSalas = (() => {
 export const currentUserStore = writable(initialUser);
 export const isAuthenticatedStore = writable(initialAuth);
 export const userSalasStore = writable(initialSalas);
+export const authUserSalasStore = userSalasStore;
 export const selectedSalaStore = writable(1);
 
 export const navMenuStore = writable([

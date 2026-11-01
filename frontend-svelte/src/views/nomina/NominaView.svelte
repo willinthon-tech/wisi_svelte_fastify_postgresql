@@ -3,6 +3,8 @@
   import { currentRouteStore, navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
+  import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
+  import { masterSalasStore, masterCortesStore, masterEmpleadosStore } from '../../controllers/master.store.js';
 
   const SUBVISTAS = [
     { id: 'personal', label: 'Personal y Salarios', desc: 'Ficha salarial, cargos y asignación de cuentas' },
@@ -14,6 +16,55 @@
 
   let activeSubvista = 'personal';
   let tasaBcv = 62.50;
+
+  // --- AISLAMIENTO MULTI-SALA ---
+  $: assignedSalaIds = (function () {
+    const user = $currentUserStore;
+    const username = (user?.username || '').toLowerCase();
+    const isAdmin = username === 'admin' || username === 'willinthon' || user?.is_admin === true || user?.rol === 'admin';
+    if (isAdmin) return [];
+
+    const userId = user?.uuid || user?.id;
+    if (!userId) return [];
+
+    if (user && Array.isArray(user.salas) && user.salas.length > 0) {
+      return user.salas.map((s) => String(typeof s === "object" ? (s.uuid || s.id) : s)).filter(Boolean);
+    }
+    const authSalas = $authUserSalasStore;
+    if (Array.isArray(authSalas) && authSalas.length > 0) {
+      return authSalas.map((s) => String(typeof s === "object" ? (s.uuid || s.id) : s)).filter(Boolean);
+    }
+    return [];
+  })();
+
+  $: userAvailableSalas = (function () {
+    const all = $masterSalasStore || [];
+    if (!assignedSalaIds || assignedSalaIds.length === 0) return all;
+    const set = new Set(assignedSalaIds.map(String));
+    return all.filter((s) => set.has(String(s.uuid || s.id)));
+  })();
+
+  let selectedSalaFiltro = 'ALL';
+
+  // --- CORTES DE ASISTENCIA / QUINCENA (RRHH) ---
+  let cortesList = [];
+  let selectedCorteUuid = '';
+
+  $: cortesFiltrados = (function() {
+    const list = cortesList.length > 0 ? cortesList : ($masterCortesStore || []);
+    if (selectedSalaFiltro === 'ALL') {
+      if (!assignedSalaIds || assignedSalaIds.length === 0) return list;
+      const allowedSet = new Set(assignedSalaIds.map(String));
+      return list.filter(c => {
+        const sUuids = (c.salas_uuids || c.salas_ids || []).map(String);
+        return sUuids.length === 0 || sUuids.some(sid => allowedSet.has(sid));
+      });
+    }
+    return list.filter(c => {
+      const sUuids = (c.salas_uuids || c.salas_ids || []).map(String);
+      return sUuids.includes(String(selectedSalaFiltro));
+    });
+  })();
 
   let unsubRoute;
   onMount(() => {
@@ -44,14 +95,16 @@
 
   async function cargarDatosBackend() {
     try {
-      const [resPers, resConc, resPer] = await Promise.all([
+      const [resPers, resConc, resPer, resCortes] = await Promise.all([
         fetch(toBackendUrl('/api/erp/nomina/personal')),
         fetch(toBackendUrl('/api/erp/nomina/conceptos')),
-        fetch(toBackendUrl('/api/erp/nomina/periodos'))
+        fetch(toBackendUrl('/api/erp/nomina/periodos')),
+        fetch(toBackendUrl('/api/erp/nomina/cortes'))
       ]);
       const dataPers = await resPers.json();
       const dataConc = await resConc.json();
       const dataPer = await resPer.json();
+      const dataCortes = await resCortes.json();
 
       if (dataPers?.success && Array.isArray(dataPers.data) && dataPers.data.length > 0) {
         empleados = dataPers.data.map(e => ({
@@ -66,6 +119,12 @@
       if (dataPer?.success && Array.isArray(dataPer.data) && dataPer.data.length > 0) {
         periodoNomina = dataPer.data[0];
       }
+      if (dataCortes?.success && Array.isArray(dataCortes.data) && dataCortes.data.length > 0) {
+        cortesList = dataCortes.data;
+        if (!selectedCorteUuid && cortesList[0]?.uuid) {
+          seleccionarCorte(cortesList[0].uuid);
+        }
+      }
     } catch (e) {
       console.warn('Modo demo/offline nómina:', e.message);
     }
@@ -78,19 +137,25 @@
 
   // --- DATOS DEMO / ESTADO V1 PERSONAL Y NÓMINA ---
   let empleados = [
-    { uuid: 'emp-01', cedula: 'V-18.492.019', nombres: 'Carlos Mendoza', cargo: 'Pitboss / Jefe de Sala', departamento: 'Mesas en Vivo', sueldo_base_usd: 650.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0821-49-1029384756', estado: 'ACTIVO' },
-    { uuid: 'emp-02', cedula: 'V-20.183.921', nombres: 'Mariana Silva', cargo: 'Croupier Principal Baccarat', departamento: 'Mesas en Vivo', sueldo_base_usd: 480.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Mercantil', nro_cuenta: '0105-0291-83-9102837465', estado: 'ACTIVO' },
-    { uuid: 'emp-03', cedula: 'V-23.819.284', nombres: 'Alejandro Ramos', cargo: 'Operador de Monitoreo CECOM', departamento: 'Seguridad Integral', sueldo_base_usd: 420.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0192-38-4920192837', estado: 'ACTIVO' },
-    { uuid: 'emp-04', cedula: 'V-19.384.712', nombres: 'Dayana Gómez', cargo: 'Cajera Bóveda y Canje', departamento: 'Administración y Caja', sueldo_base_usd: 450.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banco de Venezuela', nro_cuenta: '0102-0938-12-3920194857', estado: 'ACTIVO' },
-    { uuid: 'emp-05', cedula: 'V-25.102.938', nombres: 'José Gregorio Pérez', cargo: 'Técnico de Máquinas y Slots', departamento: 'Mantenimiento Técnico', sueldo_base_usd: 500.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0928-11-2019485729', estado: 'ACTIVO' }
+    { uuid: 'emp-01', cedula: 'V-18.492.019', nombres: 'Carlos Mendoza', cargo: 'Pitboss / Jefe de Sala', departamento: 'Mesas en Vivo', sala_nombre: 'Casino Principal', sueldo_base_usd: 650.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0821-49-1029384756', estado: 'ACTIVO' },
+    { uuid: 'emp-02', cedula: 'V-20.183.921', nombres: 'Mariana Silva', cargo: 'Croupier Principal Baccarat', departamento: 'Mesas en Vivo', sala_nombre: 'Casino Principal', sueldo_base_usd: 480.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Mercantil', nro_cuenta: '0105-0291-83-9102837465', estado: 'ACTIVO' },
+    { uuid: 'emp-03', cedula: 'V-23.819.284', nombres: 'Alejandro Ramos', cargo: 'Operador de Monitoreo CECOM', departamento: 'Seguridad Integral', sala_nombre: 'Casino Principal', sueldo_base_usd: 420.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0192-38-4920192837', estado: 'ACTIVO' },
+    { uuid: 'emp-04', cedula: 'V-19.384.712', nombres: 'Dayana Gómez', cargo: 'Cajera Bóveda y Canje', departamento: 'Administración y Caja', sala_nombre: 'Casino Principal', sueldo_base_usd: 450.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banco de Venezuela', nro_cuenta: '0102-0938-12-3920194857', estado: 'ACTIVO' },
+    { uuid: 'emp-05', cedula: 'V-25.102.938', nombres: 'José Gregorio Pérez', cargo: 'Técnico de Máquinas y Slots', departamento: 'Mantenimiento Técnico', sala_nombre: 'Casino Principal', sueldo_base_usd: 500.00, cestaticket_usd: 40.00, frecuencia: 'QUINCENAL', banco: 'Banesco', nro_cuenta: '0134-0928-11-2019485729', estado: 'ACTIVO' }
   ];
 
   let filtroPersonal = '';
-  $: personalFiltrado = empleados.filter(e => 
-    e.nombres.toLowerCase().includes(filtroPersonal.toLowerCase()) ||
-    e.cedula.toLowerCase().includes(filtroPersonal.toLowerCase()) ||
-    e.cargo.toLowerCase().includes(filtroPersonal.toLowerCase())
-  );
+  $: personalFiltrado = empleados.filter(e => {
+    const matchTxt = e.nombres.toLowerCase().includes(filtroPersonal.toLowerCase()) ||
+                     e.cedula.toLowerCase().includes(filtroPersonal.toLowerCase()) ||
+                     (e.cargo && e.cargo.toLowerCase().includes(filtroPersonal.toLowerCase()));
+    if (!matchTxt) return false;
+    if (selectedSalaFiltro !== 'ALL') {
+      const eSala = String(e.sala_uuid || e.sala_id || '');
+      return eSala === String(selectedSalaFiltro);
+    }
+    return true;
+  });
 
   // --- CONCEPTOS DE NÓMINA (LEY VENEZOLANA) ---
   let conceptos = [
@@ -111,37 +176,164 @@
     estado: 'EN_BORRADOR'
   };
 
-  // Cálculo por trabajador en V1
-  $: resumenCalculo = empleados.map(emp => {
-    const sueldoQuincena = emp.sueldo_base_usd / 2;
-    const cestaQuincena = emp.cestaticket_usd / 2;
-    const horasExtras = emp.uuid === 'emp-02' ? 35.00 : 0.00; // Mariana Silva con horas extras de ejemplo
-    const totalAsignaciones = sueldoQuincena + cestaQuincena + horasExtras;
+  let empleadosCalculo = [];
 
-    // Deducciones de ley
-    const dedIvss = sueldoQuincena * 0.04;
-    const dedFaov = sueldoQuincena * 0.01;
-    const totalDeducciones = dedIvss + dedFaov;
+  $: {
+    if (empleadosCalculo.length === 0 && empleados.length > 0) {
+      generarCalculoDesdeEmpleados();
+    }
+  }
 
-    const netoPagarUsd = totalAsignaciones - totalDeducciones;
-    const netoPagarBs = netoPagarUsd * tasaBcv;
+  function generarCalculoDesdeEmpleados() {
+    empleadosCalculo = empleados.map(emp => {
+      const sueldoQuincena = emp.sueldo_base_usd / 2;
+      const cestaQuincena = emp.cestaticket_usd / 2;
+      const horasExtras = emp.uuid === 'emp-02' ? 35.00 : 0.00;
+      const totalAsignaciones = sueldoQuincena + cestaQuincena + horasExtras;
+      const dedIvss = sueldoQuincena * 0.04;
+      const dedFaov = sueldoQuincena * 0.01;
+      const totalDeducciones = dedIvss + dedFaov;
+      const netoPagarUsd = totalAsignaciones - totalDeducciones;
+      const netoPagarBs = netoPagarUsd * tasaBcv;
 
-    return {
-      ...emp,
-      sueldoQuincena,
-      cestaQuincena,
-      horasExtras,
-      totalAsignaciones,
-      dedIvss,
-      dedFaov,
-      totalDeducciones,
-      netoPagarUsd,
-      netoPagarBs
+      return {
+        uuid: emp.uuid,
+        cedula: emp.cedula,
+        nombres: emp.nombres,
+        nombre: emp.nombres,
+        cargo: emp.cargo,
+        departamento: emp.departamento,
+        sala_nombre: emp.sala_nombre || 'Principal',
+        dias_trabajados: 15,
+        sueldoQuincena,
+        cestaQuincena,
+        horasExtras,
+        bonoAdicional: 0,
+        totalAsignaciones,
+        dedIvss,
+        dedFaov,
+        anticipos: 0,
+        totalDeducciones,
+        netoPagarUsd,
+        netoPagarBs,
+        banco: emp.banco,
+        nro_cuenta: emp.nro_cuenta
+      };
+    });
+  }
+
+  async function seleccionarCorte(corteUuid) {
+    if (!corteUuid) return;
+    selectedCorteUuid = corteUuid;
+    try {
+      const res = await fetch(toBackendUrl(`/api/erp/nomina/cortes/${corteUuid}`));
+      const json = await res.json();
+      if (json?.success && json.data) {
+        const cData = json.data;
+        periodoNomina = {
+          nombre: `Nómina Quincenal (${cData.fecha_desde} al ${cData.fecha_hasta})`,
+          desde: cData.fecha_desde,
+          hasta: cData.fecha_hasta,
+          estado: 'EN_BORRADOR'
+        };
+
+        if (Array.isArray(cData.empleados) && cData.empleados.length > 0) {
+          empleadosCalculo = cData.empleados.map(e => ({
+            ...e,
+            nombres: e.nombre || e.nombres,
+            sueldoQuincena: Number(e.sueldo_quincenal) || 225,
+            cestaQuincena: Number(e.cestaticket) || 20,
+            horasExtras: Number(e.horas_extras_monto) || 0,
+            bonoAdicional: Number(e.bonos) || 0,
+            totalAsignaciones: Number(e.total_asignaciones) || 245,
+            dedIvss: Number(e.deduccion_ivss) || 9,
+            dedFaov: Number(e.deduccion_faov) || 2.25,
+            anticipos: Number(e.anticipos) || 0,
+            totalDeducciones: Number(e.total_deducciones) || 11.25,
+            netoPagarUsd: Number(e.neto_pagar_usd) || 233.75,
+            netoPagarBs: Number(((e.neto_pagar_usd || 233.75) * tasaBcv).toFixed(2))
+          }));
+          triggerToast(`Corte cargado con ${empleadosCalculo.length} empleados desde el biométrico.`, 'info');
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Fallo cargando corte para nómina:', err);
+    }
+  }
+
+  // Modales de Ajuste y Ficha
+  let showModalAjuste = false;
+  let empAjuste = null;
+
+  function abrirModalAjuste(emp) {
+    empAjuste = { ...emp };
+    showModalAjuste = true;
+  }
+
+  function guardarAjustesEmpleado() {
+    if (!empAjuste) return;
+    const sQ = Number(empAjuste.sueldoQuincena) || 0;
+    const cQ = Number(empAjuste.cestaQuincena) || 0;
+    const hE = Number(empAjuste.horasExtras) || 0;
+    const bA = Number(empAjuste.bonoAdicional) || 0;
+    const totAsig = Number((sQ + cQ + hE + bA).toFixed(2));
+
+    const dIvss = Number(empAjuste.dedIvss) || Number((sQ * 0.04).toFixed(2));
+    const dFaov = Number(empAjuste.dedFaov) || Number((sQ * 0.01).toFixed(2));
+    const ant = Number(empAjuste.anticipos) || 0;
+    const totDed = Number((dIvss + dFaov + ant).toFixed(2));
+
+    const netoUsd = Number(Math.max(0, totAsig - totDed).toFixed(2));
+    const netoBs = Number((netoUsd * tasaBcv).toFixed(2));
+
+    const updated = {
+      ...empAjuste,
+      sueldoQuincena: sQ,
+      cestaQuincena: cQ,
+      horasExtras: hE,
+      bonoAdicional: bA,
+      totalAsignaciones: totAsig,
+      dedIvss: dIvss,
+      dedFaov: dFaov,
+      anticipos: ant,
+      totalDeducciones: totDed,
+      netoPagarUsd: netoUsd,
+      netoPagarBs: netoBs
     };
-  });
 
-  $: totalNominaUsd = resumenCalculo.reduce((acc, r) => acc + r.netoPagarUsd, 0);
-  $: totalNominaBs = totalNominaUsd * tasaBcv;
+    empleadosCalculo = empleadosCalculo.map(e => e.uuid === updated.uuid ? updated : e);
+    showModalAjuste = false;
+    empAjuste = null;
+    triggerToast('Ajustes del empleado aplicados a la nómina', 'success');
+  }
+
+  let showModalEmpleadoFicha = false;
+  let empFicha = null;
+
+  function abrirEditarFicha(emp) {
+    empFicha = { ...emp };
+    showModalEmpleadoFicha = true;
+  }
+
+  async function guardarFichaEmpleado() {
+    if (!empFicha) return;
+    try {
+      await fetch(toBackendUrl('/api/erp/nomina/personal'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(empFicha)
+      });
+    } catch (e) {}
+
+    empleados = empleados.map(e => e.uuid === empFicha.uuid ? { ...e, ...empFicha } : e);
+    showModalEmpleadoFicha = false;
+    empFicha = null;
+    triggerToast('Ficha salarial actualizada', 'success');
+  }
+
+  $: totalNominaUsd = empleadosCalculo.reduce((acc, r) => acc + (Number(r.netoPagarUsd) || 0), 0);
+  $: totalNominaBs = Number((totalNominaUsd * tasaBcv).toFixed(2));
 
   // Visualizador de Recibo de Pago
   let empleadoRecibo = null;
@@ -181,11 +373,11 @@
   // --- FASE 4: EXPORTACIONES Y FORMATOS LEGALES / BANCARIOS ---
   function exportarTxtBanco() {
     let contenido = `H\tJ409182741\tWISI ROYALE ENTERTAINMENT C.A.\t01340821491029384756\t${new Date().toISOString().split('T')[0]}\t${totalNominaBs.toFixed(2)}\r\n`;
-    resumenCalculo.forEach(r => {
+    empleadosCalculo.forEach(r => {
       const cta = (r.nro_cuenta || '01340000000000000000').replace(/-/g, '').padEnd(20, '0').slice(0, 20);
       const ced = r.cedula.replace(/[^0-9]/g, '').padStart(10, '0');
-      const montoBs = r.netoPagarBs.toFixed(2);
-      contenido += `D\t${cta}\t${montoBs}\t${ced}\t${r.nombres}\r\n`;
+      const montoBs = (Number(r.netoPagarBs) || 0).toFixed(2);
+      contenido += `D\t${cta}\t${montoBs}\t${ced}\t${r.nombres || r.nombre}\r\n`;
     });
 
     const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
@@ -311,16 +503,24 @@
       </div>
 
       <div class="action-bar">
-        <div class="search-box">
-          <input 
-            type="text" 
-            placeholder="Buscar por cédula, nombre o cargo..." 
-            bind:value={filtroPersonal}
-          />
+        <div style="display: flex; gap: 10px; align-items: center; flex: 1; flex-wrap: wrap;">
+          <select 
+            bind:value={selectedSalaFiltro}
+            style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: #ffffff; color: #0f172a;"
+          >
+            <option value="ALL">Todas las Salas Asignadas</option>
+            {#each userAvailableSalas as s}
+              <option value={s.uuid || s.id}>{s.nombre || s.nombre_comercial}</option>
+            {/each}
+          </select>
+          <div class="search-box" style="flex: 1; min-width: 260px;">
+            <input 
+              type="text" 
+              placeholder="Buscar por cédula, nombre o cargo..." 
+              bind:value={filtroPersonal}
+            />
+          </div>
         </div>
-        <button class="btn-primary" on:click={() => triggerToast('Integrado con catálogo central de RRHH', 'info')}>
-          <span>Asignar Ficha Salarial</span>
-        </button>
       </div>
 
       <div class="card-flow table-responsive">
@@ -335,6 +535,7 @@
               <th style="text-align: right;">SUELDO EN BS</th>
               <th>BANCO / CUENTA</th>
               <th style="text-align: center;">ESTADO</th>
+              <th style="text-align: center;">ACCIONES</th>
             </tr>
           </thead>
           <tbody>
@@ -358,6 +559,11 @@
                 </td>
                 <td style="text-align: center;">
                   <span class="badge-status active">{emp.estado}</span>
+                </td>
+                <td style="text-align: center;">
+                  <button class="btn-sm" style="padding: 4px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; border: 1px solid #cbd5e1; background: #ffffff; font-weight: 600;" on:click={() => abrirEditarFicha(emp)}>
+                    Editar Ficha
+                  </button>
                 </td>
               </tr>
             {/each}
@@ -419,12 +625,52 @@
   <!-- 3. PROCESAMIENTO DE NÓMINA -->
   {#if activeSubvista === 'procesamiento'}
     <div class="view-content fade-in">
+      <!-- SELECTORES MULTI-SALA Y CORTE BIOMÉTRICO RRHH -->
+      <div class="card-padded" style="margin-bottom: 16px;">
+        <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 220px;">
+            <label for="filtro-sala-nom" style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
+              Sala de Juegos / Sede
+            </label>
+            <select 
+              id="filtro-sala-nom"
+              bind:value={selectedSalaFiltro}
+              style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: #ffffff; color: #0f172a;"
+            >
+              <option value="ALL">Todas las Salas Asignadas</option>
+              {#each userAvailableSalas as s}
+                <option value={s.uuid || s.id}>{s.nombre || s.nombre_comercial}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 320px;">
+            <label for="filtro-corte-nom" style="font-size: 11px; font-weight: 800; color: #475569; text-transform: uppercase;">
+              Corte de Asistencia / Quincena (Biométrico RRHH)
+            </label>
+            <select 
+              id="filtro-corte-nom"
+              bind:value={selectedCorteUuid}
+              on:change={(e) => seleccionarCorte(e.target.value)}
+              style="padding: 8px 12px; border: 1px solid #2563eb; border-radius: 8px; font-size: 13px; font-weight: 700; background: #eff6ff; color: #1e40af;"
+            >
+              <option value="">-- Seleccionar Corte de RRHH para procesar nómina --</option>
+              {#each cortesFiltrados as c}
+                <option value={c.uuid || c.id}>
+                  Corte: {c.fecha_desde} al {c.fecha_hasta} • {c.total_empleados || 0} Empleados • {c.salas_nombres?.[0] || 'General'}
+                </option>
+              {/each}
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div class="periodo-banner">
         <div class="periodo-info">
           <div>
             <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a;">{periodoNomina.nombre}</h3>
             <p style="margin: 2px 0 0 0; font-size: 13px; color: #64748b;">
-              Período: <b>{periodoNomina.desde}</b> al <b>{periodoNomina.hasta}</b> • Estatus: 
+              Período: <b>{periodoNomina.desde}</b> al <b>{periodoNomina.hasta}</b> • Total Trabajadores: <b>{empleadosCalculo.length}</b> • Estatus: 
               <span class="badge-status {periodoNomina.estado === 'APROBADA' ? 'active' : 'draft'}">
                 {periodoNomina.estado}
               </span>
@@ -450,33 +696,42 @@
         </div>
       </div>
 
-      <!-- SÁBANA DE CÁLCULO QUINCENAL -->
+      <!-- SÁBANA DE CÁLCULO QUINCENAL DESDE CORTES -->
       <div class="card-flow table-responsive">
         <table class="table-custom">
           <thead>
             <tr>
               <th>TRABAJADOR</th>
               <th>CÉDULA</th>
+              <th>SALA</th>
+              <th style="text-align: center;">DÍAS</th>
               <th style="text-align: right;">SUELDO Q.</th>
               <th style="text-align: right;">CESTATICKET</th>
               <th style="text-align: right;">H. EXTRAS</th>
+              <th style="text-align: right;">BONOS</th>
               <th style="text-align: right;">TOTAL ASIG.</th>
-              <th style="text-align: right; color: #dc2626;">DED. IVSS (4%)</th>
-              <th style="text-align: right; color: #dc2626;">DED. FAOV (1%)</th>
+              <th style="text-align: right; color: #dc2626;">IVSS (4%)</th>
+              <th style="text-align: right; color: #dc2626;">FAOV (1%)</th>
+              <th style="text-align: right; color: #dc2626;">ANTICIPOS</th>
               <th style="text-align: right;">NETO PAGAR ($)</th>
               <th style="text-align: right;">NETO PAGAR (BS)</th>
               <th style="text-align: center;">ACCIONES</th>
             </tr>
           </thead>
           <tbody>
-            {#each resumenCalculo as r (r.uuid)}
+            {#each empleadosCalculo as r (r.uuid)}
               <tr>
-                <td><strong>{r.nombres}</strong></td>
+                <td><strong>{r.nombres || r.nombre}</strong></td>
                 <td><code>{r.cedula}</code></td>
+                <td><span class="category-chip">{r.sala_nombre || 'Principal'}</span></td>
+                <td style="text-align: center; font-weight: 700;">{r.dias_trabajados || 15}</td>
                 <td style="text-align: right;">{fmtUsd(r.sueldoQuincena)}</td>
                 <td style="text-align: right;">{fmtUsd(r.cestaQuincena)}</td>
                 <td style="text-align: right; color: {r.horasExtras > 0 ? '#15803d' : '#94a3b8'};">
                   {r.horasExtras > 0 ? fmtUsd(r.horasExtras) : '-'}
+                </td>
+                <td style="text-align: right; color: {r.bonoAdicional > 0 ? '#15803d' : '#94a3b8'};">
+                  {r.bonoAdicional > 0 ? fmtUsd(r.bonoAdicional) : '-'}
                 </td>
                 <td style="text-align: right; font-weight: 700; color: #2563eb;">
                   {fmtUsd(r.totalAsignaciones)}
@@ -487,15 +742,21 @@
                 <td style="text-align: right; color: #b91c1c;">
                   -{fmtUsd(r.dedFaov)}
                 </td>
+                <td style="text-align: right; color: #b91c1c;">
+                  {r.anticipos > 0 ? '-' + fmtUsd(r.anticipos) : '-'}
+                </td>
                 <td style="text-align: right; font-weight: 800; color: #15803d; font-size: 14px;">
                   {fmtUsd(r.netoPagarUsd)}
                 </td>
                 <td style="text-align: right; font-size: 11px; color: #64748b;">
                   {fmtBs(r.netoPagarBs)}
                 </td>
-                <td style="text-align: center;">
+                <td style="text-align: center; white-space: nowrap;">
+                  <button class="btn-sm" style="padding: 4px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; border: 1px solid #cbd5e1; background: #ffffff; font-weight: 600; margin-right: 4px;" title="Editar Ajustes Laborales" on:click={() => abrirModalAjuste(r)}>
+                    Ajustar
+                  </button>
                   <button class="btn-sm" style="padding: 4px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; border: 1px solid #cbd5e1; background: #f8fafc;" title="Ver Recibo de Pago" on:click={() => abrirRecibo(r)}>
-                    Ver Recibo
+                    Recibo
                   </button>
                 </td>
               </tr>
@@ -687,6 +948,214 @@
         <button class="btn-primary" on:click={imprimirRecibo}>
           <span>Imprimir Recibo</span>
         </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL AJUSTE DE ASIGNACIONES Y DEDUCCIONES QUINCENALES -->
+{#if showModalAjuste && empAjuste}
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">Ajustar Cálculo de Nómina (Quincena)</h3>
+          <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">
+            {empAjuste.nombres} • C.I. {empAjuste.cedula} • {empAjuste.cargo}
+          </p>
+        </div>
+        <button class="btn-close" type="button" on:click={() => { showModalAjuste = false; empAjuste = null; }}>×</button>
+      </div>
+
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">DÍAS TRABAJADOS</label>
+            <input 
+              type="number" 
+              bind:value={empAjuste.dias_trabajados} 
+              min="1" 
+              max="15" 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 700;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">SUELDO QUINCENAL ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empAjuste.sueldoQuincena} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 700;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">CESTATICKET QUINCENA ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empAjuste.cestaQuincena} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">HORAS EXTRAS / FERIADOS ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empAjuste.horasExtras} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">BONIFICACIÓN ADICIONAL ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empAjuste.bonoAdicional} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #b91c1c; margin-bottom: 4px;">ANTICIPOS O PRÉSTAMOS ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empAjuste.anticipos} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; color: #b91c1c; font-weight: 700;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #b91c1c; margin-bottom: 4px;">DEDUCCIÓN IVSS (4%) ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empAjuste.dedIvss} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #b91c1c; margin-bottom: 4px;">DEDUCCIÓN FAOV (1%) ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empAjuste.dedFaov} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+        </div>
+
+        <!-- Previsualización neta en modal -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;">Neto Estimado:</span>
+            <div style="font-size: 17px; font-weight: 900; color: #15803d;">
+              {fmtUsd(Math.max(0, (Number(empAjuste.sueldoQuincena || 0) + Number(empAjuste.cestaQuincena || 0) + Number(empAjuste.horasExtras || 0) + Number(empAjuste.bonoAdicional || 0)) - (Number(empAjuste.dedIvss || 0) + Number(empAjuste.dedFaov || 0) + Number(empAjuste.anticipos || 0))))}
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <span style="font-size: 11px; color: #64748b;">En Bolívares (Tasa BCV):</span>
+            <div style="font-size: 14px; font-weight: 800; color: #0f172a;">
+              {fmtBs(Math.max(0, (Number(empAjuste.sueldoQuincena || 0) + Number(empAjuste.cestaQuincena || 0) + Number(empAjuste.horasExtras || 0) + Number(empAjuste.bonoAdicional || 0)) - (Number(empAjuste.dedIvss || 0) + Number(empAjuste.dedFaov || 0) + Number(empAjuste.anticipos || 0))) * tasaBcv)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" type="button" on:click={() => { showModalAjuste = false; empAjuste = null; }}>Cancelar</button>
+        <button class="btn-primary" type="button" on:click={guardarAjustesEmpleado}>Guardar Ajustes</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL EDITAR FICHA SALARIAL -->
+{#if showModalEmpleadoFicha && empFicha}
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">Editar Ficha Salarial y Bancaria</h3>
+          <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">
+            {empFicha.nombres} • C.I. {empFicha.cedula}
+          </p>
+        </div>
+        <button class="btn-close" type="button" on:click={() => { showModalEmpleadoFicha = false; empFicha = null; }}>×</button>
+      </div>
+
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">SUELDO BASE MENSUAL ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empFicha.sueldo_base_usd} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 800; color: #15803d;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">CESTATICKET MENSUAL ($)</label>
+            <input 
+              type="number" 
+              step="0.01" 
+              bind:value={empFicha.cestaticket_usd} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 700;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">CARGO OPERATIVO</label>
+            <input 
+              type="text" 
+              bind:value={empFicha.cargo} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">DEPARTAMENTO</label>
+            <input 
+              type="text" 
+              bind:value={empFicha.departamento} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">BANCO</label>
+            <input 
+              type="text" 
+              bind:value={empFicha.banco} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">NRO. CUENTA (20 DÍGITOS)</label>
+            <input 
+              type="text" 
+              bind:value={empFicha.nro_cuenta} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace;"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" type="button" on:click={() => { showModalEmpleadoFicha = false; empFicha = null; }}>Cancelar</button>
+        <button class="btn-primary" type="button" on:click={guardarFichaEmpleado}>Actualizar Ficha</button>
       </div>
     </div>
   </div>

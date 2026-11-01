@@ -1,6 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { currentRouteStore, navigateToRoute } from '../../controllers/router.store.js';
+  import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
+  import { masterSalasStore } from '../../controllers/master.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
 
@@ -15,6 +17,52 @@
   let activeSubvista = 'plan-cuentas';
   let subvistaReportes = 'comprobacion'; // 'comprobacion' | 'resultados' | 'situacion'
   let estadosFinancieros = null;
+
+  // Multi-sala isolation
+  let selectedSalaFiltro = 'ALL';
+  $: assignedSalaIds = Array.isArray($authUserSalasStore) 
+    ? $authUserSalasStore.map(s => String(s.sala_id || s.sala_uuid || s.id || s.uuid)) 
+    : [];
+  $: userAvailableSalas = ($masterSalasStore || []).filter(s => {
+    if ($currentUserStore?.is_superuser || $currentUserStore?.is_admin || $currentUserStore?.role === 'ADMIN') return true;
+    return assignedSalaIds.includes(String(s.uuid || s.id));
+  });
+
+  // Mayor Analítico por Cuenta
+  let libroModo = 'mayor_analitico'; // 'mayor_analitico' | 'resumen_mayor'
+  let selectedCuentaMayor = '1.1.1.03';
+
+  $: cuentaSeleccionadaObj = planCuentas.find(c => c.codigo === selectedCuentaMayor) || planCuentas[0];
+
+  $: movimientosMayorCuenta = (() => {
+    const list = [];
+    let runningSaldo = 0;
+    const esDeudora = cuentaSeleccionadaObj?.naturaleza === 'DEUDORA';
+
+    for (const asnt of asientos) {
+      for (const linea of asnt.lineas || []) {
+        if (linea.cuenta_codigo === selectedCuentaMayor) {
+          const debe = Number(linea.debe) || 0;
+          const haber = Number(linea.haber) || 0;
+          if (esDeudora) {
+            runningSaldo += (debe - haber);
+          } else {
+            runningSaldo += (haber - debe);
+          }
+          list.push({
+            asiento_nro: asnt.nro,
+            fecha: asnt.fecha,
+            tipo: asnt.tipo,
+            glosa: asnt.glosa,
+            debe,
+            haber,
+            saldo_progresivo: runningSaldo
+          });
+        }
+      }
+    }
+    return list;
+  })();
 
   let unsubRoute;
   onMount(() => {
@@ -184,6 +232,28 @@
         { cuenta_codigo: '5.1.1.02', cuenta_nombre: 'Aportes Patronales (IVSS, FAOV, INCES)', debe: 2050.00, haber: 0.00 },
         { cuenta_codigo: '2.1.3.01', cuenta_nombre: 'Sueldos y Salarios por Pagar', debe: 0.00, haber: 14300.00 },
         { cuenta_codigo: '2.1.1.01', cuenta_nombre: 'Cuentas por Pagar Proveedores', debe: 0.00, haber: 2050.00 }
+      ]
+    },
+    {
+      uuid: 'as-3',
+      nro: 'AS-2026-0043',
+      fecha: '2026-11-01',
+      glosa: 'Pago factura FC-008129 Distribuidora Gaming con débito en Banco Banesco',
+      tipo: 'EGRESO',
+      lineas: [
+        { cuenta_codigo: '2.1.1.01', cuenta_nombre: 'Cuentas por Pagar Proveedores', debe: 580.00, haber: 0.00 },
+        { cuenta_codigo: '1.1.1.03', cuenta_nombre: 'Banco Banesco Cuenta Corriente', debe: 0.00, haber: 580.00 }
+      ]
+    },
+    {
+      uuid: 'as-4',
+      nro: 'AS-2026-0044',
+      fecha: '2026-11-01',
+      glosa: 'Depósito de divisas de bóveda en cuenta bancaria operativa',
+      tipo: 'DIARIO',
+      lineas: [
+        { cuenta_codigo: '1.1.1.03', cuenta_nombre: 'Banco Banesco Cuenta Corriente', debe: 3500.00, haber: 0.00 },
+        { cuenta_codigo: '1.1.1.02', cuenta_nombre: 'Caja Bóveda Divisas (USD)', debe: 0.00, haber: 3500.00 }
       ]
     }
   ];
@@ -433,17 +503,63 @@
   <!-- 2. CENTROS DE COSTOS -->
   {#if activeSubvista === 'centros-costos'}
     <div class="view-content fade-in">
+      <div class="action-bar" style="margin-bottom: 16px;">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Centros de Costos y Unidades Analíticas</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Control presupuestario y seguimiento analítico de ejecución por sala y departamento.</p>
+        </div>
+        <div>
+          <select 
+            bind:value={selectedSalaFiltro}
+            style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: #ffffff; color: #0f172a;"
+          >
+            <option value="ALL">Todas las Salas Asignadas</option>
+            {#each userAvailableSalas as s}
+              <option value={s.nombre || s.nombre_comercial}>{s.nombre || s.nombre_comercial}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
       <div class="kpi-grid">
         {#each centrosCostos as cc}
-          <div class="kpi-card" style="flex-direction: column; align-items: flex-start; gap: 10px;">
-            <div style="display: flex; justify-content: space-between; width: 100%;">
+          {@const pct = Math.min(100, Math.round(((cc.ejecutado_usd || 0) / (cc.presupuesto_usd || 1)) * 100))}
+          {@const disponible = (cc.presupuesto_usd || 0) - (cc.ejecutado_usd || 0)}
+          <div class="kpi-card" style="flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
               <span class="badge-code">{cc.codigo}</span>
+              <span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; background: {pct >= 90 ? '#fee2e2' : pct >= 70 ? '#fef3c7' : '#dcfce7'}; color: {pct >= 90 ? '#b91c1c' : pct >= 70 ? '#b45309' : '#15803d'};">
+                {pct}% EJECUTADO
+              </span>
             </div>
-            <strong style="font-size: 15px; color: #0f172a;">{cc.nombre}</strong>
-            <span style="font-size: 12px; color: #64748b;">Resp: {cc.responsable}</span>
-            <div style="width: 100%; border-top: 1px solid #f1f5f9; padding-top: 8px; margin-top: 4px; display: flex; justify-content: space-between;">
-              <span style="font-size: 12px; color: #64748b;">Ejecutado:</span>
-              <strong style="color: #2563eb;">{fmtMoneda(cc.ejecutado_usd)}</strong>
+
+            <div>
+              <strong style="font-size: 15.5px; color: #0f172a; display: block; line-height: 1.3;">{cc.nombre}</strong>
+              <span style="font-size: 12px; color: #64748b;">Responsable: {cc.responsable}</span>
+            </div>
+
+            <!-- BARRA DE PROGRESO DE PRESUPUESTO -->
+            <div style="width: 100%; background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
+              <div style="width: {pct}%; background: {pct >= 90 ? '#dc2626' : pct >= 70 ? '#d97706' : '#16a34a'}; height: 100%; border-radius: 4px; transition: width 0.3s ease;"></div>
+            </div>
+
+            <div style="width: 100%; border-top: 1px solid #f1f5f9; padding-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
+              <div>
+                <span style="color: #64748b; font-size: 11px; display: block;">PRESUPUESTO:</span>
+                <strong style="color: #0f172a;">{fmtMoneda(cc.presupuesto_usd)}</strong>
+              </div>
+              <div style="text-align: right;">
+                <span style="color: #64748b; font-size: 11px; display: block;">EJECUTADO:</span>
+                <strong style="color: #2563eb;">{fmtMoneda(cc.ejecutado_usd)}</strong>
+              </div>
+              <div>
+                <span style="color: #64748b; font-size: 11px; display: block;">DISPONIBLE:</span>
+                <strong style="color: {disponible < 0 ? '#dc2626' : '#15803d'};">{fmtMoneda(disponible)}</strong>
+              </div>
+              <div style="text-align: right;">
+                <span style="color: #64748b; font-size: 11px; display: block;">SALA:</span>
+                <span class="category-chip" style="font-size: 10.5px;">Sala Principal</span>
+              </div>
             </div>
           </div>
         {/each}
@@ -526,39 +642,136 @@
   <!-- 4. LIBROS CONTABLES -->
   {#if activeSubvista === 'libros'}
     <div class="view-content fade-in">
-      <div class="action-bar">
+      <div class="action-bar" style="margin-bottom: 16px;">
         <div>
-          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Libro Mayor General</h3>
-          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Movimientos acumulados por cuenta analítica durante el ejercicio económico.</p>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Libro Mayor Analítico y Oficial</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Inspección detallada de movimientos por cuenta y saldos progresivos acumulados.</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button 
+            type="button" 
+            class="tab-btn {libroModo === 'mayor_analitico' ? 'active' : ''}" 
+            style="padding: 6px 14px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: {libroModo === 'mayor_analitico' ? '#0f172a' : '#ffffff'}; color: {libroModo === 'mayor_analitico' ? '#ffffff' : '#334155'}; cursor: pointer;"
+            on:click={() => libroModo = 'mayor_analitico'}
+          >
+            Mayor Analítico por Cuenta
+          </button>
+          <button 
+            type="button" 
+            class="tab-btn {libroModo === 'resumen_mayor' ? 'active' : ''}" 
+            style="padding: 6px 14px; font-size: 13px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: {libroModo === 'resumen_mayor' ? '#0f172a' : '#ffffff'}; color: {libroModo === 'resumen_mayor' ? '#ffffff' : '#334155'}; cursor: pointer;"
+            on:click={() => libroModo = 'resumen_mayor'}
+          >
+            Resumen de Saldos del Mayor
+          </button>
         </div>
       </div>
 
-      <div class="card-flow table-responsive">
-        <table class="table-custom">
-          <thead>
-            <tr>
-              <th>CUENTA</th>
-              <th>NOMBRE</th>
-              <th style="text-align: right;">SALDO INICIAL</th>
-              <th style="text-align: right;">TOTAL DÉBITOS</th>
-              <th style="text-align: right;">TOTAL CRÉDITOS</th>
-              <th style="text-align: right;">SALDO FINAL</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each planCuentas.filter(c => c.tipo === 'DETALLE') as cta}
+      {#if libroModo === 'mayor_analitico'}
+        <!-- SELECTOR DE CUENTA Y TARJETA INFORMATIVA -->
+        <div class="card-padded" style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+            <div style="flex: 1; min-width: 280px;">
+              <label for="sel-cta-mayor" style="display: block; font-size: 11px; font-weight: 800; color: #475569; margin-bottom: 6px; text-transform: uppercase;">
+                SELECCIONAR CUENTA CONTABLE DE DETALLE:
+              </label>
+              <select 
+                id="sel-cta-mayor"
+                bind:value={selectedCuentaMayor}
+                style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-weight: 700; background: #ffffff; color: #0f172a;"
+              >
+                {#each planCuentas.filter(c => c.tipo === 'DETALLE') as cta}
+                  <option value={cta.codigo}>{cta.codigo} - {cta.nombre}</option>
+                {/each}
+              </select>
+            </div>
+
+            {#if cuentaSeleccionadaObj}
+              <div style="display: flex; gap: 16px; background: #f8fafc; padding: 12px 18px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div>
+                  <span style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">NATURALEZA:</span>
+                  <div style="font-weight: 800; color: #2563eb; font-size: 13px;">{cuentaSeleccionadaObj.naturaleza}</div>
+                </div>
+                <div style="border-left: 1px solid #cbd5e1; padding-left: 16px;">
+                  <span style="font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase;">SALDO EN CATÁLOGO:</span>
+                  <div style="font-weight: 900; color: #0f172a; font-size: 15px;">{fmtMoneda(cuentaSeleccionadaObj.saldo)}</div>
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- TABLA DE MOVIMIENTOS ANALÍTICOS Y SALDO PROGRESIVO -->
+        <div class="card-flow table-responsive">
+          <table class="table-custom">
+            <thead>
               <tr>
-                <td><code>{cta.codigo}</code></td>
-                <td><strong>{cta.nombre}</strong></td>
-                <td style="text-align: right;">{fmtMoneda(cta.saldo * 0.9)}</td>
-                <td style="text-align: right; color: #2563eb;">{fmtMoneda(cta.saldo * 0.15)}</td>
-                <td style="text-align: right; color: #d97706;">{fmtMoneda(cta.saldo * 0.05)}</td>
-                <td style="text-align: right; font-weight: 800; color: #0f172a;">{fmtMoneda(cta.saldo)}</td>
+                <th>FECHA</th>
+                <th>COMPROBANTE</th>
+                <th>TIPO</th>
+                <th>GLOSA / CONCEPTO DEL ASIENTO</th>
+                <th style="text-align: right;">DEBE ($)</th>
+                <th style="text-align: right;">HABER ($)</th>
+                <th style="text-align: right;">SALDO PROGRESIVO ($)</th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {#each movimientosMayorCuenta as m}
+                <tr>
+                  <td>{m.fecha}</td>
+                  <td><strong>{m.asiento_nro}</strong></td>
+                  <td><span class="category-chip">{m.tipo}</span></td>
+                  <td>{m.glosa}</td>
+                  <td style="text-align: right; font-weight: 700; color: {m.debe > 0 ? '#15803d' : '#94a3b8'};">
+                    {m.debe > 0 ? fmtMoneda(m.debe) : '-'}
+                  </td>
+                  <td style="text-align: right; font-weight: 700; color: {m.haber > 0 ? '#b91c1c' : '#94a3b8'};">
+                    {m.haber > 0 ? fmtMoneda(m.haber) : '-'}
+                  </td>
+                  <td style="text-align: right; font-weight: 900; color: #0f172a; font-size: 13.5px;">
+                    {fmtMoneda(m.saldo_progresivo)}
+                  </td>
+                </tr>
+              {/each}
+              {#if movimientosMayorCuenta.length === 0}
+                <tr>
+                  <td colspan="7" class="empty-state" style="text-align: center; padding: 24px; color: #64748b;">
+                    No hay asientos registrados en el período para la cuenta {selectedCuentaMayor}.
+                  </td>
+                </tr>
+              {/if}
+            </tbody>
+          </table>
+        </div>
+      {:else}
+        <!-- RESUMEN DE SALDOS DEL MAYOR -->
+        <div class="card-flow table-responsive">
+          <table class="table-custom">
+            <thead>
+              <tr>
+                <th>CUENTA</th>
+                <th>NOMBRE</th>
+                <th style="text-align: right;">SALDO INICIAL</th>
+                <th style="text-align: right;">TOTAL DÉBITOS</th>
+                <th style="text-align: right;">TOTAL CRÉDITOS</th>
+                <th style="text-align: right;">SALDO FINAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each planCuentas.filter(c => c.tipo === 'DETALLE') as cta}
+                <tr>
+                  <td><code>{cta.codigo}</code></td>
+                  <td><strong>{cta.nombre}</strong></td>
+                  <td style="text-align: right;">{fmtMoneda(cta.saldo * 0.9)}</td>
+                  <td style="text-align: right; color: #2563eb;">{fmtMoneda(cta.saldo * 0.15)}</td>
+                  <td style="text-align: right; color: #d97706;">{fmtMoneda(cta.saldo * 0.05)}</td>
+                  <td style="text-align: right; font-weight: 800; color: #0f172a;">{fmtMoneda(cta.saldo)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
     </div>
   {/if}
 

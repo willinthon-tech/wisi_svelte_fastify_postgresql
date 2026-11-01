@@ -20,7 +20,11 @@ import {
   getPersonalNominaModel,
   getConceptosNominaModel,
   getPeriodosNominaModel,
-  aprobarPeriodoNominaModel
+  aprobarPeriodoNominaModel,
+  registrarPagoProveedorModel,
+  registrarMovimientoInventarioModel,
+  getCortesParaNominaModel,
+  getCorteDetalleParaNominaModel
 } from '../models/erp.model.js';
 
 // ============================================================================
@@ -233,5 +237,45 @@ export async function aprobarPeriodoNomina(req, reply) {
     return reply.send({ success: true, data, message: 'Nómina aprobada y cerrada oficialmente' });
   } catch (err) {
     return reply.code(400).send({ success: false, message: err.message });
+  }
+}
+
+export async function registrarPagoProveedor(req, reply) {
+  try {
+    const { uuid } = req.params;
+    const data = await registrarPagoProveedorModel({ ...req.body, proveedor_uuid: uuid });
+    return reply.send({ success: true, data, message: 'Pago registrado con éxito' });
+  } catch (err) {
+    return reply.code(400).send({ success: false, message: err.message });
+  }
+}
+
+export async function registrarMovimientoInventario(req, reply) {
+  try {
+    const data = await registrarMovimientoInventarioModel(req.body || {});
+    return reply.send({ success: true, data, message: 'Movimiento de inventario registrado' });
+  } catch (err) {
+    return reply.code(400).send({ success: false, message: err.message });
+  }
+}
+
+export async function getCortesParaNomina(req, reply) {
+  try {
+    const userSalaIds = req.headers['x-user-salas'] ? req.headers['x-user-salas'].split(',') : [];
+    const salaId = req.query?.sala_id || null;
+    const data = await getCortesParaNominaModel({ userSalaIds, salaId });
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.code(500).send({ success: false, message: err.message });
+  }
+}
+
+export async function getCorteDetalleParaNomina(req, reply) {
+  try {
+    const { uuid } = req.params;
+    const data = await getCorteDetalleParaNominaModel(uuid);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.code(500).send({ success: false, message: err.message });
   }
 }

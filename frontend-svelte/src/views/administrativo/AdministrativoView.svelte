@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { currentRouteStore, navigateToRoute } from '../../controllers/router.store.js';
-  import { currentUserStore } from '../../controllers/auth.store.js';
-  import { currentRoutePermissionsStore } from '../../controllers/master.store.js';
+  import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
+  import { currentRoutePermissionsStore, masterSalasStore } from '../../controllers/master.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
 
@@ -10,13 +10,23 @@
   const SUBVISTAS = [
     { id: 'inventario', label: 'Inventario', desc: 'Artículos, costos, categorías y existencias' },
     { id: 'ventas', label: 'Ventas y Facturación', desc: 'Facturas, cotizaciones, IVA 16% e IGTF 3%' },
-    { id: 'compras', label: 'Compras y Proveedores', desc: 'Registro de proveedores y facturas de compras' },
+    { id: 'compras', label: 'Compras y Costos', desc: 'Registro de proveedores y compras por sala/categoría' },
     { id: 'cxc-cxp', label: 'Cuentas por Cobrar / Pagar', desc: 'Control de cobros, pagos y saldos' },
     { id: 'reportes-fiscales', label: 'Libros Fiscales SENIAT', desc: 'Libro de Ventas, Compras y Retenciones' }
   ];
 
   let activeSubvista = 'inventario';
   let tasaBcv = 62.50; // Tasa referencial oficial BCV editable
+
+  // Multi-sala isolation
+  let selectedSalaFiltro = 'ALL';
+  $: assignedSalaIds = Array.isArray($authUserSalasStore) 
+    ? $authUserSalasStore.map(s => String(s.sala_id || s.sala_uuid || s.id || s.uuid)) 
+    : [];
+  $: userAvailableSalas = ($masterSalasStore || []).filter(s => {
+    if ($currentUserStore?.is_superuser || $currentUserStore?.is_admin || $currentUserStore?.role === 'ADMIN') return true;
+    return assignedSalaIds.includes(String(s.uuid || s.id));
+  });
 
   // Sincronización con el router
   let unsubRoute;
@@ -47,8 +57,9 @@
   });
 
   let facturasCompras = [
-    { uuid: 'fc-01', proveedor_nombre: 'Distribuidora Gaming Venezuela S.A.', proveedor_rif: 'J-29837162-4', nro_factura_proveedor: 'FC-008129', nro_control: '00-19284', fecha: '2026-10-25', base_imponible_usd: 500.00, iva_usd: 80.00, retencion_iva_usd: 60.00, total_usd: 580.00 },
-    { uuid: 'fc-02', proveedor_nombre: 'Papelería e Impresos Caracas C.A.', proveedor_rif: 'J-31092837-1', nro_factura_proveedor: 'FC-003492', nro_control: '00-09283', fecha: '2026-10-28', base_imponible_usd: 125.00, iva_usd: 20.00, retencion_iva_usd: 20.00, total_usd: 145.00 }
+    { uuid: 'fc-01', proveedor_nombre: 'Distribuidora Gaming Venezuela S.A.', proveedor_rif: 'J-29837162-4', nro_factura_proveedor: 'FC-008129', nro_control: '00-19284', fecha: '2026-10-25', centro_costos: 'Insumos de Juego', sala_nombre: 'Sala Principal', base_imponible_usd: 500.00, iva_usd: 80.00, retencion_iva_usd: 60.00, total_usd: 580.00, pagada: false },
+    { uuid: 'fc-02', proveedor_nombre: 'Papelería e Impresos Caracas C.A.', proveedor_rif: 'J-31092837-1', nro_factura_proveedor: 'FC-003492', nro_control: '00-09283', fecha: '2026-10-28', centro_costos: 'Papelería y Fiscal', sala_nombre: 'Sala Principal', base_imponible_usd: 125.00, iva_usd: 20.00, retencion_iva_usd: 20.00, total_usd: 145.00, pagada: false },
+    { uuid: 'fc-03', proveedor_nombre: 'Tecnología y Seguridad Biométrica C.A.', proveedor_rif: 'J-40819284-9', nro_factura_proveedor: 'FC-001092', nro_control: '00-01128', fecha: '2026-10-29', centro_costos: 'Seguridad y Biometría', sala_nombre: 'Sala VIP', base_imponible_usd: 350.00, iva_usd: 56.00, retencion_iva_usd: 42.00, total_usd: 406.00, pagada: true }
   ];
 
   async function cargarDatosBackend() {
@@ -132,6 +143,71 @@
       showModalArticulo = false;
       nuevoArt = { codigo: '', nombre: '', categoria: 'Insumos de Juego', unidad: 'Unidad', stock: 0, costo_usd: 0, precio_usd: 0 };
       triggerToast('Artículo registrado en memoria local', 'success');
+    }
+  }
+
+  // Movimientos de Inventario (Entrada, Salida a Sala, Ajuste)
+  let showModalMovimiento = false;
+  let movArticulo = null;
+  let nuevoMov = {
+    tipo: 'SALIDA_CONSUMO',
+    cantidad: 1,
+    sala_id: '',
+    observacion: ''
+  };
+
+  function abrirModalMovimiento(art) {
+    movArticulo = art;
+    nuevoMov = {
+      tipo: 'SALIDA_CONSUMO',
+      cantidad: 1,
+      sala_id: userAvailableSalas[0]?.uuid || userAvailableSalas[0]?.id || '',
+      observacion: ''
+    };
+    showModalMovimiento = true;
+  }
+
+  async function registrarMovimientoArticulo() {
+    if (!movArticulo) return;
+    const cant = Number(nuevoMov.cantidad) || 0;
+    if (cant <= 0) {
+      triggerToast('La cantidad debe ser mayor a 0', 'error');
+      return;
+    }
+    try {
+      const res = await fetch(toBackendUrl('/api/erp/articulos/movimiento'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articulo_uuid: movArticulo.uuid,
+          tipo: nuevoMov.tipo,
+          cantidad: cant,
+          sala_id: nuevoMov.sala_id,
+          observacion: nuevoMov.observacion
+        })
+      });
+      const data = await res.json();
+      if (data?.success && data.data) {
+        articulos = articulos.map(a => a.uuid === movArticulo.uuid ? { ...a, stock: data.data.stock_nuevo } : a);
+      } else {
+        let nuevoStock = movArticulo.stock;
+        if (nuevoMov.tipo === 'ENTRADA') nuevoStock += cant;
+        else if (nuevoMov.tipo === 'SALIDA_CONSUMO') nuevoStock = Math.max(0, nuevoStock - cant);
+        else if (nuevoMov.tipo === 'AJUSTE') nuevoStock = cant;
+        articulos = articulos.map(a => a.uuid === movArticulo.uuid ? { ...a, stock: nuevoStock } : a);
+      }
+      showModalMovimiento = false;
+      movArticulo = null;
+      triggerToast('Movimiento de inventario registrado y stock actualizado', 'success');
+    } catch (e) {
+      let nuevoStock = movArticulo.stock;
+      if (nuevoMov.tipo === 'ENTRADA') nuevoStock += cant;
+      else if (nuevoMov.tipo === 'SALIDA_CONSUMO') nuevoStock = Math.max(0, nuevoStock - cant);
+      else if (nuevoMov.tipo === 'AJUSTE') nuevoStock = cant;
+      articulos = articulos.map(a => a.uuid === movArticulo.uuid ? { ...a, stock: nuevoStock } : a);
+      showModalMovimiento = false;
+      movArticulo = null;
+      triggerToast('Movimiento registrado en modo local', 'success');
     }
   }
 
@@ -313,6 +389,65 @@
       base_imponible_usd: 0,
       porcentaje_retencion: '75%'
     };
+  }
+
+  // --- GESTIÓN DE PAGOS A PROVEEDORES (CxP) ---
+  let showModalPagoProveedor = false;
+  let provSeleccionadoPago = null;
+  let nuevoPago = {
+    monto: 0,
+    metodo: 'TRANSFERENCIA_BANCO',
+    referencia: '',
+    observacion: ''
+  };
+
+  function abrirModalPago(prv) {
+    provSeleccionadoPago = prv;
+    nuevoPago = {
+      monto: prv.saldo_pendiente_usd || 0,
+      metodo: 'TRANSFERENCIA_BANCO',
+      referencia: '',
+      observacion: `Cancelación / Abono factura proveedor ${prv.nombre}`
+    };
+    showModalPagoProveedor = true;
+  }
+
+  async function registrarPagoProveedor() {
+    if (!provSeleccionadoPago) return;
+    const monto = Number(nuevoPago.monto) || 0;
+    if (monto <= 0) {
+      triggerToast('El monto a pagar debe ser mayor a 0', 'error');
+      return;
+    }
+    try {
+      const res = await fetch(toBackendUrl(`/api/erp/proveedores/${provSeleccionadoPago.uuid}/pagar`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          monto,
+          metodo: nuevoPago.metodo,
+          referencia: nuevoPago.referencia,
+          observacion: nuevoPago.observacion,
+          tasa_bcv: tasaBcv
+        })
+      });
+      const data = await res.json();
+      if (data?.success && data.data) {
+        provSeleccionadoPago.saldo_pendiente_usd = data.data.saldo_restante;
+      } else {
+        provSeleccionadoPago.saldo_pendiente_usd = Math.max(0, provSeleccionadoPago.saldo_pendiente_usd - monto);
+      }
+      proveedores = [...proveedores];
+      showModalPagoProveedor = false;
+      provSeleccionadoPago = null;
+      triggerToast('Pago a proveedor emitido y asiento contable generado', 'success');
+    } catch (e) {
+      provSeleccionadoPago.saldo_pendiente_usd = Math.max(0, provSeleccionadoPago.saldo_pendiente_usd - monto);
+      proveedores = [...proveedores];
+      showModalPagoProveedor = false;
+      provSeleccionadoPago = null;
+      triggerToast('Pago registrado localmente y descontado de saldo', 'success');
+    }
   }
 
   // Helper formateadores
@@ -501,9 +636,12 @@
               <th>CATEGORÍA</th>
               <th>UNIDAD</th>
               <th style="text-align: right;">EXISTENCIA</th>
-              <th style="text-align: right;">COSTO (USD / BS)</th>
-              <th style="text-align: right;">PRECIO VENTA (USD / BS)</th>
+              <th style="text-align: right;">COSTO PMP ($)</th>
+              <th style="text-align: right;">VALOR TOTAL ($)</th>
+              <th style="text-align: right;">PRECIO VENTA ($)</th>
+              <th style="text-align: center;">MARGEN %</th>
               <th style="text-align: center;">ESTADO</th>
+              <th style="text-align: center;">ACCIONES</th>
             </tr>
           </thead>
           <tbody>
@@ -518,26 +656,43 @@
                     {item.stock}
                   </span>
                 </td>
-                <td style="text-align: right;">
-                  <div class="dual-price">
-                    <span class="usd">{fmtUsd(item.costo_usd)}</span>
-                    <span class="ves">{fmtBs(item.costo_usd * tasaBcv)}</span>
-                  </div>
+                <td style="text-align: right; font-weight: 700; color: #334155;">
+                  {fmtUsd(item.costo_usd)}
+                </td>
+                <td style="text-align: right; font-weight: 800; color: #0f172a;">
+                  {fmtUsd(item.stock * item.costo_usd)}
                 </td>
                 <td style="text-align: right;">
                   <div class="dual-price">
-                    <span class="usd green">{fmtUsd(item.precio_usd)}</span>
-                    <span class="ves">{fmtBs(item.precio_usd * tasaBcv)}</span>
+                    <span class="usd green" style="font-weight: 700;">{fmtUsd(item.precio_usd)}</span>
+                    <span class="ves" style="font-size: 11px;">{fmtBs(item.precio_usd * tasaBcv)}</span>
                   </div>
                 </td>
                 <td style="text-align: center;">
-                  <span class="badge-status active">ACTIVO</span>
+                  <span style="font-size: 12px; font-weight: 800; color: #15803d; background: #dcfce7; padding: 2px 6px; border-radius: 4px;">
+                    {(((item.precio_usd - item.costo_usd) / (item.precio_usd || 1)) * 100).toFixed(1)}%
+                  </span>
+                </td>
+                <td style="text-align: center;">
+                  <span class="badge-status {item.stock <= 20 ? 'draft' : 'active'}">
+                    {item.stock <= 0 ? 'AGOTADO' : item.stock <= 20 ? 'STOCK BAJO' : 'NORMAL'}
+                  </span>
+                </td>
+                <td style="text-align: center;">
+                  <button 
+                    type="button" 
+                    class="btn-sm" 
+                    style="padding: 5px 10px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; cursor: pointer;"
+                    on:click={() => abrirModalMovimiento(item)}
+                  >
+                    Movimiento
+                  </button>
                 </td>
               </tr>
             {/each}
             {#if articulosFiltrados.length === 0}
               <tr>
-                <td colspan="8" class="empty-state">
+                <td colspan="11" class="empty-state">
                   <p>No se encontraron artículos con el criterio de búsqueda</p>
                 </td>
               </tr>
@@ -667,11 +822,61 @@
     </div>
   {/if}
 
-  <!-- CONTENIDO DE SUBVISTA: 3. COMPRAS Y PROVEEDORES -->
+  <!-- CONTENIDO DE SUBVISTA: 3. COMPRAS Y COSTOS OPERATIVOS -->
   {#if activeSubvista === 'compras'}
     <div class="view-content fade-in">
+      <!-- FILTROS Y KPIS DE COSTOS -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">TOTAL COMPRAS DEL MES</span>
+            <span class="kpi-val">{fmtUsd(facturasCompras.reduce((acc, c) => acc + c.total_usd, 0))}</span>
+            <span class="kpi-sub">{fmtBs(facturasCompras.reduce((acc, c) => acc + c.total_usd, 0) * tasaBcv)}</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">INSUMOS DE MESAS Y JUEGO</span>
+            <span class="kpi-val">
+              {fmtUsd(facturasCompras.filter(c => c.centro_costos === 'Insumos de Juego').reduce((acc, c) => acc + c.total_usd, 0))}
+            </span>
+            <span class="kpi-sub">Barajas, fichas y paños</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">REPUESTOS Y SLOTS</span>
+            <span class="kpi-val">
+              {fmtUsd(facturasCompras.filter(c => c.centro_costos === 'Seguridad y Biometría' || c.centro_costos === 'Mantenimiento Slots').reduce((acc, c) => acc + c.total_usd, 0))}
+            </span>
+            <span class="kpi-sub">Billeteros, monitores, partes</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">CRÉDITO FISCAL IVA (16%)</span>
+            <span class="kpi-val">{fmtUsd(facturasCompras.reduce((acc, c) => acc + c.iva_usd, 0))}</span>
+            <span class="kpi-sub">Deducible en SENIAT</span>
+          </div>
+        </div>
+      </div>
+
       <div class="action-bar">
-        <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Directorio de Proveedores y Cuentas por Pagar</h3>
+        <div style="display: flex; gap: 10px; align-items: center; flex: 1; flex-wrap: wrap;">
+          <select 
+            bind:value={selectedSalaFiltro}
+            style="padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 700; background: #ffffff; color: #0f172a;"
+          >
+            <option value="ALL">Todas las Salas Asignadas</option>
+            {#each userAvailableSalas as s}
+              <option value={s.nombre || s.nombre_comercial}>{s.nombre || s.nombre_comercial}</option>
+            {/each}
+          </select>
+          <h3 style="font-size: 16px; font-weight: 800; color: #1e293b; margin: 0;">Registro de Compras y Gastos Operativos</h3>
+        </div>
         <div style="display: flex; gap: 8px;">
           <button class="btn-primary" on:click={() => showModalCompra = true}>
             <span>Registrar Factura de Compra</span>
@@ -679,34 +884,41 @@
         </div>
       </div>
 
-      <div class="card-flow table-responsive">
+      <!-- TABLA DE FACTURAS DE COMPRAS -->
+      <div class="card-flow table-responsive" style="margin-bottom: 24px;">
         <table class="table-custom">
           <thead>
             <tr>
-              <th>RAZÓN SOCIAL</th>
+              <th>FECHA</th>
+              <th>PROVEEDOR</th>
               <th>RIF</th>
-              <th>TELÉFONO</th>
-              <th>RETENCIÓN IVA</th>
-              <th style="text-align: right;">SALDO PENDIENTE (USD)</th>
-              <th style="text-align: right;">SALDO EN BOLÍVARES</th>
+              <th>SALA DESTINO</th>
+              <th>CENTRO DE COSTOS</th>
+              <th>NRO FACTURA</th>
+              <th>NRO CONTROL</th>
+              <th style="text-align: right;">BASE IMP. ($)</th>
+              <th style="text-align: right;">IVA ($)</th>
+              <th style="text-align: right;">TOTAL ($)</th>
               <th style="text-align: center;">ESTADO</th>
             </tr>
           </thead>
           <tbody>
-            {#each proveedores as prv (prv.uuid)}
+            {#each facturasCompras.filter(c => selectedSalaFiltro === 'ALL' || c.sala_nombre === selectedSalaFiltro) as c (c.uuid)}
               <tr>
-                <td><strong>{prv.nombre}</strong></td>
-                <td><code>{prv.rif}</code></td>
-                <td>{prv.telefono}</td>
-                <td><span class="badge-code">{prv.retencion_iva}</span></td>
-                <td style="text-align: right; font-weight: 700; color: {prv.saldo_pendiente_usd > 0 ? '#b91c1c' : '#15803d'};">
-                  {fmtUsd(prv.saldo_pendiente_usd)}
-                </td>
-                <td style="text-align: right;">
-                  {fmtBs(prv.saldo_pendiente_usd * tasaBcv)}
-                </td>
+                <td>{c.fecha}</td>
+                <td><strong>{c.proveedor_nombre}</strong></td>
+                <td><code>{c.proveedor_rif}</code></td>
+                <td><span class="category-chip">{c.sala_nombre || 'Principal'}</span></td>
+                <td><span style="font-size: 11.5px; font-weight: 700; color: #2563eb;">{c.centro_costos || 'Operativo'}</span></td>
+                <td><strong>{c.nro_factura_proveedor}</strong></td>
+                <td>{c.nro_control}</td>
+                <td style="text-align: right;">{fmtUsd(c.base_imponible_usd)}</td>
+                <td style="text-align: right; color: #64748b;">{fmtUsd(c.iva_usd)}</td>
+                <td style="text-align: right; font-weight: 800; color: #0f172a;">{fmtUsd(c.total_usd)}</td>
                 <td style="text-align: center;">
-                  <span class="badge-status active">ACTIVO</span>
+                  <span class="badge-status {c.pagada ? 'active' : 'draft'}">
+                    {c.pagada ? 'PAGADA' : 'PENDIENTE'}
+                  </span>
                 </td>
               </tr>
             {/each}
@@ -716,33 +928,150 @@
     </div>
   {/if}
 
-  <!-- CONTENIDO DE SUBVISTA: 4. CXC / CXP -->
+  <!-- CONTENIDO DE SUBVISTA: 4. CXC / CXP (CUENTAS POR COBRAR Y PAGAR) -->
   {#if activeSubvista === 'cxc-cxp'}
     <div class="view-content fade-in">
-      <div class="cxc-grid">
-        <div class="card-padded">
-          <div class="card-header-styled">
-            <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: #0f172a;">Cuentas por Cobrar (Clientes)</h4>
-          </div>
-          <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">Saldos pendientes por facturación a crédito de clientes y salas aliadas.</p>
-          <div class="balance-card green">
-            <span class="label">TOTAL SALDO POR COBRAR</span>
-            <span class="amount">$ 3,420.00 USD</span>
-            <span class="amount-bs">{fmtBs(3420 * tasaBcv)}</span>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">TOTAL CUENTAS POR PAGAR (CxP)</span>
+            <span class="kpi-val" style="color: #b91c1c;">
+              {fmtUsd(proveedores.reduce((acc, p) => acc + p.saldo_pendiente_usd, 0))}
+            </span>
+            <span class="kpi-sub">{fmtBs(proveedores.reduce((acc, p) => acc + p.saldo_pendiente_usd, 0) * tasaBcv)}</span>
           </div>
         </div>
 
-        <div class="card-padded">
-          <div class="card-header-styled">
-            <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 800; color: #0f172a;">Cuentas por Pagar (Proveedores)</h4>
-          </div>
-          <p style="margin: 0 0 16px 0; font-size: 13px; color: #64748b;">Compromisos de compras de insumos, servicios de mantenimiento y papelería fiscal.</p>
-          <div class="balance-card red">
-            <span class="label">TOTAL SALDO POR PAGAR</span>
-            <span class="amount">{fmtUsd(proveedores.reduce((acc, p) => acc + p.saldo_pendiente_usd, 0))}</span>
-            <span class="amount-bs">{fmtBs(proveedores.reduce((acc, p) => acc + p.saldo_pendiente_usd, 0) * tasaBcv)}</span>
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">TOTAL CUENTAS POR COBRAR (CxC)</span>
+            <span class="kpi-val" style="color: #15803d;">$3,420.00</span>
+            <span class="kpi-sub">{fmtBs(3420 * tasaBcv)}</span>
           </div>
         </div>
+
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">PROVEEDORES CON DEUDA</span>
+            <span class="kpi-val">{proveedores.filter(p => p.saldo_pendiente_usd > 0).length}</span>
+            <span class="kpi-sub">De {proveedores.length} proveedores registrados</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-label">CONDICIÓN DE PAGO PROMEDIO</span>
+            <span class="kpi-val">15 DÍAS</span>
+            <span class="kpi-sub">Crédito comercial</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECCIÓN: CUENTAS POR PAGAR (PROVEEDORES) CON ACCIÓN DE PAGO -->
+      <div class="action-bar">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Cuentas por Pagar a Proveedores (CxP)</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Liquidación de pasivos comerciales con débito bancario y generación de comprobante de egreso.</p>
+        </div>
+      </div>
+
+      <div class="card-flow table-responsive" style="margin-bottom: 24px;">
+        <table class="table-custom">
+          <thead>
+            <tr>
+              <th>RAZÓN SOCIAL</th>
+              <th>RIF</th>
+              <th>TELÉFONO DE CONTACTO</th>
+              <th>RETENCIÓN SENIAT</th>
+              <th style="text-align: right;">SALDO PENDIENTE ($)</th>
+              <th style="text-align: right;">SALDO EN BS (BCV)</th>
+              <th style="text-align: center;">ESTADO DEUDA</th>
+              <th style="text-align: center;">ACCIONES</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each proveedores as prv (prv.uuid)}
+              <tr>
+                <td><strong>{prv.nombre}</strong></td>
+                <td><code>{prv.rif}</code></td>
+                <td>{prv.telefono}</td>
+                <td><span class="badge-code">{prv.retencion_iva}</span></td>
+                <td style="text-align: right; font-weight: 800; font-size: 14px; color: {prv.saldo_pendiente_usd > 0 ? '#b91c1c' : '#15803d'};">
+                  {fmtUsd(prv.saldo_pendiente_usd)}
+                </td>
+                <td style="text-align: right; font-size: 12px; color: #64748b;">
+                  {fmtBs(prv.saldo_pendiente_usd * tasaBcv)}
+                </td>
+                <td style="text-align: center;">
+                  <span class="badge-status {prv.saldo_pendiente_usd > 0 ? 'draft' : 'active'}">
+                    {prv.saldo_pendiente_usd > 0 ? 'PENDIENTE' : 'SOLVENTE'}
+                  </span>
+                </td>
+                <td style="text-align: center;">
+                  {#if prv.saldo_pendiente_usd > 0}
+                    <button 
+                      type="button"
+                      class="btn-sm" 
+                      style="padding: 5px 12px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: 1px solid #16a34a; background: #dcfce7; color: #166534; cursor: pointer;"
+                      on:click={() => abrirModalPago(prv)}
+                    >
+                      Pagar Deuda
+                    </button>
+                  {:else}
+                    <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Sin saldo</span>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- SECCIÓN: CUENTAS POR COBRAR (CLIENTES Y CONCESIONES) -->
+      <div class="action-bar">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Cuentas por Cobrar a Clientes y Salas (CxC)</h3>
+          <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Créditos concedidos por consumos especiales, fichas a crédito y servicios comerciales.</p>
+        </div>
+      </div>
+
+      <div class="card-flow table-responsive">
+        <table class="table-custom">
+          <thead>
+            <tr>
+              <th>CLIENTE / RAZÓN SOCIAL</th>
+              <th>RIF</th>
+              <th>ORIGEN</th>
+              <th>FECHA EMISIÓN</th>
+              <th>PLAZO</th>
+              <th style="text-align: right;">SALDO POR COBRAR ($)</th>
+              <th style="text-align: right;">SALDO EN BS</th>
+              <th style="text-align: center;">ESTADO</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Inversiones Royal C.A.</strong></td>
+              <td><code>J-30495821-0</code></td>
+              <td>Servicios de Sala y Alimentos</td>
+              <td>2026-10-28</td>
+              <td>15 días</td>
+              <td style="text-align: right; font-weight: 800; color: #15803d;">$1,850.00</td>
+              <td style="text-align: right; font-size: 12px; color: #64748b;">{fmtBs(1850 * tasaBcv)}</td>
+              <td style="text-align: center;"><span class="badge-status active">VIGENTE</span></td>
+            </tr>
+            <tr>
+              <td><strong>Operadora Gran Casino C.A.</strong></td>
+              <td><code>J-40112345-2</code></td>
+              <td>Concesión de Bar y Restaurante</td>
+              <td>2026-10-20</td>
+              <td>30 días</td>
+              <td style="text-align: right; font-weight: 800; color: #15803d;">$1,570.00</td>
+              <td style="text-align: right; font-size: 12px; color: #64748b;">{fmtBs(1570 * tasaBcv)}</td>
+              <td style="text-align: center;"><span class="badge-status active">VIGENTE</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   {/if}
@@ -1145,6 +1474,170 @@
       <div class="modal-footer">
         <button class="btn-secondary" on:click={() => showModalCompra = false}>Cancelar</button>
         <button class="btn-primary" on:click={registrarCompra}>Registrar Compra y Generar Asiento</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL MOVIMIENTO DE INVENTARIO -->
+{#if showModalMovimiento && movArticulo}
+  <div class="modal-backdrop fade-in" role="presentation">
+    <div class="modal-card" role="dialog" style="max-width: 540px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">Movimiento de Inventario</h3>
+          <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">
+            {movArticulo.codigo} • {movArticulo.nombre} (Stock Actual: {movArticulo.stock} {movArticulo.unidad})
+          </p>
+        </div>
+        <button class="btn-close" type="button" on:click={() => { showModalMovimiento = false; movArticulo = null; }}>&times;</button>
+      </div>
+
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="form-group">
+          <label for="f-mov-tipo" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">TIPO DE MOVIMIENTO *</label>
+          <select id="f-mov-tipo" bind:value={nuevoMov.tipo} style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 700;">
+            <option value="SALIDA_CONSUMO">Salida por Consumo / Despacho a Sala</option>
+            <option value="ENTRADA">Entrada / Recepción de Mercancía</option>
+            <option value="AJUSTE">Ajuste por Conteo Físico</option>
+          </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label for="f-mov-cant" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">CANTIDAD ({movArticulo.unidad}) *</label>
+            <input 
+              id="f-mov-cant"
+              type="number" 
+              min="1" 
+              bind:value={nuevoMov.cantidad} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 800;"
+            />
+          </div>
+          <div>
+            <label for="f-mov-sala" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">SALA / DESTINO</label>
+            <select id="f-mov-sala" bind:value={nuevoMov.sala_id} style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+              {#each userAvailableSalas as s}
+                <option value={s.uuid || s.id}>{s.nombre || s.nombre_comercial}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="f-mov-obs" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">MOTIVO / OBSERVACIONES</label>
+          <input 
+            id="f-mov-obs"
+            type="text" 
+            placeholder="Ej: Reposición de barajas mesa de Baccarat #2" 
+            bind:value={nuevoMov.observacion} 
+            style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+          />
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #475569;">
+          <strong>Impacto Estimado en Stock:</strong>
+          <span style="font-weight: 800; color: #0f172a; margin-left: 6px;">
+            {#if nuevoMov.tipo === 'ENTRADA'}
+              {movArticulo.stock + (Number(nuevoMov.cantidad) || 0)} {movArticulo.unidad} (+{nuevoMov.cantidad})
+            {:else if nuevoMov.tipo === 'SALIDA_CONSUMO'}
+              {Math.max(0, movArticulo.stock - (Number(nuevoMov.cantidad) || 0))} {movArticulo.unidad} (-{nuevoMov.cantidad})
+            {:else}
+              {nuevoMov.cantidad} {movArticulo.unidad} (Ajustado)
+            {/if}
+          </span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" type="button" on:click={() => { showModalMovimiento = false; movArticulo = null; }}>Cancelar</button>
+        <button class="btn-primary" type="button" on:click={registrarMovimientoArticulo}>Registrar Movimiento</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL REGISTRAR PAGO A PROVEEDOR (CxP) -->
+{#if showModalPagoProveedor && provSeleccionadoPago}
+  <div class="modal-backdrop fade-in" role="presentation">
+    <div class="modal-card" role="dialog" style="max-width: 580px;">
+      <div class="modal-header">
+        <div>
+          <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">Registrar Pago a Proveedor (CxP)</h3>
+          <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">
+            {provSeleccionadoPago.nombre} • RIF: {provSeleccionadoPago.rif}
+          </p>
+        </div>
+        <button class="btn-close" type="button" on:click={() => { showModalPagoProveedor = false; provSeleccionadoPago = null; }}>&times;</button>
+      </div>
+
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <span style="font-size: 11px; font-weight: 700; color: #b91c1c; text-transform: uppercase;">Deuda Pendiente Actual:</span>
+            <div style="font-size: 18px; font-weight: 900; color: #991b1b;">{fmtUsd(provSeleccionadoPago.saldo_pendiente_usd)}</div>
+          </div>
+          <div style="text-align: right;">
+            <span style="font-size: 11px; color: #7f1d1d;">En Bolívares (BCV):</span>
+            <div style="font-size: 14px; font-weight: 800; color: #991b1b;">{fmtBs(provSeleccionadoPago.saldo_pendiente_usd * tasaBcv)}</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label for="f-pgo-monto" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">MONTO A PAGAR ($ USD) *</label>
+            <input 
+              id="f-pgo-monto"
+              type="number" 
+              step="0.01" 
+              bind:value={nuevoPago.monto} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; font-weight: 800; color: #15803d;"
+            />
+          </div>
+          <div>
+            <label for="f-pgo-metodo" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">MÉTODO DE PAGO *</label>
+            <select id="f-pgo-metodo" bind:value={nuevoPago.metodo} style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 700;">
+              <option value="TRANSFERENCIA_BANCO">Transferencia Bancaria Nacional</option>
+              <option value="PAGO_MOVIL">Pago Móvil Interbancario</option>
+              <option value="EFECTIVO_DIVISAS">Efectivo Divisas (Caja)</option>
+              <option value="ZELLE">Zelle / Transferencia Internacional</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label for="f-pgo-ref" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">NRO. DE REFERENCIA BANCARIA *</label>
+            <input 
+              id="f-pgo-ref"
+              type="text" 
+              placeholder="Ej: 04928172" 
+              bind:value={nuevoPago.referencia} 
+              style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace;"
+            />
+          </div>
+          <div>
+            <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">CUENTA CONTABLE DE SALIDA</label>
+            <div style="padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; font-weight: 700; color: #334155;">
+              1.1.1.03 - Banco Moneda Nacional / Ext.
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="f-pgo-obs" style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">OBSERVACIÓN / CONCEPTO DEL EGRESO</label>
+          <input 
+            id="f-pgo-obs"
+            type="text" 
+            bind:value={nuevoPago.observacion} 
+            style="width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;"
+          />
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" type="button" on:click={() => { showModalPagoProveedor = false; provSeleccionadoPago = null; }}>Cancelar</button>
+        <button class="btn-primary" type="button" on:click={registrarPagoProveedor}>Confirmar Pago y Generar Asiento</button>
       </div>
     </div>
   </div>

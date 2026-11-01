@@ -1,5 +1,6 @@
 import { isPgConnected, sql } from '../config/db.js';
 import { randomUUID } from 'crypto';
+import { getCortesModel, getCorteByIdModel } from './master.model.js';
 
 export function isUuid(val) {
   return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
@@ -64,6 +65,24 @@ export async function deleteArticuloModel(uuid) {
   return true;
 }
 
+export async function registrarMovimientoInventarioModel(data) {
+  if (!sql) throw new Error('Database not connected');
+  const artUuid = data.articulo_uuid;
+  const tipo = String(data.tipo || 'ENTRADA').toUpperCase(); // 'ENTRADA' | 'SALIDA' | 'AJUSTE'
+  const cantidad = Number(data.cantidad) || 0;
+
+  let query;
+  if (tipo === 'ENTRADA') {
+    query = sql`UPDATE erp_articulos SET stock = stock + ${cantidad}, updated_at = NOW() WHERE uuid = ${artUuid} RETURNING *;`;
+  } else if (tipo === 'SALIDA') {
+    query = sql`UPDATE erp_articulos SET stock = GREATEST(0, stock - ${cantidad}), updated_at = NOW() WHERE uuid = ${artUuid} RETURNING *;`;
+  } else {
+    query = sql`UPDATE erp_articulos SET stock = ${cantidad}, updated_at = NOW() WHERE uuid = ${artUuid} RETURNING *;`;
+  }
+  const [art] = await query;
+  return art;
+}
+
 export async function getProveedoresModel() {
   if (!sql) return [];
   try {
@@ -106,6 +125,65 @@ export async function saveProveedorModel(data) {
     RETURNING *;
   `;
   return row;
+}
+
+export async function registrarPagoProveedorModel(data) {
+  if (!sql) throw new Error('Database not connected');
+  const prvUuid = data.proveedor_uuid;
+  const montoUsd = Number(data.monto_usd) || 0;
+  const medioPago = String(data.medio_pago || 'TRANSFERENCIA').toUpperCase();
+  const referencia = String(data.referencia || '').trim();
+
+  // Actualizar saldo pendiente del proveedor
+  const [prv] = await sql`
+    UPDATE erp_proveedores
+    SET saldo_pendiente_usd = GREATEST(0, saldo_pendiente_usd - ${montoUsd}),
+        updated_at = NOW()
+    WHERE uuid = ${prvUuid}
+    RETURNING *;
+  `;
+
+  // Asiento contable del egreso / pago
+  try {
+    const asntUuid = randomUUID();
+    const [{ asntCount }] = await sql`SELECT count(*)::int as asntCount FROM erp_asientos_contables;`;
+    const asntNro = `AS-2026-${String(asntCount + 44).padStart(4, '0')}`;
+    const fecha = data.fecha || new Date().toISOString().split('T')[0];
+    const glosa = `Pago a Proveedor ${prv?.razon_social || prvUuid} - Ref: ${referencia}`;
+
+    await sql`
+      INSERT INTO erp_asientos_contables (
+        uuid, nro_comprobante, fecha, glosa, tipo, estado, total_debe_usd, total_haber_usd
+      ) VALUES (
+        ${asntUuid}, ${asntNro}, ${fecha}, ${glosa}, 'EGRESO', 'ASENTADO', ${montoUsd}, ${montoUsd}
+      );
+    `;
+
+    // 1. Debe: Cuentas por Pagar Proveedores (2.1.1.01)
+    const [cxpRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '2.1.1.01' LIMIT 1;`;
+    if (cxpRow) {
+      await sql`
+        INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+        VALUES (${randomUUID()}, ${asntUuid}, ${cxpRow.uuid}, ${montoUsd}, 0.00, ${referencia});
+      `;
+      await sql`UPDATE erp_plan_cuentas SET saldo = GREATEST(0, saldo - ${montoUsd}), updated_at = NOW() WHERE uuid = ${cxpRow.uuid};`;
+    }
+
+    // 2. Haber: Banco (1.1.1.03) o Caja Bóveda (1.1.1.02)
+    const ctaEfectivo = medioPago === 'EFECTIVO' ? '1.1.1.02' : '1.1.1.03';
+    const [bancoRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = ${ctaEfectivo} LIMIT 1;`;
+    if (bancoRow) {
+      await sql`
+        INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+        VALUES (${randomUUID()}, ${asntUuid}, ${bancoRow.uuid}, 0.00, ${montoUsd}, ${referencia});
+      `;
+      await sql`UPDATE erp_plan_cuentas SET saldo = saldo - ${montoUsd}, updated_at = NOW() WHERE uuid = ${bancoRow.uuid};`;
+    }
+  } catch (errAsnt) {
+    console.warn('Advertencia generación asiento pago proveedor:', errAsnt.message);
+  }
+
+  return prv;
 }
 
 export async function getFacturasVentasModel() {
@@ -889,4 +967,120 @@ export async function aprobarPeriodoNominaModel(periodoUuid) {
   }
 
   return updated;
+}
+
+export async function getCortesParaNominaModel(options = {}) {
+  try {
+    const res = await getCortesModel({
+      limit: 50,
+      userSalaIds: options.userSalaIds,
+      salaIds: options.salaId ? [options.salaId] : []
+    });
+    return res?.rows || [];
+  } catch (err) {
+    console.error('Error getCortesParaNominaModel:', err.message);
+    return [];
+  }
+}
+
+export async function getCorteDetalleParaNominaModel(corteUuid) {
+  try {
+    const res = await getCorteByIdModel(corteUuid);
+    const corte = res?.data || res;
+    if (!corte) return null;
+
+    let snapshotData = corte.data || {};
+    if (typeof snapshotData === 'string') {
+      try { snapshotData = JSON.parse(snapshotData); } catch (e) { snapshotData = {}; }
+    }
+
+    let rawEmpleados = snapshotData.empleados || [];
+    if ((!rawEmpleados || rawEmpleados.length === 0) && snapshotData.reportData) {
+      if (snapshotData.reportData.empleados) rawEmpleados = snapshotData.reportData.empleados;
+    }
+
+    // Traer todos los empleados de la base de datos para cruzar sueldos, cuentas y cargos
+    let dbEmpleados = [];
+    if (sql) {
+      dbEmpleados = await sql`
+        SELECT 
+          e.uuid, e.cedula, CONCAT(e.nombres, ' ', e.apellidos) as nombre_completo,
+          e.sueldo_base, e.banco, e.nro_cuenta,
+          c.nombre as cargo_nombre, d.nombre as departamento_nombre, s.nombre as sala_nombre
+        FROM empleados e
+        LEFT JOIN cargos c ON c.uuid = e.cargo_uuid OR c.id::text = e.cargo_id::text
+        LEFT JOIN departamentos d ON d.uuid = e.departamento_uuid OR d.id::text = e.departamento_id::text
+        LEFT JOIN salas s ON s.uuid = e.sala_uuid OR s.id::text = e.sala_id::text
+        WHERE (e.is_deleted = false OR e.is_deleted IS NULL);
+      `;
+    }
+
+    const dbMap = new Map();
+    dbEmpleados.forEach(emp => {
+      if (emp.uuid) dbMap.set(String(emp.uuid), emp);
+      if (emp.cedula) dbMap.set(String(emp.cedula).replace(/[^0-9]/g, ''), emp);
+    });
+
+    // Mapear cada empleado del corte calculando nómina LOTTT
+    const empleadosProcesados = rawEmpleados.map(emp => {
+      const cleanCedula = String(emp.cedula || '').replace(/[^0-9]/g, '');
+      const dbEmp = dbMap.get(String(emp.uuid || emp.id)) || dbMap.get(cleanCedula) || {};
+
+      const sueldoMensual = Number(dbEmp.sueldo_base || emp.sueldo_base || 450.00);
+      const sueldoQuincenal = Number((sueldoMensual / 2).toFixed(2));
+      const cestaticket = 20.00; // 40 USD / 2 quincenal
+      const horasExtrasHrs = Number(emp.horasExtras || emp.horas_extras || 0);
+      const valorHora = (sueldoMensual / 30 / 8) * 1.5;
+      const horasExtrasMonto = Number((horasExtrasHrs * valorHora).toFixed(2));
+      const bonos = Number(emp.bono || 0);
+
+      const totalAsig = Number((sueldoQuincenal + cestaticket + horasExtrasMonto + bonos).toFixed(2));
+
+      // Deducciones de ley
+      const dedIvss = Number(((sueldoMensual * 12 / 52) * 0.04 * 2).toFixed(2)); // ~4% quincenal
+      const dedFaov = Number((sueldoQuincenal * 0.01).toFixed(2)); // 1%
+      const anticipos = Number(emp.anticipos || 0);
+      const totalDed = Number((dedIvss + dedFaov + anticipos).toFixed(2));
+
+      const netoUsd = Number(Math.max(0, totalAsig - totalDed).toFixed(2));
+
+      return {
+        uuid: emp.uuid || emp.id || dbEmp.uuid || randomUUID(),
+        cedula: emp.cedula || dbEmp.cedula || 'V-00000000',
+        nombre: emp.nombre || emp.nombres || dbEmp.nombre_completo || 'Empleado',
+        cargo: emp.cargo || dbEmp.cargo_nombre || 'Operador',
+        departamento: emp.departamento || dbEmp.departamento_nombre || 'Sala',
+        sala_nombre: emp.sala_nombre || dbEmp.sala_nombre || (corte.salas_nombres?.[0] || 'Principal'),
+        dias_trabajados: Number(emp.diasTrabajados || emp.dias_trabajados || 15),
+        horas_extras_hrs: horasExtrasHrs,
+        horas_extras_monto: horasExtrasMonto,
+        sueldo_mensual: sueldoMensual,
+        sueldo_quincenal: sueldoQuincenal,
+        cestaticket: cestaticket,
+        bonos: bonos,
+        total_asignaciones: totalAsig,
+        deduccion_ivss: dedIvss,
+        deduccion_faov: dedFaov,
+        anticipos: anticipos,
+        total_deducciones: totalDed,
+        neto_pagar_usd: netoUsd,
+        banco: dbEmp.banco || emp.banco || 'Banesco',
+        nro_cuenta: dbEmp.nro_cuenta || emp.nro_cuenta || '0134-0000-00-0000000000'
+      };
+    });
+
+    return {
+      corte_uuid: corte.uuid,
+      corte_id: corte.id,
+      fecha_desde: corte.fecha_desde,
+      fecha_hasta: corte.fecha_hasta,
+      salas_uuids: corte.salas_uuids,
+      salas_nombres: corte.salas_nombres,
+      total_empleados: empleadosProcesados.length,
+      empleados: empleadosProcesados
+    };
+  } catch (err) {
+    console.error('Error getCorteDetalleParaNominaModel:', err.message);
+    return null;
+  }
 }
