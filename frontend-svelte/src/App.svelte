@@ -89,6 +89,11 @@
   // Import ESTADISTICA Views
   import ContadoresView from "./views/estadistica/ContadoresView.svelte";
 
+  // Import ERP Views (Administrativo, Contabilidad, Nómina)
+  import AdministrativoView from "./views/administrativo/AdministrativoView.svelte";
+  import ContabilidadView from "./views/contabilidad/ContabilidadView.svelte";
+  import NominaView from "./views/nomina/NominaView.svelte";
+
   // Import Modal & Model Stores / Controllers
   import ItemModal from "./components/modals/ItemModal.svelte";
   import DeleteModal from "./components/modals/DeleteModal.svelte";
@@ -971,10 +976,10 @@
       <!-- Content Body -->
       <main
         class="content-body"
-        class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') || String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') || String($currentRouteStore || '').startsWith('maquinas/vista')}
+        class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') || String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') || String($currentRouteStore || '').startsWith('maquinas/vista') || String($currentRouteStore || '').startsWith('administrativo') || String($currentRouteStore || '').startsWith('contabilidad') || String($currentRouteStore || '').startsWith('nomina')}
       >
         <!-- Page Title Header without breadcrumbs -->
-        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos' && !String($currentRouteStore || '').startsWith('cecom/libro/') && !String($currentRouteStore || '').startsWith('libro/') && !String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') && !String($currentRouteStore || '').startsWith('maquinas/vista')}
+        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos' && !String($currentRouteStore || '').startsWith('cecom/libro/') && !String($currentRouteStore || '').startsWith('libro/') && !String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') && !String($currentRouteStore || '').startsWith('maquinas/vista') && !String($currentRouteStore || '').startsWith('administrativo') && !String($currentRouteStore || '').startsWith('contabilidad') && !String($currentRouteStore || '').startsWith('nomina')}
           {@const currentTitle = getTabTitle($currentRouteStore)}
           {@const isConfM = String(currentTitle || '').toUpperCase().includes('CONF.M:') || String(currentTitle || '').toUpperCase().includes('CONF.M')}
           <div
@@ -1298,6 +1303,12 @@
           {/if}
         {:else if $currentRouteStore === "herramientas" || $currentRouteStore === "otros/herramientas" || $currentRouteStore === "/herramientas"}
           <HerramientasView />
+        {:else if String($currentRouteStore || '').startsWith("administrativo") || String($currentRouteStore || '').startsWith("/administrativo")}
+          <AdministrativoView />
+        {:else if String($currentRouteStore || '').startsWith("contabilidad") || String($currentRouteStore || '').startsWith("/contabilidad")}
+          <ContabilidadView />
+        {:else if String($currentRouteStore || '').startsWith("nomina") || String($currentRouteStore || '').startsWith("/nomina")}
+          <NominaView />
         {:else}
           <!-- Generic Fallback DataTableView -->
           <DataTableView
