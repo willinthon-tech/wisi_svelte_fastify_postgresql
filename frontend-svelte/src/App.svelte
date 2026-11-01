@@ -976,10 +976,10 @@
       <!-- Content Body -->
       <main
         class="content-body"
-        class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') || String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') || String($currentRouteStore || '').startsWith('maquinas/vista') || String($currentRouteStore || '').startsWith('administrativo') || String($currentRouteStore || '').startsWith('contabilidad') || String($currentRouteStore || '').startsWith('nomina')}
+        class:corte-view-fluid={String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') || String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') || String($currentRouteStore || '').startsWith('maquinas/vista') || String($currentRouteStore || '').startsWith('erp') || String($currentRouteStore || '').startsWith('administrativo') || String($currentRouteStore || '').startsWith('contabilidad') || String($currentRouteStore || '').startsWith('contable') || String($currentRouteStore || '').startsWith('nomina')}
       >
         <!-- Page Title Header without breadcrumbs -->
-        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos' && !String($currentRouteStore || '').startsWith('cecom/libro/') && !String($currentRouteStore || '').startsWith('libro/') && !String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') && !String($currentRouteStore || '').startsWith('maquinas/vista') && !String($currentRouteStore || '').startsWith('administrativo') && !String($currentRouteStore || '').startsWith('contabilidad') && !String($currentRouteStore || '').startsWith('nomina')}
+        {#if !String($currentRouteStore || '').startsWith('rrhh/cortes/calculos') && $currentRouteStore !== 'cortes/calculos' && !String($currentRouteStore || '').startsWith('cecom/libro/') && !String($currentRouteStore || '').startsWith('libro/') && !String($currentRouteStore || '').startsWith('maquinas/maquinas/vista') && !String($currentRouteStore || '').startsWith('maquinas/vista') && !String($currentRouteStore || '').startsWith('erp') && !String($currentRouteStore || '').startsWith('administrativo') && !String($currentRouteStore || '').startsWith('contabilidad') && !String($currentRouteStore || '').startsWith('contable') && !String($currentRouteStore || '').startsWith('nomina')}
           {@const currentTitle = getTabTitle($currentRouteStore)}
           {@const isConfM = String(currentTitle || '').toUpperCase().includes('CONF.M:') || String(currentTitle || '').toUpperCase().includes('CONF.M')}
           <div
@@ -1303,12 +1303,14 @@
           {/if}
         {:else if $currentRouteStore === "herramientas" || $currentRouteStore === "otros/herramientas" || $currentRouteStore === "/herramientas"}
           <HerramientasView />
-        {:else if String($currentRouteStore || '').startsWith("administrativo") || String($currentRouteStore || '').startsWith("/administrativo")}
+        {:else if String($currentRouteStore || '').startsWith("erp/administrativo") || String($currentRouteStore || '').startsWith("/erp/administrativo") || String($currentRouteStore || '').startsWith("administrativo") || String($currentRouteStore || '').startsWith("/administrativo")}
           <AdministrativoView />
-        {:else if String($currentRouteStore || '').startsWith("contabilidad") || String($currentRouteStore || '').startsWith("/contabilidad")}
+        {:else if String($currentRouteStore || '').startsWith("erp/contab") || String($currentRouteStore || '').startsWith("/erp/contab") || String($currentRouteStore || '').startsWith("contabilidad") || String($currentRouteStore || '').startsWith("/contabilidad") || String($currentRouteStore || '').startsWith("contable") || String($currentRouteStore || '').startsWith("/contable")}
           <ContabilidadView />
-        {:else if String($currentRouteStore || '').startsWith("nomina") || String($currentRouteStore || '').startsWith("/nomina")}
+        {:else if String($currentRouteStore || '').startsWith("erp/nomina") || String($currentRouteStore || '').startsWith("/erp/nomina") || String($currentRouteStore || '').startsWith("nomina") || String($currentRouteStore || '').startsWith("/nomina")}
           <NominaView />
+        {:else if String($currentRouteStore || '').replace(/^#\/?/, '').replace(/^\//, '') === "erp"}
+          <AdministrativoView />
         {:else}
           <!-- Generic Fallback DataTableView -->
           <DataTableView

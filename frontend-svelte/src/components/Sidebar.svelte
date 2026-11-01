@@ -145,10 +145,14 @@
       </div>
       {#each page.modulos as modulo (modulo.ruta)}
         {@const routeKey = modulo.ruta.replace(/^\//, '')}
+        {@const altKey = routeKey.startsWith('erp/') ? routeKey.replace(/^erp\//, '') : ''}
         <button
           on:click={() => selectTab(modulo.ruta)}
-          class="sidebar-link {activeTab === routeKey ? 'active' : ''}"
+          class="sidebar-link {activeTab === routeKey || activeTab.startsWith(routeKey + '/') || (altKey && (activeTab === altKey || activeTab.startsWith(altKey + '/'))) ? 'active' : ''}"
         >
+          {#if modulo.icono}
+            <span class="material-icons" style="font-size: 18px; margin-right: 6px;">{modulo.icono}</span>
+          {/if}
           <span>{modulo.nombre}</span>
         </button>
       {/each}

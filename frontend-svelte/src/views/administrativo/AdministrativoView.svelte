@@ -23,9 +23,17 @@
     unsubRoute = currentRouteStore.subscribe(val => {
       const clean = String(val || '').replace(/^#\/?/, '').replace(/^\//, '').trim();
       const parts = clean.split('/');
-      if (parts[0] === 'administrativo' && parts[1]) {
-        if (SUBVISTAS.some(s => s.id === parts[1])) {
+      if (parts[0] === 'erp' && parts[1] === 'administrativo') {
+        if (parts[2] && SUBVISTAS.some(s => s.id === parts[2])) {
+          activeSubvista = parts[2];
+        } else {
+          activeSubvista = 'inventario';
+        }
+      } else if (parts[0] === 'administrativo') {
+        if (parts[1] && SUBVISTAS.some(s => s.id === parts[1])) {
           activeSubvista = parts[1];
+        } else {
+          activeSubvista = 'inventario';
         }
       }
     });
@@ -37,7 +45,7 @@
 
   function cambiarSubvista(id) {
     activeSubvista = id;
-    navigateToRoute(`administrativo/${id}`);
+    navigateToRoute(`erp/administrativo/${id}`);
   }
 
   // --- DATOS DEMO / ESTADO V1 INVENTARIO ---
