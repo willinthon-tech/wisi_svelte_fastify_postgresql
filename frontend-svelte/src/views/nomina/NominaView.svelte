@@ -4,11 +4,11 @@
   import { triggerToast } from '../../controllers/ui.store.js';
 
   const SUBVISTAS = [
-    { id: 'personal', label: 'Personal y Salarios', icon: 'badge', desc: 'Ficha salarial, cargos y asignación de cuentas' },
-    { id: 'conceptos', label: 'Conceptos y Fórmulas', icon: 'functions', desc: 'Asignaciones y deducciones de ley (IVSS, FAOV, INCES)' },
-    { id: 'procesamiento', label: 'Procesamiento de Nómina', icon: 'payments', desc: 'Cálculo quincenal/semanal masivo y aprobación' },
-    { id: 'prestaciones', label: 'Prestaciones (LOTTT)', icon: 'savings', desc: 'Garantía trimestral Art. 142 LOTTT, vacaciones y utilidades' },
-    { id: 'reportes', label: 'Recibos y Reportes', icon: 'description', desc: 'Recibos de pago individuales y sábanas bancarias' }
+    { id: 'personal', label: 'Personal y Salarios', desc: 'Ficha salarial, cargos y asignación de cuentas' },
+    { id: 'conceptos', label: 'Conceptos y Fórmulas', desc: 'Asignaciones y deducciones de ley (IVSS, FAOV, INCES)' },
+    { id: 'procesamiento', label: 'Procesamiento de Nómina', desc: 'Cálculo quincenal/semanal masivo y aprobación' },
+    { id: 'prestaciones', label: 'Prestaciones (LOTTT)', desc: 'Garantía trimestral Art. 142 LOTTT, vacaciones y utilidades' },
+    { id: 'reportes', label: 'Recibos y Reportes', desc: 'Recibos de pago individuales y sábanas bancarias' }
   ];
 
   let activeSubvista = 'personal';
@@ -137,7 +137,6 @@
   <div class="nomina-header">
     <div class="header-left">
       <div class="header-badge">
-        <span class="material-icons" style="font-size: 16px;">people</span>
         <span>SISTEMA DE NÓMINA LOTTT V1</span>
       </div>
       <h1 class="header-title">Módulo de Nómina y Pasivos Laborales</h1>
@@ -147,7 +146,6 @@
     <!-- TASA BCV -->
     <div class="bcv-widget">
       <div class="bcv-top">
-        <span class="material-icons" style="font-size: 18px; color: #10b981;">payments</span>
         <span class="bcv-label">TASA CAMBIO NOMINA</span>
       </div>
       <div class="bcv-val-row">
@@ -164,7 +162,6 @@
         class="tab-btn {activeSubvista === sub.id ? 'active' : ''}" 
         on:click={() => cambiarSubvista(sub.id)}
       >
-        <span class="material-icons tab-icon">{sub.icon}</span>
         <span class="tab-label">{sub.label}</span>
       </button>
     {/each}
@@ -175,7 +172,6 @@
     <div class="view-content fade-in">
       <div class="kpi-grid">
         <div class="kpi-card">
-          <div class="kpi-icon blue"><span class="material-icons">badge</span></div>
           <div class="kpi-info">
             <span class="kpi-label">TOTAL PERSONAL ACTIVO</span>
             <span class="kpi-val">{empleados.length}</span>
@@ -184,7 +180,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon green"><span class="material-icons">attach_money</span></div>
           <div class="kpi-info">
             <span class="kpi-label">TOTAL SUELDOS BASE (MES)</span>
             <span class="kpi-val">
@@ -195,7 +190,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon purple"><span class="material-icons">fastfood</span></div>
           <div class="kpi-info">
             <span class="kpi-label">CESTATICKET MENSUAL</span>
             <span class="kpi-val">{fmtUsd(empleados.length * 40)}</span>
@@ -204,7 +198,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon amber"><span class="material-icons">schedule</span></div>
           <div class="kpi-info">
             <span class="kpi-label">FRECUENCIA</span>
             <span class="kpi-val">QUINCENAL</span>
@@ -215,7 +208,6 @@
 
       <div class="action-bar">
         <div class="search-box">
-          <span class="material-icons">search</span>
           <input 
             type="text" 
             placeholder="Buscar por cédula, nombre o cargo..." 
@@ -223,7 +215,6 @@
           />
         </div>
         <button class="btn-primary" on:click={() => triggerToast('Integrado con catálogo central de RRHH', 'info')}>
-          <span class="material-icons">person_add</span>
           <span>Asignar Ficha Salarial</span>
         </button>
       </div>
@@ -326,7 +317,6 @@
     <div class="view-content fade-in">
       <div class="periodo-banner">
         <div class="periodo-info">
-          <span class="material-icons" style="color: #2563eb; font-size: 28px;">event_available</span>
           <div>
             <h3 style="margin: 0; font-size: 17px; font-weight: 800; color: #0f172a;">{periodoNomina.nombre}</h3>
             <p style="margin: 2px 0 0 0; font-size: 13px; color: #64748b;">
@@ -346,12 +336,10 @@
           </div>
           {#if periodoNomina.estado === 'EN_BORRADOR'}
             <button class="btn-primary" on:click={aprobarNomina}>
-              <span class="material-icons">check_circle</span>
               <span>Aprobar y Cerrar Nómina</span>
             </button>
           {:else}
             <button class="btn-secondary" on:click={() => triggerToast('Generando archivo de texto TXT para el Banco...', 'info')}>
-              <span class="material-icons">download</span>
               <span>Exportar TXT Banco</span>
             </button>
           {/if}
@@ -402,8 +390,8 @@
                   {fmtBs(r.netoPagarBs)}
                 </td>
                 <td style="text-align: center;">
-                  <button class="btn-icon" title="Ver Recibo de Pago" on:click={() => abrirRecibo(r)}>
-                    <span class="material-icons" style="font-size: 18px; color: #2563eb;">receipt</span>
+                  <button class="btn-sm" style="padding: 4px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; border: 1px solid #cbd5e1; background: #f8fafc;" title="Ver Recibo de Pago" on:click={() => abrirRecibo(r)}>
+                    Ver Recibo
                   </button>
                 </td>
               </tr>
@@ -470,15 +458,12 @@
 
         <div style="display: flex; gap: 14px; flex-wrap: wrap;">
           <button class="btn-secondary" on:click={() => triggerToast('Generando recibos PDF masivos...', 'info')}>
-            <span class="material-icons">print</span>
             <span>Imprimir Todos los Recibos de la Quincena</span>
           </button>
           <button class="btn-secondary" on:click={() => triggerToast('Exportando nómina al formato TIUNA (IVSS)...', 'info')}>
-            <span class="material-icons">assignment</span>
             <span>Archivo Plano IVSS (TIUNA)</span>
           </button>
           <button class="btn-secondary" on:click={() => triggerToast('Exportando reporte FAOV Banavih...', 'info')}>
-            <span class="material-icons">home_work</span>
             <span>Archivo FAOV (Banavih)</span>
           </button>
         </div>
@@ -492,8 +477,7 @@
   <div class="modal-backdrop fade-in" on:click={() => empleadoRecibo = null} role="presentation">
     <div class="modal-card receipt-modal" on:click|stopPropagation role="dialog">
       <div class="modal-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="material-icons" style="color: #2563eb;">receipt</span>
+        <div>
           <h3 style="margin: 0; font-size: 16px;">Recibo de Pago Individual</h3>
         </div>
         <button class="btn-close" on:click={() => empleadoRecibo = null}>&times;</button>
@@ -595,7 +579,6 @@
       <div class="modal-footer">
         <button class="btn-secondary" on:click={() => empleadoRecibo = null}>Cerrar</button>
         <button class="btn-primary" on:click={() => triggerToast('Enviando a impresión...', 'success')}>
-          <span class="material-icons">print</span>
           <span>Imprimir Recibo</span>
         </button>
       </div>

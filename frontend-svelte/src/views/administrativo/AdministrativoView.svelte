@@ -7,11 +7,11 @@
 
   // Subvistas del Módulo Administrativo
   const SUBVISTAS = [
-    { id: 'inventario', label: 'Inventario', icon: 'inventory_2', desc: 'Artículos, costos, categorías y existencias' },
-    { id: 'ventas', label: 'Ventas y Facturación', icon: 'point_of_sale', desc: 'Facturas, cotizaciones, IVA 16% e IGTF 3%' },
-    { id: 'compras', label: 'Compras y Proveedores', icon: 'shopping_cart', desc: 'Registro de proveedores y facturas de compras' },
-    { id: 'cxc-cxp', label: 'Cuentas por Cobrar / Pagar', icon: 'account_balance_wallet', desc: 'Control de cobros, pagos y saldos' },
-    { id: 'reportes-fiscales', label: 'Libros Fiscales SENIAT', icon: 'receipt_long', desc: 'Libro de Ventas, Compras y Retenciones' }
+    { id: 'inventario', label: 'Inventario', desc: 'Artículos, costos, categorías y existencias' },
+    { id: 'ventas', label: 'Ventas y Facturación', desc: 'Facturas, cotizaciones, IVA 16% e IGTF 3%' },
+    { id: 'compras', label: 'Compras y Proveedores', desc: 'Registro de proveedores y facturas de compras' },
+    { id: 'cxc-cxp', label: 'Cuentas por Cobrar / Pagar', desc: 'Control de cobros, pagos y saldos' },
+    { id: 'reportes-fiscales', label: 'Libros Fiscales SENIAT', desc: 'Libro de Ventas, Compras y Retenciones' }
   ];
 
   let activeSubvista = 'inventario';
@@ -160,7 +160,6 @@
   <div class="admin-header">
     <div class="header-left">
       <div class="header-badge">
-        <span class="material-icons" style="font-size: 16px;">admin_panel_settings</span>
         <span>SISTEMA ADMINISTRATIVO V1</span>
       </div>
       <h1 class="header-title">Módulo Administrativo y Gestión Comercial</h1>
@@ -170,7 +169,6 @@
     <!-- WIDGET TASA BCV -->
     <div class="bcv-widget">
       <div class="bcv-top">
-        <span class="material-icons" style="font-size: 18px; color: #10b981;">trending_up</span>
         <span class="bcv-label">TASA OFICIAL BCV</span>
       </div>
       <div class="bcv-val-row">
@@ -195,7 +193,6 @@
         class="tab-btn {activeSubvista === sub.id ? 'active' : ''}" 
         on:click={() => cambiarSubvista(sub.id)}
       >
-        <span class="material-icons tab-icon">{sub.icon}</span>
         <span class="tab-label">{sub.label}</span>
       </button>
     {/each}
@@ -207,7 +204,6 @@
       <!-- KPIS -->
       <div class="kpi-grid">
         <div class="kpi-card">
-          <div class="kpi-icon blue"><span class="material-icons">inventory_2</span></div>
           <div class="kpi-info">
             <span class="kpi-label">TOTAL ARTÍCULOS</span>
             <span class="kpi-val">{articulos.length}</span>
@@ -216,7 +212,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon green"><span class="material-icons">attach_money</span></div>
           <div class="kpi-info">
             <span class="kpi-label">VALOR EN EXISTENCIA (USD)</span>
             <span class="kpi-val">
@@ -227,7 +222,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon purple"><span class="material-icons">payments</span></div>
           <div class="kpi-info">
             <span class="kpi-label">VALOR EN BOLÍVARES (BCV)</span>
             <span class="kpi-val">
@@ -238,7 +232,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon amber"><span class="material-icons">warning_amber</span></div>
           <div class="kpi-info">
             <span class="kpi-label">STOCK MÍNIMO</span>
             <span class="kpi-val">{articulos.filter(a => a.stock <= 20).length}</span>
@@ -250,7 +243,6 @@
       <!-- BARRA DE ACCIÓN Y BÚSQUEDA -->
       <div class="action-bar">
         <div class="search-box">
-          <span class="material-icons">search</span>
           <input 
             type="text" 
             placeholder="Buscar por código, descripción o categoría..." 
@@ -258,7 +250,6 @@
           />
         </div>
         <button class="btn-primary" on:click={() => showModalArticulo = true}>
-          <span class="material-icons">add_box</span>
           <span>Nuevo Artículo</span>
         </button>
       </div>
@@ -310,7 +301,6 @@
             {#if articulosFiltrados.length === 0}
               <tr>
                 <td colspan="8" class="empty-state">
-                  <span class="material-icons">search_off</span>
                   <p>No se encontraron artículos con el criterio de búsqueda</p>
                 </td>
               </tr>
@@ -326,7 +316,6 @@
     <div class="view-content fade-in">
       <div class="kpi-grid">
         <div class="kpi-card">
-          <div class="kpi-icon green"><span class="material-icons">receipt</span></div>
           <div class="kpi-info">
             <span class="kpi-label">FACTURAS EMITIDAS</span>
             <span class="kpi-val">{facturas.length}</span>
@@ -335,7 +324,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon blue"><span class="material-icons">monetization_on</span></div>
           <div class="kpi-info">
             <span class="kpi-label">TOTAL FACTURADO (USD)</span>
             <span class="kpi-val">
@@ -346,7 +334,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon amber"><span class="material-icons">account_balance</span></div>
           <div class="kpi-info">
             <span class="kpi-label">IGTF 3% PERCIBIDO</span>
             <span class="kpi-val">
@@ -357,7 +344,6 @@
         </div>
 
         <div class="kpi-card">
-          <div class="kpi-icon red"><span class="material-icons">cancel</span></div>
           <div class="kpi-info">
             <span class="kpi-label">NOTAS DE CRÉDITO</span>
             <span class="kpi-val">{facturas.filter(f => f.estado === 'ANULADA_NC').length}</span>
@@ -368,11 +354,9 @@
 
       <div class="action-bar">
         <div class="notice-fiscal">
-          <span class="material-icons" style="font-size: 18px; color: #2563eb;">gavel</span>
           <span><b>Normativa SENIAT:</b> Las facturas emitidas son inmutables. Toda corrección se efectúa mediante Nota de Crédito correlativa.</span>
         </div>
         <button class="btn-primary" on:click={() => showModalFactura = true}>
-          <span class="material-icons">add</span>
           <span>Emitir Factura Fiscal</span>
         </button>
       </div>
@@ -427,11 +411,12 @@
                 <td style="text-align: center;">
                   {#if fac.estado === 'EMITIDA'}
                     <button 
-                      class="btn-icon danger" 
+                      class="btn-sm danger" 
                       title="Anular con Nota de Crédito SENIAT"
                       on:click={() => anularConNotaCredito(fac)}
+                      style="padding: 4px 8px; font-size: 11px; font-weight: 700; border-radius: 4px; border: 1px solid #fca5a5; background: #fee2e2; color: #b91c1c; cursor: pointer;"
                     >
-                      <span class="material-icons" style="font-size: 18px;">receipt_long</span>
+                      Anular NC
                     </button>
                   {:else}
                     <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">NC Aplicada</span>
@@ -451,7 +436,6 @@
       <div class="action-bar">
         <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Directorio de Proveedores y Cuentas por Pagar</h3>
         <button class="btn-primary" on:click={() => triggerToast('Registro de nuevo proveedor habilitado', 'info')}>
-          <span class="material-icons">person_add</span>
           <span>Registrar Proveedor</span>
         </button>
       </div>
@@ -499,7 +483,6 @@
       <div class="cxc-grid">
         <div class="card-flow p-4">
           <div class="card-header-styled">
-            <span class="material-icons" style="color: #2563eb;">call_received</span>
             <h4>Cuentas por Cobrar (Clientes)</h4>
           </div>
           <p class="text-sm text-slate-500 mb-4">Saldos pendientes por facturación a crédito de clientes y salas aliadas.</p>
@@ -512,7 +495,6 @@
 
         <div class="card-flow p-4">
           <div class="card-header-styled">
-            <span class="material-icons" style="color: #dc2626;">call_made</span>
             <h4>Cuentas por Pagar (Proveedores)</h4>
           </div>
           <p class="text-sm text-slate-500 mb-4">Compromisos de compras de insumos, servicios de mantenimiento y papelería fiscal.</p>
@@ -536,7 +518,6 @@
             <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Período fiscal en curso. Incluye alícuota 16%, IGTF 3% y desglose según providencia administrativa.</p>
           </div>
           <button class="btn-secondary" on:click={() => triggerToast('Generando reporte PDF del Libro de Ventas...', 'info')}>
-            <span class="material-icons">print</span>
             <span>Exportar PDF Oficial</span>
           </button>
         </div>

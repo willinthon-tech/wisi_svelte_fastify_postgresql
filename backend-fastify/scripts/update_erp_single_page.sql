@@ -44,12 +44,12 @@ BEGIN
   DELETE FROM user_module_permissions WHERE module_uuid IN (SELECT uuid FROM modulos WHERE page_uuid = v_page_uuid);
   DELETE FROM modulos WHERE page_uuid = v_page_uuid;
 
-  -- 4. Insertar ÚNICAMENTE los 3 módulos solicitados con ruta erp/...
+  -- 4. Insertar ÚNICAMENTE los 3 módulos solicitados con ruta erp/... (Sin iconos)
   INSERT INTO modulos (uuid, page_uuid, nombre, ruta, icono, orden, is_deleted, created_at, updated_at)
   VALUES 
-    (v_mod_admin, v_page_uuid, 'Administrativo', '/erp/administrativo', 'business_center', 1, false, NOW(), NOW()),
-    (v_mod_cont, v_page_uuid, 'Contable', '/erp/contable', 'account_balance', 2, false, NOW(), NOW()),
-    (v_mod_nom, v_page_uuid, 'Nomina', '/erp/nomina', 'badge', 3, false, NOW(), NOW());
+    (v_mod_admin, v_page_uuid, 'Administrativo', '/erp/administrativo', NULL, 1, false, NOW(), NOW()),
+    (v_mod_cont, v_page_uuid, 'Contable', '/erp/contable', NULL, 2, false, NOW(), NOW()),
+    (v_mod_nom, v_page_uuid, 'Nomina', '/erp/nomina', NULL, 3, false, NOW(), NOW());
 
   RAISE NOTICE '3 Módulos creados: Administrativo, Contable, Nomina.';
 

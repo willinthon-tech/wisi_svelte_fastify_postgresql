@@ -4,11 +4,11 @@
   import { triggerToast } from '../../controllers/ui.store.js';
 
   const SUBVISTAS = [
-    { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: 'account_tree', desc: 'Catálogo contable jerárquico multinivel' },
-    { id: 'centros-costos', label: 'Centros de Costos', icon: 'domain', desc: 'Unidades de negocio y departamentos analíticos' },
-    { id: 'asientos', label: 'Comprobantes y Asientos', icon: 'menu_book', desc: 'Asientos de diario por partida doble estricta' },
-    { id: 'libros', label: 'Libro Diario y Mayor', icon: 'auto_stories', desc: 'Libros oficiales y movimientos por cuenta' },
-    { id: 'reportes', label: 'Balance de Comprobación', icon: 'analytics', desc: 'Sumas y saldos, balance y resultados' }
+    { id: 'plan-cuentas', label: 'Plan de Cuentas', desc: 'Catálogo contable jerárquico multinivel' },
+    { id: 'centros-costos', label: 'Centros de Costos', desc: 'Unidades de negocio y departamentos analíticos' },
+    { id: 'asientos', label: 'Comprobantes y Asientos', desc: 'Asientos de diario por partida doble estricta' },
+    { id: 'libros', label: 'Libro Diario y Mayor', desc: 'Libros oficiales y movimientos por cuenta' },
+    { id: 'reportes', label: 'Balance de Comprobación', desc: 'Sumas y saldos, balance y resultados' }
   ];
 
   let activeSubvista = 'plan-cuentas';
@@ -217,7 +217,6 @@
   <div class="contab-header">
     <div class="header-left">
       <div class="header-badge">
-        <span class="material-icons" style="font-size: 16px;">balance</span>
         <span>SISTEMA CONTABLE VEN-NIF V1</span>
       </div>
       <h1 class="header-title">Módulo de Contabilidad General</h1>
@@ -225,7 +224,6 @@
     </div>
 
     <div class="partida-doble-badge">
-      <span class="material-icons" style="color: #10b981;">verified</span>
       <div>
         <span style="font-size: 11px; font-weight: 800; color: #047857;">PARTIDA DOBLE ESTRICTA</span>
         <div style="font-size: 13px; font-weight: 700; color: #065f46;">Debe ≡ Haber Validado</div>
@@ -241,7 +239,6 @@
         class="tab-btn {activeSubvista === sub.id ? 'active' : ''}" 
         on:click={() => cambiarSubvista(sub.id)}
       >
-        <span class="material-icons tab-icon">{sub.icon}</span>
         <span class="tab-label">{sub.label}</span>
       </button>
     {/each}
@@ -252,7 +249,6 @@
     <div class="view-content fade-in">
       <div class="action-bar">
         <div class="search-box">
-          <span class="material-icons">search</span>
           <input 
             type="text" 
             placeholder="Buscar por código (ej: 1.1) o descripción de cuenta..." 
@@ -260,7 +256,6 @@
           />
         </div>
         <button class="btn-primary" on:click={() => showModalCuenta = true}>
-          <span class="material-icons">add_circle</span>
           <span>Nueva Cuenta Contable</span>
         </button>
       </div>
@@ -286,10 +281,8 @@
                 <td>
                   <div style="padding-left: {(cuenta.nivel - 1) * 20}px; display: flex; align-items: center; gap: 6px;">
                     {#if cuenta.tipo === 'GRUPO'}
-                      <span class="material-icons" style="font-size: 16px; color: #64748b;">folder</span>
                       <strong>{cuenta.nombre}</strong>
                     {:else}
-                      <span class="material-icons" style="font-size: 16px; color: #2563eb;">description</span>
                       <span>{cuenta.nombre}</span>
                     {/if}
                   </div>
@@ -322,7 +315,6 @@
           <div class="kpi-card" style="flex-direction: column; align-items: flex-start; gap: 10px;">
             <div style="display: flex; justify-content: space-between; width: 100%;">
               <span class="badge-code">{cc.codigo}</span>
-              <span class="material-icons" style="color: #64748b;">domain</span>
             </div>
             <strong style="font-size: 15px; color: #0f172a;">{cc.nombre}</strong>
             <span style="font-size: 12px; color: #64748b;">Resp: {cc.responsable}</span>
@@ -345,7 +337,6 @@
           <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Partida doble estricta garantizada por asiento.</p>
         </div>
         <button class="btn-primary" on:click={() => showModalAsiento = true}>
-          <span class="material-icons">post_add</span>
           <span>Crear Asiento Contable</span>
         </button>
       </div>
@@ -360,7 +351,6 @@
                 <span style="font-size: 13px; color: #64748b;">Fecha: <b>{asnt.fecha}</b></span>
               </div>
               <span class="text-xs" style="color: #10b981; font-weight: 800; display: flex; align-items: center; gap: 4px;">
-                <span class="material-icons" style="font-size: 16px;">check_circle</span>
                 ASIENTO CUADRADO
               </span>
             </div>
@@ -455,7 +445,6 @@
             <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Corte financiero al cierre contable. Moneda de reporte: USD / Conversión oficial.</p>
           </div>
           <button class="btn-secondary" on:click={() => triggerToast('Generando Balance en PDF...', 'info')}>
-            <span class="material-icons">picture_as_pdf</span>
             <span>Imprimir Balance</span>
           </button>
         </div>
@@ -579,7 +568,6 @@
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <strong style="font-size: 13.5px; color: #0f172a;">Líneas del Asiento (Partida Doble)</strong>
             <button class="btn-secondary text-xs" on:click={agregarLineaAsiento}>
-              <span class="material-icons" style="font-size: 16px;">add</span>
               <span>Agregar Línea</span>
             </button>
           </div>
@@ -610,8 +598,8 @@
                     <input type="number" step="0.01" bind:value={linea.haber} style="width: 100%; padding: 6px; text-align: right; border: 1px solid #cbd5e1; border-radius: 6px;" />
                   </td>
                   <td style="text-align: center;">
-                    <button class="btn-icon danger" on:click={() => eliminarLineaAsiento(idx)}>
-                      <span class="material-icons" style="font-size: 16px;">delete</span>
+                    <button class="btn-sm danger" style="padding: 2px 6px; font-size: 11px; cursor: pointer;" on:click={() => eliminarLineaAsiento(idx)}>
+                      Eliminar
                     </button>
                   </td>
                 </tr>
@@ -632,12 +620,10 @@
             <div class="status-col">
               {#if estaCuadradoNuevo}
                 <span class="status-ok">
-                  <span class="material-icons" style="font-size: 18px;">check_circle</span>
                   ASIENTO CUADRADO
                 </span>
               {:else}
                 <span class="status-error">
-                  <span class="material-icons" style="font-size: 18px;">error</span>
                   DESCUADRE: {fmtMoneda(Math.abs(totalDebeNuevo - totalHaberNuevo))}
                 </span>
               {/if}
