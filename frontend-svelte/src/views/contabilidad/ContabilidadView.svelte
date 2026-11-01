@@ -304,6 +304,11 @@
   function fmtMoneda(val) {
     return '$ ' + Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+
+  $: ctasDetalle = planCuentas.filter(c => c.tipo === 'DETALLE');
+  $: totalBalanceDebe = ctasDetalle.filter(c => c.naturaleza === 'DEUDORA').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+  $: totalBalanceHaber = ctasDetalle.filter(c => c.naturaleza === 'ACREEDORA').reduce((acc, c) => acc + (Number(c.saldo) || 0), 0);
+  $: balanceCuadrado = Math.abs(totalBalanceDebe - totalBalanceHaber) < 0.01;
 </script>
 
 <div class="contab-container">
@@ -569,6 +574,15 @@
               </tr>
             {/each}
           </tbody>
+          <tfoot>
+            <tr style="background: #f8fafc; font-weight: 800; border-top: 2px solid #cbd5e1;">
+              <td colspan="2" style="text-align: right; text-transform: uppercase;">Sumas y Saldos Totales:</td>
+              <td style="text-align: right; color: #2563eb;">{fmtMoneda(totalBalanceDebe)}</td>
+              <td style="text-align: right; color: #2563eb;">{fmtMoneda(totalBalanceHaber)}</td>
+              <td style="text-align: right; color: #15803d;">{fmtMoneda(totalBalanceDebe)}</td>
+              <td style="text-align: right; color: #15803d;">{fmtMoneda(totalBalanceHaber)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -577,7 +591,7 @@
 
 <!-- MODAL NUEVA CUENTA -->
 {#if showModalCuenta}
-  <div class="modal-backdrop fade-in" on:click={() => showModalCuenta = false} role="presentation">
+  <div class="modal-backdrop fade-in" role="presentation">
     <div class="modal-card" on:click|stopPropagation role="dialog">
       <div class="modal-header">
         <h3>Agregar Cuenta Contable</h3>
@@ -628,7 +642,7 @@
 
 <!-- MODAL NUEVO ASIENTO CONTABLE -->
 {#if showModalAsiento}
-  <div class="modal-backdrop fade-in" on:click={() => showModalAsiento = false} role="presentation">
+  <div class="modal-backdrop fade-in" role="presentation">
     <div class="modal-card" style="max-width: 780px;" on:click|stopPropagation role="dialog">
       <div class="modal-header">
         <h3>Registrar Comprobante / Asiento Contable</h3>

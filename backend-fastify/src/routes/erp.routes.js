@@ -8,6 +8,7 @@ import {
   createFacturaVenta,
   anularFacturaVenta,
   getFacturasCompras,
+  createFacturaCompra,
   getCxcCxp,
   getPlanCuentas,
   saveCuenta,
@@ -34,6 +35,7 @@ export async function erpRoutes(fastify, options) {
   fastify.post('/api/erp/facturas-ventas/:uuid/anular', anularFacturaVenta);
 
   fastify.get('/api/erp/facturas-compras', getFacturasCompras);
+  fastify.post('/api/erp/facturas-compras', createFacturaCompra);
   fastify.get('/api/erp/cxc-cxp', getCxcCxp);
 
   // --- CONTABILIDAD ---

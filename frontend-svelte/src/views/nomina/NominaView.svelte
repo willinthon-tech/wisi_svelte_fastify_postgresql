@@ -518,7 +518,7 @@
 
 <!-- MODAL VISOR DE RECIBO DE PAGO INDIVIDUAL -->
 {#if empleadoRecibo}
-  <div class="modal-backdrop fade-in" on:click={() => empleadoRecibo = null} role="presentation">
+  <div class="modal-backdrop fade-in" role="presentation">
     <div class="modal-card receipt-modal" on:click|stopPropagation role="dialog">
       <div class="modal-header">
         <div>

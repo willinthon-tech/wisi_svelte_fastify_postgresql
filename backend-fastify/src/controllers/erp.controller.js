@@ -8,6 +8,7 @@ import {
   createFacturaVentaModel,
   anularFacturaVentaModel,
   getFacturasComprasModel,
+  createFacturaCompraModel,
   getCxcCxpSummaryModel,
   getPlanCuentasModel,
   saveCuentaModel,
@@ -104,6 +105,15 @@ export async function getFacturasCompras(req, reply) {
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.code(500).send({ success: false, message: err.message });
+  }
+}
+
+export async function createFacturaCompra(req, reply) {
+  try {
+    const data = await createFacturaCompraModel(req.body || {});
+    return reply.send({ success: true, data, message: 'Factura de compra registrada y asiento generado' });
+  } catch (err) {
+    return reply.code(400).send({ success: false, message: err.message });
   }
 }
 

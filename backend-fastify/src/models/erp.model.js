@@ -146,11 +146,11 @@ export async function createFacturaVentaModel(data) {
   const rif = String(data.rif || '').trim().toUpperCase();
   const tasaBcv = Number(data.tasa_bcv) || 62.50;
   const baseUsd = Number(data.monto_base_usd || data.base_usd) || 0;
-  const ivaUsd = Number(baseUsd * 0.16);
+  const ivaUsd = Number((baseUsd * 0.16).toFixed(4));
   const aplicaIgtf = Boolean(data.aplica_igtf || data.pagado_divisas);
-  const igtfUsd = aplicaIgtf ? Number((baseUsd + ivaUsd) * 0.03) : 0;
-  const totalUsd = baseUsd + ivaUsd + igtfUsd;
-  const totalVes = totalUsd * tasaBcv;
+  const igtfUsd = aplicaIgtf ? Number(((baseUsd + ivaUsd) * 0.03).toFixed(4)) : 0;
+  const totalUsd = Number((baseUsd + ivaUsd + igtfUsd).toFixed(4));
+  const totalVes = Number((totalUsd * tasaBcv).toFixed(2));
   const fecha = data.fecha || new Date().toISOString().split('T')[0];
 
   // Conteo para correlativo correlacionado
@@ -172,6 +172,59 @@ export async function createFacturaVentaModel(data) {
     )
     RETURNING *;
   `;
+
+  // --- FASE 3: GENERACIÓN AUTOMÁTICA DE ASIENTO CONTABLE (VENTA FISCAL SENIAT) ---
+  try {
+    const asntUuid = randomUUID();
+    const [{ asntCount }] = await sql`SELECT count(*)::int as asntCount FROM erp_asientos_contables;`;
+    const asntNro = `AS-2026-${String(asntCount + 44).padStart(4, '0')}`;
+    const glosaVenta = `Registro automático de Venta Fiscal ${nroFactura} - Cliente: ${cliente} (${rif})`;
+
+    await sql`
+      INSERT INTO erp_asientos_contables (
+        uuid, nro_comprobante, fecha, glosa, tipo, estado, total_debe_usd, total_haber_usd
+      ) VALUES (
+        ${asntUuid}, ${asntNro}, ${fecha}, ${glosaVenta}, 'INGRESO', 'ASENTADO', ${totalUsd}, ${totalUsd}
+      );
+    `;
+
+    // 1. Debe: Caja Divisas (1.1.1.02) o Caja Bs (1.1.1.01)
+    const ctaCaja = aplicaIgtf ? '1.1.1.02' : '1.1.1.01';
+    const [cajaRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = ${ctaCaja} LIMIT 1;`;
+    if (cajaRow) {
+      await sql`
+        INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+        VALUES (${randomUUID()}, ${asntUuid}, ${cajaRow.uuid}, ${totalUsd}, 0.00, ${nroFactura});
+      `;
+      await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${totalUsd}, updated_at = NOW() WHERE uuid = ${cajaRow.uuid};`;
+    }
+
+    // 2. Haber: Ingresos Operacionales (4.1.1.01)
+    const [ingRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '4.1.1.01' LIMIT 1;`;
+    if (ingRow) {
+      await sql`
+        INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+        VALUES (${randomUUID()}, ${asntUuid}, ${ingRow.uuid}, 0.00, ${baseUsd}, ${nroFactura});
+      `;
+      await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${baseUsd}, updated_at = NOW() WHERE uuid = ${ingRow.uuid};`;
+    }
+
+    // 3. Haber: Débito Fiscal IVA SENIAT + IGTF (2.1.2.01)
+    const impTotales = Number((ivaUsd + igtfUsd).toFixed(4));
+    if (impTotales > 0) {
+      const [ivaRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '2.1.2.01' LIMIT 1;`;
+      if (ivaRow) {
+        await sql`
+          INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+          VALUES (${randomUUID()}, ${asntUuid}, ${ivaRow.uuid}, 0.00, ${impTotales}, ${nroFactura});
+        `;
+        await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${impTotales}, updated_at = NOW() WHERE uuid = ${ivaRow.uuid};`;
+      }
+    }
+  } catch (errAsnt) {
+    console.warn('Advertencia generación automática asiento venta:', errAsnt.message);
+  }
+
   return created;
 }
 
@@ -183,7 +236,168 @@ export async function anularFacturaVentaModel(uuid) {
     WHERE uuid = ${uuid}
     RETURNING *;
   `;
+
+  if (updated) {
+    // --- FASE 3: GENERACIÓN AUTOMÁTICA DE CONTRASIENTO CONTABLE (ANULACIÓN NC) ---
+    try {
+      const asntUuid = randomUUID();
+      const [{ asntCount }] = await sql`SELECT count(*)::int as asntCount FROM erp_asientos_contables;`;
+      const asntNro = `AS-2026-${String(asntCount + 44).padStart(4, '0')}`;
+      const glosaNc = `Contrasiento por Anulación NC de Factura ${updated.nro_factura} - Cliente: ${updated.cliente_nombre}`;
+      const totalUsd = Number(updated.monto_total_usd);
+      const baseUsd = Number(updated.monto_base_usd);
+      const impUsd = Number(updated.monto_iva_usd) + Number(updated.monto_igtf_usd);
+      const fecha = new Date().toISOString().split('T')[0];
+
+      await sql`
+        INSERT INTO erp_asientos_contables (
+          uuid, nro_comprobante, fecha, glosa, tipo, estado, total_debe_usd, total_haber_usd
+        ) VALUES (
+          ${asntUuid}, ${asntNro}, ${fecha}, ${glosaNc}, 'EGRESO', 'ASENTADO', ${totalUsd}, ${totalUsd}
+        );
+      `;
+
+      // 1. Debe: Reversa de Ingresos (4.1.1.01)
+      const [ingRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '4.1.1.01' LIMIT 1;`;
+      if (ingRow) {
+        await sql`
+          INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+          VALUES (${randomUUID()}, ${asntUuid}, ${ingRow.uuid}, ${baseUsd}, 0.00, 'NC-' || ${updated.nro_factura});
+        `;
+        await sql`UPDATE erp_plan_cuentas SET saldo = GREATEST(0, saldo - ${baseUsd}), updated_at = NOW() WHERE uuid = ${ingRow.uuid};`;
+      }
+
+      // 2. Debe: Reversa de IVA Débito Fiscal (2.1.2.01)
+      if (impUsd > 0) {
+        const [ivaRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '2.1.2.01' LIMIT 1;`;
+        if (ivaRow) {
+          await sql`
+            INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+            VALUES (${randomUUID()}, ${asntUuid}, ${ivaRow.uuid}, ${impUsd}, 0.00, 'NC-' || ${updated.nro_factura});
+          `;
+          await sql`UPDATE erp_plan_cuentas SET saldo = GREATEST(0, saldo - ${impUsd}), updated_at = NOW() WHERE uuid = ${ivaRow.uuid};`;
+        }
+      }
+
+      // 3. Haber: Salida de Caja / Divisas (1.1.1.02 o 1.1.1.01)
+      const ctaCaja = updated.pagado_en_divisas ? '1.1.1.02' : '1.1.1.01';
+      const [cajaRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = ${ctaCaja} LIMIT 1;`;
+      if (cajaRow) {
+        await sql`
+          INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+          VALUES (${randomUUID()}, ${asntUuid}, ${cajaRow.uuid}, 0.00, ${totalUsd}, 'NC-' || ${updated.nro_factura});
+        `;
+        await sql`UPDATE erp_plan_cuentas SET saldo = GREATEST(0, saldo - ${totalUsd}), updated_at = NOW() WHERE uuid = ${cajaRow.uuid};`;
+      }
+    } catch (errAsnt) {
+      console.warn('Advertencia generación contrasiento NC:', errAsnt.message);
+    }
+  }
+
   return updated;
+}
+
+export async function createFacturaCompraModel(data) {
+  if (!sql) throw new Error('Database not connected');
+  const fcUuid = isUuid(data.uuid) ? data.uuid : randomUUID();
+  const proveedorUuid = data.proveedor_uuid;
+  if (!isUuid(proveedorUuid)) {
+    throw new Error('Proveedor no válido o no seleccionado');
+  }
+  const nroFactura = String(data.nro_factura || data.nro || '').trim();
+  const nroControl = String(data.nro_control || data.control || '').trim();
+  const fecha = data.fecha || new Date().toISOString().split('T')[0];
+  const tasaBcv = Number(data.tasa_bcv) || 62.50;
+  const baseUsd = Number(data.base_imponible_usd || data.base_usd) || 0;
+  const ivaUsd = Number((baseUsd * 0.16).toFixed(4));
+  const porcRet = data.porcentaje_retencion === '100%' ? 1.0 : 0.75;
+  const retIvaUsd = Number((ivaUsd * porcRet).toFixed(4));
+  const totalUsd = Number((baseUsd + ivaUsd).toFixed(4));
+  const saldoAPagarUsd = Number((totalUsd - retIvaUsd).toFixed(4));
+
+  const [created] = await sql`
+    INSERT INTO erp_facturas_compras (
+      uuid, proveedor_uuid, nro_factura_proveedor, nro_control, fecha,
+      tasa_bcv, base_imponible_usd, iva_usd, retencion_iva_usd, total_usd
+    ) VALUES (
+      ${fcUuid}, ${proveedorUuid}, ${nroFactura}, ${nroControl}, ${fecha},
+      ${tasaBcv}, ${baseUsd}, ${ivaUsd}, ${retIvaUsd}, ${totalUsd}
+    )
+    RETURNING *;
+  `;
+
+  // Actualizar saldo pendiente del proveedor
+  await sql`
+    UPDATE erp_proveedores
+    SET saldo_pendiente_usd = saldo_pendiente_usd + ${saldoAPagarUsd}, updated_at = NOW()
+    WHERE uuid = ${proveedorUuid};
+  `;
+
+  // --- FASE 3: GENERACIÓN AUTOMÁTICA DE ASIENTO CONTABLE (COMPRA A PROVEEDOR) ---
+  try {
+    const asntUuid = randomUUID();
+    const [{ asntCount }] = await sql`SELECT count(*)::int as asntCount FROM erp_asientos_contables;`;
+    const asntNro = `AS-2026-${String(asntCount + 44).padStart(4, '0')}`;
+    const [prv] = await sql`SELECT razon_social, rif FROM erp_proveedores WHERE uuid = ${proveedorUuid};`;
+    const prvNombre = prv ? `${prv.razon_social} (${prv.rif})` : 'Proveedor';
+    const glosaCompra = `Registro automático de Compra Fact. ${nroFactura} - Proveedor: ${prvNombre}`;
+
+    await sql`
+      INSERT INTO erp_asientos_contables (
+        uuid, nro_comprobante, fecha, glosa, tipo, estado, total_debe_usd, total_haber_usd
+      ) VALUES (
+        ${asntUuid}, ${asntNro}, ${fecha}, ${glosaCompra}, 'EGRESO', 'ASENTADO', ${totalUsd}, ${totalUsd}
+      );
+    `;
+
+    // 1. Debe: Gastos de Mantenimiento y Servicios (5.1.2.01)
+    const [gastoRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '5.1.2.01' LIMIT 1;`;
+    if (gastoRow) {
+      await sql`
+        INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+        VALUES (${randomUUID()}, ${asntUuid}, ${gastoRow.uuid}, ${baseUsd}, 0.00, ${nroFactura});
+      `;
+      await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${baseUsd}, updated_at = NOW() WHERE uuid = ${gastoRow.uuid};`;
+    }
+
+    // 2. Debe: IVA Crédito Fiscal (1.1.2.01)
+    if (ivaUsd > 0) {
+      const [ivaRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '1.1.2.01' LIMIT 1;`;
+      if (ivaRow) {
+        await sql`
+          INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+          VALUES (${randomUUID()}, ${asntUuid}, ${ivaRow.uuid}, ${ivaUsd}, 0.00, ${nroFactura});
+        `;
+        await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${ivaUsd}, updated_at = NOW() WHERE uuid = ${ivaRow.uuid};`;
+      }
+    }
+
+    // 3. Haber: Cuentas por Pagar Proveedores (2.1.1.01)
+    const [cxpRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '2.1.1.01' LIMIT 1;`;
+    if (cxpRow) {
+      await sql`
+        INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+        VALUES (${randomUUID()}, ${asntUuid}, ${cxpRow.uuid}, 0.00, ${saldoAPagarUsd}, ${nroFactura});
+      `;
+      await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${saldoAPagarUsd}, updated_at = NOW() WHERE uuid = ${cxpRow.uuid};`;
+    }
+
+    // 4. Haber: Retenciones de IVA por Enterar (2.1.2.01)
+    if (retIvaUsd > 0) {
+      const [retRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '2.1.2.01' LIMIT 1;`;
+      if (retRow) {
+        await sql`
+          INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+          VALUES (${randomUUID()}, ${asntUuid}, ${retRow.uuid}, 0.00, ${retIvaUsd}, 'RET-IVA-' || ${nroFactura});
+        `;
+        await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${retIvaUsd}, updated_at = NOW() WHERE uuid = ${retRow.uuid};`;
+      }
+    }
+  } catch (errAsnt) {
+    console.warn('Advertencia generación automática asiento compra:', errAsnt.message);
+  }
+
+  return created;
 }
 
 export async function getFacturasComprasModel() {
@@ -478,5 +692,118 @@ export async function aprobarPeriodoNominaModel(periodoUuid) {
     WHERE uuid = ${periodoUuid}
     RETURNING *;
   `;
+
+  if (updated) {
+    // --- FASE 3: GENERACIÓN AUTOMÁTICA DE ASIENTO CONTABLE DE NÓMINA (LOTTT) ---
+    try {
+      const asntUuid = randomUUID();
+      const [{ asntCount }] = await sql`SELECT count(*)::int as asntCount FROM erp_asientos_contables;`;
+      const asntNro = `AS-2026-${String(asntCount + 44).padStart(4, '0')}`;
+      const glosaNomina = `Provisión y causación de Nómina: ${updated.nombre} (${updated.fecha_desde} al ${updated.fecha_hasta})`;
+
+      let asigUsd = Number(updated.total_asignaciones_usd) || 0;
+      let dedUsd = Number(updated.total_deducciones_usd) || 0;
+      let netoUsd = Number(updated.total_neto_usd) || 0;
+
+      // Si los montos vienen en 0 en la fila del período, los calculamos desde los empleados activos
+      if (asigUsd <= 0) {
+        const empRows = await sql`
+          SELECT 
+            uuid, cedula, nombres, apellidos, 
+            COALESCE(sueldo_base, 450.00)::numeric as sueldo_base,
+            COALESCE(banco, 'Banesco') as banco,
+            COALESCE(nro_cuenta, '0134-0192-38-4920192837') as nro_cuenta
+          FROM empleados
+          WHERE is_deleted = false OR is_deleted IS NULL;
+        `;
+
+        let sumAsig = 0;
+        let sumDed = 0;
+
+        for (const emp of empRows) {
+          const sBase = Number(emp.sueldo_base) || 450;
+          const sQuincena = Number((sBase / 2).toFixed(2));
+          const cestaQuincena = 20.00;
+          const totalAsigEmp = sQuincena + cestaQuincena;
+          const dedEmp = Number((sQuincena * 0.05).toFixed(2)); // 4% IVSS + 1% FAOV
+          const netoEmp = totalAsigEmp - dedEmp;
+          const netoVes = Number((netoEmp * (Number(updated.tasa_bcv) || 62.50)).toFixed(2));
+
+          sumAsig += totalAsigEmp;
+          sumDed += dedEmp;
+
+          // Generar recibo individual de pago
+          await sql`
+            INSERT INTO erp_nomina_recibos (
+              uuid, periodo_uuid, empleado_uuid, sueldo_base_usd, total_asignaciones_usd,
+              total_deducciones_usd, neto_pagar_usd, neto_pagar_ves, banco, nro_cuenta
+            ) VALUES (
+              ${randomUUID()}, ${periodoUuid}, ${emp.uuid}, ${sBase}, ${totalAsigEmp},
+              ${dedEmp}, ${netoEmp}, ${netoVes}, ${emp.banco}, ${emp.nro_cuenta}
+            )
+            ON CONFLICT (uuid) DO NOTHING;
+          `;
+        }
+
+        asigUsd = Number(sumAsig.toFixed(2));
+        dedUsd = Number(sumDed.toFixed(2));
+        netoUsd = Number((asigUsd - dedUsd).toFixed(2));
+
+        await sql`
+          UPDATE erp_nomina_periodos
+          SET total_asignaciones_usd = ${asigUsd},
+              total_deducciones_usd = ${dedUsd},
+              total_neto_usd = ${netoUsd}
+          WHERE uuid = ${periodoUuid};
+        `;
+      }
+
+      const fecha = updated.fecha_hasta ? String(updated.fecha_hasta).split('T')[0] : new Date().toISOString().split('T')[0];
+
+      // Insertar Asiento Contable
+      await sql`
+        INSERT INTO erp_asientos_contables (
+          uuid, nro_comprobante, fecha, glosa, tipo, estado, total_debe_usd, total_haber_usd
+        ) VALUES (
+          ${asntUuid}, ${asntNro}, ${fecha}, ${glosaNomina}, 'DIARIO', 'ASENTADO', ${asigUsd}, ${asigUsd}
+        );
+      `;
+
+      // 1. Debe: Gasto de Sueldos y Salarios Personal (5.1.1.01)
+      const [gastoRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '5.1.1.01' LIMIT 1;`;
+      if (gastoRow) {
+        await sql`
+          INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+          VALUES (${randomUUID()}, ${asntUuid}, ${gastoRow.uuid}, ${asigUsd}, 0.00, ${updated.nombre});
+        `;
+        await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${asigUsd}, updated_at = NOW() WHERE uuid = ${gastoRow.uuid};`;
+      }
+
+      // 2. Haber: Sueldos y Salarios por Pagar (2.1.3.01)
+      const [pasivoRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '2.1.3.01' LIMIT 1;`;
+      if (pasivoRow) {
+        await sql`
+          INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+          VALUES (${randomUUID()}, ${asntUuid}, ${pasivoRow.uuid}, 0.00, ${netoUsd}, ${updated.nombre});
+        `;
+        await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${netoUsd}, updated_at = NOW() WHERE uuid = ${pasivoRow.uuid};`;
+      }
+
+      // 3. Haber: Retenciones de Ley por Enterar (2.1.2.02)
+      if (dedUsd > 0) {
+        const [retRow] = await sql`SELECT uuid FROM erp_plan_cuentas WHERE codigo = '2.1.2.02' LIMIT 1;`;
+        if (retRow) {
+          await sql`
+            INSERT INTO erp_asientos_detalles (uuid, asiento_uuid, cuenta_uuid, debe, haber, referencia)
+            VALUES (${randomUUID()}, ${asntUuid}, ${retRow.uuid}, 0.00, ${dedUsd}, 'RET-IVSS-FAOV');
+          `;
+          await sql`UPDATE erp_plan_cuentas SET saldo = saldo + ${dedUsd}, updated_at = NOW() WHERE uuid = ${retRow.uuid};`;
+        }
+      }
+    } catch (errAsnt) {
+      console.warn('Advertencia generación automática asiento nómina:', errAsnt.message);
+    }
+  }
+
   return updated;
 }

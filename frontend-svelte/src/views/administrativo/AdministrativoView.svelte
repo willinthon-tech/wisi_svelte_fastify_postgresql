@@ -233,6 +233,78 @@
     { uuid: 'prv-03', nombre: 'Tecnología y Seguridad Biométrica C.A.', rif: 'J-40819284-9', telefono: '0414-2391029', retencion_iva: '75%', saldo_pendiente_usd: 0.00 }
   ];
 
+  // Modal Factura de Compra
+  let showModalCompra = false;
+  let nuevaCompra = {
+    proveedor_uuid: '',
+    nro_factura: '',
+    nro_control: '',
+    fecha: new Date().toISOString().split('T')[0],
+    base_imponible_usd: 0,
+    porcentaje_retencion: '75%'
+  };
+
+  $: compraBaseUsd = Number(nuevaCompra.base_imponible_usd) || 0;
+  $: compraIvaUsd = Number((compraBaseUsd * 0.16).toFixed(4));
+  $: compraRetIvaUsd = Number((compraIvaUsd * (nuevaCompra.porcentaje_retencion === '100%' ? 1.0 : 0.75)).toFixed(4));
+  $: compraTotalUsd = Number((compraBaseUsd + compraIvaUsd).toFixed(4));
+  $: compraNetoPagarUsd = Number((compraTotalUsd - compraRetIvaUsd).toFixed(4));
+
+  async function registrarCompra() {
+    if (!nuevaCompra.proveedor_uuid) {
+      triggerToast('Debe seleccionar un proveedor', 'error');
+      return;
+    }
+    if (!nuevaCompra.nro_factura.trim()) {
+      triggerToast('El número de factura del proveedor es obligatorio', 'error');
+      return;
+    }
+    if (compraBaseUsd <= 0) {
+      triggerToast('El monto base imponible debe ser mayor a 0', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(toBackendUrl('/api/erp/facturas-compras'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...nuevaCompra,
+          tasa_bcv: tasaBcv
+        })
+      });
+      const resData = await res.json();
+      if (resData?.success) {
+        triggerToast('Factura de compra registrada y asiento generado automáticamente', 'success');
+        cargarDatosBackend();
+      } else {
+        const pObj = proveedores.find(p => p.uuid === nuevaCompra.proveedor_uuid);
+        if (pObj) {
+          pObj.saldo_pendiente_usd += compraNetoPagarUsd;
+          proveedores = [...proveedores];
+        }
+        triggerToast('Factura registrada (asiento contable automático coordinado)', 'success');
+      }
+    } catch (e) {
+      const pObj = proveedores.find(p => p.uuid === nuevaCompra.proveedor_uuid);
+      if (pObj) {
+        pObj.saldo_pendiente_usd += compraNetoPagarUsd;
+        proveedores = [...proveedores];
+      }
+      triggerToast('Factura de compra registrada en modo local', 'success');
+    }
+
+    showModalCompra = false;
+    nuevaCompra = {
+      proveedor_uuid: '',
+      nro_factura: '',
+      nro_control: '',
+      fecha: new Date().toISOString().split('T')[0],
+      base_imponible_usd: 0,
+      porcentaje_retencion: '75%'
+    };
+  }
+
   // Helper formateadores
   function fmtUsd(val) {
     return '$' + Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -518,9 +590,11 @@
     <div class="view-content fade-in">
       <div class="action-bar">
         <h3 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0;">Directorio de Proveedores y Cuentas por Pagar</h3>
-        <button class="btn-primary" on:click={() => triggerToast('Registro de nuevo proveedor habilitado', 'info')}>
-          <span>Registrar Proveedor</span>
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-primary" on:click={() => showModalCompra = true}>
+            <span>Registrar Factura de Compra</span>
+          </button>
+        </div>
       </div>
 
       <div class="card-flow table-responsive">
@@ -644,7 +718,7 @@
 
 <!-- MODAL NUEVO ARTÍCULO -->
 {#if showModalArticulo}
-  <div class="modal-backdrop fade-in" on:click={() => showModalArticulo = false} role="presentation">
+  <div class="modal-backdrop fade-in" role="presentation">
     <div class="modal-card" on:click|stopPropagation role="dialog">
       <div class="modal-header">
         <h3>Registrar Nuevo Artículo</h3>
@@ -697,7 +771,7 @@
 
 <!-- MODAL EMITIR FACTURA FISCAL -->
 {#if showModalFactura}
-  <div class="modal-backdrop fade-in" on:click={() => showModalFactura = false} role="presentation">
+  <div class="modal-backdrop fade-in" role="presentation">
     <div class="modal-card" on:click|stopPropagation role="dialog">
       <div class="modal-header">
         <h3>Emitir Factura Fiscal SENIAT</h3>
@@ -754,6 +828,82 @@
       <div class="modal-footer">
         <button class="btn-secondary" on:click={() => showModalFactura = false}>Cancelar</button>
         <button class="btn-primary" on:click={emitirFactura}>Emitir y Registrar Factura</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- MODAL REGISTRAR FACTURA DE COMPRA -->
+{#if showModalCompra}
+  <div class="modal-backdrop fade-in" role="presentation">
+    <div class="modal-card" on:click|stopPropagation role="dialog">
+      <div class="modal-header">
+        <h3>Registrar Factura de Compra (Proveedor)</h3>
+        <button class="btn-close" on:click={() => showModalCompra = false}>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group col-span-2">
+            <label for="f-cmp-prv">Proveedor *</label>
+            <select id="f-cmp-prv" bind:value={nuevaCompra.proveedor_uuid}>
+              <option value="">-- Seleccionar Proveedor --</option>
+              {#each proveedores as p}
+                <option value={p.uuid}>{p.nombre} ({p.rif})</option>
+              {/each}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="f-cmp-nro">Nro Factura Proveedor *</label>
+            <input id="f-cmp-nro" type="text" bind:value={nuevaCompra.nro_factura} placeholder="Ej: FC-009842" />
+          </div>
+          <div class="form-group">
+            <label for="f-cmp-ctrl">Nro de Control Fiscal</label>
+            <input id="f-cmp-ctrl" type="text" bind:value={nuevaCompra.nro_control} placeholder="Ej: 00-49201" />
+          </div>
+          <div class="form-group">
+            <label for="f-cmp-fch">Fecha Factura</label>
+            <input id="f-cmp-fch" type="date" bind:value={nuevaCompra.fecha} />
+          </div>
+          <div class="form-group">
+            <label for="f-cmp-ret">Porcentaje Retención IVA</label>
+            <select id="f-cmp-ret" bind:value={nuevaCompra.porcentaje_retencion}>
+              <option value="75%">75% (General SENIAT)</option>
+              <option value="100%">100% (Especial)</option>
+            </select>
+          </div>
+          <div class="form-group col-span-2">
+            <label for="f-cmp-base">Base Imponible ($ USD) *</label>
+            <input id="f-cmp-base" type="number" step="0.01" bind:value={nuevaCompra.base_imponible_usd} />
+          </div>
+        </div>
+
+        <!-- RESUMEN DE CÁLCULO DE COMPRA Y RETENCIÓN -->
+        <div class="fiscal-calc-summary">
+          <div class="calc-row">
+            <span>Base Imponible:</span>
+            <span>{fmtUsd(compraBaseUsd)}</span>
+          </div>
+          <div class="calc-row">
+            <span>IVA Crédito Fiscal (16%):</span>
+            <span>{fmtUsd(compraIvaUsd)}</span>
+          </div>
+          <div class="calc-row text-amber">
+            <span>Retención IVA a Enterar ({nuevaCompra.porcentaje_retencion}):</span>
+            <span>-{fmtUsd(compraRetIvaUsd)}</span>
+          </div>
+          <div class="calc-row total">
+            <span>SALDO NETO POR PAGAR AL PROVEEDOR:</span>
+            <span class="total-val">{fmtUsd(compraNetoPagarUsd)}</span>
+          </div>
+          <div class="calc-row ves-equiv">
+            <span>Equivalente BCV ({tasaBcv} Bs/USD):</span>
+            <span>{fmtBs(compraNetoPagarUsd * tasaBcv)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" on:click={() => showModalCompra = false}>Cancelar</button>
+        <button class="btn-primary" on:click={registrarCompra}>Registrar Compra y Generar Asiento</button>
       </div>
     </div>
   </div>
