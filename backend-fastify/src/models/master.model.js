@@ -7843,6 +7843,23 @@ export async function createMaquinaModel(data) {
   }
 }
 
+export async function createMaquinasBatchModel(items = []) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { success: true, count: 0, data: [], errors: [] };
+  }
+  const created = [];
+  const errors = [];
+  for (const itemData of items) {
+    try {
+      const res = await createMaquinaModel(itemData);
+      created.push(res);
+    } catch (err) {
+      errors.push({ nombre: itemData.nombre, serial: itemData.serial, error: err.message });
+    }
+  }
+  return { success: true, count: created.length, data: created, errors };
+}
+
 export async function updateMaquinaModel(id, data) {
   if (!id) throw new Error('ID inválido');
   const targetUuid = String(id).trim();

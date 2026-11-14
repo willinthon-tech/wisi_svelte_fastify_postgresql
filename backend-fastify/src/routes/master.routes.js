@@ -31,7 +31,7 @@ import {
   getLegal, createLegal, updateLegal, deleteLegal,
   getExcepciones, createExcepcion, updateExcepcion, deleteExcepcion,
   getFechasPatrias, createFechaPatria, updateFechaPatria, deleteFechaPatria,
-  getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, updateMaquina, deleteMaquina,
+  getMaquinas, getMaquinasFilterOptions, getMaquinaById, createMaquina, createMaquinasBatch, updateMaquina, deleteMaquina,
   saveMaquinasReporte, getMaquinasReporte,
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
@@ -542,6 +542,8 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/api/master/maquinas', getMaquinas);
   fastify.get('/master/maquinas/filter-options', getMaquinasFilterOptions);
   fastify.get('/api/master/maquinas/filter-options', getMaquinasFilterOptions);
+  fastify.post('/master/maquinas/batch', createMaquinasBatch);
+  fastify.post('/api/master/maquinas/batch', createMaquinasBatch);
   fastify.get('/master/maquinas/:id', getMaquinaById);
   fastify.get('/api/master/maquinas/:id', getMaquinaById);
   fastify.post('/master/maquinas', createMaquina);

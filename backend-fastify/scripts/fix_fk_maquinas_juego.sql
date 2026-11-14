@@ -32,3 +32,4 @@ BEGIN
 
   RAISE NOTICE 'fk_maquinas_juego_uuid corregida exitosamente apuntando a juegos_maquinas(uuid).';
 END $$;
+

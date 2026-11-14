@@ -53,3 +53,6 @@ export function closeDeleteModalUI() {
 
 export const globalCreateModalTriggerStore = writable(0);
 export function triggerGlobalCreateModal() { globalCreateModalTriggerStore.update(n => n + 1); }
+
+export const globalBatchCreateModalTriggerStore = writable(0);
+export function triggerGlobalBatchCreateModal() { globalBatchCreateModalTriggerStore.update(n => n + 1); }

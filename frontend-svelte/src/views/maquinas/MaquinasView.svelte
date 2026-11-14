@@ -22,7 +22,7 @@
 </script>
 
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
   import { 
@@ -42,7 +42,7 @@
   import { userSalasStore as masterUserSalasStore } from '../../controllers/master.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { getLocalItems, upsertLocalItem, deleteLocalItem, queueOutboxAction, generateSafeUuid } from '../../services/localDb.service.js';
-  import { triggerToast } from '../../controllers/ui.store.js';
+  import { triggerToast, globalBatchCreateModalTriggerStore } from '../../controllers/ui.store.js';
   import { navigateToRoute } from '../../controllers/router.store.js';
   import { toBackendUrl } from '../../config/api.config.js';
 
@@ -843,6 +843,261 @@
     })();
   }
 
+  // --- REGISTRO MASIVO DE MÁQUINAS ---
+  let isBatchModalOpen = false;
+  let isBatchSaving = false;
+  let batchDraft = {
+    puestos: 1,
+    sala_uuid: '',
+    juego_uuid: '',
+    estado_uuid: '',
+    sociedad_uuid: '',
+    valor_uuid: '',
+    modelo_uuid: '',
+    tipo_uuid: '',
+    modo_uuid: '',
+    legal_uuid: '',
+    rango_uuid: '',
+    nombres: '',
+    serial: 'N/A'
+  };
+
+  $: detectedBatchNames = (batchDraft.nombres || '')
+    .split(/[,;\n]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  function openBatchModal() {
+    batchDraft = {
+      puestos: 1,
+      sala_uuid: defaultSalaId || (userSalasForCreate[0]?.id || ''),
+      juego_uuid: '',
+      estado_uuid: '',
+      sociedad_uuid: '',
+      valor_uuid: '',
+      modelo_uuid: '',
+      tipo_uuid: '',
+      modo_uuid: '',
+      legal_uuid: '',
+      rango_uuid: '',
+      nombres: '',
+      serial: 'N/A'
+    };
+    isBatchModalOpen = true;
+  }
+
+  function closeBatchModal() {
+    isBatchModalOpen = false;
+  }
+
+  // Escuchar trigger de Registro Masivo desde la barra superior
+  let lastBatchTriggerVal = null;
+  const unsubBatch = globalBatchCreateModalTriggerStore.subscribe((val) => {
+    if (lastBatchTriggerVal === null) {
+      lastBatchTriggerVal = val;
+      return;
+    }
+    if (val > lastBatchTriggerVal) {
+      lastBatchTriggerVal = val;
+      openBatchModal();
+    }
+  });
+
+  onDestroy(() => {
+    if (unsubBatch) unsubBatch();
+  });
+
+  async function submitBatchModal() {
+    if (detectedBatchNames.length === 0) {
+      triggerToast('Debe ingresar al menos un número o nombre de máquina separado por coma', 'warning');
+      return;
+    }
+    if (!batchDraft.sala_uuid) {
+      triggerToast('Debe seleccionar una sala asignada', 'warning');
+      return;
+    }
+
+    isBatchSaving = true;
+
+    const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal', 'rango'];
+    const sanitizedBatch = { ...batchDraft };
+    fkMap.forEach(f => {
+      const val = sanitizedBatch[`${f}_uuid`];
+      if (!val || val === '' || val === 'null' || val === 'undefined') {
+        sanitizedBatch[`${f}_uuid`] = null;
+        sanitizedBatch[`${f}_id`] = null;
+      } else {
+        sanitizedBatch[`${f}_id`] = val;
+      }
+    });
+
+    // Hydrated names
+    let salaNombre = '';
+    if (sanitizedBatch.sala_uuid) {
+      const match = userSalasForCreate.find(s => String(s.uuid || s.id) === String(sanitizedBatch.sala_uuid));
+      if (match) salaNombre = match.nombre;
+    }
+    let juegoNombre = '';
+    if (sanitizedBatch.juego_uuid) {
+      const match = juegosOptions.find(j => String(j.uuid || j.id) === String(sanitizedBatch.juego_uuid));
+      if (match && match.uuid) juegoNombre = match.nombre;
+      else sanitizedBatch.juego_uuid = null;
+    }
+    let estadoNombre = '';
+    if (sanitizedBatch.estado_uuid) {
+      const match = estadosOptions.find(e => String(e.uuid || e.id) === String(sanitizedBatch.estado_uuid));
+      if (match) estadoNombre = match.nombre;
+    }
+    let sociedadNombre = '';
+    if (sanitizedBatch.sociedad_uuid) {
+      const match = sociedadesOptions.find(s => String(s.uuid || s.id) === String(sanitizedBatch.sociedad_uuid));
+      if (match) sociedadNombre = match.nombre;
+    }
+    let valorNombre = '';
+    if (sanitizedBatch.valor_uuid) {
+      const match = valoresOptions.find(v => String(v.uuid || v.id) === String(sanitizedBatch.valor_uuid));
+      if (match) valorNombre = match.nombre;
+    }
+    let modeloNombre = '';
+    if (sanitizedBatch.modelo_uuid) {
+      const match = modelosForCreate.find(m => String(m.uuid || m.id) === String(sanitizedBatch.modelo_uuid));
+      if (match) modeloNombre = match.nombre;
+    }
+    let tipoNombre = '';
+    if (sanitizedBatch.tipo_uuid) {
+      const match = tiposOptions.find(t => String(t.uuid || t.id) === String(sanitizedBatch.tipo_uuid));
+      if (match) tipoNombre = match.nombre;
+    }
+    let modoNombre = '';
+    if (sanitizedBatch.modo_uuid) {
+      const match = modosOptions.find(m => String(m.uuid || m.id) === String(sanitizedBatch.modo_uuid));
+      if (match) modoNombre = match.nombre;
+    }
+    let legalNombre = '';
+    if (sanitizedBatch.legal_uuid) {
+      const match = legalesOptions.find(l => String(l.uuid || l.id) === String(sanitizedBatch.legal_uuid));
+      if (match) legalNombre = match.nombre;
+    }
+    let rangoNombre = '';
+    if (sanitizedBatch.rango_uuid) {
+      const match = rangosOptions.find(r => String(r.uuid || r.id) === String(sanitizedBatch.rango_uuid));
+      if (match) rangoNombre = match.nombre;
+    }
+
+    const puestosVal = Number(sanitizedBatch.puestos) > 0 ? Number(sanitizedBatch.puestos) : 1;
+    const serialVal = (sanitizedBatch.serial && sanitizedBatch.serial.trim()) ? sanitizedBatch.serial.trim() : 'N/A';
+
+    const localBatchItems = [];
+    for (const name of detectedBatchNames) {
+      const newUuid = generateSafeUuid();
+      const localItem = {
+        uuid: newUuid,
+        id: newUuid,
+        nombre: name,
+        serial: serialVal,
+        puestos: puestosVal,
+        sala_uuid: sanitizedBatch.sala_uuid,
+        sala_id: sanitizedBatch.sala_uuid,
+        sala_nombre: salaNombre,
+        juego_uuid: sanitizedBatch.juego_uuid,
+        juego_id: sanitizedBatch.juego_uuid,
+        juego_nombre: juegoNombre,
+        estado_uuid: sanitizedBatch.estado_uuid,
+        estado_id: sanitizedBatch.estado_uuid,
+        estado_nombre: estadoNombre,
+        sociedad_uuid: sanitizedBatch.sociedad_uuid,
+        sociedad_id: sanitizedBatch.sociedad_uuid,
+        sociedad_nombre: sociedadNombre,
+        valor_uuid: sanitizedBatch.valor_uuid,
+        valor_id: sanitizedBatch.valor_uuid,
+        valor_nombre: valorNombre,
+        modelo_uuid: sanitizedBatch.modelo_uuid,
+        modelo_id: sanitizedBatch.modelo_uuid,
+        modelo_nombre: modeloNombre,
+        tipo_uuid: sanitizedBatch.tipo_uuid,
+        tipo_id: sanitizedBatch.tipo_uuid,
+        tipo_nombre: tipoNombre,
+        modo_uuid: sanitizedBatch.modo_uuid,
+        modo_id: sanitizedBatch.modo_uuid,
+        modo_nombre: modoNombre,
+        legal_uuid: sanitizedBatch.legal_uuid,
+        legal_id: sanitizedBatch.legal_uuid,
+        legal_nombre: legalNombre,
+        rango_uuid: sanitizedBatch.rango_uuid,
+        rango_id: sanitizedBatch.rango_uuid,
+        rango_nombre: rangoNombre,
+        created_at: new Date().toISOString()
+      };
+      localBatchItems.push(localItem);
+    }
+
+    // 1. Inmediatamente actualizar memoria reactiva (0ms)
+    items = [...localBatchItems, ...items];
+    totalCount += localBatchItems.length;
+    isBatchModalOpen = false;
+    isBatchSaving = false;
+    triggerToast(`Registrando ${localBatchItems.length} máquinas en lote...`, 'success');
+
+    // 2. Persistencia local inmediata en IndexedDB (<10ms)
+    for (const it of localBatchItems) {
+      upsertLocalItem('maquinas', it).catch(() => {});
+    }
+
+    // 3. Sincronización en lote con backend
+    (async () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        for (const it of localBatchItems) {
+          await queueOutboxAction({
+            entity: 'maquinas',
+            action: 'create',
+            endpoint: '/api/master/maquinas',
+            method: 'POST',
+            payload: it,
+            uuid: it.uuid
+          });
+        }
+        return;
+      }
+
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 20000);
+        const res = await fetch('/api/master/maquinas/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ maquinas: localBatchItems }),
+          signal: controller.signal
+        });
+        clearTimeout(tId);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json && json.success) {
+          triggerToast(`¡${localBatchItems.length} máquinas guardadas en servidor con éxito!`, 'success');
+          if (Array.isArray(json.data)) {
+            for (const sIt of json.data) {
+              await upsertLocalItem('maquinas', sIt);
+            }
+          }
+          await loadServerData();
+        } else {
+          throw new Error(json?.error || 'Error al guardar máquinas en lote');
+        }
+      } catch (err) {
+        console.warn('[LocalDb] Error en batch endpoint, encolando en outbox individualmente:', err.message);
+        for (const it of localBatchItems) {
+          await queueOutboxAction({
+            entity: 'maquinas',
+            action: 'create',
+            endpoint: '/api/master/maquinas',
+            method: 'POST',
+            payload: it,
+            uuid: it.uuid
+          });
+        }
+      }
+    })();
+  }
+
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
     const targetUuid = id;
@@ -1436,6 +1691,297 @@
     </div>
   </div>
 </PaginatedDataTable>
+
+<!-- MODAL REGISTRO MASIVO DE MÁQUINAS -->
+{#if isBatchModalOpen}
+  <div 
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s ease;"
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div 
+      style="background: #ffffff; border-radius: 14px; max-width: 580px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4); border: 1px solid #e2e8f0; color: #0f172a;"
+      on:click|stopPropagation
+    >
+      <!-- Modal Header -->
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+          <span style="color: #ef4444; font-size: 18px;">➕</span> Registro Masivo de Máquinas
+        </h3>
+        <button 
+          type="button" 
+          on:click={closeBatchModal}
+          style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid #cbd5e1; background: #ffffff; color: #64748b; font-size: 16px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal Body Form -->
+      <form on:submit|preventDefault={submitBatchModal} style="padding: 20px; overflow-y: auto; flex: 1;">
+        
+        <!-- Fila 1: Puestos y Sala Asignada -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <label for="batch_puestos" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              PUESTOS *
+            </label>
+            <input 
+              id="batch_puestos"
+              type="number" 
+              min="1" 
+              bind:value={batchDraft.puestos}
+              required 
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;" 
+            />
+          </div>
+          <div>
+            <label for="batch_sala" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              SALA ASIGNADA *
+            </label>
+            <select 
+              id="batch_sala"
+              bind:value={batchDraft.sala_uuid}
+              required
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              {#if !batchDraft.sala_uuid}
+                <option value="">-- Seleccionar Sala --</option>
+              {/if}
+              {#each userSalasForCreate as s}
+                <option value={s.id}>{s.nombre || s.nombre_comercial}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 2: Juego y Estado -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <label for="batch_juego" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              JUEGO
+            </label>
+            <select 
+              id="batch_juego"
+              bind:value={batchDraft.juego_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              {#each juegosOptions as j}
+                <option value={j.id}>{j.nombre}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
+            <label for="batch_estado" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              ESTADO
+            </label>
+            <select 
+              id="batch_estado"
+              bind:value={batchDraft.estado_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              <option value="">-- Seleccionar Estado --</option>
+              {#each estadosOptions as e}
+                <option value={e.id}>{e.nombre}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 3: Sociedad y Valor -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <label for="batch_sociedad" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              SOCIEDAD
+            </label>
+            <select 
+              id="batch_sociedad"
+              bind:value={batchDraft.sociedad_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              <option value="">-- Seleccionar Sociedad --</option>
+              {#each sociedadesOptions as s}
+                <option value={s.id}>{s.nombre}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
+            <label for="batch_valor" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              VALOR
+            </label>
+            <select 
+              id="batch_valor"
+              bind:value={batchDraft.valor_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              <option value="">-- Seleccionar Valor --</option>
+              {#each valoresOptions as v}
+                <option value={v.id}>{v.nombre}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 4: Modelo y Tipo -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <label for="batch_modelo" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              MODELO
+            </label>
+            <select 
+              id="batch_modelo"
+              bind:value={batchDraft.modelo_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              <option value="">-- Seleccionar Modelo --</option>
+              {#each modelosForCreate as m}
+                <option value={m.id}>{m.nombre}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
+            <label for="batch_tipo" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              TIPO
+            </label>
+            <select 
+              id="batch_tipo"
+              bind:value={batchDraft.tipo_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              <option value="">-- Seleccionar Tipo --</option>
+              {#each tiposOptions as t}
+                <option value={t.id}>{t.nombre}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 5: Modo y Legal -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <label for="batch_modo" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              MODO
+            </label>
+            <select 
+              id="batch_modo"
+              bind:value={batchDraft.modo_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              <option value="">-- Seleccionar Modo --</option>
+              {#each modosOptions as mo}
+                <option value={mo.id}>{mo.nombre}</option>
+              {/each}
+            </select>
+          </div>
+          <div>
+            <label for="batch_legal" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              LEGAL
+            </label>
+            <select 
+              id="batch_legal"
+              bind:value={batchDraft.legal_uuid}
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            >
+              <option value="">-- Seleccionar Legal --</option>
+              {#each legalesOptions as l}
+                <option value={l.id}>{l.nombre}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 6: Rango -->
+        <div style="margin-bottom: 16px;">
+          <label for="batch_rango" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+            RANGO
+          </label>
+          <select 
+            id="batch_rango"
+            bind:value={batchDraft.rango_uuid}
+            style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+          >
+            <option value="">-- Seleccionar Rango --</option>
+            {#each rangosOptions as r}
+              <option value={r.id}>{r.nombre}</option>
+            {/each}
+          </select>
+        </div>
+
+        <!-- Fila 7: Nombres de Máquinas (Separados por coma) y Serial -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label for="batch_nombres" style="display: block; font-size: 11.5px; font-weight: 800; color: #2563eb; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              NOMBRES DE MÁQUINAS (POR COMA) *
+            </label>
+            <input 
+              id="batch_nombres"
+              type="text"
+              bind:value={batchDraft.nombres}
+              placeholder="Ej. 01, 02, 04, 05"
+              required
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #3b82f6; font-size: 13.5px; color: #0f172a; font-weight: 700; outline: none; background: #eff6ff; box-sizing: border-box;"
+            />
+          </div>
+          <div>
+            <label for="batch_serial" style="display: block; font-size: 11.5px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">
+              SERIAL DE MÁQUINA
+            </label>
+            <input 
+              id="batch_serial"
+              type="text"
+              bind:value={batchDraft.serial}
+              placeholder="Ej. SN-89234812 (o N/A)"
+              style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 13.5px; color: #0f172a; font-weight: 600; outline: none; background: #ffffff; box-sizing: border-box;"
+            />
+          </div>
+        </div>
+
+        <!-- Live Preview de Máquinas Detectadas -->
+        {#if detectedBatchNames.length > 0}
+          <div style="background: #f1f5f9; border: 1px dashed #94a3b8; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
+            <div style="font-size: 12px; font-weight: 800; color: #334155; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+              <span>Máquinas a registrar ({detectedBatchNames.length}):</span>
+              <span style="color: #16a34a; font-weight: 700; font-size: 11px;">✓ Listo para procesar</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto;">
+              {#each detectedBatchNames as name}
+                <span style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 700; color: #0f172a;">
+                  {name}
+                </span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Modal Footer -->
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding-top: 16px; border-top: 1px solid #e2e8f0; margin-top: 8px;">
+          <button 
+            type="button" 
+            on:click={closeBatchModal}
+            disabled={isBatchSaving}
+            style="padding: 10px 20px; border-radius: 8px; border: 1.5px solid #cbd5e1; background: #ffffff; color: #475569; font-size: 13.5px; font-weight: 700; cursor: pointer;"
+          >
+            Cancelar
+          </button>
+          <button 
+            type="submit"
+            disabled={isBatchSaving || detectedBatchNames.length === 0}
+            style="padding: 10px 24px; border-radius: 8px; border: none; background: #2563eb; color: #ffffff; font-size: 13.5px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);"
+          >
+            {#if isBatchSaving}
+              <span>Guardando...</span>
+            {:else}
+              <span>Guardar {detectedBatchNames.length > 0 ? `(${detectedBatchNames.length} Máquinas)` : ''}</span>
+            {/if}
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+{/if}
 
 <style>
   .maquinas-filters-container {

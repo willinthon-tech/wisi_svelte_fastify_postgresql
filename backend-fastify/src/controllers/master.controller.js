@@ -31,7 +31,7 @@ import {
   getLegalModel, createLegalModel, updateLegalModel, deleteLegalModel,
   getExcepcionesModel, createExcepcionModel, updateExcepcionModel, deleteExcepcionModel,
   getFechasPatriasModel, createFechaPatriaModel, updateFechaPatriaModel, deleteFechaPatriaModel,
-  getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel,
+  getMaquinasModel, getMaquinaByIdModel, createMaquinaModel, createMaquinasBatchModel, updateMaquinaModel, deleteMaquinaModel, getMaquinasFilterOptionsModel,
   saveMaquinasReporteModel, getMaquinasReporteByUuidModel,
   getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
   getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel,
@@ -1829,6 +1829,20 @@ export async function createMaquina(request, reply) {
   try {
     const item = await createMaquinaModel(request.body);
     return reply.send({ success: true, data: item });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function createMaquinasBatch(request, reply) {
+  try {
+    const body = parseBody(request.body);
+    const list = Array.isArray(body) ? body : (Array.isArray(body?.maquinas) ? body.maquinas : [body]);
+    const result = await createMaquinasBatchModel(list);
+    for (const item of (result.data || [])) {
+      try { broadcastMasterSync('maquinas', 'create', item); } catch (e) {}
+    }
+    return reply.status(201).send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
   }

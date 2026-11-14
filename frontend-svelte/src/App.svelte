@@ -146,6 +146,7 @@
     toastVisibleStore,
     triggerToast,
     openCreateModalUI,
+    triggerGlobalBatchCreateModal,
     openEditModalUI,
     closeModalUI,
     openDeleteModalUI,
@@ -1029,6 +1030,21 @@
               {/if}
 
               {#if !isBuiltInTab($currentRouteStore) && !$currentRouteStore.startsWith('herramientas') && $currentRouteStore !== 'otros/herramientas' && $currentRoutePermissionsStore.canAdd}
+                {#if $currentRouteStore === 'configuracion/maquinas' || $currentRouteStore === 'maquinas' || $currentRouteStore === 'maquinas/maquinas'}
+                  <button
+                    on:click={triggerGlobalBatchCreateModal}
+                    type="button"
+                    class="btn-flow-batch-red"
+                    style="padding: 10px 18px; font-weight: 800; font-size: 13.5px; border-radius: 8px; background: #ffffff; color: #ef4444; border: 1.5px solid #ef4444; margin-right: 10px; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 1px 3px rgba(239, 68, 68, 0.1);"
+                    title="Registrar múltiples máquinas simultáneamente separadas por coma"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
+                    REGISTRO MASIVO
+                  </button>
+                {/if}
                 <button
                   on:click={openCreateModalUI}
                   type="button"
