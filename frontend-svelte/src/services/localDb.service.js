@@ -5,7 +5,7 @@ export const pendingSyncCountStore = writable(0);
 export const isLocalDbReadyStore = writable(false);
 
 const DB_NAME = 'wisi_local_db_v1';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 /**
  * Generador de UUID v4 seguro y compatible con cualquier entorno:
@@ -75,6 +75,7 @@ export const LOCAL_STORES = [
   'libro_datos',
   'libro_drop_mesas',
   'libro_reporte',
+  'libro_conteo_maquinas',
   'record_libro_score_baccarat',
   'record_libro_score_baccarat_mesa',
   'attlogs',
@@ -160,6 +161,10 @@ function getItemKey(item) {
 export async function saveLocalItems(storeName, items = []) {
   const db = await initLocalDb();
   if (!db || !Array.isArray(items) || items.length === 0) return;
+  if (!db.objectStoreNames.contains(storeName)) {
+    console.warn(`[LocalDb] Object store '${storeName}' no existe en IndexedDB.`);
+    return;
+  }
 
   return new Promise((resolve, reject) => {
     try {
@@ -192,6 +197,10 @@ export async function saveLocalItems(storeName, items = []) {
 export async function replaceLocalItems(storeName, items = []) {
   const db = await initLocalDb();
   if (!db) return;
+  if (!db.objectStoreNames.contains(storeName)) {
+    console.warn(`[LocalDb] Object store '${storeName}' no existe en IndexedDB.`);
+    return;
+  }
 
   return new Promise((resolve, reject) => {
     try {
@@ -226,6 +235,10 @@ export async function replaceLocalItems(storeName, items = []) {
 export async function getLocalItems(storeName, filterFn = null, sortBy = 'created_at', sortDir = 'desc') {
   const db = await initLocalDb();
   if (!db) return [];
+  if (!db.objectStoreNames.contains(storeName)) {
+    console.warn(`[LocalDb] Object store '${storeName}' no existe en IndexedDB.`);
+    return [];
+  }
 
   return new Promise((resolve, reject) => {
     try {
@@ -292,7 +305,11 @@ export async function getLocalItems(storeName, filterFn = null, sortBy = 'create
  */
 export async function upsertLocalItem(storeName, item) {
   const db = await initLocalDb();
-  if (!db || !item) return;
+  if (!db || !item) return null;
+  if (!db.objectStoreNames.contains(storeName)) {
+    console.warn(`[LocalDb] Object store '${storeName}' no existe en IndexedDB.`);
+    return null;
+  }
 
   return new Promise((resolve, reject) => {
     try {
@@ -320,6 +337,10 @@ export async function upsertLocalItem(storeName, item) {
 export async function deleteLocalItem(storeName, idOrUuid) {
   const db = await initLocalDb();
   if (!db || idOrUuid === undefined || idOrUuid === null) return;
+  if (!db.objectStoreNames.contains(storeName)) {
+    console.warn(`[LocalDb] Object store '${storeName}' no existe en IndexedDB.`);
+    return;
+  }
 
   return new Promise((resolve, reject) => {
     try {

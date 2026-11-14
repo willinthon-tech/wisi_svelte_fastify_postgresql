@@ -544,7 +544,11 @@
     limpiarCampos();
 
     // 3. PERSISTENCIA EN INDEXEDDB LOCAL (<5ms)
-    await upsertLocalItem('libro_conteo_maquinas', newRecord);
+    try {
+      await upsertLocalItem('libro_conteo_maquinas', newRecord);
+    } catch (dbErr) {
+      console.warn('[LocalDb] Error guardando conteo local en IndexedDB:', dbErr);
+    }
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
     const postEndpoint = toBackendUrl(multisalaUuid
@@ -625,7 +629,11 @@
     triggerToast('Conteo eliminado correctamente', 'info');
 
     // 2. Eliminación en base de datos local IndexedDB (<5ms)
-    await deleteLocalItem('libro_conteo_maquinas', recordUuid);
+    try {
+      await deleteLocalItem('libro_conteo_maquinas', recordUuid);
+    } catch (delDbErr) {
+      console.warn('[LocalDb] Error eliminando conteo local en IndexedDB:', delDbErr);
+    }
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
     const delEndpoint = toBackendUrl(`/api/master/libros/${lId}/conteo-maquinas/${recordUuid}`);
@@ -738,7 +746,11 @@
     triggerToast('Conteo actualizado exitosamente', 'success');
 
     // 2. Guardado en IndexedDB local
-    await upsertLocalItem('libro_conteo_maquinas', payload);
+    try {
+      await upsertLocalItem('libro_conteo_maquinas', payload);
+    } catch (e) {
+      console.warn('[handleGuardarEdicion] Error guardando local:', e);
+    }
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
     const putEndpoint = toBackendUrl(`/api/master/libros/${lId}/conteo-maquinas/${targetUuid}`);
