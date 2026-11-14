@@ -36,7 +36,7 @@ import {
   getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
   getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel,
   getLibroDropMesasModel, createLibroDropMesaModel, deleteLibroDropMesaModel,
-  getLibroConteoMaquinasModel, createLibroConteoMaquinaModel, deleteLibroConteoMaquinaModel,
+  getLibroConteoMaquinasModel, createLibroConteoMaquinaModel, updateLibroConteoMaquinaModel, deleteLibroConteoMaquinaModel,
   getLibroControlLlavesModel, createLibroControlLlavesModel, updateLibroControlLlavesHorasModel, deleteLibroControlLlavesModel,
   getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel,
   getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel,
@@ -2085,6 +2085,17 @@ export async function createLibroConteoMaquina(request, reply) {
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroConteoMaquinaModel(data);
     return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function updateLibroConteoMaquina(request, reply) {
+  try {
+    const { id, conteoId } = request.params;
+    const body = parseBody(request.body);
+    const result = await updateLibroConteoMaquinaModel(conteoId, id, body);
+    return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
   }

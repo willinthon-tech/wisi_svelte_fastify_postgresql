@@ -586,6 +586,7 @@
         if (res.ok) {
           const json = await res.json();
           if (json?.data) {
+            records = records.map(r => (String(r.uuid || r.id) === String(newRecord.uuid) || String(r.maquina_uuid || r.maquina_id) === String(selectedMaquinaId)) ? { ...newRecord, ...json.data } : r);
             await upsertLocalItem('libro_conteo_maquinas', json.data);
           }
         } else {
@@ -740,6 +741,7 @@
     await upsertLocalItem('libro_conteo_maquinas', payload);
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const putEndpoint = `/api/master/libros/${lId}/conteo-maquinas/${targetUuid}`;
     const postEndpoint = multisalaUuid
       ? `/api/master/libros/${lId}/conteo-maquinas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
       : `/api/master/libros/${lId}/conteo-maquinas`;
@@ -747,9 +749,9 @@
     if (isOffline) {
       await queueOutboxAction({
         entity: 'libro_conteo_maquinas',
-        action: 'create',
-        endpoint: postEndpoint,
-        method: 'POST',
+        action: 'update',
+        endpoint: putEndpoint,
+        method: 'PUT',
         payload: payload,
         uuid: targetUuid
       });
@@ -761,17 +763,26 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(postEndpoint, {
-          method: 'POST',
+        let res = await fetch(putEndpoint, {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
           signal: controller.signal
         });
         clearTimeout(timeoutId);
 
+        if (!res.ok) {
+          res = await fetch(postEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
         if (res.ok) {
           const json = await res.json();
           if (json?.data) {
+            records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? { ...payload, ...json.data } : r);
             await upsertLocalItem('libro_conteo_maquinas', json.data);
           }
         }
@@ -1077,7 +1088,7 @@
                 <th class="th-denom">$ 5</th>
                 <th class="th-denom">$ 1</th>
                 <th class="th-total">Total</th>
-                {#if canDelete}
+                {#if canEdit || canDelete}
                   <th class="th-acciones">Acciones</th>
                 {/if}
               </tr>
@@ -1085,15 +1096,26 @@
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="10" class="td-empty">Cargando registros...</td>
+                  <td colspan={canEdit || canDelete ? 10 : 9} class="td-empty">Cargando registros...</td>
                 </tr>
               {:else if records.length === 0}
                 <tr>
-                  <td colspan="10" class="td-empty">No hay conteos de máquinas registrados en esta jornada.</td>
+                  <td colspan={canEdit || canDelete ? 10 : 9} class="td-empty">No hay conteos de máquinas registrados en esta jornada.</td>
                 </tr>
               {:else}
                 {#each records as record, index (record.uuid || record.id || index)}
-                  <tr>
+                  <tr 
+                    class="tr-record-item"
+                    title="Haga clic para editar en formulario o use los botones de acción"
+                    on:click={() => {
+                      const match = availableMaquinas.find(m => String(m.uuid || m.id) === String(record.maquina_uuid || record.maquina_id));
+                      if (match) {
+                        seleccionarMaquina(match);
+                      } else {
+                        abrirModalEditar(record);
+                      }
+                    }}
+                  >
                     <td class="td-center td-index">{index + 1}</td>
                     <td class="td-left td-maquina-cell">
                       <div class="maquina-info-box">
@@ -1110,17 +1132,29 @@
                     <td class="td-right td-total-cell font-bold">
                       ${formatMonto(record.total)}
                     </td>
-                    {#if canDelete}
-                      <td class="td-center td-acciones-cell">
+                    {#if canEdit || canDelete}
+                      <td class="td-center td-acciones-cell" on:click|stopPropagation>
                         <div class="acciones-btn-group">
-                          <button 
-                            type="button" 
-                            class="btn-action-delete"
-                            on:click={() => handleEliminar(record)}
-                            title="Eliminar conteo"
-                          >
-                            Eliminar
-                          </button>
+                          {#if canEdit}
+                            <button 
+                              type="button" 
+                              class="btn-action-edit"
+                              on:click={() => abrirModalEditar(record)}
+                              title="Editar conteo"
+                            >
+                              Editar
+                            </button>
+                          {/if}
+                          {#if canDelete}
+                            <button 
+                              type="button" 
+                              class="btn-action-delete"
+                              on:click={() => handleEliminar(record)}
+                              title="Eliminar conteo"
+                            >
+                              Eliminar
+                            </button>
+                          {/if}
                         </div>
                       </td>
                     {/if}
@@ -1917,6 +1951,15 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
+  }
+
+  .tr-record-item {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+
+  .tr-record-item:hover {
+    background-color: #f1f5f9;
   }
 
   .btn-action-edit {

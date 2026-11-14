@@ -685,7 +685,9 @@
         if (res.ok) {
           const json = await res.json();
           if (json?.data) {
-            await upsertLocalItem('libro_aportes', json.data);
+            const merged = { ...updatedOffline, ...json.data };
+            records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? merged : r);
+            await upsertLocalItem('libro_aportes', merged);
           }
         } else {
           throw new Error(`Server status ${res.status}`);
@@ -858,7 +860,9 @@
         if (res.ok) {
           const json = await res.json();
           if (json?.data) {
-            await upsertLocalItem('libro_aportes', json.data);
+            const merged = { ...updatedOffline, ...json.data };
+            records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? merged : r);
+            await upsertLocalItem('libro_aportes', merged);
           }
         } else {
           throw new Error(`Server status ${res.status}`);

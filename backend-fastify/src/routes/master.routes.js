@@ -36,7 +36,7 @@ import {
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
   getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
-  getLibroConteoMaquinas, createLibroConteoMaquina, deleteLibroConteoMaquina,
+  getLibroConteoMaquinas, createLibroConteoMaquina, updateLibroConteoMaquina, deleteLibroConteoMaquina,
   getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves,
   getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral,
   getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente,
@@ -277,6 +277,8 @@ export default async function masterRoutes(fastify, options) {
   fastify.get('/api/master/libros/:id/conteo-maquinas', getLibroConteoMaquinas);
   fastify.post('/master/libros/:id/conteo-maquinas', createLibroConteoMaquina);
   fastify.post('/api/master/libros/:id/conteo-maquinas', createLibroConteoMaquina);
+  fastify.put('/master/libros/:id/conteo-maquinas/:conteoId', updateLibroConteoMaquina);
+  fastify.put('/api/master/libros/:id/conteo-maquinas/:conteoId', updateLibroConteoMaquina);
   fastify.delete('/master/libros/:id/conteo-maquinas/:conteoId', deleteLibroConteoMaquina);
   fastify.delete('/api/master/libros/:id/conteo-maquinas/:conteoId', deleteLibroConteoMaquina);
 

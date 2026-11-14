@@ -295,16 +295,41 @@ export async function getSalasModel() {
 }
 
 export async function createSalaModel(data) {
+  let multisalasVal = '[]';
+  if (data.multisalas !== undefined && data.multisalas !== null) {
+    multisalasVal = typeof data.multisalas === 'string' ? data.multisalas : JSON.stringify(data.multisalas);
+  }
+  const activeVal = data.active !== undefined && data.active !== null ? Number(data.active) : 1;
+  const grupoUuid = data.grupo_uuid && isUuid(data.grupo_uuid) ? String(data.grupo_uuid).trim() : null;
+
   if (isPgConnected && sql) {
     const rows = await sql`
-      INSERT INTO salas (nombre, nombre_comercial, rif, ubicacion, correo, telefono)
-      VALUES (${data.nombre}, ${data.nombre_comercial}, ${data.rif}, ${data.ubicacion}, ${data.correo}, ${data.telefono})
+      INSERT INTO salas (
+        nombre, nombre_comercial, rif, ubicacion, correo, telefono,
+        multisalas, active, grupo_uuid
+      )
+      VALUES (
+        ${data.nombre}, 
+        ${data.nombre_comercial || null}, 
+        ${data.rif || null}, 
+        ${data.ubicacion || null}, 
+        ${data.correo || null}, 
+        ${data.telefono || null},
+        ${multisalasVal}::jsonb,
+        ${activeVal},
+        ${grupoUuid ? sql`${grupoUuid}::uuid` : sql`NULL`}
+      )
       RETURNING *, uuid AS id
     `;
     return rows[0];
   } else {
     const nextId = inMemoryData.salas.length > 0 ? Math.max(...inMemoryData.salas.map(s => s.id)) + 1 : 1;
-    const newSala = { id: nextId, uuid: `sala-${Date.now()}`, ...data };
+    const newSala = { 
+      id: nextId, 
+      uuid: crypto.randomUUID(), 
+      ...data,
+      multisalas: typeof data.multisalas === 'string' ? JSON.parse(data.multisalas) : (data.multisalas || [])
+    };
     inMemoryData.salas.unshift(newSala);
     return newSala;
   }
@@ -313,11 +338,35 @@ export async function createSalaModel(data) {
 export async function updateSalaModel(id, data) {
   if (!id) throw new Error('ID inválido');
   const isU = isUuid(id);
+
+  let multisalasVal = undefined;
+  if (data.multisalas !== undefined) {
+    if (data.multisalas === null) {
+      multisalasVal = '[]';
+    } else if (typeof data.multisalas === 'string') {
+      multisalasVal = data.multisalas;
+    } else {
+      multisalasVal = JSON.stringify(data.multisalas);
+    }
+  }
+
+  const activeVal = data.active !== undefined && data.active !== null ? Number(data.active) : undefined;
+  const grupoUuid = data.grupo_uuid !== undefined ? (data.grupo_uuid && isUuid(data.grupo_uuid) ? String(data.grupo_uuid).trim() : null) : undefined;
+
   if (isPgConnected && sql) {
     const rows = await sql`
       UPDATE salas
-      SET nombre = ${data.nombre}, nombre_comercial = ${data.nombre_comercial},
-          rif = ${data.rif}, ubicacion = ${data.ubicacion}, correo = ${data.correo}, telefono = ${data.telefono}, updated_at = CURRENT_TIMESTAMP
+      SET 
+        nombre = COALESCE(${data.nombre !== undefined ? data.nombre : null}, nombre),
+        nombre_comercial = ${data.nombre_comercial !== undefined ? data.nombre_comercial : sql`nombre_comercial`},
+        rif = ${data.rif !== undefined ? data.rif : sql`rif`},
+        ubicacion = ${data.ubicacion !== undefined ? data.ubicacion : sql`ubicacion`},
+        correo = ${data.correo !== undefined ? data.correo : sql`correo`},
+        telefono = ${data.telefono !== undefined ? data.telefono : sql`telefono`},
+        multisalas = ${multisalasVal !== undefined ? sql`${multisalasVal}::jsonb` : sql`multisalas`},
+        active = ${activeVal !== undefined ? activeVal : sql`active`},
+        grupo_uuid = ${grupoUuid !== undefined ? (grupoUuid ? sql`${grupoUuid}::uuid` : sql`NULL`) : sql`grupo_uuid`},
+        updated_at = CURRENT_TIMESTAMP
       WHERE ${isU ? sql`uuid = ${id}::uuid` : sql`uuid::text = ${String(id)}`}
       RETURNING *, uuid AS id
     `;
@@ -325,7 +374,14 @@ export async function updateSalaModel(id, data) {
   } else {
     const idx = inMemoryData.salas.findIndex(s => String(s.uuid) === String(id) || String(s.id) === String(id));
     if (idx !== -1) {
-      inMemoryData.salas[idx] = { ...inMemoryData.salas[idx], ...data };
+      inMemoryData.salas[idx] = { 
+        ...inMemoryData.salas[idx], 
+        ...data,
+        multisalas: data.multisalas !== undefined 
+          ? (typeof data.multisalas === 'string' ? JSON.parse(data.multisalas) : data.multisalas) 
+          : inMemoryData.salas[idx].multisalas,
+        updated_at: new Date().toISOString()
+      };
       return inMemoryData.salas[idx];
     }
     return null;
@@ -9126,6 +9182,112 @@ export async function createLibroConteoMaquinaModel(data) {
   };
 }
 
+export async function updateLibroConteoMaquinaModel(id, libroId, data) {
+  if (!id) throw new Error('ID de registro de conteo de máquinas inválido');
+  const targetUuid = String(id).trim();
+  if (!isUuid(targetUuid)) throw new Error('UUID inválido');
+
+  const rawLibro = libroId ? String(libroId).trim() : null;
+  const libroUuid = rawLibro && isUuid(rawLibro) ? rawLibro : null;
+
+  const b100 = data.denominacion_100 !== undefined ? Math.max(0, parseInt(data.denominacion_100 ?? data.b100 ?? 0, 10) || 0) : undefined;
+  const b50 = data.denominacion_50 !== undefined ? Math.max(0, parseInt(data.denominacion_50 ?? data.b50 ?? 0, 10) || 0) : undefined;
+  const b20 = data.denominacion_20 !== undefined ? Math.max(0, parseInt(data.denominacion_20 ?? data.b20 ?? 0, 10) || 0) : undefined;
+  const b10 = data.denominacion_10 !== undefined ? Math.max(0, parseInt(data.denominacion_10 ?? data.b10 ?? 0, 10) || 0) : undefined;
+  const b5 = data.denominacion_5 !== undefined ? Math.max(0, parseInt(data.denominacion_5 ?? data.b5 ?? 0, 10) || 0) : undefined;
+  const b1 = data.denominacion_1 !== undefined ? Math.max(0, parseInt(data.denominacion_1 ?? data.b1 ?? 0, 10) || 0) : undefined;
+
+  let total = data.total !== undefined ? Number(data.total) : undefined;
+  if (total === undefined && (b100 !== undefined || b50 !== undefined || b20 !== undefined || b10 !== undefined || b5 !== undefined || b1 !== undefined)) {
+    total = ((b100 || 0) * 100) + ((b50 || 0) * 50) + ((b20 || 0) * 20) + ((b10 || 0) * 10) + ((b5 || 0) * 5) + ((b1 || 0) * 1);
+  }
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_conteo_maquinas = inMemoryData.libro_conteo_maquinas || [];
+    const idx = inMemoryData.libro_conteo_maquinas.findIndex(d => String(d.uuid || d.id) === targetUuid);
+    if (idx !== -1) {
+      if (b100 !== undefined) { inMemoryData.libro_conteo_maquinas[idx].denominacion_100 = b100; inMemoryData.libro_conteo_maquinas[idx].b100 = b100; }
+      if (b50 !== undefined) { inMemoryData.libro_conteo_maquinas[idx].denominacion_50 = b50; inMemoryData.libro_conteo_maquinas[idx].b50 = b50; }
+      if (b20 !== undefined) { inMemoryData.libro_conteo_maquinas[idx].denominacion_20 = b20; inMemoryData.libro_conteo_maquinas[idx].b20 = b20; }
+      if (b10 !== undefined) { inMemoryData.libro_conteo_maquinas[idx].denominacion_10 = b10; inMemoryData.libro_conteo_maquinas[idx].b10 = b10; }
+      if (b5 !== undefined) { inMemoryData.libro_conteo_maquinas[idx].denominacion_5 = b5; inMemoryData.libro_conteo_maquinas[idx].b5 = b5; }
+      if (b1 !== undefined) { inMemoryData.libro_conteo_maquinas[idx].denominacion_1 = b1; inMemoryData.libro_conteo_maquinas[idx].b1 = b1; }
+      if (total !== undefined) inMemoryData.libro_conteo_maquinas[idx].total = total;
+      inMemoryData.libro_conteo_maquinas[idx].updated_at = new Date().toISOString();
+      return inMemoryData.libro_conteo_maquinas[idx];
+    }
+    return null;
+  }
+
+  await sql`
+    UPDATE libro_conteo_maquinas SET
+      denominacion_100 = ${b100 !== undefined ? b100 : sql`denominacion_100`},
+      denominacion_50 = ${b50 !== undefined ? b50 : sql`denominacion_50`},
+      denominacion_20 = ${b20 !== undefined ? b20 : sql`denominacion_20`},
+      denominacion_10 = ${b10 !== undefined ? b10 : sql`denominacion_10`},
+      denominacion_5 = ${b5 !== undefined ? b5 : sql`denominacion_5`},
+      denominacion_1 = ${b1 !== undefined ? b1 : sql`denominacion_1`},
+      total = ${total !== undefined ? total : sql`total`},
+      updated_at = CURRENT_TIMESTAMP
+    WHERE uuid = ${targetUuid}::uuid
+      ${libroUuid ? sql`AND libro_uuid = ${libroUuid}::uuid` : sql``}
+  `;
+
+  const details = await sql`
+    SELECT 
+      d.uuid,
+      d.uuid AS id,
+      d.libro_uuid,
+      d.libro_uuid AS libro_id,
+      d.multisala_uuid,
+      d.maquina_uuid,
+      d.maquina_uuid AS maquina_id,
+      d.denominacion_100,
+      d.denominacion_50,
+      d.denominacion_20,
+      d.denominacion_10,
+      d.denominacion_5,
+      d.denominacion_1,
+      d.denominacion_100 AS b100,
+      d.denominacion_50 AS b50,
+      d.denominacion_20 AS b20,
+      d.denominacion_10 AS b10,
+      d.denominacion_5 AS b5,
+      d.denominacion_1 AS b1,
+      d.total,
+      d.created_at,
+      d.updated_at,
+      m.nombre AS maquina_nombre,
+      m.serial AS maquina_serial,
+      m.rango_uuid,
+      m.rango_uuid AS rango_id,
+      r.nombre AS rango_nombre,
+      j.nombre AS juego_nombre,
+      s.nombre AS sala_nombre,
+      s.nombre_comercial AS sala_nombre_comercial
+    FROM libro_conteo_maquinas d
+    JOIN maquinas m ON d.maquina_uuid = m.uuid
+    LEFT JOIN rangos r ON m.rango_uuid = r.uuid
+    LEFT JOIN juegos_maquinas j ON m.juego_uuid = j.uuid
+    LEFT JOIN salas s ON m.sala_uuid = s.uuid
+    WHERE d.uuid = ${targetUuid}::uuid
+  `;
+
+  const finalRow = details[0] || { uuid: targetUuid, id: targetUuid };
+  return {
+    ...finalRow,
+    b100: finalRow.denominacion_100,
+    b50: finalRow.denominacion_50,
+    b20: finalRow.denominacion_20,
+    b10: finalRow.denominacion_10,
+    b5: finalRow.denominacion_5,
+    b1: finalRow.denominacion_1,
+    maquina_nombre: finalRow.maquina_nombre || '',
+    rango_nombre: finalRow.rango_nombre || 'Sin Rango',
+    juego_nombre: finalRow.juego_nombre || ''
+  };
+}
+
 export async function deleteLibroConteoMaquinaModel(id, libroId) {
   if (!id) throw new Error('ID de registro de conteo de máquinas inválido');
   const targetUuid = String(id).trim();
@@ -9393,11 +9555,13 @@ export async function getLibroAportesModel(libroId) {
       la.uuid AS id,
       la.libro_uuid,
       la.libro_uuid AS libro_id,
+      la.multisala_uuid,
       la.empleado_uuid,
       la.empleado_uuid AS empleado_id,
       la.rango_uuid,
       la.rango_uuid AS rango_id,
       la.monto,
+      la.hora,
       COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
       la.updated_at,
@@ -9408,11 +9572,11 @@ export async function getLibroAportesModel(libroId) {
       d.nombre AS departamento_nombre,
       r.nombre AS rango_nombre
     FROM libro_aportes la
-    JOIN empleados e ON la.empleado_uuid = e.uuid
+    LEFT JOIN empleados e ON la.empleado_uuid = e.uuid
     LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
     LEFT JOIN areas a ON c.area_uuid = a.uuid
     LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
-    JOIN rangos r ON la.rango_uuid = r.uuid
+    LEFT JOIN rangos r ON la.rango_uuid = r.uuid
     WHERE la.libro_uuid = ${targetLibroUuid}::uuid
     ORDER BY la.created_at DESC, la.uuid DESC
   `;
@@ -9437,8 +9601,12 @@ export async function createLibroAporteModel(data) {
   if (!isUuid(empleadoUuid)) throw new Error('UUID de empleado inválido');
   if (!isUuid(rangoUuid)) throw new Error('UUID de rango inválido');
 
+  const rawMultisala = data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
+
   const monto = Number(data.monto) || 0;
   const tipo = (data.tipo || '').trim() || 'Aporte';
+  const hora = data.hora ? String(data.hora).trim().slice(0, 10) : null;
   const aporteUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : crypto.randomUUID();
 
   if (!isPgConnected || !sql) {
@@ -9448,12 +9616,14 @@ export async function createLibroAporteModel(data) {
       uuid: aporteUuid,
       libro_id: libroUuid,
       libro_uuid: libroUuid,
+      multisala_uuid: multisalaUuid,
       empleado_id: empleadoUuid,
       empleado_uuid: empleadoUuid,
       rango_id: rangoUuid,
       rango_uuid: rangoUuid,
       monto,
       tipo,
+      hora,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -9463,18 +9633,21 @@ export async function createLibroAporteModel(data) {
 
   const res = await sql`
     INSERT INTO libro_aportes (
-      uuid, libro_uuid, empleado_uuid, rango_uuid, monto, tipo
+      uuid, libro_uuid, multisala_uuid, empleado_uuid, rango_uuid, monto, tipo, hora
     )
     VALUES (
       ${aporteUuid}::uuid,
       ${libroUuid}::uuid,
+      ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
       ${empleadoUuid}::uuid,
       ${rangoUuid}::uuid,
-      ${monto}, ${tipo}
+      ${monto}, ${tipo}, ${hora}
     )
     ON CONFLICT (uuid) DO UPDATE SET
       monto = EXCLUDED.monto,
       tipo = EXCLUDED.tipo,
+      hora = EXCLUDED.hora,
+      multisala_uuid = EXCLUDED.multisala_uuid,
       updated_at = NOW()
     RETURNING uuid
   `;
@@ -9487,11 +9660,13 @@ export async function createLibroAporteModel(data) {
       la.uuid AS id,
       la.libro_uuid,
       la.libro_uuid AS libro_id,
+      la.multisala_uuid,
       la.empleado_uuid,
       la.empleado_uuid AS empleado_id,
       la.rango_uuid,
       la.rango_uuid AS rango_id,
       la.monto,
+      la.hora,
       COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
       la.updated_at,
@@ -9502,11 +9677,11 @@ export async function createLibroAporteModel(data) {
       d.nombre AS departamento_nombre,
       r.nombre AS rango_nombre
     FROM libro_aportes la
-    JOIN empleados e ON la.empleado_uuid = e.uuid
+    LEFT JOIN empleados e ON la.empleado_uuid = e.uuid
     LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
     LEFT JOIN areas a ON c.area_uuid = a.uuid
     LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
-    JOIN rangos r ON la.rango_uuid = r.uuid
+    LEFT JOIN rangos r ON la.rango_uuid = r.uuid
     WHERE la.uuid = ${insertedUuid}::uuid
   `;
 
@@ -9527,8 +9702,12 @@ export async function updateLibroAporteModel(id, libroId, data) {
   const rawRango = data.rango_uuid !== undefined ? data.rango_uuid : data.rango_id;
   const rangoUuid = (rawRango !== undefined && rawRango && isUuid(rawRango)) ? String(rawRango).trim() : null;
 
+  const rawMultisala = data.multisala_uuid !== undefined ? data.multisala_uuid : data.multisala_id;
+  const multisalaUuid = (rawMultisala !== undefined && rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : (rawMultisala === null ? null : undefined);
+
   const monto = data.monto !== undefined ? Number(data.monto) : null;
   const tipo = data.tipo !== undefined ? (String(data.tipo).trim() || 'Aporte') : null;
+  const hora = data.hora !== undefined ? (data.hora ? String(data.hora).trim().slice(0, 10) : null) : undefined;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
@@ -9542,8 +9721,10 @@ export async function updateLibroAporteModel(id, libroId, data) {
         inMemoryData.libro_aportes[idx].rango_uuid = rangoUuid;
         inMemoryData.libro_aportes[idx].rango_id = rangoUuid;
       }
+      if (multisalaUuid !== undefined) inMemoryData.libro_aportes[idx].multisala_uuid = multisalaUuid;
       if (monto !== null) inMemoryData.libro_aportes[idx].monto = monto;
       if (tipo !== null) inMemoryData.libro_aportes[idx].tipo = tipo;
+      if (hora !== undefined) inMemoryData.libro_aportes[idx].hora = hora;
       inMemoryData.libro_aportes[idx].updated_at = new Date().toISOString();
       return inMemoryData.libro_aportes[idx];
     }
@@ -9555,8 +9736,10 @@ export async function updateLibroAporteModel(id, libroId, data) {
     SET
       empleado_uuid = COALESCE(${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`}, empleado_uuid),
       rango_uuid = COALESCE(${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`}, rango_uuid),
+      multisala_uuid = ${multisalaUuid !== undefined ? (multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`) : sql`multisala_uuid`},
       monto = COALESCE(${monto}, monto),
       tipo = COALESCE(${tipo}, tipo),
+      hora = ${hora !== undefined ? (hora ? hora : sql`NULL`) : sql`hora`},
       updated_at = CURRENT_TIMESTAMP
     WHERE uuid = ${targetUuid}::uuid
       ${libroUuid ? sql`AND libro_uuid = ${libroUuid}::uuid` : sql``}
@@ -9568,11 +9751,13 @@ export async function updateLibroAporteModel(id, libroId, data) {
       la.uuid AS id,
       la.libro_uuid,
       la.libro_uuid AS libro_id,
+      la.multisala_uuid,
       la.empleado_uuid,
       la.empleado_uuid AS empleado_id,
       la.rango_uuid,
       la.rango_uuid AS rango_id,
       la.monto,
+      la.hora,
       COALESCE(la.tipo, 'Aporte') AS tipo,
       la.created_at,
       la.updated_at,
@@ -9583,11 +9768,11 @@ export async function updateLibroAporteModel(id, libroId, data) {
       d.nombre AS departamento_nombre,
       r.nombre AS rango_nombre
     FROM libro_aportes la
-    JOIN empleados e ON la.empleado_uuid = e.uuid
+    LEFT JOIN empleados e ON la.empleado_uuid = e.uuid
     LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
     LEFT JOIN areas a ON c.area_uuid = a.uuid
     LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
-    JOIN rangos r ON la.rango_uuid = r.uuid
+    LEFT JOIN rangos r ON la.rango_uuid = r.uuid
     WHERE la.uuid = ${targetUuid}::uuid
     LIMIT 1
   `;
