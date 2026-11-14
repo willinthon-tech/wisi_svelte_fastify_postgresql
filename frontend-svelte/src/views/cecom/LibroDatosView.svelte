@@ -16,6 +16,7 @@
     queueOutboxAction,
     generateSafeUuid
   } from '../../services/localDb.service.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let libro = null;
   export let libroId = null;
@@ -24,6 +25,23 @@
   let prevMultisala = undefined;
   $: if (multisalaUuid !== prevMultisala) {
     prevMultisala = multisalaUuid;
+    recordId = null;
+    recordUuid = null;
+    aperturaSalaInicio = '';
+    aperturaSalaFin = '';
+    aperturaMaquinasInicio = '';
+    aperturaMaquinasFin = '';
+    aperturaBingoInicio = '';
+    aperturaBingoFin = '';
+    retirosDropboxInicio = '';
+    retirosDropboxFin = '';
+    conteoDropboxInicio = '';
+    conteoDropboxFin = '';
+    operadorTurnoA = '';
+    operadorTurnoC = '';
+    operadoresTurnoAList = [];
+    operadoresTurnoCList = [];
+    lastUpdatedAt = null;
     loadDatos();
   }
 
@@ -469,6 +487,24 @@
         operadoresTurnoCList = parseOperadores(operadorTurnoC);
         lastUpdatedAt = d.updated_at || d.created_at || null;
         isLoadingData = false;
+      } else {
+        recordId = null;
+        recordUuid = null;
+        aperturaSalaInicio = '';
+        aperturaSalaFin = '';
+        aperturaMaquinasInicio = '';
+        aperturaMaquinasFin = '';
+        aperturaBingoInicio = '';
+        aperturaBingoFin = '';
+        retirosDropboxInicio = '';
+        retirosDropboxFin = '';
+        conteoDropboxInicio = '';
+        conteoDropboxFin = '';
+        operadorTurnoA = '';
+        operadorTurnoC = '';
+        operadoresTurnoAList = [];
+        operadoresTurnoCList = [];
+        lastUpdatedAt = null;
       }
     } catch (e) {
       // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
@@ -485,7 +521,7 @@
       const fetchUrl = multisalaUuid 
         ? `/api/master/libros/${lId}/datos?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
         : `/api/master/libros/${lId}/datos`;
-      const res = await fetch(fetchUrl, { signal: controller.signal });
+      const res = await fetch(toBackendUrl(fetchUrl), { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -516,7 +552,7 @@
 
           lastUpdatedAt = d.updated_at || d.created_at || null;
           saveLocalItems('libro_datos', [d]).catch(() => {});
-        } else if (!recordId) {
+        } else {
           recordId = null;
           recordUuid = null;
           aperturaSalaInicio = '';
@@ -624,7 +660,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(postEndpoint, {
+        const res = await fetch(toBackendUrl(postEndpoint), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(localRecord),

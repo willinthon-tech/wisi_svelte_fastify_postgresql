@@ -30,6 +30,7 @@
   $: if (multisalaUuid !== prevMultisala) {
     prevMultisala = multisalaUuid;
     selectedMaquinaId = '';
+    records = [];
     limpiarCampos();
     loadRecords();
   }
@@ -446,9 +447,12 @@
       if (Array.isArray(local) && local.length > 0) {
         records = local;
         isLoadingRecords = false;
+      } else {
+        records = [];
       }
     } catch (e) {
       console.warn('[LocalDb] Error leyendo libro_conteo_maquinas local:', e);
+      records = [];
     }
 
     // 2. Sincronización en segundo plano con backend
@@ -463,9 +467,7 @@
       if (res.ok) {
         const json = await res.json();
         if (json?.data && Array.isArray(json.data)) {
-          if (json.data.length > 0 || records.length === 0) {
-            records = json.data;
-          }
+          records = json.data;
           await saveLocalItems('libro_conteo_maquinas', json.data);
         }
       }

@@ -15,6 +15,7 @@
     queueOutboxAction,
     generateSafeUuid
   } from '../../services/localDb.service.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let libro = null;
   export let libroId = null;
@@ -317,8 +318,12 @@
       );
       if (Array.isArray(local) && local.length > 0) {
         records = local;
+      } else {
+        records = [];
       }
-    } catch (e) {}
+    } catch (e) {
+      records = [];
+    }
 
     // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -330,10 +335,10 @@
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const fetchUrl = multisalaUuid
+      const rawUrl = multisalaUuid
         ? `/api/master/libros/${lId}/incidencias-generales?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
         : `/api/master/libros/${lId}/incidencias-generales`;
-      const res = await fetch(fetchUrl, { signal: controller.signal });
+      const res = await fetch(toBackendUrl(rawUrl), { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -455,7 +460,7 @@
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(postEndpoint, {
+          const res = await fetch(toBackendUrl(postEndpoint), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(rec),
@@ -519,7 +524,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${recordUuid}`, {
+        const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/incidencias-generales/${recordUuid}`), {
           method: 'DELETE',
           signal: controller.signal
         });
@@ -629,7 +634,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/incidencias-generales/${targetUuid}`, {
+        const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/incidencias-generales/${targetUuid}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedRecord),

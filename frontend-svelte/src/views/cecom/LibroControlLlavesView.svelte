@@ -17,6 +17,7 @@
     queueOutboxAction,
     generateSafeUuid
   } from '../../services/localDb.service.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let libro = null;
   export let libroId = null;
@@ -165,7 +166,7 @@
       } else if (libro?.sala_id) {
         q.set('sala_ids', String(libro.sala_id));
       }
-      const res = await fetch(`/api/master/llaves?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/llaves?${q.toString()}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
@@ -216,7 +217,7 @@
       const fetchUrl = multisalaUuid
         ? `/api/master/libros/${lId}/control-llaves?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
         : `/api/master/libros/${lId}/control-llaves`;
-      const res = await fetch(fetchUrl, { signal: controller.signal });
+      const res = await fetch(toBackendUrl(fetchUrl), { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -328,7 +329,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(postEndpoint, {
+        const res = await fetch(toBackendUrl(postEndpoint), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newRecord),
@@ -391,7 +392,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/control-llaves/${recordUuid}`, {
+        const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/control-llaves/${recordUuid}`), {
           method: 'DELETE',
           signal: controller.signal
         });
@@ -492,7 +493,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/control-llaves/${targetUuid}/horas`, {
+        const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/control-llaves/${targetUuid}/horas`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

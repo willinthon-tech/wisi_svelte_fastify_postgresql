@@ -18,6 +18,7 @@
     queueOutboxAction,
     generateSafeUuid
   } from '../../services/localDb.service.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let libro = null;
   export let libroId = null;
@@ -194,7 +195,7 @@
       } else if (libro?.sala_id) {
         q.set('sala_ids', String(libro.sala_id));
       }
-      const res = await fetch(`/api/master/mesas?${q.toString()}`);
+      const res = await fetch(toBackendUrl(`/api/master/mesas?${q.toString()}`));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
@@ -226,8 +227,12 @@
           handleMesaChange();
         }
         isLoadingRecords = false;
+      } else {
+        dropRecords = [];
       }
-    } catch (e) {}
+    } catch (e) {
+      dropRecords = [];
+    }
 
     // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -242,7 +247,7 @@
       const fetchUrl = multisalaUuid
         ? `/api/master/libros/${lId}/drop-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
         : `/api/master/libros/${lId}/drop-mesas`;
-      const res = await fetch(fetchUrl, { signal: controller.signal });
+      const res = await fetch(toBackendUrl(fetchUrl), { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -326,6 +331,7 @@
       mesa_uuid: mesaUuid,
       mesa_id: mesaUuid || midStr,
       mesa_nombre: mesaObj?.nombre || `Mesa #${midStr}`,
+      multisala_uuid: multisalaUuid || null,
       denominacion_100: currentMesaBilletes100,
       denominacion_50: currentMesaBilletes50,
       denominacion_20: currentMesaBilletes20,
@@ -367,7 +373,10 @@
       if (typeof navigator !== 'undefined' && navigator.onLine) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/drop-mesas`, {
+        const rawUrl = multisalaUuid
+          ? `/api/master/libros/${lId}/drop-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+          : `/api/master/libros/${lId}/drop-mesas`;
+        const res = await fetch(toBackendUrl(rawUrl), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(record),
@@ -468,7 +477,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(postEndpoint, {
+        const res = await fetch(toBackendUrl(postEndpoint), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newRecord),
@@ -530,7 +539,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/drop-mesas/${recordUuid}`, {
+        const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/drop-mesas/${recordUuid}`), {
           method: 'DELETE',
           signal: controller.signal
         });

@@ -17,6 +17,7 @@
     queueOutboxAction,
     generateSafeUuid
   } from '../../services/localDb.service.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let libro = null;
   export let libroId = null;
@@ -378,8 +379,12 @@
       );
       if (Array.isArray(local) && local.length > 0) {
         records = local;
+      } else {
+        records = [];
       }
-    } catch (e) {}
+    } catch (e) {
+      records = [];
+    }
 
     // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -394,7 +399,7 @@
       const fetchUrl = multisalaUuid 
         ? `/api/master/libros/${lId}/control-clientes?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
         : `/api/master/libros/${lId}/control-clientes`;
-      const res = await fetch(fetchUrl, { signal: controller.signal });
+      const res = await fetch(toBackendUrl(fetchUrl), { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -438,7 +443,7 @@
       const dropUrl = multisalaUuid
         ? `/api/master/libros/${lId}/drop-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
         : `/api/master/libros/${lId}/drop-mesas`;
-      const res = await fetch(dropUrl, { signal: controller.signal });
+      const res = await fetch(toBackendUrl(dropUrl), { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -465,7 +470,7 @@
         ? `/api/master/libros/${lId}/control-clientes/sugerencias?${params.toString()}` 
         : `/api/master/libros/control-clientes/sugerencias?${params.toString()}`;
 
-      const res = await fetch(url);
+      const res = await fetch(toBackendUrl(url));
       if (res.ok) {
         const json = await res.json();
         if (json && json.success && Array.isArray(json.data)) {
@@ -663,7 +668,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(postEndpoint, {
+        const res = await fetch(toBackendUrl(postEndpoint), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newRecord),
@@ -726,7 +731,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/control-clientes/${recordUuid}`, {
+        const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/control-clientes/${recordUuid}`), {
           method: 'DELETE',
           signal: controller.signal
         });
@@ -851,7 +856,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/control-clientes/${targetUuid}`, {
+        const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/control-clientes/${targetUuid}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(editPayload),

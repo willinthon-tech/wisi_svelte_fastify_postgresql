@@ -8688,14 +8688,28 @@ export async function deleteLibroModel(id) {
 }
 
 // --- DROP DE MESAS (CECOM: LIBRO DROP) ---
-export async function getLibroDropMesasModel(libroId) {
+export async function getLibroDropMesasModel(libroId, multisalaUuid = null) {
   if (!libroId) return [];
   const targetLibroUuid = String(libroId).trim();
   if (!isUuid(targetLibroUuid)) return [];
 
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
   if (!isPgConnected || !sql) {
     const list = inMemoryData.libro_drop_mesas || [];
-    return list.filter(d => String(d.libro_uuid || d.libro_id) === targetLibroUuid);
+    return list.filter(d => 
+      String(d.libro_uuid || d.libro_id) === targetLibroUuid &&
+      (rawMultisala === 'all' || (rawMultisala ? String(d.multisala_uuid) === String(rawMultisala) : !d.multisala_uuid))
+    );
+  }
+
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND d.multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND d.multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND d.multisala_uuid IS NULL`;
   }
 
   const rows = await sql`
@@ -8704,6 +8718,7 @@ export async function getLibroDropMesasModel(libroId) {
       d.uuid AS id,
       d.libro_uuid,
       d.libro_uuid AS libro_id,
+      d.multisala_uuid,
       d.mesa_uuid,
       d.mesa_uuid AS mesa_id,
       d.denominacion_100,
@@ -8730,6 +8745,7 @@ export async function getLibroDropMesasModel(libroId) {
     LEFT JOIN juegos j ON m.juego_uuid = j.uuid
     LEFT JOIN salas s ON m.sala_uuid = s.uuid
     WHERE d.libro_uuid = ${targetLibroUuid}::uuid
+      ${whereMultisala}
     ORDER BY d.created_at ASC, d.uuid ASC
   `;
 
@@ -8751,6 +8767,9 @@ export async function createLibroDropMesaModel(data) {
   if (!isUuid(libroUuid)) throw new Error('UUID de libro inválido');
   if (!isUuid(mesaUuid)) throw new Error('UUID de mesa inválido');
 
+  const rawMultisala = data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
+
   const b100 = Math.max(0, parseInt(data.denominacion_100 ?? data.b100 ?? 0, 10) || 0);
   const b50 = Math.max(0, parseInt(data.denominacion_50 ?? data.b50 ?? 0, 10) || 0);
   const b20 = Math.max(0, parseInt(data.denominacion_20 ?? data.b20 ?? 0, 10) || 0);
@@ -8765,7 +8784,8 @@ export async function createLibroDropMesaModel(data) {
     inMemoryData.libro_drop_mesas = inMemoryData.libro_drop_mesas || [];
     const existingIdx = (inMemoryData.libro_drop_mesas || []).findIndex(
       d => String(d.libro_uuid || d.libro_id) === libroUuid &&
-           String(d.mesa_uuid || d.mesa_id) === mesaUuid
+           String(d.mesa_uuid || d.mesa_id) === mesaUuid &&
+           (multisalaUuid ? String(d.multisala_uuid) === multisalaUuid : !d.multisala_uuid)
     );
 
     const mesa = (inMemoryData.mesas || []).find(m => String(m.uuid || m.id) === mesaUuid) || {};
@@ -8773,6 +8793,7 @@ export async function createLibroDropMesaModel(data) {
     if (existingIdx !== -1) {
       inMemoryData.libro_drop_mesas[existingIdx] = {
         ...inMemoryData.libro_drop_mesas[existingIdx],
+        multisala_uuid: multisalaUuid,
         denominacion_100: b100,
         denominacion_50: b50,
         denominacion_20: b20,
@@ -8791,6 +8812,7 @@ export async function createLibroDropMesaModel(data) {
       uuid: dropUuid,
       libro_id: libroUuid,
       libro_uuid: libroUuid,
+      multisala_uuid: multisalaUuid,
       mesa_id: mesaUuid,
       mesa_uuid: mesaUuid,
       denominacion_100: b100,
@@ -8810,16 +8832,26 @@ export async function createLibroDropMesaModel(data) {
     return newDrop;
   }
 
-  const existingRow = await sql`
-    SELECT uuid FROM libro_drop_mesas
-    WHERE libro_uuid = ${libroUuid}::uuid AND mesa_uuid = ${mesaUuid}::uuid
-    LIMIT 1
-  `;
+  let existingRow;
+  if (multisalaUuid) {
+    existingRow = await sql`
+      SELECT uuid FROM libro_drop_mesas
+      WHERE libro_uuid = ${libroUuid}::uuid AND mesa_uuid = ${mesaUuid}::uuid AND multisala_uuid = ${multisalaUuid}::uuid
+      LIMIT 1
+    `;
+  } else {
+    existingRow = await sql`
+      SELECT uuid FROM libro_drop_mesas
+      WHERE libro_uuid = ${libroUuid}::uuid AND mesa_uuid = ${mesaUuid}::uuid AND multisala_uuid IS NULL
+      LIMIT 1
+    `;
+  }
 
   let insertedUuid = null;
   if (existingRow.length > 0) {
     const updated = await sql`
       UPDATE libro_drop_mesas SET
+        multisala_uuid = ${multisalaUuid ? multisalaUuid : null}::uuid,
         denominacion_100 = ${b100},
         denominacion_50 = ${b50},
         denominacion_20 = ${b20},
@@ -8835,7 +8867,7 @@ export async function createLibroDropMesaModel(data) {
   } else {
     const res = await sql`
       INSERT INTO libro_drop_mesas (
-        uuid, libro_uuid, mesa_uuid,
+        uuid, libro_uuid, mesa_uuid, multisala_uuid,
         denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
         total
       )
@@ -8843,6 +8875,7 @@ export async function createLibroDropMesaModel(data) {
         ${dropUuid}::uuid,
         ${libroUuid}::uuid,
         ${mesaUuid}::uuid,
+        ${multisalaUuid ? multisalaUuid : null}::uuid,
         ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
         ${total}
       )
@@ -8857,6 +8890,7 @@ export async function createLibroDropMesaModel(data) {
       d.uuid AS id,
       d.libro_uuid,
       d.libro_uuid AS libro_id,
+      d.multisala_uuid,
       d.mesa_uuid,
       d.mesa_uuid AS mesa_id,
       d.denominacion_100,
@@ -9325,15 +9359,18 @@ export async function deleteLibroConteoMaquinaModel(id, libroId) {
 }
 
 // --- CONTROL DE LLAVES (CECOM: LIBRO CONTROL DE LLAVES) ---
-export async function getLibroControlLlavesModel(libroId) {
+export async function getLibroControlLlavesModel(libroId, multisalaUuid = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const targetLibroUuid = String(libroId).trim();
   if (!isUuid(targetLibroUuid)) return [];
 
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_llaves = inMemoryData.libro_control_llaves || [];
     const list = inMemoryData.libro_control_llaves.filter(c => 
-      String(c.libro_uuid || c.libro_id) === targetLibroUuid
+      String(c.libro_uuid || c.libro_id) === targetLibroUuid &&
+      (rawMultisala === 'all' || (rawMultisala ? String(c.multisala_uuid) === String(rawMultisala) : !c.multisala_uuid))
     );
     return list.map(c => {
       const uKeys = toUuidArray(c.llaves_uuids || c.llaves_ids);
@@ -9345,12 +9382,22 @@ export async function getLibroControlLlavesModel(libroId) {
     }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
 
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND cl.multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND cl.multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND cl.multisala_uuid IS NULL`;
+  }
+
   const rows = await sql`
     SELECT 
       cl.uuid,
       cl.uuid AS id,
       cl.libro_uuid,
       cl.libro_uuid AS libro_id,
+      cl.multisala_uuid,
       cl.descripcion,
       cl.hora_salida,
       cl.hora_recepcion,
@@ -9367,6 +9414,7 @@ export async function getLibroControlLlavesModel(libroId) {
       ) AS llaves_detalle
     FROM libro_control_llaves cl
     WHERE cl.libro_uuid = ${targetLibroUuid}::uuid
+      ${whereMultisala}
     ORDER BY cl.created_at DESC, cl.uuid DESC
   `;
 
@@ -9378,6 +9426,9 @@ export async function createLibroControlLlavesModel(data) {
   if (!rawLibro) throw new Error('ID de libro inválido');
   const libroUuid = String(rawLibro).trim();
   if (!isUuid(libroUuid)) throw new Error('UUID de libro inválido');
+
+  const rawMultisala = data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
 
   const llavesUuids = toUuidArray(data.llaves_uuids || data.llaves_ids);
   if (llavesUuids.length === 0) {
@@ -9400,6 +9451,7 @@ export async function createLibroControlLlavesModel(data) {
       uuid: controlUuid,
       libro_id: libroUuid,
       libro_uuid: libroUuid,
+      multisala_uuid: multisalaUuid,
       llaves_ids: llavesUuids,
       llaves_uuids: llavesUuids,
       descripcion,
@@ -9415,11 +9467,12 @@ export async function createLibroControlLlavesModel(data) {
 
   const res = await sql`
     INSERT INTO libro_control_llaves (
-      uuid, libro_uuid, llaves_uuids, descripcion, hora_salida, hora_recepcion
+      uuid, libro_uuid, multisala_uuid, llaves_uuids, descripcion, hora_salida, hora_recepcion
     )
     VALUES (
       ${controlUuid}::uuid,
       ${libroUuid}::uuid,
+      ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
       ${llavesUuids}::uuid[],
       ${descripcion},
       ${horaSalida},
@@ -9436,6 +9489,7 @@ export async function createLibroControlLlavesModel(data) {
       cl.uuid AS id,
       cl.libro_uuid,
       cl.libro_uuid AS libro_id,
+      cl.multisala_uuid,
       cl.descripcion,
       cl.hora_salida,
       cl.hora_recepcion,
@@ -9455,6 +9509,7 @@ export async function createLibroControlLlavesModel(data) {
     LIMIT 1
   `;
 
+  saveLibroReporteModel(libroUuid).catch(() => {});
   return rows[0];
 }
 
@@ -9547,17 +9602,31 @@ export async function deleteLibroControlLlavesModel(id, libroId) {
 }
 
 // --- APORTES DE LIBRO (CECOM: LIBRO APORTES) ---
-export async function getLibroAportesModel(libroId) {
+export async function getLibroAportesModel(libroId, multisalaUuid = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const targetLibroUuid = String(libroId).trim();
   if (!isUuid(targetLibroUuid)) return [];
 
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_aportes = inMemoryData.libro_aportes || [];
     return inMemoryData.libro_aportes
-      .filter(a => String(a.libro_uuid || a.libro_id) === targetLibroUuid)
+      .filter(a => 
+        String(a.libro_uuid || a.libro_id) === targetLibroUuid &&
+        (rawMultisala === 'all' || (rawMultisala ? String(a.multisala_uuid) === String(rawMultisala) : !a.multisala_uuid))
+      )
       .map(a => ({ ...a, tipo: a.tipo || 'Aporte' }))
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND la.multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND la.multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND la.multisala_uuid IS NULL`;
   }
 
   const rows = await sql`
@@ -9589,6 +9658,7 @@ export async function getLibroAportesModel(libroId) {
     LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
     LEFT JOIN rangos r ON la.rango_uuid = r.uuid
     WHERE la.libro_uuid = ${targetLibroUuid}::uuid
+      ${whereMultisala}
     ORDER BY la.created_at DESC, la.uuid DESC
   `;
 
@@ -9816,16 +9886,30 @@ export async function deleteLibroAporteModel(id, libroId) {
 }
 
 // --- INCIDENCIAS GENERALES (CECOM: LIBRO INCIDENCIAS GENERALES) ---
-export async function getLibroIncidenciasGeneralesModel(libroId) {
+export async function getLibroIncidenciasGeneralesModel(libroId, multisalaUuid = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const targetLibroUuid = String(libroId).trim();
   if (!isUuid(targetLibroUuid)) return [];
 
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_incidencias_generales = inMemoryData.libro_incidencias_generales || [];
     return inMemoryData.libro_incidencias_generales
-      .filter(c => String(c.libro_uuid || c.libro_id) === targetLibroUuid)
+      .filter(c => 
+        String(c.libro_uuid || c.libro_id) === targetLibroUuid &&
+        (rawMultisala === 'all' || (rawMultisala ? String(c.multisala_uuid) === String(rawMultisala) : !c.multisala_uuid))
+      )
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND lig.multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND lig.multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND lig.multisala_uuid IS NULL`;
   }
 
   const rows = await sql`
@@ -9834,6 +9918,7 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
       lig.uuid AS id, 
       lig.libro_uuid, 
       lig.libro_uuid AS libro_id, 
+      lig.multisala_uuid,
       lig.tipo_incidencia_uuid,
       lig.tipo_incidencia_uuid AS tipo_incidencia_id,
       lig.descripcion, 
@@ -9845,6 +9930,7 @@ export async function getLibroIncidenciasGeneralesModel(libroId) {
     FROM libro_incidencias_generales lig
     LEFT JOIN tipo_incidencias ti ON lig.tipo_incidencia_uuid = ti.uuid
     WHERE lig.libro_uuid = ${targetLibroUuid}::uuid
+      ${whereMultisala}
     ORDER BY lig.created_at DESC, lig.uuid DESC
   `;
 
@@ -9856,6 +9942,9 @@ export async function createLibroIncidenciaGeneralModel(data) {
   if (!rawLibro) throw new Error('ID de libro inválido');
   const libroUuid = String(rawLibro).trim();
   if (!isUuid(libroUuid)) throw new Error('UUID de libro inválido');
+
+  const rawMultisala = data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
 
   const descripcion = (data.descripcion || '').trim();
   if (!descripcion) {
@@ -9879,6 +9968,7 @@ export async function createLibroIncidenciaGeneralModel(data) {
       uuid: incUuid,
       libro_id: libroUuid,
       libro_uuid: libroUuid,
+      multisala_uuid: multisalaUuid,
       tipo_incidencia_id: tipoIncidenciaUuid,
       tipo_incidencia_uuid: tipoIncidenciaUuid,
       descripcion,
@@ -9914,17 +10004,19 @@ export async function createLibroIncidenciaGeneralModel(data) {
 
   const res = await sql`
     INSERT INTO libro_incidencias_generales (
-      uuid, libro_uuid, tipo_incidencia_uuid, descripcion, tipo, hora
+      uuid, libro_uuid, multisala_uuid, tipo_incidencia_uuid, descripcion, tipo, hora
     )
     VALUES (
       ${incUuid}::uuid,
       ${libroUuid}::uuid,
+      ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
       ${tipoIncidenciaUuid ? sql`${tipoIncidenciaUuid}::uuid` : sql`NULL`},
       ${descripcion}, ${tipo || 'General'}, ${hora}
     )
-    RETURNING uuid, libro_uuid, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at
+    RETURNING uuid, libro_uuid, multisala_uuid, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at
   `;
 
+  saveLibroReporteModel(libroUuid).catch(() => {});
   return {
     ...res[0],
     id: res[0].uuid,
@@ -9977,8 +10069,12 @@ export async function updateLibroIncidenciaGeneralModel(incidenciaId, libroId, d
       updated_at = CURRENT_TIMESTAMP
     WHERE uuid = ${targetUuid}::uuid
       ${libroUuid ? sql`AND libro_uuid = ${libroUuid}::uuid` : sql``}
-    RETURNING uuid, libro_uuid, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at
+    RETURNING uuid, libro_uuid, multisala_uuid, tipo_incidencia_uuid, descripcion, tipo, hora, created_at, updated_at
   `;
+
+  if (rows && rows.length > 0 && (rows[0].libro_uuid || libroUuid)) {
+    saveLibroReporteModel(rows[0].libro_uuid || libroUuid).catch(() => {});
+  }
 
   return {
     ...rows[0],
@@ -10016,15 +10112,18 @@ export async function deleteLibroIncidenciaGeneralModel(id, libroId) {
 }
 
 // --- CONTROL DE CLIENTES (CECOM: LIBRO CONTROL DE CLIENTES) ---
-export async function getLibroControlClientesModel(libroId) {
+export async function getLibroControlClientesModel(libroId, multisalaUuid = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const isU = isUuid(libroId);
   const targetLibroUuid = isU ? String(libroId).trim() : null;
 
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
     const list = inMemoryData.libro_control_clientes.filter(c => 
-      String(c.libro_uuid) === String(libroId) || String(c.libro_id) === String(libroId)
+      (String(c.libro_uuid) === String(libroId) || String(c.libro_id) === String(libroId)) &&
+      (rawMultisala === 'all' || (rawMultisala ? String(c.multisala_uuid) === String(rawMultisala) : !c.multisala_uuid))
     );
     return list.sort((a, b) => String(b.created_at || b.uuid).localeCompare(String(a.created_at || a.uuid)));
   }
@@ -10036,12 +10135,22 @@ export async function getLibroControlClientesModel(libroId) {
   }
   if (!resolvedLibroUuid) return [];
 
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND lcc.multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND lcc.multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND lcc.multisala_uuid IS NULL`;
+  }
+
   const rows = await sql`
     SELECT 
       lcc.uuid,
       lcc.uuid AS id,
       lcc.libro_uuid,
       lcc.libro_uuid AS libro_id,
+      lcc.multisala_uuid,
       lcc.cliente_uuid,
       lcc.cliente_uuid AS cliente_id,
       COALESCE(c.nombre, '') AS cliente, 
@@ -10064,6 +10173,7 @@ export async function getLibroControlClientesModel(libroId) {
     LEFT JOIN metodos_pago mp ON lcc.metodo_pago_uuid = mp.uuid
     WHERE lcc.libro_uuid = ${resolvedLibroUuid}::uuid
       AND (lcc.is_deleted IS FALSE OR lcc.is_deleted IS NULL)
+      ${whereMultisala}
     ORDER BY lcc.created_at DESC, lcc.uuid DESC
   `;
 
@@ -10296,6 +10406,9 @@ export async function createLibroControlClienteModel(data) {
   const nota = (data.nota || '').trim();
   const lccUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : crypto.randomUUID();
 
+  const rawMultisala = data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
     const newRecord = {
@@ -10303,6 +10416,8 @@ export async function createLibroControlClienteModel(data) {
       uuid: lccUuid,
       libro_id: libroUuid,
       libro_uuid: libroUuid,
+      multisala_uuid: multisalaUuid,
+      multisala_id: multisalaUuid,
       cliente_id: clienteUuid,
       cliente_uuid: clienteUuid,
       cliente: clienteNombre,
@@ -10324,6 +10439,7 @@ export async function createLibroControlClienteModel(data) {
     INSERT INTO libro_control_clientes (
       uuid,
       libro_uuid,
+      multisala_uuid,
       cliente_uuid,
       tipo,
       monto,
@@ -10334,6 +10450,7 @@ export async function createLibroControlClienteModel(data) {
     VALUES (
       ${lccUuid}::uuid,
       ${libroUuid}::uuid,
+      ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
       ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
       ${tipo},
       ${monto},
@@ -10344,6 +10461,7 @@ export async function createLibroControlClienteModel(data) {
     RETURNING 
       uuid, uuid AS id, 
       libro_uuid, libro_uuid AS libro_id, 
+      multisala_uuid, multisala_uuid AS multisala_id,
       cliente_uuid, cliente_uuid AS cliente_id, 
       tipo, monto, 
       metodo_pago_uuid, metodo_pago_uuid AS metodo_pago_id, 
@@ -11049,15 +11167,23 @@ export async function deleteClienteModel(id) {
 }
 
 // --- DATOS DEL LIBRO (CECOM: LIBRO DATOS OPERATIVOS) ---
-export async function getLibroDatosModel(libroId) {
+export async function getLibroDatosModel(libroId, multisalaUuid = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const isLibU = isUuid(libroId);
   const targetLibroUuid = isLibU ? String(libroId).trim() : null;
 
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_datos = inMemoryData.libro_datos || [];
+    if (rawMultisala === 'all') {
+      return inMemoryData.libro_datos.filter(d => 
+        String(d.libro_uuid) === String(libroId) || String(d.libro_id) === String(libroId)
+      );
+    }
     const found = inMemoryData.libro_datos.find(d => 
-      String(d.libro_uuid) === String(libroId) || String(d.libro_id) === String(libroId)
+      (String(d.libro_uuid) === String(libroId) || String(d.libro_id) === String(libroId)) &&
+      (rawMultisala ? String(d.multisala_uuid) === String(rawMultisala) : !d.multisala_uuid)
     );
     return found || null;
   }
@@ -11067,11 +11193,21 @@ export async function getLibroDatosModel(libroId) {
     const lRow = await sql`SELECT uuid FROM libros WHERE uuid::text = ${String(libroId)} LIMIT 1`;
     if (lRow.length > 0) resolvedLibroUuid = lRow[0].uuid;
   }
-  if (!resolvedLibroUuid) return null;
+  if (!resolvedLibroUuid) return rawMultisala === 'all' ? [] : null;
+
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND multisala_uuid IS NULL`;
+  }
 
   const rows = await sql`
     SELECT 
       uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id,
+      multisala_uuid, multisala_uuid AS multisala_id,
       apertura_sala_inicio, apertura_sala_fin,
       apertura_maquinas_inicio, apertura_maquinas_fin,
       apertura_bingo_inicio, apertura_bingo_fin,
@@ -11082,13 +11218,17 @@ export async function getLibroDatosModel(libroId) {
     FROM libro_datos
     WHERE libro_uuid = ${resolvedLibroUuid}::uuid
       AND (is_deleted IS FALSE OR is_deleted IS NULL)
-    LIMIT 1
+      ${whereMultisala}
+    ORDER BY created_at ASC
   `;
 
+  if (rawMultisala === 'all') {
+    return rows;
+  }
   return rows.length > 0 ? rows[0] : null;
 }
 
-export async function saveLibroDatosModel(libroId, data) {
+export async function saveLibroDatosModel(libroId, data, multisalaUuidParam = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const isLibU = isUuid(libroId);
   let resolvedLibroUuid = isLibU ? String(libroId).trim() : null;
@@ -11100,6 +11240,9 @@ export async function saveLibroDatosModel(libroId, data) {
     }
   }
   if (!resolvedLibroUuid) throw new Error('Libro no encontrado');
+
+  const rawMultisala = multisalaUuidParam || data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
 
   const aperturaSalaInicio = (data.apertura_sala_inicio || '').trim() || null;
   const aperturaSalaFin = (data.apertura_sala_fin || '').trim() || null;
@@ -11118,11 +11261,14 @@ export async function saveLibroDatosModel(libroId, data) {
   if (!isPgConnected || !sql) {
     inMemoryData.libro_datos = inMemoryData.libro_datos || [];
     let idx = inMemoryData.libro_datos.findIndex(d => 
-      String(d.libro_uuid) === String(resolvedLibroUuid) || String(d.libro_id) === String(resolvedLibroUuid)
+      (String(d.libro_uuid) === String(resolvedLibroUuid) || String(d.libro_id) === String(resolvedLibroUuid)) &&
+      (multisalaUuid ? String(d.multisala_uuid) === multisalaUuid : !d.multisala_uuid)
     );
     if (idx !== -1) {
       inMemoryData.libro_datos[idx] = {
         ...inMemoryData.libro_datos[idx],
+        multisala_uuid: multisalaUuid,
+        multisala_id: multisalaUuid,
         apertura_sala_inicio: aperturaSalaInicio,
         apertura_sala_fin: aperturaSalaFin,
         apertura_maquinas_inicio: aperturaMaquinasInicio,
@@ -11144,6 +11290,8 @@ export async function saveLibroDatosModel(libroId, data) {
         uuid: datosUuid,
         libro_id: resolvedLibroUuid,
         libro_uuid: resolvedLibroUuid,
+        multisala_uuid: multisalaUuid,
+        multisala_id: multisalaUuid,
         apertura_sala_inicio: aperturaSalaInicio,
         apertura_sala_fin: aperturaSalaFin,
         apertura_maquinas_inicio: aperturaMaquinasInicio,
@@ -11164,16 +11312,26 @@ export async function saveLibroDatosModel(libroId, data) {
     }
   }
 
-  const existingRow = await sql`
-    SELECT uuid FROM libro_datos
-    WHERE libro_uuid = ${resolvedLibroUuid}::uuid
-    LIMIT 1
-  `;
+  let existingRow;
+  if (multisalaUuid) {
+    existingRow = await sql`
+      SELECT uuid FROM libro_datos
+      WHERE libro_uuid = ${resolvedLibroUuid}::uuid AND multisala_uuid = ${multisalaUuid}::uuid
+      LIMIT 1
+    `;
+  } else {
+    existingRow = await sql`
+      SELECT uuid FROM libro_datos
+      WHERE libro_uuid = ${resolvedLibroUuid}::uuid AND multisala_uuid IS NULL
+      LIMIT 1
+    `;
+  }
 
   let rows;
   if (existingRow.length > 0) {
     rows = await sql`
       UPDATE libro_datos SET
+        multisala_uuid = ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
         apertura_sala_inicio = ${aperturaSalaInicio},
         apertura_sala_fin = ${aperturaSalaFin},
         apertura_maquinas_inicio = ${aperturaMaquinasInicio},
@@ -11190,6 +11348,7 @@ export async function saveLibroDatosModel(libroId, data) {
       WHERE uuid = ${existingRow[0].uuid}::uuid
       RETURNING 
         uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id,
+        multisala_uuid, multisala_uuid AS multisala_id,
         apertura_sala_inicio, apertura_sala_fin,
         apertura_maquinas_inicio, apertura_maquinas_fin,
         apertura_bingo_inicio, apertura_bingo_fin,
@@ -11203,6 +11362,7 @@ export async function saveLibroDatosModel(libroId, data) {
       INSERT INTO libro_datos (
         uuid,
         libro_uuid,
+        multisala_uuid,
         apertura_sala_inicio, apertura_sala_fin,
         apertura_maquinas_inicio, apertura_maquinas_fin,
         apertura_bingo_inicio, apertura_bingo_fin,
@@ -11213,6 +11373,7 @@ export async function saveLibroDatosModel(libroId, data) {
       VALUES (
         ${datosUuid}::uuid,
         ${resolvedLibroUuid}::uuid,
+        ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
         ${aperturaSalaInicio}, ${aperturaSalaFin},
         ${aperturaMaquinasInicio}, ${aperturaMaquinasFin},
         ${aperturaBingoInicio}, ${aperturaBingoFin},
@@ -11222,6 +11383,7 @@ export async function saveLibroDatosModel(libroId, data) {
       )
       RETURNING 
         uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id,
+        multisala_uuid, multisala_uuid AS multisala_id,
         apertura_sala_inicio, apertura_sala_fin,
         apertura_maquinas_inicio, apertura_maquinas_fin,
         apertura_bingo_inicio, apertura_bingo_fin,
@@ -11232,19 +11394,23 @@ export async function saveLibroDatosModel(libroId, data) {
     `;
   }
 
+  saveLibroReporteModel(resolvedLibroUuid).catch(() => {});
   return rows[0];
 }
 
 // --- NOVEDADES DE MESAS (CECOM: LIBRO NOVEDADES MESAS) ---
-export async function getLibroNovedadesMesasModel(libroId) {
+export async function getLibroNovedadesMesasModel(libroId, multisalaUuid = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const isLibU = isUuid(libroId);
   const targetLibroUuid = isLibU ? String(libroId).trim() : null;
 
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
     return inMemoryData.libro_novedades_mesas.filter(d => 
-      String(d.libro_uuid) === String(libroId) || String(d.libro_id) === String(libroId)
+      (String(d.libro_uuid) === String(libroId) || String(d.libro_id) === String(libroId)) &&
+      (rawMultisala === 'all' || (rawMultisala ? String(d.multisala_uuid) === String(rawMultisala) : !d.multisala_uuid))
     );
   }
 
@@ -11255,12 +11421,23 @@ export async function getLibroNovedadesMesasModel(libroId) {
   }
   if (!resolvedLibroUuid) return [];
 
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND nm.multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND nm.multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND nm.multisala_uuid IS NULL`;
+  }
+
   const rows = await sql`
     SELECT 
       nm.uuid,
       nm.uuid AS id,
       nm.libro_uuid,
       nm.libro_uuid AS libro_id,
+      nm.multisala_uuid,
+      nm.multisala_uuid AS multisala_id,
       nm.mesa_uuid,
       nm.mesa_uuid AS mesa_id,
       m.nombre AS mesa_nombre,
@@ -11282,13 +11459,14 @@ export async function getLibroNovedadesMesasModel(libroId) {
     LEFT JOIN juegos j ON m.juego_uuid = j.uuid
     WHERE nm.libro_uuid = ${resolvedLibroUuid}::uuid
       AND (nm.is_deleted IS FALSE OR nm.is_deleted IS NULL)
+      ${whereMultisala}
     ORDER BY m.nombre ASC, nm.uuid ASC
   `;
 
   return rows;
 }
 
-export async function saveLibroNovedadesMesaModel(libroId, data) {
+export async function saveLibroNovedadesMesaModel(libroId, data, multisalaUuidParam = null) {
   if (!libroId) throw new Error('ID de libro inválido');
   const isLibU = isUuid(libroId);
   let resolvedLibroUuid = isLibU ? String(libroId).trim() : null;
@@ -11300,6 +11478,9 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
     }
   }
   if (!resolvedLibroUuid) throw new Error('Libro no encontrado');
+
+  const rawMultisala = multisalaUuidParam || data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
 
   const rawMesa = data.mesa_uuid || data.mesa_id;
   if (!rawMesa) throw new Error('ID de mesa inválido');
@@ -11326,11 +11507,14 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
     inMemoryData.libro_novedades_mesas = inMemoryData.libro_novedades_mesas || [];
     let idx = inMemoryData.libro_novedades_mesas.findIndex(
       d => (String(d.libro_uuid) === String(resolvedLibroUuid) || String(d.libro_id) === String(resolvedLibroUuid)) &&
-           (String(d.mesa_uuid) === String(resolvedMesaUuid) || String(d.mesa_id) === String(resolvedMesaUuid))
+           (String(d.mesa_uuid) === String(resolvedMesaUuid) || String(d.mesa_id) === String(resolvedMesaUuid)) &&
+           (multisalaUuid ? String(d.multisala_uuid) === multisalaUuid : !d.multisala_uuid)
     );
     if (idx !== -1) {
       inMemoryData.libro_novedades_mesas[idx] = {
         ...inMemoryData.libro_novedades_mesas[idx],
+        multisala_uuid: multisalaUuid,
+        multisala_id: multisalaUuid,
         hora_apertura: horaApertura,
         hora_cierre: horaCierre,
         pitboss: pitboss,
@@ -11346,6 +11530,8 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
         uuid: novUuid,
         libro_id: resolvedLibroUuid,
         libro_uuid: resolvedLibroUuid,
+        multisala_uuid: multisalaUuid,
+        multisala_id: multisalaUuid,
         mesa_id: resolvedMesaUuid,
         mesa_uuid: resolvedMesaUuid,
         hora_apertura: horaApertura,
@@ -11362,16 +11548,26 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
     }
   }
 
-  const existingRow = await sql`
-    SELECT uuid FROM libro_novedades_mesas
-    WHERE libro_uuid = ${resolvedLibroUuid}::uuid AND mesa_uuid = ${resolvedMesaUuid}::uuid
-    LIMIT 1
-  `;
+  let existingRow;
+  if (multisalaUuid) {
+    existingRow = await sql`
+      SELECT uuid FROM libro_novedades_mesas
+      WHERE libro_uuid = ${resolvedLibroUuid}::uuid AND mesa_uuid = ${resolvedMesaUuid}::uuid AND multisala_uuid = ${multisalaUuid}::uuid
+      LIMIT 1
+    `;
+  } else {
+    existingRow = await sql`
+      SELECT uuid FROM libro_novedades_mesas
+      WHERE libro_uuid = ${resolvedLibroUuid}::uuid AND mesa_uuid = ${resolvedMesaUuid}::uuid AND multisala_uuid IS NULL
+      LIMIT 1
+    `;
+  }
 
   let rows;
   if (existingRow.length > 0) {
     rows = await sql`
       UPDATE libro_novedades_mesas SET
+        multisala_uuid = ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
         hora_apertura = ${horaApertura},
         hora_cierre = ${horaCierre},
         pitboss = ${pitboss},
@@ -11381,7 +11577,9 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid = ${existingRow[0].uuid}::uuid
       RETURNING 
-        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, mesa_uuid, mesa_uuid AS mesa_id,
+        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, 
+        multisala_uuid, multisala_uuid AS multisala_id,
+        mesa_uuid, mesa_uuid AS mesa_id,
         hora_apertura, hora_cierre,
         pitboss, croupier_apertura, croupier_cierre,
         observacion,
@@ -11392,6 +11590,7 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
       INSERT INTO libro_novedades_mesas (
         uuid,
         libro_uuid,
+        multisala_uuid,
         mesa_uuid,
         hora_apertura,
         hora_cierre,
@@ -11403,6 +11602,7 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
       VALUES (
         ${novUuid}::uuid,
         ${resolvedLibroUuid}::uuid,
+        ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
         ${resolvedMesaUuid}::uuid,
         ${horaApertura},
         ${horaCierre},
@@ -11412,7 +11612,9 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
         ${observacion}
       )
       RETURNING 
-        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, mesa_uuid, mesa_uuid AS mesa_id,
+        uuid, uuid AS id, libro_uuid, libro_uuid AS libro_id, 
+        multisala_uuid, multisala_uuid AS multisala_id,
+        mesa_uuid, mesa_uuid AS mesa_id,
         hora_apertura, hora_cierre,
         pitboss, croupier_apertura, croupier_cierre,
         observacion,
@@ -11420,6 +11622,7 @@ export async function saveLibroNovedadesMesaModel(libroId, data) {
     `;
   }
 
+  saveLibroReporteModel(resolvedLibroUuid).catch(() => {});
   return rows[0];
 }
 
