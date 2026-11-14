@@ -8887,6 +8887,7 @@ export async function createLibroDropMesaModel(data) {
   `;
 
   const finalRow = details[0] || { uuid: insertedUuid, id: insertedUuid };
+  saveLibroReporteModel(libroUuid).catch(() => {});
   return {
     ...finalRow,
     b100: finalRow.denominacion_100,
@@ -9169,6 +9170,7 @@ export async function createLibroConteoMaquinaModel(data) {
   `;
 
   const finalRow = details[0] || { uuid: insertedUuid, id: insertedUuid };
+  saveLibroReporteModel(libroUuid).catch(() => {});
   return {
     ...finalRow,
     b100: finalRow.denominacion_100,
@@ -9275,6 +9277,10 @@ export async function updateLibroConteoMaquinaModel(id, libroId, data) {
   `;
 
   const finalRow = details[0] || { uuid: targetUuid, id: targetUuid };
+  const repLibUuid = finalRow.libro_uuid || libroUuid;
+  if (repLibUuid) {
+    saveLibroReporteModel(repLibUuid).catch(() => {});
+  }
   return {
     ...finalRow,
     b100: finalRow.denominacion_100,
@@ -9310,6 +9316,10 @@ export async function deleteLibroConteoMaquinaModel(id, libroId) {
     WHERE uuid = ${targetUuid}::uuid
       ${libroUuid ? sql`AND libro_uuid = ${libroUuid}::uuid` : sql``}
   `;
+
+  if (libroUuid) {
+    saveLibroReporteModel(libroUuid).catch(() => {});
+  }
 
   return { success: true, id: targetUuid, uuid: targetUuid };
 }
@@ -11677,6 +11687,36 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
       while (typeof rData === 'string') {
         try { rData = JSON.parse(rData); } catch (e) { break; }
       }
+      if (!rData || typeof rData !== 'object') rData = {};
+
+      // Siempre reflejar las subvistas en vivo más recientes en el reporte
+      if (Array.isArray(conteoMaquinasRes)) {
+        rData.conteo_maquinas = conteoMaquinasRes;
+      }
+      if (Array.isArray(aportesRes)) {
+        rData.aportes = aportesRes;
+        rData.aportes_maquinas = aportesRes;
+      }
+      if (Array.isArray(dropRes)) {
+        rData.drop_mesas = dropRes;
+      }
+      if (Array.isArray(novedadesRes)) {
+        rData.novedades_mesas = novedadesRes;
+      }
+      if (Array.isArray(llavesRes)) {
+        rData.control_llaves = llavesRes;
+      }
+      if (Array.isArray(clientesRes)) {
+        rData.control_clientes = clientesRes;
+      }
+      if (Array.isArray(incidenciasRes)) {
+        rData.incidencias_generales = incidenciasRes;
+      }
+      if (datosList && datosList.length > 0) {
+        rData.all_datos = datosList;
+        if (!rData.datos) rData.datos = defaultDatos;
+      }
+
       return {
         success: true,
         exists: true,

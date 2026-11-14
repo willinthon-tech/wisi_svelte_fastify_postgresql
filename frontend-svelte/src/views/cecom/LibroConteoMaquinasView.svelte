@@ -20,6 +20,7 @@
     queueOutboxAction,
     generateSafeUuid
   } from '../../services/localDb.service.js';
+  import { toBackendUrl } from '../../config/api.config.js';
 
   export let libro = null;
   export let libroId = null;
@@ -122,9 +123,9 @@
       }
 
       const [resMaq, resModos, resRangos] = await Promise.all([
-        fetch(`/api/master/maquinas?${qMaq.toString()}`).catch(() => null),
-        fetch(`/api/master/modos?limit=all`).catch(() => null),
-        fetch(`/api/master/rangos?limit=all`).catch(() => null)
+        fetch(toBackendUrl(`/api/master/maquinas?${qMaq.toString()}`)).catch(() => null),
+        fetch(toBackendUrl(`/api/master/modos?limit=all`)).catch(() => null),
+        fetch(toBackendUrl(`/api/master/rangos?limit=all`)).catch(() => null)
       ]);
 
       if (resMaq && resMaq.ok) {
@@ -453,16 +454,18 @@
     // 2. Sincronización en segundo plano con backend
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const fetchUrl = multisalaUuid 
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const fetchUrl = toBackendUrl(multisalaUuid 
         ? `/api/master/libros/${lId}/conteo-maquinas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
-        : `/api/master/libros/${lId}/conteo-maquinas`;
+        : `/api/master/libros/${lId}/conteo-maquinas`);
       const res = await fetch(fetchUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
         if (json?.data && Array.isArray(json.data)) {
-          records = json.data;
+          if (json.data.length > 0 || records.length === 0) {
+            records = json.data;
+          }
           await saveLocalItems('libro_conteo_maquinas', json.data);
         }
       }
@@ -506,16 +509,17 @@
 
     isSaving = true;
 
-    const maquinaObj = availableMaquinas.find(m => String(m.uuid || m.id) === String(selectedMaquinaId));
+    const targetMaquinaId = String(selectedMaquinaId);
+    const maquinaObj = availableMaquinas.find(m => String(m.uuid || m.id) === targetMaquinaId);
     const itemUuid = generateSafeUuid();
 
     const newRecord = {
       uuid: itemUuid,
       libro_uuid: lId,
       multisala_uuid: multisalaUuid || null,
-      maquina_uuid: selectedMaquinaId,
-      maquina_id: selectedMaquinaId,
-      maquina_nombre: maquinaObj?.nombre || `Máquina #${selectedMaquinaId}`,
+      maquina_uuid: targetMaquinaId,
+      maquina_id: targetMaquinaId,
+      maquina_nombre: maquinaObj?.nombre || `Máquina #${targetMaquinaId}`,
       maquina_serial: maquinaObj?.serial || '',
       rango_uuid: maquinaObj?.rango_uuid || null,
       rango_nombre: maquinaObj?.rango_nombre || 'Sin Rango',
@@ -538,7 +542,7 @@
 
     // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA (0ms)
     // Si ya existía, reemplaza ese registro; si no, lo agrega
-    const existingIdx = records.findIndex(r => String(r.maquina_uuid || r.maquina_id) === String(selectedMaquinaId));
+    const existingIdx = records.findIndex(r => String(r.maquina_uuid || r.maquina_id) === targetMaquinaId);
     if (existingIdx !== -1) {
       const existingUuid = records[existingIdx].uuid || records[existingIdx].id;
       newRecord.uuid = existingUuid;
@@ -556,9 +560,9 @@
     await upsertLocalItem('libro_conteo_maquinas', newRecord);
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-    const postEndpoint = multisalaUuid
+    const postEndpoint = toBackendUrl(multisalaUuid
       ? `/api/master/libros/${lId}/conteo-maquinas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
-      : `/api/master/libros/${lId}/conteo-maquinas`;
+      : `/api/master/libros/${lId}/conteo-maquinas`);
 
     if (isOffline) {
       await queueOutboxAction({
@@ -576,7 +580,7 @@
     // 4. SINCRONIZACIÓN CON EL BACKEND
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       const res = await fetch(postEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -588,7 +592,7 @@
       if (res.ok) {
         const json = await res.json();
         if (json?.data) {
-          records = records.map(r => (String(r.uuid || r.id) === String(newRecord.uuid) || String(r.maquina_uuid || r.maquina_id) === String(selectedMaquinaId)) ? { ...newRecord, ...json.data } : r);
+          records = records.map(r => (String(r.uuid || r.id) === String(newRecord.uuid) || String(r.maquina_uuid || r.maquina_id) === targetMaquinaId) ? { ...newRecord, ...json.data } : r);
           await upsertLocalItem('libro_conteo_maquinas', json.data);
         }
       } else {
@@ -631,7 +635,7 @@
     await deleteLocalItem('libro_conteo_maquinas', recordUuid);
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-    const delEndpoint = `/api/master/libros/${lId}/conteo-maquinas/${recordUuid}`;
+    const delEndpoint = toBackendUrl(`/api/master/libros/${lId}/conteo-maquinas/${recordUuid}`);
 
     if (isOffline) {
       await queueOutboxAction({
@@ -744,10 +748,10 @@
     await upsertLocalItem('libro_conteo_maquinas', payload);
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-    const putEndpoint = `/api/master/libros/${lId}/conteo-maquinas/${targetUuid}`;
-    const postEndpoint = multisalaUuid
+    const putEndpoint = toBackendUrl(`/api/master/libros/${lId}/conteo-maquinas/${targetUuid}`);
+    const postEndpoint = toBackendUrl(multisalaUuid
       ? `/api/master/libros/${lId}/conteo-maquinas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
-      : `/api/master/libros/${lId}/conteo-maquinas`;
+      : `/api/master/libros/${lId}/conteo-maquinas`);
 
     if (isOffline) {
       await queueOutboxAction({
@@ -1037,7 +1041,11 @@
             class="btn-guardar" 
             disabled={isSaving || !selectedMaquinaId}
           >
-            {conteosMap.has(String(selectedMaquinaId)) ? 'Actualizar Conteo' : 'Guardar'}
+            {#if isSaving}
+              Guardando...
+            {:else}
+              {conteosMap.has(String(selectedMaquinaId)) ? 'Actualizar Conteo' : 'Guardar'}
+            {/if}
           </button>
           {#if selectedMaquinaId || b100 || b50 || b20 || b10 || b5 || b1}
             <button 

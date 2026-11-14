@@ -99,6 +99,33 @@
     isLoading = true;
     loadError = null;
 
+    // Recuperar cualquier conteo de máquinas guardado localmente en IndexedDB para asegurar visualización inmediata
+    let localConteos = [];
+    try {
+      localConteos = await getLocalItems('libro_conteo_maquinas', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(id) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(id) || String(r.libro_id) === String(libro?.id)))
+      );
+    } catch (e) {}
+
+    const mergeConteoMaquinas = (baseList = []) => {
+      const list = Array.isArray(baseList) ? [...baseList] : [];
+      if (Array.isArray(localConteos) && localConteos.length > 0) {
+        for (const lc of localConteos) {
+          const lcUuid = String(lc.uuid || lc.id || '');
+          const lcMaq = String(lc.maquina_uuid || lc.maquina_id || '');
+          const exists = list.some(c => 
+            (lcUuid && String(c.uuid || c.id) === lcUuid) ||
+            (lcMaq && String(c.maquina_uuid || c.maquina_id) === lcMaq)
+          );
+          if (!exists) {
+            list.push(lc);
+          }
+        }
+      }
+      return list;
+    };
+
     // 1. Carga previa inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_reporte', r => 
@@ -115,7 +142,7 @@
           datos: payload.datos || null,
           all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
           drop_mesas: payload.drop_mesas || [],
-          conteo_maquinas: payload.conteo_maquinas || [],
+          conteo_maquinas: mergeConteoMaquinas(payload.conteo_maquinas),
           novedades_mesas: payload.novedades_mesas || [],
           aportes: payload.aportes_maquinas || payload.aportes || [],
           control_llaves: payload.control_llaves || [],
@@ -149,12 +176,17 @@
                 ? libro
                 : payload.libro || libro;
 
+          const finalConteoMaquinas = mergeConteoMaquinas(payload.conteo_maquinas);
+          if (liveCounts && finalConteoMaquinas.length > (liveCounts.conteo_maquinas || 0)) {
+            liveCounts.conteo_maquinas = finalConteoMaquinas.length;
+          }
+
           resumenData = {
             libro: loadedLibro,
             datos: payload.datos || null,
             all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
             drop_mesas: payload.drop_mesas || [],
-            conteo_maquinas: payload.conteo_maquinas || [],
+            conteo_maquinas: finalConteoMaquinas,
             novedades_mesas: payload.novedades_mesas || [],
             aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
