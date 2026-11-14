@@ -8979,8 +8979,6 @@ export async function getLibroConteoMaquinasModel(libroId, multisalaUuid = null)
     whereMultisala = sql`AND d.multisala_uuid = ${multisalaUuid}::uuid`;
   } else if (multisalaUuid === 'null' || multisalaUuid === 'none') {
     whereMultisala = sql`AND d.multisala_uuid IS NULL`;
-  } else if (!multisalaUuid && multisalaUuid !== 'all') {
-    whereMultisala = sql`AND d.multisala_uuid IS NULL`;
   }
 
   const rows = await sql`
@@ -9040,8 +9038,23 @@ export async function createLibroConteoMaquinaModel(data) {
   if (!rawLibro) throw new Error('El ID del libro es obligatorio');
   if (!rawMaquina) throw new Error('Debe seleccionar una máquina');
 
-  const libroUuid = String(rawLibro).trim();
-  const maquinaUuid = String(rawMaquina).trim();
+  const strLibro = String(rawLibro).trim();
+  const strMaquina = String(rawMaquina).trim();
+
+  let libroUuid = isUuid(strLibro) ? strLibro : null;
+  if (!libroUuid && isPgConnected && sql) {
+    const lRows = await sql`SELECT uuid FROM libros WHERE uuid::text = ${strLibro} LIMIT 1`;
+    if (lRows.length > 0) libroUuid = lRows[0].uuid;
+  }
+  if (!libroUuid) libroUuid = strLibro;
+
+  let maquinaUuid = isUuid(strMaquina) ? strMaquina : null;
+  if (!maquinaUuid && isPgConnected && sql) {
+    const mRows = await sql`SELECT uuid FROM maquinas WHERE (uuid::text = ${strMaquina} OR nombre = ${strMaquina} OR serial = ${strMaquina}) LIMIT 1`;
+    if (mRows.length > 0) maquinaUuid = mRows[0].uuid;
+  }
+  if (!maquinaUuid) maquinaUuid = strMaquina;
+
   if (!isUuid(libroUuid)) throw new Error('UUID de libro inválido');
   if (!isUuid(maquinaUuid)) throw new Error('UUID de máquina inválido');
 
@@ -9121,7 +9134,7 @@ export async function createLibroConteoMaquinaModel(data) {
   } else {
     existingRow = await sql`
       SELECT uuid FROM libro_conteo_maquinas
-      WHERE libro_uuid = ${libroUuid}::uuid AND maquina_uuid = ${maquinaUuid}::uuid AND multisala_uuid IS NULL
+      WHERE libro_uuid = ${libroUuid}::uuid AND maquina_uuid = ${maquinaUuid}::uuid
       LIMIT 1
     `;
   }
@@ -9138,6 +9151,8 @@ export async function createLibroConteoMaquinaModel(data) {
         denominacion_5 = ${b5},
         denominacion_1 = ${b1},
         total = ${total},
+        is_deleted = false,
+        deleted_at = NULL,
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid = ${existingRow[0].uuid}::uuid
       RETURNING uuid
@@ -9265,6 +9280,8 @@ export async function updateLibroConteoMaquinaModel(id, libroId, data) {
       denominacion_5 = ${b5 !== undefined ? b5 : sql`denominacion_5`},
       denominacion_1 = ${b1 !== undefined ? b1 : sql`denominacion_1`},
       total = ${total !== undefined ? total : sql`total`},
+      is_deleted = false,
+      deleted_at = NULL,
       updated_at = CURRENT_TIMESTAMP
     WHERE uuid = ${targetUuid}::uuid
       ${libroUuid ? sql`AND libro_uuid = ${libroUuid}::uuid` : sql``}

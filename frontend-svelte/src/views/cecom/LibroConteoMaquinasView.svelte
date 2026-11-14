@@ -27,11 +27,20 @@
   export let multisalaUuid = null;
 
   let prevMultisala = undefined;
+  let prevLibroKey = null;
+
+  $: currentLibroKey = String(libro?.uuid || libroId || libro?.id || '');
+
   $: if (multisalaUuid !== prevMultisala) {
     prevMultisala = multisalaUuid;
     selectedMaquinaId = '';
     records = [];
     limpiarCampos();
+    loadRecords();
+  }
+
+  $: if (currentLibroKey && currentLibroKey !== prevLibroKey) {
+    prevLibroKey = currentLibroKey;
     loadRecords();
   }
 
@@ -214,40 +223,17 @@
         }
       }
 
-      // Filtro obligatorio: Solo máquinas de modo "Bill" (Billetero)
-      const matchedModo = allModosList.find(mo => 
-        String(mo.uuid || mo.id) === String(m.modo_uuid || m.modo_id)
-      );
-      const modoStr = String(
-        m.modo_nombre || 
-        matchedModo?.nombre || 
-        (typeof m.modo === 'string' ? m.modo : m.modo?.nombre) || 
-        ''
-      ).trim().toLowerCase();
-
-      let isBill = false;
-      if (modoStr) {
-        isBill = modoStr === 'bill' || modoStr.startsWith('bill') || modoStr.includes('billeter');
-      } else if (allModosList.length === 0) {
-        // Modos aún no cargados de IndexedDB: asumir true para no vaciar la lista mientras carga
-        isBill = true;
-      } else {
-        const billModo = allModosList.find(mo => {
-          const nom = (mo.nombre || '').trim().toLowerCase();
-          return nom === 'bill' || nom.startsWith('bill') || nom.includes('billeter');
-        });
-        if (billModo && (m.modo_uuid || m.modo_id)) {
-          isBill = String(m.modo_uuid || m.modo_id) === String(billModo.uuid || billModo.id);
-        }
-      }
-
-      return isBill;
+      return true;
     }).map(m => {
       const matchedRango = allRangosList.find(r => 
         String(r.uuid || r.id) === String(m.rango_uuid || m.rango_id)
       );
+      const matchedModo = allModosList.find(mo => 
+        String(mo.uuid || mo.id) === String(m.modo_uuid || m.modo_id)
+      );
       return {
         ...m,
+        modo_nombre: m.modo_nombre || matchedModo?.nombre || '',
         rango_nombre: m.rango_nombre || matchedRango?.nombre || 'Sin Rango'
       };
     }).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true }));
@@ -442,7 +428,7 @@
       const local = await getLocalItems('libro_conteo_maquinas', r => 
         ((r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
         (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))) &&
-        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : !r.multisala_uuid)
+        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : true)
       );
       if (Array.isArray(local) && local.length > 0) {
         records = local;
@@ -556,7 +542,6 @@
 
     // 2. Limpieza del formulario
     limpiarCampos();
-    triggerToast('Conteo de máquina guardado con éxito', 'success');
 
     // 3. PERSISTENCIA EN INDEXEDDB LOCAL (<5ms)
     await upsertLocalItem('libro_conteo_maquinas', newRecord);
@@ -567,6 +552,7 @@
       : `/api/master/libros/${lId}/conteo-maquinas`);
 
     if (isOffline) {
+      triggerToast('Conteo guardado localmente (modo sin conexión)', 'info');
       await queueOutboxAction({
         entity: 'libro_conteo_maquinas',
         action: 'create',
@@ -597,8 +583,13 @@
           records = records.map(r => (String(r.uuid || r.id) === String(newRecord.uuid) || String(r.maquina_uuid || r.maquina_id) === targetMaquinaId) ? { ...newRecord, ...json.data } : r);
           await upsertLocalItem('libro_conteo_maquinas', json.data);
         }
+        triggerToast('Conteo de máquina guardado con éxito', 'success');
       } else {
-        throw new Error(`Server returned ${res.status}`);
+        const errJson = await res.json().catch(() => null);
+        const errMsg = errJson?.message || `Error del servidor (${res.status})`;
+        console.warn('[handleGuardar] Error del backend:', errMsg);
+        triggerToast(`Guardado en cola: ${errMsg}`, 'warning');
+        throw new Error(errMsg);
       }
     } catch (syncErr) {
       console.warn('[LocalDb] Falló sync con backend en vivo, asegurando en Outbox:', syncErr);
@@ -874,7 +865,7 @@
       </div>
     {:else if availableMaquinas.length === 0}
       <div class="shelf-empty">
-        No hay máquinas con modo Bill (billetero) asociadas a esta sala.
+        No hay máquinas asociadas a esta sala.
       </div>
     {:else if filteredAvailableMaquinas.length === 0}
       <div class="shelf-empty">
