@@ -492,10 +492,9 @@
     if (isMultisalaTarget) {
       datos = allD.find(d => d.multisala_uuid && String(d.multisala_uuid) === String(subsalaUuid)) ||
               (isFirstActiveSubsala ? allD.find(d => !d.multisala_uuid) : null) ||
-              rawData.datos ||
               null;
     } else {
-      datos = rawData.datos || allD[0] || null;
+      datos = rawData.datos || allD.find(d => !d.multisala_uuid) || allD[0] || null;
     }
 
     // 2. Drop de mesas
@@ -1201,6 +1200,8 @@
            SECCIONES OPERATIVAS (AGRUPADAS POR SALA HIJA SI ES MULTISALAS)
            ============================================================ -->
       {#each renderedSections as section (section.subsala?.uuid || 'root')}
+        {@const secOpA = (section.subData.datos?.operador_turno_a && section.subData.datos.operador_turno_a.trim()) ? section.subData.datos.operador_turno_a : (section.subsala ? "—" : mainOperadorA)}
+        {@const secOpC = (section.subData.datos?.operador_turno_c && section.subData.datos.operador_turno_c.trim()) ? section.subData.datos.operador_turno_c : (section.subsala ? "—" : mainOperadorC)}
         <div class="subsala-section-block">
           {#if section.subsala}
             <div class="subsala-report-header">
@@ -2196,58 +2197,58 @@
               {/if}
             {/if}
           </div>
+
+          <!-- ============================================================
+               9. OPERADORES CECOM (APERTURA Y CIERRE) Y AUDITORÍA
+               ============================================================ -->
+          <div class="sheet-section sub-module-section operadores-final-section">
+            <div class="operadores-section-box">
+              <span class="op-main-title">OPERADORES CECOM{#if section.subsala} ({section.subsala.nombre.toUpperCase()}){/if}:</span>
+              <div class="op-line">
+                <span class="op-label">TURNO A (APERTURA):</span>
+                <span class="op-names"
+                  >NOMBRES: {secOpA}</span
+                >
+              </div>
+              <div class="op-line">
+                <span class="op-label">TURNO C (CIERRE):</span>
+                <span class="op-names"
+                  >NOMBRES: {secOpC}</span
+                >
+              </div>
+            </div>
+
+            <!-- Firmas Oficiales de Auditoría -->
+            <div class="sheet-footer-signatures">
+              <div class="signature-box">
+                <div class="sign-line"></div>
+                <span class="sign-title">Operador CECOM (Turno A - Apertura)</span>
+                <span class="sign-name"
+                  >{secOpA && secOpA !== "—" && secOpA !== "-" ? secOpA : "Firma y Huella"}</span
+                >
+              </div>
+
+              <div class="signature-box">
+                <div class="sign-line"></div>
+                <span class="sign-title">Operador CECOM (Turno C - Cierre)</span>
+                <span class="sign-name"
+                  >{secOpC && secOpC !== "—" && secOpC !== "-" ? secOpC : "Firma y Huella"}</span
+                >
+              </div>
+
+              <div class="signature-box">
+                <div class="sign-line"></div>
+                <span class="sign-title">Supervisión / Auditoría de Sala</span>
+                <span class="sign-name">Firma y Sello Oficial</span>
+              </div>
+            </div>
+
+            <div class="sheet-bottom-note">
+              Documento oficial {section.subsala ? `(${section.subsala.nombre})` : 'consolidado'} emitido por el Sistema WISI.
+            </div>
+          </div>
         </div>
       {/each}
-
-      <!-- ============================================================
-           9. OPERADORES CECOM (APERTURA Y CIERRE) Y AUDITORÍA FINAL
-           ============================================================ -->
-      <div class="sheet-section sub-module-section operadores-final-section">
-        <div class="operadores-section-box">
-          <span class="op-main-title">OPERADORES CECOM:</span>
-          <div class="op-line">
-            <span class="op-label">TURNO A (APERTURA):</span>
-            <span class="op-names"
-              >NOMBRES: {mainOperadorA}</span
-            >
-          </div>
-          <div class="op-line">
-            <span class="op-label">TURNO C (CIERRE):</span>
-            <span class="op-names"
-              >NOMBRES: {mainOperadorC}</span
-            >
-          </div>
-        </div>
-
-        <!-- Firmas Oficiales de Auditoría -->
-        <div class="sheet-footer-signatures">
-          <div class="signature-box">
-            <div class="sign-line"></div>
-            <span class="sign-title">Operador CECOM (Turno A - Apertura)</span>
-            <span class="sign-name"
-              >{mainOperadorA !== "—" ? mainOperadorA : "Firma y Huella"}</span
-            >
-          </div>
-
-          <div class="signature-box">
-            <div class="sign-line"></div>
-            <span class="sign-title">Operador CECOM (Turno C - Cierre)</span>
-            <span class="sign-name"
-              >{mainOperadorC !== "—" ? mainOperadorC : "Firma y Huella"}</span
-            >
-          </div>
-
-          <div class="signature-box">
-            <div class="sign-line"></div>
-            <span class="sign-title">Supervisión / Auditoría de Sala</span>
-            <span class="sign-name">Firma y Sello Oficial</span>
-          </div>
-        </div>
-
-        <div class="sheet-bottom-note">
-          Documento oficial consolidado emitido por el Sistema WISI.
-        </div>
-      </div>
     </div>
   {/if}
 </div>
@@ -2806,7 +2807,15 @@
     display: flex;
     flex-direction: column;
     width: 100%;
-    margin-bottom: 24px;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 2px dashed #cbd5e1;
+  }
+
+  .subsala-section-block:last-child {
+    margin-bottom: 12px;
+    padding-bottom: 0;
+    border-bottom: none;
   }
 
   .subsala-report-header {
@@ -3859,6 +3868,14 @@
     }
 
     /* 5. Reglas de Paginación y Saltos de Hoja */
+    .subsala-section-block:not(:last-child) {
+      break-after: page !important;
+      page-break-after: always !important;
+      border-bottom: none !important;
+      margin-bottom: 0 !important;
+      padding-bottom: 0 !important;
+    }
+
     .sheet-header {
       break-inside: avoid !important;
       page-break-inside: avoid !important;
