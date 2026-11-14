@@ -7692,38 +7692,114 @@ export async function createMaquinaModel(data) {
       }
     }
 
-    const rows = await sql`
-      INSERT INTO maquinas (
-        uuid,
-        nombre, serial, puestos, 
-        sala_uuid, 
-        juego_uuid, 
-        estado_uuid,
-        sociedad_uuid, 
-        valor_uuid, 
-        modelo_uuid, 
-        tipo_uuid, 
-        modo_uuid, 
-        legal_uuid,
-        rango_uuid
-      ) VALUES (
-        ${maquinaUuid}::uuid,
-        ${nombre}, ${serial}, ${puestos}, 
-        ${sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`}, 
-        ${juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`}, 
-        ${estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`},
-        ${sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`}, 
-        ${valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`}, 
-        ${modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`}, 
-        ${tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`}, 
-        ${modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`}, 
-        ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`},
-        ${rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`}
-      )
-      RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
-        sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
-        modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
-    `;
+    let rows;
+    try {
+      rows = await sql`
+        INSERT INTO maquinas (
+          uuid,
+          nombre, serial, puestos, 
+          sala_uuid, 
+          juego_uuid, 
+          estado_uuid,
+          sociedad_uuid, 
+          valor_uuid, 
+          modelo_uuid, 
+          tipo_uuid, 
+          modo_uuid, 
+          legal_uuid,
+          rango_uuid
+        ) VALUES (
+          ${maquinaUuid}::uuid,
+          ${nombre}, ${serial}, ${puestos}, 
+          ${sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`}, 
+          ${juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`}, 
+          ${estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`},
+          ${sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`}, 
+          ${valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`}, 
+          ${modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`}, 
+          ${tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`}, 
+          ${modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`}, 
+          ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`},
+          ${rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`}
+        )
+        RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
+          sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
+          modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
+      `;
+    } catch (insertErr) {
+      if (insertErr.code === '23503') {
+        console.warn('[createMaquinaModel] Foreign key violation detectada (23503):', insertErr.message);
+        if (String(insertErr.message).includes('fk_maquinas_juego_uuid')) {
+          try {
+            await sql.unsafe(`
+              ALTER TABLE maquinas DROP CONSTRAINT IF EXISTS fk_maquinas_juego_uuid;
+              UPDATE maquinas SET juego_uuid = NULL WHERE juego_uuid IS NOT NULL AND juego_uuid NOT IN (SELECT uuid FROM juegos_maquinas);
+              ALTER TABLE maquinas ADD CONSTRAINT fk_maquinas_juego_uuid FOREIGN KEY (juego_uuid) REFERENCES juegos_maquinas(uuid) ON DELETE SET NULL;
+            `);
+            rows = await sql`
+              INSERT INTO maquinas (
+                uuid, nombre, serial, puestos, sala_uuid, juego_uuid, estado_uuid,
+                sociedad_uuid, valor_uuid, modelo_uuid, tipo_uuid, modo_uuid, legal_uuid, rango_uuid
+              ) VALUES (
+                ${maquinaUuid}::uuid, ${nombre}, ${serial}, ${puestos},
+                ${sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`},
+                ${juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`},
+                ${estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`},
+                ${sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`},
+                ${valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`},
+                ${modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`},
+                ${tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`},
+                ${modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`},
+                ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`},
+                ${rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`}
+              )
+              RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
+                sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
+                modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
+            `;
+          } catch (retryErr) {
+            console.warn('[createMaquinaModel] Reintento falló, insertando con juego_uuid = NULL:', retryErr.message);
+            rows = await sql`
+              INSERT INTO maquinas (
+                uuid, nombre, serial, puestos, sala_uuid, juego_uuid, estado_uuid,
+                sociedad_uuid, valor_uuid, modelo_uuid, tipo_uuid, modo_uuid, legal_uuid, rango_uuid
+              ) VALUES (
+                ${maquinaUuid}::uuid, ${nombre}, ${serial}, ${puestos},
+                ${sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`},
+                NULL,
+                ${estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`},
+                ${sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`},
+                ${valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`},
+                ${modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`},
+                ${tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`},
+                ${modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`},
+                ${legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`},
+                ${rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`}
+              )
+              RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
+                sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
+                modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
+            `;
+          }
+        } else {
+          rows = await sql`
+            INSERT INTO maquinas (
+              uuid, nombre, serial, puestos, sala_uuid, juego_uuid, estado_uuid,
+              sociedad_uuid, valor_uuid, modelo_uuid, tipo_uuid, modo_uuid, legal_uuid, rango_uuid
+            ) VALUES (
+              ${maquinaUuid}::uuid, ${nombre}, ${serial}, ${puestos},
+              ${sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`},
+              NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+            )
+            RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
+              sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
+              modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
+          `;
+        }
+      } else {
+        throw insertErr;
+      }
+    }
     return rows[0];
   } else {
     if (!inMemoryData.maquinas) inMemoryData.maquinas = [];
@@ -7868,28 +7944,94 @@ export async function updateMaquinaModel(id, data) {
       }
     }
 
-    const rows = await sql`
-      UPDATE maquinas
-      SET
-        nombre = ${nombre !== undefined ? nombre : sql`nombre`},
-        serial = ${serial !== undefined ? serial : sql`serial`},
-        puestos = ${puestos !== undefined ? puestos : sql`puestos`},
-        sala_uuid = ${sala_uuid !== undefined ? (sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
-        juego_uuid = ${juego_uuid !== undefined ? (juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`) : sql`juego_uuid`},
-        estado_uuid = ${estado_uuid !== undefined ? (estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`) : sql`estado_uuid`},
-        sociedad_uuid = ${sociedad_uuid !== undefined ? (sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`) : sql`sociedad_uuid`},
-        valor_uuid = ${valor_uuid !== undefined ? (valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`) : sql`valor_uuid`},
-        modelo_uuid = ${modelo_uuid !== undefined ? (modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`) : sql`modelo_uuid`},
-        tipo_uuid = ${tipo_uuid !== undefined ? (tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`) : sql`tipo_uuid`},
-        modo_uuid = ${modo_uuid !== undefined ? (modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`) : sql`modo_uuid`},
-        legal_uuid = ${legal_uuid !== undefined ? (legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`) : sql`legal_uuid`},
-        rango_uuid = ${rango_uuid !== undefined ? (rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`) : sql`rango_uuid`},
-        updated_at = CURRENT_TIMESTAMP
-      WHERE uuid = ${targetUuid}::uuid
-      RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
-        sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
-        modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
-    `;
+    let rows;
+    try {
+      rows = await sql`
+        UPDATE maquinas
+        SET
+          nombre = ${nombre !== undefined ? nombre : sql`nombre`},
+          serial = ${serial !== undefined ? serial : sql`serial`},
+          puestos = ${puestos !== undefined ? puestos : sql`puestos`},
+          sala_uuid = ${sala_uuid !== undefined ? (sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
+          juego_uuid = ${juego_uuid !== undefined ? (juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`) : sql`juego_uuid`},
+          estado_uuid = ${estado_uuid !== undefined ? (estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`) : sql`estado_uuid`},
+          sociedad_uuid = ${sociedad_uuid !== undefined ? (sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`) : sql`sociedad_uuid`},
+          valor_uuid = ${valor_uuid !== undefined ? (valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`) : sql`valor_uuid`},
+          modelo_uuid = ${modelo_uuid !== undefined ? (modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`) : sql`modelo_uuid`},
+          tipo_uuid = ${tipo_uuid !== undefined ? (tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`) : sql`tipo_uuid`},
+          modo_uuid = ${modo_uuid !== undefined ? (modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`) : sql`modo_uuid`},
+          legal_uuid = ${legal_uuid !== undefined ? (legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`) : sql`legal_uuid`},
+          rango_uuid = ${rango_uuid !== undefined ? (rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`) : sql`rango_uuid`},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE uuid = ${targetUuid}::uuid
+        RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
+          sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
+          modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
+      `;
+    } catch (upErr) {
+      if (upErr.code === '23503') {
+        console.warn('[updateMaquinaModel] Error FK (23503):', upErr.message);
+        if (String(upErr.message).includes('fk_maquinas_juego_uuid')) {
+          try {
+            await sql.unsafe(`
+              ALTER TABLE maquinas DROP CONSTRAINT IF EXISTS fk_maquinas_juego_uuid;
+              UPDATE maquinas SET juego_uuid = NULL WHERE juego_uuid IS NOT NULL AND juego_uuid NOT IN (SELECT uuid FROM juegos_maquinas);
+              ALTER TABLE maquinas ADD CONSTRAINT fk_maquinas_juego_uuid FOREIGN KEY (juego_uuid) REFERENCES juegos_maquinas(uuid) ON DELETE SET NULL;
+            `);
+            rows = await sql`
+              UPDATE maquinas
+              SET
+                nombre = ${nombre !== undefined ? nombre : sql`nombre`},
+                serial = ${serial !== undefined ? serial : sql`serial`},
+                puestos = ${puestos !== undefined ? puestos : sql`puestos`},
+                sala_uuid = ${sala_uuid !== undefined ? (sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
+                juego_uuid = ${juego_uuid !== undefined ? (juego_uuid ? sql`${juego_uuid}::uuid` : sql`NULL`) : sql`juego_uuid`},
+                estado_uuid = ${estado_uuid !== undefined ? (estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`) : sql`estado_uuid`},
+                sociedad_uuid = ${sociedad_uuid !== undefined ? (sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`) : sql`sociedad_uuid`},
+                valor_uuid = ${valor_uuid !== undefined ? (valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`) : sql`valor_uuid`},
+                modelo_uuid = ${modelo_uuid !== undefined ? (modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`) : sql`modelo_uuid`},
+                tipo_uuid = ${tipo_uuid !== undefined ? (tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`) : sql`tipo_uuid`},
+                modo_uuid = ${modo_uuid !== undefined ? (modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`) : sql`modo_uuid`},
+                legal_uuid = ${legal_uuid !== undefined ? (legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`) : sql`legal_uuid`},
+                rango_uuid = ${rango_uuid !== undefined ? (rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`) : sql`rango_uuid`},
+                updated_at = CURRENT_TIMESTAMP
+              WHERE uuid = ${targetUuid}::uuid
+              RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
+                sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
+                modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
+            `;
+          } catch (retryErr) {
+            console.warn('[updateMaquinaModel] Reintento falló, actualizando con juego_uuid = NULL:', retryErr.message);
+            rows = await sql`
+              UPDATE maquinas
+              SET
+                nombre = ${nombre !== undefined ? nombre : sql`nombre`},
+                serial = ${serial !== undefined ? serial : sql`serial`},
+                puestos = ${puestos !== undefined ? puestos : sql`puestos`},
+                sala_uuid = ${sala_uuid !== undefined ? (sala_uuid ? sql`${sala_uuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
+                juego_uuid = NULL,
+                estado_uuid = ${estado_uuid !== undefined ? (estado_uuid ? sql`${estado_uuid}::uuid` : sql`NULL`) : sql`estado_uuid`},
+                sociedad_uuid = ${sociedad_uuid !== undefined ? (sociedad_uuid ? sql`${sociedad_uuid}::uuid` : sql`NULL`) : sql`sociedad_uuid`},
+                valor_uuid = ${valor_uuid !== undefined ? (valor_uuid ? sql`${valor_uuid}::uuid` : sql`NULL`) : sql`valor_uuid`},
+                modelo_uuid = ${modelo_uuid !== undefined ? (modelo_uuid ? sql`${modelo_uuid}::uuid` : sql`NULL`) : sql`modelo_uuid`},
+                tipo_uuid = ${tipo_uuid !== undefined ? (tipo_uuid ? sql`${tipo_uuid}::uuid` : sql`NULL`) : sql`tipo_uuid`},
+                modo_uuid = ${modo_uuid !== undefined ? (modo_uuid ? sql`${modo_uuid}::uuid` : sql`NULL`) : sql`modo_uuid`},
+                legal_uuid = ${legal_uuid !== undefined ? (legal_uuid ? sql`${legal_uuid}::uuid` : sql`NULL`) : sql`legal_uuid`},
+                rango_uuid = ${rango_uuid !== undefined ? (rango_uuid ? sql`${rango_uuid}::uuid` : sql`NULL`) : sql`rango_uuid`},
+                updated_at = CURRENT_TIMESTAMP
+              WHERE uuid = ${targetUuid}::uuid
+              RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id, estado_uuid AS estado_id,
+                sociedad_uuid AS sociedad_id, valor_uuid AS valor_id, modelo_uuid AS modelo_id, tipo_uuid AS tipo_id,
+                modo_uuid AS modo_id, legal_uuid AS legal_id, rango_uuid AS rango_id
+            `;
+          }
+        } else {
+          throw upErr;
+        }
+      } else {
+        throw upErr;
+      }
+    }
     return rows[0] || null;
   } else {
     const list = inMemoryData.maquinas || [];

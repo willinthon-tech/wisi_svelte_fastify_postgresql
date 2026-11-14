@@ -277,6 +277,41 @@ export async function initDb() {
       console.warn('Advertencia migrando multisala_uuid en tablas de libro:', eLibroCol.message);
     }
 
+    // Garantizar que fk_maquinas_juego_uuid referencie a juegos_maquinas(uuid) y NO a juegos(uuid)
+    try {
+      await sql.unsafe(`
+        DO $$
+        DECLARE
+          v_ref_table text;
+        BEGIN
+          SELECT ccu.table_name INTO v_ref_table
+          FROM information_schema.table_constraints tc
+          JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+          WHERE tc.constraint_name = 'fk_maquinas_juego_uuid' AND tc.table_name = 'maquinas'
+          LIMIT 1;
+
+          IF v_ref_table IS NOT NULL AND v_ref_table != 'juegos_maquinas' THEN
+            ALTER TABLE maquinas DROP CONSTRAINT fk_maquinas_juego_uuid;
+            v_ref_table := NULL;
+          END IF;
+
+          IF v_ref_table IS NULL THEN
+            UPDATE maquinas SET juego_uuid = NULL 
+            WHERE juego_uuid IS NOT NULL AND juego_uuid NOT IN (SELECT uuid FROM juegos_maquinas);
+
+            ALTER TABLE maquinas DROP CONSTRAINT IF EXISTS fk_maquinas_juego_uuid;
+
+            ALTER TABLE maquinas ADD CONSTRAINT fk_maquinas_juego_uuid 
+              FOREIGN KEY (juego_uuid) REFERENCES juegos_maquinas(uuid) ON DELETE SET NULL;
+          END IF;
+        EXCEPTION WHEN OTHERS THEN
+          NULL;
+        END $$;
+      `);
+    } catch (eFkMaq) {
+      console.warn('Advertencia verificando fk_maquinas_juego_uuid en initDb:', eFkMaq.message);
+    }
+
     isPgConnected = true;
     console.log(`\x1b[32m[CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {
