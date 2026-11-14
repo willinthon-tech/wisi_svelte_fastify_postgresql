@@ -453,8 +453,22 @@
       if (res.ok) {
         const json = await res.json();
         if (json?.data && Array.isArray(json.data)) {
-          records = json.data;
-          await saveLocalItems('libro_conteo_maquinas', json.data);
+          const serverList = json.data;
+          // Conservar registros locales pendientes para evitar que desaparezcan si aún no impactaron en BD
+          const merged = [...serverList];
+          for (const localRec of (records || [])) {
+            const locKey = String(localRec.uuid || localRec.id || '');
+            const locMaq = String(localRec.maquina_uuid || localRec.maquina_id || '');
+            const exists = serverList.some(s => 
+              (locKey && String(s.uuid || s.id) === locKey) ||
+              (locMaq && String(s.maquina_uuid || s.maquina_id) === locMaq)
+            );
+            if (!exists) {
+              merged.push(localRec);
+            }
+          }
+          records = merged;
+          await saveLocalItems('libro_conteo_maquinas', merged);
         }
       }
     } catch (err) {
@@ -590,9 +604,9 @@
         triggerToast('Conteo de máquina guardado con éxito', 'success');
       } else {
         const errJson = await res.json().catch(() => null);
-        const errMsg = errJson?.message || `Error del servidor (${res.status})`;
+        const errMsg = errJson?.error || errJson?.message || `Error del servidor (${res.status})`;
         console.warn('[handleGuardar] Error del backend:', errMsg);
-        triggerToast(`Guardado en cola: ${errMsg}`, 'warning');
+        triggerToast(`Error al guardar en servidor: ${errMsg}`, 'warning');
         throw new Error(errMsg);
       }
     } catch (syncErr) {

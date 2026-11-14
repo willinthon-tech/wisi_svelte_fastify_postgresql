@@ -2084,6 +2084,7 @@ export async function createLibroConteoMaquina(request, reply) {
     const body = parseBody(request.body);
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroConteoMaquinaModel(data);
+    try { broadcastMasterSync('libro_conteo_maquinas', 'create', result); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2095,6 +2096,7 @@ export async function updateLibroConteoMaquina(request, reply) {
     const { id, conteoId } = request.params;
     const body = parseBody(request.body);
     const result = await updateLibroConteoMaquinaModel(conteoId, id, body);
+    try { broadcastMasterSync('libro_conteo_maquinas', 'update', result); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2105,6 +2107,7 @@ export async function deleteLibroConteoMaquina(request, reply) {
   try {
     const { id, conteoId } = request.params;
     const result = await deleteLibroConteoMaquinaModel(conteoId, id);
+    try { broadcastMasterSync('libro_conteo_maquinas', 'delete', { id: conteoId, uuid: conteoId, libro_id: id }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });

@@ -7602,36 +7602,85 @@ export async function createMaquinaModel(data) {
   const maquinaUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : crypto.randomUUID();
 
   const rawSala = data.sala_uuid || data.sala_id;
-  const sala_uuid = rawSala && isUuid(rawSala) ? String(rawSala).trim() : null;
+  let sala_uuid = rawSala && isUuid(rawSala) ? String(rawSala).trim() : null;
 
   const rawJuego = data.juego_uuid || data.juego_id;
-  const juego_uuid = rawJuego && isUuid(rawJuego) ? String(rawJuego).trim() : null;
+  let juego_uuid = rawJuego && isUuid(rawJuego) ? String(rawJuego).trim() : null;
 
   const rawEstado = data.estado_uuid || data.estado_id;
-  const estado_uuid = rawEstado && isUuid(rawEstado) ? String(rawEstado).trim() : null;
+  let estado_uuid = rawEstado && isUuid(rawEstado) ? String(rawEstado).trim() : null;
 
   const rawSociedad = data.sociedad_uuid || data.sociedad_id;
-  const sociedad_uuid = rawSociedad && isUuid(rawSociedad) ? String(rawSociedad).trim() : null;
+  let sociedad_uuid = rawSociedad && isUuid(rawSociedad) ? String(rawSociedad).trim() : null;
 
   const rawValor = data.valor_uuid || data.valor_id;
-  const valor_uuid = rawValor && isUuid(rawValor) ? String(rawValor).trim() : null;
+  let valor_uuid = rawValor && isUuid(rawValor) ? String(rawValor).trim() : null;
 
   const rawModelo = data.modelo_uuid || data.modelo_id;
-  const modelo_uuid = rawModelo && isUuid(rawModelo) ? String(rawModelo).trim() : null;
+  let modelo_uuid = rawModelo && isUuid(rawModelo) ? String(rawModelo).trim() : null;
 
   const rawTipo = data.tipo_uuid || data.tipo_id;
-  const tipo_uuid = rawTipo && isUuid(rawTipo) ? String(rawTipo).trim() : null;
+  let tipo_uuid = rawTipo && isUuid(rawTipo) ? String(rawTipo).trim() : null;
 
   const rawModo = data.modo_uuid || data.modo_id;
-  const modo_uuid = rawModo && isUuid(rawModo) ? String(rawModo).trim() : null;
+  let modo_uuid = rawModo && isUuid(rawModo) ? String(rawModo).trim() : null;
 
   const rawLegal = data.legal_uuid || data.legal_id;
-  const legal_uuid = rawLegal && isUuid(rawLegal) ? String(rawLegal).trim() : null;
+  let legal_uuid = rawLegal && isUuid(rawLegal) ? String(rawLegal).trim() : null;
 
   const rawRango = data.rango_uuid || data.rango_id;
-  const rango_uuid = rawRango && isUuid(rawRango) ? String(rawRango).trim() : null;
+  let rango_uuid = rawRango && isUuid(rawRango) ? String(rawRango).trim() : null;
 
   if (isPgConnected && sql) {
+    // Sanitizar claves foráneas contra la base de datos real para evitar fk_maquinas_* violations
+    if (juego_uuid) {
+      const checkJ = await sql`SELECT uuid FROM juegos_maquinas WHERE uuid = ${juego_uuid}::uuid LIMIT 1`;
+      if (checkJ.length === 0) {
+        let resolvedJ = null;
+        if (data.juego_nombre) {
+          const byName = await sql`SELECT uuid FROM juegos_maquinas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(${data.juego_nombre})) LIMIT 1`;
+          if (byName.length > 0) resolvedJ = byName[0].uuid;
+        }
+        juego_uuid = resolvedJ;
+      }
+    }
+    if (sala_uuid) {
+      const checkS = await sql`SELECT uuid FROM salas WHERE uuid = ${sala_uuid}::uuid LIMIT 1`;
+      if (checkS.length === 0) sala_uuid = null;
+    }
+    if (estado_uuid) {
+      const checkE = await sql`SELECT uuid FROM estados WHERE uuid = ${estado_uuid}::uuid LIMIT 1`;
+      if (checkE.length === 0) estado_uuid = null;
+    }
+    if (sociedad_uuid) {
+      const checkSoc = await sql`SELECT uuid FROM sociedades WHERE uuid = ${sociedad_uuid}::uuid LIMIT 1`;
+      if (checkSoc.length === 0) sociedad_uuid = null;
+    }
+    if (valor_uuid) {
+      const checkV = await sql`SELECT uuid FROM valores WHERE uuid = ${valor_uuid}::uuid LIMIT 1`;
+      if (checkV.length === 0) valor_uuid = null;
+    }
+    if (modelo_uuid) {
+      const checkM = await sql`SELECT uuid FROM modelos WHERE uuid = ${modelo_uuid}::uuid LIMIT 1`;
+      if (checkM.length === 0) modelo_uuid = null;
+    }
+    if (tipo_uuid) {
+      const checkT = await sql`SELECT uuid FROM tipos WHERE uuid = ${tipo_uuid}::uuid LIMIT 1`;
+      if (checkT.length === 0) tipo_uuid = null;
+    }
+    if (modo_uuid) {
+      const checkMo = await sql`SELECT uuid FROM modos WHERE uuid = ${modo_uuid}::uuid LIMIT 1`;
+      if (checkMo.length === 0) modo_uuid = null;
+    }
+    if (legal_uuid) {
+      const checkL = await sql`SELECT uuid FROM legal WHERE uuid = ${legal_uuid}::uuid LIMIT 1`;
+      if (checkL.length === 0) legal_uuid = null;
+    }
+    if (rango_uuid) {
+      const checkR = await sql`SELECT uuid FROM rangos WHERE uuid = ${rango_uuid}::uuid LIMIT 1`;
+      if (checkR.length === 0) rango_uuid = null;
+    }
+
     if (serial.toUpperCase() !== 'N/A') {
       const existing = await sql`
         SELECT uuid, nombre, serial FROM maquinas 
@@ -7728,36 +7777,85 @@ export async function updateMaquinaModel(id, data) {
   const puestos = data.puestos !== undefined ? (Number(data.puestos) > 0 ? Number(data.puestos) : 1) : undefined;
 
   const rawSala = data.sala_uuid !== undefined ? data.sala_uuid : data.sala_id;
-  const sala_uuid = rawSala !== undefined ? (rawSala && isUuid(rawSala) ? String(rawSala).trim() : null) : undefined;
+  let sala_uuid = rawSala !== undefined ? (rawSala && isUuid(rawSala) ? String(rawSala).trim() : null) : undefined;
 
   const rawJuego = data.juego_uuid !== undefined ? data.juego_uuid : data.juego_id;
-  const juego_uuid = rawJuego !== undefined ? (rawJuego && isUuid(rawJuego) ? String(rawJuego).trim() : null) : undefined;
+  let juego_uuid = rawJuego !== undefined ? (rawJuego && isUuid(rawJuego) ? String(rawJuego).trim() : null) : undefined;
 
   const rawEstado = data.estado_uuid !== undefined ? data.estado_uuid : data.estado_id;
-  const estado_uuid = rawEstado !== undefined ? (rawEstado && isUuid(rawEstado) ? String(rawEstado).trim() : null) : undefined;
+  let estado_uuid = rawEstado !== undefined ? (rawEstado && isUuid(rawEstado) ? String(rawEstado).trim() : null) : undefined;
 
   const rawSociedad = data.sociedad_uuid !== undefined ? data.sociedad_uuid : data.sociedad_id;
-  const sociedad_uuid = rawSociedad !== undefined ? (rawSociedad && isUuid(rawSociedad) ? String(rawSociedad).trim() : null) : undefined;
+  let sociedad_uuid = rawSociedad !== undefined ? (rawSociedad && isUuid(rawSociedad) ? String(rawSociedad).trim() : null) : undefined;
 
   const rawValor = data.valor_uuid !== undefined ? data.valor_uuid : data.valor_id;
-  const valor_uuid = rawValor !== undefined ? (rawValor && isUuid(rawValor) ? String(rawValor).trim() : null) : undefined;
+  let valor_uuid = rawValor !== undefined ? (rawValor && isUuid(rawValor) ? String(rawValor).trim() : null) : undefined;
 
   const rawModelo = data.modelo_uuid !== undefined ? data.modelo_uuid : data.modelo_id;
-  const modelo_uuid = rawModelo !== undefined ? (rawModelo && isUuid(rawModelo) ? String(rawModelo).trim() : null) : undefined;
+  let modelo_uuid = rawModelo !== undefined ? (rawModelo && isUuid(rawModelo) ? String(rawModelo).trim() : null) : undefined;
 
   const rawTipo = data.tipo_uuid !== undefined ? data.tipo_uuid : data.tipo_id;
-  const tipo_uuid = rawTipo !== undefined ? (rawTipo && isUuid(rawTipo) ? String(rawTipo).trim() : null) : undefined;
+  let tipo_uuid = rawTipo !== undefined ? (rawTipo && isUuid(rawTipo) ? String(rawTipo).trim() : null) : undefined;
 
   const rawModo = data.modo_uuid !== undefined ? data.modo_uuid : data.modo_id;
-  const modo_uuid = rawModo !== undefined ? (rawModo && isUuid(rawModo) ? String(rawModo).trim() : null) : undefined;
+  let modo_uuid = rawModo !== undefined ? (rawModo && isUuid(rawModo) ? String(rawModo).trim() : null) : undefined;
 
   const rawLegal = data.legal_uuid !== undefined ? data.legal_uuid : data.legal_id;
-  const legal_uuid = rawLegal !== undefined ? (rawLegal && isUuid(rawLegal) ? String(rawLegal).trim() : null) : undefined;
+  let legal_uuid = rawLegal !== undefined ? (rawLegal && isUuid(rawLegal) ? String(rawLegal).trim() : null) : undefined;
 
   const rawRango = data.rango_uuid !== undefined ? data.rango_uuid : data.rango_id;
-  const rango_uuid = rawRango !== undefined ? (rawRango && isUuid(rawRango) ? String(rawRango).trim() : null) : undefined;
+  let rango_uuid = rawRango !== undefined ? (rawRango && isUuid(rawRango) ? String(rawRango).trim() : null) : undefined;
 
   if (isPgConnected && sql) {
+    // Sanitizar claves foráneas contra la base de datos real para evitar fk_maquinas_* violations
+    if (juego_uuid !== undefined && juego_uuid !== null) {
+      const checkJ = await sql`SELECT uuid FROM juegos_maquinas WHERE uuid = ${juego_uuid}::uuid LIMIT 1`;
+      if (checkJ.length === 0) {
+        let resolvedJ = null;
+        if (data.juego_nombre) {
+          const byName = await sql`SELECT uuid FROM juegos_maquinas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(${data.juego_nombre})) LIMIT 1`;
+          if (byName.length > 0) resolvedJ = byName[0].uuid;
+        }
+        juego_uuid = resolvedJ;
+      }
+    }
+    if (sala_uuid !== undefined && sala_uuid !== null) {
+      const checkS = await sql`SELECT uuid FROM salas WHERE uuid = ${sala_uuid}::uuid LIMIT 1`;
+      if (checkS.length === 0) sala_uuid = null;
+    }
+    if (estado_uuid !== undefined && estado_uuid !== null) {
+      const checkE = await sql`SELECT uuid FROM estados WHERE uuid = ${estado_uuid}::uuid LIMIT 1`;
+      if (checkE.length === 0) estado_uuid = null;
+    }
+    if (sociedad_uuid !== undefined && sociedad_uuid !== null) {
+      const checkSoc = await sql`SELECT uuid FROM sociedades WHERE uuid = ${sociedad_uuid}::uuid LIMIT 1`;
+      if (checkSoc.length === 0) sociedad_uuid = null;
+    }
+    if (valor_uuid !== undefined && valor_uuid !== null) {
+      const checkV = await sql`SELECT uuid FROM valores WHERE uuid = ${valor_uuid}::uuid LIMIT 1`;
+      if (checkV.length === 0) valor_uuid = null;
+    }
+    if (modelo_uuid !== undefined && modelo_uuid !== null) {
+      const checkM = await sql`SELECT uuid FROM modelos WHERE uuid = ${modelo_uuid}::uuid LIMIT 1`;
+      if (checkM.length === 0) modelo_uuid = null;
+    }
+    if (tipo_uuid !== undefined && tipo_uuid !== null) {
+      const checkT = await sql`SELECT uuid FROM tipos WHERE uuid = ${tipo_uuid}::uuid LIMIT 1`;
+      if (checkT.length === 0) tipo_uuid = null;
+    }
+    if (modo_uuid !== undefined && modo_uuid !== null) {
+      const checkMo = await sql`SELECT uuid FROM modos WHERE uuid = ${modo_uuid}::uuid LIMIT 1`;
+      if (checkMo.length === 0) modo_uuid = null;
+    }
+    if (legal_uuid !== undefined && legal_uuid !== null) {
+      const checkL = await sql`SELECT uuid FROM legal WHERE uuid = ${legal_uuid}::uuid LIMIT 1`;
+      if (checkL.length === 0) legal_uuid = null;
+    }
+    if (rango_uuid !== undefined && rango_uuid !== null) {
+      const checkR = await sql`SELECT uuid FROM rangos WHERE uuid = ${rango_uuid}::uuid LIMIT 1`;
+      if (checkR.length === 0) rango_uuid = null;
+    }
+
     if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
       const existing = await sql`
         SELECT uuid, nombre, serial FROM maquinas 
@@ -9049,9 +9147,25 @@ export async function createLibroConteoMaquinaModel(data) {
   if (!libroUuid) libroUuid = strLibro;
 
   let maquinaUuid = isUuid(strMaquina) ? strMaquina : null;
-  if (!maquinaUuid && isPgConnected && sql) {
-    const mRows = await sql`SELECT uuid FROM maquinas WHERE (uuid::text = ${strMaquina} OR nombre = ${strMaquina} OR serial = ${strMaquina}) LIMIT 1`;
-    if (mRows.length > 0) maquinaUuid = mRows[0].uuid;
+  if (isPgConnected && sql) {
+    if (maquinaUuid) {
+      const checkM = await sql`SELECT uuid FROM maquinas WHERE uuid = ${maquinaUuid}::uuid LIMIT 1`;
+      if (checkM.length === 0 && (data.maquina_nombre || data.maquina_serial)) {
+        const mRows = await sql`
+          SELECT uuid FROM maquinas 
+          WHERE (LOWER(TRIM(nombre)) = LOWER(TRIM(${data.maquina_nombre || ''})) OR LOWER(TRIM(serial)) = LOWER(TRIM(${data.maquina_serial || ''}))) 
+          LIMIT 1
+        `;
+        if (mRows.length > 0) maquinaUuid = mRows[0].uuid;
+      }
+    } else {
+      const mRows = await sql`
+        SELECT uuid FROM maquinas 
+        WHERE (uuid::text = ${strMaquina} OR nombre = ${strMaquina} OR serial = ${strMaquina}) 
+        LIMIT 1
+      `;
+      if (mRows.length > 0) maquinaUuid = mRows[0].uuid;
+    }
   }
   if (!maquinaUuid) maquinaUuid = strMaquina;
 

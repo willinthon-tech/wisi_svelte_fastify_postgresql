@@ -173,7 +173,7 @@
   onMount(async () => {
     isLoading = true;
     await Promise.all([
-      loadMasterStoresFromBackend(),
+      loadMasterStoresFromBackend(true),
       fetchFilterOptions(),
       loadServerData(currentParams)
     ]);
@@ -406,14 +406,17 @@
     nombre: r.nombre
   }));
 
-  $: juegosOptions = ($masterJuegosMaquinasStore && $masterJuegosMaquinasStore.length > 0
-    ? $masterJuegosMaquinasStore
-    : (filterOptions.juegos || [])
-  ).map(j => ({
-    uuid: j.uuid,
-    id: j.uuid || j.id,
-    nombre: j.nombre
-  }));
+  $: juegosOptions = [
+    { uuid: '', id: '', nombre: '-- Sin Juego (Opcional) --' },
+    ...($masterJuegosMaquinasStore && $masterJuegosMaquinasStore.length > 0
+      ? $masterJuegosMaquinasStore
+      : (filterOptions.juegos || [])
+    ).map(j => ({
+      uuid: j.uuid,
+      id: j.uuid || j.id,
+      nombre: j.nombre
+    }))
+  ];
 
   $: estadosOptions = ($masterEstadosStore && $masterEstadosStore.length > 0
     ? $masterEstadosStore
@@ -719,12 +722,28 @@
     }
     const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal', 'rango'];
     fkMap.forEach(f => {
-      if (draft[`${f}_uuid`] && !draft[`${f}_id`]) draft[`${f}_id`] = draft[`${f}_uuid`];
+      const val = draft[`${f}_uuid`];
+      if (!val || val === '' || val === 'null' || val === 'undefined') {
+        draft[`${f}_uuid`] = null;
+        draft[`${f}_id`] = null;
+      } else if (!draft[`${f}_id`]) {
+        draft[`${f}_id`] = val;
+      }
     });
 
     if (draft.juego_uuid) {
       const matched = juegosOptions.find(j => String(j.uuid || j.id) === String(draft.juego_uuid));
-      if (matched) draft.juego_nombre = matched.nombre;
+      if (matched && matched.uuid) {
+        draft.juego_nombre = matched.nombre;
+      } else {
+        draft.juego_uuid = null;
+        draft.juego_id = null;
+        draft.juego_nombre = null;
+      }
+    } else {
+      draft.juego_uuid = null;
+      draft.juego_id = null;
+      draft.juego_nombre = null;
     }
     if (draft.sala_uuid) {
       const matched = userSalasForCreate.find(s => String(s.uuid || s.id) === String(draft.sala_uuid));
@@ -830,14 +849,28 @@
     const payload = { ...draft };
     const fkMap = ['sala', 'juego', 'estado', 'sociedad', 'valor', 'modelo', 'tipo', 'modo', 'legal', 'rango'];
     fkMap.forEach(f => {
-      if (payload[`${f}_uuid`] && !payload[`${f}_id`]) payload[`${f}_id`] = payload[`${f}_uuid`];
+      const val = payload[`${f}_uuid`];
+      if (val === '' || val === 'null' || val === 'undefined') {
+        payload[`${f}_uuid`] = null;
+        payload[`${f}_id`] = null;
+      } else if (payload[`${f}_uuid`] && !payload[`${f}_id`]) {
+        payload[`${f}_id`] = payload[`${f}_uuid`];
+      }
     });
 
     if (payload.juego_uuid !== undefined) {
-      if (payload.juego_uuid) {
+      if (payload.juego_uuid && payload.juego_uuid !== '' && payload.juego_uuid !== 'null') {
         const matched = juegosOptions.find(j => String(j.uuid || j.id) === String(payload.juego_uuid));
-        payload.juego_nombre = matched ? matched.nombre : null;
+        if (matched && matched.uuid) {
+          payload.juego_nombre = matched.nombre;
+        } else {
+          payload.juego_uuid = null;
+          payload.juego_id = null;
+          payload.juego_nombre = null;
+        }
       } else {
+        payload.juego_uuid = null;
+        payload.juego_id = null;
         payload.juego_nombre = null;
       }
     }
