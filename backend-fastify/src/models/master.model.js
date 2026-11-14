@@ -8981,11 +8981,12 @@ export async function getLibroConteoMaquinasModel(libroId, multisalaUuid = null)
       s.nombre AS sala_nombre,
       s.nombre_comercial AS sala_nombre_comercial
     FROM libro_conteo_maquinas d
-    JOIN maquinas m ON d.maquina_uuid = m.uuid
+    LEFT JOIN maquinas m ON d.maquina_uuid = m.uuid
     LEFT JOIN rangos r ON m.rango_uuid = r.uuid
     LEFT JOIN juegos_maquinas j ON m.juego_uuid = j.uuid
     LEFT JOIN salas s ON m.sala_uuid = s.uuid
     WHERE d.libro_uuid = ${targetLibroUuid}::uuid
+      AND (d.is_deleted IS FALSE OR d.is_deleted IS NULL)
       ${whereMultisala}
     ORDER BY d.created_at ASC, d.uuid ASC
   `;
@@ -9160,7 +9161,7 @@ export async function createLibroConteoMaquinaModel(data) {
       s.nombre AS sala_nombre,
       s.nombre_comercial AS sala_nombre_comercial
     FROM libro_conteo_maquinas d
-    JOIN maquinas m ON d.maquina_uuid = m.uuid
+    LEFT JOIN maquinas m ON d.maquina_uuid = m.uuid
     LEFT JOIN rangos r ON m.rango_uuid = r.uuid
     LEFT JOIN juegos_maquinas j ON m.juego_uuid = j.uuid
     LEFT JOIN salas s ON m.sala_uuid = s.uuid
@@ -9266,7 +9267,7 @@ export async function updateLibroConteoMaquinaModel(id, libroId, data) {
       s.nombre AS sala_nombre,
       s.nombre_comercial AS sala_nombre_comercial
     FROM libro_conteo_maquinas d
-    JOIN maquinas m ON d.maquina_uuid = m.uuid
+    LEFT JOIN maquinas m ON d.maquina_uuid = m.uuid
     LEFT JOIN rangos r ON m.rango_uuid = r.uuid
     LEFT JOIN juegos_maquinas j ON m.juego_uuid = j.uuid
     LEFT JOIN salas s ON m.sala_uuid = s.uuid
@@ -11673,8 +11674,8 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
 
     if (rows && rows.length > 0) {
       let rData = rows[0].data;
-      if (typeof rData === 'string') {
-        try { rData = JSON.parse(rData); } catch (e) {}
+      while (typeof rData === 'string') {
+        try { rData = JSON.parse(rData); } catch (e) { break; }
       }
       return {
         success: true,

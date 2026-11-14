@@ -453,7 +453,7 @@
     // 2. Sincronización en segundo plano con backend
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const fetchUrl = multisalaUuid 
         ? `/api/master/libros/${lId}/conteo-maquinas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
         : `/api/master/libros/${lId}/conteo-maquinas`;
@@ -503,6 +503,8 @@
       triggerToast('Debe ingresar al menos una denominación con cantidad mayor a 0', 'warning');
       return;
     }
+
+    isSaving = true;
 
     const maquinaObj = availableMaquinas.find(m => String(m.uuid || m.id) === String(selectedMaquinaId));
     const itemUuid = generateSafeUuid();
@@ -567,43 +569,44 @@
         payload: newRecord,
         uuid: newRecord.uuid
       });
+      isSaving = false;
       return;
     }
 
-    // 4. SINCRONIZACIÓN EN SEGUNDO PLANO CON EL BACKEND
-    (async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(postEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newRecord),
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
+    // 4. SINCRONIZACIÓN CON EL BACKEND
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(postEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecord),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
 
-        if (res.ok) {
-          const json = await res.json();
-          if (json?.data) {
-            records = records.map(r => (String(r.uuid || r.id) === String(newRecord.uuid) || String(r.maquina_uuid || r.maquina_id) === String(selectedMaquinaId)) ? { ...newRecord, ...json.data } : r);
-            await upsertLocalItem('libro_conteo_maquinas', json.data);
-          }
-        } else {
-          throw new Error(`Server returned ${res.status}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data) {
+          records = records.map(r => (String(r.uuid || r.id) === String(newRecord.uuid) || String(r.maquina_uuid || r.maquina_id) === String(selectedMaquinaId)) ? { ...newRecord, ...json.data } : r);
+          await upsertLocalItem('libro_conteo_maquinas', json.data);
         }
-      } catch (syncErr) {
-        console.warn('[LocalDb] Falló sync con backend en vivo, asegurando en Outbox:', syncErr);
-        await queueOutboxAction({
-          entity: 'libro_conteo_maquinas',
-          action: 'create',
-          endpoint: postEndpoint,
-          method: 'POST',
-          payload: newRecord,
-          uuid: newRecord.uuid
-        });
+      } else {
+        throw new Error(`Server returned ${res.status}`);
       }
-    })();
+    } catch (syncErr) {
+      console.warn('[LocalDb] Falló sync con backend en vivo, asegurando en Outbox:', syncErr);
+      await queueOutboxAction({
+        entity: 'libro_conteo_maquinas',
+        action: 'create',
+        endpoint: postEndpoint,
+        method: 'POST',
+        payload: newRecord,
+        uuid: newRecord.uuid
+      });
+    } finally {
+      isSaving = false;
+    }
   }
 
   // --- ELIMINAR CONTEO ---
@@ -758,46 +761,50 @@
       return;
     }
 
-    // 3. Segundo plano para backend
-    (async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-        let res = await fetch(putEndpoint, {
-          method: 'PUT',
+    isSavingModal = true;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      let res = await fetch(putEndpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const c2 = new AbortController();
+        const t2 = setTimeout(() => c2.abort(), 8000);
+        res = await fetch(postEndpoint, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-          signal: controller.signal
+          signal: c2.signal
         });
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-          res = await fetch(postEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-        }
-
-        if (res.ok) {
-          const json = await res.json();
-          if (json?.data) {
-            records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? { ...payload, ...json.data } : r);
-            await upsertLocalItem('libro_conteo_maquinas', json.data);
-          }
-        }
-      } catch (editErr) {
-        console.warn('[LocalDb] Falló edición en vivo, encolando en Outbox:', editErr);
-        await queueOutboxAction({
-          entity: 'libro_conteo_maquinas',
-          action: 'create',
-          endpoint: postEndpoint,
-          method: 'POST',
-          payload: payload,
-          uuid: targetUuid
-        });
+        clearTimeout(t2);
       }
-    })();
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data) {
+          records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? { ...payload, ...json.data } : r);
+          await upsertLocalItem('libro_conteo_maquinas', json.data);
+        }
+      }
+    } catch (editErr) {
+      console.warn('[LocalDb] Falló edición en vivo, encolando en Outbox:', editErr);
+      await queueOutboxAction({
+        entity: 'libro_conteo_maquinas',
+        action: 'create',
+        endpoint: postEndpoint,
+        method: 'POST',
+        payload: payload,
+        uuid: targetUuid
+      });
+    } finally {
+      isSavingModal = false;
+    }
   }
 
   onMount(async () => {
@@ -1088,7 +1095,7 @@
                 <th class="th-denom">$ 5</th>
                 <th class="th-denom">$ 1</th>
                 <th class="th-total">Total</th>
-                {#if canEdit || canDelete}
+                {#if canDelete}
                   <th class="th-acciones">Acciones</th>
                 {/if}
               </tr>
@@ -1096,17 +1103,17 @@
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan={canEdit || canDelete ? 10 : 9} class="td-empty">Cargando registros...</td>
+                  <td colspan={canDelete ? 10 : 9} class="td-empty">Cargando registros...</td>
                 </tr>
               {:else if records.length === 0}
                 <tr>
-                  <td colspan={canEdit || canDelete ? 10 : 9} class="td-empty">No hay conteos de máquinas registrados en esta jornada.</td>
+                  <td colspan={canDelete ? 10 : 9} class="td-empty">No hay conteos de máquinas registrados en esta jornada.</td>
                 </tr>
               {:else}
                 {#each records as record, index (record.uuid || record.id || index)}
                   <tr 
                     class="tr-record-item"
-                    title="Haga clic para editar en formulario o use los botones de acción"
+                    title="Haga clic para cargar en el formulario superior"
                     on:click={() => {
                       const match = availableMaquinas.find(m => String(m.uuid || m.id) === String(record.maquina_uuid || record.maquina_id));
                       if (match) {
@@ -1132,29 +1139,17 @@
                     <td class="td-right td-total-cell font-bold">
                       ${formatMonto(record.total)}
                     </td>
-                    {#if canEdit || canDelete}
+                    {#if canDelete}
                       <td class="td-center td-acciones-cell" on:click|stopPropagation>
                         <div class="acciones-btn-group">
-                          {#if canEdit}
-                            <button 
-                              type="button" 
-                              class="btn-action-edit"
-                              on:click={() => abrirModalEditar(record)}
-                              title="Editar conteo"
-                            >
-                              Editar
-                            </button>
-                          {/if}
-                          {#if canDelete}
-                            <button 
-                              type="button" 
-                              class="btn-action-delete"
-                              on:click={() => handleEliminar(record)}
-                              title="Eliminar conteo"
-                            >
-                              Eliminar
-                            </button>
-                          {/if}
+                          <button 
+                            type="button" 
+                            class="btn-action-delete"
+                            on:click={() => handleEliminar(record)}
+                            title="Eliminar conteo"
+                          >
+                            Eliminar
+                          </button>
                         </div>
                       </td>
                     {/if}

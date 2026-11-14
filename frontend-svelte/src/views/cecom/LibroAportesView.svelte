@@ -685,8 +685,8 @@
         if (res.ok) {
           const json = await res.json();
           if (json?.data) {
-            const merged = { ...updatedOffline, ...json.data };
-            records = records.map(r => String(r.uuid || r.id) === String(targetUuid) ? merged : r);
+            const merged = { ...newRecord, ...json.data };
+            records = records.map(r => String(r.uuid || r.id) === String(itemUuid) ? merged : r);
             await upsertLocalItem('libro_aportes', merged);
           }
         } else {
