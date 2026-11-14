@@ -8869,6 +8869,288 @@ export async function deleteLibroDropMesaModel(id, libroId) {
   return { success: true, id: targetUuid, uuid: targetUuid };
 }
 
+// --- CONTEO DE MÁQUINAS (CECOM: LIBRO CONTEO MÁQUINAS) ---
+export async function getLibroConteoMaquinasModel(libroId, multisalaUuid = null) {
+  if (!libroId) return [];
+  const targetLibroUuid = String(libroId).trim();
+  if (!isUuid(targetLibroUuid)) return [];
+
+  if (!isPgConnected || !sql) {
+    const list = inMemoryData.libro_conteo_maquinas || [];
+    return list.filter(d => 
+      String(d.libro_uuid || d.libro_id) === targetLibroUuid &&
+      (multisalaUuid === 'all' || (multisalaUuid ? String(d.multisala_uuid) === String(multisalaUuid) : !d.multisala_uuid))
+    );
+  }
+
+  let whereMultisala = sql``;
+  if (multisalaUuid && isUuid(multisalaUuid)) {
+    whereMultisala = sql`AND d.multisala_uuid = ${multisalaUuid}::uuid`;
+  } else if (multisalaUuid === 'null' || multisalaUuid === 'none') {
+    whereMultisala = sql`AND d.multisala_uuid IS NULL`;
+  } else if (!multisalaUuid && multisalaUuid !== 'all') {
+    whereMultisala = sql`AND d.multisala_uuid IS NULL`;
+  }
+
+  const rows = await sql`
+    SELECT 
+      d.uuid,
+      d.uuid AS id,
+      d.libro_uuid,
+      d.libro_uuid AS libro_id,
+      d.multisala_uuid,
+      d.maquina_uuid,
+      d.maquina_uuid AS maquina_id,
+      d.denominacion_100,
+      d.denominacion_50,
+      d.denominacion_20,
+      d.denominacion_10,
+      d.denominacion_5,
+      d.denominacion_1,
+      d.denominacion_100 AS b100,
+      d.denominacion_50 AS b50,
+      d.denominacion_20 AS b20,
+      d.denominacion_10 AS b10,
+      d.denominacion_5 AS b5,
+      d.denominacion_1 AS b1,
+      d.total,
+      d.created_at,
+      d.updated_at,
+      m.nombre AS maquina_nombre,
+      m.serial AS maquina_serial,
+      m.rango_uuid,
+      m.rango_uuid AS rango_id,
+      r.nombre AS rango_nombre,
+      j.nombre AS juego_nombre,
+      s.nombre AS sala_nombre,
+      s.nombre_comercial AS sala_nombre_comercial
+    FROM libro_conteo_maquinas d
+    JOIN maquinas m ON d.maquina_uuid = m.uuid
+    LEFT JOIN rangos r ON m.rango_uuid = r.uuid
+    LEFT JOIN juegos_maquinas j ON m.juego_uuid = j.uuid
+    LEFT JOIN salas s ON m.sala_uuid = s.uuid
+    WHERE d.libro_uuid = ${targetLibroUuid}::uuid
+      ${whereMultisala}
+    ORDER BY d.created_at ASC, d.uuid ASC
+  `;
+
+  return rows.map(r => ({
+    ...r,
+    maquina_nombre: r.maquina_nombre || '',
+    rango_nombre: r.rango_nombre || 'Sin Rango',
+    juego_nombre: r.juego_nombre || ''
+  }));
+}
+
+export async function createLibroConteoMaquinaModel(data) {
+  const rawLibro = data.libro_uuid || data.libro_id;
+  const rawMaquina = data.maquina_uuid || data.maquina_id;
+  if (!rawLibro) throw new Error('El ID del libro es obligatorio');
+  if (!rawMaquina) throw new Error('Debe seleccionar una máquina');
+
+  const libroUuid = String(rawLibro).trim();
+  const maquinaUuid = String(rawMaquina).trim();
+  if (!isUuid(libroUuid)) throw new Error('UUID de libro inválido');
+  if (!isUuid(maquinaUuid)) throw new Error('UUID de máquina inválido');
+
+  const rawMultisala = data.multisala_uuid;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
+
+  const b100 = Math.max(0, parseInt(data.denominacion_100 ?? data.b100 ?? 0, 10) || 0);
+  const b50 = Math.max(0, parseInt(data.denominacion_50 ?? data.b50 ?? 0, 10) || 0);
+  const b20 = Math.max(0, parseInt(data.denominacion_20 ?? data.b20 ?? 0, 10) || 0);
+  const b10 = Math.max(0, parseInt(data.denominacion_10 ?? data.b10 ?? 0, 10) || 0);
+  const b5 = Math.max(0, parseInt(data.denominacion_5 ?? data.b5 ?? 0, 10) || 0);
+  const b1 = Math.max(0, parseInt(data.denominacion_1 ?? data.b1 ?? 0, 10) || 0);
+
+  const total = (b100 * 100) + (b50 * 50) + (b20 * 20) + (b10 * 10) + (b5 * 5) + (b1 * 1);
+  const conteoUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : crypto.randomUUID();
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_conteo_maquinas = inMemoryData.libro_conteo_maquinas || [];
+    const existingIdx = inMemoryData.libro_conteo_maquinas.findIndex(
+      d => String(d.libro_uuid || d.libro_id) === libroUuid &&
+           String(d.maquina_uuid || d.maquina_id) === maquinaUuid &&
+           (multisalaUuid ? String(d.multisala_uuid) === multisalaUuid : !d.multisala_uuid)
+    );
+
+    const maq = (inMemoryData.maquinas || []).find(m => String(m.uuid || m.id) === maquinaUuid) || {};
+    const rg = (inMemoryData.rangos || []).find(r => String(r.uuid || r.id) === String(maq.rango_uuid || maq.rango_id)) || {};
+
+    if (existingIdx !== -1) {
+      inMemoryData.libro_conteo_maquinas[existingIdx] = {
+        ...inMemoryData.libro_conteo_maquinas[existingIdx],
+        denominacion_100: b100,
+        denominacion_50: b50,
+        denominacion_20: b20,
+        denominacion_10: b10,
+        denominacion_5: b5,
+        denominacion_1: b1,
+        b100, b50, b20, b10, b5, b1,
+        total,
+        updated_at: new Date().toISOString()
+      };
+      return inMemoryData.libro_conteo_maquinas[existingIdx];
+    }
+
+    const newConteo = {
+      id: conteoUuid,
+      uuid: conteoUuid,
+      libro_id: libroUuid,
+      libro_uuid: libroUuid,
+      multisala_uuid: multisalaUuid,
+      maquina_id: maquinaUuid,
+      maquina_uuid: maquinaUuid,
+      denominacion_100: b100,
+      denominacion_50: b50,
+      denominacion_20: b20,
+      denominacion_10: b10,
+      denominacion_5: b5,
+      denominacion_1: b1,
+      b100, b50, b20, b10, b5, b1,
+      total,
+      maquina_nombre: maq.nombre || `Máquina #${maquinaUuid}`,
+      maquina_serial: maq.serial || '',
+      rango_nombre: rg.nombre || 'Sin Rango',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.libro_conteo_maquinas.push(newConteo);
+    return newConteo;
+  }
+
+  let existingRow;
+  if (multisalaUuid) {
+    existingRow = await sql`
+      SELECT uuid FROM libro_conteo_maquinas
+      WHERE libro_uuid = ${libroUuid}::uuid AND maquina_uuid = ${maquinaUuid}::uuid AND multisala_uuid = ${multisalaUuid}::uuid
+      LIMIT 1
+    `;
+  } else {
+    existingRow = await sql`
+      SELECT uuid FROM libro_conteo_maquinas
+      WHERE libro_uuid = ${libroUuid}::uuid AND maquina_uuid = ${maquinaUuid}::uuid AND multisala_uuid IS NULL
+      LIMIT 1
+    `;
+  }
+
+  let insertedUuid = null;
+  if (existingRow.length > 0) {
+    const updated = await sql`
+      UPDATE libro_conteo_maquinas SET
+        multisala_uuid = ${multisalaUuid ? multisalaUuid : null}::uuid,
+        denominacion_100 = ${b100},
+        denominacion_50 = ${b50},
+        denominacion_20 = ${b20},
+        denominacion_10 = ${b10},
+        denominacion_5 = ${b5},
+        denominacion_1 = ${b1},
+        total = ${total},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE uuid = ${existingRow[0].uuid}::uuid
+      RETURNING uuid
+    `;
+    insertedUuid = updated[0].uuid;
+  } else {
+    const res = await sql`
+      INSERT INTO libro_conteo_maquinas (
+        uuid, libro_uuid, maquina_uuid, multisala_uuid,
+        denominacion_100, denominacion_50, denominacion_20, denominacion_10, denominacion_5, denominacion_1, 
+        total
+      )
+      VALUES (
+        ${conteoUuid}::uuid,
+        ${libroUuid}::uuid,
+        ${maquinaUuid}::uuid,
+        ${multisalaUuid ? multisalaUuid : null}::uuid,
+        ${b100}, ${b50}, ${b20}, ${b10}, ${b5}, ${b1}, 
+        ${total}
+      )
+      RETURNING uuid
+    `;
+    insertedUuid = res[0].uuid;
+  }
+
+  const details = await sql`
+    SELECT 
+      d.uuid,
+      d.uuid AS id,
+      d.libro_uuid,
+      d.libro_uuid AS libro_id,
+      d.multisala_uuid,
+      d.maquina_uuid,
+      d.maquina_uuid AS maquina_id,
+      d.denominacion_100,
+      d.denominacion_50,
+      d.denominacion_20,
+      d.denominacion_10,
+      d.denominacion_5,
+      d.denominacion_1,
+      d.denominacion_100 AS b100,
+      d.denominacion_50 AS b50,
+      d.denominacion_20 AS b20,
+      d.denominacion_10 AS b10,
+      d.denominacion_5 AS b5,
+      d.denominacion_1 AS b1,
+      d.total,
+      d.created_at,
+      d.updated_at,
+      m.nombre AS maquina_nombre,
+      m.serial AS maquina_serial,
+      m.rango_uuid,
+      m.rango_uuid AS rango_id,
+      r.nombre AS rango_nombre,
+      j.nombre AS juego_nombre,
+      s.nombre AS sala_nombre,
+      s.nombre_comercial AS sala_nombre_comercial
+    FROM libro_conteo_maquinas d
+    JOIN maquinas m ON d.maquina_uuid = m.uuid
+    LEFT JOIN rangos r ON m.rango_uuid = r.uuid
+    LEFT JOIN juegos_maquinas j ON m.juego_uuid = j.uuid
+    LEFT JOIN salas s ON m.sala_uuid = s.uuid
+    WHERE d.uuid = ${insertedUuid}::uuid
+  `;
+
+  const finalRow = details[0] || { uuid: insertedUuid, id: insertedUuid };
+  return {
+    ...finalRow,
+    b100: finalRow.denominacion_100,
+    b50: finalRow.denominacion_50,
+    b20: finalRow.denominacion_20,
+    b10: finalRow.denominacion_10,
+    b5: finalRow.denominacion_5,
+    b1: finalRow.denominacion_1,
+    maquina_nombre: finalRow.maquina_nombre || '',
+    rango_nombre: finalRow.rango_nombre || 'Sin Rango',
+    juego_nombre: finalRow.juego_nombre || ''
+  };
+}
+
+export async function deleteLibroConteoMaquinaModel(id, libroId) {
+  if (!id) throw new Error('ID de registro de conteo de máquinas inválido');
+  const targetUuid = String(id).trim();
+  if (!isUuid(targetUuid)) throw new Error('UUID inválido');
+
+  const rawLibro = libroId ? String(libroId).trim() : null;
+  const libroUuid = rawLibro && isUuid(rawLibro) ? rawLibro : null;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_conteo_maquinas = inMemoryData.libro_conteo_maquinas || [];
+    inMemoryData.libro_conteo_maquinas = inMemoryData.libro_conteo_maquinas.filter(d => 
+      String(d.uuid || d.id) !== targetUuid
+    );
+    return { success: true, id: targetUuid, uuid: targetUuid };
+  }
+
+  await sql`
+    DELETE FROM libro_conteo_maquinas
+    WHERE uuid = ${targetUuid}::uuid
+      ${libroUuid ? sql`AND libro_uuid = ${libroUuid}::uuid` : sql``}
+  `;
+
+  return { success: true, id: targetUuid, uuid: targetUuid };
+}
+
 // --- CONTROL DE LLAVES (CECOM: LIBRO CONTROL DE LLAVES) ---
 export async function getLibroControlLlavesModel(libroId) {
   if (!libroId) throw new Error('ID de libro inválido');
@@ -9709,8 +9991,46 @@ export async function createLibroControlClienteModel(data) {
     if (existing.length > 0) {
       clienteUuid = existing[0].uuid;
     } else {
-      const defTipo = await sql`SELECT uuid FROM tipo_clientes WHERE is_deleted IS FALSE OR is_deleted IS NULL ORDER BY nombre ASC LIMIT 1`;
-      const defTipoUuid = defTipo.length > 0 ? defTipo[0].uuid : null;
+      // Priorizar explícitamente el tipo de cliente 'General', NUNCA 'Denegado'
+      let defTipoUuid = (data.tipo_cliente_uuid && isUuid(data.tipo_cliente_uuid)) ? String(data.tipo_cliente_uuid).trim() : null;
+
+      if (!defTipoUuid) {
+        const generalTipo = await sql`
+          SELECT uuid FROM tipo_clientes 
+          WHERE LOWER(TRIM(nombre)) = 'general' 
+            AND (is_deleted IS FALSE OR is_deleted IS NULL)
+          LIMIT 1
+        `;
+        if (generalTipo.length > 0) {
+          defTipoUuid = generalTipo[0].uuid;
+        }
+      }
+
+      if (!defTipoUuid) {
+        const fallbackTipo = await sql`
+          SELECT uuid FROM tipo_clientes 
+          WHERE LOWER(TRIM(nombre)) NOT LIKE '%denegad%' 
+            AND (is_deleted IS FALSE OR is_deleted IS NULL)
+          ORDER BY (LOWER(TRIM(nombre)) = 'general') DESC, nombre ASC 
+          LIMIT 1
+        `;
+        if (fallbackTipo.length > 0) {
+          defTipoUuid = fallbackTipo[0].uuid;
+        }
+      }
+
+      if (!defTipoUuid) {
+        const anyTipo = await sql`
+          SELECT uuid FROM tipo_clientes 
+          WHERE is_deleted IS FALSE OR is_deleted IS NULL 
+          ORDER BY (LOWER(TRIM(nombre)) = 'general') DESC, (LOWER(TRIM(nombre)) LIKE '%denegad%') ASC, nombre ASC 
+          LIMIT 1
+        `;
+        if (anyTipo.length > 0) {
+          defTipoUuid = anyTipo[0].uuid;
+        }
+      }
+
       const newClientUuid = crypto.randomUUID();
       const newClient = await sql`
         INSERT INTO clientes (uuid, nombre, tipo_cliente_uuid, sala_uuid)
@@ -9723,6 +10043,27 @@ export async function createLibroControlClienteModel(data) {
         RETURNING uuid
       `;
       clienteUuid = newClient[0].uuid;
+    }
+  } else if (!clienteUuid && clienteNombre && (!sql || !isPgConnected)) {
+    inMemoryData.clientes = inMemoryData.clientes || [];
+    const exCli = inMemoryData.clientes.find(c => (c.nombre || '').toLowerCase().trim() === clienteNombre.toLowerCase().trim());
+    if (exCli) {
+      clienteUuid = exCli.uuid || exCli.id;
+    } else {
+      const defTipo = (inMemoryData.tipo_clientes || []).find(t => (t.nombre || '').toLowerCase().trim() === 'general') ||
+                      (inMemoryData.tipo_clientes || []).find(t => !(t.nombre || '').toLowerCase().includes('denegad')) ||
+                      (inMemoryData.tipo_clientes || [])[0];
+      const newClientUuid = crypto.randomUUID();
+      const newCli = {
+        uuid: newClientUuid,
+        id: newClientUuid,
+        nombre: clienteNombre,
+        tipo_cliente_uuid: defTipo ? (defTipo.uuid || defTipo.id) : null,
+        tipo_cliente_nombre: defTipo?.nombre || 'General',
+        sala_uuid: resolvedSalaUuid
+      };
+      inMemoryData.clientes.push(newCli);
+      clienteUuid = newClientUuid;
     }
   }
 
@@ -9905,8 +10246,46 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     if (existing.length > 0) {
       clienteUuid = existing[0].uuid;
     } else {
-      const defTipo = await sql`SELECT uuid FROM tipo_clientes WHERE is_deleted IS FALSE OR is_deleted IS NULL ORDER BY nombre ASC LIMIT 1`;
-      const defTipoUuid = defTipo.length > 0 ? defTipo[0].uuid : null;
+      // Priorizar explícitamente el tipo de cliente 'General', NUNCA 'Denegado'
+      let defTipoUuid = (data.tipo_cliente_uuid && isUuid(data.tipo_cliente_uuid)) ? String(data.tipo_cliente_uuid).trim() : null;
+
+      if (!defTipoUuid) {
+        const generalTipo = await sql`
+          SELECT uuid FROM tipo_clientes 
+          WHERE LOWER(TRIM(nombre)) = 'general' 
+            AND (is_deleted IS FALSE OR is_deleted IS NULL)
+          LIMIT 1
+        `;
+        if (generalTipo.length > 0) {
+          defTipoUuid = generalTipo[0].uuid;
+        }
+      }
+
+      if (!defTipoUuid) {
+        const fallbackTipo = await sql`
+          SELECT uuid FROM tipo_clientes 
+          WHERE LOWER(TRIM(nombre)) NOT LIKE '%denegad%' 
+            AND (is_deleted IS FALSE OR is_deleted IS NULL)
+          ORDER BY (LOWER(TRIM(nombre)) = 'general') DESC, nombre ASC 
+          LIMIT 1
+        `;
+        if (fallbackTipo.length > 0) {
+          defTipoUuid = fallbackTipo[0].uuid;
+        }
+      }
+
+      if (!defTipoUuid) {
+        const anyTipo = await sql`
+          SELECT uuid FROM tipo_clientes 
+          WHERE is_deleted IS FALSE OR is_deleted IS NULL 
+          ORDER BY (LOWER(TRIM(nombre)) = 'general') DESC, (LOWER(TRIM(nombre)) LIKE '%denegad%') ASC, nombre ASC 
+          LIMIT 1
+        `;
+        if (anyTipo.length > 0) {
+          defTipoUuid = anyTipo[0].uuid;
+        }
+      }
+
       const newClientUuid = crypto.randomUUID();
       const newClient = await sql`
         INSERT INTO clientes (uuid, nombre, tipo_cliente_uuid, sala_uuid)
@@ -9919,6 +10298,27 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
         RETURNING uuid
       `;
       clienteUuid = newClient[0].uuid;
+    }
+  } else if (!clienteUuid && clienteNombre && (!sql || !isPgConnected)) {
+    inMemoryData.clientes = inMemoryData.clientes || [];
+    const exCli = inMemoryData.clientes.find(c => (c.nombre || '').toLowerCase().trim() === clienteNombre.toLowerCase().trim());
+    if (exCli) {
+      clienteUuid = exCli.uuid || exCli.id;
+    } else {
+      const defTipo = (inMemoryData.tipo_clientes || []).find(t => (t.nombre || '').toLowerCase().trim() === 'general') ||
+                      (inMemoryData.tipo_clientes || []).find(t => !(t.nombre || '').toLowerCase().includes('denegad')) ||
+                      (inMemoryData.tipo_clientes || [])[0];
+      const newClientUuid = crypto.randomUUID();
+      const newCli = {
+        uuid: newClientUuid,
+        id: newClientUuid,
+        nombre: clienteNombre,
+        tipo_cliente_uuid: defTipo ? (defTipo.uuid || defTipo.id) : null,
+        tipo_cliente_nombre: defTipo?.nombre || 'General',
+        sala_uuid: targetLibroUuid
+      };
+      inMemoryData.clientes.push(newCli);
+      clienteUuid = newClientUuid;
     }
   }
 
@@ -10287,8 +10687,11 @@ export async function createClienteModel(data) {
   const nombre = (data.nombre || '').trim();
   if (!nombre) throw new Error('El nombre del cliente es obligatorio');
 
-  const tipoClienteRaw = data.tipo_cliente_uuid || data.tipo_cliente_id;
-  const tipoClienteUuid = (tipoClienteRaw && isUuid(tipoClienteRaw)) ? String(tipoClienteRaw).trim() : null;
+  let tipoClienteUuid = (tipoClienteRaw && isUuid(tipoClienteRaw)) ? String(tipoClienteRaw).trim() : null;
+  if (!tipoClienteUuid && isPgConnected && sql) {
+    const gen = await sql`SELECT uuid FROM tipo_clientes WHERE LOWER(TRIM(nombre)) = 'general' AND (is_deleted IS FALSE OR is_deleted IS NULL) LIMIT 1`;
+    if (gen.length > 0) tipoClienteUuid = gen[0].uuid;
+  }
 
   const salaRaw = data.sala_uuid || data.sala_id;
   const salaUuid = (salaRaw && isUuid(salaRaw)) ? String(salaRaw).trim() : null;
@@ -10859,16 +11262,18 @@ export async function saveLibroReporteModel(libroId) {
     aportesRes,
     llavesRes,
     clientesRes,
-    incidenciasRes
+    incidenciasRes,
+    conteoMaquinasRes
   ] = await Promise.all([
     getLibroByIdModel(libroId).catch(e => null),
-    getLibroDatosModel(libroId).catch(e => null),
-    getLibroDropMesasModel(libroId).catch(e => []),
-    getLibroNovedadesMesasModel(libroId).catch(e => []),
-    getLibroAportesModel(libroId).catch(e => []),
-    getLibroControlLlavesModel(libroId).catch(e => []),
-    getLibroControlClientesModel(libroId).catch(e => []),
-    getLibroIncidenciasGeneralesModel(libroId).catch(e => [])
+    getLibroDatosModel(libroId, 'all').catch(e => null),
+    getLibroDropMesasModel(libroId, 'all').catch(e => []),
+    getLibroNovedadesMesasModel(libroId, 'all').catch(e => []),
+    getLibroAportesModel(libroId, 'all').catch(e => []),
+    getLibroControlLlavesModel(libroId, 'all').catch(e => []),
+    getLibroControlClientesModel(libroId, 'all').catch(e => []),
+    getLibroIncidenciasGeneralesModel(libroId, 'all').catch(e => []),
+    getLibroConteoMaquinasModel(libroId, 'all').catch(e => [])
   ]);
 
   const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
@@ -10884,15 +11289,19 @@ export async function saveLibroReporteModel(libroId) {
   const salaNombre = libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala';
   const fecha = libroObj?.descripcion || null;
 
+  const datosList = Array.isArray(datosRes) ? datosRes : (datosRes ? [datosRes] : []);
+  const defaultDatos = datosList.find(d => !d.multisala_uuid) || datosList[0] || null;
+
   const liveCounts = {
-    datos: datosRes ? 1 : 0,
+    datos: datosList.length,
     drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
     aportes: Array.isArray(aportesRes) ? aportesRes.length : 0,
     aportes_maquinas: Array.isArray(aportesRes) ? aportesRes.length : 0,
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
-    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0,
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0
   };
 
   const fullData = {
@@ -10903,14 +11312,16 @@ export async function saveLibroReporteModel(libroId) {
     sala_nombre: salaNombre,
     fecha: fecha,
     libro: libroObj || null,
-    datos: datosRes || null,
+    datos: defaultDatos,
+    all_datos: datosList,
     drop_mesas: Array.isArray(dropRes) ? dropRes : [],
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
     aportes: Array.isArray(aportesRes) ? aportesRes : [],
     aportes_maquinas: Array.isArray(aportesRes) ? aportesRes : [],
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
-    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : [],
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : []
   };
 
   const jsonStr = JSON.stringify(fullData);
@@ -10998,27 +11409,33 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     aportesRes,
     llavesRes,
     clientesRes,
-    incidenciasRes
+    incidenciasRes,
+    conteoMaquinasRes
   ] = await Promise.all([
     getLibroByIdModel(idOrLibroId).catch(() => null),
-    getLibroDatosModel(idOrLibroId).catch(() => null),
-    getLibroDropMesasModel(idOrLibroId).catch(() => []),
-    getLibroNovedadesMesasModel(idOrLibroId).catch(() => []),
-    getLibroAportesModel(idOrLibroId).catch(() => []),
-    getLibroControlLlavesModel(idOrLibroId).catch(() => []),
-    getLibroControlClientesModel(idOrLibroId).catch(() => []),
-    getLibroIncidenciasGeneralesModel(idOrLibroId).catch(() => [])
+    getLibroDatosModel(idOrLibroId, 'all').catch(() => []),
+    getLibroDropMesasModel(idOrLibroId, 'all').catch(() => []),
+    getLibroNovedadesMesasModel(idOrLibroId, 'all').catch(() => []),
+    getLibroAportesModel(idOrLibroId, 'all').catch(() => []),
+    getLibroControlLlavesModel(idOrLibroId, 'all').catch(() => []),
+    getLibroControlClientesModel(idOrLibroId, 'all').catch(() => []),
+    getLibroIncidenciasGeneralesModel(idOrLibroId, 'all').catch(() => []),
+    getLibroConteoMaquinasModel(idOrLibroId, 'all').catch(() => [])
   ]);
 
+  const datosList = Array.isArray(datosRes) ? datosRes : (datosRes ? [datosRes] : []);
+  const defaultDatos = datosList.find(d => !d.multisala_uuid) || datosList[0] || null;
+
   const liveCounts = {
-    datos: datosRes ? 1 : 0,
+    datos: datosList.length,
     drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
     aportes: Array.isArray(aportesRes) ? aportesRes.length : 0,
     aportes_maquinas: Array.isArray(aportesRes) ? aportesRes.length : 0,
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
-    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0,
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0
   };
 
   const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
@@ -11037,14 +11454,16 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
     fecha: libroObj?.descripcion || null,
     libro: libroObj || null,
-    datos: datosRes || null,
+    datos: defaultDatos,
+    all_datos: datosList,
     drop_mesas: Array.isArray(dropRes) ? dropRes : [],
     novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
     aportes: Array.isArray(aportesRes) ? aportesRes : [],
     aportes_maquinas: Array.isArray(aportesRes) ? aportesRes : [],
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
-    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : []
+    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : [],
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : []
   };
 
   if (isPgConnected && sql) {

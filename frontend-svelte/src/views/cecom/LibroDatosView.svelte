@@ -19,6 +19,13 @@
 
   export let libro = null;
   export let libroId = null;
+  export let multisalaUuid = null;
+
+  let prevMultisala = undefined;
+  $: if (multisalaUuid !== prevMultisala) {
+    prevMultisala = multisalaUuid;
+    loadDatos();
+  }
 
   $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
@@ -408,17 +415,39 @@
 
   let recordUuid = null;
 
+  function resetFields() {
+    recordUuid = null;
+    recordId = null;
+    aperturaSalaInicio = '';
+    aperturaSalaFin = '';
+    aperturaMaquinasInicio = '';
+    aperturaMaquinasFin = '';
+    aperturaBingoInicio = '';
+    aperturaBingoFin = '';
+    retirosDropboxInicio = '';
+    retirosDropboxFin = '';
+    conteoDropboxInicio = '';
+    conteoDropboxFin = '';
+    operadorTurnoA = '';
+    operadorTurnoC = '';
+    operadoresTurnoAList = [];
+    operadoresTurnoCList = [];
+    lastUpdatedAt = null;
+  }
+
   async function loadDatos() {
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
 
     isLoadingData = true;
+    resetFields();
 
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_datos', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+        ((r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))) &&
+        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : !r.multisala_uuid)
       );
       if (Array.isArray(local) && local.length > 0) {
         const d = local[0];
@@ -453,7 +482,10 @@
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`/api/master/libros/${lId}/datos`, { signal: controller.signal });
+      const fetchUrl = multisalaUuid 
+        ? `/api/master/libros/${lId}/datos?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+        : `/api/master/libros/${lId}/datos`;
+      const res = await fetch(fetchUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -538,6 +570,7 @@
       uuid: itemUuid,
       libro_uuid: lId,
       libro_id: lId,
+      multisala_uuid: multisalaUuid || null,
       apertura_sala_inicio: aperturaSalaInicio,
       apertura_sala_fin: aperturaSalaFin,
       apertura_maquinas_inicio: aperturaMaquinasInicio,
@@ -569,12 +602,16 @@
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
+    const postEndpoint = multisalaUuid
+      ? `/api/master/libros/${lId}/datos?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+      : `/api/master/libros/${lId}/datos`;
+
     if (isOffline) {
       // 3A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
       await queueOutboxAction({
         entity: 'libro_datos',
         action: 'create',
-        endpoint: `/api/master/libros/${lId}/datos`,
+        endpoint: postEndpoint,
         method: 'POST',
         payload: localRecord,
         uuid: itemUuid
@@ -587,7 +624,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/datos`, {
+        const res = await fetch(postEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(localRecord),

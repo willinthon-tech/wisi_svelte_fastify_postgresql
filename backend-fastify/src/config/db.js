@@ -222,6 +222,61 @@ export async function initDb() {
       console.warn('Advertencia migrando columnas de usuarios:', eUserCol.message);
     }
 
+    // Garantizar columna multisalas y active en salas
+    try {
+      await sql`ALTER TABLE salas ADD COLUMN IF NOT EXISTS multisalas JSONB DEFAULT '[]'::jsonb;`;
+      await sql`UPDATE salas SET multisalas = '[]'::jsonb WHERE multisalas IS NULL;`;
+      await sql`ALTER TABLE salas ADD COLUMN IF NOT EXISTS active INT DEFAULT 1;`;
+      await sql`UPDATE salas SET active = 1 WHERE active IS NULL;`;
+    } catch (eSalasCol) {
+      console.warn('Advertencia migrando columnas en salas:', eSalasCol.message);
+    }
+
+    // Garantizar columna multisala_uuid en todas las tablas del módulo Libro
+    try {
+      const libroTables = [
+        'libro_datos',
+        'libro_drop_mesas',
+        'libro_control_llaves',
+        'libro_incidencias_generales',
+        'libro_control_clientes',
+        'libro_aportes',
+        'libro_novedades_mesas',
+        'libro_reporte'
+      ];
+      for (const t of libroTables) {
+        await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS multisala_uuid UUID;`);
+      }
+      await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS hora VARCHAR(20);`);
+      await sql.unsafe(`ALTER TABLE libro_datos DROP CONSTRAINT IF EXISTS libro_datos_libro_uuid_key;`);
+      await sql.unsafe(`DROP INDEX IF EXISTS libro_datos_libro_uuid_key;`);
+
+      await sql.unsafe(`
+        CREATE TABLE IF NOT EXISTS libro_conteo_maquinas (
+          uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          libro_uuid UUID NOT NULL,
+          multisala_uuid UUID,
+          maquina_uuid UUID NOT NULL,
+          denominacion_100 INT DEFAULT 0,
+          denominacion_50 INT DEFAULT 0,
+          denominacion_20 INT DEFAULT 0,
+          denominacion_10 INT DEFAULT 0,
+          denominacion_5 INT DEFAULT 0,
+          denominacion_1 INT DEFAULT 0,
+          total NUMERIC(14, 2) DEFAULT 0.00,
+          is_deleted BOOLEAN DEFAULT FALSE,
+          deleted_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_libro_conteo_maquinas_libro ON libro_conteo_maquinas (libro_uuid);
+        CREATE INDEX IF NOT EXISTS idx_libro_conteo_maquinas_maquina ON libro_conteo_maquinas (maquina_uuid);
+        CREATE INDEX IF NOT EXISTS idx_libro_conteo_maquinas_multisala ON libro_conteo_maquinas (multisala_uuid);
+      `);
+    } catch (eLibroCol) {
+      console.warn('Advertencia migrando multisala_uuid en tablas de libro:', eLibroCol.message);
+    }
+
     isPgConnected = true;
     console.log(`\x1b[32m[CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {

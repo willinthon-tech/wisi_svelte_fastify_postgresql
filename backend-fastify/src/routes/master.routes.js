@@ -36,6 +36,7 @@ import {
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
   getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
+  getLibroConteoMaquinas, createLibroConteoMaquina, deleteLibroConteoMaquina,
   getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves,
   getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral,
   getLibroControlClientes, getClientesSugerencias, createLibroControlCliente, updateLibroControlCliente, deleteLibroControlCliente,
@@ -270,6 +271,14 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/libros/:id/drop-mesas', createLibroDropMesa);
   fastify.delete('/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
   fastify.delete('/api/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
+
+  // Conteo Máquinas (CECOM: Libro Conteo Máquinas)
+  fastify.get('/master/libros/:id/conteo-maquinas', getLibroConteoMaquinas);
+  fastify.get('/api/master/libros/:id/conteo-maquinas', getLibroConteoMaquinas);
+  fastify.post('/master/libros/:id/conteo-maquinas', createLibroConteoMaquina);
+  fastify.post('/api/master/libros/:id/conteo-maquinas', createLibroConteoMaquina);
+  fastify.delete('/master/libros/:id/conteo-maquinas/:conteoId', deleteLibroConteoMaquina);
+  fastify.delete('/api/master/libros/:id/conteo-maquinas/:conteoId', deleteLibroConteoMaquina);
 
   // Control Llaves (CECOM: Libro Control de Llaves)
   fastify.get('/master/libros/:id/control-llaves', getLibroControlLlaves);

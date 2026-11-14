@@ -23,6 +23,13 @@
 
   export let libro = null;
   export let libroId = null;
+  export let multisalaUuid = null;
+
+  let prevMultisala = undefined;
+  $: if (multisalaUuid !== prevMultisala) {
+    prevMultisala = multisalaUuid;
+    loadRecords();
+  }
 
   $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
@@ -301,8 +308,9 @@
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_novedades_mesas', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+        ((r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))) &&
+        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : !r.multisala_uuid)
       );
       if (Array.isArray(local) && local.length > 0) {
         novedadesRecords = local;
@@ -321,7 +329,10 @@
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, { signal: controller.signal });
+      const fetchUrl = multisalaUuid
+        ? `/api/master/libros/${lId}/novedades-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+        : `/api/master/libros/${lId}/novedades-mesas`;
+      const res = await fetch(fetchUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -429,6 +440,7 @@
     const localRecord = {
       uuid: itemUuid,
       libro_uuid: lId,
+      multisala_uuid: multisalaUuid || null,
       mesa_uuid: mesaUuid,
       mesa_id: mesaUuid || String(mesaId),
       mesa_nombre: mesaObj?.nombre || `Mesa #${mesaId}`,
@@ -462,11 +474,15 @@
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
+    const postEndpoint = multisalaUuid
+      ? `/api/master/libros/${lId}/novedades-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+      : `/api/master/libros/${lId}/novedades-mesas`;
+
     if (isOffline) {
       await queueOutboxAction({
         entity: 'libro_novedades_mesas',
         action: existing ? 'update' : 'create',
-        endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+        endpoint: postEndpoint,
         method: 'POST',
         payload: localRecord,
         uuid: itemUuid
@@ -479,7 +495,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
+        const res = await fetch(postEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(localRecord),
@@ -641,6 +657,7 @@
       const localRecord = {
         uuid: itemUuid,
         libro_uuid: lId,
+        multisala_uuid: multisalaUuid || null,
         mesa_uuid: mesa.uuid || (String(mesa.id).length > 20 ? mesa.id : null),
         mesa_id: mesa.uuid || String(mesa.id),
         mesa_nombre: mesa.nombre || `Mesa #${mesa.id}`,
@@ -668,12 +685,17 @@
     }
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    const postEndpoint = multisalaUuid
+      ? `/api/master/libros/${lId}/novedades-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+      : `/api/master/libros/${lId}/novedades-mesas`;
+
     if (isOffline) {
       for (const item of newBatchRecords) {
         await queueOutboxAction({
           entity: 'libro_novedades_mesas',
           action: item.isUpdate ? 'update' : 'create',
-          endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+          endpoint: postEndpoint,
           method: 'POST',
           payload: item.localRecord,
           uuid: item.itemUuid
@@ -688,7 +710,7 @@
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
+          const res = await fetch(postEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(item.localRecord),
@@ -709,7 +731,7 @@
           await queueOutboxAction({
             entity: 'libro_novedades_mesas',
             action: item.isUpdate ? 'update' : 'create',
-            endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+            endpoint: postEndpoint,
             method: 'POST',
             payload: item.localRecord,
             uuid: item.itemUuid
@@ -774,6 +796,7 @@
     const localRecord = {
       uuid: itemUuid,
       libro_uuid: lId,
+      multisala_uuid: multisalaUuid || null,
       mesa_uuid: modalMesa?.uuid || (String(modalMesa?.id).length > 20 ? modalMesa?.id : null),
       mesa_id: modalMesa?.uuid || String(mid),
       mesa_nombre: modalMesa?.nombre || `Mesa #${mid}`,
@@ -796,11 +819,16 @@
     await upsertLocalItem('libro_novedades_mesas', localRecord);
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    const postEndpoint = multisalaUuid
+      ? `/api/master/libros/${lId}/novedades-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+      : `/api/master/libros/${lId}/novedades-mesas`;
+
     if (isOffline) {
       await queueOutboxAction({
         entity: 'libro_novedades_mesas',
         action: existing ? 'update' : 'create',
-        endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+        endpoint: postEndpoint,
         method: 'POST',
         payload: localRecord,
         uuid: itemUuid
@@ -813,7 +841,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/novedades-mesas`, {
+        const res = await fetch(postEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(localRecord),
@@ -834,7 +862,7 @@
         await queueOutboxAction({
           entity: 'libro_novedades_mesas',
           action: existing ? 'update' : 'create',
-          endpoint: `/api/master/libros/${lId}/novedades-mesas`,
+          endpoint: postEndpoint,
           method: 'POST',
           payload: localRecord,
           uuid: itemUuid

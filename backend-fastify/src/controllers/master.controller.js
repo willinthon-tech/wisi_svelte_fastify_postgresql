@@ -36,6 +36,7 @@ import {
   getLlavesModel, getLlavesFilterOptionsModel, createLlaveModel, updateLlaveModel, softDeleteLlaveModel, restoreLlaveModel, purgeLlaveModel,
   getLibrosModel, getLibroByIdModel, getLibrosFilterOptionsModel, createLibroModel, updateLibroModel, deleteLibroModel,
   getLibroDropMesasModel, createLibroDropMesaModel, deleteLibroDropMesaModel,
+  getLibroConteoMaquinasModel, createLibroConteoMaquinaModel, deleteLibroConteoMaquinaModel,
   getLibroControlLlavesModel, createLibroControlLlavesModel, updateLibroControlLlavesHorasModel, deleteLibroControlLlavesModel,
   getLibroIncidenciasGeneralesModel, createLibroIncidenciaGeneralModel, updateLibroIncidenciaGeneralHoraModel, deleteLibroIncidenciaGeneralModel,
   getLibroControlClientesModel, getClientesSugerenciasModel, createLibroControlClienteModel, updateLibroControlClienteModel, deleteLibroControlClienteModel,
@@ -2037,7 +2038,7 @@ export async function deleteLibro(request, reply) {
 export async function getLibroDropMesas(request, reply) {
   try {
     const { id } = request.params;
-    const data = await getLibroDropMesasModel(id);
+    const data = await getLibroDropMesasModel(id, request.query?.multisala_uuid);
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2048,7 +2049,7 @@ export async function createLibroDropMesa(request, reply) {
   try {
     const { id } = request.params;
     const body = parseBody(request.body);
-    const data = { ...body, libro_id: id };
+    const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroDropMesaModel(data);
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
@@ -2066,11 +2067,44 @@ export async function deleteLibroDropMesa(request, reply) {
   }
 }
 
+// --- CONTEO DE MÁQUINAS (CECOM: LIBRO CONTEO MÁQUINAS) ---
+export async function getLibroConteoMaquinas(request, reply) {
+  try {
+    const { id } = request.params;
+    const data = await getLibroConteoMaquinasModel(id, request.query?.multisala_uuid);
+    return reply.send({ success: true, data });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function createLibroConteoMaquina(request, reply) {
+  try {
+    const { id } = request.params;
+    const body = parseBody(request.body);
+    const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
+    const result = await createLibroConteoMaquinaModel(data);
+    return reply.status(201).send({ success: true, data: result });
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
+export async function deleteLibroConteoMaquina(request, reply) {
+  try {
+    const { id, conteoId } = request.params;
+    const result = await deleteLibroConteoMaquinaModel(conteoId, id);
+    return reply.send(result);
+  } catch (err) {
+    return reply.status(400).send({ success: false, error: err.message });
+  }
+}
+
 // --- CONTROL DE LLAVES (CECOM: LIBRO CONTROL DE LLAVES) ---
 export async function getLibroControlLlaves(request, reply) {
   try {
     const { id } = request.params;
-    const data = await getLibroControlLlavesModel(id);
+    const data = await getLibroControlLlavesModel(id, request.query?.multisala_uuid);
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2081,7 +2115,7 @@ export async function createLibroControlLlaves(request, reply) {
   try {
     const { id } = request.params;
     const body = parseBody(request.body);
-    const data = { ...body, libro_id: id };
+    const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroControlLlavesModel(data);
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
@@ -2114,7 +2148,7 @@ export async function deleteLibroControlLlaves(request, reply) {
 export async function getLibroIncidenciasGenerales(request, reply) {
   try {
     const { id } = request.params;
-    const data = await getLibroIncidenciasGeneralesModel(id);
+    const data = await getLibroIncidenciasGeneralesModel(id, request.query?.multisala_uuid);
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2125,7 +2159,7 @@ export async function createLibroIncidenciaGeneral(request, reply) {
   try {
     const { id } = request.params;
     const body = parseBody(request.body);
-    const data = { ...body, libro_id: id };
+    const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroIncidenciaGeneralModel(data);
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
@@ -2160,7 +2194,7 @@ export async function deleteLibroIncidenciaGeneral(request, reply) {
 export async function getLibroControlClientes(request, reply) {
   try {
     const { id } = request.params;
-    const data = await getLibroControlClientesModel(id);
+    const data = await getLibroControlClientesModel(id, request.query?.multisala_uuid);
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2183,7 +2217,7 @@ export async function createLibroControlCliente(request, reply) {
   try {
     const { id } = request.params;
     const body = parseBody(request.body);
-    const data = { ...body, libro_id: id };
+    const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroControlClienteModel(data);
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
@@ -2216,7 +2250,7 @@ export async function deleteLibroControlCliente(request, reply) {
 export async function getLibroDatos(request, reply) {
   try {
     const { id } = request.params;
-    const data = await getLibroDatosModel(id);
+    const data = await getLibroDatosModel(id, request.query?.multisala_uuid);
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2227,7 +2261,7 @@ export async function saveLibroDatos(request, reply) {
   try {
     const { id } = request.params;
     const body = parseBody(request.body);
-    const result = await saveLibroDatosModel(id, body);
+    const result = await saveLibroDatosModel(id, body, request.query?.multisala_uuid);
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2238,7 +2272,7 @@ export async function saveLibroDatos(request, reply) {
 export async function getLibroNovedadesMesas(request, reply) {
   try {
     const { id } = request.params;
-    const data = await getLibroNovedadesMesasModel(id);
+    const data = await getLibroNovedadesMesasModel(id, request.query?.multisala_uuid);
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2249,7 +2283,7 @@ export async function saveLibroNovedadesMesa(request, reply) {
   try {
     const { id } = request.params;
     const body = parseBody(request.body);
-    const result = await saveLibroNovedadesMesaModel(id, body);
+    const result = await saveLibroNovedadesMesaModel(id, body, request.query?.multisala_uuid);
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2403,7 +2437,7 @@ export const deleteRango = rangosCtrl.delete;
 export async function getLibroAportes(request, reply) {
   try {
     const { id } = request.params;
-    const data = await getLibroAportesModel(id);
+    const data = await getLibroAportesModel(id, request.query?.multisala_uuid);
     return reply.send({ success: true, data });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2414,7 +2448,7 @@ export async function createLibroAporte(request, reply) {
   try {
     const { id } = request.params;
     const body = parseBody(request.body);
-    const data = { ...body, libro_id: id };
+    const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroAporteModel(data);
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {

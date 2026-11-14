@@ -5,6 +5,7 @@
     masterSalasStore, 
     masterLibrosStore, 
     masterMetodosPagoStore, 
+    masterTipoClientesStore,
     currentRoutePermissionsStore, 
     loadMasterStoresFromBackend 
   } from '../../controllers/master.store.js';
@@ -19,6 +20,17 @@
 
   export let libro = null;
   export let libroId = null;
+  export let multisalaUuid = null;
+
+  let prevMultisala = undefined;
+  $: if (multisalaUuid !== prevMultisala) {
+    prevMultisala = multisalaUuid;
+    cliente = '';
+    monto = '';
+    nota = '';
+    loadRecords();
+    loadDropRecords();
+  }
 
   // Permisologías del módulo en tiempo real
   $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
@@ -55,6 +67,12 @@
   // Estado para el cliente seleccionado
   let selectedClienteUuid = null;
   let selectedTipoClienteNombre = '';
+
+  $: generalTipoCliente = ($masterTipoClientesStore || []).find(t => 
+    (t.nombre || '').toLowerCase().trim() === 'general'
+  ) || ($masterTipoClientesStore || []).find(t => 
+    !(t.nombre || '').toLowerCase().includes('denegad')
+  ) || null;
 
   // Extraer clientes únicos para sugerencias locales
   $: clientesLocales = [...new Set(records.map(r => r.cliente).filter(Boolean))];
@@ -354,8 +372,9 @@
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_control_clientes', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+        ((r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))) &&
+        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : !r.multisala_uuid)
       );
       if (Array.isArray(local) && local.length > 0) {
         records = local;
@@ -372,7 +391,10 @@
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`/api/master/libros/${lId}/control-clientes`, { signal: controller.signal });
+      const fetchUrl = multisalaUuid 
+        ? `/api/master/libros/${lId}/control-clientes?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+        : `/api/master/libros/${lId}/control-clientes`;
+      const res = await fetch(fetchUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -396,8 +418,9 @@
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_drop_mesas', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+        ((r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))) &&
+        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : !r.multisala_uuid)
       );
       if (Array.isArray(local) && local.length > 0) {
         dropRecords = local;
@@ -412,7 +435,10 @@
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`/api/master/libros/${lId}/drop-mesas`, { signal: controller.signal });
+      const dropUrl = multisalaUuid
+        ? `/api/master/libros/${lId}/drop-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+        : `/api/master/libros/${lId}/drop-mesas`;
+      const res = await fetch(dropUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -562,19 +588,36 @@
       return;
     }
 
+    const targetTipoClienteUuid = selectedClienteUuid ? undefined : (generalTipoCliente?.uuid || generalTipoCliente?.id || null);
+
     const newRecord = {
       uuid: itemUuid,
       libro_uuid: lId,
+      multisala_uuid: multisalaUuid || null,
       cliente: cleanCliente,
       cliente_uuid: selectedClienteUuid || null,
+      tipo_cliente_uuid: targetTipoClienteUuid,
       tipo: tipo || 'Compra',
       monto: cleanMonto,
       metodo_pago_uuid: matchedMetodo.uuid || null,
       metodo: matchedMetodo.nombre,
       hora: getCurrentTimeString(),
       nota: (nota || '').trim(),
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      tipo_cliente_nombre: selectedClienteUuid ? (selectedTipoClienteNombre || 'General') : 'General'
     };
+
+    if (!selectedClienteUuid) {
+      const localNewCliente = {
+        uuid: generateSafeUuid(),
+        nombre: cleanCliente,
+        tipo_cliente_uuid: targetTipoClienteUuid,
+        tipo_cliente_nombre: 'General',
+        sala_uuid: targetSalaUuid
+      };
+      upsertLocalItem('clientes', localNewCliente).catch(() => {});
+      sugerenciasRemotas = [...sugerenciasRemotas, localNewCliente];
+    }
 
     // 1. ACTUALIZACIÓN INSTANTÁNEA EN MEMORIA (0ms)
     records = [newRecord, ...records];
@@ -595,12 +638,16 @@
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
+    const postEndpoint = multisalaUuid
+      ? `/api/master/libros/${lId}/control-clientes?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+      : `/api/master/libros/${lId}/control-clientes`;
+
     if (isOffline) {
       // 4A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
       await queueOutboxAction({
         entity: 'libro_control_clientes',
         action: 'create',
-        endpoint: `/api/master/libros/${lId}/control-clientes`,
+        endpoint: postEndpoint,
         method: 'POST',
         payload: newRecord,
         uuid: itemUuid
@@ -616,7 +663,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/control-clientes`, {
+        const res = await fetch(postEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newRecord),
@@ -761,8 +808,10 @@
     isSavingModal = true;
     const targetUuid = editingRecord.uuid || editingRecord.id;
     const matchedMetodo = metodosDisponibles.find(m => String(m.uuid || m.id) === String(modalMetodoPagoUuid));
+    const targetTipoClienteUuid = modalClienteUuid ? undefined : (generalTipoCliente?.uuid || generalTipoCliente?.id || null);
     const editPayload = {
       cliente_uuid: modalClienteUuid || null,
+      tipo_cliente_uuid: targetTipoClienteUuid,
       cliente: modalCliente.trim(),
       tipo: modalTipo,
       monto: Number(modalMonto),

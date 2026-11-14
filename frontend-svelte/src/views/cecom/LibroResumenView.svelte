@@ -34,6 +34,7 @@
   let liveCounts = {
     datos: 0,
     drop_mesas: 0,
+    conteo_maquinas: 0,
     novedades_mesas: 0,
     aportes: 0,
     control_llaves: 0,
@@ -45,7 +46,9 @@
   let resumenData = {
     libro: null,
     datos: null,
+    all_datos: [],
     drop_mesas: [],
+    conteo_maquinas: [],
     novedades_mesas: [],
     aportes: [],
     control_llaves: [],
@@ -110,7 +113,9 @@
         resumenData = {
           libro: payload.libro || libro,
           datos: payload.datos || null,
+          all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
           drop_mesas: payload.drop_mesas || [],
+          conteo_maquinas: payload.conteo_maquinas || [],
           novedades_mesas: payload.novedades_mesas || [],
           aportes: payload.aportes_maquinas || payload.aportes || [],
           control_llaves: payload.control_llaves || [],
@@ -147,7 +152,9 @@
           resumenData = {
             libro: loadedLibro,
             datos: payload.datos || null,
+            all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
             drop_mesas: payload.drop_mesas || [],
+            conteo_maquinas: payload.conteo_maquinas || [],
             novedades_mesas: payload.novedades_mesas || [],
             aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
@@ -208,7 +215,9 @@
           resumenData = {
             libro: loadedLibro,
             datos: payload.datos || null,
+            all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
             drop_mesas: payload.drop_mesas || [],
+            conteo_maquinas: payload.conteo_maquinas || [],
             novedades_mesas: payload.novedades_mesas || [],
             aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
@@ -292,6 +301,35 @@
     return "Sala de Casino";
   })();
 
+  // Detección de multisalas para la sala del libro
+  $: currentSalaMultisalas = (() => {
+    let raw = activeLibro?.sala_multisalas;
+    if (!raw && (activeLibro?.sala_uuid || activeLibro?.sala_id)) {
+      const foundSala = ($masterSalasStore || []).find(
+        (s) =>
+          (activeLibro.sala_uuid && (s.uuid === activeLibro.sala_uuid || s.id === activeLibro.sala_uuid)) ||
+          (activeLibro.sala_id && String(s.uuid || s.id) === String(activeLibro.sala_id))
+      );
+      if (foundSala) raw = foundSala.multisalas;
+    }
+    if (!raw) return [];
+    if (typeof raw === "string") {
+      try {
+        raw = JSON.parse(raw);
+      } catch (e) {
+        return [];
+      }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw;
+  })();
+
+  $: subsalasList = currentSalaMultisalas.filter(
+    (s) => s && (s.active === undefined || s.active === null || Number(s.active) === 1 || s.active === true)
+  );
+
+  $: isMultisala = subsalasList.length > 0;
+
   // Desglose de fecha [ D | M | A ]
   $: dateParts = (() => {
     const dStr = activeLibro?.descripcion || "";
@@ -358,11 +396,6 @@
     });
   }
 
-  $: sortedControlClientes = sortByMasReciente(resumenData.control_clientes);
-  $: sortedControlLlaves = sortByMasReciente(resumenData.control_llaves);
-  $: sortedIncidenciasGenerales = sortByMasReciente(resumenData.incidencias_generales);
-  $: sortedAportes = sortByMasReciente(resumenData.aportes_maquinas || resumenData.aportes || []);
-
   $: availableTiposIncidencia = $masterTipoIncidenciasStore || [];
 
   function normalizeText(val) {
@@ -376,64 +409,6 @@
   function getPillIcon(name) {
     return "";
   }
-
-  // 1. Clasificación reactiva y dinámica de Incidencias según los Tipos registrados (CONF.M: CECOM)
-  $: incidenciasPorTipo = (() => {
-    const list = sortedIncidenciasGenerales;
-
-    // Crear categorías a partir de los tipos configurados
-    const categories = availableTiposIncidencia.map(t => ({
-      uuid: t.uuid || t.id,
-      id: t.uuid || t.id,
-      nombre: t.nombre,
-      items: []
-    }));
-
-    for (const inc of list) {
-      const incUuid = (inc.tipo_incidencia_uuid || inc.tipo_incidencia_id) != null ? String(inc.tipo_incidencia_uuid || inc.tipo_incidencia_id) : null;
-      const incTipoNorm = normalizeText(inc.tipo || inc.tipo_incidencia_nombre);
-      const descNorm = (inc.descripcion || "").toLowerCase();
-
-      // 1. Coincidencia directa por UUID o por Nombre del Tipo
-      let matchedCat = categories.find(c => 
-        (incUuid && String(c.uuid || c.id) === incUuid) ||
-        (normalizeText(c.nombre) === incTipoNorm)
-      );
-
-      // 2. Coincidencia heurística para registros históricos si no coincidió por ID
-      if (!matchedCat) {
-        if (incTipoNorm.includes("mercanc") || descNorm.includes("mercanc") || descNorm.includes("proveedor")) {
-          matchedCat = categories.find(c => normalizeText(c.nombre).includes("mercanc"));
-        } else if (incTipoNorm.includes("emplead") || incTipoNorm.includes("personal") || descNorm.includes("emplead") || descNorm.includes("croupier")) {
-          matchedCat = categories.find(c => normalizeText(c.nombre).includes("emplead") || normalizeText(c.nombre).includes("personal"));
-        } else if (incTipoNorm.includes("maquin") || descNorm.includes("maquin")) {
-          matchedCat = categories.find(c => normalizeText(c.nombre).includes("maquin"));
-        }
-      }
-
-      if (matchedCat) {
-        matchedCat.items.push(inc);
-      } else {
-        const customName = (inc.tipo || inc.tipo_incidencia_nombre || "General").trim();
-        let customCat = categories.find(c => normalizeText(c.nombre) === normalizeText(customName));
-        if (!customCat) {
-          customCat = { id: `custom-${customName}`, nombre: customName, items: [] };
-          categories.push(customCat);
-        }
-        customCat.items.push(inc);
-      }
-    }
-
-    return categories;
-  })();
-
-  // Compatibilidad hacia atrás
-  $: incidenciasBloque = (() => {
-    const mercancia = incidenciasPorTipo.find(c => normalizeText(c.nombre).includes("mercanc"))?.items || [];
-    const empleado = incidenciasPorTipo.find(c => normalizeText(c.nombre).includes("emplead") || normalizeText(c.nombre).includes("personal"))?.items || [];
-    const generales = incidenciasPorTipo.find(c => normalizeText(c.nombre).includes("general"))?.items || [];
-    return { mercancia, empleado, generales };
-  })();
 
   function getContrastColor(hexColor) {
     if (!hexColor || typeof hexColor !== "string") return "#ffffff";
@@ -465,115 +440,111 @@
     return `background-color: ${color} !important; color: ${textCol} !important; border: 1px solid rgba(0, 0, 0, 0.15) !important; box-shadow: 0 1px 2px rgba(0,0,0,0.06);`;
   }
 
-  // 2. Agrupación reactiva de Clientes por Método de Pago
-  $: clientesPorMetodo = (() => {
-    const list = resumenData.control_clientes || [];
-    const map = {};
-    for (const c of list) {
-      const metodo = (c.metodo || "No especificado").trim();
-      const color = c.metodo_color || null;
-      if (!map[metodo]) {
-        map[metodo] = { metodo, color, ops: 0, compras: 0, pagos: 0, balance: 0 };
+  // Helper que procesa y calcula las 7 subvistas operativas para una sala (única o hija)
+  function computeSubsalaReport(subsalaUuid, rawData) {
+    const isMultisalaTarget = Boolean(subsalaUuid);
+    const isFirstActiveSubsala = Boolean(
+      subsalaUuid && subsalasList.length > 0 && String(subsalasList[0].uuid) === String(subsalaUuid)
+    );
+
+    const matchesSub = (recUuid) => {
+      if (!isMultisalaTarget) return true;
+      if (recUuid && String(recUuid) === String(subsalaUuid)) return true;
+      if (!recUuid && isFirstActiveSubsala) return true;
+      return false;
+    };
+
+    // 1. Datos operativos (horarios)
+    const allD = rawData.all_datos || (rawData.datos ? (Array.isArray(rawData.datos) ? rawData.datos : [rawData.datos]) : []);
+    let datos = null;
+    if (isMultisalaTarget) {
+      datos = allD.find(d => d.multisala_uuid && String(d.multisala_uuid) === String(subsalaUuid)) ||
+              (isFirstActiveSubsala ? allD.find(d => !d.multisala_uuid) : null) ||
+              rawData.datos ||
+              null;
+    } else {
+      datos = rawData.datos || allD[0] || null;
+    }
+
+    // 2. Drop de mesas
+    const drop_mesas = (rawData.drop_mesas || []).filter(d => matchesSub(d.multisala_uuid));
+    const sum100 = drop_mesas.reduce((acc, r) => acc + (Number(r.denominacion_100 ?? r.b100 ?? 0) || 0), 0);
+    const sum50 = drop_mesas.reduce((acc, r) => acc + (Number(r.denominacion_50 ?? r.b50 ?? 0) || 0), 0);
+    const sum20 = drop_mesas.reduce((acc, r) => acc + (Number(r.denominacion_20 ?? r.b20 ?? 0) || 0), 0);
+    const sum10 = drop_mesas.reduce((acc, r) => acc + (Number(r.denominacion_10 ?? r.b10 ?? 0) || 0), 0);
+    const sum5 = drop_mesas.reduce((acc, r) => acc + (Number(r.denominacion_5 ?? r.b5 ?? 0) || 0), 0);
+    const sum1 = drop_mesas.reduce((acc, r) => acc + (Number(r.denominacion_1 ?? r.b1 ?? 0) || 0), 0);
+    const grandTotal = drop_mesas.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
+    const dropTotales = { sum100, sum50, sum20, sum10, sum5, sum1, grandTotal };
+
+    // 3. Novedades de mesas
+    const novedades_mesas = (rawData.novedades_mesas || []).filter(n => matchesSub(n.multisala_uuid));
+
+    // 4. Incidencias generales
+    const rawIncidencias = (rawData.incidencias_generales || []).filter(i => matchesSub(i.multisala_uuid));
+    const sortedIncidencias = sortByMasReciente(rawIncidencias);
+
+    const categories = availableTiposIncidencia.map(t => ({
+      uuid: t.uuid || t.id,
+      id: t.uuid || t.id,
+      nombre: t.nombre,
+      items: []
+    }));
+
+    for (const inc of sortedIncidencias) {
+      const incUuid = (inc.tipo_incidencia_uuid || inc.tipo_incidencia_id) != null ? String(inc.tipo_incidencia_uuid || inc.tipo_incidencia_id) : null;
+      const incTipoNorm = normalizeText(inc.tipo || inc.tipo_incidencia_nombre);
+      const descNorm = (inc.descripcion || "").toLowerCase();
+
+      let matchedCat = categories.find(c => 
+        (incUuid && String(c.uuid || c.id) === incUuid) ||
+        (normalizeText(c.nombre) === incTipoNorm)
+      );
+
+      if (!matchedCat) {
+        if (incTipoNorm.includes("mercanc") || descNorm.includes("mercanc") || descNorm.includes("proveedor")) {
+          matchedCat = categories.find(c => normalizeText(c.nombre).includes("mercanc"));
+        } else if (incTipoNorm.includes("emplead") || incTipoNorm.includes("personal") || descNorm.includes("emplead") || descNorm.includes("croupier")) {
+          matchedCat = categories.find(c => normalizeText(c.nombre).includes("emplead") || normalizeText(c.nombre).includes("personal"));
+        } else if (incTipoNorm.includes("maquin") || descNorm.includes("maquin")) {
+          matchedCat = categories.find(c => normalizeText(c.nombre).includes("maquin"));
+        }
       }
-      if (!map[metodo].color && color) {
-        map[metodo].color = color;
-      }
-      const m = parseFloat(c.monto) || 0;
-      const t = (c.tipo || "compra").toLowerCase();
-      map[metodo].ops += 1;
-      if (t === "pago") {
-        map[metodo].pagos += m;
+
+      if (matchedCat) {
+        matchedCat.items.push(inc);
       } else {
-        map[metodo].compras += m;
+        const customName = (inc.tipo || inc.tipo_incidencia_nombre || "General").trim();
+        let customCat = categories.find(c => normalizeText(c.nombre) === normalizeText(customName));
+        if (!customCat) {
+          customCat = { id: `custom-${customName}`, nombre: customName, items: [] };
+          categories.push(customCat);
+        }
+        customCat.items.push(inc);
       }
     }
-    return Object.values(map)
-      .map((item) => ({
-        ...item,
-        balance: item.compras - item.pagos,
-      }))
-      .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
-  })();
+    const incidenciasPorTipo = categories;
 
-  $: totalesPorMetodo = (() => {
-    const list = clientesPorMetodo;
-    const ops = list.reduce((acc, r) => acc + r.ops, 0);
-    const compras = list.reduce((acc, r) => acc + r.compras, 0);
-    const pagos = list.reduce((acc, r) => acc + r.pagos, 0);
-    return { ops, compras, pagos, balance: compras - pagos };
-  })();
-
-  // 3. Agrupación reactiva de Clientes por Cliente / Jugador
-  $: clientesPorJugador = (() => {
-    const list = resumenData.control_clientes || [];
-    const map = {};
-    for (const c of list) {
-      const cliente = (c.cliente || "Anónimo / General").trim();
-      if (!map[cliente]) {
-        map[cliente] = { cliente, ops: 0, compras: 0, pagos: 0, balance: 0 };
-      }
-      const m = parseFloat(c.monto) || 0;
-      const t = (c.tipo || "compra").toLowerCase();
-      map[cliente].ops += 1;
-      if (t === "pago") {
-        map[cliente].pagos += m;
+    // 5. Control de llaves
+    const rawLlaves = (rawData.control_llaves || []).filter(k => matchesSub(k.multisala_uuid));
+    const sortedControlLlaves = sortByMasReciente(rawLlaves);
+    let enCustodia = 0;
+    let devueltas = 0;
+    for (const k of sortedControlLlaves) {
+      if (k.hora_recepcion && k.hora_recepcion.trim()) {
+        devueltas++;
       } else {
-        map[cliente].compras += m;
+        enCustodia++;
       }
     }
-    return Object.values(map)
-      .map((item) => ({
-        ...item,
-        balance: item.compras - item.pagos,
-      }))
-      .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
-  })();
+    const llavesTotales = { total: sortedControlLlaves.length, enCustodia, devueltas };
 
-  $: totalesPorJugador = (() => {
-    const list = clientesPorJugador;
-    const ops = list.reduce((acc, r) => acc + r.ops, 0);
-    const compras = list.reduce((acc, r) => acc + r.compras, 0);
-    const pagos = list.reduce((acc, r) => acc + r.pagos, 0);
-    return { ops, compras, pagos, balance: compras - pagos };
-  })();
-
-  // Totales de Drop
-  $: dropTotales = (() => {
-    const list = resumenData.drop_mesas || [];
-    const sum100 = list.reduce(
-      (acc, r) => acc + (Number(r.denominacion_100 ?? r.b100 ?? 0) || 0),
-      0,
-    );
-    const sum50 = list.reduce(
-      (acc, r) => acc + (Number(r.denominacion_50 ?? r.b50 ?? 0) || 0),
-      0,
-    );
-    const sum20 = list.reduce(
-      (acc, r) => acc + (Number(r.denominacion_20 ?? r.b20 ?? 0) || 0),
-      0,
-    );
-    const sum10 = list.reduce(
-      (acc, r) => acc + (Number(r.denominacion_10 ?? r.b10 ?? 0) || 0),
-      0,
-    );
-    const sum5 = list.reduce(
-      (acc, r) => acc + (Number(r.denominacion_5 ?? r.b5 ?? 0) || 0),
-      0,
-    );
-    const sum1 = list.reduce(
-      (acc, r) => acc + (Number(r.denominacion_1 ?? r.b1 ?? 0) || 0),
-      0,
-    );
-    const grandTotal = list.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
-    return { sum100, sum50, sum20, sum10, sum5, sum1, grandTotal };
-  })();
-
-  // Resumen financiero de Clientes
-  $: clientesTotales = (() => {
-    const list = resumenData.control_clientes || [];
+    // 6. Control de clientes
+    const rawClientes = (rawData.control_clientes || []).filter(c => matchesSub(c.multisala_uuid));
+    const sortedControlClientes = sortByMasReciente(rawClientes);
     let totalCompras = 0;
     let totalPagos = 0;
-    for (const c of list) {
+    for (const c of sortedControlClientes) {
       const m = parseFloat(c.monto) || 0;
       const t = (c.tipo || "compra").toLowerCase();
       if (t === "pago") {
@@ -583,64 +554,94 @@
       }
     }
     const balanceNeto = totalCompras - totalPagos;
-    return { totalCompras, totalPagos, balanceNeto, totalOps: list.length };
-  })();
+    const clientesTotales = { totalCompras, totalPagos, balanceNeto, totalOps: sortedControlClientes.length };
 
-  // Producción = Drop + (Total Compra - Total Pagos)
-  $: produccionTotal =
-    dropTotales.grandTotal +
-    (clientesTotales.totalCompras - clientesTotales.totalPagos);
-
-  // Resumen de Llaves
-  $: llavesTotales = (() => {
-    const list = resumenData.control_llaves || [];
-    let enCustodia = 0;
-    let devueltas = 0;
-    for (const k of list) {
-      if (k.hora_recepcion && k.hora_recepcion.trim()) {
-        devueltas++;
+    const mapMetodo = {};
+    for (const c of sortedControlClientes) {
+      const metodo = (c.metodo || "No especificado").trim();
+      const color = c.metodo_color || null;
+      if (!mapMetodo[metodo]) {
+        mapMetodo[metodo] = { metodo, color, ops: 0, compras: 0, pagos: 0, balance: 0 };
+      }
+      if (!mapMetodo[metodo].color && color) {
+        mapMetodo[metodo].color = color;
+      }
+      const m = parseFloat(c.monto) || 0;
+      const t = (c.tipo || "compra").toLowerCase();
+      mapMetodo[metodo].ops += 1;
+      if (t === "pago") {
+        mapMetodo[metodo].pagos += m;
       } else {
-        enCustodia++;
+        mapMetodo[metodo].compras += m;
       }
     }
-    return { total: list.length, enCustodia, devueltas };
-  })();
+    const clientesPorMetodo = Object.values(mapMetodo)
+      .map((item) => ({ ...item, balance: item.compras - item.pagos }))
+      .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
 
-  // Resumen de Aportes Máquinas (Aportes y Devoluciones)
-  $: aportesTotales = (() => {
-    const list = sortedAportes;
-    const aportesList = list.filter(a => (a.tipo || 'Aporte') === 'Aporte');
-    const devolucionesList = list.filter(a => (a.tipo || 'Aporte') === 'Devolución');
+    const opsMet = clientesPorMetodo.reduce((acc, r) => acc + r.ops, 0);
+    const comprasMet = clientesPorMetodo.reduce((acc, r) => acc + r.compras, 0);
+    const pagosMet = clientesPorMetodo.reduce((acc, r) => acc + r.pagos, 0);
+    const totalesPorMetodo = { ops: opsMet, compras: comprasMet, pagos: pagosMet, balance: comprasMet - pagosMet };
 
-    const totalAportes = aportesList.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
-    const totalDevoluciones = devolucionesList.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
+    const mapJugador = {};
+    for (const c of sortedControlClientes) {
+      const cliente = (c.cliente || "Anónimo / General").trim();
+      if (!mapJugador[cliente]) {
+        mapJugador[cliente] = { cliente, ops: 0, compras: 0, pagos: 0, balance: 0 };
+      }
+      const m = parseFloat(c.monto) || 0;
+      const t = (c.tipo || "compra").toLowerCase();
+      mapJugador[cliente].ops += 1;
+      if (t === "pago") {
+        mapJugador[cliente].pagos += m;
+      } else {
+        mapJugador[cliente].compras += m;
+      }
+    }
+    const clientesPorJugador = Object.values(mapJugador)
+      .map((item) => ({ ...item, balance: item.compras - item.pagos }))
+      .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
+
+    const opsJug = clientesPorJugador.reduce((acc, r) => acc + r.ops, 0);
+    const comprasJug = clientesPorJugador.reduce((acc, r) => acc + r.compras, 0);
+    const pagosJug = clientesPorJugador.reduce((acc, r) => acc + r.pagos, 0);
+    const totalesPorJugador = { ops: opsJug, compras: comprasJug, pagos: pagosJug, balance: comprasJug - pagosJug };
+
+    const produccionTotal = dropTotales.grandTotal + (clientesTotales.totalCompras - clientesTotales.totalPagos);
+
+    // 7. Aportes máquinas
+    const rawAportes = (rawData.aportes_maquinas || rawData.aportes || []).filter(a => matchesSub(a.multisala_uuid));
+    const sortedAportesList = sortByMasReciente(rawAportes);
+
+    const aportesOnly = sortedAportesList.filter(a => (a.tipo || 'Aporte') === 'Aporte');
+    const devolucionesOnly = sortedAportesList.filter(a => (a.tipo || 'Aporte') === 'Devolución');
+
+    const totalAportes = aportesOnly.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
+    const totalDevoluciones = devolucionesOnly.reduce((acc, a) => acc + (parseFloat(a.monto) || 0), 0);
     const netoMonto = totalAportes - totalDevoluciones;
-    const totalOps = list.length;
-    const cantAportes = aportesList.length;
-    const cantDevoluciones = devolucionesList.length;
-    const promedio = cantAportes > 0 ? totalAportes / cantAportes : (totalOps > 0 ? netoMonto / totalOps : 0);
+    const totalOpsAportes = sortedAportesList.length;
+    const cantAportes = aportesOnly.length;
+    const cantDevoluciones = devolucionesOnly.length;
+    const promedioAportes = cantAportes > 0 ? totalAportes / cantAportes : (totalOpsAportes > 0 ? netoMonto / totalOpsAportes : 0);
 
-    return {
-      totalMonto: netoMonto, // retrocompatibilidad
+    const aportesTotales = {
+      totalMonto: netoMonto,
       totalAportes,
       totalDevoluciones,
       netoMonto,
-      totalOps,
+      totalOps: totalOpsAportes,
       cantAportes,
       cantDevoluciones,
-      promedio
+      promedio: promedioAportes
     };
-  })();
 
-  // Agrupado de Aportes por Rango (Separando Aportes y Devoluciones)
-  $: aportesPorRango = (() => {
-    const list = sortedAportes;
-    const map = {};
-    for (const a of list) {
+    const mapRango = {};
+    for (const a of sortedAportesList) {
       const rKey = a.rango_uuid || a.rango_id || 0;
       const rNom = a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
-      if (!map[rKey]) {
-        map[rKey] = {
+      if (!mapRango[rKey]) {
+        mapRango[rKey] = {
           rango_uuid: a.rango_uuid || rKey,
           rango_id: rKey,
           rango_nombre: rNom,
@@ -653,40 +654,36 @@
           monto: 0
         };
       }
-      map[rKey].cantidad++;
+      mapRango[rKey].cantidad++;
       const val = parseFloat(a.monto) || 0;
       if ((a.tipo || 'Aporte') === 'Devolución') {
-        map[rKey].cantDevoluciones++;
-        map[rKey].montoDevoluciones += val;
-        map[rKey].neto -= val;
-        map[rKey].monto -= val;
+        mapRango[rKey].cantDevoluciones++;
+        mapRango[rKey].montoDevoluciones += val;
+        mapRango[rKey].neto -= val;
+        mapRango[rKey].monto -= val;
       } else {
-        map[rKey].cantAportes++;
-        map[rKey].montoAportes += val;
-        map[rKey].neto += val;
-        map[rKey].monto += val;
+        mapRango[rKey].cantAportes++;
+        mapRango[rKey].montoAportes += val;
+        mapRango[rKey].neto += val;
+        mapRango[rKey].monto += val;
       }
     }
-    const grandTotal = aportesTotales.totalAportes || 1;
-    return Object.values(map)
+    const grandTotalAportes = aportesTotales.totalAportes || 1;
+    const aportesPorRango = Object.values(mapRango)
       .map(item => ({
         ...item,
-        porcentaje: (item.montoAportes / grandTotal) * 100,
+        porcentaje: (item.montoAportes / grandTotalAportes) * 100,
         promedio: item.cantAportes > 0 ? item.montoAportes / item.cantAportes : 0
       }))
       .sort((a, b) => b.montoAportes - a.montoAportes);
-  })();
 
-  // Agrupado de Aportes por Empleado (Separando Aportes y Devoluciones)
-  $: aportesPorEmpleado = (() => {
-    const list = sortedAportes;
-    const map = {};
-    for (const a of list) {
+    const mapEmp = {};
+    for (const a of sortedAportesList) {
       const empKey = a.empleado_uuid || a.empleado_id || 0;
       const empNom = a.empleado_nombre || (a.empleado_uuid ? `Empleado #${a.empleado_uuid.slice(0, 8)}` : 'Empleado');
       const cargoNom = a.cargo_nombre || '—';
-      if (!map[empKey]) {
-        map[empKey] = {
+      if (!mapEmp[empKey]) {
+        mapEmp[empKey] = {
           empleado_uuid: a.empleado_uuid || empKey,
           empleado_id: empKey,
           empleado_nombre: empNom,
@@ -700,28 +697,139 @@
           monto: 0
         };
       }
-      map[empKey].cantidad++;
+      mapEmp[empKey].cantidad++;
       const val = parseFloat(a.monto) || 0;
       if ((a.tipo || 'Aporte') === 'Devolución') {
-        map[empKey].cantDevoluciones++;
-        map[empKey].montoDevoluciones += val;
-        map[empKey].neto -= val;
-        map[empKey].monto -= val;
+        mapEmp[empKey].cantDevoluciones++;
+        mapEmp[empKey].montoDevoluciones += val;
+        mapEmp[empKey].neto -= val;
+        mapEmp[empKey].monto -= val;
       } else {
-        map[empKey].cantAportes++;
-        map[empKey].montoAportes += val;
-        map[empKey].neto += val;
-        map[empKey].monto += val;
+        mapEmp[empKey].cantAportes++;
+        mapEmp[empKey].montoAportes += val;
+        mapEmp[empKey].neto += val;
+        mapEmp[empKey].monto += val;
       }
     }
-    const grandTotal = aportesTotales.totalAportes || 1;
-    return Object.values(map)
+    const aportesPorEmpleado = Object.values(mapEmp)
       .map(item => ({
         ...item,
-        porcentaje: (item.montoAportes / grandTotal) * 100,
+        porcentaje: (item.montoAportes / grandTotalAportes) * 100,
         promedio: item.cantAportes > 0 ? item.montoAportes / item.cantAportes : 0
       }))
       .sort((a, b) => b.montoAportes - a.montoAportes);
+
+    // 8. Conteo de máquinas (Billeteros)
+    const rawConteo = (rawData.conteo_maquinas || []).filter(c => matchesSub(c.multisala_uuid));
+    const sortedConteoList = sortByMasReciente(rawConteo);
+
+    const sumConteo100 = sortedConteoList.reduce((acc, r) => acc + (Number(r.denominacion_100 ?? r.b100 ?? 0) || 0), 0);
+    const sumConteo50 = sortedConteoList.reduce((acc, r) => acc + (Number(r.denominacion_50 ?? r.b50 ?? 0) || 0), 0);
+    const sumConteo20 = sortedConteoList.reduce((acc, r) => acc + (Number(r.denominacion_20 ?? r.b20 ?? 0) || 0), 0);
+    const sumConteo10 = sortedConteoList.reduce((acc, r) => acc + (Number(r.denominacion_10 ?? r.b10 ?? 0) || 0), 0);
+    const sumConteo5 = sortedConteoList.reduce((acc, r) => acc + (Number(r.denominacion_5 ?? r.b5 ?? 0) || 0), 0);
+    const sumConteo1 = sortedConteoList.reduce((acc, r) => acc + (Number(r.denominacion_1 ?? r.b1 ?? 0) || 0), 0);
+    const grandTotalConteo = sortedConteoList.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
+
+    const conteoTotales = {
+      sum100: sumConteo100,
+      sum50: sumConteo50,
+      sum20: sumConteo20,
+      sum10: sumConteo10,
+      sum5: sumConteo5,
+      sum1: sumConteo1,
+      totalMaquinas: sortedConteoList.length,
+      grandTotal: grandTotalConteo
+    };
+
+    // Agrupación de conteo por Rango para el reporte
+    const mapConteoRango = {};
+    for (const c of sortedConteoList) {
+      const rKey = c.rango_uuid || c.rango_id || 0;
+      const rNom = c.rango_nombre || (c.rango_uuid ? `Rango #${c.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
+      if (!mapConteoRango[rKey]) {
+        mapConteoRango[rKey] = {
+          rango_uuid: c.rango_uuid || rKey,
+          rango_id: rKey,
+          rango_nombre: rNom,
+          maquinasCount: 0,
+          b100: 0,
+          b50: 0,
+          b20: 0,
+          b10: 0,
+          b5: 0,
+          b1: 0,
+          total: 0
+        };
+      }
+      mapConteoRango[rKey].maquinasCount++;
+      mapConteoRango[rKey].b100 += Number(c.denominacion_100 ?? c.b100 ?? 0) || 0;
+      mapConteoRango[rKey].b50 += Number(c.denominacion_50 ?? c.b50 ?? 0) || 0;
+      mapConteoRango[rKey].b20 += Number(c.denominacion_20 ?? c.b20 ?? 0) || 0;
+      mapConteoRango[rKey].b10 += Number(c.denominacion_10 ?? c.b10 ?? 0) || 0;
+      mapConteoRango[rKey].b5 += Number(c.denominacion_5 ?? c.b5 ?? 0) || 0;
+      mapConteoRango[rKey].b1 += Number(c.denominacion_1 ?? c.b1 ?? 0) || 0;
+      mapConteoRango[rKey].total += Number(c.total) || 0;
+    }
+    const conteoPorRango = Object.values(mapConteoRango).sort((a, b) => b.total - a.total);
+
+    return {
+      datos,
+      drop_mesas,
+      dropTotales,
+      novedades_mesas,
+      incidencias_generales: sortedIncidencias,
+      incidenciasPorTipo,
+      control_llaves: sortedControlLlaves,
+      llavesTotales,
+      control_clientes: sortedControlClientes,
+      clientesTotales,
+      clientesPorMetodo,
+      totalesPorMetodo,
+      clientesPorJugador,
+      totalesPorJugador,
+      produccionTotal,
+      aportes: sortedAportesList,
+      aportesTotales,
+      aportesPorRango,
+      aportesPorEmpleado,
+      conteo_maquinas: sortedConteoList,
+      conteoTotales,
+      conteoPorRango
+    };
+  }
+
+  // Estructura de secciones a renderizar en el reporte
+  $: renderedSections = (() => {
+    if (subsalasList && subsalasList.length > 0) {
+      return subsalasList.map(subsala => ({
+        subsala,
+        subData: computeSubsalaReport(subsala.uuid, resumenData)
+      }));
+    }
+    return [{
+      subsala: null,
+      subData: computeSubsalaReport(null, resumenData)
+    }];
+  })();
+
+  // Operadores de turno al pie de reporte (toma de los datos del libro o de la primera subsección)
+  $: mainOperadorA = (() => {
+    if (resumenData.datos?.operador_turno_a && resumenData.datos.operador_turno_a.trim()) {
+      return resumenData.datos.operador_turno_a;
+    }
+    const allD = resumenData.all_datos || [];
+    const found = allD.find(d => d.operador_turno_a && d.operador_turno_a.trim());
+    return found ? found.operador_turno_a : "—";
+  })();
+
+  $: mainOperadorC = (() => {
+    if (resumenData.datos?.operador_turno_c && resumenData.datos.operador_turno_c.trim()) {
+      return resumenData.datos.operador_turno_c;
+    }
+    const allD = resumenData.all_datos || [];
+    const found = allD.find(d => d.operador_turno_c && d.operador_turno_c.trim());
+    return found ? found.operador_turno_c : "—";
   })();
 
   // Formatear montos en dólares
@@ -1058,852 +1166,1009 @@
       </div>
 
       <!-- ============================================================
-           1. INFORMACIÓN DE SALA (Horarios Operativos Oficiales)
+           SECCIONES OPERATIVAS (AGRUPADAS POR SALA HIJA SI ES MULTISALAS)
            ============================================================ -->
-      <div class="sheet-section official-incidencias-block first-section">
-        <div class="sheet-main-title-box">
-          <h1 class="sheet-title-text">Resumen De Incidencias Diarias.</h1>
-        </div>
+      {#each renderedSections as section (section.subsala?.uuid || 'root')}
+        <div class="subsala-section-block">
+          {#if section.subsala}
+            <div class="subsala-report-header">
+              <h2 class="subsala-report-title">{section.subsala.nombre}</h2>
+            </div>
+          {/if}
 
-        <div class="horarios-section">
-          <div class="horarios-list">
-            <!-- 1. Apertura de la sala -->
-            <div class="horario-item">
-              <div class="horario-label-group">
-                <span class="item-num">1.</span>
-                <span class="item-label">Apertura de la sala</span>
-              </div>
-              <div class="item-values">
-                <span class="h-pair">
-                  <span class="h-text">h inicio:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.apertura_sala_inicio || "—"}</span
-                  >
-                </span>
-                <span class="h-pair">
-                  <span class="h-text">h cierre:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.apertura_sala_fin || "—"}</span
-                  >
-                </span>
-              </div>
+          <!-- ============================================================
+               1. INFORMACIÓN DE SALA (Horarios Operativos Oficiales)
+               ============================================================ -->
+          <div class="sheet-section official-incidencias-block first-section">
+            <div class="sheet-main-title-box">
+              <h1 class="sheet-title-text">Resumen De Incidencias Diarias.</h1>
             </div>
 
-            <!-- 2. Apertura de maquinas -->
-            <div class="horario-item">
-              <div class="horario-label-group">
-                <span class="item-num">2.</span>
-                <span class="item-label">Apertura de maquinas</span>
-              </div>
-              <div class="item-values">
-                <span class="h-pair">
-                  <span class="h-text">h inicio:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.apertura_maquinas_inicio || "—"}</span
-                  >
-                </span>
-                <span class="h-pair">
-                  <span class="h-text">h cierre:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.apertura_maquinas_fin || "—"}</span
-                  >
-                </span>
-              </div>
-            </div>
-
-            <!-- 3. Apertura de bingo -->
-            <div class="horario-item">
-              <div class="horario-label-group">
-                <span class="item-num">3.</span>
-                <span class="item-label">Apertura de bingo</span>
-              </div>
-              <div class="item-values">
-                <span class="h-pair">
-                  <span class="h-text">h inicio:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.apertura_bingo_inicio || "—"}</span
-                  >
-                </span>
-                <span class="h-pair">
-                  <span class="h-text">h cierre:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.apertura_bingo_fin || "—"}</span
-                  >
-                </span>
-              </div>
-            </div>
-
-            <!-- 4. Retiro de dropbox general -->
-            <div class="horario-item">
-              <div class="horario-label-group">
-                <span class="item-num">4.</span>
-                <span class="item-label">Retiro de dropbox general</span>
-              </div>
-              <div class="item-values">
-                <span class="h-pair">
-                  <span class="h-text">h inicio:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.retiros_dropbox_inicio || "—"}</span
-                  >
-                </span>
-                <span class="h-pair">
-                  <span class="h-text">h cierre:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.retiros_dropbox_fin || "—"}</span
-                  >
-                </span>
-              </div>
-            </div>
-
-            <!-- 5. Conteo DROP -->
-            <div class="horario-item">
-              <div class="horario-label-group">
-                <span class="item-num">5.</span>
-                <span class="item-label">Conteo DROP</span>
-              </div>
-              <div class="item-values">
-                <span class="h-pair">
-                  <span class="h-text">h inicio:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.conteo_dropbox_inicio || "—"}</span
-                  >
-                </span>
-                <span class="h-pair">
-                  <span class="h-text">h cierre:</span>
-                  <span class="h-val"
-                    >{resumenData.datos?.conteo_dropbox_fin || "—"}</span
-                  >
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ============================================================
-           2. DROP DE MESAS (Arqueo de Efectivo)
-           ============================================================ -->
-      <div class="sheet-section sub-module-section">
-        <div class="sub-header-row">
-          <div class="sub-title-group">
-            <h2 class="sub-section-title">
-              2. Drop de Mesas (Arqueo de Efectivo)
-            </h2>
-            <span class="sub-count-badge"
-              >{resumenData.drop_mesas.length} mesas registradas</span
-            >
-          </div>
-          <span
-            class="sub-total-badge {produccionTotal >= 0
-              ? 'badge-produccion-positive'
-              : 'badge-produccion-negative'}"
-          >
-            Producción: <b>{formatMoney(produccionTotal)}</b>
-          </span>
-        </div>
-
-        <!-- Indicadores rápidos de rendimiento -->
-        <div class="quick-kpi-grid">
-          <div class="kpi-card">
-            <span class="kpi-label">Total Drop</span>
-            <span class="kpi-value text-emerald"
-              >{formatMoney(dropTotales.grandTotal)}</span
-            >
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-label">Total Compra</span>
-            <span class="kpi-value text-blue"
-              >{formatMoney(clientesTotales.totalCompras)}</span
-            >
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-label">Total Pagos</span>
-            <span class="kpi-value text-rose"
-              >{formatMoney(clientesTotales.totalPagos)}</span
-            >
-          </div>
-          <div class="kpi-card">
-            <span class="kpi-label">Total Compra - Total Pagos</span>
-            <span
-              class="kpi-value {clientesTotales.balanceNeto >= 0
-                ? 'text-emerald'
-                : 'text-rose'}"
-            >
-              {formatMoney(clientesTotales.balanceNeto)}
-            </span>
-          </div>
-        </div>
-
-        {#if resumenData.drop_mesas.length === 0}
-          <div class="empty-sub-alert">
-            No hay registros de drop para este libro.
-          </div>
-        {:else}
-          <div class="table-responsive-wrapper">
-            <table class="sheet-detail-table">
-              <thead>
-                <tr>
-                  <th class="th-mesa">MESA</th>
-                  <th class="th-num">$100</th>
-                  <th class="th-num">$50</th>
-                  <th class="th-num">$20</th>
-                  <th class="th-num">$10</th>
-                  <th class="th-num">$5</th>
-                  <th class="th-num">$1</th>
-                  <th class="th-total">TOTAL RECAUDADO</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each resumenData.drop_mesas as d}
-                  <tr>
-                    <td class="cell-mesa-bold"
-                      >{d.mesa_nombre || (d.mesa_uuid ? `Mesa #${d.mesa_uuid.slice(0, 8)}` : `Mesa #${d.mesa_id}`)}</td
-                    >
-                    <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
-                    <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
-                    <td class="cell-num">{d.denominacion_20 ?? d.b20 ?? 0}</td>
-                    <td class="cell-num">{d.denominacion_10 ?? d.b10 ?? 0}</td>
-                    <td class="cell-num">{d.denominacion_5 ?? d.b5 ?? 0}</td>
-                    <td class="cell-num">{d.denominacion_1 ?? d.b1 ?? 0}</td>
-                    <td class="cell-total-money">{formatMoney(d.total)}</td>
-                  </tr>
-                {/each}
-              </tbody>
-              <tfoot>
-                <tr class="tfoot-totals">
-                  <td>TOTALES</td>
-                  <td class="cell-num">{dropTotales.sum100}</td>
-                  <td class="cell-num">{dropTotales.sum50}</td>
-                  <td class="cell-num">{dropTotales.sum20}</td>
-                  <td class="cell-num">{dropTotales.sum10}</td>
-                  <td class="cell-num">{dropTotales.sum5}</td>
-                  <td class="cell-num">{dropTotales.sum1}</td>
-                  <td class="cell-grand-total"
-                    >{formatMoney(dropTotales.grandTotal)}</td
-                  >
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        {/if}
-      </div>
-
-      <!-- ============================================================
-           3. NOVEDADES DE MESAS (Apertura y Cierre de Mesas)
-           ============================================================ -->
-      <div class="sheet-section sub-module-section">
-        <div class="sub-header-row">
-          <div class="sub-title-group">
-            <h2 class="sub-section-title">
-              3. Novedades de Mesas (Apertura y Cierre)
-            </h2>
-            <span class="sub-count-badge"
-              >{resumenData.novedades_mesas.length} registros</span
-            >
-          </div>
-        </div>
-
-        <div class="mesas-section">
-          <div class="table-responsive-wrapper">
-            <table class="sheet-official-table">
-              <thead>
-                <tr>
-                  <th class="th-hora-a">HORA<br />A</th>
-                  <th class="th-mesa">MESA</th>
-                  <th class="th-pitboss">PITBOSS</th>
-                  <th class="th-croupier">CROUPIER<br />APERTURA</th>
-                  <th class="th-croupier">CROUPIER<br />CIERRE</th>
-                  <th class="th-hora-c">HORA<br />C</th>
-                  <th class="th-obs">OBSERVACIÓN</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#if resumenData.novedades_mesas.length === 0}
-                  <tr>
-                    <td colspan="7" class="cell-empty-text"
-                      >No hay novedades registradas de mesas para este día.</td
-                    >
-                  </tr>
-                {:else}
-                  {#each resumenData.novedades_mesas as nov}
-                    <tr>
-                      <td class="cell-center">{nov.hora_apertura || "—"}</td>
-                      <td class="cell-mesa-name"
-                        >{nov.mesa_nombre || (nov.mesa_uuid ? `Mesa #${nov.mesa_uuid.slice(0, 8)}` : `Mesa #${nov.mesa_id}`)}</td
-                      >
-                      <td class="cell-left">{nov.pitboss || "—"}</td>
-                      <td class="cell-left">{nov.croupier_apertura || "—"}</td>
-                      <td class="cell-left">{nov.croupier_cierre || "—"}</td>
-                      <td class="cell-center">{nov.hora_cierre || "—"}</td>
-                      <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
-                    </tr>
-                  {/each}
-                {/if}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ============================================================
-           4. BITÁCORA DE INCIDENCIAS POR TIPO (Dinámico según Tipo Incidencias)
-           ============================================================ -->
-      <div class="sheet-section sub-module-section">
-        <div class="sub-header-row">
-          <div class="sub-title-group">
-            <h2 class="sub-section-title">
-              4. Bitácora de Incidencias
-            </h2>
-            <span class="sub-count-badge"
-              >{resumenData.incidencias_generales.length} reportes en total</span
-            >
-          </div>
-        </div>
-
-        <div class="incidencias-bloque-tres">
-          {#each incidenciasPorTipo as cat (cat.uuid || cat.id)}
-            <div class="incidencia-subbloque">
-              <div class="incidencia-subbloque-header">
-                <h3 class="incidencia-subbloque-title">
-                  <span>{cat.nombre}</span>
-                </h3>
-                <span class="incidencia-badge">{cat.items.length}</span>
-              </div>
-              <div class="incidencia-subbloque-content">
-                {#if cat.items.length === 0}
-                  <div class="empty-sub-alert">
-                    Sin novedades de {cat.nombre.toLowerCase()} registradas.
+            <div class="horarios-section">
+              <div class="horarios-list">
+                <!-- 1. Apertura de la sala -->
+                <div class="horario-item">
+                  <div class="horario-label-group">
+                    <span class="item-num">1.</span>
+                    <span class="item-label">Apertura de la sala</span>
                   </div>
-                {:else}
-                  {#each cat.items as inc}
-                    {@const parsed = parseIncidenciaContent(
-                      inc.descripcion,
-                      inc.hora,
-                    )}
-                    <div class="incidencia-item-card">
-                      <div class="inc-item-title-bold">{parsed.title}</div>
-                      {#if parsed.items && parsed.items.length > 0}
-                        <ul class="inc-subitems-list">
-                          {#each parsed.items as subItem}
-                            <li>{subItem}</li>
-                          {/each}
-                        </ul>
-                      {/if}
-                    </div>
-                  {/each}
-                {/if}
+                  <div class="item-values">
+                    <span class="h-pair">
+                      <span class="h-text">h inicio:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.apertura_sala_inicio || "—"}</span
+                      >
+                    </span>
+                    <span class="h-pair">
+                      <span class="h-text">h cierre:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.apertura_sala_fin || "—"}</span
+                      >
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 2. Apertura de maquinas -->
+                <div class="horario-item">
+                  <div class="horario-label-group">
+                    <span class="item-num">2.</span>
+                    <span class="item-label">Apertura de maquinas</span>
+                  </div>
+                  <div class="item-values">
+                    <span class="h-pair">
+                      <span class="h-text">h inicio:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.apertura_maquinas_inicio || "—"}</span
+                      >
+                    </span>
+                    <span class="h-pair">
+                      <span class="h-text">h cierre:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.apertura_maquinas_fin || "—"}</span
+                      >
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 3. Apertura de bingo -->
+                <div class="horario-item">
+                  <div class="horario-label-group">
+                    <span class="item-num">3.</span>
+                    <span class="item-label">Apertura de bingo</span>
+                  </div>
+                  <div class="item-values">
+                    <span class="h-pair">
+                      <span class="h-text">h inicio:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.apertura_bingo_inicio || "—"}</span
+                      >
+                    </span>
+                    <span class="h-pair">
+                      <span class="h-text">h cierre:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.apertura_bingo_fin || "—"}</span
+                      >
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 4. Retiro de dropbox general -->
+                <div class="horario-item">
+                  <div class="horario-label-group">
+                    <span class="item-num">4.</span>
+                    <span class="item-label">Retiro de dropbox general</span>
+                  </div>
+                  <div class="item-values">
+                    <span class="h-pair">
+                      <span class="h-text">h inicio:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.retiros_dropbox_inicio || "—"}</span
+                      >
+                    </span>
+                    <span class="h-pair">
+                      <span class="h-text">h cierre:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.retiros_dropbox_fin || "—"}</span
+                      >
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 5. Conteo DROP -->
+                <div class="horario-item">
+                  <div class="horario-label-group">
+                    <span class="item-num">5.</span>
+                    <span class="item-label">Conteo DROP</span>
+                  </div>
+                  <div class="item-values">
+                    <span class="h-pair">
+                      <span class="h-text">h inicio:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.conteo_dropbox_inicio || "—"}</span
+                      >
+                    </span>
+                    <span class="h-pair">
+                      <span class="h-text">h cierre:</span>
+                      <span class="h-val"
+                        >{section.subData.datos?.conteo_dropbox_fin || "—"}</span
+                      >
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
-          {/each}
-        </div>
-      </div>
-
-      <!-- ============================================================
-           5. CONTROL DE LLAVES
-           ============================================================ -->
-      <div class="sheet-section sub-module-section">
-        <div class="sub-header-row">
-          <div class="sub-title-group">
-            <h2 class="sub-section-title">
-              5. Bitácora de Control de Llaves
-            </h2>
-            <span class="sub-count-badge">{llavesTotales.total} registros</span>
-          </div>
-          <div class="badges-status-group">
-            <span class="badge-kpi-pill active"
-              >En Custodia: <b>{llavesTotales.enCustodia}</b></span
-            >
-            <span class="badge-kpi-pill success"
-              >Devueltas: <b>{llavesTotales.devueltas}</b></span
-            >
-          </div>
-        </div>
-
-        {#if resumenData.control_llaves.length === 0}
-          <div class="empty-sub-alert">
-            No hay movimientos de control de llaves registrados en este libro.
-          </div>
-        {:else}
-          <div class="table-responsive-wrapper">
-            <table class="sheet-detail-table">
-              <thead>
-                <tr>
-                  <th class="th-num">N°</th>
-                  <th class="th-llave">LLAVES</th>
-                  <th class="th-desc">DESCRIPCIÓN / MOTIVO</th>
-                  <th class="th-hora">HORA SALIDA</th>
-                  <th class="th-hora">HORA RECEPCIÓN</th>
-                  <th class="th-estado">ESTADO</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each sortedControlLlaves as k, idx}
-                  {@const isDevuelta = Boolean(
-                    k.hora_recepcion && k.hora_recepcion.trim(),
-                  )}
-                  {@const llavesTexto =
-                    k.llaves_detalle && k.llaves_detalle.length > 0
-                      ? k.llaves_detalle.map((l) => l.nombre).join(", ")
-                      : k.llave_nombre ||
-                        (k.llaves_ids ? `${k.llaves_ids.length} llaves` : "—")}
-                  <tr>
-                    <td class="cell-center">{idx + 1}</td>
-                    <td class="cell-llave-bold">{llavesTexto}</td>
-                    <td class="cell-left">{k.descripcion || "General"}</td>
-                    <td class="cell-center">{k.hora_salida || "—"}</td>
-                    <td class="cell-center">{k.hora_recepcion || "—"}</td>
-                    <td class="cell-center">
-                      {#if isDevuelta}
-                        <span class="tag-status tag-success">Devuelta</span>
-                      {:else}
-                        <span class="tag-status tag-warning">En Custodia</span>
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {/if}
-      </div>
-
-      <!-- ============================================================
-           6. CONTROL DE CLIENTES (Detallado + 2 Tablitas Agrupadas)
-           ============================================================ -->
-      <div class="sheet-section sub-module-section">
-        <div class="sub-header-row">
-          <div class="sub-title-group">
-            <h2 class="sub-section-title">
-              6. Control de Clientes / Jugadores en Sala
-            </h2>
-            <span class="sub-count-badge"
-              >{clientesTotales.totalOps} transacciones</span
-            >
-          </div>
-          <div class="badges-status-group">
-            <span class="badge-kpi-pill success"
-              >Total Compras: <b>{formatMoney(clientesTotales.totalCompras)}</b
-              ></span
-            >
-            <span class="badge-kpi-pill info"
-              >Total Pagos: <b>{formatMoney(clientesTotales.totalPagos)}</b
-              ></span
-            >
-            <span
-              class="badge-kpi-pill {clientesTotales.balanceNeto >= 0
-                ? 'highlight-positive'
-                : 'highlight-negative'}"
-            >
-              Balance Neto: <b>{formatMoney(clientesTotales.balanceNeto)}</b>
-            </span>
-          </div>
-        </div>
-
-        <!-- 6.1 Detallado de Operación -->
-        {#if resumenData.control_clientes.length === 0}
-          <div class="empty-sub-alert">
-            No hay operaciones de control de clientes registradas en este libro.
-          </div>
-        {:else}
-          <div class="table-responsive-wrapper">
-            <table class="sheet-detail-table">
-              <thead>
-                <tr>
-                  <th class="th-num">N°</th>
-                  <th class="th-hora">HORA</th>
-                  <th class="th-cliente">CLIENTE / JUGADOR</th>
-                  <th class="th-tipo">TIPO</th>
-                  <th class="th-metodo">MÉTODO</th>
-                  <th class="th-nota">NOTA</th>
-                  <th class="th-total">MONTO</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each sortedControlClientes as c, idx}
-                  {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
-                  <tr>
-                    <td class="cell-center">{idx + 1}</td>
-                    <td class="cell-center">{c.hora || "—"}</td>
-                    <td class="cell-client-name">{c.cliente || "—"}</td>
-                    <td class="cell-center">
-                      <span
-                        class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
-                      >
-                        {c.tipo || "Compra"}
-                      </span>
-                    </td>
-                    <td class="cell-center">
-                      <span
-                        class="tag-metodo-badge"
-                        style="{getMetodoBadgeStyle(c.metodo, c.metodo_color)}"
-                      >
-                        {c.metodo || "General"}
-                      </span>
-                    </td>
-                    <td class="cell-nota tag-nota-text" title={c.nota || ""}>
-                      {c.nota ? c.nota : "—"}
-                    </td>
-                    <td class="cell-total-money">{formatMoney(c.monto)}</td>
-                  </tr>
-                {/each}
-              </tbody>
-              <tfoot>
-                <tr class="tfoot-totals">
-                  <td colspan="6">BALANCE NETO (COMPRAS - PAGOS)</td>
-                  <td class="cell-grand-total"
-                    >{formatMoney(clientesTotales.balanceNeto)}</td
-                  >
-                </tr>
-              </tfoot>
-            </table>
           </div>
 
-          <!-- 6.2 Las 2 Tablitas Agrupadas (Por Método de Pago y Por Cliente) -->
-          <div class="client-summaries-grid">
-            <!-- Tablita A: Agrupado por Método de Pago -->
-            <div class="summary-subtable-box">
-              <div class="subtable-header">
-                <h4 class="subtable-title">Resumen por Método de Pago</h4>
-                <span class="incidencia-badge"
-                  >{clientesPorMetodo.length} métodos</span
+          <!-- ============================================================
+               2. DROP DE MESAS (Arqueo de Efectivo)
+               ============================================================ -->
+          <div class="sheet-section sub-module-section">
+            <div class="sub-header-row">
+              <div class="sub-title-group">
+                <h2 class="sub-section-title">
+                  2. Drop de Mesas (Arqueo de Efectivo)
+                </h2>
+                <span class="sub-count-badge"
+                  >{section.subData.drop_mesas.length} mesas registradas</span
                 >
               </div>
+              <span
+                class="sub-total-badge {section.subData.produccionTotal >= 0
+                  ? 'badge-produccion-positive'
+                  : 'badge-produccion-negative'}"
+              >
+                Producción: <b>{formatMoney(section.subData.produccionTotal)}</b>
+              </span>
+            </div>
+
+            <!-- Indicadores rápidos de rendimiento -->
+            <div class="quick-kpi-grid">
+              <div class="kpi-card">
+                <span class="kpi-label">Total Drop</span>
+                <span class="kpi-value text-emerald"
+                  >{formatMoney(section.subData.dropTotales.grandTotal)}</span
+                >
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-label">Total Compra</span>
+                <span class="kpi-value text-blue"
+                  >{formatMoney(section.subData.clientesTotales.totalCompras)}</span
+                >
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-label">Total Pagos</span>
+                <span class="kpi-value text-rose"
+                  >{formatMoney(section.subData.clientesTotales.totalPagos)}</span
+                >
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-label">Total Compra - Total Pagos</span>
+                <span
+                  class="kpi-value {section.subData.clientesTotales.balanceNeto >= 0
+                    ? 'text-emerald'
+                    : 'text-rose'}"
+                >
+                  {formatMoney(section.subData.clientesTotales.balanceNeto)}
+                </span>
+              </div>
+            </div>
+
+            {#if section.subData.drop_mesas.length === 0}
+              <div class="empty-sub-alert">
+                No hay registros de drop para este libro.
+              </div>
+            {:else}
               <div class="table-responsive-wrapper">
-                <table class="compact-table">
+                <table class="sheet-detail-table">
                   <thead>
                     <tr>
-                      <th>MÉTODO</th>
-                      <th>OPS</th>
-                      <th>COMPRAS</th>
-                      <th>PAGOS</th>
-                      <th>BALANCE</th>
+                      <th class="th-mesa">MESA</th>
+                      <th class="th-num">$100</th>
+                      <th class="th-num">$50</th>
+                      <th class="th-num">$20</th>
+                      <th class="th-num">$10</th>
+                      <th class="th-num">$5</th>
+                      <th class="th-num">$1</th>
+                      <th class="th-total">TOTAL RECAUDADO</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {#each clientesPorMetodo as m}
+                    {#each section.subData.drop_mesas as d}
                       <tr>
-                        <td class="cell-left font-bold">
-                          <span
-                            class="tag-metodo-badge"
-                            style="{getMetodoBadgeStyle(m.metodo, m.color)}"
+                        <td class="cell-mesa-bold"
+                          >{d.mesa_nombre || (d.mesa_uuid ? `Mesa #${d.mesa_uuid.slice(0, 8)}` : `Mesa #${d.mesa_id}`)}</td
+                        >
+                        <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
+                        <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
+                        <td class="cell-num">{d.denominacion_20 ?? d.b20 ?? 0}</td>
+                        <td class="cell-num">{d.denominacion_10 ?? d.b10 ?? 0}</td>
+                        <td class="cell-num">{d.denominacion_5 ?? d.b5 ?? 0}</td>
+                        <td class="cell-num">{d.denominacion_1 ?? d.b1 ?? 0}</td>
+                        <td class="cell-total-money">{formatMoney(d.total)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td>TOTALES</td>
+                      <td class="cell-num">{section.subData.dropTotales.sum100}</td>
+                      <td class="cell-num">{section.subData.dropTotales.sum50}</td>
+                      <td class="cell-num">{section.subData.dropTotales.sum20}</td>
+                      <td class="cell-num">{section.subData.dropTotales.sum10}</td>
+                      <td class="cell-num">{section.subData.dropTotales.sum5}</td>
+                      <td class="cell-num">{section.subData.dropTotales.sum1}</td>
+                      <td class="cell-grand-total"
+                        >{formatMoney(section.subData.dropTotales.grandTotal)}</td
+                      >
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            {/if}
+          </div>
+
+          <!-- ============================================================
+               3. NOVEDADES DE MESAS (Apertura y Cierre de Mesas)
+               ============================================================ -->
+          <div class="sheet-section sub-module-section">
+            <div class="sub-header-row">
+              <div class="sub-title-group">
+                <h2 class="sub-section-title">
+                  3. Novedades de Mesas (Apertura y Cierre)
+                </h2>
+                <span class="sub-count-badge"
+                  >{section.subData.novedades_mesas.length} registros</span
+                >
+              </div>
+            </div>
+
+            <div class="mesas-section">
+              <div class="table-responsive-wrapper">
+                <table class="sheet-official-table">
+                  <thead>
+                    <tr>
+                      <th class="th-hora-a">HORA<br />A</th>
+                      <th class="th-mesa">MESA</th>
+                      <th class="th-pitboss">PITBOSS</th>
+                      <th class="th-croupier">CROUPIER<br />APERTURA</th>
+                      <th class="th-croupier">CROUPIER<br />CIERRE</th>
+                      <th class="th-hora-c">HORA<br />C</th>
+                      <th class="th-obs">OBSERVACIÓN</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#if section.subData.novedades_mesas.length === 0}
+                      <tr>
+                        <td colspan="7" class="cell-empty-text"
+                          >No hay novedades registradas de mesas para este día.</td
+                        >
+                      </tr>
+                    {:else}
+                      {#each section.subData.novedades_mesas as nov}
+                        <tr>
+                          <td class="cell-center">{nov.hora_apertura || "—"}</td>
+                          <td class="cell-mesa-name"
+                            >{nov.mesa_nombre || (nov.mesa_uuid ? `Mesa #${nov.mesa_uuid.slice(0, 8)}` : `Mesa #${nov.mesa_id}`)}</td
                           >
-                            {m.metodo}
+                          <td class="cell-left">{nov.pitboss || "—"}</td>
+                          <td class="cell-left">{nov.croupier_apertura || "—"}</td>
+                          <td class="cell-left">{nov.croupier_cierre || "—"}</td>
+                          <td class="cell-center">{nov.hora_cierre || "—"}</td>
+                          <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
+                        </tr>
+                      {/each}
+                    {/if}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- ============================================================
+               4. BITÁCORA DE INCIDENCIAS POR TIPO (Dinámico según Tipo Incidencias)
+               ============================================================ -->
+          <div class="sheet-section sub-module-section">
+            <div class="sub-header-row">
+              <div class="sub-title-group">
+                <h2 class="sub-section-title">
+                  4. Bitácora de Incidencias
+                </h2>
+                <span class="sub-count-badge"
+                  >{section.subData.incidencias_generales.length} reportes en total</span
+                >
+              </div>
+            </div>
+
+            <div class="incidencias-bloque-tres">
+              {#each section.subData.incidenciasPorTipo as cat (cat.uuid || cat.id)}
+                <div class="incidencia-subbloque">
+                  <div class="incidencia-subbloque-header">
+                    <h3 class="incidencia-subbloque-title">
+                      <span>{cat.nombre}</span>
+                    </h3>
+                    <span class="incidencia-badge">{cat.items.length}</span>
+                  </div>
+                  <div class="incidencia-subbloque-content">
+                    {#if cat.items.length === 0}
+                      <div class="empty-sub-alert">
+                        Sin novedades de {cat.nombre.toLowerCase()} registradas.
+                      </div>
+                    {:else}
+                      {#each cat.items as inc}
+                        {@const parsed = parseIncidenciaContent(
+                          inc.descripcion,
+                          inc.hora,
+                        )}
+                        <div class="incidencia-item-card">
+                          <div class="inc-item-title-bold">{parsed.title}</div>
+                          {#if parsed.items && parsed.items.length > 0}
+                            <ul class="inc-subitems-list">
+                              {#each parsed.items as subItem}
+                                <li>{subItem}</li>
+                              {/each}
+                            </ul>
+                          {/if}
+                        </div>
+                      {/each}
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <!-- ============================================================
+               5. CONTROL DE LLAVES
+               ============================================================ -->
+          <div class="sheet-section sub-module-section">
+            <div class="sub-header-row">
+              <div class="sub-title-group">
+                <h2 class="sub-section-title">
+                  5. Bitácora de Control de Llaves
+                </h2>
+                <span class="sub-count-badge">{section.subData.llavesTotales.total} registros</span>
+              </div>
+              <div class="badges-status-group">
+                <span class="badge-kpi-pill active"
+                  >En Custodia: <b>{section.subData.llavesTotales.enCustodia}</b></span
+                >
+                <span class="badge-kpi-pill success"
+                  >Devueltas: <b>{section.subData.llavesTotales.devueltas}</b></span
+                >
+              </div>
+            </div>
+
+            {#if section.subData.control_llaves.length === 0}
+              <div class="empty-sub-alert">
+                No hay movimientos de control de llaves registrados en este libro.
+              </div>
+            {:else}
+              <div class="table-responsive-wrapper">
+                <table class="sheet-detail-table">
+                  <thead>
+                    <tr>
+                      <th class="th-num">N°</th>
+                      <th class="th-llave">LLAVES</th>
+                      <th class="th-desc">DESCRIPCIÓN / MOTIVO</th>
+                      <th class="th-hora">HORA SALIDA</th>
+                      <th class="th-hora">HORA RECEPCIÓN</th>
+                      <th class="th-estado">ESTADO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.control_llaves as k, idx}
+                      {@const isDevuelta = Boolean(
+                        k.hora_recepcion && k.hora_recepcion.trim(),
+                      )}
+                      {@const llavesTexto =
+                        k.llaves_detalle && k.llaves_detalle.length > 0
+                          ? k.llaves_detalle.map((l) => l.nombre).join(", ")
+                          : k.llave_nombre ||
+                            (k.llaves_ids ? `${k.llaves_ids.length} llaves` : "—")}
+                      <tr>
+                        <td class="cell-center">{idx + 1}</td>
+                        <td class="cell-llave-bold">{llavesTexto}</td>
+                        <td class="cell-left">{k.descripcion || "General"}</td>
+                        <td class="cell-center">{k.hora_salida || "—"}</td>
+                        <td class="cell-center">{k.hora_recepcion || "—"}</td>
+                        <td class="cell-center">
+                          {#if isDevuelta}
+                            <span class="tag-status tag-success">Devuelta</span>
+                          {:else}
+                            <span class="tag-status tag-warning">En Custodia</span>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
+          </div>
+
+          <!-- ============================================================
+               6. CONTROL DE CLIENTES (Detallado + 2 Tablitas Agrupadas)
+               ============================================================ -->
+          <div class="sheet-section sub-module-section">
+            <div class="sub-header-row">
+              <div class="sub-title-group">
+                <h2 class="sub-section-title">
+                  6. Control de Clientes / Jugadores en Sala
+                </h2>
+                <span class="sub-count-badge"
+                  >{section.subData.clientesTotales.totalOps} transacciones</span
+                >
+              </div>
+              <div class="badges-status-group">
+                <span class="badge-kpi-pill success"
+                  >Total Compras: <b>{formatMoney(section.subData.clientesTotales.totalCompras)}</b
+                  ></span
+                >
+                <span class="badge-kpi-pill info"
+                  >Total Pagos: <b>{formatMoney(section.subData.clientesTotales.totalPagos)}</b
+                  ></span
+                >
+                <span
+                  class="badge-kpi-pill {section.subData.clientesTotales.balanceNeto >= 0
+                    ? 'highlight-positive'
+                    : 'highlight-negative'}"
+                >
+                  Balance Neto: <b>{formatMoney(section.subData.clientesTotales.balanceNeto)}</b>
+                </span>
+              </div>
+            </div>
+
+            <!-- 6.1 Detallado de Operación -->
+            {#if section.subData.control_clientes.length === 0}
+              <div class="empty-sub-alert">
+                No hay operaciones de control de clientes registradas en este libro.
+              </div>
+            {:else}
+              <div class="table-responsive-wrapper">
+                <table class="sheet-detail-table">
+                  <thead>
+                    <tr>
+                      <th class="th-num">N°</th>
+                      <th class="th-hora">HORA</th>
+                      <th class="th-cliente">CLIENTE / JUGADOR</th>
+                      <th class="th-tipo">TIPO</th>
+                      <th class="th-metodo">MÉTODO</th>
+                      <th class="th-nota">NOTA</th>
+                      <th class="th-total">MONTO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.control_clientes as c, idx}
+                      {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
+                      <tr>
+                        <td class="cell-center">{idx + 1}</td>
+                        <td class="cell-center">{c.hora || "—"}</td>
+                        <td class="cell-client-name">{c.cliente || "—"}</td>
+                        <td class="cell-center">
+                          <span
+                            class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
+                          >
+                            {c.tipo || "Compra"}
                           </span>
                         </td>
-                        <td class="cell-center">{m.ops}</td>
-                        <td class="cell-total-money">{formatMoney(m.compras)}</td>
-                        <td class="cell-total-money text-blue"
-                          >{formatMoney(m.pagos)}</td
-                        >
-                        <td
-                          class="cell-total-money {m.balance >= 0
-                            ? 'text-emerald'
-                            : 'text-rose'}"
-                        >
-                          {formatMoney(m.balance)}
+                        <td class="cell-center">
+                          <span
+                            class="tag-metodo-badge"
+                            style="{getMetodoBadgeStyle(c.metodo, c.metodo_color)}"
+                          >
+                            {c.metodo || "General"}
+                          </span>
                         </td>
+                        <td class="cell-nota tag-nota-text" title={c.nota || ""}>
+                          {c.nota ? c.nota : "—"}
+                        </td>
+                        <td class="cell-total-money">{formatMoney(c.monto)}</td>
                       </tr>
                     {/each}
                   </tbody>
                   <tfoot>
                     <tr class="tfoot-totals">
-                      <td>TOTAL</td>
-                      <td class="cell-center">{totalesPorMetodo.ops}</td>
-                      <td class="cell-total-money"
-                        >{formatMoney(totalesPorMetodo.compras)}</td
-                      >
-                      <td class="cell-total-money text-blue"
-                        >{formatMoney(totalesPorMetodo.pagos)}</td
-                      >
+                      <td colspan="6">BALANCE NETO (COMPRAS - PAGOS)</td>
                       <td class="cell-grand-total"
-                        >{formatMoney(totalesPorMetodo.balance)}</td
+                        >{formatMoney(section.subData.clientesTotales.balanceNeto)}</td
                       >
                     </tr>
                   </tfoot>
                 </table>
               </div>
-            </div>
 
-            <!-- Tablita B: Agrupado por Cliente / Jugador -->
-            <div class="summary-subtable-box">
-              <div class="subtable-header">
-                <h4 class="subtable-title">Resumen por Cliente / Jugador</h4>
-                <span class="incidencia-badge"
-                  >{clientesPorJugador.length} clientes</span
+              <!-- 6.2 Las 2 Tablitas Agrupadas (Por Método de Pago y Por Cliente) -->
+              <div class="client-summaries-grid">
+                <!-- Tablita A: Agrupado por Método de Pago -->
+                <div class="summary-subtable-box">
+                  <div class="subtable-header">
+                    <h4 class="subtable-title">Resumen por Método de Pago</h4>
+                    <span class="incidencia-badge"
+                      >{section.subData.clientesPorMetodo.length} métodos</span
+                    >
+                  </div>
+                  <div class="table-responsive-wrapper">
+                    <table class="compact-table">
+                      <thead>
+                        <tr>
+                          <th>MÉTODO</th>
+                          <th>OPS</th>
+                          <th>COMPRAS</th>
+                          <th>PAGOS</th>
+                          <th>BALANCE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each section.subData.clientesPorMetodo as m}
+                          <tr>
+                            <td class="cell-left font-bold">
+                              <span
+                                class="tag-metodo-badge"
+                                style="{getMetodoBadgeStyle(m.metodo, m.color)}"
+                              >
+                                {m.metodo}
+                              </span>
+                            </td>
+                            <td class="cell-center">{m.ops}</td>
+                            <td class="cell-total-money">{formatMoney(m.compras)}</td>
+                            <td class="cell-total-money text-blue"
+                              >{formatMoney(m.pagos)}</td
+                            >
+                            <td
+                              class="cell-total-money {m.balance >= 0
+                                ? 'text-emerald'
+                                : 'text-rose'}"
+                            >
+                              {formatMoney(m.balance)}
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                      <tfoot>
+                        <tr class="tfoot-totals">
+                          <td>TOTAL</td>
+                          <td class="cell-center">{section.subData.totalesPorMetodo.ops}</td>
+                          <td class="cell-total-money"
+                            >{formatMoney(section.subData.totalesPorMetodo.compras)}</td
+                          >
+                          <td class="cell-total-money text-blue"
+                            >{formatMoney(section.subData.totalesPorMetodo.pagos)}</td
+                          >
+                          <td class="cell-grand-total"
+                            >{formatMoney(section.subData.totalesPorMetodo.balance)}</td
+                          >
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Tablita B: Agrupado por Cliente / Jugador -->
+                <div class="summary-subtable-box">
+                  <div class="subtable-header">
+                    <h4 class="subtable-title">Resumen por Cliente / Jugador</h4>
+                    <span class="incidencia-badge"
+                      >{section.subData.clientesPorJugador.length} clientes</span
+                    >
+                  </div>
+                  <div class="table-responsive-wrapper">
+                    <table class="compact-table">
+                      <thead>
+                        <tr>
+                          <th>CLIENTE</th>
+                          <th>OPS</th>
+                          <th>COMPRAS</th>
+                          <th>PAGOS</th>
+                          <th>BALANCE</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each section.subData.clientesPorJugador as cl}
+                          <tr>
+                            <td class="cell-left font-bold">{cl.cliente}</td>
+                            <td class="cell-center">{cl.ops}</td>
+                            <td class="cell-total-money">{formatMoney(cl.compras)}</td
+                            >
+                            <td class="cell-total-money text-blue"
+                              >{formatMoney(cl.pagos)}</td
+                            >
+                            <td
+                              class="cell-total-money {cl.balance >= 0
+                                ? 'text-emerald'
+                                : 'text-rose'}"
+                            >
+                              {formatMoney(cl.balance)}
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                      <tfoot>
+                        <tr class="tfoot-totals">
+                          <td>TOTAL</td>
+                          <td class="cell-center">{section.subData.totalesPorJugador.ops}</td>
+                          <td class="cell-total-money"
+                            >{formatMoney(section.subData.totalesPorJugador.compras)}</td
+                          >
+                          <td class="cell-total-money text-blue"
+                            >{formatMoney(section.subData.totalesPorJugador.pagos)}</td
+                          >
+                          <td class="cell-grand-total"
+                            >{formatMoney(section.subData.totalesPorJugador.balance)}</td
+                          >
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            {/if}
+          </div>
+
+          <!-- ============================================================
+               7. APORTES MÁQUINAS (Detallado + 2 Tablitas Agrupadas: Rangos y Empleados)
+               ============================================================ -->
+          <div class="sheet-section sub-module-section">
+            <div class="sub-header-row">
+              <div class="sub-title-group">
+                <h2 class="sub-section-title">
+                  7. Aportes Máquinas
+                </h2>
+                <span class="sub-count-badge"
+                  >{section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
                 >
               </div>
+              <div class="badges-status-group">
+                <span class="badge-kpi-pill success"
+                  >Total Aportes: <b>{formatMoney(section.subData.aportesTotales.totalAportes)}</b></span
+                >
+                {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                  <span class="badge-kpi-pill warning"
+                    >Total Devoluciones: <b>-{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</b></span
+                  >
+                  <span class="badge-kpi-pill {section.subData.aportesTotales.netoMonto >= 0 ? 'highlight-positive' : 'highlight-negative'}"
+                    >Neto Aportes: <b>{formatMoney(section.subData.aportesTotales.netoMonto)}</b></span
+                  >
+                {/if}
+                <span class="badge-kpi-pill info"
+                  >Promedio: <b>{formatMoney(section.subData.aportesTotales.promedio)}</b></span
+                >
+              </div>
+            </div>
+
+            <!-- 7.1 Detallado de Aportes -->
+            {#if section.subData.aportes.length === 0}
+              <div class="empty-sub-alert">
+                No hay aportes ni devoluciones de máquinas registradas en este libro.
+              </div>
+            {:else}
               <div class="table-responsive-wrapper">
-                <table class="compact-table">
+                <table class="sheet-detail-table">
                   <thead>
                     <tr>
-                      <th>CLIENTE</th>
-                      <th>OPS</th>
-                      <th>COMPRAS</th>
-                      <th>PAGOS</th>
-                      <th>BALANCE</th>
+                      <th class="th-num">N°</th>
+                      <th class="th-tipo">TIPO</th>
+                      <th class="th-hora">HORA</th>
+                      <th class="th-cliente">EMPLEADO</th>
+                      <th class="th-metodo">CARGO</th>
+                      <th class="th-tipo">RANGO</th>
+                      <th class="th-total">MONTO</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {#each clientesPorJugador as cl}
+                    {#each section.subData.aportes as a, idx}
+                      {@const isAporte = (a.tipo || "Aporte") === "Aporte"}
                       <tr>
-                        <td class="cell-left font-bold">{cl.cliente}</td>
-                        <td class="cell-center">{cl.ops}</td>
-                        <td class="cell-total-money">{formatMoney(cl.compras)}</td
-                        >
-                        <td class="cell-total-money text-blue"
-                          >{formatMoney(cl.pagos)}</td
-                        >
-                        <td
-                          class="cell-total-money {cl.balance >= 0
-                            ? 'text-emerald'
-                            : 'text-rose'}"
-                        >
-                          {formatMoney(cl.balance)}
+                        <td class="cell-center">{idx + 1}</td>
+                        <td class="cell-center">
+                          <span class="tag-tipo {isAporte ? 'tag-aporte' : 'tag-devolucion'}">
+                            {isAporte ? 'Aporte' : 'Devolución'}
+                          </span>
+                        </td>
+                        <td class="cell-center">{a.hora || (a.created_at ? new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—')}</td>
+                        <td class="cell-client-name font-bold">{a.empleado_nombre || "—"}</td>
+                        <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
+                        <td class="cell-center">
+                          <span class="tag-tipo tag-rango">
+                            {a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${a.rango_id}`)}
+                          </span>
+                        </td>
+                        <td class="cell-total-money font-bold {isAporte ? '' : 'text-danger-money'}">
+                          {isAporte ? '' : '-'}{formatMoney(a.monto)}
                         </td>
                       </tr>
                     {/each}
                   </tbody>
                   <tfoot>
                     <tr class="tfoot-totals">
-                      <td>TOTAL</td>
-                      <td class="cell-center">{totalesPorJugador.ops}</td>
-                      <td class="cell-total-money"
-                        >{formatMoney(totalesPorJugador.compras)}</td
-                      >
-                      <td class="cell-total-money text-blue"
-                        >{formatMoney(totalesPorJugador.pagos)}</td
-                      >
+                      <td colspan="6">
+                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                          TOTAL APORTES ({formatMoney(section.subData.aportesTotales.totalAportes)}) - DEVOLUCIONES ({formatMoney(section.subData.aportesTotales.totalDevoluciones)}) = NETO APORTES MÁQUINAS
+                        {:else}
+                          TOTAL APORTES MÁQUINAS
+                        {/if}
+                      </td>
                       <td class="cell-grand-total"
-                        >{formatMoney(totalesPorJugador.balance)}</td
+                        >{formatMoney(section.subData.aportesTotales.netoMonto)}</td
                       >
                     </tr>
                   </tfoot>
                 </table>
               </div>
-            </div>
-          </div>
-        {/if}
-      </div>
 
-      <!-- ============================================================
-           7. APORTES MÁQUINAS (Detallado + 2 Tablitas Agrupadas: Rangos y Empleados)
-           ============================================================ -->
-      <div class="sheet-section sub-module-section">
-        <div class="sub-header-row">
-          <div class="sub-title-group">
-            <h2 class="sub-section-title">
-              7. Aportes Máquinas
-            </h2>
-            <span class="sub-count-badge"
-              >{aportesTotales.totalOps} {aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
-            >
-          </div>
-          <div class="badges-status-group">
-            <span class="badge-kpi-pill success"
-              >Total Aportes: <b>{formatMoney(aportesTotales.totalAportes)}</b></span
-            >
-            {#if aportesTotales.totalDevoluciones > 0}
-              <span class="badge-kpi-pill warning"
-                >Total Devoluciones: <b>-{formatMoney(aportesTotales.totalDevoluciones)}</b></span
-              >
-              <span class="badge-kpi-pill {aportesTotales.netoMonto >= 0 ? 'highlight-positive' : 'highlight-negative'}"
-                >Neto Aportes: <b>{formatMoney(aportesTotales.netoMonto)}</b></span
-              >
+              <!-- 7.2 Las 2 Tablitas Agrupadas (Por Rango y Por Empleado) -->
+              <div class="client-summaries-grid">
+                <!-- Tablita A: Resumen por Rango -->
+                <div class="summary-subtable-box">
+                  <div class="subtable-header">
+                    <h4 class="subtable-title">Resumen por Rango</h4>
+                    <span class="incidencia-badge"
+                      >{section.subData.aportesPorRango.length} rangos</span
+                    >
+                  </div>
+                  <div class="table-responsive-wrapper">
+                    <table class="compact-table">
+                      <thead>
+                        <tr>
+                          <th>RANGO</th>
+                          <th>OPS</th>
+                          <th>APORTES</th>
+                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                            <th>DEVOLUCIONES</th>
+                            <th>TOTAL NETO</th>
+                          {:else}
+                            <th>MONTO TOTAL</th>
+                          {/if}
+                          <th>% TOTAL</th>
+                          <th>PROMEDIO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each section.subData.aportesPorRango as rg}
+                          <tr>
+                            <td class="cell-left font-bold">{rg.rango_nombre}</td>
+                            <td class="cell-center">{rg.cantidad} ops</td>
+                            <td class="cell-total-money font-bold">{formatMoney(rg.montoAportes)}</td>
+                            {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                              <td class="cell-total-money text-danger-money">{rg.montoDevoluciones > 0 ? `-${formatMoney(rg.montoDevoluciones)}` : '$0'}</td>
+                              <td class="cell-total-money font-bold">{formatMoney(rg.neto)}</td>
+                            {/if}
+                            <td class="cell-center tag-metodo-text">{rg.porcentaje.toFixed(1)}%</td>
+                            <td class="cell-total-money">{formatMoney(rg.promedio)}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                      <tfoot>
+                        <tr class="tfoot-totals">
+                          <td>TOTAL</td>
+                          <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
+                          <td class="cell-total-money">{formatMoney(section.subData.aportesTotales.totalAportes)}</td>
+                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                            <td class="cell-total-money text-danger-money">-{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</td>
+                            <td class="cell-grand-total">{formatMoney(section.subData.aportesTotales.netoMonto)}</td>
+                          {/if}
+                          <td class="cell-center">100%</td>
+                          <td class="cell-grand-total"
+                            >{formatMoney(section.subData.aportesTotales.promedio)}</td
+                          >
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Tablita B: Resumen por Empleado -->
+                <div class="summary-subtable-box">
+                  <div class="subtable-header">
+                    <h4 class="subtable-title">Resumen por Empleado</h4>
+                    <span class="incidencia-badge"
+                      >{section.subData.aportesPorEmpleado.length} empleados</span
+                    >
+                  </div>
+                  <div class="table-responsive-wrapper">
+                    <table class="compact-table">
+                      <thead>
+                        <tr>
+                          <th>EMPLEADO</th>
+                          <th>CARGO</th>
+                          <th>OPS</th>
+                          <th>APORTES</th>
+                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                            <th>DEVOLUCIONES</th>
+                            <th>TOTAL NETO</th>
+                          {:else}
+                            <th>MONTO TOTAL</th>
+                          {/if}
+                          <th>% TOTAL</th>
+                          <th>PROMEDIO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each section.subData.aportesPorEmpleado as emp}
+                          <tr>
+                            <td class="cell-left font-bold">{emp.empleado_nombre}</td>
+                            <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
+                            <td class="cell-center">{emp.cantidad} ops</td>
+                            <td class="cell-total-money font-bold">{formatMoney(emp.montoAportes)}</td>
+                            {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                              <td class="cell-total-money text-danger-money">{emp.montoDevoluciones > 0 ? `-${formatMoney(emp.montoDevoluciones)}` : '$0'}</td>
+                              <td class="cell-total-money font-bold">{formatMoney(emp.neto)}</td>
+                            {/if}
+                            <td class="cell-center tag-metodo-text">{emp.porcentaje.toFixed(1)}%</td>
+                            <td class="cell-total-money">{formatMoney(emp.promedio)}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                      <tfoot>
+                        <tr class="tfoot-totals">
+                          <td>TOTAL</td>
+                          <td>—</td>
+                          <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
+                          <td class="cell-total-money">{formatMoney(section.subData.aportesTotales.totalAportes)}</td>
+                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                            <td class="cell-total-money text-danger-money">-{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</td>
+                            <td class="cell-grand-total">{formatMoney(section.subData.aportesTotales.netoMonto)}</td>
+                          {/if}
+                          <td class="cell-center">100%</td>
+                          <td class="cell-grand-total"
+                            >{formatMoney(section.subData.aportesTotales.promedio)}</td
+                          >
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
             {/if}
-            <span class="badge-kpi-pill info"
-              >Promedio: <b>{formatMoney(aportesTotales.promedio)}</b></span
-            >
+          </div>
+
+          <!-- ============================================================
+               8. CONTEO DE MÁQUINAS (Billeteros)
+               ============================================================ -->
+          <div class="sheet-section sub-module-section">
+            <div class="sub-header-row">
+              <div class="sub-title-group">
+                <h2 class="sub-section-title">
+                  8. Conteo de Máquinas (Billeteros)
+                </h2>
+                <span class="sub-count-badge"
+                  >{section.subData.conteo_maquinas.length} máquinas contadas</span
+                >
+              </div>
+              <span class="sub-total-badge badge-produccion-positive">
+                Total Recaudado: <b>{formatMoney(section.subData.conteoTotales.grandTotal)}</b>
+              </span>
+            </div>
+
+            <!-- Indicadores rápidos de rendimiento -->
+            <div class="quick-kpi-grid">
+              <div class="kpi-card">
+                <span class="kpi-label">Máquinas Contadas</span>
+                <span class="kpi-value text-blue">{section.subData.conteoTotales.totalMaquinas}</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-label">Total en Billetes</span>
+                <span class="kpi-value text-emerald">{formatMoney(section.subData.conteoTotales.grandTotal)}</span>
+              </div>
+              <div class="kpi-card">
+                <span class="kpi-label">Rangos Procesados</span>
+                <span class="kpi-value text-slate">{section.subData.conteoPorRango.length}</span>
+              </div>
+            </div>
+
+            {#if section.subData.conteo_maquinas.length === 0}
+              <div class="empty-sub-alert">
+                No hay registros de conteo de máquinas para este libro.
+              </div>
+            {:else}
+              <div class="table-responsive-wrapper">
+                <table class="sheet-detail-table">
+                  <thead>
+                    <tr>
+                      <th class="th-num">N°</th>
+                      <th class="th-mesa">MÁQUINA</th>
+                      <th class="th-mesa">RANGO</th>
+                      <th class="th-num">$100</th>
+                      <th class="th-num">$50</th>
+                      <th class="th-num">$20</th>
+                      <th class="th-num">$10</th>
+                      <th class="th-num">$5</th>
+                      <th class="th-num">$1</th>
+                      <th class="th-total">TOTAL RECAUDADO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.conteo_maquinas as m, idx}
+                      <tr>
+                        <td class="cell-num">{idx + 1}</td>
+                        <td class="cell-mesa-bold">{m.maquina_nombre || (m.maquina_uuid ? `Máquina #${m.maquina_uuid.slice(0, 8)}` : `Máquina #${m.maquina_id}`)}</td>
+                        <td class="cell-center">
+                          <span class="badge-rango-pill">{m.rango_nombre || 'Sin Rango'}</span>
+                        </td>
+                        <td class="cell-num">{m.denominacion_100 ?? m.b100 ?? 0}</td>
+                        <td class="cell-num">{m.denominacion_50 ?? m.b50 ?? 0}</td>
+                        <td class="cell-num">{m.denominacion_20 ?? m.b20 ?? 0}</td>
+                        <td class="cell-num">{m.denominacion_10 ?? m.b10 ?? 0}</td>
+                        <td class="cell-num">{m.denominacion_5 ?? m.b5 ?? 0}</td>
+                        <td class="cell-num">{m.denominacion_1 ?? m.b1 ?? 0}</td>
+                        <td class="cell-total-money">{formatMoney(m.total)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td colspan="3">TOTALES</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
+                      <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <!-- Resumen por Rango debajo del detallado -->
+              {#if section.subData.conteoPorRango.length > 0}
+                <div class="sub-table-group" style="margin-top: 18px;">
+                  <h3 class="sub-group-title">Resumen de Conteo por Rango</h3>
+                  <div class="table-responsive-wrapper">
+                    <table class="sheet-detail-table">
+                      <thead>
+                        <tr>
+                          <th class="th-num">N°</th>
+                          <th class="th-mesa">RANGO</th>
+                          <th class="th-num">MÁQUINAS</th>
+                          <th class="th-num">$100</th>
+                          <th class="th-num">$50</th>
+                          <th class="th-num">$20</th>
+                          <th class="th-num">$10</th>
+                          <th class="th-num">$5</th>
+                          <th class="th-num">$1</th>
+                          <th class="th-total">TOTAL RECAUDADO</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each section.subData.conteoPorRango as rg, rIdx}
+                          <tr>
+                            <td class="cell-num">{rIdx + 1}</td>
+                            <td class="cell-mesa-bold">{rg.rango_nombre}</td>
+                            <td class="cell-num">{rg.maquinasCount}</td>
+                            <td class="cell-num">{rg.b100}</td>
+                            <td class="cell-num">{rg.b50}</td>
+                            <td class="cell-num">{rg.b20}</td>
+                            <td class="cell-num">{rg.b10}</td>
+                            <td class="cell-num">{rg.b5}</td>
+                            <td class="cell-num">{rg.b1}</td>
+                            <td class="cell-total-money">{formatMoney(rg.total)}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                      <tfoot>
+                        <tr class="tfoot-totals">
+                          <td colspan="2">TOTAL GENERAL</td>
+                          <td class="cell-num">{section.subData.conteoTotales.totalMaquinas}</td>
+                          <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
+                          <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
+                          <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
+                          <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
+                          <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
+                          <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
+                          <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              {/if}
+            {/if}
           </div>
         </div>
-
-        <!-- 7.1 Detallado de Aportes -->
-        {#if sortedAportes.length === 0}
-          <div class="empty-sub-alert">
-            No hay aportes ni devoluciones de máquinas registradas en este libro.
-          </div>
-        {:else}
-          <div class="table-responsive-wrapper">
-            <table class="sheet-detail-table">
-              <thead>
-                <tr>
-                  <th class="th-num">N°</th>
-                  <th class="th-tipo">TIPO</th>
-                  <th class="th-hora">HORA</th>
-                  <th class="th-cliente">EMPLEADO</th>
-                  <th class="th-metodo">CARGO</th>
-                  <th class="th-tipo">RANGO</th>
-                  <th class="th-total">MONTO</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each sortedAportes as a, idx}
-                  {@const isAporte = (a.tipo || "Aporte") === "Aporte"}
-                  <tr>
-                    <td class="cell-center">{idx + 1}</td>
-                    <td class="cell-center">
-                      <span class="tag-tipo {isAporte ? 'tag-aporte' : 'tag-devolucion'}">
-                        {isAporte ? 'Aporte' : 'Devolución'}
-                      </span>
-                    </td>
-                    <td class="cell-center">{a.hora || (a.created_at ? new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—')}</td>
-                    <td class="cell-client-name font-bold">{a.empleado_nombre || "—"}</td>
-                    <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
-                    <td class="cell-center">
-                      <span class="tag-tipo tag-rango">
-                        {a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${a.rango_id}`)}
-                      </span>
-                    </td>
-                    <td class="cell-total-money font-bold {isAporte ? '' : 'text-danger-money'}">
-                      {isAporte ? '' : '-'}{formatMoney(a.monto)}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-              <tfoot>
-                <tr class="tfoot-totals">
-                  <td colspan="6">
-                    {#if aportesTotales.totalDevoluciones > 0}
-                      TOTAL APORTES ({formatMoney(aportesTotales.totalAportes)}) - DEVOLUCIONES ({formatMoney(aportesTotales.totalDevoluciones)}) = NETO APORTES MÁQUINAS
-                    {:else}
-                      TOTAL APORTES MÁQUINAS
-                    {/if}
-                  </td>
-                  <td class="cell-grand-total"
-                    >{formatMoney(aportesTotales.netoMonto)}</td
-                  >
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          <!-- 7.2 Las 2 Tablitas Agrupadas (Por Rango y Por Empleado) -->
-          <div class="client-summaries-grid">
-            <!-- Tablita A: Resumen por Rango -->
-            <div class="summary-subtable-box">
-              <div class="subtable-header">
-                <h4 class="subtable-title">Resumen por Rango</h4>
-                <span class="incidencia-badge"
-                  >{aportesPorRango.length} rangos</span
-                >
-              </div>
-              <div class="table-responsive-wrapper">
-                <table class="compact-table">
-                  <thead>
-                    <tr>
-                      <th>RANGO</th>
-                      <th>OPS</th>
-                      <th>APORTES</th>
-                      {#if aportesTotales.totalDevoluciones > 0}
-                        <th>DEVOLUCIONES</th>
-                        <th>TOTAL NETO</th>
-                      {:else}
-                        <th>MONTO TOTAL</th>
-                      {/if}
-                      <th>% TOTAL</th>
-                      <th>PROMEDIO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each aportesPorRango as rg}
-                      <tr>
-                        <td class="cell-left font-bold">{rg.rango_nombre}</td>
-                        <td class="cell-center">{rg.cantidad} ops</td>
-                        <td class="cell-total-money font-bold">{formatMoney(rg.montoAportes)}</td>
-                        {#if aportesTotales.totalDevoluciones > 0}
-                          <td class="cell-total-money text-danger-money">{rg.montoDevoluciones > 0 ? `-${formatMoney(rg.montoDevoluciones)}` : '$0'}</td>
-                          <td class="cell-total-money font-bold">{formatMoney(rg.neto)}</td>
-                        {/if}
-                        <td class="cell-center tag-metodo-text">{rg.porcentaje.toFixed(1)}%</td>
-                        <td class="cell-total-money">{formatMoney(rg.promedio)}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td>TOTAL</td>
-                      <td class="cell-center">{aportesTotales.totalOps} ops</td>
-                      <td class="cell-total-money">{formatMoney(aportesTotales.totalAportes)}</td>
-                      {#if aportesTotales.totalDevoluciones > 0}
-                        <td class="cell-total-money text-danger-money">-{formatMoney(aportesTotales.totalDevoluciones)}</td>
-                        <td class="cell-grand-total">{formatMoney(aportesTotales.netoMonto)}</td>
-                      {/if}
-                      <td class="cell-center">100%</td>
-                      <td class="cell-grand-total"
-                        >{formatMoney(aportesTotales.promedio)}</td
-                      >
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-
-            <!-- Tablita B: Resumen por Empleado -->
-            <div class="summary-subtable-box">
-              <div class="subtable-header">
-                <h4 class="subtable-title">Resumen por Empleado</h4>
-                <span class="incidencia-badge"
-                  >{aportesPorEmpleado.length} empleados</span
-                >
-              </div>
-              <div class="table-responsive-wrapper">
-                <table class="compact-table">
-                  <thead>
-                    <tr>
-                      <th>EMPLEADO</th>
-                      <th>CARGO</th>
-                      <th>OPS</th>
-                      <th>APORTES</th>
-                      {#if aportesTotales.totalDevoluciones > 0}
-                        <th>DEVOLUCIONES</th>
-                        <th>TOTAL NETO</th>
-                      {:else}
-                        <th>MONTO TOTAL</th>
-                      {/if}
-                      <th>% TOTAL</th>
-                      <th>PROMEDIO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each aportesPorEmpleado as emp}
-                      <tr>
-                        <td class="cell-left font-bold">{emp.empleado_nombre}</td>
-                        <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
-                        <td class="cell-center">{emp.cantidad} ops</td>
-                        <td class="cell-total-money font-bold">{formatMoney(emp.montoAportes)}</td>
-                        {#if aportesTotales.totalDevoluciones > 0}
-                          <td class="cell-total-money text-danger-money">{emp.montoDevoluciones > 0 ? `-${formatMoney(emp.montoDevoluciones)}` : '$0'}</td>
-                          <td class="cell-total-money font-bold">{formatMoney(emp.neto)}</td>
-                        {/if}
-                        <td class="cell-center tag-metodo-text">{emp.porcentaje.toFixed(1)}%</td>
-                        <td class="cell-total-money">{formatMoney(emp.promedio)}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td>TOTAL</td>
-                      <td>—</td>
-                      <td class="cell-center">{aportesTotales.totalOps} ops</td>
-                      <td class="cell-total-money">{formatMoney(aportesTotales.totalAportes)}</td>
-                      {#if aportesTotales.totalDevoluciones > 0}
-                        <td class="cell-total-money text-danger-money">-{formatMoney(aportesTotales.totalDevoluciones)}</td>
-                        <td class="cell-grand-total">{formatMoney(aportesTotales.netoMonto)}</td>
-                      {/if}
-                      <td class="cell-center">100%</td>
-                      <td class="cell-grand-total"
-                        >{formatMoney(aportesTotales.promedio)}</td
-                      >
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          </div>
-        {/if}
-      </div>
+      {/each}
 
       <!-- ============================================================
-           8. OPERADORES CECOM (APERTURA Y CIERRE) Y AUDITORÍA FINAL
+           9. OPERADORES CECOM (APERTURA Y CIERRE) Y AUDITORÍA FINAL
            ============================================================ -->
       <div class="sheet-section sub-module-section operadores-final-section">
         <div class="operadores-section-box">
@@ -1911,13 +2176,13 @@
           <div class="op-line">
             <span class="op-label">TURNO A (APERTURA):</span>
             <span class="op-names"
-              >NOMBRES: {resumenData.datos?.operador_turno_a || "—"}</span
+              >NOMBRES: {mainOperadorA}</span
             >
           </div>
           <div class="op-line">
             <span class="op-label">TURNO C (CIERRE):</span>
             <span class="op-names"
-              >NOMBRES: {resumenData.datos?.operador_turno_c || "—"}</span
+              >NOMBRES: {mainOperadorC}</span
             >
           </div>
         </div>
@@ -1928,7 +2193,7 @@
             <div class="sign-line"></div>
             <span class="sign-title">Operador CECOM (Turno A - Apertura)</span>
             <span class="sign-name"
-              >{resumenData.datos?.operador_turno_a || "Firma y Huella"}</span
+              >{mainOperadorA !== "—" ? mainOperadorA : "Firma y Huella"}</span
             >
           </div>
 
@@ -1936,7 +2201,7 @@
             <div class="sign-line"></div>
             <span class="sign-title">Operador CECOM (Turno C - Cierre)</span>
             <span class="sign-name"
-              >{resumenData.datos?.operador_turno_c || "Firma y Huella"}</span
+              >{mainOperadorC !== "—" ? mainOperadorC : "Firma y Huella"}</span
             >
           </div>
 
@@ -2505,6 +2770,34 @@
     padding-bottom: 12px;
   }
 
+  .subsala-section-block {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-bottom: 24px;
+  }
+
+  .subsala-report-header {
+    width: 100%;
+    margin: 16px 0 12px 0;
+    padding: 10px 16px;
+    background: #0f172a;
+    border-radius: 6px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .subsala-report-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #ffffff;
+  }
+
   .casino-logo-box {
     display: flex;
     flex-direction: column;
@@ -2912,6 +3205,17 @@
     color: #b91c1c;
     font-weight: 800;
     border: 1px solid #fecaca;
+  }
+
+  .badge-rango-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #4338ca;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 9999px;
   }
 
   /* Quick KPI Cards */
@@ -3527,6 +3831,21 @@
       break-inside: avoid !important;
       page-break-inside: avoid !important;
       margin-bottom: 12px !important;
+    }
+
+    .subsala-report-header {
+      background: #0f172a !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color: #ffffff !important;
+      break-after: avoid !important;
+      page-break-after: avoid !important;
+      margin-top: 18px !important;
+      margin-bottom: 10px !important;
+    }
+
+    .subsala-report-title {
+      color: #ffffff !important;
     }
 
     .sub-module-section,

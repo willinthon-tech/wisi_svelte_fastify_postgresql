@@ -99,7 +99,10 @@
     } else {
       uuid = null;
       nombre = '';
-      tipoClienteUuid = '';
+      const defTipo = ($masterTipoClientesStore || []).find(t => (t.nombre || '').toLowerCase().trim() === 'general') ||
+                      ($masterTipoClientesStore || []).find(t => !(t.nombre || '').toLowerCase().includes('denegad')) ||
+                      null;
+      tipoClienteUuid = defTipo ? String(defTipo.uuid || defTipo.id) : (tipoClientesOptions.length > 0 ? String(tipoClientesOptions[0].uuid) : '');
       salaUuid = availableSalas.length === 1 ? String(availableSalas[0].uuid || availableSalas[0].id) : '';
       descripcion = '';
       fotoUrl = '';

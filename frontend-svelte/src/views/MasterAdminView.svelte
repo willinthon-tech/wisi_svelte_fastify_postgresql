@@ -31,6 +31,7 @@
   import DeleteModal from "../components/modals/DeleteModal.svelte";
   import BlockedDeleteModal from "../components/modals/BlockedDeleteModal.svelte";
   import OrderModulosModal from "../components/modals/OrderModulosModal.svelte";
+  import MultisalasModal from "../components/modals/MultisalasModal.svelte";
   import { navigateToRoute } from "../controllers/router.store.js";
   import { currentUserStore } from "../controllers/auth.store.js";
   import { triggerToast } from "../controllers/ui.store.js";
@@ -190,6 +191,29 @@
   function openOrderModulosModal(pagina) {
     selectedPaginaToOrder = pagina;
     isOrderModulosModalOpen = true;
+  }
+
+  // Multisalas modal state
+  let isMultisalasModalOpen = false;
+  let selectedSalaForMultisalas = null;
+
+  function openMultisalasModal(sala) {
+    selectedSalaForMultisalas = sala;
+    isMultisalasModalOpen = true;
+  }
+
+  function getSubsalasList(multisalas) {
+    if (!multisalas) return [];
+    if (Array.isArray(multisalas)) return multisalas;
+    if (typeof multisalas === 'string') {
+      try {
+        const parsed = JSON.parse(multisalas);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
   }
 
   // Inline edit state for DataTables
@@ -3040,21 +3064,34 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                 >
 
                 {#if activeTab === "salas"}
-                  <td style="padding: 8px 14px; font-weight: 700;"
-                    >{#if isEditing}<input
+                  {@const subsalasList = getSubsalasList(item.multisalas)}
+                  <td style="padding: 8px 14px; font-weight: 700;">
+                    {#if isEditing}
+                      <input
                         bind:value={inlineDraft.nombre}
                         class="form-input"
                         style="padding: 3px 6px;"
-                      />{:else}<span>{item.nombre}</span>{/if}</td
-                  >
+                      />
+                    {:else}
+                      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span>{item.nombre}</span>
+                        {#if subsalasList.length > 0}
+                          <span
+                            style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;"
+                            title="Multisalas activo: {subsalasList.length} sucursales configuradas"
+                          >
+                            Multisalas ({subsalasList.length})
+                          </span>
+                        {/if}
+                      </div>
+                    {/if}
+                  </td>
                   <td style="padding: 8px 14px;"
                     >{#if isEditing}<input
                         bind:value={inlineDraft.nombre_comercial}
                         class="form-input"
                         style="padding: 3px 6px;"
-                      />{:else}<span>{item.nombre_comercial || "—"}</span
-                      >{/if}</td
-                  >
+                      />{:else}<span>{item.nombre_comercial || "—"}</span>{/if}</td>
                   <td
                     style="padding: 8px 14px; font-weight: 700; color: #334155;"
                   >
@@ -3075,29 +3112,25 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         bind:value={inlineDraft.rif}
                         class="form-input"
                         style="padding: 3px 6px;"
-                      />{:else}<span>{item.rif || "—"}</span>{/if}</td
-                  >
+                      />{:else}<span>{item.rif || "—"}</span>{/if}</td>
                   <td style="padding: 8px 14px;"
                     >{#if isEditing}<input
                         bind:value={inlineDraft.ubicacion}
                         class="form-input"
                         style="padding: 3px 6px;"
-                      />{:else}<span>{item.ubicacion || "—"}</span>{/if}</td
-                  >
+                      />{:else}<span>{item.ubicacion || "—"}</span>{/if}</td>
                   <td style="padding: 8px 14px;"
                     >{#if isEditing}<input
                         bind:value={inlineDraft.correo}
                         class="form-input"
                         style="padding: 3px 6px;"
-                      />{:else}<span>{item.correo || "—"}</span>{/if}</td
-                  >
+                      />{:else}<span>{item.correo || "—"}</span>{/if}</td>
                   <td style="padding: 8px 14px;"
                     >{#if isEditing}<input
                         bind:value={inlineDraft.telefono}
                         class="form-input"
                         style="padding: 3px 6px;"
-                      />{:else}<span>{item.telefono || "—"}</span>{/if}</td
-                  >
+                      />{:else}<span>{item.telefono || "—"}</span>{/if}</td>
                 {:else if activeTab === "paginas"}
                   <td style="padding: 8px 14px; font-weight: 700;"
                     >{#if isEditing}<input
@@ -3308,6 +3341,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         style="padding: 4px 8px; font-size: 12px;"
                         title="Editar">Editar</button
                       >
+                    {/if}
+                    {#if activeTab === "salas"}
+                      <button
+                        on:click={() => openMultisalasModal(item)}
+                        type="button"
+                        class="btn-flow-sec"
+                        style="padding: 4px 8px; font-size: 12px; color: #2563eb; border-color: #93c5fd; background: #eff6ff; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"
+                        title="Configurar Multisalas"
+                      >
+                        Multisalas
+                      </button>
                     {/if}
                     <button
                       on:click={() => promptDelete(item)}
@@ -3656,6 +3700,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   on:close={() => {
     isOrderModulosModalOpen = false;
     selectedPaginaToOrder = null;
+  }}
+/>
+
+<!-- Modal Configuración de Multisalas -->
+<MultisalasModal
+  show={isMultisalasModalOpen}
+  sala={selectedSalaForMultisalas}
+  on:saved={() => loadMasterStoresFromBackend()}
+  on:close={() => {
+    isMultisalasModalOpen = false;
+    selectedSalaForMultisalas = null;
   }}
 />
 

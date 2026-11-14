@@ -20,6 +20,18 @@
 
   export let libro = null;
   export let libroId = null;
+  export let multisalaUuid = null;
+
+  let prevMultisala = undefined;
+  $: if (multisalaUuid !== prevMultisala) {
+    prevMultisala = multisalaUuid;
+    selectedEmpleado = null;
+    empleadoSearchQuery = '';
+    selectedRango = null;
+    selectedRangoId = '';
+    monto = '';
+    loadRecords();
+  }
 
   $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
@@ -65,7 +77,17 @@
   let modalEmpleadoId = null;
   let modalRangoId = null;
   let modalMonto = '';
+  let modalHora = '';
   let isSavingModal = false;
+
+  function getCurrentTimeString() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function ponerHoraActualModal() {
+    modalHora = getCurrentTimeString();
+  }
 
   // Encabezado superior oscuro (ej. "Roraima - 10/09/2026")
   $: tableHeaderTitle = (() => {
@@ -93,6 +115,9 @@
 
   function formatHora(dt) {
     if (!dt) return '—';
+    if (typeof dt === 'string' && /^\d{1,2}:\d{2}(:\d{2})?$/.test(dt.trim())) {
+      return dt.trim().slice(0, 5);
+    }
     try {
       const d = new Date(dt);
       if (isNaN(d.getTime())) return dt;
@@ -358,8 +383,9 @@
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_aportes', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+        ((r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))) &&
+        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : !r.multisala_uuid)
       );
       if (Array.isArray(local)) {
         records = local;
@@ -376,7 +402,10 @@
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`, { signal: controller.signal });
+      const fetchUrl = multisalaUuid 
+        ? `/api/master/libros/${lId}/aportes-maquinas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+        : `/api/master/libros/${lId}/aportes-maquinas`;
+      const res = await fetch(fetchUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -584,6 +613,7 @@
     const newRecord = {
       uuid: itemUuid,
       libro_uuid: lId,
+      multisala_uuid: multisalaUuid || null,
       empleado_uuid: empUuid,
       empleado_id: empUuid,
       empleado_nombre: selectedEmpleado?.nombre || '',
@@ -594,6 +624,7 @@
       rango_nombre: selectedRango?.nombre || '',
       monto: numMonto,
       tipo: tipo || 'Aporte',
+      hora: getCurrentTimeString(),
       created_at: new Date().toISOString()
     };
 
@@ -618,12 +649,16 @@
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
+    const postEndpoint = multisalaUuid
+      ? `/api/master/libros/${lId}/aportes-maquinas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+      : `/api/master/libros/${lId}/aportes-maquinas`;
+
     if (isOffline) {
       // 4A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
       await queueOutboxAction({
         entity: 'libro_aportes',
         action: 'create',
-        endpoint: `/api/master/libros/${lId}/aportes-maquinas`,
+        endpoint: postEndpoint,
         method: 'POST',
         payload: newRecord,
         uuid: itemUuid
@@ -639,7 +674,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/aportes-maquinas`, {
+        const res = await fetch(postEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newRecord),
@@ -735,6 +770,7 @@
     modalEmpleadoId = record.empleado_uuid || record.empleado_id;
     modalRangoId = String(record.rango_uuid || record.rango_id);
     modalMonto = String(record.monto);
+    modalHora = record.hora || (record.created_at ? formatHora(record.created_at) : getCurrentTimeString());
     showModalEditar = true;
   }
 
@@ -745,6 +781,7 @@
     modalEmpleadoId = null;
     modalRangoId = null;
     modalMonto = '';
+    modalHora = '';
   }
 
   async function handleGuardarEdicion() {
@@ -761,6 +798,11 @@
       return;
     }
 
+    if (!modalHora) {
+      triggerToast('Debe indicar una hora válida', 'warning');
+      return;
+    }
+
     const targetUuid = editingRecord.uuid || editingRecord.id;
     const payload = {
       empleado_uuid: modalEmpleadoId,
@@ -768,7 +810,8 @@
       rango_uuid: modalRangoId,
       rango_id: modalRangoId,
       monto: numMonto,
-      tipo: modalTipo || 'Aporte'
+      tipo: modalTipo || 'Aporte',
+      hora: modalHora
     };
 
     const updatedOffline = {
@@ -1182,7 +1225,7 @@
                       </span>
                     </td>
                     <td class="td-center td-hora-val">
-                      <span class="time-badge">{formatHora(record.created_at)}</span>
+                      <span class="time-badge">{formatHora(record.hora || record.created_at)}</span>
                     </td>
                     {#if canEdit || canDelete}
                       <td class="td-center td-acciones">
@@ -1424,6 +1467,28 @@
                 required
               />
             </div>
+          </div>
+
+          <!-- Selección de Hora (Idéntico a Control Clientes) -->
+          <div class="modal-field-group">
+            <div class="modal-field-header">
+              <label for="modal-input-hora" class="modal-field-label">Hora de la Operación: *</label>
+              <button 
+                type="button" 
+                class="btn-hora-now" 
+                on:click={ponerHoraActualModal}
+                title="Poner hora actual ahora"
+              >
+                ⚡ Usar hora actual
+              </button>
+            </div>
+            <input 
+              id="modal-input-hora" 
+              type="time" 
+              class="form-time-input-modal" 
+              bind:value={modalHora} 
+              required
+            />
           </div>
         </div>
 
@@ -2381,5 +2446,47 @@
   .btn-modal-save:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .modal-field-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .btn-hora-now {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #2563eb;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-hora-now:hover {
+    background: #e2e8f0;
+    color: #1d4ed8;
+  }
+
+  .form-time-input-modal {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+    background: #ffffff;
+    outline: none;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+  }
+
+  .form-time-input-modal:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
   }
 </style>

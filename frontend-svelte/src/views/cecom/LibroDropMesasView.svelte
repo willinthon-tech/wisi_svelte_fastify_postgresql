@@ -21,6 +21,15 @@
 
   export let libro = null;
   export let libroId = null;
+  export let multisalaUuid = null;
+
+  let prevMultisala = undefined;
+  $: if (multisalaUuid !== prevMultisala) {
+    prevMultisala = multisalaUuid;
+    selectedMesaId = '';
+    limpiarCampos();
+    loadDropRecords();
+  }
 
   $: canEdit = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canEdit) : true;
   $: canDelete = $currentRoutePermissionsStore ? Boolean($currentRoutePermissionsStore.canDelete) : true;
@@ -207,8 +216,9 @@
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_drop_mesas', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))
+        ((r.libro_uuid && (String(r.libro_uuid) === String(lId) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(lId) || String(r.libro_id) === String(libro?.id)))) &&
+        (multisalaUuid ? String(r.multisala_uuid) === String(multisalaUuid) : !r.multisala_uuid)
       );
       if (Array.isArray(local) && local.length > 0) {
         dropRecords = local;
@@ -229,7 +239,10 @@
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(`/api/master/libros/${lId}/drop-mesas`, { signal: controller.signal });
+      const fetchUrl = multisalaUuid
+        ? `/api/master/libros/${lId}/drop-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+        : `/api/master/libros/${lId}/drop-mesas`;
+      const res = await fetch(fetchUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         const json = await res.json();
@@ -402,6 +415,7 @@
       mesa_uuid: mesaUuid,
       mesa_id: mesaUuid || selectedMesaId,
       mesa_nombre: mesaObj?.nombre || `Mesa #${selectedMesaId}`,
+      multisala_uuid: multisalaUuid || null,
       denominacion_100: currentMesaBilletes100,
       denominacion_50: currentMesaBilletes50,
       denominacion_20: currentMesaBilletes20,
@@ -432,12 +446,16 @@
 
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
+    const postEndpoint = multisalaUuid
+      ? `/api/master/libros/${lId}/drop-mesas?multisala_uuid=${encodeURIComponent(multisalaUuid)}`
+      : `/api/master/libros/${lId}/drop-mesas`;
+
     if (isOffline) {
       // 3A. Modo Offline: Encolar de inmediato en Outbox sin tocar la red
       await queueOutboxAction({
         entity: 'libro_drop_mesas',
         action: 'create',
-        endpoint: `/api/master/libros/${lId}/drop-mesas`,
+        endpoint: postEndpoint,
         method: 'POST',
         payload: newRecord,
         uuid: itemUuid
@@ -450,7 +468,7 @@
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
-        const res = await fetch(`/api/master/libros/${lId}/drop-mesas`, {
+        const res = await fetch(postEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newRecord),

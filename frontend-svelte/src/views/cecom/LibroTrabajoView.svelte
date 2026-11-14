@@ -3,7 +3,9 @@
   import { currentRouteStore, navigateToRoute } from '../../controllers/router.store.js';
   import { triggerToast } from '../../controllers/ui.store.js';
   import { getPublicWebUrl } from '../../config/api.config.js';
+  import { masterSalasStore } from '../../controllers/master.store.js';
   import LibroDropMesasView from './LibroDropMesasView.svelte';
+  import LibroConteoMaquinasView from './LibroConteoMaquinasView.svelte';
   import LibroControlLlavesView from './LibroControlLlavesView.svelte';
   import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
   import LibroControlClientesView from './LibroControlClientesView.svelte';
@@ -24,6 +26,7 @@
   const SUBVISTAS = [
     { id: 'datos', label: 'Datos', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
     { id: 'drop-mesas', label: 'Drop Mesas', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
+    { id: 'conteo-maquinas', label: 'Conteo Máquinas', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
     { id: 'control-llaves', label: 'Control Llaves', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '', description: 'Eventos e incidentes reportados en sala' },
     { id: 'control-clientes', label: 'Control Clientes', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
@@ -33,8 +36,35 @@
   ];
 
   let activeSubvista = 'datos';
+  let activeMultisalaUuid = null;
 
-  // Suscribirse a cambios en currentRouteStore para sincronizar la subvista
+  // Lista reactiva de salas hijas (multisalas) de la sala del libro
+  $: subsalasList = (() => {
+    let raw = libro?.sala_multisalas;
+    if (!raw && libro?.sala_uuid) {
+      const s = ($masterSalasStore || []).find(item => item.uuid === libro.sala_uuid || item.id === libro.sala_uuid);
+      if (s) raw = s.multisalas;
+    }
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(item => item && item.nombre && (item.active === 1 || item.active === true || item.active === undefined));
+  })();
+
+  // Si la sala es multisala y aún no se ha seleccionado una o la seleccionada no existe, asignar la primera por defecto
+  $: if (subsalasList.length > 0) {
+    if (!activeMultisalaUuid || !subsalasList.some(s => s.uuid === activeMultisalaUuid)) {
+      activeMultisalaUuid = subsalasList[0].uuid;
+      if (libroId && activeSubvista) {
+        navigateToRoute(`cecom/libro/${libroId}/${activeSubvista}/${activeMultisalaUuid}`);
+      }
+    }
+  } else {
+    activeMultisalaUuid = null;
+  }
+
+  // Suscribirse a cambios en currentRouteStore para sincronizar la subvista y la multisala
   let unsubRoute = null;
 
   function parseRoute(routeStr) {
@@ -43,25 +73,37 @@
     if (clean === 'cecom/libro' || clean === 'libro' || clean === 'libros') {
       return; // Es la vista lista de libros, no un libro individual
     }
-    // Match pattern cecom/libro/:id(/:subvista)? o libro/:id(/:subvista)?
-    const match = clean.match(/^(?:cecom\/libro\/|libro\/)([a-f0-9-]+|\d+)(?:\/([a-z0-9-]+))?$/i)
-      || clean.match(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|\d+)(?:\/([a-z0-9-]+))?$/i);
-    if (match) {
-      const parsedId = match[1];
-      const parsedSub = match[2];
-      if (parsedId && parsedId !== libroId) {
-        libroId = parsedId;
-        loadLibro(libroId);
+    
+    // Descomponer en segmentos
+    const parts = clean.split('/').filter(Boolean);
+    if (parts[0] === 'cecom') parts.shift();
+    if (parts[0] === 'libro') parts.shift();
+
+    if (parts.length === 0) return;
+
+    const parsedId = parts[0];
+    const secondPart = parts[1];
+    const thirdPart = parts[2];
+
+    if (parsedId && parsedId !== libroId) {
+      libroId = parsedId;
+      loadLibro(libroId);
+    }
+
+    if (secondPart) {
+      if (secondPart === 'aportes') {
+        activeSubvista = 'aportes-maquinas';
+      } else if (secondPart === 'conteo') {
+        activeSubvista = 'conteo-maquinas';
+      } else if (SUBVISTAS.some(s => s.id === secondPart)) {
+        activeSubvista = secondPart;
       }
-      if (parsedSub) {
-        if (parsedSub === 'aportes') {
-          activeSubvista = 'aportes-maquinas';
-        } else if (SUBVISTAS.some(s => s.id === parsedSub)) {
-          activeSubvista = parsedSub;
-        }
-      } else if (!parsedSub) {
-        activeSubvista = 'datos';
-      }
+    } else {
+      activeSubvista = 'datos';
+    }
+
+    if (thirdPart) {
+      activeMultisalaUuid = thirdPart;
     }
   }
 
@@ -131,7 +173,18 @@
   function handleSelectSubvista(subId) {
     activeSubvista = subId;
     if (libroId) {
-      navigateToRoute(`cecom/libro/${libroId}/${subId}`);
+      if (activeMultisalaUuid && subsalasList.length > 0) {
+        navigateToRoute(`cecom/libro/${libroId}/${subId}/${activeMultisalaUuid}`);
+      } else {
+        navigateToRoute(`cecom/libro/${libroId}/${subId}`);
+      }
+    }
+  }
+
+  function handleSelectMultisala(uuid) {
+    activeMultisalaUuid = uuid;
+    if (libroId) {
+      navigateToRoute(`cecom/libro/${libroId}/${activeSubvista}/${uuid}`);
     }
   }
 
@@ -206,6 +259,26 @@
     </div>
   </div>
 
+  {#if subsalasList.length > 0}
+    <!-- Multisalas Horizontal Tab Bar ("BOTONES DE SALAS HIJAS") -->
+    <div class="subvistas-tabs-wrapper multisalas-tabs-wrapper">
+      <div class="subvistas-tabs" role="tablist">
+        {#each subsalasList as sub}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMultisalaUuid === sub.uuid}
+            class="subvista-tab-btn"
+            class:active={activeMultisalaUuid === sub.uuid}
+            on:click={() => handleSelectMultisala(sub.uuid)}
+          >
+            <span class="tab-label">{sub.nombre}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   <!-- Subviews Horizontal Tab Bar ("BOTONES DE SUBVISTAS") -->
   <div class="subvistas-tabs-wrapper">
     <div class="subvistas-tabs" role="tablist">
@@ -239,19 +312,21 @@
       </div>
     {:else}
       {#if activeSubvista === 'datos'}
-        <LibroDatosView {libro} {libroId} />
+        <LibroDatosView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'drop-mesas'}
-        <LibroDropMesasView {libro} {libroId} />
+        <LibroDropMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
+      {:else if activeSubvista === 'conteo-maquinas'}
+        <LibroConteoMaquinasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'control-llaves'}
-        <LibroControlLlavesView {libro} {libroId} />
+        <LibroControlLlavesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'incidencias-generales'}
-        <LibroIncidenciasGeneralesView {libro} {libroId} />
+        <LibroIncidenciasGeneralesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'control-clientes'}
-        <LibroControlClientesView {libro} {libroId} />
+        <LibroControlClientesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'aportes-maquinas' || activeSubvista === 'aportes'}
-        <LibroAportesView {libro} {libroId} />
+        <LibroAportesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'novedades-mesas'}
-        <LibroNovedadesMesasView {libro} {libroId} />
+        <LibroNovedadesMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'resumen-libro'}
         <LibroResumenView isPublic={false} {libro} {libroId} onSelectSubvista={handleSelectSubvista} />
       {/if}
