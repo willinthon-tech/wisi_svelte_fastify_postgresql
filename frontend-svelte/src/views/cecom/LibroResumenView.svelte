@@ -850,7 +850,7 @@
     // Numeración dinámica de submódulos (se ajusta según los módulos que realmente tienen datos)
     // 1. Resumen de Producción
     const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (clientesTotales && clientesTotales.totalOps > 0));
-    const hasResumenMaquinas = Boolean((conteo_maquinas && conteo_maquinas.length > 0) || (aportes && aportes.length > 0));
+    const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0));
     let idxProd = 0;
     const numResumenMesas = hasResumenMesas ? ++idxProd : 0;
     const numResumenMaquinas = hasResumenMaquinas ? ++idxProd : 0;
@@ -859,9 +859,9 @@
     // 2. Resumen de Movimientos de Mesas y Máquinas
     const hasDropMesas = Boolean(drop_mesas && drop_mesas.length > 0);
     const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
-    const hasControlClientes = Boolean(control_clientes && control_clientes.length > 0);
-    const hasBilleteros = Boolean(conteo_maquinas && conteo_maquinas.length > 0);
-    const hasAportes = Boolean(aportes && aportes.length > 0);
+    const hasControlClientes = Boolean(sortedControlClientes && sortedControlClientes.length > 0);
+    const hasBilleteros = Boolean(sortedConteoList && sortedConteoList.length > 0);
+    const hasAportes = Boolean(sortedAportesList && sortedAportesList.length > 0);
     let idxMov = 0;
     const numDropMesas = hasDropMesas ? ++idxMov : 0;
     const numNovedadesMesas = hasNovedadesMesas ? ++idxMov : 0;
