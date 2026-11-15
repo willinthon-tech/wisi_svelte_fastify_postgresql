@@ -1246,12 +1246,12 @@
       </div>
 
       <!-- ============================================================
-           RESUMEN DE SALAS (Consolidado General de Multisalas)
+           PRODUCCIÓN GLOBAL (Consolidado General de Multisalas)
            ============================================================ -->
       {#if isMultisala && renderedSections.length > 0}
         <div class="multisala-header-summary">
           <div class="sheet-main-title-box first-title-box">
-            <h1 class="sheet-title-text">Resumen de Salas</h1>
+            <h1 class="sheet-title-text">Producción Global</h1>
           </div>
           <div class="quick-kpi-grid">
             {#each renderedSections as sec}
@@ -1272,6 +1272,10 @@
                 </span>
               </div>
             {/if}
+          </div>
+
+          <div class="sheet-main-title-box" style="margin-top: 22px;">
+            <h1 class="sheet-title-text">Detallado por Sala</h1>
           </div>
         </div>
       {/if}
@@ -2929,9 +2933,9 @@
     background: #f8fafc;
   }
 
-  /* Resumen de Salas Multisala en el encabezado */
+  /* Producción Global Multisala en el encabezado */
   .multisala-header-summary {
-    margin-bottom: 20px;
+    margin-bottom: 4px;
   }
 
   /* Título principal */
