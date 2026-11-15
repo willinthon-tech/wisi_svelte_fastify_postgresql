@@ -1301,10 +1301,6 @@
                ============================================================ -->
           {#if section.subData.activeHorarios.length > 0}
             <div class="sheet-section official-incidencias-block first-section">
-              <div class="sheet-main-title-box first-title-box">
-                <h1 class="sheet-title-text">Resumen de Aperturas y Cierres</h1>
-              </div>
-
               <div class="horarios-section">
                 <div class="horarios-list">
                   {#each section.subData.activeHorarios as h, hIdx}
