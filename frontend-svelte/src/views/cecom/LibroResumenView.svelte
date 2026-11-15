@@ -1496,9 +1496,6 @@
                     >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
                   >
                 </div>
-                <span class="sub-total-badge badge-produccion-positive">
-                  Total Recaudado: <b>{formatMoney(section.subData.dropTotales.grandTotal)}</b>
-                </span>
               </div>
 
               <div class="table-responsive-wrapper">
@@ -1614,23 +1611,6 @@
                   <span class="sub-count-badge"
                     >{section.subData.clientesTotales.totalOps} transacciones</span
                   >
-                </div>
-                <div class="badges-status-group">
-                  <span class="badge-kpi-pill success"
-                    >Total Compras: <b>{formatMoney(section.subData.clientesTotales.totalCompras)}</b
-                    ></span
-                  >
-                  <span class="badge-kpi-pill info"
-                    >Total Pagos: <b>{formatMoney(section.subData.clientesTotales.totalPagos)}</b
-                    ></span
-                  >
-                  <span
-                    class="badge-kpi-pill {section.subData.clientesTotales.balanceNeto >= 0
-                      ? 'highlight-positive'
-                      : 'highlight-negative'}"
-                  >
-                    Balance Neto: <b>{formatMoney(section.subData.clientesTotales.balanceNeto)}</b>
-                  </span>
                 </div>
               </div>
 
@@ -1833,25 +1813,6 @@
                     >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina contada' : 'máquinas contadas'}</span
                   >
                 </div>
-                <span class="sub-total-badge badge-produccion-positive">
-                  Total Recaudado: <b>{formatMoney(section.subData.conteoTotales.grandTotal)}</b>
-                </span>
-              </div>
-
-              <!-- Indicadores rápidos de rendimiento -->
-              <div class="quick-kpi-grid">
-                <div class="kpi-card">
-                  <span class="kpi-label">Máquinas Contadas</span>
-                  <span class="kpi-value text-blue">{section.subData.conteoTotales.totalMaquinas}</span>
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Total en Billetes</span>
-                  <span class="kpi-value text-emerald">{formatMoney(section.subData.conteoTotales.grandTotal)}</span>
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Rangos Procesados</span>
-                  <span class="kpi-value text-slate">{section.subData.conteoPorRango.length}</span>
-                </div>
               </div>
 
               <div class="table-responsive-wrapper">
@@ -1973,22 +1934,6 @@
                     >{section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
                   >
                 </div>
-                <div class="badges-status-group">
-                  <span class="badge-kpi-pill highlight-negative"
-                    >Total Aportes (Salida): <b>-{formatMoney(section.subData.aportesTotales.totalAportes)}</b></span
-                  >
-                  {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                    <span class="badge-kpi-pill success"
-                      >Total Devoluciones (Retorno): <b>+{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</b></span
-                    >
-                    <span class="badge-kpi-pill {section.subData.aportesTotales.netoMonto <= 0 ? 'highlight-positive' : 'highlight-negative'}"
-                      >Neto Salida: <b>{formatMoney(section.subData.aportesTotales.netoMonto)}</b></span
-                    >
-                  {/if}
-                  <span class="badge-kpi-pill info"
-                    >Promedio Aporte: <b>{formatMoney(section.subData.aportesTotales.promedio)}</b></span
-                  >
-                </div>
               </div>
 
               <!-- 8.1 Detallado de Aportes y Devoluciones -->
@@ -2031,13 +1976,7 @@
                   </tbody>
                   <tfoot>
                     <tr class="tfoot-totals">
-                      <td colspan="6">
-                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                          TOTAL APORTES ({formatMoney(section.subData.aportesTotales.totalAportes)}) - DEVOLUCIONES ({formatMoney(section.subData.aportesTotales.totalDevoluciones)}) = NETO SALIDA MÁQUINAS
-                        {:else}
-                          TOTAL APORTES MÁQUINAS (SALIDA DE CAJA)
-                        {/if}
-                      </td>
+                      <td colspan="6">TOTAL</td>
                       <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : 'text-emerald'}"
                         >{formatMoney(section.subData.aportesTotales.netoMonto)}</td
                       >
@@ -2070,8 +2009,6 @@
                             {:else}
                               <th>MONTO TOTAL</th>
                             {/if}
-                            <th>% TOTAL</th>
-                            <th>PROMEDIO</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2084,8 +2021,6 @@
                                 <td class="cell-total-money font-bold text-emerald">{rg.montoDevoluciones > 0 ? `+${formatMoney(rg.montoDevoluciones)}` : '$0'}</td>
                                 <td class="cell-total-money font-bold">{formatMoney(rg.neto)}</td>
                               {/if}
-                              <td class="cell-center tag-metodo-text">{rg.porcentaje.toFixed(1)}%</td>
-                              <td class="cell-total-money">{formatMoney(rg.promedio)}</td>
                             </tr>
                           {/each}
                         </tbody>
@@ -2098,10 +2033,6 @@
                               <td class="cell-total-money font-bold text-emerald">+{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</td>
                               <td class="cell-grand-total">{formatMoney(section.subData.aportesTotales.netoMonto)}</td>
                             {/if}
-                            <td class="cell-center">100%</td>
-                            <td class="cell-grand-total"
-                              >{formatMoney(section.subData.aportesTotales.promedio)}</td
-                            >
                           </tr>
                         </tfoot>
                       </table>
@@ -2132,8 +2063,6 @@
                             {:else}
                               <th>MONTO TOTAL</th>
                             {/if}
-                            <th>% TOTAL</th>
-                            <th>PROMEDIO</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2147,8 +2076,6 @@
                                 <td class="cell-total-money font-bold text-emerald">{emp.montoDevoluciones > 0 ? `+${formatMoney(emp.montoDevoluciones)}` : '$0'}</td>
                                 <td class="cell-total-money font-bold">{formatMoney(emp.neto)}</td>
                               {/if}
-                              <td class="cell-center tag-metodo-text">{emp.porcentaje.toFixed(1)}%</td>
-                              <td class="cell-total-money">{formatMoney(emp.promedio)}</td>
                             </tr>
                           {/each}
                         </tbody>
@@ -2162,10 +2089,6 @@
                               <td class="cell-total-money font-bold text-emerald">+{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</td>
                               <td class="cell-grand-total">{formatMoney(section.subData.aportesTotales.netoMonto)}</td>
                             {/if}
-                            <td class="cell-center">100%</td>
-                            <td class="cell-grand-total"
-                              >{formatMoney(section.subData.aportesTotales.promedio)}</td
-                            >
                           </tr>
                         </tfoot>
                       </table>
