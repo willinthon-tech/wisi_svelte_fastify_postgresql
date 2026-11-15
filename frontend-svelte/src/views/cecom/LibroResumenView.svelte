@@ -847,9 +847,53 @@
     const produccionFinal = produccionMesas + produccionMaquinas;
     const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + clientesTotales.totalCompras;
 
+    // Numeración dinámica de submódulos (se ajusta según los módulos que realmente tienen datos)
+    // 1. Resumen de Producción
+    const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (clientesTotales && clientesTotales.totalOps > 0));
+    const hasResumenMaquinas = Boolean((conteo_maquinas && conteo_maquinas.length > 0) || (aportes && aportes.length > 0));
+    let idxProd = 0;
+    const numResumenMesas = hasResumenMesas ? ++idxProd : 0;
+    const numResumenMaquinas = hasResumenMaquinas ? ++idxProd : 0;
+    const numResumenProduccion = ++idxProd;
+
+    // 2. Resumen de Movimientos de Mesas y Máquinas
+    const hasDropMesas = Boolean(drop_mesas && drop_mesas.length > 0);
+    const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
+    const hasControlClientes = Boolean(control_clientes && control_clientes.length > 0);
+    const hasBilleteros = Boolean(conteo_maquinas && conteo_maquinas.length > 0);
+    const hasAportes = Boolean(aportes && aportes.length > 0);
+    let idxMov = 0;
+    const numDropMesas = hasDropMesas ? ++idxMov : 0;
+    const numNovedadesMesas = hasNovedadesMesas ? ++idxMov : 0;
+    const numControlClientes = hasControlClientes ? ++idxMov : 0;
+    const numBilleteros = hasBilleteros ? ++idxMov : 0;
+    const numAportes = hasAportes ? ++idxMov : 0;
+
+    // 3. Resumen de Incidencias
+    const incidenciasActivas = incidenciasPorTipo.filter(cat => cat.items && cat.items.length > 0);
+    const hasBitacoraIncidencias = Boolean(sortedIncidencias && sortedIncidencias.length > 0 && incidenciasActivas && incidenciasActivas.length > 0);
+    const hasControlLlaves = Boolean(sortedControlLlaves && sortedControlLlaves.length > 0);
+    let idxInc = 0;
+    const numBitacoraIncidencias = hasBitacoraIncidencias ? ++idxInc : 0;
+    const numControlLlaves = hasControlLlaves ? ++idxInc : 0;
+
+    const numeracion = {
+      numResumenMesas,
+      numResumenMaquinas,
+      numResumenProduccion,
+      numDropMesas,
+      numNovedadesMesas,
+      numControlClientes,
+      numBilleteros,
+      numAportes,
+      numBitacoraIncidencias,
+      numControlLlaves
+    };
+
     return {
       datos,
       activeHorarios: getActiveHorarios(datos),
+      numeracion,
       drop_mesas,
       dropTotales,
       novedades_mesas,
@@ -1344,7 +1388,7 @@
                 <div class="sub-header-row">
                   <div class="sub-title-group">
                     <h2 class="sub-section-title">
-                      1. Resumen Mesas
+                      {section.subData.numeracion.numResumenMesas}. Resumen Mesas
                     </h2>
                     {#if section.subData.drop_mesas.length > 0}
                       <span class="sub-count-badge"
@@ -1404,7 +1448,7 @@
                 <div class="sub-header-row">
                   <div class="sub-title-group">
                     <h2 class="sub-section-title">
-                      2. Resumen Máquinas
+                      {section.subData.numeracion.numResumenMaquinas}. Resumen Máquinas
                     </h2>
                     {#if section.subData.conteo_maquinas.length > 0}
                       <span class="sub-count-badge"
@@ -1463,7 +1507,7 @@
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    3. Resumen Producción
+                    {section.subData.numeracion.numResumenProduccion}. Resumen Producción
                   </h2>
                 </div>
               </div>
@@ -1507,7 +1551,7 @@
           <!-- ============================================================
                RESUMEN DE MOVIMIENTOS DE MESAS Y MÁQUINAS (Encabezado Principal)
                ============================================================ -->
-          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.control_clientes && section.subData.control_clientes.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
+          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.novedades_mesas && section.subData.novedades_mesas.length > 0) || (section.subData.control_clientes && section.subData.control_clientes.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
             <div class="sheet-main-title-box">
               <h1 class="sheet-title-text">Resumen de Movimientos de Mesas y Máquinas</h1>
             </div>
@@ -1521,7 +1565,7 @@
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    1. Drop Mesas
+                    {section.subData.numeracion.numDropMesas}. Drop Mesas
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
@@ -1583,9 +1627,9 @@
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
-                  <h3 class="sub-section-title" style="font-size: 1.05rem;">
-                    Novedades de Mesas (Apertura y Cierre)
-                  </h3>
+                  <h2 class="sub-section-title">
+                    {section.subData.numeracion.numNovedadesMesas}. Novedades de Mesas (Apertura y Cierre)
+                  </h2>
                   <span class="sub-count-badge"
                     >{section.subData.novedades_mesas.length} {section.subData.novedades_mesas.length === 1 ? 'registro' : 'registros'}</span
                   >
@@ -1630,14 +1674,14 @@
 
 
           <!-- ============================================================
-               2. CONTROL DE CLIENTES (Detallado + 2 Tablitas Agrupadas)
+               CONTROL DE CLIENTES (Detallado + 2 Tablitas Agrupadas)
                ============================================================ -->
           {#if section.subData.control_clientes && section.subData.control_clientes.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    2. Control de Clientes
+                    {section.subData.numeracion.numControlClientes}. Control de Clientes
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.clientesTotales.totalOps} transacciones</span
@@ -1828,14 +1872,14 @@
           {/if}
 
           <!-- ============================================================
-               3. BILLETEROS (Conteo de Máquinas)
+               BILLETEROS (Conteo de Máquinas)
                ============================================================ -->
           {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    3. Billeteros
+                    {section.subData.numeracion.numBilleteros}. Billeteros
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina contada' : 'máquinas contadas'}</span
@@ -1949,14 +1993,14 @@
           {/if}
 
           <!-- ============================================================
-               4. APORTES Y DEVOLUCIONES
+               APORTES Y DEVOLUCIONES
                ============================================================ -->
           {#if section.subData.aportes && section.subData.aportes.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    4. Aportes y Devoluciones
+                    {section.subData.numeracion.numAportes}. Aportes y Devoluciones
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
@@ -2137,14 +2181,14 @@
           {/if}
 
           <!-- ============================================================
-               1. BITÁCORA DE INCIDENCIAS
+               BITÁCORA DE INCIDENCIAS
                ============================================================ -->
           {#if section.subData.incidencias_generales && section.subData.incidencias_generales.length > 0 && section.subData.incidenciasActivas && section.subData.incidenciasActivas.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    1. Bitácora de Incidencias
+                    {section.subData.numeracion.numBitacoraIncidencias}. Bitácora de Incidencias
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.incidencias_generales.length} {section.subData.incidencias_generales.length === 1 ? 'reporte en total' : 'reportes en total'}</span
@@ -2190,9 +2234,9 @@
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
-                  <h3 class="sub-section-title" style="font-size: 1.05rem;">
-                    2. Bitácora de Control de Llaves
-                  </h3>
+                  <h2 class="sub-section-title">
+                    {section.subData.numeracion.numControlLlaves}. Bitácora de Control de Llaves
+                  </h2>
                   <span class="sub-count-badge">{section.subData.llavesTotales.total} {section.subData.llavesTotales.total === 1 ? 'registro' : 'registros'}</span>
                 </div>
                 <div class="badges-status-group">
