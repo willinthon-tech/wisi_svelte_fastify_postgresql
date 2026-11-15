@@ -1261,10 +1261,13 @@
           <!-- ============================================================
                1. INFORMACIÓN DE SALA (Horarios Operativos Oficiales)
                ============================================================ -->
+          <!-- ============================================================
+               1. RESUMEN DE APERTURAS Y CIERRES (Horarios Operativos)
+               ============================================================ -->
           {#if section.subData.activeHorarios.length > 0}
             <div class="sheet-section official-incidencias-block first-section">
-              <div class="sheet-main-title-box">
-                <h1 class="sheet-title-text">Resumen De Incidencias Diarias.</h1>
+              <div class="sheet-main-title-box first-title-box">
+                <h1 class="sheet-title-text">Resumen de Aperturas y Cierres</h1>
               </div>
 
               <div class="horarios-section">
@@ -1297,145 +1300,146 @@
           {/if}
 
           <!-- ============================================================
-               2. RESUMEN MESAS
-               ============================================================ -->
-          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.clientesTotales && section.subData.clientesTotales.totalOps > 0)}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    2. Resumen Mesas
-                  </h2>
-                  {#if section.subData.drop_mesas.length > 0}
-                    <span class="sub-count-badge"
-                      >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa' : 'mesas'}</span
-                    >
-                  {/if}
-                </div>
-              </div>
-
-              <!-- Indicadores de rendimiento de Mesas -->
-              <div class="quick-kpi-grid">
-                <div class="kpi-card">
-                  <span class="kpi-label">DROP</span>
-                  <span class="kpi-value text-emerald"
-                    >{formatMoney(section.subData.dropTotales.grandTotal)}</span
-                  >
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">TOTAL COMPRA DE CLIENTES</span>
-                  <span class="kpi-value text-emerald"
-                    >{formatMoney(section.subData.clientesTotales.totalCompras)}</span
-                  >
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">TOTAL PAGOS A CLIENTES</span>
-                  <span class="kpi-value text-rose"
-                    >{formatMoney(section.subData.clientesTotales.totalPagos)}</span
-                  >
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">BALANCE (COMPRA - PAGOS)</span>
-                  <span
-                    class="kpi-value {section.subData.clientesTotales.balanceNeto >= 0
-                      ? 'text-emerald'
-                      : 'text-rose'}"
-                  >
-                    {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
-                  </span>
-                </div>
-                <div class="kpi-card {section.subData.produccionMesas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
-                  <span class="kpi-label">PRODUCCIÓN</span>
-                  <span
-                    class="kpi-value {section.subData.produccionMesas >= 0
-                      ? 'text-emerald font-bold'
-                      : 'text-rose font-bold'}"
-                  >
-                    {formatMoney(section.subData.produccionMesas)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          {/if}
-
-          <!-- ============================================================
-               3. RESUMEN MÁQUINAS
-               ============================================================ -->
-          {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    3. Resumen Máquinas
-                  </h2>
-                  {#if section.subData.conteo_maquinas.length > 0}
-                    <span class="sub-count-badge"
-                      >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina' : 'máquinas'}</span
-                    >
-                  {/if}
-                </div>
-              </div>
-
-              <!-- Indicadores de rendimiento de Máquinas -->
-              <div class="quick-kpi-grid">
-                <div class="kpi-card">
-                  <span class="kpi-label">BILLETERO</span>
-                  <span class="kpi-value text-emerald"
-                    >{formatMoney(section.subData.conteoTotales.grandTotal)}</span
-                  >
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">APORTES</span>
-                  <span class="kpi-value text-rose"
-                    >{formatMoney(section.subData.aportesTotales.totalAportes)}</span
-                  >
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">DEVOLUCIONES</span>
-                  <span class="kpi-value text-emerald"
-                    >{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</span
-                  >
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">BALANCE ( APORTES - DEVOLUCIONES )</span>
-                  <span
-                    class="kpi-value {section.subData.aportesTotales.netoMonto <= 0
-                      ? 'text-emerald'
-                      : 'text-rose'}"
-                  >
-                    {formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
-                  </span>
-                </div>
-                <div class="kpi-card {section.subData.produccionMaquinas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
-                  <span class="kpi-label">PRODUCCIÓN</span>
-                  <span
-                    class="kpi-value {section.subData.produccionMaquinas >= 0
-                      ? 'text-emerald font-bold'
-                      : 'text-rose font-bold'}"
-                  >
-                    {formatMoney(section.subData.produccionMaquinas)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          {/if}
-
-          <!-- ============================================================
-               4. RESUMEN PRODUCCIÓN
+               RESUMEN DE PRODUCCIÓN (Encabezado Principal y Submódulos 1, 2, 3)
                ============================================================ -->
           {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.clientesTotales && section.subData.clientesTotales.totalOps > 0)}
+            <div class="sheet-main-title-box">
+              <h1 class="sheet-title-text">Resumen de Producción</h1>
+            </div>
+
+            <!-- 1. Resumen Mesas -->
+            {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.clientesTotales && section.subData.clientesTotales.totalOps > 0)}
+              <div class="sheet-section sub-module-section">
+                <div class="sub-header-row">
+                  <div class="sub-title-group">
+                    <h2 class="sub-section-title">
+                      1. Resumen Mesas
+                    </h2>
+                    {#if section.subData.drop_mesas.length > 0}
+                      <span class="sub-count-badge"
+                        >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa' : 'mesas'}</span
+                      >
+                    {/if}
+                  </div>
+                </div>
+
+                <!-- Indicadores de rendimiento de Mesas -->
+                <div class="quick-kpi-grid">
+                  <div class="kpi-card">
+                    <span class="kpi-label">DROP</span>
+                    <span class="kpi-value text-emerald"
+                      >{formatMoney(section.subData.dropTotales.grandTotal)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">TOTAL COMPRA DE CLIENTES</span>
+                    <span class="kpi-value text-emerald"
+                      >{formatMoney(section.subData.clientesTotales.totalCompras)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">TOTAL PAGOS A CLIENTES</span>
+                    <span class="kpi-value text-rose"
+                      >{formatMoney(section.subData.clientesTotales.totalPagos)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">BALANCE (COMPRA - PAGOS)</span>
+                    <span
+                      class="kpi-value {section.subData.clientesTotales.balanceNeto >= 0
+                        ? 'text-emerald'
+                        : 'text-rose'}"
+                    >
+                      {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
+                    </span>
+                  </div>
+                  <div class="kpi-card {section.subData.produccionMesas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                    <span class="kpi-label">PRODUCCIÓN</span>
+                    <span
+                      class="kpi-value {section.subData.produccionMesas >= 0
+                        ? 'text-emerald font-bold'
+                        : 'text-rose font-bold'}"
+                    >
+                      {formatMoney(Math.abs(section.subData.produccionMesas))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <!-- 2. Resumen Máquinas -->
+            {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
+              <div class="sheet-section sub-module-section">
+                <div class="sub-header-row">
+                  <div class="sub-title-group">
+                    <h2 class="sub-section-title">
+                      2. Resumen Máquinas
+                    </h2>
+                    {#if section.subData.conteo_maquinas.length > 0}
+                      <span class="sub-count-badge"
+                        >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina' : 'máquinas'}</span
+                      >
+                    {/if}
+                  </div>
+                </div>
+
+                <!-- Indicadores de rendimiento de Máquinas -->
+                <div class="quick-kpi-grid">
+                  <div class="kpi-card">
+                    <span class="kpi-label">BILLETERO</span>
+                    <span class="kpi-value text-emerald"
+                      >{formatMoney(section.subData.conteoTotales.grandTotal)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">TOTAL APORTES A MÁQUINAS</span>
+                    <span class="kpi-value text-rose"
+                      >{formatMoney(section.subData.aportesTotales.totalAportes)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">TOTAL DEVOLUCIONES DE MÁQUINAS</span>
+                    <span class="kpi-value text-emerald"
+                      >{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">BALANCE ( APORTES - DEVOLUCIONES )</span>
+                    <span
+                      class="kpi-value {section.subData.aportesTotales.netoMonto <= 0
+                        ? 'text-emerald'
+                        : 'text-rose'}"
+                    >
+                      {formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
+                    </span>
+                  </div>
+                  <div class="kpi-card {section.subData.produccionMaquinas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                    <span class="kpi-label">PRODUCCIÓN</span>
+                    <span
+                      class="kpi-value {section.subData.produccionMaquinas >= 0
+                        ? 'text-emerald font-bold'
+                        : 'text-rose font-bold'}"
+                    >
+                      {formatMoney(Math.abs(section.subData.produccionMaquinas))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <!-- 3. Resumen Producción -->
             <div class="sheet-section sub-module-section resumen-final-box">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    4. Resumen Producción
+                    3. Resumen Producción
                   </h2>
                 </div>
               </div>
 
               <!-- Indicadores consolidados de producción -->
               <div class="quick-kpi-grid">
-                <div class="kpi-card {section.subData.produccionMesas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                <div class="kpi-card">
                   <span class="kpi-label">MESAS</span>
                   <span
                     class="kpi-value {section.subData.produccionMesas >= 0
@@ -1445,7 +1449,7 @@
                     {formatMoney(Math.abs(section.subData.produccionMesas))}
                   </span>
                 </div>
-                <div class="kpi-card {section.subData.produccionMaquinas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                <div class="kpi-card">
                   <span class="kpi-label">MÁQUINAS</span>
                   <span
                     class="kpi-value {section.subData.produccionMaquinas >= 0
@@ -1462,7 +1466,7 @@
                       ? 'text-emerald font-bold'
                       : 'text-rose font-bold'}"
                   >
-                    {formatMoney(section.subData.produccionFinal)}
+                    {formatMoney(Math.abs(section.subData.produccionFinal))}
                   </span>
                 </div>
               </div>
@@ -1470,14 +1474,23 @@
           {/if}
 
           <!-- ============================================================
-               5. DROP MESAS
+               RESUMEN DE MOVIMIENTOS DE MESAS Y MÁQUINAS (Encabezado Principal)
+               ============================================================ -->
+          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.control_clientes && section.subData.control_clientes.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
+            <div class="sheet-main-title-box">
+              <h1 class="sheet-title-text">Resumen de Movimientos de Mesas y Máquinas</h1>
+            </div>
+          {/if}
+
+          <!-- ============================================================
+               1. DROP MESAS
                ============================================================ -->
           {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    5. Drop Mesas
+                    1. Drop Mesas
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
@@ -1589,14 +1602,14 @@
 
 
           <!-- ============================================================
-               6. CONTROL DE CLIENTES (Detallado + 2 Tablitas Agrupadas)
+               2. CONTROL DE CLIENTES (Detallado + 2 Tablitas Agrupadas)
                ============================================================ -->
           {#if section.subData.control_clientes && section.subData.control_clientes.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    6. Control de Clientes
+                    2. Control de Clientes
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.clientesTotales.totalOps} transacciones</span
@@ -1807,14 +1820,14 @@
           {/if}
 
           <!-- ============================================================
-               7. BILLETEROS (Conteo de Máquinas)
+               3. BILLETEROS (Conteo de Máquinas)
                ============================================================ -->
           {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    7. Billeteros
+                    3. Billeteros
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina contada' : 'máquinas contadas'}</span
@@ -1947,14 +1960,14 @@
           {/if}
 
           <!-- ============================================================
-               8. APORTES Y DEVOLUCIONES
+               4. APORTES Y DEVOLUCIONES
                ============================================================ -->
           {#if section.subData.aportes && section.subData.aportes.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    8. Aportes y Devoluciones
+                    4. Aportes y Devoluciones
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
@@ -2164,14 +2177,23 @@
           {/if}
 
           <!-- ============================================================
-               9. BITÁCORA DE INCIDENCIAS
+               RESUMEN DE INCIDENCIAS (Encabezado Principal)
+               ============================================================ -->
+          {#if (section.subData.incidencias_generales && section.subData.incidencias_generales.length > 0 && section.subData.incidenciasActivas && section.subData.incidenciasActivas.length > 0) || (section.subData.control_llaves && section.subData.control_llaves.length > 0)}
+            <div class="sheet-main-title-box">
+              <h1 class="sheet-title-text">Resumen de Incidencias</h1>
+            </div>
+          {/if}
+
+          <!-- ============================================================
+               1. BITÁCORA DE INCIDENCIAS
                ============================================================ -->
           {#if section.subData.incidencias_generales && section.subData.incidencias_generales.length > 0 && section.subData.incidenciasActivas && section.subData.incidenciasActivas.length > 0}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    9. Bitácora de Incidencias
+                    1. Bitácora de Incidencias
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.incidencias_generales.length} {section.subData.incidencias_generales.length === 1 ? 'reporte en total' : 'reportes en total'}</span
@@ -2218,7 +2240,7 @@
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h3 class="sub-section-title" style="font-size: 1.05rem;">
-                    Bitácora de Control de Llaves
+                    2. Bitácora de Control de Llaves
                   </h3>
                   <span class="sub-count-badge">{section.subData.llavesTotales.total} {section.subData.llavesTotales.total === 1 ? 'registro' : 'registros'}</span>
                 </div>
@@ -2959,9 +2981,25 @@
   /* Título principal */
   .sheet-main-title-box {
     text-align: center;
-    margin: 18px 0 16px;
-    border-bottom: 2px solid #2563eb;
+    margin: 28px 0 16px;
+    border-bottom: 2.5px solid #2563eb;
     padding-bottom: 6px;
+  }
+
+  .sheet-main-title-box:not(.first-title-box) {
+    margin-top: 36px;
+    padding-top: 24px;
+    border-top: 2px dashed #9ca3af;
+  }
+
+  .sheet-main-title-box.first-title-box {
+    margin-top: 10px;
+  }
+
+  .sheet-main-title-box + .sub-module-section {
+    border-top: none;
+    margin-top: 12px;
+    padding-top: 0;
   }
 
   .sheet-title-text {
