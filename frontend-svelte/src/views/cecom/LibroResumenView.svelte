@@ -1246,6 +1246,37 @@
       </div>
 
       <!-- ============================================================
+           RESUMEN DE SALAS (Consolidado General de Multisalas)
+           ============================================================ -->
+      {#if isMultisala && renderedSections.length > 0}
+        <div class="multisala-header-summary">
+          <div class="sheet-main-title-box first-title-box">
+            <h1 class="sheet-title-text">Resumen de Salas</h1>
+          </div>
+          <div class="quick-kpi-grid">
+            {#each renderedSections as sec}
+              {@const prod = sec.subData?.produccionFinal || 0}
+              <div class="kpi-card {prod > 0 ? 'kpi-card-positive' : (prod < 0 ? 'kpi-card-negative' : '')}">
+                <span class="kpi-label">{sec.subsala ? sec.subsala.nombre.toUpperCase() : 'SALA'}</span>
+                <span class="kpi-value {prod > 0 ? 'text-emerald font-bold' : (prod < 0 ? 'text-rose font-bold' : 'font-bold')}">
+                  {formatMoney(Math.abs(prod))}
+                </span>
+              </div>
+            {/each}
+            {#if renderedSections.length > 1}
+              {@const grandTotalMultisala = renderedSections.reduce((acc, sec) => acc + (sec.subData?.produccionFinal || 0), 0)}
+              <div class="kpi-card {grandTotalMultisala > 0 ? 'kpi-card-positive' : (grandTotalMultisala < 0 ? 'kpi-card-negative' : '')}">
+                <span class="kpi-label">TOTAL</span>
+                <span class="kpi-value {grandTotalMultisala > 0 ? 'text-emerald font-bold' : (grandTotalMultisala < 0 ? 'text-rose font-bold' : 'font-bold')}">
+                  {formatMoney(Math.abs(grandTotalMultisala))}
+                </span>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      <!-- ============================================================
            SECCIONES OPERATIVAS (AGRUPADAS POR SALA HIJA SI ES MULTISALAS)
            ============================================================ -->
       {#each renderedSections as section (section.subsala?.uuid || 'root')}
@@ -1327,38 +1358,38 @@
                 <div class="quick-kpi-grid">
                   <div class="kpi-card">
                     <span class="kpi-label">DROP</span>
-                    <span class="kpi-value text-emerald"
+                    <span class="kpi-value {section.subData.dropTotales.grandTotal > 0 ? 'text-emerald' : ''}"
                       >{formatMoney(section.subData.dropTotales.grandTotal)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">TOTAL COMPRA DE CLIENTES</span>
-                    <span class="kpi-value text-emerald"
+                    <span class="kpi-value {section.subData.clientesTotales.totalCompras > 0 ? 'text-emerald' : ''}"
                       >{formatMoney(section.subData.clientesTotales.totalCompras)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">TOTAL PAGOS A CLIENTES</span>
-                    <span class="kpi-value text-rose"
+                    <span class="kpi-value {section.subData.clientesTotales.totalPagos > 0 ? 'text-rose' : ''}"
                       >{formatMoney(section.subData.clientesTotales.totalPagos)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">BALANCE (COMPRA - PAGOS)</span>
                     <span
-                      class="kpi-value {section.subData.clientesTotales.balanceNeto >= 0
+                      class="kpi-value {section.subData.clientesTotales.balanceNeto > 0
                         ? 'text-emerald'
-                        : 'text-rose'}"
+                        : (section.subData.clientesTotales.balanceNeto < 0 ? 'text-rose' : '')}"
                     >
                       {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
                     </span>
                   </div>
-                  <div class="kpi-card {section.subData.produccionMesas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                  <div class="kpi-card {section.subData.produccionMesas > 0 ? 'kpi-card-positive' : (section.subData.produccionMesas < 0 ? 'kpi-card-negative' : '')}">
                     <span class="kpi-label">PRODUCCIÓN</span>
                     <span
-                      class="kpi-value {section.subData.produccionMesas >= 0
+                      class="kpi-value {section.subData.produccionMesas > 0
                         ? 'text-emerald font-bold'
-                        : 'text-rose font-bold'}"
+                        : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
                     >
                       {formatMoney(Math.abs(section.subData.produccionMesas))}
                     </span>
@@ -1387,38 +1418,38 @@
                 <div class="quick-kpi-grid">
                   <div class="kpi-card">
                     <span class="kpi-label">BILLETERO</span>
-                    <span class="kpi-value text-emerald"
+                    <span class="kpi-value {section.subData.conteoTotales.grandTotal > 0 ? 'text-emerald' : ''}"
                       >{formatMoney(section.subData.conteoTotales.grandTotal)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">TOTAL APORTES A MÁQUINAS</span>
-                    <span class="kpi-value text-rose"
+                    <span class="kpi-value {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}"
                       >{formatMoney(section.subData.aportesTotales.totalAportes)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">TOTAL DEVOLUCIONES DE MÁQUINAS</span>
-                    <span class="kpi-value text-emerald"
+                    <span class="kpi-value {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}"
                       >{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">BALANCE ( APORTES - DEVOLUCIONES )</span>
                     <span
-                      class="kpi-value {section.subData.aportesTotales.netoMonto <= 0
+                      class="kpi-value {section.subData.aportesTotales.netoMonto < 0
                         ? 'text-emerald'
-                        : 'text-rose'}"
+                        : (section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : '')}"
                     >
                       {formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
                     </span>
                   </div>
-                  <div class="kpi-card {section.subData.produccionMaquinas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                  <div class="kpi-card {section.subData.produccionMaquinas > 0 ? 'kpi-card-positive' : (section.subData.produccionMaquinas < 0 ? 'kpi-card-negative' : '')}">
                     <span class="kpi-label">PRODUCCIÓN</span>
                     <span
-                      class="kpi-value {section.subData.produccionMaquinas >= 0
+                      class="kpi-value {section.subData.produccionMaquinas > 0
                         ? 'text-emerald font-bold'
-                        : 'text-rose font-bold'}"
+                        : (section.subData.produccionMaquinas < 0 ? 'text-rose font-bold' : 'font-bold')}"
                     >
                       {formatMoney(Math.abs(section.subData.produccionMaquinas))}
                     </span>
@@ -1442,9 +1473,9 @@
                 <div class="kpi-card">
                   <span class="kpi-label">MESAS</span>
                   <span
-                    class="kpi-value {section.subData.produccionMesas >= 0
+                    class="kpi-value {section.subData.produccionMesas > 0
                       ? 'text-emerald font-bold'
-                      : 'text-rose font-bold'}"
+                      : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
                   >
                     {formatMoney(Math.abs(section.subData.produccionMesas))}
                   </span>
@@ -1452,19 +1483,19 @@
                 <div class="kpi-card">
                   <span class="kpi-label">MÁQUINAS</span>
                   <span
-                    class="kpi-value {section.subData.produccionMaquinas >= 0
+                    class="kpi-value {section.subData.produccionMaquinas > 0
                       ? 'text-emerald font-bold'
-                      : 'text-rose font-bold'}"
+                      : (section.subData.produccionMaquinas < 0 ? 'text-rose font-bold' : 'font-bold')}"
                   >
                     {formatMoney(Math.abs(section.subData.produccionMaquinas))}
                   </span>
                 </div>
-                <div class="kpi-card {section.subData.produccionFinal >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                <div class="kpi-card {section.subData.produccionFinal > 0 ? 'kpi-card-positive' : (section.subData.produccionFinal < 0 ? 'kpi-card-negative' : '')}">
                   <span class="kpi-label">PRODUCCIÓN</span>
                   <span
-                    class="kpi-value {section.subData.produccionFinal >= 0
+                    class="kpi-value {section.subData.produccionFinal > 0
                       ? 'text-emerald font-bold'
-                      : 'text-rose font-bold'}"
+                      : (section.subData.produccionFinal < 0 ? 'text-rose font-bold' : 'font-bold')}"
                   >
                     {formatMoney(Math.abs(section.subData.produccionFinal))}
                   </span>
@@ -1653,7 +1684,7 @@
                         <td class="cell-nota tag-nota-text" title={c.nota || ""}>
                           {c.nota ? c.nota : "—"}
                         </td>
-                        <td class="cell-total-money font-bold {isCompra ? 'text-emerald' : 'text-rose'}">
+                        <td class="cell-total-money font-bold {c.monto > 0 ? (isCompra ? 'text-emerald' : 'text-rose') : ''}">
                           {formatMoney(Math.abs(c.monto))}
                         </td>
                       </tr>
@@ -1662,7 +1693,7 @@
                   <tfoot>
                     <tr class="tfoot-totals">
                       <td colspan="6">BALANCE NETO (COMPRAS - PAGOS)</td>
-                      <td class="cell-grand-total {section.subData.clientesTotales.balanceNeto >= 0 ? 'text-emerald' : 'text-rose'}">
+                      <td class="cell-grand-total {section.subData.clientesTotales.balanceNeto > 0 ? 'text-emerald' : (section.subData.clientesTotales.balanceNeto < 0 ? 'text-rose' : '')}">
                         {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
                       </td>
                     </tr>
@@ -1704,12 +1735,12 @@
                                 </span>
                               </td>
                               <td class="cell-center">{m.ops}</td>
-                              <td class="cell-total-money font-bold text-emerald">{formatMoney(Math.abs(m.compras))}</td>
-                              <td class="cell-total-money font-bold text-rose">{formatMoney(Math.abs(m.pagos))}</td>
+                              <td class="cell-total-money font-bold {m.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(m.compras))}</td>
+                              <td class="cell-total-money font-bold {m.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(m.pagos))}</td>
                               <td
-                                class="cell-total-money font-bold {m.balance >= 0
+                                class="cell-total-money font-bold {m.balance > 0
                                   ? 'text-emerald'
-                                  : 'text-rose'}"
+                                  : (m.balance < 0 ? 'text-rose' : '')}"
                               >
                                 {formatMoney(Math.abs(m.balance))}
                               </td>
@@ -1720,13 +1751,13 @@
                           <tr class="tfoot-totals">
                             <td>TOTAL</td>
                             <td class="cell-center">{section.subData.totalesPorMetodo.ops}</td>
-                            <td class="cell-total-money font-bold text-emerald"
+                            <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.compras > 0 ? 'text-emerald' : ''}"
                               >{formatMoney(Math.abs(section.subData.totalesPorMetodo.compras))}</td
                             >
-                            <td class="cell-total-money font-bold text-rose"
+                            <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.pagos > 0 ? 'text-rose' : ''}"
                               >{formatMoney(Math.abs(section.subData.totalesPorMetodo.pagos))}</td
                             >
-                            <td class="cell-grand-total {section.subData.totalesPorMetodo.balance >= 0 ? 'text-emerald' : 'text-rose'}"
+                            <td class="cell-grand-total {section.subData.totalesPorMetodo.balance > 0 ? 'text-emerald' : (section.subData.totalesPorMetodo.balance < 0 ? 'text-rose' : '')}"
                               >{formatMoney(Math.abs(section.subData.totalesPorMetodo.balance))}</td
                             >
                           </tr>
@@ -1761,12 +1792,12 @@
                             <tr>
                               <td class="cell-left font-bold">{cl.cliente}</td>
                               <td class="cell-center">{cl.ops}</td>
-                              <td class="cell-total-money font-bold text-emerald">{formatMoney(Math.abs(cl.compras))}</td>
-                              <td class="cell-total-money font-bold text-rose">{formatMoney(Math.abs(cl.pagos))}</td>
+                              <td class="cell-total-money font-bold {cl.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(cl.compras))}</td>
+                              <td class="cell-total-money font-bold {cl.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(cl.pagos))}</td>
                               <td
-                                class="cell-total-money font-bold {cl.balance >= 0
+                                class="cell-total-money font-bold {cl.balance > 0
                                   ? 'text-emerald'
-                                  : 'text-rose'}"
+                                  : (cl.balance < 0 ? 'text-rose' : '')}"
                               >
                                 {formatMoney(Math.abs(cl.balance))}
                               </td>
@@ -1777,13 +1808,13 @@
                           <tr class="tfoot-totals">
                             <td>TOTAL</td>
                             <td class="cell-center">{section.subData.totalesPorJugador.ops}</td>
-                            <td class="cell-total-money font-bold text-emerald"
+                            <td class="cell-total-money font-bold {section.subData.totalesPorJugador.compras > 0 ? 'text-emerald' : ''}"
                               >{formatMoney(Math.abs(section.subData.totalesPorJugador.compras))}</td
                             >
-                            <td class="cell-total-money font-bold text-rose"
+                            <td class="cell-total-money font-bold {section.subData.totalesPorJugador.pagos > 0 ? 'text-rose' : ''}"
                               >{formatMoney(Math.abs(section.subData.totalesPorJugador.pagos))}</td
                             >
-                            <td class="cell-grand-total {section.subData.totalesPorJugador.balance >= 0 ? 'text-emerald' : 'text-rose'}"
+                            <td class="cell-grand-total {section.subData.totalesPorJugador.balance > 0 ? 'text-emerald' : (section.subData.totalesPorJugador.balance < 0 ? 'text-rose' : '')}"
                               >{formatMoney(Math.abs(section.subData.totalesPorJugador.balance))}</td
                             >
                           </tr>
@@ -1965,7 +1996,7 @@
                             {a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${a.rango_id}`)}
                           </span>
                         </td>
-                        <td class="cell-total-money font-bold {isAporte ? 'text-rose' : 'text-emerald'}">
+                        <td class="cell-total-money font-bold {a.monto > 0 ? (isAporte ? 'text-rose' : 'text-emerald') : ''}">
                           {formatMoney(Math.abs(a.monto))}
                         </td>
                       </tr>
@@ -1974,7 +2005,7 @@
                   <tfoot>
                     <tr class="tfoot-totals">
                       <td colspan="6">TOTAL</td>
-                      <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : 'text-emerald'}">
+                      <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">
                         {formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
                       </td>
                     </tr>
@@ -2013,9 +2044,9 @@
                             <tr>
                               <td class="cell-left font-bold">{rg.rango_nombre}</td>
                               <td class="cell-center">{rg.cantidad} ops</td>
-                              <td class="cell-total-money font-bold text-rose">{formatMoney(Math.abs(rg.montoAportes))}</td>
+                              <td class="cell-total-money font-bold {rg.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(rg.montoAportes))}</td>
                               {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                                <td class="cell-total-money font-bold text-emerald">{rg.montoDevoluciones > 0 ? formatMoney(Math.abs(rg.montoDevoluciones)) : '$0'}</td>
+                                <td class="cell-total-money font-bold {rg.montoDevoluciones > 0 ? 'text-emerald' : ''}">{rg.montoDevoluciones > 0 ? formatMoney(Math.abs(rg.montoDevoluciones)) : '$0'}</td>
                                 <td class="cell-total-money font-bold {rg.neto > 0 ? 'text-rose' : (rg.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(rg.neto))}</td>
                               {/if}
                             </tr>
@@ -2025,9 +2056,9 @@
                           <tr class="tfoot-totals">
                             <td>TOTAL</td>
                             <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
-                            <td class="cell-total-money font-bold text-rose">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
+                            <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
                             {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                              <td class="cell-total-money font-bold text-emerald">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
+                              <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
                               <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
                             {/if}
                           </tr>
@@ -2068,9 +2099,9 @@
                               <td class="cell-left font-bold">{emp.empleado_nombre}</td>
                               <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
                               <td class="cell-center">{emp.cantidad} ops</td>
-                              <td class="cell-total-money font-bold text-rose">{formatMoney(Math.abs(emp.montoAportes))}</td>
+                              <td class="cell-total-money font-bold {emp.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(emp.montoAportes))}</td>
                               {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                                <td class="cell-total-money font-bold text-emerald">{emp.montoDevoluciones > 0 ? formatMoney(Math.abs(emp.montoDevoluciones)) : '$0'}</td>
+                                <td class="cell-total-money font-bold {emp.montoDevoluciones > 0 ? 'text-emerald' : ''}">{emp.montoDevoluciones > 0 ? formatMoney(Math.abs(emp.montoDevoluciones)) : '$0'}</td>
                                 <td class="cell-total-money font-bold {emp.neto > 0 ? 'text-rose' : (emp.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(emp.neto))}</td>
                               {/if}
                             </tr>
@@ -2081,9 +2112,9 @@
                             <td>TOTAL</td>
                             <td>—</td>
                             <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
-                            <td class="cell-total-money font-bold text-rose">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
+                            <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
                             {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                              <td class="cell-total-money font-bold text-emerald">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
+                              <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
                               <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
                             {/if}
                           </tr>
@@ -2898,21 +2929,26 @@
     background: #f8fafc;
   }
 
+  /* Resumen de Salas Multisala en el encabezado */
+  .multisala-header-summary {
+    margin-bottom: 20px;
+  }
+
   /* Título principal */
   .sheet-main-title-box {
     text-align: center;
-    margin: 36px 0 16px;
+    margin: 20px 0 12px;
     border-bottom: 2.5px solid #2563eb;
     padding-bottom: 6px;
   }
 
   .sheet-main-title-box.first-title-box {
-    margin-top: 10px;
+    margin-top: 6px;
   }
 
   .sheet-main-title-box + .sub-module-section {
     border-top: none !important;
-    margin-top: 12px;
+    margin-top: 10px;
     padding-top: 0;
   }
 
@@ -2927,7 +2963,7 @@
 
   /* Lista de Horarios Operativos */
   .horarios-section {
-    margin-bottom: 20px;
+    margin-bottom: 6px;
     font-size: 13.5px;
     line-height: 1.4;
   }
