@@ -1428,7 +1428,7 @@
             {/if}
 
             <!-- 3. Resumen Producción -->
-            <div class="sheet-section sub-module-section resumen-final-box">
+            <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
@@ -2981,15 +2981,9 @@
   /* Título principal */
   .sheet-main-title-box {
     text-align: center;
-    margin: 28px 0 16px;
+    margin: 36px 0 16px;
     border-bottom: 2.5px solid #2563eb;
     padding-bottom: 6px;
-  }
-
-  .sheet-main-title-box:not(.first-title-box) {
-    margin-top: 36px;
-    padding-top: 24px;
-    border-top: 2px dashed #9ca3af;
   }
 
   .sheet-main-title-box.first-title-box {
@@ -2997,7 +2991,7 @@
   }
 
   .sheet-main-title-box + .sub-module-section {
-    border-top: none;
+    border-top: none !important;
     margin-top: 12px;
     padding-top: 0;
   }
@@ -3262,9 +3256,9 @@
   }
 
   .official-incidencias-block {
-    margin-top: 24px;
-    border-top: 2px dashed #9ca3af;
-    padding-top: 16px;
+    margin-top: 10px;
+    border-top: none !important;
+    padding-top: 0;
   }
 
   .hidden-on-screen {
