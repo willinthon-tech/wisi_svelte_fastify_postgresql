@@ -1312,47 +1312,40 @@
                     >
                   {/if}
                 </div>
-                <span
-                  class="sub-total-badge {section.subData.produccionMesas >= 0
-                    ? 'badge-produccion-positive'
-                    : 'badge-produccion-negative'}"
-                >
-                  Producción Mesas: <b>{formatMoney(section.subData.produccionMesas)}</b>
-                </span>
               </div>
 
               <!-- Indicadores de rendimiento de Mesas -->
               <div class="quick-kpi-grid">
                 <div class="kpi-card">
-                  <span class="kpi-label">Total Drop Mesas</span>
+                  <span class="kpi-label">DROP</span>
                   <span class="kpi-value text-emerald"
                     >{formatMoney(section.subData.dropTotales.grandTotal)}</span
                   >
                 </div>
                 <div class="kpi-card">
-                  <span class="kpi-label">Total Compra Clientes</span>
-                  <span class="kpi-value text-blue"
+                  <span class="kpi-label">TOTAL COMPRA DE CLIENTES</span>
+                  <span class="kpi-value text-emerald"
                     >{formatMoney(section.subData.clientesTotales.totalCompras)}</span
                   >
                 </div>
                 <div class="kpi-card">
-                  <span class="kpi-label">Total Pagos Clientes</span>
+                  <span class="kpi-label">TOTAL PAGOS A CLIENTES</span>
                   <span class="kpi-value text-rose"
                     >{formatMoney(section.subData.clientesTotales.totalPagos)}</span
                   >
                 </div>
                 <div class="kpi-card">
-                  <span class="kpi-label">Balance Clientes (Compra - Pagos)</span>
+                  <span class="kpi-label">BALANCE (COMPRA - PAGOS)</span>
                   <span
                     class="kpi-value {section.subData.clientesTotales.balanceNeto >= 0
                       ? 'text-emerald'
                       : 'text-rose'}"
                   >
-                    {formatMoney(section.subData.clientesTotales.balanceNeto)}
+                    {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
                   </span>
                 </div>
-                <div class="kpi-card kpi-highlight">
-                  <span class="kpi-label">Producción Neta Mesas</span>
+                <div class="kpi-card {section.subData.produccionMesas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                  <span class="kpi-label">PRODUCCIÓN</span>
                   <span
                     class="kpi-value {section.subData.produccionMesas >= 0
                       ? 'text-emerald font-bold'
@@ -1381,47 +1374,40 @@
                     >
                   {/if}
                 </div>
-                <span
-                  class="sub-total-badge {section.subData.produccionMaquinas >= 0
-                    ? 'badge-produccion-positive'
-                    : 'badge-produccion-negative'}"
-                >
-                  Producción Máquinas: <b>{formatMoney(section.subData.produccionMaquinas)}</b>
-                </span>
               </div>
 
               <!-- Indicadores de rendimiento de Máquinas -->
               <div class="quick-kpi-grid">
                 <div class="kpi-card">
-                  <span class="kpi-label">Total Billeteros</span>
+                  <span class="kpi-label">BILLETERO</span>
                   <span class="kpi-value text-emerald"
                     >{formatMoney(section.subData.conteoTotales.grandTotal)}</span
                   >
                 </div>
                 <div class="kpi-card">
-                  <span class="kpi-label">Total Aportes (Salida)</span>
+                  <span class="kpi-label">APORTES</span>
                   <span class="kpi-value text-rose"
-                    >-{formatMoney(section.subData.aportesTotales.totalAportes)}</span
+                    >{formatMoney(section.subData.aportesTotales.totalAportes)}</span
                   >
                 </div>
                 <div class="kpi-card">
-                  <span class="kpi-label">Total Devoluciones (Retorno)</span>
+                  <span class="kpi-label">DEVOLUCIONES</span>
                   <span class="kpi-value text-emerald"
-                    >+{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</span
+                    >{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</span
                   >
                 </div>
                 <div class="kpi-card">
-                  <span class="kpi-label">Neto Aportes / Devoluciones</span>
+                  <span class="kpi-label">BALANCE ( APORTES - DEVOLUCIONES )</span>
                   <span
                     class="kpi-value {section.subData.aportesTotales.netoMonto <= 0
                       ? 'text-emerald'
                       : 'text-rose'}"
                   >
-                    {section.subData.aportesTotales.netoMonto > 0 ? '-' : ''}{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
+                    {formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
                   </span>
                 </div>
-                <div class="kpi-card kpi-highlight">
-                  <span class="kpi-label">Producción Neta Máquinas</span>
+                <div class="kpi-card {section.subData.produccionMaquinas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                  <span class="kpi-label">PRODUCCIÓN</span>
                   <span
                     class="kpi-value {section.subData.produccionMaquinas >= 0
                       ? 'text-emerald font-bold'
@@ -1435,55 +1421,42 @@
           {/if}
 
           <!-- ============================================================
-               4. RESUMEN FINAL
+               4. RESUMEN PRODUCCIÓN
                ============================================================ -->
           {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.clientesTotales && section.subData.clientesTotales.totalOps > 0)}
             <div class="sheet-section sub-module-section resumen-final-box">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    4. Resumen Final
+                    4. Resumen Producción
                   </h2>
                 </div>
-                <span
-                  class="sub-total-badge {section.subData.produccionFinal >= 0
-                    ? 'badge-produccion-positive'
-                    : 'badge-produccion-negative'}"
-                >
-                  Producción Total: <b>{formatMoney(section.subData.produccionFinal)}</b>
-                </span>
               </div>
 
-              <!-- Indicadores consolidados finales -->
+              <!-- Indicadores consolidados de producción -->
               <div class="quick-kpi-grid">
-                <div class="kpi-card">
-                  <span class="kpi-label">Producción Mesas</span>
+                <div class="kpi-card {section.subData.produccionMesas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                  <span class="kpi-label">MESAS</span>
                   <span
                     class="kpi-value {section.subData.produccionMesas >= 0
-                      ? 'text-emerald'
-                      : 'text-rose'}"
+                      ? 'text-emerald font-bold'
+                      : 'text-rose font-bold'}"
                   >
-                    {formatMoney(section.subData.produccionMesas)}
+                    {formatMoney(Math.abs(section.subData.produccionMesas))}
                   </span>
                 </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Producción Máquinas</span>
+                <div class="kpi-card {section.subData.produccionMaquinas >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                  <span class="kpi-label">MÁQUINAS</span>
                   <span
                     class="kpi-value {section.subData.produccionMaquinas >= 0
-                      ? 'text-emerald'
-                      : 'text-rose'}"
+                      ? 'text-emerald font-bold'
+                      : 'text-rose font-bold'}"
                   >
-                    {formatMoney(section.subData.produccionMaquinas)}
+                    {formatMoney(Math.abs(section.subData.produccionMaquinas))}
                   </span>
                 </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Total Ingresos Brutos</span>
-                  <span class="kpi-value text-blue"
-                    >{formatMoney(section.subData.totalIngresosBrutos)}</span
-                  >
-                </div>
-                <div class="kpi-card kpi-highlight-final">
-                  <span class="kpi-label">Producción Total Final</span>
+                <div class="kpi-card {section.subData.produccionFinal >= 0 ? 'kpi-card-positive' : 'kpi-card-negative'}">
+                  <span class="kpi-label">PRODUCCIÓN</span>
                   <span
                     class="kpi-value {section.subData.produccionFinal >= 0
                       ? 'text-emerald font-bold'
@@ -3381,19 +3354,19 @@
     gap: 2px;
   }
 
-  .kpi-card.kpi-highlight {
-    background: #f0fdf4;
-    border-color: #86efac;
+  .kpi-card.kpi-card-positive {
+    background: #f0fdf4 !important;
+    border: 1.5px solid #86efac !important;
   }
 
-  .kpi-card.kpi-highlight-final {
-    background: #eff6ff;
-    border-color: #93c5fd;
+  .kpi-card.kpi-card-negative {
+    background: #fef2f2 !important;
+    border: 1.5px solid #fca5a5 !important;
   }
 
   .resumen-final-box {
-    border: 2px solid #3b82f6 !important;
-    background: #f8faff;
+    border: 1.5px solid #bfdbfe !important;
+    background: #f8fafc;
     border-radius: 8px;
     padding: 16px;
   }
