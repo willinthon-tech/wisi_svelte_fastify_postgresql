@@ -3501,10 +3501,12 @@
   .tag-compra {
     background: #dcfce7;
     color: #15803d;
+    border: 1px solid #bbf7d0;
   }
   .tag-pago {
-    background: #eff6ff;
-    color: #1d4ed8;
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
   }
   .tag-aporte {
     background: #fee2e2;
