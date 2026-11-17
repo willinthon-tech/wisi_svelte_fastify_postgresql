@@ -5882,6 +5882,7 @@ export async function createMesaModel(data) {
         nombre, 
         juego_uuid, 
         sala_uuid, 
+        banca,
         active
       )
       VALUES (
@@ -5889,6 +5890,7 @@ export async function createMesaModel(data) {
         ${cleanName}, 
         ${rawJuego}::uuid, 
         ${rawSala}::uuid, 
+        ${data.banca !== undefined && data.banca !== null ? (typeof data.banca === 'string' ? data.banca : JSON.stringify(data.banca)) : '[]'}::jsonb,
         1
       )
       RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id
@@ -5909,6 +5911,7 @@ export async function createMesaModel(data) {
       juego_uuid: rawJuego,
       sala_id: rawSala,
       sala_uuid: rawSala,
+      banca: data.banca !== undefined ? (typeof data.banca === 'string' ? JSON.parse(data.banca) : data.banca) : [],
       active: 1,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -5925,6 +5928,17 @@ export async function updateMesaModel(id, data) {
   const rawJuego = data.juego_uuid !== undefined ? data.juego_uuid : data.juego_id;
   const rawSala = data.sala_uuid !== undefined ? data.sala_uuid : data.sala_id;
   const active = data.active !== undefined ? Number(data.active) : null;
+
+  let bancaVal = undefined;
+  if (data.banca !== undefined) {
+    if (data.banca === null) {
+      bancaVal = '[]';
+    } else if (typeof data.banca === 'string') {
+      bancaVal = data.banca;
+    } else {
+      bancaVal = JSON.stringify(data.banca);
+    }
+  }
 
   if (isPgConnected && sql) {
     let currentSalaUuid = null;
@@ -5963,6 +5977,7 @@ export async function updateMesaModel(id, data) {
         nombre = COALESCE(${cleanName}, nombre),
         juego_uuid = ${rawJuego !== undefined ? (juegoUuid ? sql`${juegoUuid}::uuid` : sql`NULL`) : sql`juego_uuid`},
         sala_uuid = ${rawSala !== undefined ? (salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`) : sql`sala_uuid`},
+        banca = ${bancaVal !== undefined ? sql`${bancaVal}::jsonb` : sql`banca`},
         active = COALESCE(${active}, active),
         updated_at = CURRENT_TIMESTAMP
       WHERE uuid = ${id}::uuid
@@ -5972,7 +5987,14 @@ export async function updateMesaModel(id, data) {
   } else {
     const idx = (inMemoryData.mesas || []).findIndex(m => m.uuid === id || m.id === id);
     if (idx !== -1) {
-      inMemoryData.mesas[idx] = { ...inMemoryData.mesas[idx], ...data, updated_at: new Date().toISOString() };
+      inMemoryData.mesas[idx] = { 
+        ...inMemoryData.mesas[idx], 
+        ...data, 
+        banca: data.banca !== undefined 
+          ? (typeof data.banca === 'string' ? JSON.parse(data.banca) : data.banca) 
+          : inMemoryData.mesas[idx].banca,
+        updated_at: new Date().toISOString() 
+      };
       return inMemoryData.mesas[idx];
     }
     return null;

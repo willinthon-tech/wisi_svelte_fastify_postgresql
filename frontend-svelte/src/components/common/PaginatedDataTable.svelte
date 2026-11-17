@@ -170,7 +170,7 @@
   export let columns = [];
   export let searchPlaceholder = 'Buscar registros...';
   export let entityType = 'registro';
-  export let actions = { edit: true, delete: true, reincorporate: false, desincorporate: false, restore: false };
+  export let actions = { edit: true, delete: true, reincorporate: false, desincorporate: false, restore: false, banca: false };
   export let showCheckbox = true;
   export let isServerSide = false;
   export let createFields = [];
@@ -281,7 +281,8 @@
     (actions.edit !== false && canEdit) || 
     ((actions.delete !== false || actions.reincorporate || actions.desincorporate || actions.restore) && canDelete) ||
     actions.trabajar || 
-    actions.compartir
+    actions.compartir ||
+    actions.banca
   );
 
   // Reincorporar Modal State
@@ -1970,6 +1971,16 @@
                       {/if}
                     {/if}
 
+                    {#if actions.banca}
+                      <button
+                        type="button"
+                        class="btn-action btn-banca"
+                        title={actions.bancaTitle || 'Configurar Banca de la Mesa'}
+                        on:click={() => dispatch('banca', item)}>
+                        {actions.bancaLabel || 'Banca'}
+                      </button>
+                    {/if}
+
                     {#if actions.compartir}
                       <button
                         type="button"
@@ -2474,6 +2485,18 @@
 
   .btn-edit:hover {
     background: #eff6ff;
+  }
+
+  .btn-banca {
+    color: #059669;
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+    font-weight: 700;
+  }
+
+  .btn-banca:hover {
+    background: #d1fae5;
+    color: #047857;
   }
 
   .btn-compartir {

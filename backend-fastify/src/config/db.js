@@ -234,6 +234,14 @@ export async function initDb() {
       console.warn('Advertencia migrando columnas en salas:', eSalasCol.message);
     }
 
+    // Garantizar columna banca en mesas
+    try {
+      await sql`ALTER TABLE mesas ADD COLUMN IF NOT EXISTS banca JSONB DEFAULT '[]'::jsonb;`;
+      await sql`UPDATE mesas SET banca = '[]'::jsonb WHERE banca IS NULL;`;
+    } catch (eMesasCol) {
+      console.warn('Advertencia migrando columna banca en mesas:', eMesasCol.message);
+    }
+
     // Garantizar columna multisala_uuid en todas las tablas del módulo Libro
     try {
       const libroTables = [

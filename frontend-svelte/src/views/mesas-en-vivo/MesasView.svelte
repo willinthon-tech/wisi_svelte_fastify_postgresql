@@ -13,6 +13,7 @@
   import { onMount } from 'svelte';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
+  import BancaMesaModal from '../../components/modals/BancaMesaModal.svelte';
   import { 
     masterMesasActions, 
     masterMesasStore, 
@@ -308,6 +309,15 @@
       });
     }
   }
+
+  // Modal Banca State
+  let isBancaModalOpen = false;
+  let selectedMesaForBanca = null;
+
+  function openBancaModal(mesa) {
+    selectedMesaForBanca = mesa;
+    isBancaModalOpen = true;
+  }
 </script>
 
 <PaginatedDataTable 
@@ -326,6 +336,7 @@
   uniqueByField="sala_uuid"
   actions={{ 
     edit: true, 
+    banca: true,
     delete: true, 
     deleteLabel: 'Desincorporar', 
     deleteTitle: 'Desincorporar Mesa' 
@@ -333,6 +344,7 @@
   on:fetchServerData={(e) => loadServerData(e.detail)}
   on:create={handleCreate}
   on:saveInline={handleSaveInline}
+  on:banca={(e) => openBancaModal(e.detail)}
   on:delete={handleDelete}
   on:batchDelete={handleBatchDelete}
 >
@@ -372,6 +384,17 @@
     {/if}
   </div>
 </PaginatedDataTable>
+
+<!-- Modal Configuración de Banca para la Mesa -->
+<BancaMesaModal
+  show={isBancaModalOpen}
+  mesa={selectedMesaForBanca}
+  on:saved={() => loadServerData()}
+  on:close={() => {
+    isBancaModalOpen = false;
+    selectedMesaForBanca = null;
+  }}
+/>
 
 <style>
   .smart-filters-grid {
