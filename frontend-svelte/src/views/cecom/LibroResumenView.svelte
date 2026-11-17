@@ -982,120 +982,125 @@
     );
 
     // 9. Resumen de Producción por Rango (Conteo Billeteros - Aportes y Devoluciones Netos)
-    const mapProduccionRango = {};
+    let produccionPorRango = [];
+    const hasAnyMaquinaOps = sortedConteoList.length > 0 || sortedAportesList.length > 0;
 
-    // Obtener todas las máquinas registradas en la sala del libro
-    const targetSalaUuid = activeLibro?.sala_uuid || activeLibro?.sala_id || null;
-    const allMaquinasList = (rawData.maquinas && rawData.maquinas.length > 0)
-      ? rawData.maquinas
-      : ($masterMaquinasStore || []);
+    if (hasAnyMaquinaOps) {
+      const mapProduccionRango = {};
 
-    const allMaquinasSala = allMaquinasList.filter(m => {
-      if (m.is_deleted) return false;
-      if (targetSalaUuid && (m.sala_uuid || m.sala_id) && String(m.sala_uuid || m.sala_id) !== String(targetSalaUuid)) return false;
-      return true;
-    });
+      // Obtener todas las máquinas registradas en la sala del libro
+      const targetSalaUuid = activeLibro?.sala_uuid || activeLibro?.sala_id || null;
+      const allMaquinasList = (rawData.maquinas && rawData.maquinas.length > 0)
+        ? rawData.maquinas
+        : ($masterMaquinasStore || []);
 
-    // Mapear conteo total de máquinas registradas en la sala por Rango (uuid y nombre)
-    const mapTotalMaquinasPorRangoUuid = {};
-    const mapTotalMaquinasPorRangoNombre = {};
-    for (const m of allMaquinasSala) {
-      if (m.rango_uuid) {
-        mapTotalMaquinasPorRangoUuid[String(m.rango_uuid)] = (mapTotalMaquinasPorRangoUuid[String(m.rango_uuid)] || 0) + 1;
+      const allMaquinasSala = allMaquinasList.filter(m => {
+        if (m.is_deleted) return false;
+        if (targetSalaUuid && (m.sala_uuid || m.sala_id) && String(m.sala_uuid || m.sala_id) !== String(targetSalaUuid)) return false;
+        return true;
+      });
+
+      // Mapear conteo total de máquinas registradas en la sala por Rango (uuid y nombre)
+      const mapTotalMaquinasPorRangoUuid = {};
+      const mapTotalMaquinasPorRangoNombre = {};
+      for (const m of allMaquinasSala) {
+        if (m.rango_uuid) {
+          mapTotalMaquinasPorRangoUuid[String(m.rango_uuid)] = (mapTotalMaquinasPorRangoUuid[String(m.rango_uuid)] || 0) + 1;
+        }
+        const rNom = (m.rango_nombre || '').trim();
+        if (rNom) {
+          mapTotalMaquinasPorRangoNombre[rNom.toLowerCase()] = (mapTotalMaquinasPorRangoNombre[rNom.toLowerCase()] || 0) + 1;
+        }
       }
-      const rNom = (m.rango_nombre || '').trim();
-      if (rNom) {
-        mapTotalMaquinasPorRangoNombre[rNom.toLowerCase()] = (mapTotalMaquinasPorRangoNombre[rNom.toLowerCase()] || 0) + 1;
+
+      // A) Inicializar con todos los rangos que tienen máquinas registradas en la sala
+      for (const m of allMaquinasSala) {
+        const rKey = m.rango_uuid || (m.rango_nombre ? m.rango_nombre.trim() : 'sin_rango');
+        const rNom = m.rango_nombre || (m.rango_uuid ? `Rango #${m.rango_uuid.slice(0, 8)}` : 'Sin Rango');
+        if (!mapProduccionRango[rKey]) {
+          mapProduccionRango[rKey] = {
+            rango_uuid: m.rango_uuid || rKey,
+            rango_id: rKey,
+            rango_nombre: rNom,
+            maquinasCount: 0,
+            maquinasSet: new Set(),
+            billetero: 0,
+            montoAportes: 0,
+            montoDevoluciones: 0,
+            aportesNeto: 0,
+            produccion: 0
+          };
+        }
       }
+
+      // B) Mapear desde conteo de máquinas
+      for (const c of sortedConteoList) {
+        const rKey = c.rango_uuid || c.rango_id || (c.rango_nombre ? c.rango_nombre.trim() : 0);
+        const rNom = c.rango_nombre || (c.rango_uuid ? `Rango #${c.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
+        if (!mapProduccionRango[rKey]) {
+          mapProduccionRango[rKey] = {
+            rango_uuid: c.rango_uuid || rKey,
+            rango_id: rKey,
+            rango_nombre: rNom,
+            maquinasCount: 0,
+            maquinasSet: new Set(),
+            billetero: 0,
+            montoAportes: 0,
+            montoDevoluciones: 0,
+            aportesNeto: 0,
+            produccion: 0
+          };
+        }
+        const maqKey = c.maquina_uuid || c.maquina_id || c.id || `${rKey}_${mapProduccionRango[rKey].maquinasSet.size + 1}`;
+        mapProduccionRango[rKey].maquinasSet.add(maqKey);
+        mapProduccionRango[rKey].billetero += Number(c.total) || 0;
+      }
+
+      // C) Cruzar con los datos de aportes y devoluciones
+      for (const a of sortedAportesList) {
+        const rKey = a.rango_uuid || a.rango_id || (a.rango_nombre ? a.rango_nombre.trim() : 0);
+        const rNom = a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
+        if (!mapProduccionRango[rKey]) {
+          mapProduccionRango[rKey] = {
+            rango_uuid: a.rango_uuid || rKey,
+            rango_id: rKey,
+            rango_nombre: rNom,
+            maquinasCount: 0,
+            maquinasSet: new Set(),
+            billetero: 0,
+            montoAportes: 0,
+            montoDevoluciones: 0,
+            aportesNeto: 0,
+            produccion: 0
+          };
+        }
+        const val = parseFloat(a.monto) || 0;
+        if ((a.tipo || 'Aporte') === 'Devolución') {
+          mapProduccionRango[rKey].montoDevoluciones += val;
+          mapProduccionRango[rKey].aportesNeto -= val;
+        } else {
+          mapProduccionRango[rKey].montoAportes += val;
+          mapProduccionRango[rKey].aportesNeto += val;
+        }
+      }
+
+      // D) Asignar conteo real de máquinas por rango
+      for (const item of Object.values(mapProduccionRango)) {
+        const countByUuid = item.rango_uuid ? mapTotalMaquinasPorRangoUuid[String(item.rango_uuid)] : 0;
+        const countByNom = item.rango_nombre ? mapTotalMaquinasPorRangoNombre[item.rango_nombre.trim().toLowerCase()] : 0;
+        item.maquinasCount = countByUuid || countByNom || (item.maquinasSet ? item.maquinasSet.size : 0) || 0;
+      }
+
+      // E) Calcular producción neta y ordenar alfabéticamente
+      produccionPorRango = Object.values(mapProduccionRango)
+        .filter(item => item.maquinasCount > 0 || item.billetero !== 0 || item.aportesNeto !== 0)
+        .map(item => ({
+          ...item,
+          produccion: item.billetero - item.aportesNeto
+        })).sort((a, b) => 
+          (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
+        );
     }
-
-    // A) Inicializar con todos los rangos que tienen máquinas registradas en la sala
-    for (const m of allMaquinasSala) {
-      const rKey = m.rango_uuid || (m.rango_nombre ? m.rango_nombre.trim() : 'sin_rango');
-      const rNom = m.rango_nombre || (m.rango_uuid ? `Rango #${m.rango_uuid.slice(0, 8)}` : 'Sin Rango');
-      if (!mapProduccionRango[rKey]) {
-        mapProduccionRango[rKey] = {
-          rango_uuid: m.rango_uuid || rKey,
-          rango_id: rKey,
-          rango_nombre: rNom,
-          maquinasCount: 0,
-          maquinasSet: new Set(),
-          billetero: 0,
-          montoAportes: 0,
-          montoDevoluciones: 0,
-          aportesNeto: 0,
-          produccion: 0
-        };
-      }
-    }
-
-    // B) Mapear desde conteo de máquinas
-    for (const c of sortedConteoList) {
-      const rKey = c.rango_uuid || c.rango_id || (c.rango_nombre ? c.rango_nombre.trim() : 0);
-      const rNom = c.rango_nombre || (c.rango_uuid ? `Rango #${c.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
-      if (!mapProduccionRango[rKey]) {
-        mapProduccionRango[rKey] = {
-          rango_uuid: c.rango_uuid || rKey,
-          rango_id: rKey,
-          rango_nombre: rNom,
-          maquinasCount: 0,
-          maquinasSet: new Set(),
-          billetero: 0,
-          montoAportes: 0,
-          montoDevoluciones: 0,
-          aportesNeto: 0,
-          produccion: 0
-        };
-      }
-      const maqKey = c.maquina_uuid || c.maquina_id || c.id || `${rKey}_${mapProduccionRango[rKey].maquinasSet.size + 1}`;
-      mapProduccionRango[rKey].maquinasSet.add(maqKey);
-      mapProduccionRango[rKey].billetero += Number(c.total) || 0;
-    }
-
-    // C) Cruzar con los datos de aportes y devoluciones
-    for (const a of sortedAportesList) {
-      const rKey = a.rango_uuid || a.rango_id || (a.rango_nombre ? a.rango_nombre.trim() : 0);
-      const rNom = a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
-      if (!mapProduccionRango[rKey]) {
-        mapProduccionRango[rKey] = {
-          rango_uuid: a.rango_uuid || rKey,
-          rango_id: rKey,
-          rango_nombre: rNom,
-          maquinasCount: 0,
-          maquinasSet: new Set(),
-          billetero: 0,
-          montoAportes: 0,
-          montoDevoluciones: 0,
-          aportesNeto: 0,
-          produccion: 0
-        };
-      }
-      const val = parseFloat(a.monto) || 0;
-      if ((a.tipo || 'Aporte') === 'Devolución') {
-        mapProduccionRango[rKey].montoDevoluciones += val;
-        mapProduccionRango[rKey].aportesNeto -= val;
-      } else {
-        mapProduccionRango[rKey].montoAportes += val;
-        mapProduccionRango[rKey].aportesNeto += val;
-      }
-    }
-
-    // D) Asignar conteo real de máquinas por rango
-    for (const item of Object.values(mapProduccionRango)) {
-      const countByUuid = item.rango_uuid ? mapTotalMaquinasPorRangoUuid[String(item.rango_uuid)] : 0;
-      const countByNom = item.rango_nombre ? mapTotalMaquinasPorRangoNombre[item.rango_nombre.trim().toLowerCase()] : 0;
-      item.maquinasCount = countByUuid || countByNom || (item.maquinasSet ? item.maquinasSet.size : 0) || 0;
-    }
-
-    // E) Calcular producción neta y ordenar alfabéticamente
-    const produccionPorRango = Object.values(mapProduccionRango)
-      .filter(item => item.maquinasCount > 0 || item.billetero !== 0 || item.aportesNeto !== 0)
-      .map(item => ({
-        ...item,
-        produccion: item.billetero - item.aportesNeto
-      })).sort((a, b) => 
-        (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
-      );
 
     const produccionTotales = {
       totalMaquinas: produccionPorRango.reduce((acc, r) => acc + (r.maquinasCount || 0), 0),
