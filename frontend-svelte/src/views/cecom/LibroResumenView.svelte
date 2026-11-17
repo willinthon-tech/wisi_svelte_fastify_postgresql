@@ -2884,7 +2884,7 @@
             {#if section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0}
               <div class="summary-subtable-box" style="margin-top: 18px;">
                 <div class="subtable-header">
-                  <h4 class="subtable-title">Resumen de Producción por Rango</h4>
+                  <h4 class="subtable-title">Resumen de Producción por Rango ( BILLETERO / APORTES Y DEVOLUCIONES )</h4>
                   <span class="incidencia-badge"
                     >{section.subData.produccionPorRango.length} {section.subData.produccionPorRango.length === 1 ? 'rango' : 'rangos'}</span
                   >
@@ -2897,7 +2897,7 @@
                         <th>MÁQUINAS</th>
                         <th>BILLETERO</th>
                         <th>APORTES Y DEVOLUCIONES</th>
-                        <th>TOTAL PRODUCCIÓN</th>
+                        <th>TOTAL</th>
                       </tr>
                     </thead>
                     <tbody>
