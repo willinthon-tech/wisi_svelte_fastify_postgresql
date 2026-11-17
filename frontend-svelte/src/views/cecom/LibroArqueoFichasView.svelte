@@ -562,7 +562,7 @@
           <tr>
             <th class="th-center th-num">N°</th>
             <th class="th-mesa">Mesa</th>
-            <th class="th-center th-movimiento">Movimiento</th>
+            <th class="th-center th-movimiento"></th>
             {#each salaFichas as valor}
               <th class="th-center">$ {valor}</th>
             {/each}
@@ -611,7 +611,7 @@
                   </div>
                 </td>
                 <td class="td-center td-movimiento">
-                  <span class="mov-badge mov-apertura">Apertura</span>
+                  <span class="mov-badge mov-apertura" title="Apertura">A</span>
                 </td>
                 {#each salaFichas as valor}
                   {@const apCount = getChipCount(group.apertura, valor)}
@@ -650,9 +650,9 @@
               <tr class="drop-row row-cierre">
                 <td class="td-center td-movimiento">
                   {#if hasCierre}
-                    <span class="mov-badge mov-cierre">Cierre</span>
+                    <span class="mov-badge mov-cierre" title="Cierre">C</span>
                   {:else}
-                    <span class="mov-badge mov-pendiente">Pendiente</span>
+                    <span class="mov-badge mov-pendiente" title="Pendiente de Cierre">P</span>
                   {/if}
                 </td>
                 {#each salaFichas as valor}
@@ -669,7 +669,7 @@
               <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
               <tr class="drop-row row-diferencia mesa-last-row">
                 <td class="td-center td-movimiento">
-                  <span class="mov-badge mov-diferencia">Total</span>
+                  <span class="mov-badge mov-diferencia" title="Total">T</span>
                 </td>
                 {#each salaFichas as valor}
                   {@const apC = getChipCount(group.apertura, valor)}
@@ -713,7 +713,7 @@
           <tfoot>
             <tr class="total-row footer-apertura">
               <td colspan="2" class="total-label-cell">TOTAL APERTURA</td>
-              <td class="td-center"><span class="mov-badge mov-apertura">Apertura</span></td>
+              <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">A</span></td>
               {#each salaFichas as valor}
                 {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                 <td class="td-center total-val-cell">{sumAp}</td>
@@ -726,7 +726,7 @@
 
             <tr class="total-row footer-cierre">
               <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
-              <td class="td-center"><span class="mov-badge mov-cierre">Cierre</span></td>
+              <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">C</span></td>
               {#each salaFichas as valor}
                 {@const sumCi = mesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
                 <td class="td-center total-val-cell">{sumCi}</td>
@@ -739,7 +739,7 @@
 
             <tr class="total-row footer-diferencia">
               <td colspan="2" class="total-label-cell">DIFERENCIA NETA</td>
-              <td class="td-center"><span class="mov-badge mov-diferencia">Total</span></td>
+              <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
               {#each salaFichas as valor}
                 {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                 {@const sumCi = mesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
@@ -1014,7 +1014,7 @@
   }
 
   .th-movimiento {
-    width: 90px;
+    width: 36px;
   }
 
   .th-total {
@@ -1093,13 +1093,14 @@
 
   /* Badges de Movimiento */
   .mov-badge {
-    display: inline-block;
-    padding: 2px 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
     border-radius: 4px;
-    font-size: 10.5px;
+    font-size: 11.5px;
     font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
   }
 
   .mov-apertura {
