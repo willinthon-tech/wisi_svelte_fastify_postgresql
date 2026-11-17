@@ -42,6 +42,7 @@
 
   // Estado del formulario
   let cliente = '';
+  let caja = 'Mesas'; // 'Mesas' o 'Máquinas'
   let tipo = 'Compra'; // 'Compra' o 'Pago'
   let selectedMetodoPagoUuid = null;
   let monto = '';
@@ -148,6 +149,7 @@
   let editingRecord = null;
   let modalCliente = '';
   let modalClienteUuid = null;
+  let modalCaja = 'Mesas';
   let modalTipo = 'Compra';
   let modalMonto = '';
   let modalMetodoPagoUuid = null;
@@ -602,6 +604,7 @@
       cliente: cleanCliente,
       cliente_uuid: selectedClienteUuid || null,
       tipo_cliente_uuid: targetTipoClienteUuid,
+      caja: caja || 'Mesas',
       tipo: tipo || 'Compra',
       monto: cleanMonto,
       metodo_pago_uuid: matchedMetodo.uuid || null,
@@ -631,6 +634,7 @@
     cliente = '';
     selectedClienteUuid = null;
     selectedTipoClienteNombre = '';
+    caja = 'Mesas';
     monto = '';
     nota = '';
     tipo = 'Compra';
@@ -759,6 +763,7 @@
     editingRecord = record;
     modalCliente = record.cliente || '';
     modalClienteUuid = record.cliente_uuid || null;
+    modalCaja = record.caja || 'Mesas';
     modalTipo = record.tipo || 'Compra';
     modalMonto = record.monto != null ? String(record.monto) : '';
     modalMetodoPagoUuid = record.metodo_pago_uuid || record.metodo_pago_id 
@@ -776,6 +781,7 @@
     editingRecord = null;
     modalCliente = '';
     modalClienteUuid = null;
+    modalCaja = 'Mesas';
     modalTipo = 'Compra';
     modalMonto = '';
     modalNota = '';
@@ -818,6 +824,7 @@
       cliente_uuid: modalClienteUuid || null,
       tipo_cliente_uuid: targetTipoClienteUuid,
       cliente: modalCliente.trim(),
+      caja: modalCaja || 'Mesas',
       tipo: modalTipo,
       monto: Number(modalMonto),
       metodo_pago_uuid: matchedMetodo?.uuid || null,
@@ -945,6 +952,34 @@
           {/if}
         </div>
         <span class="field-hint">Escriba nombre o tipo de cliente. Pulsa <b>Tab ⇥</b> para autocompletar. Si no existe, se creará automáticamente como General.</span>
+      </div>
+
+      <!-- Sección Caja: Mesas o Máquinas -->
+      <div class="form-group">
+        <label class="form-label">CAJA: *</label>
+        <div class="radio-toggle-group">
+          <label class="radio-option {caja === 'Mesas' ? 'selected-caja-mesas' : ''}">
+            <input 
+              type="radio" 
+              name="caja-operacion" 
+              value="Mesas" 
+              bind:group={caja}
+            />
+            <span class="radio-custom"></span>
+            <span class="radio-text">Mesas</span>
+          </label>
+
+          <label class="radio-option {caja === 'Máquinas' ? 'selected-caja-maquinas' : ''}">
+            <input 
+              type="radio" 
+              name="caja-operacion" 
+              value="Máquinas" 
+              bind:group={caja}
+            />
+            <span class="radio-custom"></span>
+            <span class="radio-text">Máquinas</span>
+          </label>
+        </div>
       </div>
 
       <!-- Sección Tipo: Compra o Pago (2 Radios) -->
@@ -1109,21 +1144,6 @@
             {/if}
           </div>
         </div>
-
-        <!-- KPI 4: Drop Mesas & Total Combinado -->
-        <div class="kpi-card kpi-drop">
-          <div class="kpi-header">
-            <span class="kpi-label">PRODUCCIÓN DÍA</span>
-          </div>
-          <div class="kpi-value-row">
-            <span class="kpi-value text-slate">${formatMonto(resultadoConDrop)}</span>
-          </div>
-          <div class="kpi-subtext kpi-drop-breakdown">
-            <span>Drop Mesas: <b>${formatMonto(totalDrop)}</b></span>
-            <span class="dot-sep">•</span>
-            <span>Neto: <b>{balanceNeto >= 0 ? '+' : '-'}${formatMonto(Math.abs(balanceNeto))}</b></span>
-          </div>
-        </div>
       </div>
 
       <!-- Selector de Pestañas: 1. Detallado, 2. Métodos, 3. Clientes -->
@@ -1172,6 +1192,7 @@
               <tr>
                 <th class="th-center th-num">N°</th>
                 <th class="th-cliente">Cliente</th>
+                <th class="th-center th-caja">Caja</th>
                 <th class="th-center th-tipo">Tipo</th>
                 <th class="th-right th-monto">Monto</th>
                 <th class="th-center th-metodo">Método</th>
@@ -1184,7 +1205,7 @@
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="{canEdit || canDelete ? 7 : 6}" class="empty-state-cell">
+                  <td colspan="{canEdit || canDelete ? 8 : 7}" class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
                       <span>Cargando registros de clientes...</span>
@@ -1193,7 +1214,7 @@
                 </tr>
               {:else if records.length === 0}
                 <tr>
-                  <td colspan="{canEdit || canDelete ? 7 : 6}" class="empty-state-cell">
+                  <td colspan="{canEdit || canDelete ? 8 : 7}" class="empty-state-cell">
                     <div class="empty-msg-box">
                       <p class="empty-text">
                         No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
@@ -1212,6 +1233,13 @@
                           <span class="cliente-tipo-pill">{record.tipo_cliente_nombre}</span>
                         {/if}
                       </div>
+                    </td>
+                    <td class="td-center td-caja">
+                      {#if (record.caja || 'Mesas').toLowerCase() === 'máquinas' || (record.caja || 'Mesas').toLowerCase() === 'maquinas'}
+                        <span class="badge-caja badge-caja-maquinas">Máquinas</span>
+                      {:else}
+                        <span class="badge-caja badge-caja-mesas">Mesas</span>
+                      {/if}
                     </td>
                     <td class="td-center td-tipo">
                       {#if record.tipo === 'Compra'}
@@ -1451,6 +1479,27 @@
               bind:value={modalCliente} 
               required
             />
+          </div>
+
+          <!-- Caja: Mesas / Máquinas -->
+          <div class="modal-field-group">
+            <label class="modal-field-label">Caja: *</label>
+            <div class="modal-tipo-buttons">
+              <button 
+                type="button" 
+                class="modal-btn-tipo btn-caja-mesas {modalCaja === 'Mesas' ? 'active' : ''}" 
+                on:click={() => modalCaja = 'Mesas'}
+              >
+                MESAS
+              </button>
+              <button 
+                type="button" 
+                class="modal-btn-tipo btn-caja-maquinas {modalCaja === 'Máquinas' ? 'active' : ''}" 
+                on:click={() => modalCaja = 'Máquinas'}
+              >
+                MÁQUINAS
+              </button>
+            </div>
           </div>
 
           <!-- Tipo de Transacción: Compra / Pago -->
@@ -1823,6 +1872,20 @@
     font-weight: 700;
   }
 
+  .radio-option.selected-caja-mesas {
+    border-color: #0284c7;
+    background: #f0f9ff;
+    color: #0369a1;
+    font-weight: 700;
+  }
+
+  .radio-option.selected-caja-maquinas {
+    border-color: #d97706;
+    background: #fffbeb;
+    color: #b45309;
+    font-weight: 700;
+  }
+
   /* Métodos de Pago Grid y Seleccionados */
   .metodos-grid {
     display: grid;
@@ -2047,6 +2110,27 @@
     border: 1px solid #ddd6fe;
   }
 
+  /* Badges de Caja */
+  .badge-caja {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+
+  .badge-caja-mesas {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+  }
+
+  .badge-caja-maquinas {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
   .monto-value {
     font-weight: 700;
     color: #0f172a;
@@ -2187,7 +2271,7 @@
   /* Grid de Métricas (KPIs) */
   .kpi-metrics-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
     padding: 16px;
     background: #f8fafc;
@@ -2196,7 +2280,13 @@
 
   @media (max-width: 900px) {
     .kpi-metrics-grid {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  @media (max-width: 680px) {
+    .kpi-metrics-grid {
+      grid-template-columns: 1fr;
     }
   }
 
@@ -2655,6 +2745,20 @@
     color: #ffffff;
     border-color: #7c3aed;
     box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);
+  }
+
+  .modal-btn-tipo.btn-caja-mesas.active {
+    background: #0284c7;
+    color: #ffffff;
+    border-color: #0369a1;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+  }
+
+  .modal-btn-tipo.btn-caja-maquinas.active {
+    background: #d97706;
+    color: #ffffff;
+    border-color: #b45309;
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
   }
 
   .modal-field-group {

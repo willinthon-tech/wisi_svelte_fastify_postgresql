@@ -10759,6 +10759,7 @@ export async function getLibroControlClientesModel(libroId, multisalaUuid = null
       lcc.cliente_uuid,
       lcc.cliente_uuid AS cliente_id,
       COALESCE(c.nombre, '') AS cliente, 
+      COALESCE(lcc.caja, 'Mesas') AS caja,
       lcc.tipo, 
       lcc.monto, 
       lcc.metodo_pago_uuid,
@@ -11014,6 +11015,9 @@ export async function createLibroControlClienteModel(data) {
   const rawMultisala = data.multisala_uuid || data.multisala_id;
   const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
 
+  const rawCaja = (data.caja || '').trim();
+  const caja = (rawCaja.toLowerCase() === 'maquinas' || rawCaja.toLowerCase() === 'máquinas') ? 'Máquinas' : 'Mesas';
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
     const newRecord = {
@@ -11026,6 +11030,7 @@ export async function createLibroControlClienteModel(data) {
       cliente_id: clienteUuid,
       cliente_uuid: clienteUuid,
       cliente: clienteNombre,
+      caja,
       tipo,
       monto,
       metodo_pago_id: metodoPagoUuid,
@@ -11046,6 +11051,7 @@ export async function createLibroControlClienteModel(data) {
       libro_uuid,
       multisala_uuid,
       cliente_uuid,
+      caja,
       tipo,
       monto,
       metodo_pago_uuid,
@@ -11057,6 +11063,7 @@ export async function createLibroControlClienteModel(data) {
       ${libroUuid}::uuid,
       ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
       ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
+      ${caja},
       ${tipo},
       ${monto},
       ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
@@ -11068,6 +11075,7 @@ export async function createLibroControlClienteModel(data) {
       libro_uuid, libro_uuid AS libro_id, 
       multisala_uuid, multisala_uuid AS multisala_id,
       cliente_uuid, cliente_uuid AS cliente_id, 
+      caja,
       tipo, monto, 
       metodo_pago_uuid, metodo_pago_uuid AS metodo_pago_id, 
       hora, nota, created_at, updated_at
@@ -11244,6 +11252,8 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
   const nota = data.nota !== undefined ? String(data.nota).trim() : undefined;
   const tipo = data.tipo !== undefined ? (String(data.tipo).trim() || 'Compra') : undefined;
   const monto = data.monto !== undefined && data.monto !== '' ? Number(data.monto) : undefined;
+  const rawCaja = data.caja !== undefined ? String(data.caja).trim() : undefined;
+  const caja = rawCaja !== undefined ? ((rawCaja.toLowerCase() === 'maquinas' || rawCaja.toLowerCase() === 'máquinas') ? 'Máquinas' : 'Mesas') : undefined;
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_control_clientes = inMemoryData.libro_control_clientes || [];
@@ -11252,6 +11262,7 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     );
     if (idx !== -1) {
       inMemoryData.libro_control_clientes[idx].hora = hora;
+      if (caja !== undefined) inMemoryData.libro_control_clientes[idx].caja = caja;
       if (metodoPagoUuid !== undefined) {
         inMemoryData.libro_control_clientes[idx].metodo_pago_uuid = metodoPagoUuid;
         inMemoryData.libro_control_clientes[idx].metodo_pago_id = metodoPagoUuid;
@@ -11275,6 +11286,7 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     UPDATE libro_control_clientes
     SET 
       hora = ${hora},
+      caja = ${caja !== undefined ? caja : sql`caja`},
       metodo_pago_uuid = ${metodoPagoUuid !== undefined ? (metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`) : sql`metodo_pago_uuid`},
       cliente_uuid = ${clienteUuid !== undefined ? (clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`) : sql`cliente_uuid`},
       tipo = ${tipo !== undefined ? tipo : sql`tipo`},
@@ -11287,6 +11299,7 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       uuid, uuid AS id, 
       libro_uuid, libro_uuid AS libro_id, 
       cliente_uuid, cliente_uuid AS cliente_id, 
+      caja,
       tipo, monto, 
       metodo_pago_uuid, metodo_pago_uuid AS metodo_pago_id, 
       hora, nota, created_at, updated_at

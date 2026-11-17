@@ -2112,6 +2112,7 @@
                       <th class="th-num">N°</th>
                       <th class="th-hora">HORA</th>
                       <th class="th-cliente">CLIENTE / JUGADOR</th>
+                      <th class="th-caja">CAJA</th>
                       <th class="th-tipo">TIPO</th>
                       <th class="th-metodo">MÉTODO</th>
                       <th class="th-nota">NOTA</th>
@@ -2121,10 +2122,18 @@
                   <tbody>
                     {#each section.subData.control_clientes as c, idx}
                       {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
+                      {@const isMaquinas = (c.caja || "Mesas").toLowerCase() === "máquinas" || (c.caja || "Mesas").toLowerCase() === "maquinas"}
                       <tr>
                         <td class="cell-center">{idx + 1}</td>
                         <td class="cell-center">{c.hora || "—"}</td>
                         <td class="cell-client-name">{c.cliente || "—"}</td>
+                        <td class="cell-center">
+                          <span
+                            class="tag-caja {isMaquinas ? 'tag-caja-maquinas' : 'tag-caja-mesas'}"
+                          >
+                            {c.caja || "Mesas"}
+                          </span>
+                        </td>
                         <td class="cell-center">
                           <span
                             class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
@@ -2151,7 +2160,7 @@
                   </tbody>
                   <tfoot>
                     <tr class="tfoot-totals">
-                      <td colspan="6">BALANCE NETO (COMPRAS - PAGOS)</td>
+                      <td colspan="7">BALANCE NETO (COMPRAS - PAGOS)</td>
                       <td class="cell-grand-total {section.subData.clientesTotales.balanceNeto > 0 ? 'text-emerald' : (section.subData.clientesTotales.balanceNeto < 0 ? 'text-rose' : '')}">
                         {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
                       </td>
@@ -4003,6 +4012,24 @@
   .cell-client-name {
     font-weight: 700;
     color: #111827;
+  }
+
+  .tag-caja {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  .tag-caja-mesas {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+  }
+  .tag-caja-maquinas {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
   }
 
   .tag-tipo {
