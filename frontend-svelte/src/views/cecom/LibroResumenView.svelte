@@ -1104,14 +1104,14 @@
       totalProduccion: produccionPorRango.reduce((acc, r) => acc + r.produccion, 0)
     };
 
-    const produccionMaquinas = conteoTotales.grandTotal - aportesTotales.totalAportes + aportesTotales.totalDevoluciones;
+    const produccionMaquinas = conteoTotales.grandTotal - aportesTotales.totalAportes + aportesTotales.totalDevoluciones + (dataClientesMaquinas.totales.totalCompras - dataClientesMaquinas.totales.totalPagos);
     const produccionFinal = produccionMesas + produccionMaquinas;
-    const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + clientesTotales.totalCompras;
+    const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + dataClientesMesas.totales.totalCompras + dataClientesMaquinas.totales.totalCompras;
 
     // Numeración dinámica de submódulos (se ajusta según los módulos que realmente tienen datos)
     // 1. Resumen de Producción
-    const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (clientesTotales && clientesTotales.totalOps > 0));
-    const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0));
+    const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (dataClientesMesas && dataClientesMesas.totales.totalOps > 0));
+    const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0) || (dataClientesMaquinas && dataClientesMaquinas.totales.totalOps > 0));
     let idxProd = 0;
     const numResumenMesas = hasResumenMesas ? ++idxProd : 0;
     const numResumenMaquinas = hasResumenMaquinas ? ++idxProd : 0;
@@ -1119,13 +1119,13 @@
 
     // 2. Detallado Mesas
     const hasDropMesas = Boolean(drop_mesas && drop_mesas.length > 0);
-    const hasArqueoFichas = Boolean(arqueoMesaGroups && arqueoMesaGroups.length > 0);
     const hasClientesMesas = Boolean(dataClientesMesas && dataClientesMesas.records.length > 0);
+    const hasArqueoFichas = Boolean(arqueoMesaGroups && arqueoMesaGroups.length > 0);
     const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
     let idxMesas = 0;
     const numDropMesas = hasDropMesas ? ++idxMesas : 0;
-    const numArqueoFichas = hasArqueoFichas ? ++idxMesas : 0;
     const numClientesMesas = hasClientesMesas ? ++idxMesas : 0;
+    const numArqueoFichas = hasArqueoFichas ? ++idxMesas : 0;
     const numNovedadesMesas = hasNovedadesMesas ? ++idxMesas : 0;
 
     // 3. Detallado Máquinas
@@ -1663,7 +1663,7 @@
             </div>
 
             <!-- 1. Resumen Mesas -->
-            {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.clientesTotales && section.subData.clientesTotales.totalOps > 0)}
+            {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.clientesMesas && section.subData.clientesMesas.totales.totalOps > 0)}
               <div class="sheet-section sub-module-section">
                 <div class="sub-header-row">
                   <div class="sub-title-group">
@@ -1688,24 +1688,24 @@
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">TOTAL COMPRA DE CLIENTES</span>
-                    <span class="kpi-value {section.subData.clientesTotales.totalCompras > 0 ? 'text-emerald' : ''}"
-                      >{formatMoney(section.subData.clientesTotales.totalCompras)}</span
+                    <span class="kpi-value {section.subData.clientesMesas.totales.totalCompras > 0 ? 'text-emerald' : ''}"
+                      >{formatMoney(section.subData.clientesMesas.totales.totalCompras)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">TOTAL PAGOS A CLIENTES</span>
-                    <span class="kpi-value {section.subData.clientesTotales.totalPagos > 0 ? 'text-rose' : ''}"
-                      >{formatMoney(section.subData.clientesTotales.totalPagos)}</span
+                    <span class="kpi-value {section.subData.clientesMesas.totales.totalPagos > 0 ? 'text-rose' : ''}"
+                      >{formatMoney(section.subData.clientesMesas.totales.totalPagos)}</span
                     >
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">BALANCE (COMPRA - PAGOS)</span>
                     <span
-                      class="kpi-value {section.subData.clientesTotales.balanceNeto > 0
+                      class="kpi-value {section.subData.clientesMesas.totales.balanceNeto > 0
                         ? 'text-emerald'
-                        : (section.subData.clientesTotales.balanceNeto < 0 ? 'text-rose' : '')}"
+                        : (section.subData.clientesMesas.totales.balanceNeto < 0 ? 'text-rose' : '')}"
                     >
-                      {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
+                      {formatMoney(Math.abs(section.subData.clientesMesas.totales.balanceNeto))}
                     </span>
                   </div>
                   <div class="kpi-card {section.subData.produccionMesas > 0 ? 'kpi-card-positive' : (section.subData.produccionMesas < 0 ? 'kpi-card-negative' : '')}">
@@ -1723,7 +1723,7 @@
             {/if}
 
             <!-- 2. Resumen Máquinas -->
-            {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
+            {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.clientesMaquinas && section.subData.clientesMaquinas.totales.totalOps > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
               <div class="sheet-section sub-module-section">
                 <div class="sub-header-row">
                   <div class="sub-title-group">
@@ -1745,6 +1745,28 @@
                     <span class="kpi-value {section.subData.conteoTotales.grandTotal > 0 ? 'text-emerald' : ''}"
                       >{formatMoney(section.subData.conteoTotales.grandTotal)}</span
                     >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">TOTAL COMPRA DE CLIENTES</span>
+                    <span class="kpi-value {section.subData.clientesMaquinas.totales.totalCompras > 0 ? 'text-emerald' : ''}"
+                      >{formatMoney(section.subData.clientesMaquinas.totales.totalCompras)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">TOTAL PAGOS A CLIENTES</span>
+                    <span class="kpi-value {section.subData.clientesMaquinas.totales.totalPagos > 0 ? 'text-rose' : ''}"
+                      >{formatMoney(section.subData.clientesMaquinas.totales.totalPagos)}</span
+                    >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">BALANCE (COMPRA - PAGOS)</span>
+                    <span
+                      class="kpi-value {section.subData.clientesMaquinas.totales.balanceNeto > 0
+                        ? 'text-emerald'
+                        : (section.subData.clientesMaquinas.totales.balanceNeto < 0 ? 'text-rose' : '')}"
+                    >
+                      {formatMoney(Math.abs(section.subData.clientesMaquinas.totales.balanceNeto))}
+                    </span>
                   </div>
                   <div class="kpi-card">
                     <span class="kpi-label">TOTAL APORTES A MÁQUINAS</span>
@@ -1895,181 +1917,6 @@
                       <td class="cell-grand-total"
                         >{formatMoney(section.subData.dropTotales.grandTotal)}</td
                       >
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          {/if}
-
-          <!-- ============================================================
-               ARQUEO DE FICHAS
-               ============================================================ -->
-          {#if section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    {section.subData.numeracion.numArqueoFichas}. Arqueo Fichas
-                  </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
-                  >
-                </div>
-              </div>
-
-              <div class="table-responsive-wrapper">
-                <table class="drop-table arqueo-table">
-                  <thead>
-                    <tr>
-                      <th class="th-center th-num">N°</th>
-                      <th class="th-mesa">Mesa</th>
-                      <th class="th-center th-movimiento"></th>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        <th class="th-center">$ {valor}</th>
-                      {/each}
-                      <th class="th-center th-total">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.arqueoMesaGroups as group, idx (group.mesaId)}
-                      {@const apTotal = Number(group.apertura?.total) || 0}
-                      {@const hasCierre = Boolean(group.cierre)}
-                      {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
-                      {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
-
-                      <!-- Sub-fila 1: APERTURA -->
-                      <tr class="drop-row row-apertura" class:mesa-first-row={true}>
-                        <td class="td-center td-num" rowspan="3">
-                          <span class="index-num">{idx + 1}</span>
-                        </td>
-                        <td class="td-mesa" rowspan="3">
-                          <div class="mesa-title-cell">
-                            <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
-                            {#if group.juegoNombre}
-                              <span class="mesa-sub-juego">{group.juegoNombre}</span>
-                            {/if}
-                          </div>
-                        </td>
-                        <td class="td-center td-movimiento">
-                          <span class="mov-badge mov-apertura" title="Apertura">A</span>
-                        </td>
-                        {#each section.subData.arqueoSalaFichas as valor}
-                          {@const apCount = getChipCount(group.apertura, valor)}
-                          <td class="td-center count-val">
-                            {apCount !== null ? apCount : '—'}
-                          </td>
-                        {/each}
-                        <td class="td-center td-total-val ap-total-cell font-bold">
-                          $ {formatMoney(apTotal)}
-                        </td>
-                      </tr>
-
-                      <!-- Sub-fila 2: CIERRE -->
-                      <tr class="drop-row row-cierre">
-                        <td class="td-center td-movimiento">
-                          {#if hasCierre}
-                            <span class="mov-badge mov-cierre" title="Cierre">C</span>
-                          {:else}
-                            <span class="mov-badge mov-pendiente" title="Pendiente de Cierre">P</span>
-                          {/if}
-                        </td>
-                        {#each section.subData.arqueoSalaFichas as valor}
-                          {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
-                          <td class="td-center count-val" class:val-pending={!hasCierre}>
-                            {ciCount !== null ? ciCount : '—'}
-                          </td>
-                        {/each}
-                        <td class="td-center td-total-val ci-total-cell font-bold" class:val-pending={!hasCierre}>
-                          {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
-                        </td>
-                      </tr>
-
-                      <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
-                      <tr class="drop-row row-diferencia mesa-last-row">
-                        <td class="td-center td-movimiento">
-                          <span class="mov-badge mov-diferencia" title="Total">T</span>
-                        </td>
-                        {#each section.subData.arqueoSalaFichas as valor}
-                          {@const apC = getChipCount(group.apertura, valor)}
-                          {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
-                          {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - apC) : null}
-                          <td class="td-center count-val">
-                            {#if difChips !== null}
-                              <span 
-                                class="dif-chips-val"
-                                class:dif-pos={difChips > 0}
-                                class:dif-neg={difChips < 0}
-                              >
-                                {Math.abs(difChips)}
-                              </span>
-                            {:else}
-                              <span class="val-pending">—</span>
-                            {/if}
-                          </td>
-                        {/each}
-                        <td class="td-center td-total-val dif-total-cell font-bold">
-                          {#if difTotal !== null}
-                            <span 
-                              class="dif-monto-badge"
-                              class:dif-pos={difTotal > 0}
-                              class:dif-neg={difTotal < 0}
-                              class:dif-neu={difTotal === 0}
-                            >
-                              $ {formatMoney(Math.abs(difTotal))}
-                            </span>
-                          {:else}
-                            <span class="val-pending">—</span>
-                          {/if}
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
-
-                  <!-- Fila de Totales Generales -->
-                  <tfoot>
-                    <tr class="total-row footer-apertura">
-                      <td colspan="2" class="total-label-cell">TOTAL APERTURA</td>
-                      <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">A</span></td>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
-                        <td class="td-center total-val-cell">{sumAp}</td>
-                      {/each}
-                      <td class="td-center grand-total-cell ap-grand-total">
-                        $ {formatMoney(section.subData.totalArqueoApertura)}
-                      </td>
-                    </tr>
-
-                    <tr class="total-row footer-cierre">
-                      <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
-                      <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">C</span></td>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                        <td class="td-center total-val-cell">{sumCi}</td>
-                      {/each}
-                      <td class="td-center grand-total-cell ci-grand-total">
-                        $ {formatMoney(section.subData.totalArqueoCierre)}
-                      </td>
-                    </tr>
-
-                    <tr class="total-row footer-diferencia">
-                      <td colspan="2" class="total-label-cell">DIFERENCIA NETA</td>
-                      <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
-                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                        {@const dif = sumCi - sumAp}
-                        <td class="td-center total-val-cell">
-                          <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
-                            {Math.abs(dif)}
-                          </span>
-                        </td>
-                      {/each}
-                      <td class="td-center grand-total-cell dif-grand-total">
-                        <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
-                          $ {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
-                        </span>
-                      </td>
                     </tr>
                   </tfoot>
                 </table>
@@ -2275,6 +2122,181 @@
                     </div>
                   </div>
                 {/if}
+              </div>
+            </div>
+          {/if}
+
+          <!-- ============================================================
+               ARQUEO DE FICHAS
+               ============================================================ -->
+          {#if section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+            <div class="sheet-section sub-module-section">
+              <div class="sub-header-row">
+                <div class="sub-title-group">
+                  <h2 class="sub-section-title">
+                    {section.subData.numeracion.numArqueoFichas}. Arqueo Fichas
+                  </h2>
+                  <span class="sub-count-badge"
+                    >{section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
+                  >
+                </div>
+              </div>
+
+              <div class="table-responsive-wrapper">
+                <table class="drop-table arqueo-table">
+                  <thead>
+                    <tr>
+                      <th class="th-center th-num">N°</th>
+                      <th class="th-mesa">Mesa</th>
+                      <th class="th-center th-movimiento"></th>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        <th class="th-center">$ {valor}</th>
+                      {/each}
+                      <th class="th-center th-total">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.arqueoMesaGroups as group, idx (group.mesaId)}
+                      {@const apTotal = Number(group.apertura?.total) || 0}
+                      {@const hasCierre = Boolean(group.cierre)}
+                      {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
+                      {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
+
+                      <!-- Sub-fila 1: APERTURA -->
+                      <tr class="drop-row row-apertura" class:mesa-first-row={true}>
+                        <td class="td-center td-num" rowspan="3">
+                          <span class="index-num">{idx + 1}</span>
+                        </td>
+                        <td class="td-mesa" rowspan="3">
+                          <div class="mesa-title-cell">
+                            <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
+                            {#if group.juegoNombre}
+                              <span class="mesa-sub-juego">{group.juegoNombre}</span>
+                            {/if}
+                          </div>
+                        </td>
+                        <td class="td-center td-movimiento">
+                          <span class="mov-badge mov-apertura" title="Apertura">A</span>
+                        </td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const apCount = getChipCount(group.apertura, valor)}
+                          <td class="td-center count-val">
+                            {apCount !== null ? apCount : '—'}
+                          </td>
+                        {/each}
+                        <td class="td-center td-total-val ap-total-cell font-bold">
+                          $ {formatMoney(apTotal)}
+                        </td>
+                      </tr>
+
+                      <!-- Sub-fila 2: CIERRE -->
+                      <tr class="drop-row row-cierre">
+                        <td class="td-center td-movimiento">
+                          {#if hasCierre}
+                            <span class="mov-badge mov-cierre" title="Cierre">C</span>
+                          {:else}
+                            <span class="mov-badge mov-pendiente" title="Pendiente de Cierre">P</span>
+                          {/if}
+                        </td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
+                          <td class="td-center count-val" class:val-pending={!hasCierre}>
+                            {ciCount !== null ? ciCount : '—'}
+                          </td>
+                        {/each}
+                        <td class="td-center td-total-val ci-total-cell font-bold" class:val-pending={!hasCierre}>
+                          {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
+                        </td>
+                      </tr>
+
+                      <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
+                      <tr class="drop-row row-diferencia mesa-last-row">
+                        <td class="td-center td-movimiento">
+                          <span class="mov-badge mov-diferencia" title="Total">T</span>
+                        </td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const apC = getChipCount(group.apertura, valor)}
+                          {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
+                          {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - apC) : null}
+                          <td class="td-center count-val">
+                            {#if difChips !== null}
+                              <span 
+                                class="dif-chips-val"
+                                class:dif-pos={difChips > 0}
+                                class:dif-neg={difChips < 0}
+                              >
+                                {Math.abs(difChips)}
+                              </span>
+                            {:else}
+                              <span class="val-pending">—</span>
+                            {/if}
+                          </td>
+                        {/each}
+                        <td class="td-center td-total-val dif-total-cell font-bold">
+                          {#if difTotal !== null}
+                            <span 
+                              class="dif-monto-badge"
+                              class:dif-pos={difTotal > 0}
+                              class:dif-neg={difTotal < 0}
+                              class:dif-neu={difTotal === 0}
+                            >
+                              $ {formatMoney(Math.abs(difTotal))}
+                            </span>
+                          {:else}
+                            <span class="val-pending">—</span>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+
+                  <!-- Fila de Totales Generales -->
+                  <tfoot>
+                    <tr class="total-row footer-apertura">
+                      <td colspan="2" class="total-label-cell">TOTAL APERTURA</td>
+                      <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">A</span></td>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                        <td class="td-center total-val-cell">{sumAp}</td>
+                      {/each}
+                      <td class="td-center grand-total-cell ap-grand-total">
+                        $ {formatMoney(section.subData.totalArqueoApertura)}
+                      </td>
+                    </tr>
+
+                    <tr class="total-row footer-cierre">
+                      <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
+                      <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">C</span></td>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                        <td class="td-center total-val-cell">{sumCi}</td>
+                      {/each}
+                      <td class="td-center grand-total-cell ci-grand-total">
+                        $ {formatMoney(section.subData.totalArqueoCierre)}
+                      </td>
+                    </tr>
+
+                    <tr class="total-row footer-diferencia">
+                      <td colspan="2" class="total-label-cell">DIFERENCIA NETA</td>
+                      <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                        {@const dif = sumCi - sumAp}
+                        <td class="td-center total-val-cell">
+                          <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
+                            {Math.abs(dif)}
+                          </span>
+                        </td>
+                      {/each}
+                      <td class="td-center grand-total-cell dif-grand-total">
+                        <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
+                          $ {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
           {/if}
