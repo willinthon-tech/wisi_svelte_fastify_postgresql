@@ -2901,6 +2901,217 @@
           {/if}
 
           <!-- ============================================================
+               CONTROL DE CLIENTES (Encabezado Principal - Detallado Completo)
+               ============================================================ -->
+          {#if section.subData.control_clientes && section.subData.control_clientes.length > 0}
+            <div class="sheet-main-title-box">
+              <h1 class="sheet-title-text">Control de Clientes</h1>
+            </div>
+
+            <div class="sheet-section sub-module-section">
+              <div class="sub-header-row">
+                <div class="sub-title-group">
+                  <h2 class="sub-section-title">
+                    Detallado de Operaciones
+                  </h2>
+                  <span class="sub-count-badge"
+                    >{section.subData.clientesTotales.totalOps} transacciones</span
+                  >
+                </div>
+              </div>
+
+              <!-- Detallado de Operación -->
+              <div class="table-responsive-wrapper">
+                <table class="sheet-detail-table">
+                  <thead>
+                    <tr>
+                      <th class="th-num">N°</th>
+                      <th class="th-hora">HORA</th>
+                      <th class="th-cliente">CLIENTE / JUGADOR</th>
+                      <th class="th-caja">CAJA</th>
+                      <th class="th-tipo">TIPO</th>
+                      <th class="th-metodo">MÉTODO</th>
+                      <th class="th-nota">NOTA</th>
+                      <th class="th-total">MONTO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.control_clientes as c, idx}
+                      {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
+                      {@const isMaquinas = (c.caja || "Mesas").toLowerCase() === "máquinas" || (c.caja || "Mesas").toLowerCase() === "maquinas"}
+                      <tr>
+                        <td class="cell-center">{idx + 1}</td>
+                        <td class="cell-center">{c.hora || "—"}</td>
+                        <td class="cell-client-name">{c.cliente || "—"}</td>
+                        <td class="cell-center">
+                          <span
+                            class="tag-caja {isMaquinas ? 'tag-caja-maquinas' : 'tag-caja-mesas'}"
+                          >
+                            {c.caja || "Mesas"}
+                          </span>
+                        </td>
+                        <td class="cell-center">
+                          <span
+                            class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
+                          >
+                            {c.tipo || "Compra"}
+                          </span>
+                        </td>
+                        <td class="cell-center">
+                          <span
+                            class="tag-metodo-badge"
+                            style="{getMetodoBadgeStyle(c.metodo, c.metodo_color)}"
+                          >
+                            {c.metodo || "General"}
+                          </span>
+                        </td>
+                        <td class="cell-nota tag-nota-text" title={c.nota || ""}>
+                          {c.nota ? c.nota : "—"}
+                        </td>
+                        <td class="cell-total-money font-bold {c.monto > 0 ? (isCompra ? 'text-emerald' : 'text-rose') : ''}">
+                          {formatMoney(Math.abs(c.monto))}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td colspan="7">BALANCE NETO (COMPRAS - PAGOS)</td>
+                      <td class="cell-grand-total {section.subData.clientesTotales.balanceNeto > 0 ? 'text-emerald' : (section.subData.clientesTotales.balanceNeto < 0 ? 'text-rose' : '')}">
+                        {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <!-- Las 2 Tablitas Agrupadas (Por Método de Pago y Por Cliente) -->
+              <div class="client-summaries-grid">
+                <!-- Tablita A: Agrupado por Método de Pago -->
+                {#if section.subData.clientesPorMetodo && section.subData.clientesPorMetodo.length > 0}
+                  <div class="summary-subtable-box">
+                    <div class="subtable-header">
+                      <h4 class="subtable-title">Resumen por Método de Pago</h4>
+                      <span class="incidencia-badge"
+                        >{section.subData.clientesPorMetodo.length} métodos</span
+                      >
+                    </div>
+                    <div class="table-responsive-wrapper">
+                      <table class="compact-table">
+                        <thead>
+                          <tr>
+                            <th>MÉTODO</th>
+                            <th>OPS</th>
+                            <th>COMPRAS</th>
+                            <th>PAGOS</th>
+                            <th>BALANCE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each section.subData.clientesPorMetodo as m}
+                            <tr>
+                              <td class="cell-left font-bold">
+                                <span
+                                  class="tag-metodo-badge"
+                                  style="{getMetodoBadgeStyle(m.metodo, m.color)}"
+                                >
+                                  {m.metodo}
+                                </span>
+                              </td>
+                              <td class="cell-center">{m.ops}</td>
+                              <td class="cell-total-money font-bold {m.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(m.compras))}</td>
+                              <td class="cell-total-money font-bold {m.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(m.pagos))}</td>
+                              <td
+                                class="cell-total-money font-bold {m.balance > 0
+                                  ? 'text-emerald'
+                                  : (m.balance < 0 ? 'text-rose' : '')}"
+                              >
+                                {formatMoney(Math.abs(m.balance))}
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                        <tfoot>
+                          <tr class="tfoot-totals">
+                            <td>TOTAL</td>
+                            <td class="cell-center">{section.subData.totalesPorMetodo.ops}</td>
+                            <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.compras > 0 ? 'text-emerald' : ''}"
+                              >{formatMoney(Math.abs(section.subData.totalesPorMetodo.compras))}</td
+                            >
+                            <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.pagos > 0 ? 'text-rose' : ''}"
+                              >{formatMoney(Math.abs(section.subData.totalesPorMetodo.pagos))}</td
+                            >
+                            <td class="cell-grand-total {section.subData.totalesPorMetodo.balance > 0 ? 'text-emerald' : (section.subData.totalesPorMetodo.balance < 0 ? 'text-rose' : '')}"
+                              >{formatMoney(Math.abs(section.subData.totalesPorMetodo.balance))}</td
+                            >
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Tablita B: Agrupado por Cliente / Jugador -->
+                {#if section.subData.clientesPorJugador && section.subData.clientesPorJugador.length > 0}
+                  <div class="summary-subtable-box">
+                    <div class="subtable-header">
+                      <h4 class="subtable-title">Resumen por Cliente / Jugador</h4>
+                      <span class="incidencia-badge"
+                        >{section.subData.clientesPorJugador.length} clientes</span
+                      >
+                    </div>
+                    <div class="table-responsive-wrapper">
+                      <table class="compact-table">
+                        <thead>
+                          <tr>
+                            <th>CLIENTE</th>
+                            <th>OPS</th>
+                            <th>COMPRAS</th>
+                            <th>PAGOS</th>
+                            <th>BALANCE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each section.subData.clientesPorJugador as cl}
+                            <tr>
+                              <td class="cell-left font-bold">{cl.cliente}</td>
+                              <td class="cell-center">{cl.ops}</td>
+                              <td class="cell-total-money font-bold {cl.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(cl.compras))}</td>
+                              <td class="cell-total-money font-bold {cl.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(cl.pagos))}</td>
+                              <td
+                                class="cell-total-money font-bold {cl.balance > 0
+                                  ? 'text-emerald'
+                                  : (cl.balance < 0 ? 'text-rose' : '')}"
+                              >
+                                {formatMoney(Math.abs(cl.balance))}
+                              </td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                        <tfoot>
+                          <tr class="tfoot-totals">
+                            <td>TOTAL</td>
+                            <td class="cell-center">{section.subData.totalesPorJugador.ops}</td>
+                            <td class="cell-total-money font-bold {section.subData.totalesPorJugador.compras > 0 ? 'text-emerald' : ''}"
+                              >{formatMoney(Math.abs(section.subData.totalesPorJugador.compras))}</td
+                            >
+                            <td class="cell-total-money font-bold {section.subData.totalesPorJugador.pagos > 0 ? 'text-rose' : ''}"
+                              >{formatMoney(Math.abs(section.subData.totalesPorJugador.pagos))}</td
+                            >
+                            <td class="cell-grand-total {section.subData.totalesPorJugador.balance > 0 ? 'text-emerald' : (section.subData.totalesPorJugador.balance < 0 ? 'text-rose' : '')}"
+                              >{formatMoney(Math.abs(section.subData.totalesPorJugador.balance))}</td
+                            >
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
+          <!-- ============================================================
                RESUMEN DE INCIDENCIAS (Encabezado Principal)
                ============================================================ -->
           {#if (section.subData.incidencias_generales && section.subData.incidencias_generales.length > 0 && section.subData.incidenciasActivas && section.subData.incidenciasActivas.length > 0) || (section.subData.control_llaves && section.subData.control_llaves.length > 0)}
