@@ -205,7 +205,8 @@
     { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: true },
     { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false },
-    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'Juego Asignado', sortable: true, editable: false }
+    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'Juego Asignado', sortable: true, editable: false },
+    { key: 'banca', label: 'Fichas en Banca', type: 'fichas_banca', sortable: false, editable: false }
   ];
 
   $: createFields = [
@@ -318,6 +319,12 @@
     selectedMesaForBanca = mesa;
     isBancaModalOpen = true;
   }
+
+  function handleBancaSaved(event) {
+    const { uuid, banca } = event.detail;
+    items = items.map(x => (String(x.uuid || x.id) === String(uuid)) ? { ...x, banca } : x);
+    loadServerData().catch(() => {});
+  }
 </script>
 
 <PaginatedDataTable 
@@ -389,7 +396,7 @@
 <BancaMesaModal
   show={isBancaModalOpen}
   mesa={selectedMesaForBanca}
-  on:saved={() => loadServerData()}
+  on:saved={handleBancaSaved}
   on:close={() => {
     isBancaModalOpen = false;
     selectedMesaForBanca = null;

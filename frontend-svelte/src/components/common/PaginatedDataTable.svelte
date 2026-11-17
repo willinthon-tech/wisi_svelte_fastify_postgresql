@@ -1204,6 +1204,33 @@
     }
   }
 
+  function parseBancaData(raw) {
+    if (!raw) return { totalChips: 0, totalAmount: 0, tooltip: 'Sin fichas configuradas' };
+    let list = [];
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (typeof raw === 'string') {
+      try { list = JSON.parse(raw); } catch (e) { list = []; }
+    }
+    let totalChips = 0;
+    let totalAmount = 0;
+    let breakdown = [];
+    for (const b of (Array.isArray(list) ? list : [])) {
+      const qty = Number(b.cantidad ?? 0);
+      const val = Number(b.valor ?? b.denominacion ?? 0);
+      if (!isNaN(qty) && qty > 0 && !isNaN(val) && val > 0) {
+        totalChips += qty;
+        totalAmount += (qty * val);
+        breakdown.push(`${qty.toLocaleString('en-US')} de $${val.toLocaleString('en-US')}`);
+      }
+    }
+    return {
+      totalChips,
+      totalAmount,
+      tooltip: breakdown.length > 0 ? `Desglose de Banca: ${breakdown.join(', ')}` : 'Sin fichas configuradas'
+    };
+  }
+
   let lastKnownItems = items;
   let lastKnownPaginatedItems = paginatedItems;
   let pendingModalPageDirection = null;
@@ -1534,7 +1561,27 @@
                         style="padding: 3px 6px; font-size: 11.5px; font-weight: 700; border-radius: 6px; border: 1px solid #2563eb; background: #ffffff;"
                       />
 
-                    {:else if col.type === 'color'}
+                    {:else if col.type === 'fichas_banca'}
+                    <!-- READ-ONLY Fichas en Banca de Mesa -->
+                    {@const bancaInfo = parseBancaData(item[col.key] || item.banca)}
+                    {#if bancaInfo.totalChips > 0}
+                      <span 
+                        style="display: inline-flex; align-items: center; gap: 6px; background: #ecfdf5; color: #065f46; border: 1.5px solid #a7f3d0; padding: 3px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 800; box-shadow: 0 1px 2px rgba(0,0,0,0.03); cursor: default;"
+                        title={bancaInfo.tooltip}
+                      >
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #059669; flex-shrink: 0;"></span>
+                        {bancaInfo.totalChips.toLocaleString('en-US')} fichas &bull; ${bancaInfo.totalAmount.toLocaleString('en-US')}
+                      </span>
+                    {:else}
+                      <span 
+                        style="display: inline-block; background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; font-style: italic;"
+                        title="Esta mesa no tiene fichas en banca asignadas"
+                      >
+                        Sin configurar (0)
+                      </span>
+                    {/if}
+
+                  {:else if col.type === 'color'}
                       <!-- Color Picker Input for Color Column -->
                       <div style="display: inline-flex; align-items: center; gap: 6px;">
                         <input 
@@ -1581,6 +1628,26 @@
                         class="inline-input"
                         placeholder={col.label}
                       />
+                    {/if}
+
+                  {:else if col.type === 'fichas_banca'}
+                    <!-- READ-ONLY Fichas en Banca de Mesa -->
+                    {@const bancaInfo = parseBancaData(item[col.key] || item.banca)}
+                    {#if bancaInfo.totalChips > 0}
+                      <span 
+                        style="display: inline-flex; align-items: center; gap: 6px; background: #ecfdf5; color: #065f46; border: 1.5px solid #a7f3d0; padding: 3px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 800; box-shadow: 0 1px 2px rgba(0,0,0,0.03); cursor: default;"
+                        title={bancaInfo.tooltip}
+                      >
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #059669; flex-shrink: 0;"></span>
+                        {bancaInfo.totalChips.toLocaleString('en-US')} fichas &bull; ${bancaInfo.totalAmount.toLocaleString('en-US')}
+                      </span>
+                    {:else}
+                      <span 
+                        style="display: inline-block; background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; font-style: italic;"
+                        title="Esta mesa no tiene fichas en banca asignadas"
+                      >
+                        Sin configurar (0)
+                      </span>
                     {/if}
 
                   {:else if col.type === 'color'}
