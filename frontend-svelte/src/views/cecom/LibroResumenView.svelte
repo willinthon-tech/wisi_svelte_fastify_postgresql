@@ -2011,7 +2011,7 @@
                 {#if section.subData.clientesMesas.porMetodo && section.subData.clientesMesas.porMetodo.length > 0}
                   <div class="summary-subtable-box">
                     <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Método de Pago</h4>
+                      <h4 class="subtable-title">Resumen por Método de Pago en Mesas</h4>
                       <span class="incidencia-badge"
                         >{section.subData.clientesMesas.porMetodo.length} métodos</span
                       >
@@ -2075,7 +2075,7 @@
                 {#if section.subData.clientesMesas.porJugador && section.subData.clientesMesas.porJugador.length > 0}
                   <div class="summary-subtable-box">
                     <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Cliente / Jugador</h4>
+                      <h4 class="subtable-title">Resumen por Cliente / Jugador en Mesas</h4>
                       <span class="incidencia-badge"
                         >{section.subData.clientesMesas.porJugador.length} clientes</span
                       >
@@ -2581,7 +2581,7 @@
                 {#if section.subData.clientesMaquinas.porMetodo && section.subData.clientesMaquinas.porMetodo.length > 0}
                   <div class="summary-subtable-box">
                     <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Método de Pago</h4>
+                      <h4 class="subtable-title">Resumen por Método de Pago en Máquinas</h4>
                       <span class="incidencia-badge"
                         >{section.subData.clientesMaquinas.porMetodo.length} métodos</span
                       >
@@ -2645,7 +2645,7 @@
                 {#if section.subData.clientesMaquinas.porJugador && section.subData.clientesMaquinas.porJugador.length > 0}
                   <div class="summary-subtable-box">
                     <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Cliente / Jugador</h4>
+                      <h4 class="subtable-title">Resumen por Cliente / Jugador en Máquinas</h4>
                       <span class="incidencia-badge"
                         >{section.subData.clientesMaquinas.porJugador.length} clientes</span
                       >
