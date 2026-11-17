@@ -291,6 +291,10 @@
 
       triggerToast(`Mesa "${mesaObj?.nombre || 'Mesa'}" aperturada correctamente ($${formatMoney(total)}).`, 'success');
 
+      // Limpiar y resetear el formulario tras aperturar
+      selectedMesaId = '';
+      limpiarFormulario();
+
       // 3. Sincronizar en segundo plano con el backend
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
       if (isOffline) {
@@ -421,6 +425,7 @@
     // 1. Eliminar en memoria inmediatamente (0ms)
     arqueoRecords = arqueoRecords.filter(r => String(r.mesa_uuid || r.mesa_id) !== String(mId));
     if (String(selectedMesaId) === String(mId)) {
+      selectedMesaId = '';
       limpiarFormulario();
     }
     triggerToast(`Arqueo de la mesa "${group.mesaNombre}" eliminado`, 'info');
