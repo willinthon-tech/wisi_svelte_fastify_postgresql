@@ -12295,6 +12295,28 @@ export async function saveLibroReporteModel(libroId) {
   const salaNombre = libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala';
   const fecha = libroObj?.descripcion || null;
 
+  let maquinasSala = [];
+  if (salaUuid && sql && isPgConnected) {
+    try {
+      maquinasSala = await sql`
+        SELECT 
+          m.uuid,
+          m.nombre,
+          m.serial,
+          m.puestos,
+          m.rango_uuid,
+          r.nombre AS rango_nombre
+        FROM maquinas m
+        LEFT JOIN rangos r ON m.rango_uuid = r.uuid
+        WHERE m.sala_uuid = ${salaUuid}::uuid
+          AND COALESCE(m.is_deleted, false) = false
+        ORDER BY m.nombre ASC
+      `;
+    } catch (eMq) {
+      console.warn('Error consultando maquinas de sala en saveLibroReporteModel:', eMq.message);
+    }
+  }
+
   const datosList = Array.isArray(datosRes) ? datosRes : (datosRes ? [datosRes] : []);
   const defaultDatos = datosList.find(d => !d.multisala_uuid) || datosList[0] || null;
 
@@ -12329,7 +12351,8 @@ export async function saveLibroReporteModel(libroId) {
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : [],
     conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : [],
-    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes : []
+    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes : [],
+    maquinas: Array.isArray(maquinasSala) ? maquinasSala : []
   };
 
   const jsonStr = JSON.stringify(fullData);
@@ -12457,11 +12480,34 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     if (lRow.length > 0) resolvedLibroUuid = lRow[0].uuid;
   }
 
+  const targetSalaUuid = libroObj?.sala_uuid || null;
+  let maquinasSala = [];
+  if (targetSalaUuid && sql && isPgConnected) {
+    try {
+      maquinasSala = await sql`
+        SELECT 
+          m.uuid,
+          m.nombre,
+          m.serial,
+          m.puestos,
+          m.rango_uuid,
+          r.nombre AS rango_nombre
+        FROM maquinas m
+        LEFT JOIN rangos r ON m.rango_uuid = r.uuid
+        WHERE m.sala_uuid = ${targetSalaUuid}::uuid
+          AND COALESCE(m.is_deleted, false) = false
+        ORDER BY m.nombre ASC
+      `;
+    } catch (eMq) {
+      console.warn('Error consultando maquinas de sala en getLibroReporteModel:', eMq.message);
+    }
+  }
+
   const previewData = {
     libro_id: resolvedLibroUuid,
     libro_uuid: resolvedLibroUuid,
-    sala_id: libroObj?.sala_uuid || null,
-    sala_uuid: libroObj?.sala_uuid || null,
+    sala_id: targetSalaUuid,
+    sala_uuid: targetSalaUuid,
     sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
     fecha: libroObj?.descripcion || null,
     libro: libroObj || null,
@@ -12474,7 +12520,9 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : [],
-    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : []
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : [],
+    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes : [],
+    maquinas: Array.isArray(maquinasSala) ? maquinasSala : []
   };
 
   if (isPgConnected && sql) {
@@ -12526,6 +12574,12 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
       }
       if (Array.isArray(incidenciasRes)) {
         rData.incidencias_generales = incidenciasRes;
+      }
+      if (Array.isArray(arqueoFichasRes)) {
+        rData.arqueo_fichas = arqueoFichasRes;
+      }
+      if (Array.isArray(maquinasSala)) {
+        rData.maquinas = maquinasSala;
       }
       if (datosList && datosList.length > 0) {
         rData.all_datos = datosList;

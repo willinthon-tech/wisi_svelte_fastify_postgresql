@@ -10,6 +10,7 @@
     masterSalasStore,
     masterTipoIncidenciasStore,
     masterMetodosPagoStore,
+    masterMaquinasStore,
     loadMasterStoresFromBackend,
   } from "../../controllers/master.store.js";
   import {
@@ -34,6 +35,7 @@
   let liveCounts = {
     datos: 0,
     drop_mesas: 0,
+    arqueo_fichas: 0,
     conteo_maquinas: 0,
     novedades_mesas: 0,
     aportes: 0,
@@ -48,12 +50,14 @@
     datos: null,
     all_datos: [],
     drop_mesas: [],
+    arqueo_fichas: [],
     conteo_maquinas: [],
     novedades_mesas: [],
     aportes: [],
     control_llaves: [],
     control_clientes: [],
     incidencias_generales: [],
+    maquinas: []
   };
 
   // Selector de visualización en pantalla
@@ -108,6 +112,19 @@
       );
     } catch (e) {}
 
+    let localArqueos = [];
+    try {
+      localArqueos = await getLocalItems('libro_arqueo_fichas', r => 
+        (r.libro_uuid && (String(r.libro_uuid) === String(id) || String(r.libro_uuid) === String(libro?.uuid))) ||
+        (r.libro_id && (String(r.libro_id) === String(id) || String(r.libro_id) === String(libro?.id)))
+      );
+    } catch (e) {}
+
+    let localMaquinas = [];
+    try {
+      localMaquinas = await getLocalItems('maquinas');
+    } catch (e) {}
+
     const mergeConteoMaquinas = (baseList = []) => {
       const list = Array.isArray(baseList) ? [...baseList] : [];
       if (Array.isArray(localConteos) && localConteos.length > 0) {
@@ -120,6 +137,20 @@
           );
           if (!exists) {
             list.push(lc);
+          }
+        }
+      }
+      return list;
+    };
+
+    const mergeArqueoFichas = (baseList = []) => {
+      const list = Array.isArray(baseList) ? [...baseList] : [];
+      if (Array.isArray(localArqueos) && localArqueos.length > 0) {
+        for (const la of localArqueos) {
+          const laUuid = String(la.uuid || la.id || '');
+          const exists = list.some(a => laUuid && String(a.uuid || a.id) === laUuid);
+          if (!exists) {
+            list.push(la);
           }
         }
       }
@@ -142,12 +173,14 @@
           datos: payload.datos || null,
           all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
           drop_mesas: payload.drop_mesas || [],
+          arqueo_fichas: mergeArqueoFichas(payload.arqueo_fichas),
           conteo_maquinas: mergeConteoMaquinas(payload.conteo_maquinas),
           novedades_mesas: payload.novedades_mesas || [],
           aportes: payload.aportes_maquinas || payload.aportes || [],
           control_llaves: payload.control_llaves || [],
           control_clientes: payload.control_clientes || [],
           incidencias_generales: payload.incidencias_generales || [],
+          maquinas: payload.maquinas || (localMaquinas && localMaquinas.length > 0 ? localMaquinas : ($masterMaquinasStore || []))
         };
         if (!libro && resumenData.libro) {
           libro = resumenData.libro;
@@ -181,17 +214,24 @@
             liveCounts.conteo_maquinas = finalConteoMaquinas.length;
           }
 
+          const finalArqueoFichas = mergeArqueoFichas(payload.arqueo_fichas);
+          if (liveCounts && finalArqueoFichas.length > (liveCounts.arqueo_fichas || 0)) {
+            liveCounts.arqueo_fichas = finalArqueoFichas.length;
+          }
+
           resumenData = {
             libro: loadedLibro,
             datos: payload.datos || null,
             all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
             drop_mesas: payload.drop_mesas || [],
+            arqueo_fichas: finalArqueoFichas,
             conteo_maquinas: finalConteoMaquinas,
             novedades_mesas: payload.novedades_mesas || [],
             aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
             control_clientes: payload.control_clientes || [],
             incidencias_generales: payload.incidencias_generales || [],
+            maquinas: payload.maquinas || (localMaquinas && localMaquinas.length > 0 ? localMaquinas : ($masterMaquinasStore || []))
           };
           if (!libro && resumenData.libro) {
             libro = resumenData.libro;
@@ -249,12 +289,14 @@
             datos: payload.datos || null,
             all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
             drop_mesas: payload.drop_mesas || [],
+            arqueo_fichas: payload.arqueo_fichas || [],
             conteo_maquinas: payload.conteo_maquinas || [],
             novedades_mesas: payload.novedades_mesas || [],
             aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
             control_clientes: payload.control_clientes || [],
             incidencias_generales: payload.incidencias_generales || [],
+            maquinas: payload.maquinas || ($masterMaquinasStore || [])
           };
           if (!libro && resumenData.libro) {
             libro = resumenData.libro;
@@ -511,7 +553,18 @@
     });
   }
 
-  // Helper que procesa y calcula las 7 subvistas operativas para una sala (única o hija)
+  // Obtener cantidad de fichas de un registro para una denominación dada
+  function getChipCount(record, valor) {
+    if (!record) return null;
+    const fList = Array.isArray(record.fichas)
+      ? record.fichas
+      : (typeof record.fichas === 'string' ? JSON.parse(record.fichas || '[]') : []);
+
+    const found = fList.find(f => Number(f.valor ?? f.denominacion) === Number(valor));
+    return found ? (Number(found.cantidad) || 0) : 0;
+  }
+
+  // Helper que procesa y calcula las subvistas operativas para una sala (única o hija)
   function computeSubsalaReport(subsalaUuid, rawData) {
     const isMultisalaTarget = Boolean(subsalaUuid);
     const isFirstActiveSubsala = Boolean(
@@ -546,6 +599,57 @@
     const sum1 = drop_mesas.reduce((acc, r) => acc + (Number(r.denominacion_1 ?? r.b1 ?? 0) || 0), 0);
     const grandTotal = drop_mesas.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
     const dropTotales = { sum100, sum50, sum20, sum10, sum5, sum1, grandTotal };
+
+    // 2.1 Arqueo de Fichas
+    const rawArqueo = (rawData.arqueo_fichas || []).filter(a => matchesSub(a.multisala_uuid));
+
+    let rawFichas = activeLibro?.sala_fichas;
+    if (!rawFichas && (activeLibro?.sala_uuid || activeLibro?.sala_id)) {
+      const s = ($masterSalasStore || []).find(
+        (sala) => (activeLibro.sala_uuid && (sala.uuid === activeLibro.sala_uuid || sala.id === activeLibro.sala_uuid)) || 
+                  (activeLibro.sala_id && String(sala.uuid || sala.id) === String(activeLibro.sala_id))
+      );
+      if (s) rawFichas = s.fichas || s.sala_fichas;
+    }
+    if (typeof rawFichas === 'string') {
+      try { rawFichas = JSON.parse(rawFichas); } catch (e) { rawFichas = null; }
+    }
+    let arqueoSalaFichas = [1000, 500, 100, 25, 5, 1];
+    if (Array.isArray(rawFichas) && rawFichas.length > 0) {
+      const nums = rawFichas.map(v => parseInt(v, 10)).filter(n => !isNaN(n) && n > 0);
+      if (nums.length > 0) {
+        arqueoSalaFichas = Array.from(new Set(nums)).sort((a, b) => b - a);
+      }
+    }
+
+    const arqueoGroupsMap = new Map();
+    for (const r of rawArqueo) {
+      if (r.is_deleted) continue;
+      const mId = String(r.mesa_uuid || r.mesa_id || r.id);
+      if (!arqueoGroupsMap.has(mId)) {
+        arqueoGroupsMap.set(mId, {
+          mesaId: mId,
+          mesaNombre: r.mesa_nombre || `Mesa #${mId.slice(0, 8)}`,
+          juegoNombre: r.juego_nombre || '',
+          apertura: null,
+          cierre: null
+        });
+      }
+      const g = arqueoGroupsMap.get(mId);
+      if (r.tipo === 'apertura') {
+        g.apertura = r;
+      } else if (r.tipo === 'cierre') {
+        g.cierre = r;
+      }
+    }
+
+    const arqueoMesaGroups = Array.from(arqueoGroupsMap.values()).sort((a, b) => 
+      (a.mesaNombre || '').localeCompare(b.mesaNombre || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    const totalArqueoApertura = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.apertura?.total) || 0), 0);
+    const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
+    const totalArqueoDiferencia = totalArqueoCierre - totalArqueoApertura;
 
     // 3. Novedades de mesas
     const novedades_mesas = (rawData.novedades_mesas || []).filter(n => matchesSub(n.multisala_uuid));
@@ -848,15 +952,61 @@
     // 9. Resumen de Producción por Rango (Conteo Billeteros - Aportes y Devoluciones Netos)
     const mapProduccionRango = {};
 
-    // A) Mapear primero desde conteo de máquinas
+    // Obtener todas las máquinas registradas en la sala del libro
+    const targetSalaUuid = activeLibro?.sala_uuid || activeLibro?.sala_id || null;
+    const allMaquinasList = (rawData.maquinas && rawData.maquinas.length > 0)
+      ? rawData.maquinas
+      : ($masterMaquinasStore || []);
+
+    const allMaquinasSala = allMaquinasList.filter(m => {
+      if (m.is_deleted) return false;
+      if (targetSalaUuid && (m.sala_uuid || m.sala_id) && String(m.sala_uuid || m.sala_id) !== String(targetSalaUuid)) return false;
+      return true;
+    });
+
+    // Mapear conteo total de máquinas registradas en la sala por Rango (uuid y nombre)
+    const mapTotalMaquinasPorRangoUuid = {};
+    const mapTotalMaquinasPorRangoNombre = {};
+    for (const m of allMaquinasSala) {
+      if (m.rango_uuid) {
+        mapTotalMaquinasPorRangoUuid[String(m.rango_uuid)] = (mapTotalMaquinasPorRangoUuid[String(m.rango_uuid)] || 0) + 1;
+      }
+      const rNom = (m.rango_nombre || '').trim();
+      if (rNom) {
+        mapTotalMaquinasPorRangoNombre[rNom.toLowerCase()] = (mapTotalMaquinasPorRangoNombre[rNom.toLowerCase()] || 0) + 1;
+      }
+    }
+
+    // A) Inicializar con todos los rangos que tienen máquinas registradas en la sala
+    for (const m of allMaquinasSala) {
+      const rKey = m.rango_uuid || (m.rango_nombre ? m.rango_nombre.trim() : 'sin_rango');
+      const rNom = m.rango_nombre || (m.rango_uuid ? `Rango #${m.rango_uuid.slice(0, 8)}` : 'Sin Rango');
+      if (!mapProduccionRango[rKey]) {
+        mapProduccionRango[rKey] = {
+          rango_uuid: m.rango_uuid || rKey,
+          rango_id: rKey,
+          rango_nombre: rNom,
+          maquinasCount: 0,
+          maquinasSet: new Set(),
+          billetero: 0,
+          montoAportes: 0,
+          montoDevoluciones: 0,
+          aportesNeto: 0,
+          produccion: 0
+        };
+      }
+    }
+
+    // B) Mapear desde conteo de máquinas
     for (const c of sortedConteoList) {
-      const rKey = c.rango_uuid || c.rango_id || 0;
+      const rKey = c.rango_uuid || c.rango_id || (c.rango_nombre ? c.rango_nombre.trim() : 0);
       const rNom = c.rango_nombre || (c.rango_uuid ? `Rango #${c.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
       if (!mapProduccionRango[rKey]) {
         mapProduccionRango[rKey] = {
           rango_uuid: c.rango_uuid || rKey,
           rango_id: rKey,
           rango_nombre: rNom,
+          maquinasCount: 0,
           maquinasSet: new Set(),
           billetero: 0,
           montoAportes: 0,
@@ -870,15 +1020,16 @@
       mapProduccionRango[rKey].billetero += Number(c.total) || 0;
     }
 
-    // B) Cruzar con los datos de aportes y devoluciones
+    // C) Cruzar con los datos de aportes y devoluciones
     for (const a of sortedAportesList) {
-      const rKey = a.rango_uuid || a.rango_id || 0;
+      const rKey = a.rango_uuid || a.rango_id || (a.rango_nombre ? a.rango_nombre.trim() : 0);
       const rNom = a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
       if (!mapProduccionRango[rKey]) {
         mapProduccionRango[rKey] = {
           rango_uuid: a.rango_uuid || rKey,
           rango_id: rKey,
           rango_nombre: rNom,
+          maquinasCount: 0,
           maquinasSet: new Set(),
           billetero: 0,
           montoAportes: 0,
@@ -897,17 +1048,25 @@
       }
     }
 
-    // C) Calcular producción neta y ordenar alfabéticamente
-    const produccionPorRango = Object.values(mapProduccionRango).map(item => ({
-      ...item,
-      maquinasCount: item.maquinasSet.size,
-      produccion: item.billetero - item.aportesNeto
-    })).sort((a, b) => 
-      (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
-    );
+    // D) Asignar conteo real de máquinas por rango
+    for (const item of Object.values(mapProduccionRango)) {
+      const countByUuid = item.rango_uuid ? mapTotalMaquinasPorRangoUuid[String(item.rango_uuid)] : 0;
+      const countByNom = item.rango_nombre ? mapTotalMaquinasPorRangoNombre[item.rango_nombre.trim().toLowerCase()] : 0;
+      item.maquinasCount = countByUuid || countByNom || (item.maquinasSet ? item.maquinasSet.size : 0) || 0;
+    }
+
+    // E) Calcular producción neta y ordenar alfabéticamente
+    const produccionPorRango = Object.values(mapProduccionRango)
+      .filter(item => item.maquinasCount > 0 || item.billetero !== 0 || item.aportesNeto !== 0)
+      .map(item => ({
+        ...item,
+        produccion: item.billetero - item.aportesNeto
+      })).sort((a, b) => 
+        (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
+      );
 
     const produccionTotales = {
-      totalMaquinas: produccionPorRango.reduce((acc, r) => acc + r.maquinasCount, 0),
+      totalMaquinas: produccionPorRango.reduce((acc, r) => acc + (r.maquinasCount || 0), 0),
       totalBilletero: produccionPorRango.reduce((acc, r) => acc + r.billetero, 0),
       totalAportesNeto: produccionPorRango.reduce((acc, r) => acc + r.aportesNeto, 0),
       totalProduccion: produccionPorRango.reduce((acc, r) => acc + r.produccion, 0)
@@ -928,12 +1087,14 @@
 
     // 2. Resumen de Movimientos de Mesas y Máquinas
     const hasDropMesas = Boolean(drop_mesas && drop_mesas.length > 0);
+    const hasArqueoFichas = Boolean(arqueoMesaGroups && arqueoMesaGroups.length > 0);
     const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
     const hasControlClientes = Boolean(sortedControlClientes && sortedControlClientes.length > 0);
     const hasBilleteros = Boolean(sortedConteoList && sortedConteoList.length > 0);
     const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (produccionPorRango && produccionPorRango.length > 0));
     let idxMov = 0;
     const numDropMesas = hasDropMesas ? ++idxMov : 0;
+    const numArqueoFichas = hasArqueoFichas ? ++idxMov : 0;
     const numNovedadesMesas = hasNovedadesMesas ? ++idxMov : 0;
     const numControlClientes = hasControlClientes ? ++idxMov : 0;
     const numBilleteros = hasBilleteros ? ++idxMov : 0;
@@ -952,6 +1113,7 @@
       numResumenMaquinas,
       numResumenProduccion,
       numDropMesas,
+      numArqueoFichas,
       numNovedadesMesas,
       numControlClientes,
       numBilleteros,
@@ -966,6 +1128,12 @@
       numeracion,
       drop_mesas,
       dropTotales,
+      arqueo_fichas: rawArqueo,
+      arqueoSalaFichas,
+      arqueoMesaGroups,
+      totalArqueoApertura,
+      totalArqueoCierre,
+      totalArqueoDiferencia,
       novedades_mesas,
       incidencias_generales: sortedIncidencias,
       incidenciasPorTipo,
@@ -1623,7 +1791,7 @@
           <!-- ============================================================
                RESUMEN DE MOVIMIENTOS DE MESAS Y MÁQUINAS (Encabezado Principal)
                ============================================================ -->
-          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.novedades_mesas && section.subData.novedades_mesas.length > 0) || (section.subData.control_clientes && section.subData.control_clientes.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
+          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0) || (section.subData.novedades_mesas && section.subData.novedades_mesas.length > 0) || (section.subData.control_clientes && section.subData.control_clientes.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
             <div class="sheet-main-title-box">
               <h1 class="sheet-title-text">Resumen de Movimientos de Mesas y Máquinas</h1>
             </div>
@@ -1687,6 +1855,181 @@
                       <td class="cell-grand-total"
                         >{formatMoney(section.subData.dropTotales.grandTotal)}</td
                       >
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          {/if}
+
+          <!-- ============================================================
+               ARQUEO DE FICHAS
+               ============================================================ -->
+          {#if section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+            <div class="sheet-section sub-module-section">
+              <div class="sub-header-row">
+                <div class="sub-title-group">
+                  <h2 class="sub-section-title">
+                    {section.subData.numeracion.numArqueoFichas}. Arqueo Fichas
+                  </h2>
+                  <span class="sub-count-badge"
+                    >{section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
+                  >
+                </div>
+              </div>
+
+              <div class="table-responsive-wrapper">
+                <table class="drop-table arqueo-table">
+                  <thead>
+                    <tr>
+                      <th class="th-center th-num">N°</th>
+                      <th class="th-mesa">Mesa</th>
+                      <th class="th-center th-movimiento"></th>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        <th class="th-center">$ {valor}</th>
+                      {/each}
+                      <th class="th-center th-total">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.arqueoMesaGroups as group, idx (group.mesaId)}
+                      {@const apTotal = Number(group.apertura?.total) || 0}
+                      {@const hasCierre = Boolean(group.cierre)}
+                      {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
+                      {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
+
+                      <!-- Sub-fila 1: APERTURA -->
+                      <tr class="drop-row row-apertura" class:mesa-first-row={true}>
+                        <td class="td-center td-num" rowspan="3">
+                          <span class="index-num">{idx + 1}</span>
+                        </td>
+                        <td class="td-mesa" rowspan="3">
+                          <div class="mesa-title-cell">
+                            <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
+                            {#if group.juegoNombre}
+                              <span class="mesa-sub-juego">{group.juegoNombre}</span>
+                            {/if}
+                          </div>
+                        </td>
+                        <td class="td-center td-movimiento">
+                          <span class="mov-badge mov-apertura" title="Apertura">A</span>
+                        </td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const apCount = getChipCount(group.apertura, valor)}
+                          <td class="td-center count-val">
+                            {apCount !== null ? apCount : '—'}
+                          </td>
+                        {/each}
+                        <td class="td-center td-total-val ap-total-cell font-bold">
+                          $ {formatMoney(apTotal)}
+                        </td>
+                      </tr>
+
+                      <!-- Sub-fila 2: CIERRE -->
+                      <tr class="drop-row row-cierre">
+                        <td class="td-center td-movimiento">
+                          {#if hasCierre}
+                            <span class="mov-badge mov-cierre" title="Cierre">C</span>
+                          {:else}
+                            <span class="mov-badge mov-pendiente" title="Pendiente de Cierre">P</span>
+                          {/if}
+                        </td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
+                          <td class="td-center count-val" class:val-pending={!hasCierre}>
+                            {ciCount !== null ? ciCount : '—'}
+                          </td>
+                        {/each}
+                        <td class="td-center td-total-val ci-total-cell font-bold" class:val-pending={!hasCierre}>
+                          {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
+                        </td>
+                      </tr>
+
+                      <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
+                      <tr class="drop-row row-diferencia mesa-last-row">
+                        <td class="td-center td-movimiento">
+                          <span class="mov-badge mov-diferencia" title="Total">T</span>
+                        </td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const apC = getChipCount(group.apertura, valor)}
+                          {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
+                          {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - apC) : null}
+                          <td class="td-center count-val">
+                            {#if difChips !== null}
+                              <span 
+                                class="dif-chips-val"
+                                class:dif-pos={difChips > 0}
+                                class:dif-neg={difChips < 0}
+                              >
+                                {Math.abs(difChips)}
+                              </span>
+                            {:else}
+                              <span class="val-pending">—</span>
+                            {/if}
+                          </td>
+                        {/each}
+                        <td class="td-center td-total-val dif-total-cell font-bold">
+                          {#if difTotal !== null}
+                            <span 
+                              class="dif-monto-badge"
+                              class:dif-pos={difTotal > 0}
+                              class:dif-neg={difTotal < 0}
+                              class:dif-neu={difTotal === 0}
+                            >
+                              $ {formatMoney(Math.abs(difTotal))}
+                            </span>
+                          {:else}
+                            <span class="val-pending">—</span>
+                          {/if}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+
+                  <!-- Fila de Totales Generales -->
+                  <tfoot>
+                    <tr class="total-row footer-apertura">
+                      <td colspan="2" class="total-label-cell">TOTAL APERTURA</td>
+                      <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">A</span></td>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                        <td class="td-center total-val-cell">{sumAp}</td>
+                      {/each}
+                      <td class="td-center grand-total-cell ap-grand-total">
+                        $ {formatMoney(section.subData.totalArqueoApertura)}
+                      </td>
+                    </tr>
+
+                    <tr class="total-row footer-cierre">
+                      <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
+                      <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">C</span></td>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                        <td class="td-center total-val-cell">{sumCi}</td>
+                      {/each}
+                      <td class="td-center grand-total-cell ci-grand-total">
+                        $ {formatMoney(section.subData.totalArqueoCierre)}
+                      </td>
+                    </tr>
+
+                    <tr class="total-row footer-diferencia">
+                      <td colspan="2" class="total-label-cell">DIFERENCIA NETA</td>
+                      <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
+                      {#each section.subData.arqueoSalaFichas as valor}
+                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                        {@const dif = sumCi - sumAp}
+                        <td class="td-center total-val-cell">
+                          <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
+                            {Math.abs(dif)}
+                          </span>
+                        </td>
+                      {/each}
+                      <td class="td-center grand-total-cell dif-grand-total">
+                        <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
+                          $ {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
+                        </span>
+                      </td>
                     </tr>
                   </tfoot>
                 </table>
@@ -2269,7 +2612,7 @@
                       {#each section.subData.produccionPorRango as rg}
                         <tr>
                           <td class="cell-left font-bold">{rg.rango_nombre}</td>
-                          <td class="cell-center">{rg.maquinasCount} ops</td>
+                          <td class="cell-center font-bold">{rg.maquinasCount}</td>
                           <td class="cell-total-money font-bold {rg.billetero > 0 ? 'text-emerald' : ''}">{formatMoney(rg.billetero)}</td>
                           <td class="cell-total-money font-bold {rg.aportesNeto > 0 ? 'text-rose' : (rg.aportesNeto < 0 ? 'text-emerald' : '')}">
                             {formatMoney(rg.aportesNeto)}
@@ -2283,7 +2626,7 @@
                     <tfoot>
                       <tr class="tfoot-totals">
                         <td>TOTAL</td>
-                        <td class="cell-center">{section.subData.produccionTotales.totalMaquinas} ops</td>
+                        <td class="cell-center font-bold">{section.subData.produccionTotales.totalMaquinas}</td>
                         <td class="cell-total-money font-bold {section.subData.produccionTotales.totalBilletero > 0 ? 'text-emerald' : ''}">
                           {formatMoney(section.subData.produccionTotales.totalBilletero)}
                         </td>
@@ -4355,5 +4698,241 @@
     .sign-line {
       width: 100%;
     }
+  }
+
+  /* ============================================================
+     TABLA DE ARQUEO DE FICHAS EN RESUMEN DE LIBRO
+     ============================================================ */
+  .drop-table.arqueo-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+    border: 1px solid #cbd5e1;
+    margin-bottom: 16px;
+  }
+
+  .drop-table.arqueo-table thead tr {
+    background: #2b3544;
+    color: #ffffff;
+  }
+
+  .drop-table.arqueo-table th {
+    padding: 10px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .drop-table.arqueo-table td {
+    padding: 7px 10px;
+    color: #1e293b;
+    font-size: 12.5px;
+    white-space: nowrap;
+    vertical-align: middle;
+    border: 1px solid #e2e8f0;
+  }
+
+  .drop-table.arqueo-table .th-center,
+  .drop-table.arqueo-table .td-center {
+    text-align: center;
+  }
+
+  .drop-table.arqueo-table .th-num,
+  .drop-table.arqueo-table .td-num {
+    width: 45px;
+  }
+
+  .drop-table.arqueo-table .th-mesa,
+  .drop-table.arqueo-table .td-mesa {
+    min-width: 170px;
+    text-align: left;
+    padding-left: 12px;
+  }
+
+  .drop-table.arqueo-table .th-movimiento,
+  .drop-table.arqueo-table .td-movimiento {
+    width: 45px;
+  }
+
+  .drop-table.arqueo-table .th-total {
+    min-width: 110px;
+    text-align: center;
+  }
+
+  .mesa-title-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mesa-main-name {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .mesa-sub-juego {
+    font-size: 11.5px;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .index-num {
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .row-apertura {
+    background: #ffffff;
+  }
+
+  .row-cierre {
+    background: #f8fafc;
+  }
+
+  .row-diferencia {
+    background: #ffffff;
+  }
+
+  .mesa-last-row {
+    border-bottom: 2px solid #cbd5e1 !important;
+  }
+
+  .mov-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-weight: 800;
+  }
+
+  .mov-apertura {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+  }
+
+  .mov-cierre {
+    background: #ede9fe;
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+  }
+
+  .mov-pendiente {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  .mov-diferencia {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+  }
+
+  .count-val {
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .val-pending {
+    color: #94a3b8;
+    font-weight: 400;
+  }
+
+  .ap-total-cell {
+    font-weight: 700;
+    color: #0369a1;
+  }
+
+  .ci-total-cell {
+    font-weight: 700;
+    color: #6d28d9;
+  }
+
+  .dif-total-cell {
+    font-weight: 800;
+  }
+
+  .dif-chips-val {
+    font-weight: 700;
+    font-size: 11.5px;
+  }
+
+  .dif-chips-val.dif-pos,
+  .dif-pos {
+    color: #16a34a !important;
+  }
+
+  .dif-chips-val.dif-neg,
+  .dif-neg {
+    color: #dc2626 !important;
+  }
+
+  .dif-neu {
+    color: #64748b !important;
+  }
+
+  .dif-monto-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 800;
+  }
+
+  .total-row {
+    background: #f8fafc;
+    font-weight: 700;
+  }
+
+  .footer-apertura {
+    border-top: 2px solid #94a3b8 !important;
+  }
+
+  .footer-diferencia {
+    border-bottom: 2px solid #94a3b8 !important;
+    background: #f1f5f9;
+  }
+
+  .total-row td {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #0f172a;
+    border: 1px solid #cbd5e1;
+  }
+
+  .total-label-cell {
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #0f172a;
+    padding-left: 14px !important;
+  }
+
+  .total-val-cell {
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .grand-total-cell {
+    font-weight: 800;
+    font-size: 13px;
+  }
+
+  .ap-grand-total {
+    color: #0369a1 !important;
+  }
+
+  .ci-grand-total {
+    color: #6d28d9 !important;
+  }
+
+  .dif-grand-total {
+    font-weight: 800;
   }
 </style>
