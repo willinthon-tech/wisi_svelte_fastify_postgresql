@@ -252,7 +252,7 @@
               class:negative={diferenciaMonto < 0}
               class:neutral={diferenciaMonto === 0}
             >
-              {diferenciaMonto > 0 ? '+' : ''}$ {formatMoney(diferenciaMonto)}
+              $ {formatMoney(Math.abs(diferenciaMonto))}
             </span>
           </div>
         </div>
@@ -304,7 +304,7 @@
                         class:diff-pos={difChips > 0}
                         class:diff-neg={difChips < 0}
                       >
-                        {difChips > 0 ? `+${difChips}` : difChips}
+                        {Math.abs(difChips)}
                       </span>
                     </td>
                   </tr>
@@ -736,3 +736,4 @@
     to { transform: translateY(0); opacity: 1; }
   }
 </style>
+

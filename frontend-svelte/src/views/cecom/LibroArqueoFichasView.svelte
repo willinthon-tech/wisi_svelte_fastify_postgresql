@@ -677,7 +677,7 @@
                         class:dif-pos={difChips > 0}
                         class:dif-neg={difChips < 0}
                       >
-                        {difChips > 0 ? `+${difChips}` : difChips}
+                        {Math.abs(difChips)}
                       </span>
                     {:else}
                       <span class="val-pending">—</span>
@@ -692,7 +692,7 @@
                       class:dif-neg={difTotal < 0}
                       class:dif-neu={difTotal === 0}
                     >
-                      {difTotal > 0 ? '+' : ''}$ {formatMoney(difTotal)}
+                      $ {formatMoney(Math.abs(difTotal))}
                     </span>
                   {:else}
                     <span class="val-pending">—</span>
@@ -741,13 +741,13 @@
                 {@const dif = sumCi - sumAp}
                 <td class="td-center total-val-cell">
                   <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
-                    {dif > 0 ? `+${dif}` : dif}
+                    {Math.abs(dif)}
                   </span>
                 </td>
               {/each}
               <td class="td-center grand-total-cell dif-grand-total">
                 <span class:dif-pos={totalGeneralDiferencia > 0} class:dif-neg={totalGeneralDiferencia < 0}>
-                  {totalGeneralDiferencia > 0 ? '+' : ''}$ {formatMoney(totalGeneralDiferencia)}
+                  $ {formatMoney(Math.abs(totalGeneralDiferencia))}
                 </span>
               </td>
               <td></td>
@@ -1316,3 +1316,4 @@
     to { transform: rotate(360deg); }
   }
 </style>
+
