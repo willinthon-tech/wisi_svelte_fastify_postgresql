@@ -1130,10 +1130,12 @@
 
     // 3. Detallado Máquinas
     const hasBilleteros = Boolean(sortedConteoList && sortedConteoList.length > 0);
+    const hasConteoPorRango = Boolean(conteoPorRango && conteoPorRango.length > 0);
     const hasClientesMaquinas = Boolean(dataClientesMaquinas && dataClientesMaquinas.records.length > 0);
     const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (produccionPorRango && produccionPorRango.length > 0));
     let idxMaquinas = 0;
     const numBilleteros = hasBilleteros ? ++idxMaquinas : 0;
+    const numConteoPorRango = hasConteoPorRango ? ++idxMaquinas : 0;
     const numClientesMaquinas = hasClientesMaquinas ? ++idxMaquinas : 0;
     const numAportes = hasAportes ? ++idxMaquinas : 0;
 
@@ -1150,10 +1152,11 @@
       numResumenMaquinas,
       numResumenProduccion,
       numDropMesas,
-      numArqueoFichas,
       numClientesMesas,
+      numArqueoFichas,
       numNovedadesMesas,
       numBilleteros,
+      numConteoPorRango,
       numClientesMaquinas,
       numAportes,
       numBitacoraIncidencias,
@@ -2425,60 +2428,72 @@
                   </tfoot>
                 </table>
               </div>
+            </div>
+          {/if}
 
-              <!-- Resumen por Rango debajo del detallado -->
-              {#if section.subData.conteoPorRango.length > 0}
-                <div class="sub-table-group" style="margin-top: 18px;">
-                  <h3 class="sub-group-title">Resumen de Conteo por Rango</h3>
-                  <div class="table-responsive-wrapper">
-                    <table class="sheet-detail-table">
-                      <thead>
-                        <tr>
-                          <th class="th-num">N°</th>
-                          <th class="th-mesa">RANGO</th>
-                          <th class="th-num">MÁQUINAS</th>
-                          <th class="th-num">$100</th>
-                          <th class="th-num">$50</th>
-                          <th class="th-num">$20</th>
-                          <th class="th-num">$10</th>
-                          <th class="th-num">$5</th>
-                          <th class="th-num">$1</th>
-                          <th class="th-total">TOTAL RECAUDADO</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {#each section.subData.conteoPorRango as rg, rIdx}
-                          <tr>
-                            <td class="cell-num">{rIdx + 1}</td>
-                            <td class="cell-mesa-bold">{rg.rango_nombre}</td>
-                            <td class="cell-num">{rg.maquinasCount}</td>
-                            <td class="cell-num">{rg.b100}</td>
-                            <td class="cell-num">{rg.b50}</td>
-                            <td class="cell-num">{rg.b20}</td>
-                            <td class="cell-num">{rg.b10}</td>
-                            <td class="cell-num">{rg.b5}</td>
-                            <td class="cell-num">{rg.b1}</td>
-                            <td class="cell-total-money">{formatMoney(rg.total)}</td>
-                          </tr>
-                        {/each}
-                      </tbody>
-                      <tfoot>
-                        <tr class="tfoot-totals">
-                          <td colspan="2">TOTAL GENERAL</td>
-                          <td class="cell-num">{section.subData.conteoTotales.totalMaquinas}</td>
-                          <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
-                          <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
-                          <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
-                          <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
-                          <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
-                          <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
-                          <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+          <!-- ============================================================
+               RESUMEN DE CONTEO POR RANGO
+               ============================================================ -->
+          {#if section.subData.conteoPorRango && section.subData.conteoPorRango.length > 0}
+            <div class="sheet-section sub-module-section">
+              <div class="sub-header-row">
+                <div class="sub-title-group">
+                  <h2 class="sub-section-title">
+                    {section.subData.numeracion.numConteoPorRango}. Resumen de Conteo por Rango
+                  </h2>
+                  <span class="sub-count-badge"
+                    >{section.subData.conteoPorRango.length} {section.subData.conteoPorRango.length === 1 ? 'rango' : 'rangos'}</span
+                  >
                 </div>
-              {/if}
+              </div>
+
+              <div class="table-responsive-wrapper">
+                <table class="sheet-detail-table">
+                  <thead>
+                    <tr>
+                      <th class="th-num">N°</th>
+                      <th class="th-mesa">RANGO</th>
+                      <th class="th-num">MÁQUINAS</th>
+                      <th class="th-num">$100</th>
+                      <th class="th-num">$50</th>
+                      <th class="th-num">$20</th>
+                      <th class="th-num">$10</th>
+                      <th class="th-num">$5</th>
+                      <th class="th-num">$1</th>
+                      <th class="th-total">TOTAL RECAUDADO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.conteoPorRango as rg, rIdx}
+                      <tr>
+                        <td class="cell-num">{rIdx + 1}</td>
+                        <td class="cell-mesa-bold">{rg.rango_nombre}</td>
+                        <td class="cell-num">{rg.maquinasCount}</td>
+                        <td class="cell-num">{rg.b100}</td>
+                        <td class="cell-num">{rg.b50}</td>
+                        <td class="cell-num">{rg.b20}</td>
+                        <td class="cell-num">{rg.b10}</td>
+                        <td class="cell-num">{rg.b5}</td>
+                        <td class="cell-num">{rg.b1}</td>
+                        <td class="cell-total-money">{formatMoney(rg.total)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td colspan="2">TOTAL GENERAL</td>
+                      <td class="cell-num">{section.subData.conteoTotales.totalMaquinas}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
+                      <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
+                      <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           {/if}
 
