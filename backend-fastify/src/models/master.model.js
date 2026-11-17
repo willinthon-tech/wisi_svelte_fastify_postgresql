@@ -299,6 +299,10 @@ export async function createSalaModel(data) {
   if (data.multisalas !== undefined && data.multisalas !== null) {
     multisalasVal = typeof data.multisalas === 'string' ? data.multisalas : JSON.stringify(data.multisalas);
   }
+  let fichasVal = '[]';
+  if (data.fichas !== undefined && data.fichas !== null) {
+    fichasVal = typeof data.fichas === 'string' ? data.fichas : JSON.stringify(data.fichas);
+  }
   const activeVal = data.active !== undefined && data.active !== null ? Number(data.active) : 1;
   const grupoUuid = data.grupo_uuid && isUuid(data.grupo_uuid) ? String(data.grupo_uuid).trim() : null;
 
@@ -306,7 +310,7 @@ export async function createSalaModel(data) {
     const rows = await sql`
       INSERT INTO salas (
         nombre, nombre_comercial, rif, ubicacion, correo, telefono,
-        multisalas, active, grupo_uuid
+        multisalas, fichas, active, grupo_uuid
       )
       VALUES (
         ${data.nombre}, 
@@ -316,6 +320,7 @@ export async function createSalaModel(data) {
         ${data.correo || null}, 
         ${data.telefono || null},
         ${multisalasVal}::jsonb,
+        ${fichasVal}::jsonb,
         ${activeVal},
         ${grupoUuid ? sql`${grupoUuid}::uuid` : sql`NULL`}
       )
@@ -328,7 +333,8 @@ export async function createSalaModel(data) {
       id: nextId, 
       uuid: crypto.randomUUID(), 
       ...data,
-      multisalas: typeof data.multisalas === 'string' ? JSON.parse(data.multisalas) : (data.multisalas || [])
+      multisalas: typeof data.multisalas === 'string' ? JSON.parse(data.multisalas) : (data.multisalas || []),
+      fichas: typeof data.fichas === 'string' ? JSON.parse(data.fichas) : (data.fichas || [])
     };
     inMemoryData.salas.unshift(newSala);
     return newSala;
@@ -350,6 +356,17 @@ export async function updateSalaModel(id, data) {
     }
   }
 
+  let fichasVal = undefined;
+  if (data.fichas !== undefined) {
+    if (data.fichas === null) {
+      fichasVal = '[]';
+    } else if (typeof data.fichas === 'string') {
+      fichasVal = data.fichas;
+    } else {
+      fichasVal = JSON.stringify(data.fichas);
+    }
+  }
+
   const activeVal = data.active !== undefined && data.active !== null ? Number(data.active) : undefined;
   const grupoUuid = data.grupo_uuid !== undefined ? (data.grupo_uuid && isUuid(data.grupo_uuid) ? String(data.grupo_uuid).trim() : null) : undefined;
 
@@ -364,6 +381,7 @@ export async function updateSalaModel(id, data) {
         correo = ${data.correo !== undefined ? data.correo : sql`correo`},
         telefono = ${data.telefono !== undefined ? data.telefono : sql`telefono`},
         multisalas = ${multisalasVal !== undefined ? sql`${multisalasVal}::jsonb` : sql`multisalas`},
+        fichas = ${fichasVal !== undefined ? sql`${fichasVal}::jsonb` : sql`fichas`},
         active = ${activeVal !== undefined ? activeVal : sql`active`},
         grupo_uuid = ${grupoUuid !== undefined ? (grupoUuid ? sql`${grupoUuid}::uuid` : sql`NULL`) : sql`grupo_uuid`},
         updated_at = CURRENT_TIMESTAMP
@@ -380,6 +398,9 @@ export async function updateSalaModel(id, data) {
         multisalas: data.multisalas !== undefined 
           ? (typeof data.multisalas === 'string' ? JSON.parse(data.multisalas) : data.multisalas) 
           : inMemoryData.salas[idx].multisalas,
+        fichas: data.fichas !== undefined 
+          ? (typeof data.fichas === 'string' ? JSON.parse(data.fichas) : data.fichas) 
+          : inMemoryData.salas[idx].fichas,
         updated_at: new Date().toISOString()
       };
       return inMemoryData.salas[idx];

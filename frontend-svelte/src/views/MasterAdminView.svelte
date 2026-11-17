@@ -32,6 +32,7 @@
   import BlockedDeleteModal from "../components/modals/BlockedDeleteModal.svelte";
   import OrderModulosModal from "../components/modals/OrderModulosModal.svelte";
   import MultisalasModal from "../components/modals/MultisalasModal.svelte";
+  import FichasModal from "../components/modals/FichasModal.svelte";
   import { navigateToRoute } from "../controllers/router.store.js";
   import { currentUserStore } from "../controllers/auth.store.js";
   import { triggerToast } from "../controllers/ui.store.js";
@@ -208,6 +209,29 @@
     if (typeof multisalas === 'string') {
       try {
         const parsed = JSON.parse(multisalas);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  // Fichas modal state
+  let isFichasModalOpen = false;
+  let selectedSalaForFichas = null;
+
+  function openFichasModal(sala) {
+    selectedSalaForFichas = sala;
+    isFichasModalOpen = true;
+  }
+
+  function getFichasList(fichas) {
+    if (!fichas) return [];
+    if (Array.isArray(fichas)) return fichas;
+    if (typeof fichas === 'string') {
+      try {
+        const parsed = JSON.parse(fichas);
         return Array.isArray(parsed) ? parsed : [];
       } catch (e) {
         return [];
@@ -3065,6 +3089,7 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
 
                 {#if activeTab === "salas"}
                   {@const subsalasList = getSubsalasList(item.multisalas)}
+                  {@const fichasList = getFichasList(item.fichas)}
                   <td style="padding: 8px 14px; font-weight: 700;">
                     {#if isEditing}
                       <input
@@ -3081,6 +3106,14 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                             title="Multisalas activo: {subsalasList.length} sucursales configuradas"
                           >
                             Multisalas ({subsalasList.length})
+                          </span>
+                        {/if}
+                        {#if fichasList.length > 0}
+                          <span
+                            style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px;"
+                            title="Fichas configuradas: {fichasList.length} denominaciones"
+                          >
+                            Fichas ({fichasList.length})
                           </span>
                         {/if}
                       </div>
@@ -3351,6 +3384,15 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
                         title="Configurar Multisalas"
                       >
                         Multisalas
+                      </button>
+                      <button
+                        on:click={() => openFichasModal(item)}
+                        type="button"
+                        class="btn-flow-sec"
+                        style="padding: 4px 8px; font-size: 12px; color: #059669; border-color: #a7f3d0; background: #ecfdf5; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"
+                        title="Configurar Fichas"
+                      >
+                        Fichas
                       </button>
                     {/if}
                     <button
@@ -3711,6 +3753,17 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
   on:close={() => {
     isMultisalasModalOpen = false;
     selectedSalaForMultisalas = null;
+  }}
+/>
+
+<!-- Modal Configuración de Fichas -->
+<FichasModal
+  show={isFichasModalOpen}
+  sala={selectedSalaForFichas}
+  on:saved={() => loadMasterStoresFromBackend()}
+  on:close={() => {
+    isFichasModalOpen = false;
+    selectedSalaForFichas = null;
   }}
 />
 

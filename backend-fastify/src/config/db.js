@@ -222,10 +222,12 @@ export async function initDb() {
       console.warn('Advertencia migrando columnas de usuarios:', eUserCol.message);
     }
 
-    // Garantizar columna multisalas y active en salas
+    // Garantizar columna multisalas, fichas y active en salas
     try {
       await sql`ALTER TABLE salas ADD COLUMN IF NOT EXISTS multisalas JSONB DEFAULT '[]'::jsonb;`;
       await sql`UPDATE salas SET multisalas = '[]'::jsonb WHERE multisalas IS NULL;`;
+      await sql`ALTER TABLE salas ADD COLUMN IF NOT EXISTS fichas JSONB DEFAULT '[]'::jsonb;`;
+      await sql`UPDATE salas SET fichas = '[]'::jsonb WHERE fichas IS NULL;`;
       await sql`ALTER TABLE salas ADD COLUMN IF NOT EXISTS active INT DEFAULT 1;`;
       await sql`UPDATE salas SET active = 1 WHERE active IS NULL;`;
     } catch (eSalasCol) {
