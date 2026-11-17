@@ -383,6 +383,7 @@
   }
 
   .modal-header {
+    flex-shrink: 0;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -450,6 +451,8 @@
   .modal-body {
     padding: 20px 24px;
     overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -466,6 +469,7 @@
 
   /* Comparativa de Totales */
   .comparative-banner {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -524,7 +528,9 @@
   .table-container {
     border: 1px solid #e2e8f0;
     border-radius: 10px;
-    overflow: hidden;
+    max-height: 320px;
+    overflow-y: auto;
+    position: relative;
   }
 
   .cierre-table {
@@ -539,6 +545,10 @@
   }
 
   .cierre-table th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #0f172a;
     padding: 10px 12px;
     font-size: 11px;
     font-weight: 700;
@@ -678,6 +688,7 @@
 
   /* Footer */
   .modal-footer {
+    flex-shrink: 0;
     display: flex;
     justify-content: flex-end;
     align-items: center;
