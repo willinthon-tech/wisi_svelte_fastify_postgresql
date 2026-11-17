@@ -6046,7 +6046,7 @@ export async function purgeMesaModel(id) {
 // MODELOS PARA CONFIGURACIÓN DE MÁQUINAS (CONF.M: MAQUINAS)
 // =========================================================================
 
-function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
+function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName, hasColor = (tableName === 'metodos_pago')) {
   return {
     get: async function(params = {}) {
       if (!isPgConnected || !sql) {
@@ -6065,7 +6065,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
       const search = String(params.search || '').trim().toLowerCase();
       const sortBy = (params.sortBy === 'nombre') 
         ? 'nombre' 
-        : (params.sortBy === 'color' ? 'color' : 'created_at');
+        : ((hasColor && params.sortBy === 'color') ? 'color' : 'created_at');
       const sortDir = (params.sortDir || (sortBy === 'created_at' ? 'desc' : 'asc')).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
 
       const searchPattern = `%${search}%`;
@@ -6109,7 +6109,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
     create: async function(data) {
       const cleanName = (data.nombre || '').trim();
       if (!cleanName) throw new Error(`El nombre de ${entityLabel} es obligatorio`);
-      const cleanColor = data.color !== undefined ? (String(data.color).trim() || '#3B82F6') : undefined;
+      const cleanColor = (hasColor && data.color !== undefined) ? (String(data.color).trim() || '#3B82F6') : undefined;
       const itemUuid = data.uuid && isUuid(data.uuid) ? data.uuid : null;
 
       if (isPgConnected && sql) {
@@ -6123,7 +6123,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
         }
 
         let rows;
-        if (cleanColor !== undefined) {
+        if (hasColor && cleanColor !== undefined) {
           rows = await sql`
             INSERT INTO ${sql(tableName)} (
               ${itemUuid ? sql`uuid,` : sql``}
@@ -6160,7 +6160,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
           id: nextId,
           uuid: itemUuid || `item-${Date.now()}`,
           nombre: toTitleCase(cleanName),
-          ...(cleanColor !== undefined ? { color: cleanColor } : {}),
+          ...(hasColor && cleanColor !== undefined ? { color: cleanColor } : {}),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -6172,7 +6172,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
     update: async function(id, data) {
       if (!id || !isUuid(id)) throw new Error('ID inválido');
       const cleanName = data.nombre !== undefined ? String(data.nombre).trim() : null;
-      const cleanColor = data.color !== undefined ? String(data.color).trim() : null;
+      const cleanColor = (hasColor && data.color !== undefined) ? String(data.color).trim() : null;
 
       if (isPgConnected && sql) {
         if (cleanName) {
@@ -6188,7 +6188,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
         }
 
         let rows;
-        if (cleanColor !== null) {
+        if (hasColor && cleanColor !== null) {
           rows = await sql`
             UPDATE ${sql(tableName)}
             SET 
@@ -6215,7 +6215,7 @@ function buildSimpleConfigCrud(tableName, entityLabel, memKey = tableName) {
         if (idx !== -1) {
           list[idx] = { ...list[idx], ...data, updated_at: new Date().toISOString() };
           if (cleanName) list[idx].nombre = toTitleCase(cleanName);
-          if (cleanColor) list[idx].color = cleanColor;
+          if (hasColor && cleanColor) list[idx].color = cleanColor;
           return list[idx];
         }
         return null;

@@ -102,8 +102,9 @@
 
   async function handleCreate(event) {
     const draft = event.detail;
+    const cleanPayload = { nombre: (draft.nombre || '').trim() };
     try {
-      const created = await masterRangosActions.add(draft);
+      const created = await masterRangosActions.add(cleanPayload);
       triggerToast('Rango creado exitosamente', 'success');
       if (created) {
         items = [created, ...items.filter(x => String(x.uuid || x.id) !== String(created.uuid || created.id))];
@@ -118,10 +119,11 @@
   async function handleSaveInline(event) {
     const { id, draft } = event.detail;
     const targetUuid = id;
+    const cleanPayload = { nombre: (draft.nombre || '').trim() };
     try {
-      await masterRangosActions.update(targetUuid, draft);
+      await masterRangosActions.update(targetUuid, cleanPayload);
       triggerToast('Rango actualizado exitosamente', 'success');
-      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...draft } : x);
+      items = items.map(x => (String(x.uuid || x.id) === String(targetUuid)) ? { ...x, ...cleanPayload } : x);
       loadServerData().catch(() => {});
     } catch (err) {
       triggerToast(`Error al actualizar rango: ${err.message}`, 'error');

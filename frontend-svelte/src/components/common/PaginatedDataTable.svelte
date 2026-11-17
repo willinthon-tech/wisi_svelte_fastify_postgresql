@@ -1099,14 +1099,15 @@
   function startInlineEdit(item) {
     if (!canEdit) return;
     editingInlineId = item.uuid || item.id;
+    const hasCol = (key) => Array.isArray(columns) && columns.some(c => c.key === key);
     const draft = {
       ...item,
-      fecha_nacimiento: formatDateForInput(item.fecha_nacimiento),
-      fecha_ingreso: formatDateForInput(item.fecha_ingreso),
-      hora_entrada: item.hora_entrada || '',
-      hora_salida: item.hora_salida || '',
-      color: item.color || '#FFFF99',
-      tipo: item.tipo || 'horario'
+      ...(item.fecha_nacimiento !== undefined || hasCol('fecha_nacimiento') ? { fecha_nacimiento: formatDateForInput(item.fecha_nacimiento) } : {}),
+      ...(item.fecha_ingreso !== undefined || hasCol('fecha_ingreso') ? { fecha_ingreso: formatDateForInput(item.fecha_ingreso) } : {}),
+      ...(item.hora_entrada !== undefined || hasCol('hora_entrada') ? { hora_entrada: item.hora_entrada || '' } : {}),
+      ...(item.hora_salida !== undefined || hasCol('hora_salida') ? { hora_salida: item.hora_salida || '' } : {}),
+      ...(item.color !== undefined || hasCol('color') ? { color: item.color || '#FFFF99' } : {}),
+      ...(item.tipo !== undefined || hasCol('tipo') ? { tipo: item.tipo || 'horario' } : {})
     };
     if (Array.isArray(columns)) {
       for (const col of columns) {
