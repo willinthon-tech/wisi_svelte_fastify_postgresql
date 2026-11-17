@@ -242,25 +242,8 @@ export async function initDb() {
       console.warn('Advertencia migrando columna banca en mesas:', eMesasCol.message);
     }
 
-    // Garantizar columna multisala_uuid en todas las tablas del módulo Libro
+    // Garantizar tablas y columna multisala_uuid en todas las tablas del módulo Libro
     try {
-      const libroTables = [
-        'libro_datos',
-        'libro_drop_mesas',
-        'libro_control_llaves',
-        'libro_incidencias_generales',
-        'libro_control_clientes',
-        'libro_aportes',
-        'libro_novedades_mesas',
-        'libro_reporte'
-      ];
-      for (const t of libroTables) {
-        await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS multisala_uuid UUID;`);
-      }
-      await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS hora VARCHAR(20);`);
-      await sql.unsafe(`ALTER TABLE libro_datos DROP CONSTRAINT IF EXISTS libro_datos_libro_uuid_key;`);
-      await sql.unsafe(`DROP INDEX IF EXISTS libro_datos_libro_uuid_key;`);
-
       await sql.unsafe(`
         CREATE TABLE IF NOT EXISTS libro_conteo_maquinas (
           uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -282,7 +265,45 @@ export async function initDb() {
         CREATE INDEX IF NOT EXISTS idx_libro_conteo_maquinas_libro ON libro_conteo_maquinas (libro_uuid);
         CREATE INDEX IF NOT EXISTS idx_libro_conteo_maquinas_maquina ON libro_conteo_maquinas (maquina_uuid);
         CREATE INDEX IF NOT EXISTS idx_libro_conteo_maquinas_multisala ON libro_conteo_maquinas (multisala_uuid);
+
+        CREATE TABLE IF NOT EXISTS libro_arqueo_fichas (
+          uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          libro_uuid UUID NOT NULL,
+          multisala_uuid UUID,
+          mesa_uuid UUID NOT NULL,
+          tipo VARCHAR(20) NOT NULL DEFAULT 'apertura',
+          fichas JSONB NOT NULL DEFAULT '[]'::jsonb,
+          total NUMERIC(14, 2) DEFAULT 0.00,
+          observaciones TEXT,
+          is_deleted BOOLEAN DEFAULT FALSE,
+          deleted_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_libro_arqueo_fichas_libro ON libro_arqueo_fichas (libro_uuid);
+        CREATE INDEX IF NOT EXISTS idx_libro_arqueo_fichas_mesa ON libro_arqueo_fichas (mesa_uuid);
+        CREATE INDEX IF NOT EXISTS idx_libro_arqueo_fichas_multisala ON libro_arqueo_fichas (multisala_uuid);
+        CREATE INDEX IF NOT EXISTS idx_libro_arqueo_fichas_tipo ON libro_arqueo_fichas (tipo);
       `);
+
+      const libroTables = [
+        'libro_datos',
+        'libro_drop_mesas',
+        'libro_control_llaves',
+        'libro_incidencias_generales',
+        'libro_control_clientes',
+        'libro_aportes',
+        'libro_novedades_mesas',
+        'libro_reporte',
+        'libro_conteo_maquinas',
+        'libro_arqueo_fichas'
+      ];
+      for (const t of libroTables) {
+        await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS multisala_uuid UUID;`);
+      }
+      await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS hora VARCHAR(20);`);
+      await sql.unsafe(`ALTER TABLE libro_datos DROP CONSTRAINT IF EXISTS libro_datos_libro_uuid_key;`);
+      await sql.unsafe(`DROP INDEX IF EXISTS libro_datos_libro_uuid_key;`);
     } catch (eLibroCol) {
       console.warn('Advertencia migrando multisala_uuid en tablas de libro:', eLibroCol.message);
     }

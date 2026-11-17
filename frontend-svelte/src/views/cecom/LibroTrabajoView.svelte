@@ -5,6 +5,7 @@
   import { getPublicWebUrl } from '../../config/api.config.js';
   import { masterSalasStore } from '../../controllers/master.store.js';
   import LibroDropMesasView from './LibroDropMesasView.svelte';
+  import LibroArqueoFichasView from './LibroArqueoFichasView.svelte';
   import LibroConteoMaquinasView from './LibroConteoMaquinasView.svelte';
   import LibroControlLlavesView from './LibroControlLlavesView.svelte';
   import LibroIncidenciasGeneralesView from './LibroIncidenciasGeneralesView.svelte';
@@ -26,6 +27,7 @@
   const SUBVISTAS = [
     { id: 'datos', label: 'Datos', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
     { id: 'drop-mesas', label: 'Drop Mesas', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
+    { id: 'arqueo-fichas', label: 'Arqueo Fichas', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
     { id: 'conteo-maquinas', label: 'Conteo Máquinas', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
     { id: 'control-llaves', label: 'Control Llaves', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '', description: 'Eventos e incidentes reportados en sala' },
@@ -95,6 +97,8 @@
         activeSubvista = 'aportes-maquinas';
       } else if (secondPart === 'conteo') {
         activeSubvista = 'conteo-maquinas';
+      } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas') {
+        activeSubvista = 'arqueo-fichas';
       } else if (SUBVISTAS.some(s => s.id === secondPart)) {
         activeSubvista = secondPart;
       }
@@ -315,6 +319,8 @@
         <LibroDatosView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'drop-mesas'}
         <LibroDropMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
+      {:else if activeSubvista === 'arqueo-fichas' || activeSubvista === 'arqueo'}
+        <LibroArqueoFichasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'conteo-maquinas'}
         <LibroConteoMaquinasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'control-llaves'}

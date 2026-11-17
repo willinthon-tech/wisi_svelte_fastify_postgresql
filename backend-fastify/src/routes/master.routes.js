@@ -36,6 +36,7 @@ import {
   getLlaves, getLlavesFilterOptions, createLlave, updateLlave, deleteLlave, restoreLlave, purgeLlave,
   getLibros, getLibroById, getLibrosFilterOptions, createLibro, updateLibro, deleteLibro,
   getLibroDropMesas, createLibroDropMesa, deleteLibroDropMesa,
+  getLibroArqueoFichas, createOrUpdateLibroArqueoFicha, deleteLibroArqueoFicha,
   getLibroConteoMaquinas, createLibroConteoMaquina, updateLibroConteoMaquina, deleteLibroConteoMaquina,
   getLibroControlLlaves, createLibroControlLlaves, updateLibroControlLlavesHoras, deleteLibroControlLlaves,
   getLibroIncidenciasGenerales, createLibroIncidenciaGeneral, updateLibroIncidenciaGeneralHora, deleteLibroIncidenciaGeneral,
@@ -271,6 +272,14 @@ export default async function masterRoutes(fastify, options) {
   fastify.post('/api/master/libros/:id/drop-mesas', createLibroDropMesa);
   fastify.delete('/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
   fastify.delete('/api/master/libros/:id/drop-mesas/:dropId', deleteLibroDropMesa);
+
+  // Arqueo Fichas (CECOM: Libro Arqueo Fichas)
+  fastify.get('/master/libros/:id/arqueo-fichas', getLibroArqueoFichas);
+  fastify.get('/api/master/libros/:id/arqueo-fichas', getLibroArqueoFichas);
+  fastify.post('/master/libros/:id/arqueo-fichas', createOrUpdateLibroArqueoFicha);
+  fastify.post('/api/master/libros/:id/arqueo-fichas', createOrUpdateLibroArqueoFicha);
+  fastify.delete('/master/libros/:id/arqueo-fichas/:targetId', deleteLibroArqueoFicha);
+  fastify.delete('/api/master/libros/:id/arqueo-fichas/:targetId', deleteLibroArqueoFicha);
 
   // Conteo Máquinas (CECOM: Libro Conteo Máquinas)
   fastify.get('/master/libros/:id/conteo-maquinas', getLibroConteoMaquinas);

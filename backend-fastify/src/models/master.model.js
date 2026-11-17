@@ -9691,6 +9691,278 @@ export async function deleteLibroConteoMaquinaModel(id, libroId) {
   return { success: true, id: targetUuid, uuid: targetUuid };
 }
 
+// --- ARQUEO DE FICHAS (CECOM: LIBRO ARQUEO FICHAS - APERTURA Y CIERRE) ---
+export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
+  if (!libroId) return [];
+  const targetLibroUuid = String(libroId).trim();
+  if (!isUuid(targetLibroUuid)) return [];
+
+  const rawMultisala = multisalaUuid !== undefined ? multisalaUuid : null;
+
+  if (!isPgConnected || !sql) {
+    const list = inMemoryData.libro_arqueo_fichas || [];
+    return list.filter(d => 
+      String(d.libro_uuid || d.libro_id) === targetLibroUuid &&
+      (rawMultisala === 'all' || (rawMultisala ? String(d.multisala_uuid) === String(rawMultisala) : !d.multisala_uuid)) &&
+      !d.is_deleted
+    );
+  }
+
+  let whereMultisala = sql``;
+  if (rawMultisala && isUuid(rawMultisala)) {
+    whereMultisala = sql`AND a.multisala_uuid = ${rawMultisala}::uuid`;
+  } else if (rawMultisala === 'null' || rawMultisala === 'none') {
+    whereMultisala = sql`AND a.multisala_uuid IS NULL`;
+  } else if (!rawMultisala && rawMultisala !== 'all') {
+    whereMultisala = sql`AND a.multisala_uuid IS NULL`;
+  }
+
+  const rows = await sql`
+    SELECT 
+      a.uuid,
+      a.uuid AS id,
+      a.libro_uuid,
+      a.libro_uuid AS libro_id,
+      a.multisala_uuid,
+      a.mesa_uuid,
+      a.mesa_uuid AS mesa_id,
+      a.tipo,
+      a.fichas,
+      a.total,
+      a.observaciones,
+      a.created_at,
+      a.updated_at,
+      m.nombre AS mesa_nombre,
+      j.nombre AS juego_nombre,
+      s.nombre AS sala_nombre,
+      s.nombre_comercial AS sala_nombre_comercial,
+      m.banca AS mesa_banca
+    FROM libro_arqueo_fichas a
+    JOIN mesas m ON a.mesa_uuid = m.uuid
+    LEFT JOIN juegos j ON m.juego_uuid = j.uuid
+    LEFT JOIN salas s ON m.sala_uuid = s.uuid
+    WHERE a.libro_uuid = ${targetLibroUuid}::uuid
+      AND (a.is_deleted IS FALSE OR a.is_deleted IS NULL)
+      ${whereMultisala}
+    ORDER BY m.nombre ASC, a.tipo ASC, a.created_at ASC
+  `;
+
+  return rows.map(r => ({
+    ...r,
+    mesa_nombre: r.mesa_nombre ? toTitleCase(r.mesa_nombre) : '',
+    juego_nombre: r.juego_nombre ? toTitleCase(r.juego_nombre) : '',
+    fichas: Array.isArray(r.fichas) ? r.fichas : (typeof r.fichas === 'string' ? JSON.parse(r.fichas || '[]') : [])
+  }));
+}
+
+export async function createOrUpdateLibroArqueoFichaModel(data) {
+  const rawLibro = data.libro_uuid || data.libro_id;
+  const rawMesa = data.mesa_uuid || data.mesa_id;
+  if (!rawLibro) throw new Error('El ID del libro es obligatorio');
+  if (!rawMesa) throw new Error('Debe seleccionar una mesa');
+
+  const libroUuid = String(rawLibro).trim();
+  const mesaUuid = String(rawMesa).trim();
+  if (!isUuid(libroUuid)) throw new Error('UUID de libro inválido');
+  if (!isUuid(mesaUuid)) throw new Error('UUID de mesa inválido');
+
+  const rawMultisala = data.multisala_uuid || data.multisala_id;
+  const multisalaUuid = (rawMultisala && isUuid(rawMultisala)) ? String(rawMultisala).trim() : null;
+
+  const tipo = (data.tipo && String(data.tipo).toLowerCase().trim() === 'cierre') ? 'cierre' : 'apertura';
+  const observaciones = data.observaciones ? String(data.observaciones).trim() : null;
+
+  let rawFichas = [];
+  if (Array.isArray(data.fichas)) {
+    rawFichas = data.fichas;
+  } else if (typeof data.fichas === 'string') {
+    try { rawFichas = JSON.parse(data.fichas); } catch (e) { rawFichas = []; }
+  }
+
+  const fichasClean = (Array.isArray(rawFichas) ? rawFichas : []).map(f => {
+    const v = Number(f.valor ?? f.denominacion);
+    const c = Math.max(0, parseInt(f.cantidad ?? 0, 10) || 0);
+    return {
+      valor: isNaN(v) ? 0 : v,
+      cantidad: c,
+      total: (isNaN(v) ? 0 : v) * c
+    };
+  }).filter(f => f.valor > 0).sort((a, b) => b.valor - a.valor);
+
+  const calculatedTotal = fichasClean.reduce((acc, f) => acc + f.total, 0);
+  const total = data.total !== undefined && !isNaN(Number(data.total)) ? Number(data.total) : calculatedTotal;
+  const arqueoUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : crypto.randomUUID();
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_arqueo_fichas = inMemoryData.libro_arqueo_fichas || [];
+    const existingIdx = inMemoryData.libro_arqueo_fichas.findIndex(
+      d => String(d.libro_uuid || d.libro_id) === libroUuid &&
+           String(d.mesa_uuid || d.mesa_id) === mesaUuid &&
+           d.tipo === tipo &&
+           (multisalaUuid ? String(d.multisala_uuid) === multisalaUuid : !d.multisala_uuid) &&
+           !d.is_deleted
+    );
+
+    const mesa = (inMemoryData.mesas || []).find(m => String(m.uuid || m.id) === mesaUuid) || {};
+
+    if (existingIdx !== -1) {
+      inMemoryData.libro_arqueo_fichas[existingIdx] = {
+        ...inMemoryData.libro_arqueo_fichas[existingIdx],
+        fichas: fichasClean,
+        total,
+        observaciones,
+        updated_at: new Date().toISOString()
+      };
+      return inMemoryData.libro_arqueo_fichas[existingIdx];
+    }
+
+    const newRecord = {
+      id: arqueoUuid,
+      uuid: arqueoUuid,
+      libro_id: libroUuid,
+      libro_uuid: libroUuid,
+      multisala_uuid: multisalaUuid,
+      mesa_id: mesaUuid,
+      mesa_uuid: mesaUuid,
+      tipo,
+      fichas: fichasClean,
+      total,
+      observaciones,
+      mesa_nombre: mesa.nombre || `Mesa #${mesaUuid}`,
+      juego_nombre: mesa.juego_nombre || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    inMemoryData.libro_arqueo_fichas.push(newRecord);
+    return newRecord;
+  }
+
+  let existingRow;
+  if (multisalaUuid) {
+    existingRow = await sql`
+      SELECT uuid FROM libro_arqueo_fichas
+      WHERE libro_uuid = ${libroUuid}::uuid 
+        AND mesa_uuid = ${mesaUuid}::uuid 
+        AND multisala_uuid = ${multisalaUuid}::uuid
+        AND tipo = ${tipo}
+        AND (is_deleted IS FALSE OR is_deleted IS NULL)
+      LIMIT 1
+    `;
+  } else {
+    existingRow = await sql`
+      SELECT uuid FROM libro_arqueo_fichas
+      WHERE libro_uuid = ${libroUuid}::uuid 
+        AND mesa_uuid = ${mesaUuid}::uuid 
+        AND multisala_uuid IS NULL
+        AND tipo = ${tipo}
+        AND (is_deleted IS FALSE OR is_deleted IS NULL)
+      LIMIT 1
+    `;
+  }
+
+  let insertedUuid = null;
+  if (existingRow.length > 0) {
+    const updated = await sql`
+      UPDATE libro_arqueo_fichas SET
+        fichas = ${JSON.stringify(fichasClean)}::jsonb,
+        total = ${total},
+        observaciones = ${observaciones},
+        is_deleted = false,
+        deleted_at = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE uuid = ${existingRow[0].uuid}::uuid
+      RETURNING uuid
+    `;
+    insertedUuid = updated[0].uuid;
+  } else {
+    const res = await sql`
+      INSERT INTO libro_arqueo_fichas (
+        uuid, libro_uuid, mesa_uuid, multisala_uuid,
+        tipo, fichas, total, observaciones
+      )
+      VALUES (
+        ${arqueoUuid}::uuid,
+        ${libroUuid}::uuid,
+        ${mesaUuid}::uuid,
+        ${multisalaUuid ? multisalaUuid : null}::uuid,
+        ${tipo},
+        ${JSON.stringify(fichasClean)}::jsonb,
+        ${total},
+        ${observaciones}
+      )
+      RETURNING uuid
+    `;
+    insertedUuid = res[0].uuid;
+  }
+
+  const details = await sql`
+    SELECT 
+      a.uuid,
+      a.uuid AS id,
+      a.libro_uuid,
+      a.libro_uuid AS libro_id,
+      a.multisala_uuid,
+      a.mesa_uuid,
+      a.mesa_uuid AS mesa_id,
+      a.tipo,
+      a.fichas,
+      a.total,
+      a.observaciones,
+      a.created_at,
+      a.updated_at,
+      m.nombre AS mesa_nombre,
+      j.nombre AS juego_nombre,
+      s.nombre AS sala_nombre,
+      s.nombre_comercial AS sala_nombre_comercial,
+      m.banca AS mesa_banca
+    FROM libro_arqueo_fichas a
+    JOIN mesas m ON a.mesa_uuid = m.uuid
+    LEFT JOIN juegos j ON m.juego_uuid = j.uuid
+    LEFT JOIN salas s ON m.sala_uuid = s.uuid
+    WHERE a.uuid = ${insertedUuid}::uuid
+    LIMIT 1
+  `;
+
+  const finalRow = details[0] || { uuid: insertedUuid, id: insertedUuid };
+  saveLibroReporteModel(libroUuid).catch(() => {});
+  return {
+    ...finalRow,
+    mesa_nombre: finalRow.mesa_nombre ? toTitleCase(finalRow.mesa_nombre) : '',
+    juego_nombre: finalRow.juego_nombre ? toTitleCase(finalRow.juego_nombre) : '',
+    fichas: Array.isArray(finalRow.fichas) ? finalRow.fichas : (typeof finalRow.fichas === 'string' ? JSON.parse(finalRow.fichas || '[]') : [])
+  };
+}
+
+export async function deleteLibroArqueoFichaModel(idOrMesaId, libroId) {
+  if (!idOrMesaId) throw new Error('ID de registro o mesa inválido');
+  const targetUuid = String(idOrMesaId).trim();
+  if (!isUuid(targetUuid)) throw new Error('UUID inválido');
+
+  const rawLibro = libroId ? String(libroId).trim() : null;
+  const libroUuid = rawLibro && isUuid(rawLibro) ? rawLibro : null;
+
+  if (!isPgConnected || !sql) {
+    inMemoryData.libro_arqueo_fichas = inMemoryData.libro_arqueo_fichas || [];
+    inMemoryData.libro_arqueo_fichas = inMemoryData.libro_arqueo_fichas.filter(d => 
+      String(d.uuid || d.id) !== targetUuid && String(d.mesa_uuid || d.mesa_id) !== targetUuid
+    );
+    return { success: true, id: targetUuid, uuid: targetUuid };
+  }
+
+  await sql`
+    UPDATE libro_arqueo_fichas
+    SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
+    WHERE (uuid = ${targetUuid}::uuid OR mesa_uuid = ${targetUuid}::uuid)
+      ${libroUuid ? sql`AND libro_uuid = ${libroUuid}::uuid` : sql``}
+  `;
+
+  if (libroUuid) {
+    saveLibroReporteModel(libroUuid).catch(() => {});
+  }
+
+  return { success: true, id: targetUuid, uuid: targetUuid };
+}
+
 // --- CONTROL DE LLAVES (CECOM: LIBRO CONTROL DE LLAVES) ---
 export async function getLibroControlLlavesModel(libroId, multisalaUuid = null) {
   if (!libroId) throw new Error('ID de libro inválido');
@@ -11995,7 +12267,8 @@ export async function saveLibroReporteModel(libroId) {
     llavesRes,
     clientesRes,
     incidenciasRes,
-    conteoMaquinasRes
+    conteoMaquinasRes,
+    arqueoFichasRes
   ] = await Promise.all([
     getLibroByIdModel(libroId).catch(e => null),
     getLibroDatosModel(libroId, 'all').catch(e => null),
@@ -12005,7 +12278,8 @@ export async function saveLibroReporteModel(libroId) {
     getLibroControlLlavesModel(libroId, 'all').catch(e => []),
     getLibroControlClientesModel(libroId, 'all').catch(e => []),
     getLibroIncidenciasGeneralesModel(libroId, 'all').catch(e => []),
-    getLibroConteoMaquinasModel(libroId, 'all').catch(e => [])
+    getLibroConteoMaquinasModel(libroId, 'all').catch(e => []),
+    getLibroArqueoFichasModel(libroId, 'all').catch(e => [])
   ]);
 
   const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
@@ -12033,7 +12307,8 @@ export async function saveLibroReporteModel(libroId) {
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0,
-    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0,
+    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes.length : 0
   };
 
   const fullData = {
@@ -12053,7 +12328,8 @@ export async function saveLibroReporteModel(libroId) {
     control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
     control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : [],
-    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : []
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : [],
+    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes : []
   };
 
   const jsonStr = JSON.stringify(fullData);
@@ -12142,7 +12418,8 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     llavesRes,
     clientesRes,
     incidenciasRes,
-    conteoMaquinasRes
+    conteoMaquinasRes,
+    arqueoFichasRes
   ] = await Promise.all([
     getLibroByIdModel(idOrLibroId).catch(() => null),
     getLibroDatosModel(idOrLibroId, 'all').catch(() => []),
@@ -12152,7 +12429,8 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     getLibroControlLlavesModel(idOrLibroId, 'all').catch(() => []),
     getLibroControlClientesModel(idOrLibroId, 'all').catch(() => []),
     getLibroIncidenciasGeneralesModel(idOrLibroId, 'all').catch(() => []),
-    getLibroConteoMaquinasModel(idOrLibroId, 'all').catch(() => [])
+    getLibroConteoMaquinasModel(idOrLibroId, 'all').catch(() => []),
+    getLibroArqueoFichasModel(idOrLibroId, 'all').catch(() => [])
   ]);
 
   const datosList = Array.isArray(datosRes) ? datosRes : (datosRes ? [datosRes] : []);
@@ -12167,7 +12445,8 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
     control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
     incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0,
-    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0
+    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0,
+    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes.length : 0
   };
 
   const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
