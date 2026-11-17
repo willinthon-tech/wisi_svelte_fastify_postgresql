@@ -1138,6 +1138,7 @@
     const numConteoPorRango = hasConteoPorRango ? ++idxMaquinas : 0;
     const numClientesMaquinas = hasClientesMaquinas ? ++idxMaquinas : 0;
     const numAportes = hasAportes ? ++idxMaquinas : 0;
+    const hasDetalladoMaquinas = Boolean(hasBilleteros || hasConteoPorRango || hasClientesMaquinas || hasAportes);
 
     // 4. Resumen de Incidencias
     const incidenciasActivas = incidenciasPorTipo.filter(cat => cat.items && cat.items.length > 0);
@@ -1159,6 +1160,7 @@
       numConteoPorRango,
       numClientesMaquinas,
       numAportes,
+      hasDetalladoMaquinas,
       numBitacoraIncidencias,
       numControlLlaves
     };
@@ -2358,7 +2360,7 @@
           <!-- ============================================================
                DETALLADO MÁQUINAS (Encabezado Principal)
                ============================================================ -->
-          {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.clientesMaquinas && section.subData.clientesMaquinas.records.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
+          {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.conteoPorRango && section.subData.conteoPorRango.length > 0) || (section.subData.clientesMaquinas && section.subData.clientesMaquinas.records.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0)}
             <div class="sheet-main-title-box">
               <h1 class="sheet-title-text">Detallado Máquinas</h1>
             </div>
@@ -2949,7 +2951,7 @@
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    Detallado de Operaciones
+                    1. Detallado de Operaciones
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.clientesTotales.totalOps} transacciones</span
