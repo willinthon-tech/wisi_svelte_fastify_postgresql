@@ -745,7 +745,7 @@
         porcentaje: (item.montoAportes / grandTotalAportes) * 100,
         promedio: item.cantAportes > 0 ? item.montoAportes / item.cantAportes : 0
       }))
-      .sort((a, b) => b.montoAportes - a.montoAportes);
+      .sort((a, b) => (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' }));
 
     const mapEmp = {};
     for (const a of sortedAportesList) {
@@ -841,7 +841,77 @@
       mapConteoRango[rKey].b1 += Number(c.denominacion_1 ?? c.b1 ?? 0) || 0;
       mapConteoRango[rKey].total += Number(c.total) || 0;
     }
-    const conteoPorRango = Object.values(mapConteoRango).sort((a, b) => b.total - a.total);
+    const conteoPorRango = Object.values(mapConteoRango).sort((a, b) => 
+      (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    // 9. Resumen de Producción por Rango (Conteo Billeteros - Aportes y Devoluciones Netos)
+    const mapProduccionRango = {};
+
+    // A) Mapear primero desde conteo de máquinas
+    for (const c of sortedConteoList) {
+      const rKey = c.rango_uuid || c.rango_id || 0;
+      const rNom = c.rango_nombre || (c.rango_uuid ? `Rango #${c.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
+      if (!mapProduccionRango[rKey]) {
+        mapProduccionRango[rKey] = {
+          rango_uuid: c.rango_uuid || rKey,
+          rango_id: rKey,
+          rango_nombre: rNom,
+          maquinasSet: new Set(),
+          billetero: 0,
+          montoAportes: 0,
+          montoDevoluciones: 0,
+          aportesNeto: 0,
+          produccion: 0
+        };
+      }
+      const maqKey = c.maquina_uuid || c.maquina_id || c.id || `${rKey}_${mapProduccionRango[rKey].maquinasSet.size + 1}`;
+      mapProduccionRango[rKey].maquinasSet.add(maqKey);
+      mapProduccionRango[rKey].billetero += Number(c.total) || 0;
+    }
+
+    // B) Cruzar con los datos de aportes y devoluciones
+    for (const a of sortedAportesList) {
+      const rKey = a.rango_uuid || a.rango_id || 0;
+      const rNom = a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${rKey}`);
+      if (!mapProduccionRango[rKey]) {
+        mapProduccionRango[rKey] = {
+          rango_uuid: a.rango_uuid || rKey,
+          rango_id: rKey,
+          rango_nombre: rNom,
+          maquinasSet: new Set(),
+          billetero: 0,
+          montoAportes: 0,
+          montoDevoluciones: 0,
+          aportesNeto: 0,
+          produccion: 0
+        };
+      }
+      const val = parseFloat(a.monto) || 0;
+      if ((a.tipo || 'Aporte') === 'Devolución') {
+        mapProduccionRango[rKey].montoDevoluciones += val;
+        mapProduccionRango[rKey].aportesNeto -= val;
+      } else {
+        mapProduccionRango[rKey].montoAportes += val;
+        mapProduccionRango[rKey].aportesNeto += val;
+      }
+    }
+
+    // C) Calcular producción neta y ordenar alfabéticamente
+    const produccionPorRango = Object.values(mapProduccionRango).map(item => ({
+      ...item,
+      maquinasCount: item.maquinasSet.size,
+      produccion: item.billetero - item.aportesNeto
+    })).sort((a, b) => 
+      (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    const produccionTotales = {
+      totalMaquinas: produccionPorRango.reduce((acc, r) => acc + r.maquinasCount, 0),
+      totalBilletero: produccionPorRango.reduce((acc, r) => acc + r.billetero, 0),
+      totalAportesNeto: produccionPorRango.reduce((acc, r) => acc + r.aportesNeto, 0),
+      totalProduccion: produccionPorRango.reduce((acc, r) => acc + r.produccion, 0)
+    };
 
     const produccionMaquinas = conteoTotales.grandTotal - aportesTotales.totalAportes + aportesTotales.totalDevoluciones;
     const produccionFinal = produccionMesas + produccionMaquinas;
@@ -861,7 +931,7 @@
     const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
     const hasControlClientes = Boolean(sortedControlClientes && sortedControlClientes.length > 0);
     const hasBilleteros = Boolean(sortedConteoList && sortedConteoList.length > 0);
-    const hasAportes = Boolean(sortedAportesList && sortedAportesList.length > 0);
+    const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (produccionPorRango && produccionPorRango.length > 0));
     let idxMov = 0;
     const numDropMesas = hasDropMesas ? ++idxMov : 0;
     const numNovedadesMesas = hasNovedadesMesas ? ++idxMov : 0;
@@ -919,7 +989,9 @@
       aportesPorEmpleado,
       conteo_maquinas: sortedConteoList,
       conteoTotales,
-      conteoPorRango
+      conteoPorRango,
+      produccionPorRango,
+      produccionTotales
     };
   }
 
@@ -1995,7 +2067,7 @@
           <!-- ============================================================
                APORTES Y DEVOLUCIONES
                ============================================================ -->
-          {#if section.subData.aportes && section.subData.aportes.length > 0}
+          {#if (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0)}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
@@ -2009,7 +2081,8 @@
               </div>
 
               <!-- 8.1 Detallado de Aportes y Devoluciones -->
-              <div class="table-responsive-wrapper">
+              {#if section.subData.aportes && section.subData.aportes.length > 0}
+                <div class="table-responsive-wrapper">
                 <table class="sheet-detail-table">
                   <thead>
                     <tr>
@@ -2056,8 +2129,10 @@
                   </tfoot>
                 </table>
               </div>
+            {/if}
 
-              <!-- 8.2 Las 2 Tablitas Agrupadas (Por Rango y Por Empleado) -->
+            <!-- 8.2 Las 2 Tablitas Agrupadas (Por Rango y Por Empleado) -->
+            {#if (section.subData.aportesPorRango && section.subData.aportesPorRango.length > 0) || (section.subData.aportesPorEmpleado && section.subData.aportesPorEmpleado.length > 0)}
               <div class="client-summaries-grid">
                 <!-- Tablita A: Resumen por Rango -->
                 {#if section.subData.aportesPorRango && section.subData.aportesPorRango.length > 0}
@@ -2168,6 +2243,62 @@
                   </div>
                 {/if}
               </div>
+            {/if}
+
+            <!-- 8.3 Resumen de Producción por Rango -->
+            {#if section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0}
+              <div class="summary-subtable-box" style="margin-top: 18px;">
+                <div class="subtable-header">
+                  <h4 class="subtable-title">Resumen de Producción por Rango</h4>
+                  <span class="incidencia-badge"
+                    >{section.subData.produccionPorRango.length} {section.subData.produccionPorRango.length === 1 ? 'rango' : 'rangos'}</span
+                  >
+                </div>
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
+                      <tr>
+                        <th>RANGO</th>
+                        <th>MÁQUINAS</th>
+                        <th>BILLETERO</th>
+                        <th>APORTES Y DEVOLUCIONES</th>
+                        <th>TOTAL PRODUCCIÓN</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.produccionPorRango as rg}
+                        <tr>
+                          <td class="cell-left font-bold">{rg.rango_nombre}</td>
+                          <td class="cell-center">{rg.maquinasCount} ops</td>
+                          <td class="cell-total-money font-bold {rg.billetero > 0 ? 'text-emerald' : ''}">{formatMoney(rg.billetero)}</td>
+                          <td class="cell-total-money font-bold {rg.aportesNeto > 0 ? 'text-rose' : (rg.aportesNeto < 0 ? 'text-emerald' : '')}">
+                            {formatMoney(rg.aportesNeto)}
+                          </td>
+                          <td class="cell-grand-total {rg.produccion > 0 ? 'text-emerald' : (rg.produccion < 0 ? 'text-rose' : '')}">
+                            {formatMoney(rg.produccion)}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td>TOTAL</td>
+                        <td class="cell-center">{section.subData.produccionTotales.totalMaquinas} ops</td>
+                        <td class="cell-total-money font-bold {section.subData.produccionTotales.totalBilletero > 0 ? 'text-emerald' : ''}">
+                          {formatMoney(section.subData.produccionTotales.totalBilletero)}
+                        </td>
+                        <td class="cell-total-money font-bold {section.subData.produccionTotales.totalAportesNeto > 0 ? 'text-rose' : (section.subData.produccionTotales.totalAportesNeto < 0 ? 'text-emerald' : '')}">
+                          {formatMoney(section.subData.produccionTotales.totalAportesNeto)}
+                        </td>
+                        <td class="cell-grand-total {section.subData.produccionTotales.totalProduccion > 0 ? 'text-emerald' : (section.subData.produccionTotales.totalProduccion < 0 ? 'text-rose' : '')}">
+                          {formatMoney(section.subData.produccionTotales.totalProduccion)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            {/if}
             </div>
           {/if}
 
