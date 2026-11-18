@@ -408,18 +408,18 @@ class WhatsAppService {
 
         console.log(`✅ [WhatsApp] Operación registrada en Control de Clientes: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} (${parsed.caja})`);
 
-        // E) Confirmación en WhatsApp
+        // E) Confirmación en WhatsApp: Reaccionar con el check verde (chulito)
         if (mapping.auto_reply && this.sock) {
-          const confirmText = 
-`✅ *Operación Registrada en WISI*
-• *Tipo:* ${parsed.tipo}
-• *Monto:* $${parsed.monto}
-• *Método:* ${parsed.metodo}
-• *Caja:* ${parsed.caja}
-• *Cliente:* ${parsed.cliente}
-• *Hora:* ${horaStr}`;
-
-          await this.sock.sendMessage(remoteJid, { text: confirmText }, { quoted: m });
+          try {
+            await this.sock.sendMessage(remoteJid, {
+              react: {
+                text: '✅',
+                key: m.key
+              }
+            });
+          } catch (eReact) {
+            console.warn('Error enviando reacción check en WhatsApp:', eReact.message);
+          }
         }
 
       } else if (parsed.modulo === 'aportes_maquinas') {
@@ -544,15 +544,18 @@ class WhatsAppService {
 
         console.log(`✅ [WhatsApp] ${parsed.tipo} registrado en Aportes: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
 
+        // Confirmación en WhatsApp: Reaccionar con el check verde (chulito)
         if (mapping.auto_reply && this.sock) {
-          const confirmText = 
-`✅ *${parsed.tipo} Registrado en WISI*
-• *Monto:* $${parsed.monto}
-• *Rango:* ${rangoNombre}
-• *Operador:* ${empleadoNombre}
-• *Hora:* ${horaStr}`;
-
-          await this.sock.sendMessage(remoteJid, { text: confirmText }, { quoted: m });
+          try {
+            await this.sock.sendMessage(remoteJid, {
+              react: {
+                text: '✅',
+                key: m.key
+              }
+            });
+          } catch (eReact) {
+            console.warn('Error enviando reacción check en WhatsApp:', eReact.message);
+          }
         }
       }
 

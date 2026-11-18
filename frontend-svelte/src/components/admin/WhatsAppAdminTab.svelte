@@ -615,7 +615,7 @@
               <th>ESTADO</th>
               <th>GRUPO DE WHATSAPP</th>
               <th>SALA ASIGNADA</th>
-              <th>AUTO-CONFIRMACIÓN</th>
+              <th>CONFIRMACIÓN (CHECK)</th>
               <th style="text-align: right;">ACCIONES</th>
             </tr>
           </thead>
@@ -648,7 +648,7 @@
                 </td>
                 <td>
                   {#if m.auto_reply !== false}
-                    <span class="reply-badge enabled">✅ Responde Confirmación</span>
+                    <span class="reply-badge enabled">✅ Reacción Check</span>
                   {:else}
                     <span class="reply-badge disabled">Silencioso</span>
                   {/if}
@@ -832,7 +832,7 @@
         <div class="form-row">
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={mappingForm.auto_reply} />
-            <span>Enviar mensaje de confirmación automático (check) al grupo al procesar cada operación</span>
+            <span>Reaccionar con check (✅ chulito) al mensaje del usuario al procesar cada operación</span>
           </label>
         </div>
 
