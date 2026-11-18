@@ -24,6 +24,86 @@
   let isLoadingLogs = false;
   let isSavingMapping = false;
 
+  // Filtrar para que solo aparezcan salas válidas (excluir galpones y depósitos)
+  function isTipo1Sala(sala) {
+    if (!sala) return false;
+
+    // Grupo UUID check (Galpones / Depósitos):
+    const galponGrupoUuids = [
+      '51a3d9bc-76d3-4f08-8dd9-97c7f79ea0e3',
+      '55d65e8b-09b2-4164-8491-efbdd50433b6'
+    ];
+    const gUuid = sala.grupo_uuid ? String(sala.grupo_uuid).toLowerCase().trim() : '';
+    if (gUuid && galponGrupoUuids.includes(gUuid)) return false;
+
+    // Grupo Nombre check:
+    if (sala.grupo_nombre) {
+      const gn = String(sala.grupo_nombre).toLowerCase().trim();
+      if (gn.includes('galpon') || gn.includes('galpón') || gn.includes('deposito') || gn.includes('depósito')) {
+        return false;
+      }
+    }
+
+    // Name check:
+    const nom = String(sala.nombre || sala.name || sala.nombre_comercial || '').toLowerCase().trim();
+    if (
+      nom.includes('galpon') || 
+      nom.includes('galpón') || 
+      nom.includes('deposito') || 
+      nom.includes('depósito') || 
+      nom.includes('sótano') || 
+      nom.includes('sotano') || 
+      nom.includes('almacen') || 
+      nom.includes('almacén') || 
+      nom === 'gainer' || 
+      nom.startsWith('darien')
+    ) {
+      return false;
+    }
+
+    // Legacy fields check (if present)
+    if (sala.grupo_id !== undefined && sala.grupo_id !== null && !isNaN(Number(sala.grupo_id))) {
+      if (Number(sala.grupo_id) === 2) return false;
+    }
+    if (sala.tipo_id !== undefined && sala.tipo_id !== null && !isNaN(Number(sala.tipo_id))) {
+      if (Number(sala.tipo_id) === 2) return false;
+    }
+    if (sala.tipo !== undefined && sala.tipo !== null && !isNaN(Number(sala.tipo))) {
+      if (Number(sala.tipo) === 2) return false;
+    }
+
+    return true;
+  }
+
+  // Lista reactiva de salas válidas (solo salas de juego, sin galpones)
+  $: availableSalas = (salas || []).filter(isTipo1Sala);
+
+  // Helper para extraer lista de subsalas / salas hijas si es multisala
+  function getSubsalasList(multisalas) {
+    if (!multisalas) return [];
+    let list = [];
+    if (Array.isArray(multisalas)) {
+      list = multisalas;
+    } else if (typeof multisalas === 'string') {
+      try {
+        const parsed = JSON.parse(multisalas);
+        list = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        list = [];
+      }
+    }
+    return list.map(item => {
+      if (typeof item === 'string') {
+        return { uuid: item, nombre: item, active: 1 };
+      }
+      return {
+        uuid: item.uuid || item.id,
+        nombre: item.nombre || item.name || 'Sub-sala',
+        active: item.active !== 0 && item.active !== false
+      };
+    }).filter(sub => sub.active !== false && sub.active !== 0 && Boolean(sub.uuid));
+  }
+
   // Modal para asociar/editar mapeo de grupo
   let isModalOpen = false;
   let isEditingMapping = false;
@@ -31,11 +111,19 @@
     group_jid: "",
     group_name: "",
     sala_uuid: "",
-    modulo_destino: "control_clientes",
-    caja_default: "Mesas",
+    multisala_uuid: "",
     auto_reply: true,
     is_active: true
   };
+
+  // Sala seleccionada y sus subsalas
+  $: selectedSalaObj = availableSalas.find(s => (s.uuid === mappingForm.sala_uuid || s.id === mappingForm.sala_uuid)) || null;
+  $: currentSubsalas = selectedSalaObj ? getSubsalasList(selectedSalaObj.multisalas) : [];
+
+  function handleSalaChange(e) {
+    mappingForm.sala_uuid = e.target.value;
+    mappingForm.multisala_uuid = "";
+  }
 
   // Probador interactivo de sintaxis
   let testInput = "Compra 200$ USDT Máquinas Abel Gonzáles";
@@ -172,12 +260,12 @@
 
   function openCreateMappingModal() {
     isEditingMapping = false;
+    const defaultSala = availableSalas.length > 0 ? (availableSalas[0].uuid || availableSalas[0].id) : "";
     mappingForm = {
       group_jid: "",
       group_name: "",
-      sala_uuid: (salas && salas[0]?.uuid) || "",
-      modulo_destino: "control_clientes",
-      caja_default: "Mesas",
+      sala_uuid: defaultSala,
+      multisala_uuid: "",
       auto_reply: true,
       is_active: true
     };
@@ -190,8 +278,7 @@
       group_jid: m.group_jid,
       group_name: m.group_name || "",
       sala_uuid: m.sala_uuid || "",
-      modulo_destino: m.modulo_destino || "control_clientes",
-      caja_default: m.caja_default || "Mesas",
+      multisala_uuid: m.multisala_uuid || "",
       auto_reply: m.auto_reply !== false,
       is_active: m.is_active !== false
     };
@@ -528,8 +615,6 @@
               <th>ESTADO</th>
               <th>GRUPO DE WHATSAPP</th>
               <th>SALA ASIGNADA</th>
-              <th>MÓDULO DESTINO</th>
-              <th>CAJA DEFECTO</th>
               <th>AUTO-CONFIRMACIÓN</th>
               <th style="text-align: right;">ACCIONES</th>
             </tr>
@@ -554,17 +639,12 @@
                   </div>
                 </td>
                 <td>
-                  <span class="sala-badge">🏛️ {m.sala_nombre || 'Sala no especificada'}</span>
-                </td>
-                <td>
-                  <span class="modulo-badge {m.modulo_destino}">
-                    {m.modulo_destino === 'control_clientes' ? 'Control de Clientes' : 'Aportes / Devoluciones'}
-                  </span>
-                </td>
-                <td>
-                  <span class="caja-badge {m.caja_default}">
-                    {m.caja_default || 'Mesas'}
-                  </span>
+                  <div class="sala-cell-info">
+                    <span class="sala-badge">🏛️ {m.sala_nombre || 'Sala no especificada'}</span>
+                    {#if m.sub_sala_nombre}
+                      <span class="subsala-pill">📍 Sub-sala: {m.sub_sala_nombre}</span>
+                    {/if}
+                  </div>
                 </td>
                 <td>
                   {#if m.auto_reply !== false}
@@ -720,36 +800,33 @@
           />
         </div>
 
-        <!-- Sala Asignada -->
+        <!-- Sala Asignada (Solo salas operativas, sin galpones) -->
         <div class="form-group">
           <label class="form-label">Sala a la que pertenece este Grupo *</label>
-          <select class="form-select" bind:value={mappingForm.sala_uuid}>
+          <select class="form-select" value={mappingForm.sala_uuid} on:change={handleSalaChange}>
             <option value="">-- Seleccionar Sala --</option>
-            {#each (salas || []) as s}
+            {#each availableSalas as s}
               <option value={s.uuid || s.id}>{s.nombre || s.nombre_comercial}</option>
             {/each}
           </select>
           <span class="field-hint">Las transacciones escritas en este grupo se registrarán en el Libro Diario activo de esta sala.</span>
         </div>
 
-        <!-- Módulo Destino por defecto -->
-        <div class="form-group">
-          <label class="form-label">Módulo Destino por Defecto</label>
-          <select class="form-select" bind:value={mappingForm.modulo_destino}>
-            <option value="control_clientes">Control de Clientes (Compras y Pagos)</option>
-            <option value="aportes_maquinas">Aportes y Devoluciones (Máquinas)</option>
-          </select>
-        </div>
-
-        <!-- Caja por defecto -->
-        <div class="form-group">
-          <label class="form-label">Caja Predeterminada</label>
-          <select class="form-select" bind:value={mappingForm.caja_default}>
-            <option value="Mesas">Caja Mesas</option>
-            <option value="Máquinas">Caja Máquinas</option>
-          </select>
-          <span class="field-hint">Si el mensaje no menciona explícitamente "Mesas" o "Máquinas", se asignará a esta caja.</span>
-        </div>
+        <!-- Sub-sala / Sucursal (Multisala) -->
+        {#if currentSubsalas && currentSubsalas.length > 0}
+          <div class="form-group subsala-field-box">
+            <label class="form-label">
+              <span class="multisala-badge-tag">Multisala Activo</span> Sub-sala / Sucursal Específica (Opcional)
+            </label>
+            <select class="form-select" bind:value={mappingForm.multisala_uuid}>
+              <option value="">-- Toda la Sala (Sin sub-sala específica) --</option>
+              {#each currentSubsalas as sub}
+                <option value={sub.uuid}>📍 {sub.nombre}</option>
+              {/each}
+            </select>
+            <span class="field-hint">Esta sala cuenta con sucursales o salas hijas configuradas. Selecciona si este grupo corresponde a una en particular.</span>
+          </div>
+        {/if}
 
         <!-- Opciones adicionales -->
         <div class="form-row">
@@ -1200,6 +1277,13 @@
     color: #94a3b8;
   }
 
+  .sala-cell-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    align-items: flex-start;
+  }
+
   .sala-badge {
     background: #f0fdf4;
     color: #166534;
@@ -1208,6 +1292,35 @@
     font-weight: 700;
     font-size: 12px;
     border: 1px solid #bbf7d0;
+    display: inline-block;
+  }
+
+  .subsala-pill {
+    background: #eff6ff;
+    color: #1d4ed8;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid #bfdbfe;
+    display: inline-block;
+  }
+
+  .subsala-field-box {
+    background: #f8fafc;
+    border: 1.5px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+
+  .multisala-badge-tag {
+    background: #e0e7ff;
+    color: #4338ca;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 800;
+    margin-right: 6px;
   }
 
   .modulo-badge {

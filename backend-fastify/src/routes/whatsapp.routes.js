@@ -46,14 +46,43 @@ export default async function whatsappRoutes(fastify, options) {
     const mappings = await sql`
       SELECT 
         m.*,
-        s.nombre AS sala_nombre
+        s.nombre AS sala_nombre,
+        s.multisalas AS sala_multisalas
       FROM whatsapp_group_mappings m
       LEFT JOIN salas s ON m.sala_uuid = s.uuid
       ORDER BY m.created_at DESC
     `;
+
+    const enriched = mappings.map(m => {
+      let sub_sala_nombre = null;
+      if (m.multisala_uuid && m.sala_multisalas) {
+        let subList = [];
+        if (Array.isArray(m.sala_multisalas)) {
+          subList = m.sala_multisalas;
+        } else if (typeof m.sala_multisalas === 'string') {
+          try {
+            subList = JSON.parse(m.sala_multisalas);
+          } catch(e) {}
+        }
+        if (Array.isArray(subList)) {
+          const found = subList.find(sub => 
+            (sub && sub.uuid && String(sub.uuid).toLowerCase() === String(m.multisala_uuid).toLowerCase()) ||
+            (sub && sub.id && String(sub.id) === String(m.multisala_uuid))
+          );
+          if (found) {
+            sub_sala_nombre = found.nombre || found.name || null;
+          }
+        }
+      }
+      return {
+        ...m,
+        sub_sala_nombre
+      };
+    });
+
     return {
       success: true,
-      data: mappings
+      data: enriched
     };
   });
 
@@ -81,6 +110,10 @@ export default async function whatsappRoutes(fastify, options) {
       return reply.code(500).send({ success: false, error: 'Base de datos no disponible' });
     }
 
+    const safeMultisalaUuid = (multisala_uuid && String(multisala_uuid).trim() !== '') 
+      ? String(multisala_uuid).trim() 
+      : null;
+
     const res = await sql`
       INSERT INTO whatsapp_group_mappings (
         group_jid,
@@ -96,7 +129,7 @@ export default async function whatsappRoutes(fastify, options) {
         ${group_jid},
         ${group_name || 'Grupo WhatsApp'},
         ${sala_uuid}::uuid,
-        ${multisala_uuid ? sql`${multisala_uuid}::uuid` : sql`NULL`},
+        ${safeMultisalaUuid ? sql`${safeMultisalaUuid}::uuid` : sql`NULL`},
         ${modulo_destino || 'control_clientes'},
         ${caja_default || 'Mesas'},
         ${auto_reply !== false},
