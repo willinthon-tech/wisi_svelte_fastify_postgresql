@@ -170,18 +170,25 @@
     }
   }
 
-  async function handleConnect() {
+  async function handleConnect(force = false) {
     isConnecting = true;
     try {
-      const res = await fetch(toBackendUrl("/api/whatsapp/connect"), { method: "POST" });
+      const res = await fetch(toBackendUrl("/api/whatsapp/connect"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force })
+      });
       const json = await res.json();
       if (json && json.success) {
         status = json.data || status;
-        if (status.status === 'waiting_qr') {
+        if (status.status === 'connected') {
+          triggerToast("WhatsApp conectado exitosamente", "success");
+          fetchGroups();
+        } else if (status.status === 'waiting_qr') {
           triggerToast("Código QR generado. Escanéalo desde tu teléfono.", "success");
         } else {
-          triggerToast("Iniciando motor de WhatsApp. Esperando código QR...", "info");
-          setTimeout(() => fetchStatus(true), 1000);
+          triggerToast(status.hasSavedSession ? "Reconectando sesión de WhatsApp..." : "Iniciando motor de WhatsApp...", "info");
+          setTimeout(() => fetchStatus(true), 1500);
         }
       } else {
         triggerToast(json?.error || "Error al conectar WhatsApp", "error");
@@ -429,6 +436,9 @@
             <span class="sub-label">{status.hasSavedSession ? "Reanudando conexión guardada" : "Generando credenciales de sesión"}</span>
           </div>
         </div>
+        <button class="btn-secondary" on:click={() => handleConnect(true)} disabled={isConnecting} style="margin-left: 6px; font-size: 12px; padding: 6px 12px;">
+          ⚡ Forzar
+        </button>
       {:else}
         <div class="status-pill disconnected">
           <span class="status-dot gray"></span>
@@ -437,7 +447,7 @@
             <span class="sub-label">{status.hasSavedSession ? "Lista para reconectar automáticamente" : "Sin número de WhatsApp asociado"}</span>
           </div>
         </div>
-        <button class="btn-connect" on:click={handleConnect} disabled={isConnecting}>
+        <button class="btn-connect" on:click={() => handleConnect(false)} disabled={isConnecting}>
           {isConnecting ? "Conectando..." : (status.hasSavedSession ? "⚡ Reconectar Sesión" : "📲 Generar QR / Vincular")}
         </button>
       {/if}
@@ -457,10 +467,23 @@
             ? "El sistema está reactivando tu sesión guardada con WhatsApp. Espera un momento, no necesitas escanear el código QR."
             : "Por favor espera unos segundos. El código QR aparecerá automáticamente aquí abajo. Luego debes escanearlo con la cámara de tu teléfono desde WhatsApp > Dispositivos vinculados."}
         </p>
+        {#if status.hasSavedSession}
+          <p style="margin: 6px 0 0 0; font-size: 12px; color: #64748b;">
+            ¿Deseas desvincular o escanear un nuevo código QR? 
+            <button class="btn-link" on:click={handleDisconnect} style="background: none; border: none; color: #ef4444; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0 4px;">
+              Cerrar sesión actual y generar nuevo QR
+            </button>
+          </p>
+        {/if}
       </div>
-      <button class="btn-secondary" on:click={() => fetchStatus()}>
-        🔄 Comprobar Ahora
-      </button>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button class="btn-primary" on:click={() => handleConnect(true)} disabled={isConnecting} style="font-size: 13px;">
+          ⚡ Forzar Reconexión
+        </button>
+        <button class="btn-secondary" on:click={() => fetchStatus()} style="font-size: 13px;">
+          🔄 Comprobar Estado
+        </button>
+      </div>
     </div>
   {/if}
 

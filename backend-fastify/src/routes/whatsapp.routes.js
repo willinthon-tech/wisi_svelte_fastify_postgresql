@@ -19,9 +19,10 @@ export default async function whatsappRoutes(fastify, options) {
     };
   });
 
-  // 2. Conectar / Generar QR
+  // 2. Conectar / Generar QR / Forzar reinicio
   fastify.post('/api/whatsapp/connect', async (req, reply) => {
-    const status = await whatsappService.connect();
+    const { force } = req.body || {};
+    const status = await whatsappService.connect(Boolean(force));
     return {
       success: true,
       data: status
