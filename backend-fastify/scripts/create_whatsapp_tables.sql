@@ -13,13 +13,18 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_group_mappings (
     group_name VARCHAR(255),                            -- Nombre identificador del grupo (ej: Caja Central Mesas)
     sala_uuid UUID,                                     -- Sala a la que pertenece el grupo
     multisala_uuid UUID,                                -- Multisala opcional
-    modulo_destino VARCHAR(50) DEFAULT 'control_clientes', -- 'control_clientes' o 'aportes_maquinas'
-    caja_default VARCHAR(50) DEFAULT 'Mesas',           -- 'Mesas' o 'Máquinas' si no se especifica en el texto
     auto_reply BOOLEAN DEFAULT true,                    -- Enviar respuesta de confirmación al grupo
     is_active BOOLEAN DEFAULT true,                     -- Monitoreo activo
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Asegurar columna multisala_uuid si la tabla ya existía
+ALTER TABLE public.whatsapp_group_mappings ADD COLUMN IF NOT EXISTS multisala_uuid UUID;
+
+-- Eliminar columnas obsoletas si existían
+ALTER TABLE public.whatsapp_group_mappings DROP COLUMN IF EXISTS modulo_destino;
+ALTER TABLE public.whatsapp_group_mappings DROP COLUMN IF EXISTS caja_default;
 
 -- Índices de búsqueda para public.whatsapp_group_mappings
 CREATE INDEX IF NOT EXISTS idx_wa_mappings_jid ON public.whatsapp_group_mappings(group_jid);

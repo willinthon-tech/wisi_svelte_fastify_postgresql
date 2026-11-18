@@ -93,8 +93,6 @@ export default async function whatsappRoutes(fastify, options) {
       group_name,
       sala_uuid,
       multisala_uuid,
-      modulo_destino,
-      caja_default,
       auto_reply,
       is_active
     } = req.body || {};
@@ -120,8 +118,6 @@ export default async function whatsappRoutes(fastify, options) {
         group_name,
         sala_uuid,
         multisala_uuid,
-        modulo_destino,
-        caja_default,
         auto_reply,
         is_active,
         updated_at
@@ -130,8 +126,6 @@ export default async function whatsappRoutes(fastify, options) {
         ${group_name || 'Grupo WhatsApp'},
         ${sala_uuid}::uuid,
         ${safeMultisalaUuid ? sql`${safeMultisalaUuid}::uuid` : sql`NULL`},
-        ${modulo_destino || 'control_clientes'},
-        ${caja_default || 'Mesas'},
         ${auto_reply !== false},
         ${is_active !== false},
         CURRENT_TIMESTAMP
@@ -140,8 +134,6 @@ export default async function whatsappRoutes(fastify, options) {
         group_name = EXCLUDED.group_name,
         sala_uuid = EXCLUDED.sala_uuid,
         multisala_uuid = EXCLUDED.multisala_uuid,
-        modulo_destino = EXCLUDED.modulo_destino,
-        caja_default = EXCLUDED.caja_default,
         auto_reply = EXCLUDED.auto_reply,
         is_active = EXCLUDED.is_active,
         updated_at = CURRENT_TIMESTAMP

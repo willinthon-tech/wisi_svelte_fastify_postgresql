@@ -19,14 +19,16 @@ async function run() {
       group_name VARCHAR(255),
       sala_uuid UUID,
       multisala_uuid UUID,
-      modulo_destino VARCHAR(50) DEFAULT 'control_clientes',
-      caja_default VARCHAR(50) DEFAULT 'Mesas',
       auto_reply BOOLEAN DEFAULT true,
       is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     )
   `;
+
+  await sql`ALTER TABLE whatsapp_group_mappings ADD COLUMN IF NOT EXISTS multisala_uuid UUID`;
+  await sql`ALTER TABLE whatsapp_group_mappings DROP COLUMN IF EXISTS modulo_destino`;
+  await sql`ALTER TABLE whatsapp_group_mappings DROP COLUMN IF EXISTS caja_default`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS whatsapp_logs (

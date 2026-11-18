@@ -242,8 +242,8 @@ class WhatsAppService {
 
       // 2. Ejecutar el parser inteligente
       const parsed = parseWhatsAppMessage(messageText, {
-        caja_default: mapping.caja_default || 'Mesas',
-        modulo_destino: mapping.modulo_destino || 'control_clientes'
+        caja_default: 'Mesas',
+        modulo_destino: 'control_clientes'
       });
 
       if (!parsed || !parsed.success) {
