@@ -198,6 +198,30 @@ export default async function whatsappRoutes(fastify, options) {
       modulo_destino: modulo_destino || 'control_clientes'
     });
 
+    if (result && result.success) {
+      let checkEmoji = '✅';
+      let checkLabel = 'Coincidencia Completa (Check Verde)';
+
+      if (result.modulo === 'aportes_maquinas') {
+        const hasRg = Boolean(result.explicit?.rango);
+        const hasOp = Boolean(result.explicit?.operador);
+        if (!hasRg || !hasOp) {
+          checkEmoji = '☑️';
+          checkLabel = 'Entra por verificar (Check Azul): ' + (!hasOp ? 'Falta operador' : 'Falta rango');
+        }
+      } else {
+        const hasCl = Boolean(result.explicit?.cliente);
+        const hasMet = Boolean(result.explicit?.metodo);
+        if (!hasCl || !hasMet) {
+          checkEmoji = '☑️';
+          checkLabel = 'Entra por verificar (Check Azul): ' + (!hasCl ? 'Falta cliente' : 'Falta método');
+        }
+      }
+
+      result.check_emoji = checkEmoji;
+      result.check_label = checkLabel;
+    }
+
     return {
       success: true,
       data: result,

@@ -134,27 +134,33 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
 
   // 4. Detectar Caja (Mesas o Máquinas)
   let caja = isAporteDev ? 'Máquinas' : (defaultOptions.caja_default || 'Mesas');
+  let cajaExplicit = false;
   for (const rule of CAJA_RULES) {
     if (rule.regex.test(textWithoutNota)) {
       caja = rule.caja;
+      cajaExplicit = true;
       break;
     }
   }
 
   // 5. Detectar Método de Pago
   let metodo = defaultOptions.metodo_default || 'Cash';
+  let metodoExplicit = false;
   for (const rule of METODO_RULES) {
     if (rule.regex.test(textWithoutNota)) {
       metodo = rule.metodo;
+      metodoExplicit = true;
       break;
     }
   }
 
   // 6. Detectar Rango (para Aportes/Devoluciones)
   let rango = null;
+  let rangoExplicit = false;
   for (const rule of RANGO_RULES) {
     if (rule.regex.test(textWithoutNota)) {
       rango = rule.rango;
+      rangoExplicit = true;
       break;
     }
   }
@@ -166,6 +172,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
         .split(' ')
         .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
+      rangoExplicit = true;
     }
   }
 
@@ -224,6 +231,9 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     ? 'aportes_maquinas' 
     : (defaultOptions.modulo_destino || 'control_clientes');
 
+  const clienteExplicit = !isAporteDev && Boolean(parsedName && parsedName.toLowerCase() !== 'general');
+  const operadorExplicit = isAporteDev && Boolean(parsedName && parsedName.toLowerCase() !== 'general');
+
   return {
     success: true,
     tipo,
@@ -234,6 +244,13 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     operador,
     rango,
     nota,
-    modulo
+    modulo,
+    explicit: {
+      metodo: metodoExplicit,
+      caja: cajaExplicit,
+      rango: rangoExplicit,
+      cliente: clienteExplicit,
+      operador: operadorExplicit
+    }
   };
 }

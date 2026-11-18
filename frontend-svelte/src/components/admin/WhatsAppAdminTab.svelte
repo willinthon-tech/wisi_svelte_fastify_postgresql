@@ -601,6 +601,12 @@
             <span class="val">{testResult.nota}</span>
           </div>
         {/if}
+        <div class="preview-item" style="grid-column: 1 / -1; background: #ffffff; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+          <span class="lbl" style="font-size: 11px;">REACCIÓN AL GRUPO:</span>
+          <span class="val bold {testResult.check_emoji === '✅' ? 'text-green' : 'text-blue'}" style="font-size: 13.5px;">
+            {testResult.check_emoji || '✅'} {testResult.check_label || 'Coincidencia Completa'}
+          </span>
+        </div>
       </div>
     {:else if testInput.trim()}
       <div class="test-no-match">
@@ -750,6 +756,11 @@
                 <td>
                   {#if log.status === 'procesado'}
                     <span class="status-chip success">✅ Registrado</span>
+                  {:else if log.status === 'procesado_por_verificar'}
+                    <span class="status-chip info" title={log.error_message || 'Verificar datos'}>☑️ Por Verificar</span>
+                    {#if log.error_message}
+                      <span class="sub-obs">{log.error_message}</span>
+                    {/if}
                   {:else if log.status === 'sin_libro_activo'}
                     <span class="status-chip warning">⚠️ Sin Libro Abierto</span>
                   {:else}
@@ -1464,8 +1475,10 @@
     white-space: nowrap;
   }
   .status-chip.success { background: #ecfdf5; color: #065f46; }
+  .status-chip.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
   .status-chip.warning { background: #fffbeb; color: #92400e; }
   .status-chip.error { background: #fef2f2; color: #991b1b; }
+  .sub-obs { display: block; font-size: 10.5px; color: #64748b; font-weight: 500; margin-top: 2px; max-width: 180px; white-space: normal; }
 
   .parsed-pill {
     background: #f8fafc;

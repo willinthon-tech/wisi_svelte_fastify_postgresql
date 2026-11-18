@@ -444,7 +444,27 @@ class WhatsAppService {
           metodoPagoUuid = foundMetodo.uuid;
         }
 
-        // C) Hora actual de Caracas
+        // C) Evaluación de coincidencias para definir el chulito (Verde ✅ vs Azul ☑️)
+        let esCoincidenciaExacta = true;
+        let observaciones = [];
+
+        // 1. Verificación de Cliente: ¿existía ya en la base de datos?
+        if (existingClients.length === 0) {
+          esCoincidenciaExacta = false;
+          observaciones.push(parsed.cliente === 'General' ? 'Cliente no especificado (asignado General)' : `Cliente nuevo (${parsed.cliente})`);
+        }
+
+        // 2. Verificación de Método de Pago: ¿fue explícito o se asumió por descarte?
+        if (!parsed.explicit?.metodo) {
+          esCoincidenciaExacta = false;
+          observaciones.push('Método de pago no explícito (asumido por defecto)');
+        }
+
+        const logStatus = esCoincidenciaExacta ? 'procesado' : 'procesado_por_verificar';
+        const checkEmoji = esCoincidenciaExacta ? '✅' : '☑️';
+        const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
+
+        // D) Hora actual de Caracas
         const horaStr = new Date().toLocaleTimeString('es-VE', {
           hour: '2-digit',
           minute: '2-digit',
@@ -453,10 +473,10 @@ class WhatsAppService {
         });
 
         const notaStr = parsed.nota 
-          ? `${parsed.nota} (vía WhatsApp)` 
-          : `Vía WhatsApp por ${senderName}`;
+          ? (obsTexto ? `${parsed.nota} [Verificar: ${obsTexto}]` : `${parsed.nota} (vía WhatsApp)`)
+          : (obsTexto ? `Vía WhatsApp por ${senderName} [Verificar: ${obsTexto}]` : `Vía WhatsApp por ${senderName}`);
 
-        // D) Insertar en libro_control_clientes
+        // E) Insertar en libro_control_clientes
         const insertRes = await sql`
           INSERT INTO libro_control_clientes (
             libro_uuid,
@@ -487,21 +507,21 @@ class WhatsAppService {
         // Registrar log
         await sql`
           INSERT INTO whatsapp_logs (
-            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, inserted_record_uuid
+            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message, inserted_record_uuid
           ) VALUES (
             ${remoteJid}, ${mapping.group_name}, ${senderJid}, ${senderName}, ${messageText}, 
-            ${sql.json(parsed)}, 'procesado', ${insertedUuid}
+            ${sql.json(parsed)}, ${logStatus}, ${obsTexto}, ${insertedUuid}
           )
         `;
 
-        console.log(`✅ [WhatsApp] Operación registrada en Control de Clientes: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} (${parsed.caja})`);
+        console.log(`${checkEmoji} [WhatsApp] Operación registrada en Control de Clientes [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} (${parsed.caja}) ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        // E) Confirmación en WhatsApp: Reaccionar con el check verde (chulito)
+        // F) Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación)
         if (mapping.auto_reply && this.sock) {
           try {
             await this.sock.sendMessage(remoteJid, {
               react: {
-                text: '✅',
+                text: checkEmoji,
                 key: m.key
               }
             });
@@ -521,11 +541,13 @@ class WhatsAppService {
           WHERE COALESCE(is_deleted, false) = false
         `;
 
+        // Variable para verificar si el rango fue encontrado con certeza
+        let foundRango = null;
         if (parsed.rango && allRangos.length > 0) {
           const normTarget = normalizeText(parsed.rango);
 
           // 1. Coincidencia exacta normalizada
-          let foundRango = allRangos.find(r => normalizeText(r.nombre) === normTarget);
+          foundRango = allRangos.find(r => normalizeText(r.nombre) === normTarget);
 
           // 2. Coincidencia por número de rango (ej. "Rango 1", "Rango 2"...)
           if (!foundRango) {
@@ -575,6 +597,7 @@ class WhatsAppService {
         // B) Buscar o resolver Empleado / Operador con matching inteligente
         let empleadoUuid = null;
         let empleadoNombre = parsed.operador || 'Operador General';
+        let foundEmp = null;
 
         const allEmps = await sql`
           SELECT uuid, nombre, cedula 
@@ -587,7 +610,7 @@ class WhatsAppService {
           const normTarget = normalizeText(parsed.operador);
 
           // 1. Coincidencia exacta normalizada
-          let foundEmp = allEmps.find(e => normalizeText(e.nombre) === normTarget);
+          foundEmp = allEmps.find(e => normalizeText(e.nombre) === normTarget);
 
           // 2. Coincidencia si el nombre empieza con el término (ej. "Manuel" -> "Manuel Barrientos")
           if (!foundEmp) {
@@ -631,6 +654,26 @@ class WhatsAppService {
           }
         }
 
+        // C) Evaluación de coincidencias para definir el chulito (Verde ✅ vs Azul ☑️)
+        let esCoincidenciaExacta = true;
+        let observaciones = [];
+
+        // 1. Verificación de Rango: ¿fue explícito y coincide con la BD?
+        if (!parsed.explicit?.rango || !foundRango) {
+          esCoincidenciaExacta = false;
+          observaciones.push('Rango no especificado o asignado por defecto');
+        }
+
+        // 2. Verificación de Operador: ¿coincidió con un empleado activo existente?
+        if (!parsed.explicit?.operador || !foundEmp) {
+          esCoincidenciaExacta = false;
+          observaciones.push(parsed.operador === 'General' ? 'Operador no especificado (asignado General)' : `Operador nuevo/no registrado (${parsed.operador})`);
+        }
+
+        const logStatus = esCoincidenciaExacta ? 'procesado' : 'procesado_por_verificar';
+        const checkEmoji = esCoincidenciaExacta ? '✅' : '☑️';
+        const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
+
         const horaStr = new Date().toLocaleTimeString('es-VE', {
           hour: '2-digit',
           minute: '2-digit',
@@ -638,7 +681,7 @@ class WhatsAppService {
           timeZone: 'America/Caracas'
         });
 
-        // C) Insertar en libro_aportes
+        // D) Insertar en libro_aportes
         const insertRes = await sql`
           INSERT INTO libro_aportes (
             libro_uuid,
@@ -664,21 +707,21 @@ class WhatsAppService {
 
         await sql`
           INSERT INTO whatsapp_logs (
-            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, inserted_record_uuid
+            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message, inserted_record_uuid
           ) VALUES (
             ${remoteJid}, ${mapping.group_name}, ${senderJid}, ${senderName}, ${messageText}, 
-            ${sql.json(parsed)}, 'procesado', ${insertedUuid}
+            ${sql.json(parsed)}, ${logStatus}, ${obsTexto}, ${insertedUuid}
           )
         `;
 
-        console.log(`✅ [WhatsApp] ${parsed.tipo} registrado en Aportes: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
+        console.log(`${checkEmoji} [WhatsApp] ${parsed.tipo} registrado en Aportes [${logStatus}]: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre} ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        // Confirmación en WhatsApp: Reaccionar con el check verde (chulito)
+        // Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación)
         if (mapping.auto_reply && this.sock) {
           try {
             await this.sock.sendMessage(remoteJid, {
               react: {
-                text: '✅',
+                text: checkEmoji,
                 key: m.key
               }
             });
