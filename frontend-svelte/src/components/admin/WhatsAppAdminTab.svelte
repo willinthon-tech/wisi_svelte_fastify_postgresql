@@ -425,20 +425,20 @@
         <div class="status-pill connecting">
           <span class="status-dot blue"></span>
           <div>
-            <strong>INICIANDO MOTOR WHATSAPP...</strong>
-            <span class="sub-label">Generando credenciales de sesión</span>
+            <strong>{status.hasSavedSession ? "RECONECTANDO SESIÓN..." : "INICIANDO MOTOR WHATSAPP..."}</strong>
+            <span class="sub-label">{status.hasSavedSession ? "Reanudando conexión guardada" : "Generando credenciales de sesión"}</span>
           </div>
         </div>
       {:else}
         <div class="status-pill disconnected">
           <span class="status-dot gray"></span>
           <div>
-            <strong>DESCONECTADO</strong>
-            <span class="sub-label">Sin número de WhatsApp asociado</span>
+            <strong>{status.hasSavedSession ? "SESIÓN GUARDADA" : "DESCONECTADO"}</strong>
+            <span class="sub-label">{status.hasSavedSession ? "Lista para reconectar automáticamente" : "Sin número de WhatsApp asociado"}</span>
           </div>
         </div>
         <button class="btn-connect" on:click={handleConnect} disabled={isConnecting}>
-          {isConnecting ? "Iniciando..." : "📲 Generar QR / Vincular"}
+          {isConnecting ? "Conectando..." : (status.hasSavedSession ? "⚡ Reconectar Sesión" : "📲 Generar QR / Vincular")}
         </button>
       {/if}
     </div>
@@ -450,10 +450,12 @@
       <div class="spinner-circle"></div>
       <div style="flex: 1;">
         <h4 style="margin: 0; color: #1e40af; font-size: 15px; font-weight: 800;">
-          ⏳ Generando código QR de WhatsApp en pantalla...
+          {status.hasSavedSession ? "🔄 Reconectando sesión guardada de WhatsApp..." : "⏳ Generando código QR de WhatsApp en pantalla..."}
         </h4>
         <p style="margin: 4px 0 0 0; color: #475569; font-size: 13px;">
-          Por favor espera unos segundos. El código QR aparecerá automáticamente aquí abajo. Luego debes escanearlo con la cámara de tu teléfono desde <strong>WhatsApp &gt; Dispositivos vinculados</strong>.
+          {status.hasSavedSession 
+            ? "El sistema está reactivando tu sesión guardada con WhatsApp. Espera un momento, no necesitas escanear el código QR."
+            : "Por favor espera unos segundos. El código QR aparecerá automáticamente aquí abajo. Luego debes escanearlo con la cámara de tu teléfono desde WhatsApp > Dispositivos vinculados."}
         </p>
       </div>
       <button class="btn-secondary" on:click={() => fetchStatus()}>
@@ -518,6 +520,35 @@
       />
       <button class="btn-test" on:click={runTestParse} disabled={isTesting}>
         Probar Análisis
+      </button>
+    </div>
+
+    <!-- Píldoras con ejemplos de prueba del diccionario inteligente -->
+    <div class="test-examples-row">
+      <span class="examples-label">💡 Ejemplos de prueba:</span>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "c 100 pdv maquina Willinthon"; runTestParse(); }}>
+        c 100 pdv maquina Willinthon
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "Compra 200$ USDT Máquinas Abel"; runTestParse(); }}>
+        Compra 200$ USDT Máquinas Abel
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "pago 50 pm mesas Pedro"; runTestParse(); }}>
+        pago 50 pm mesas Pedro
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "pago mobil 50 mesas Juan"; runTestParse(); }}>
+        pago mobil 50 mesas Juan
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "aporte 200 r1 Carlos"; runTestParse(); }}>
+        aporte 200 r1 Carlos
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "aporte 500$ Rango 1 Manuel Barrientos"; runTestParse(); }}>
+        aporte 500$ Rango 1 Manuel Barrientos
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "dev 100 ruleta Cesar"; runTestParse(); }}>
+        dev 100 ruleta Cesar
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "Aporte 300 fuma Juan"; runTestParse(); }}>
+        Aporte 300 fuma Juan
       </button>
     </div>
 
@@ -1188,6 +1219,39 @@
     font-size: 13.5px;
     font-weight: 700;
     cursor: pointer;
+  }
+
+  .test-examples-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: -6px;
+    margin-bottom: 14px;
+  }
+
+  .examples-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #64748b;
+  }
+
+  .pill-btn {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .pill-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    border-color: #94a3b8;
   }
 
   .test-preview-grid {

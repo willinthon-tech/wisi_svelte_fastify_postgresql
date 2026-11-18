@@ -13,6 +13,7 @@ import cecomVideoRoutes from './routes/cecom-video.routes.js';
 import { baccaratRoutes } from './routes/baccarat.routes.js';
 import { erpRoutes } from './routes/erp.routes.js';
 import whatsappRoutes from './routes/whatsapp.routes.js';
+import { whatsappService } from './services/whatsapp.service.js';
 import { syncAttlogs } from './controllers/master.controller.js';
 import { initDb } from './config/db.js';
 
@@ -137,6 +138,10 @@ async function startServer() {
     await fastify.register(baccaratRoutes);
     await fastify.register(erpRoutes);
     await fastify.register(whatsappRoutes);
+    // Auto-inicializar motor de WhatsApp si existe sesión previa
+    whatsappService.init().catch(err => {
+      console.warn('Advertencia auto-iniciando WhatsApp en arranque:', err.message);
+    });
     // Register Biometric Push Endpoints at Root Level (Hikvision ISAPI)
     await fastify.register(async (app) => {
       app.post('/attlogs/sync', syncAttlogs);

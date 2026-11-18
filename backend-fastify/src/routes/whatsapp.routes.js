@@ -5,6 +5,14 @@ import { sql, isPgConnected } from '../config/db.js';
 export default async function whatsappRoutes(fastify, options) {
   // 1. Estado de la conexión
   fastify.get('/api/whatsapp/status', async (req, reply) => {
+    // Si el servicio no está activo pero existen credenciales válidas guardadas, auto-reconectar en background
+    if (whatsappService.status === 'disconnected' && whatsappService.hasSavedSession()) {
+      console.log('🔄 [WhatsApp] Sesión guardada detectada. Auto-conectando motor en segundo plano...');
+      whatsappService.connect().catch(err => {
+        console.warn('⚠️ [WhatsApp] Auto-conexión en segundo plano falló:', err.message);
+      });
+    }
+
     return {
       success: true,
       data: whatsappService.getStatus()

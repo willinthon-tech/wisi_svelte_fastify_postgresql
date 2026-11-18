@@ -3,13 +3,35 @@ import qrcode from 'qrcode';
 import pino from 'pino';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { sql, isPgConnected } from '../config/db.js';
-import { parseWhatsAppMessage } from './whatsapp-parser.js';
+import { parseWhatsAppMessage, normalizeText } from './whatsapp-parser.js';
 
-// Directorio para guardar las credenciales de la sesión de WhatsApp
-const AUTH_DIR = path.join(process.cwd(), 'auth_whatsapp');
-if (!fs.existsSync(AUTH_DIR)) {
-  fs.mkdirSync(AUTH_DIR, { recursive: true });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Directorio para guardar las credenciales de la sesión de WhatsApp (ruta absoluta fija)
+const AUTH_DIR = path.resolve(__dirname, '../../auth_whatsapp');
+
+// Migración de retrocompatibilidad si creds.json existía en la raíz
+try {
+  if (!fs.existsSync(AUTH_DIR)) {
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
+  }
+  const legacyDir = path.join(process.cwd(), 'auth_whatsapp');
+  if (legacyDir !== AUTH_DIR && fs.existsSync(legacyDir)) {
+    const legacyCreds = path.join(legacyDir, 'creds.json');
+    const targetCreds = path.join(AUTH_DIR, 'creds.json');
+    if (fs.existsSync(legacyCreds) && !fs.existsSync(targetCreds)) {
+      const files = fs.readdirSync(legacyDir);
+      for (const f of files) {
+        fs.copyFileSync(path.join(legacyDir, f), path.join(AUTH_DIR, f));
+      }
+      console.log('📦 [WhatsApp] Credenciales migradas a ubicación absoluta permanente:', AUTH_DIR);
+    }
+  }
+} catch (e) {
+  console.warn('Advertencia comprobando AUTH_DIR de WhatsApp:', e.message);
 }
 
 class WhatsAppService {
@@ -24,13 +46,35 @@ class WhatsAppService {
     this.isReconnecting = false;
   }
 
+  hasSavedSession() {
+    try {
+      const credsFile = path.join(AUTH_DIR, 'creds.json');
+      if (fs.existsSync(credsFile)) {
+        const stat = fs.statSync(credsFile);
+        return stat.size > 20;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   getStatus() {
     return {
       status: this.status,
       qr: this.qrDataUrl,
       user: this.userInfo,
-      error: this.lastError
+      error: this.lastError,
+      hasSavedSession: this.hasSavedSession()
     };
+  }
+
+  async init() {
+    // Si ya existe una sesión guardada válida y no está conectado, auto-conectar en segundo plano
+    if (this.hasSavedSession() && this.status === 'disconnected') {
+      console.log('📱 [WhatsApp] Sesión previa detectada. Auto-conectando motor en segundo plano...');
+      this.connect().catch(err => {
+        console.warn('⚠️ [WhatsApp] Auto-conexión inicial falló:', err.message);
+      });
+    }
   }
 
   async connect() {
@@ -38,6 +82,9 @@ class WhatsAppService {
       return this.getStatus();
     }
     if (this.sock && this.status === 'waiting_qr' && this.qrDataUrl) {
+      return this.getStatus();
+    }
+    if (this.status === 'connecting' && this.sock) {
       return this.getStatus();
     }
 
@@ -64,14 +111,14 @@ class WhatsAppService {
 
       this.sock.ev.on('creds.update', saveCreds);
 
-      // Esperar activamente hasta que Baileys emita el primer código QR (típicamente 300ms a 1.2s)
+      // Esperar activamente hasta que Baileys emita el primer código QR o abra la conexión
       const waitForFirstQR = new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve(), 4000);
+        const timeout = setTimeout(() => resolve(), 3500);
 
         const checkHandler = (update) => {
           if (update.qr || update.connection === 'open' || update.connection === 'close') {
             clearTimeout(timeout);
-            setTimeout(() => resolve(), 200);
+            setTimeout(() => resolve(), 150);
           }
         };
 
@@ -144,7 +191,7 @@ class WhatsAppService {
         }
       });
 
-      // Esperar a que el QR esté listo antes de responder la petición HTTP
+      // Esperar a que el evento inicial (QR o conexión abierta) esté listo
       await waitForFirstQR;
 
     } catch (err) {
@@ -179,8 +226,11 @@ class WhatsAppService {
       if (fs.existsSync(AUTH_DIR)) {
         const files = fs.readdirSync(AUTH_DIR);
         for (const file of files) {
-          fs.unlinkSync(path.join(AUTH_DIR, file));
+          try {
+            fs.unlinkSync(path.join(AUTH_DIR, file));
+          } catch (e) {}
         }
+        console.log('🗑️ [WhatsApp] Archivos de sesión eliminados.');
       }
     } catch (e) {
       console.warn('Error limpiando auth files:', e.message);
@@ -240,7 +290,7 @@ class WhatsAppService {
 
       const mapping = mappings[0];
 
-      // 2. Ejecutar el parser inteligente
+      // 2. Ejecutar el parser inteligente con diccionario y NLP
       const parsed = parseWhatsAppMessage(messageText, {
         caja_default: 'Mesas',
         modulo_destino: 'control_clientes'
@@ -345,15 +395,53 @@ class WhatsAppService {
           clienteUuid = newClient[0]?.uuid;
         }
 
-        // B) Buscar método de pago por coincidencia
+        // B) Buscar método de pago por coincidencia inteligente (Diccionario & NLP)
         let metodoPagoUuid = null;
-        const metodos = await sql`
+        const allMetodos = await sql`
           SELECT uuid, nombre FROM metodos_pago 
-          WHERE LOWER(TRIM(nombre)) = LOWER(${parsed.metodo.trim()})
-          LIMIT 1
+          WHERE COALESCE(is_deleted, false) = false
         `;
-        if (metodos.length > 0) {
-          metodoPagoUuid = metodos[0].uuid;
+
+        const normMetodo = normalizeText(parsed.metodo);
+        // 1. Coincidencia exacta normalizada
+        let foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === normMetodo);
+
+        // 2. Coincidencia por alias conocidos del diccionario
+        if (!foundMetodo) {
+          if (normMetodo === 'pdv' || normMetodo === 'punto') {
+            foundMetodo = allMetodos.find(m => {
+              const n = normalizeText(m.nombre);
+              return n === 'pdv' || n === 'punto' || n.includes('punto') || n === 'pos' || n.includes('debito') || n.includes('tarjeta');
+            });
+          } else if (normMetodo.includes('pago movil') || normMetodo.includes('pago mobil') || normMetodo === 'pm') {
+            foundMetodo = allMetodos.find(m => {
+              const n = normalizeText(m.nombre);
+              return n.includes('movil') || n.includes('mobil') || n === 'pm';
+            });
+          } else if (normMetodo === 'usdt') {
+            foundMetodo = allMetodos.find(m => {
+              const n = normalizeText(m.nombre);
+              return n === 'usdt' || n.includes('binance') || n.includes('crypto') || n.includes('tether');
+            });
+          } else if (normMetodo === 'cash') {
+            foundMetodo = allMetodos.find(m => {
+              const n = normalizeText(m.nombre);
+              return n === 'cash' || n.includes('efectivo') || n.includes('dolar') || n === 'usd';
+            });
+          } else if (normMetodo === 'zelle') {
+            foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zelle') || normalizeText(m.nombre).includes('zele'));
+          } else if (normMetodo === 'transferencia') {
+            foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('transf') || normalizeText(m.nombre).includes('banco'));
+          }
+        }
+
+        // 3. Fallback a método Cash / Efectivo o primer método disponible
+        if (!foundMetodo && allMetodos.length > 0) {
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'cash' || normalizeText(m.nombre).includes('efectivo')) || allMetodos[0];
+        }
+
+        if (foundMetodo) {
+          metodoPagoUuid = foundMetodo.uuid;
         }
 
         // C) Hora actual de Caracas
@@ -424,58 +512,104 @@ class WhatsAppService {
 
       } else if (parsed.modulo === 'aportes_maquinas') {
         // Módulo de aportes y devoluciones en máquinas
-        // A) Buscar o resolver Rango
+        // A) Buscar o resolver Rango con matching inteligente (Diccionario & NLP)
         let rangoUuid = null;
         let rangoNombre = parsed.rango || 'General';
 
-        if (parsed.rango) {
-          const rgClean = parsed.rango.trim().toLowerCase();
-          const rangos = await sql`
-            SELECT uuid, nombre FROM rangos 
-            WHERE LOWER(TRIM(nombre)) = ${rgClean}
-               OR LOWER(TRIM(nombre)) LIKE ${`%${rgClean}%`}
-            ORDER BY 
-              CASE WHEN LOWER(TRIM(nombre)) = ${rgClean} THEN 0 ELSE 1 END
-            LIMIT 1
-          `;
-          if (rangos.length > 0) {
-            rangoUuid = rangos[0].uuid;
-            rangoNombre = rangos[0].nombre;
+        const allRangos = await sql`
+          SELECT uuid, nombre FROM rangos 
+          WHERE COALESCE(is_deleted, false) = false
+        `;
+
+        if (parsed.rango && allRangos.length > 0) {
+          const normTarget = normalizeText(parsed.rango);
+
+          // 1. Coincidencia exacta normalizada
+          let foundRango = allRangos.find(r => normalizeText(r.nombre) === normTarget);
+
+          // 2. Coincidencia por número de rango (ej. "Rango 1", "Rango 2"...)
+          if (!foundRango) {
+            const numMatch = normTarget.match(/\b([1-9])\b/);
+            if (numMatch) {
+              const targetNum = numMatch[1];
+              foundRango = allRangos.find(r => {
+                const rn = normalizeText(r.nombre);
+                return rn.endsWith(targetNum) || rn.includes(`rango ${targetNum}`) || rn.includes(`rg ${targetNum}`) || rn.includes(`rg${targetNum}`);
+              });
+            }
+          }
+
+          // 3. Coincidencia por fumadores, ruleta o sin rango
+          if (!foundRango) {
+            if (normTarget.includes('fuma')) {
+              foundRango = allRangos.find(r => normalizeText(r.nombre).includes('fuma'));
+            } else if (normTarget.includes('ruleta')) {
+              foundRango = allRangos.find(r => normalizeText(r.nombre).includes('ruleta'));
+            } else if (normTarget.includes('sin rango') || normTarget === 'sr') {
+              foundRango = allRangos.find(r => normalizeText(r.nombre).includes('sin rango') || normalizeText(r.nombre).includes('sinrango'));
+            }
+          }
+
+          // 4. Coincidencia substring
+          if (!foundRango) {
+            foundRango = allRangos.find(r => normalizeText(r.nombre).includes(normTarget) || normTarget.includes(normalizeText(r.nombre)));
+          }
+
+          if (foundRango) {
+            rangoUuid = foundRango.uuid;
+            rangoNombre = foundRango.nombre;
           }
         }
 
-        if (!rangoUuid) {
-          const defRango = await sql`
-            SELECT uuid, nombre FROM rangos 
-            ORDER BY CASE WHEN LOWER(nombre) = 'rango 1' THEN 0 WHEN LOWER(nombre) = 'general' THEN 1 ELSE 2 END
-            LIMIT 1
-          `;
-          if (defRango.length > 0) {
-            rangoUuid = defRango[0].uuid;
-            rangoNombre = defRango[0].nombre;
+        // Fallback por defecto si no encontró ninguno
+        if (!rangoUuid && allRangos.length > 0) {
+          const defRango = allRangos.find(r => normalizeText(r.nombre) === 'rango 1') ||
+                           allRangos.find(r => normalizeText(r.nombre) === 'general') ||
+                           allRangos[0];
+          if (defRango) {
+            rangoUuid = defRango.uuid;
+            rangoNombre = defRango.nombre;
           }
         }
 
-        // B) Buscar o resolver Empleado / Operador
+        // B) Buscar o resolver Empleado / Operador con matching inteligente
         let empleadoUuid = null;
         let empleadoNombre = parsed.operador || 'Operador General';
 
-        if (parsed.operador && parsed.operador.toLowerCase() !== 'general') {
-          const opClean = parsed.operador.trim().toLowerCase();
-          const emps = await sql`
-            SELECT uuid, nombre FROM empleados 
-            WHERE (LOWER(TRIM(nombre)) = ${opClean}
-               OR LOWER(TRIM(nombre)) LIKE ${`%${opClean}%`})
-              AND COALESCE(is_deleted, false) = false
-            ORDER BY 
-              CASE WHEN LOWER(TRIM(nombre)) = ${opClean} THEN 0 ELSE 1 END,
-              LENGTH(nombre) ASC
-            LIMIT 1
-          `;
+        const allEmps = await sql`
+          SELECT uuid, nombre, cedula 
+          FROM empleados 
+          WHERE COALESCE(activo, true) = true 
+            AND COALESCE(is_deleted, false) = false
+        `;
 
-          if (emps.length > 0) {
-            empleadoUuid = emps[0].uuid;
-            empleadoNombre = emps[0].nombre;
+        if (parsed.operador && parsed.operador.toLowerCase() !== 'general' && allEmps.length > 0) {
+          const normTarget = normalizeText(parsed.operador);
+
+          // 1. Coincidencia exacta normalizada
+          let foundEmp = allEmps.find(e => normalizeText(e.nombre) === normTarget);
+
+          // 2. Coincidencia si el nombre empieza con el término (ej. "Manuel" -> "Manuel Barrientos")
+          if (!foundEmp) {
+            foundEmp = allEmps.find(e => normalizeText(e.nombre).startsWith(normTarget + ' '));
+          }
+
+          // 3. Coincidencia por palabra individual (ej. "Jonas" en "Bonalde Jonas", o "Cesar" en "Cesar Mendoza")
+          if (!foundEmp) {
+            foundEmp = allEmps.find(e => {
+              const words = normalizeText(e.nombre).split(/\s+/);
+              return words.includes(normTarget);
+            });
+          }
+
+          // 4. Coincidencia substring
+          if (!foundEmp) {
+            foundEmp = allEmps.find(e => normalizeText(e.nombre).includes(normTarget) || normTarget.includes(normalizeText(e.nombre)));
+          }
+
+          if (foundEmp) {
+            empleadoUuid = foundEmp.uuid;
+            empleadoNombre = foundEmp.nombre;
           } else {
             // Si el operador no existe aún en el sistema, crearlo como empleado para asociarlo
             const tempCedula = `WA-${Date.now().toString().slice(-8)}`;
@@ -491,14 +625,9 @@ class WhatsAppService {
           }
         } else {
           // Si no se especificó operador, asignar al primer empleado activo disponible
-          const defEmp = await sql`
-            SELECT uuid, nombre FROM empleados 
-            WHERE COALESCE(activo, true) = true AND COALESCE(is_deleted, false) = false 
-            ORDER BY created_at ASC LIMIT 1
-          `;
-          if (defEmp.length > 0) {
-            empleadoUuid = defEmp[0].uuid;
-            empleadoNombre = defEmp[0].nombre;
+          if (allEmps.length > 0) {
+            empleadoUuid = allEmps[0].uuid;
+            empleadoNombre = allEmps[0].nombre;
           }
         }
 
@@ -577,4 +706,3 @@ class WhatsAppService {
 }
 
 export const whatsappService = new WhatsAppService();
-
