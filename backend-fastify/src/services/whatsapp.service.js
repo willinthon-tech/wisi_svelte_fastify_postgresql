@@ -518,51 +518,77 @@ class WhatsAppService {
 
         // B) Buscar método de pago por coincidencia inteligente (Diccionario & NLP)
         let metodoPagoUuid = null;
+        let metodoFallbackUsado = false;
+        let metodoAsignadoNombre = 'General';
+
         const allMetodos = await sql`
           SELECT uuid, nombre FROM metodos_pago 
           WHERE COALESCE(is_deleted, false) = false
         `;
 
-        const normMetodo = normalizeText(parsed.metodo);
-        // 1. Coincidencia exacta normalizada
-        let foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === normMetodo);
+        let foundMetodo = null;
+        if (parsed.metodo && allMetodos.length > 0) {
+          const normMetodo = normalizeText(parsed.metodo);
 
-        // 2. Coincidencia por alias conocidos del diccionario
-        if (!foundMetodo) {
-          if (normMetodo === 'pdv' || normMetodo === 'punto') {
-            foundMetodo = allMetodos.find(m => {
-              const n = normalizeText(m.nombre);
-              return n === 'pdv' || n === 'punto' || n.includes('punto') || n === 'pos' || n.includes('debito') || n.includes('tarjeta');
-            });
-          } else if (normMetodo.includes('pago movil') || normMetodo.includes('pago mobil') || normMetodo === 'pm') {
-            foundMetodo = allMetodos.find(m => {
-              const n = normalizeText(m.nombre);
-              return n.includes('movil') || n.includes('mobil') || n === 'pm';
-            });
-          } else if (normMetodo === 'usdt') {
-            foundMetodo = allMetodos.find(m => {
-              const n = normalizeText(m.nombre);
-              return n === 'usdt' || n.includes('binance') || n.includes('crypto') || n.includes('tether');
-            });
-          } else if (normMetodo === 'cash') {
-            foundMetodo = allMetodos.find(m => {
-              const n = normalizeText(m.nombre);
-              return n === 'cash' || n.includes('efectivo') || n.includes('dolar') || n === 'usd';
-            });
-          } else if (normMetodo === 'zelle') {
-            foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zelle') || normalizeText(m.nombre).includes('zele'));
-          } else if (normMetodo === 'transferencia') {
-            foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('transf') || normalizeText(m.nombre).includes('banco'));
+          // 1. Coincidencia exacta normalizada
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === normMetodo);
+
+          // 2. Coincidencia por alias conocidos del diccionario
+          if (!foundMetodo) {
+            if (normMetodo === 'pdv' || normMetodo === 'punto') {
+              foundMetodo = allMetodos.find(m => {
+                const n = normalizeText(m.nombre);
+                return n === 'pdv' || n === 'punto' || n.includes('punto') || n === 'pos' || n.includes('debito') || n.includes('tarjeta');
+              });
+            } else if (normMetodo.includes('pago movil') || normMetodo.includes('pago mobil') || normMetodo === 'pm') {
+              foundMetodo = allMetodos.find(m => {
+                const n = normalizeText(m.nombre);
+                return n.includes('movil') || n.includes('mobil') || n === 'pm';
+              });
+            } else if (normMetodo === 'usdt') {
+              foundMetodo = allMetodos.find(m => {
+                const n = normalizeText(m.nombre);
+                return n === 'usdt' || n.includes('binance') || n.includes('crypto') || n.includes('tether');
+              });
+            } else if (normMetodo === 'cash') {
+              foundMetodo = allMetodos.find(m => {
+                const n = normalizeText(m.nombre);
+                return n === 'cash' || n.includes('efectivo') || n.includes('dolar') || n === 'usd';
+              });
+            } else if (normMetodo === 'zelle') {
+              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zelle') || normalizeText(m.nombre).includes('zele'));
+            } else if (normMetodo === 'transferencia') {
+              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('transf') || normalizeText(m.nombre).includes('banco'));
+            } else if (normMetodo === 'zinli') {
+              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zinli'));
+            } else if (normMetodo === 'wally') {
+              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('wally'));
+            } else if (normMetodo === 'paypal') {
+              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('paypal'));
+            } else if (normMetodo === 'general' || normMetodo === 'otros') {
+              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('general') || normalizeText(m.nombre).includes('otro'));
+            }
           }
         }
 
-        // 3. Fallback a método Cash / Efectivo o primer método disponible
+        // 3. Fallback Genérico: si no existe en BD (ej. "Zinli") o no se especificó método
         if (!foundMetodo && allMetodos.length > 0) {
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'cash' || normalizeText(m.nombre).includes('efectivo')) || allMetodos[0];
+          // Prioridad 1: Buscar método "General"
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'general');
+          // Prioridad 2: Buscar método "Cash" / "Efectivo"
+          if (!foundMetodo) {
+            foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'cash' || normalizeText(m.nombre).includes('efectivo'));
+          }
+          // Prioridad 3: Primer método de la lista
+          if (!foundMetodo) {
+            foundMetodo = allMetodos[0];
+          }
+          metodoFallbackUsado = true;
         }
 
         if (foundMetodo) {
           metodoPagoUuid = foundMetodo.uuid;
+          metodoAsignadoNombre = foundMetodo.nombre;
         }
 
         // C) Evaluación de coincidencias para definir el chulito (Verde ✅ vs Azul ☑️)
@@ -575,10 +601,13 @@ class WhatsAppService {
           observaciones.push(parsed.cliente === 'General' ? 'Cliente no especificado (asignado General)' : `Cliente nuevo (${parsed.cliente})`);
         }
 
-        // 2. Verificación de Método de Pago: ¿fue explícito o se asumió por descarte?
+        // 2. Verificación de Método de Pago: ¿fue explícito y coincide con la BD, o requirió genérico?
         if (!parsed.explicit?.metodo) {
           esCoincidenciaExacta = false;
-          observaciones.push('Método de pago no explícito (asumido por defecto)');
+          observaciones.push(`Método de pago no especificado (asignado ${metodoAsignadoNombre})`);
+        } else if (metodoFallbackUsado && parsed.metodo && normalizeText(parsed.metodo) !== normalizeText(metodoAsignadoNombre)) {
+          esCoincidenciaExacta = false;
+          observaciones.push(`Método "${parsed.metodo}" no registrado en BD (asignado a ${metodoAsignadoNombre})`);
         }
 
         const logStatus = esCoincidenciaExacta ? 'procesado' : 'procesado_por_verificar';
@@ -593,9 +622,13 @@ class WhatsAppService {
           timeZone: 'America/Caracas'
         });
 
+        const metodoExtraNota = (metodoFallbackUsado && parsed.metodo && normalizeText(parsed.metodo) !== normalizeText(metodoAsignadoNombre))
+          ? ` [Método: ${parsed.metodo}]`
+          : '';
+
         const notaStr = parsed.nota 
-          ? (obsTexto ? `${parsed.nota} [Verificar: ${obsTexto}]` : `${parsed.nota} (vía WhatsApp)`)
-          : (obsTexto ? `Vía WhatsApp por ${senderName} [Verificar: ${obsTexto}]` : `Vía WhatsApp por ${senderName}`);
+          ? (obsTexto ? `${parsed.nota} [Verificar: ${obsTexto}]${metodoExtraNota}` : `${parsed.nota} (vía WhatsApp)${metodoExtraNota}`)
+          : (obsTexto ? `Vía WhatsApp por ${senderName} [Verificar: ${obsTexto}]${metodoExtraNota}` : `Vía WhatsApp por ${senderName}${metodoExtraNota}`);
 
         // E) Insertar en libro_control_clientes
         const insertRes = await sql`
@@ -703,10 +736,10 @@ class WhatsAppService {
           }
         }
 
-        // Fallback por defecto si no encontró ninguno
+        // Fallback por defecto si no encontró ninguno (prioridad: General)
         if (!rangoUuid && allRangos.length > 0) {
-          const defRango = allRangos.find(r => normalizeText(r.nombre) === 'rango 1') ||
-                           allRangos.find(r => normalizeText(r.nombre) === 'general') ||
+          const defRango = allRangos.find(r => normalizeText(r.nombre) === 'general') ||
+                           allRangos.find(r => normalizeText(r.nombre) === 'rango 1') ||
                            allRangos[0];
           if (defRango) {
             rangoUuid = defRango.uuid;
@@ -767,8 +800,12 @@ class WhatsAppService {
             }
           }
         } else {
-          // Si no se especificó operador, asignar al primer empleado activo disponible
-          if (allEmps.length > 0) {
+          // Si no se especificó operador, asignar al empleado "General" si existe, o al primer empleado activo
+          const genEmp = allEmps.find(e => normalizeText(e.nombre) === 'general');
+          if (genEmp) {
+            empleadoUuid = genEmp.uuid;
+            empleadoNombre = genEmp.nombre;
+          } else if (allEmps.length > 0) {
             empleadoUuid = allEmps[0].uuid;
             empleadoNombre = allEmps[0].nombre;
           }
