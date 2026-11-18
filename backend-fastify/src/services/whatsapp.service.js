@@ -255,7 +255,7 @@ class WhatsAppService {
 
       console.log(`📩 [WhatsApp Group] [${mapping.group_name}] Mensaje detectado: "${messageText}"`);
 
-      // 3. Buscar el libro operativo activo para la sala vinculada
+      // 3. Buscar el último libro en curso (el más reciente abierto) para la sala vinculada
       let libros = [];
       if (mapping.sala_uuid) {
         libros = await sql`
@@ -263,19 +263,17 @@ class WhatsAppService {
           FROM libros
           WHERE sala_uuid = ${mapping.sala_uuid}::uuid
             AND COALESCE(is_deleted, false) = false
-            AND COALESCE(active::int, 1) = 1
           ORDER BY created_at DESC
           LIMIT 1
         `;
       }
 
-      // Si no hay libro con esa sala_uuid específica, tomar el libro operativo activo más reciente
+      // Si no hay libro con esa sala_uuid específica, tomar el libro operativo activo más reciente del sistema
       if (libros.length === 0) {
         libros = await sql`
           SELECT uuid, sala_uuid, descripcion, created_at
           FROM libros
           WHERE COALESCE(is_deleted, false) = false
-            AND COALESCE(active::int, 1) = 1
           ORDER BY created_at DESC
           LIMIT 1
         `;
@@ -302,6 +300,28 @@ class WhatsAppService {
 
       const libro = libros[0];
       let insertedUuid = null;
+
+      // Resolver multisala_uuid (sub-sala / sala hija) estrictamente por UUID
+      let targetMultisalaUuid = mapping.multisala_uuid || null;
+      if (!targetMultisalaUuid && mapping.sala_uuid) {
+        try {
+          const salaRows = await sql`SELECT multisalas FROM salas WHERE uuid = ${mapping.sala_uuid}::uuid LIMIT 1`;
+          if (salaRows.length > 0 && salaRows[0].multisalas) {
+            let subs = salaRows[0].multisalas;
+            if (typeof subs === 'string') {
+              try { subs = JSON.parse(subs); } catch(e) { subs = []; }
+            }
+            if (Array.isArray(subs) && subs.length > 0) {
+              const activeSub = subs.find(s => s && (s.active === 1 || s.active === true || s.active === undefined));
+              if (activeSub && activeSub.uuid) {
+                targetMultisalaUuid = activeSub.uuid;
+              }
+            }
+          }
+        } catch (eSub) {
+          console.warn('Error resolviendo sub-sala:', eSub.message);
+        }
+      }
 
       // 4. Inserción según módulo
       if (parsed.modulo === 'control_clientes') {
@@ -358,7 +378,7 @@ class WhatsAppService {
             nota
           ) VALUES (
             ${libro.uuid}::uuid,
-            ${mapping.multisala_uuid ? sql`${mapping.multisala_uuid}::uuid` : sql`NULL`},
+            ${targetMultisalaUuid ? sql`${targetMultisalaUuid}::uuid` : sql`NULL`},
             ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
             ${parsed.caja},
             ${parsed.tipo},
@@ -497,7 +517,7 @@ class WhatsAppService {
             hora
           ) VALUES (
             ${libro.uuid}::uuid,
-            ${mapping.multisala_uuid ? sql`${mapping.multisala_uuid}::uuid` : sql`NULL`},
+            ${targetMultisalaUuid ? sql`${targetMultisalaUuid}::uuid` : sql`NULL`},
             ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
             ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
             ${parsed.tipo},
