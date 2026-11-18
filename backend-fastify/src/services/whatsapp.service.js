@@ -10,27 +10,32 @@ import { parseWhatsAppMessage, normalizeText } from './whatsapp-parser.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Función inteligente para resolver el directorio de credenciales de WhatsApp
+// Función para resolver el directorio de credenciales de WhatsApp
 function resolveAuthDir() {
   const candidates = [
     path.resolve(__dirname, '../../auth_whatsapp'),
     path.resolve(__dirname, '../../../auth_whatsapp'),
     path.join(process.cwd(), 'auth_whatsapp'),
-    path.join(process.cwd(), 'backend-fastify', 'auth_whatsapp')
+    path.join(process.cwd(), 'backend-fastify', 'auth_whatsapp'),
+    '/var/www/wisi/backend-fastify/auth_whatsapp',
+    '/var/www/wisi/auth_whatsapp'
   ];
 
-  // 1. Priorizar el directorio que ya contenga credenciales registradas válidas (registered: true)
+  // 1. Priorizar el directorio que contenga creds.json con credenciales guardadas
   for (const dir of candidates) {
-    const credsFile = path.join(dir, 'creds.json');
-    if (fs.existsSync(credsFile)) {
-      try {
-        const raw = fs.readFileSync(credsFile, 'utf8');
-        const data = JSON.parse(raw);
-        if (data && data.registered === true && data.me?.id) {
-          return dir;
+    try {
+      const credsFile = path.join(dir, 'creds.json');
+      if (fs.existsSync(credsFile)) {
+        const stat = fs.statSync(credsFile);
+        if (stat.size > 150) {
+          const raw = fs.readFileSync(credsFile, 'utf8');
+          const data = JSON.parse(raw);
+          if (data && (data.registered === true || data.me || data.signedIdentityKey || data.account)) {
+            return dir;
+          }
         }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
   }
 
   // 2. Si ninguno tiene sesión activa válida, usar el directorio permanente en backend-fastify
@@ -40,8 +45,6 @@ function resolveAuthDir() {
   }
   return defaultDir;
 }
-
-const AUTH_DIR = resolveAuthDir();
 
 class WhatsAppService {
   constructor() {
@@ -55,22 +58,26 @@ class WhatsAppService {
     this.connectingStartedAt = 0;
     this.reconnectTimeout = null;
     this.watchdogInterval = null;
+    this.processedMessageIds = new Set(); // Evita procesar duplicados ante reenvíos de red
 
-    // Iniciar Watchdog para asegurar que el servicio nunca se caiga o quede colgado
+    // Iniciar Watchdog para asegurar que el servicio nunca se caiga ni se desconecte silenciosamente
     this.startWatchdog();
   }
 
   /**
-   * Verifica si existe una sesión de WhatsApp genuinamente vinculada y registrada en el teléfono.
+   * Verifica si existe una sesión de WhatsApp genuinamente guardada
    */
   hasSavedSession() {
     try {
       const authDir = resolveAuthDir();
       const credsFile = path.join(authDir, 'creds.json');
       if (fs.existsSync(credsFile)) {
-        const raw = fs.readFileSync(credsFile, 'utf8');
-        const data = JSON.parse(raw);
-        return Boolean(data && data.registered === true && data.me?.id);
+        const stat = fs.statSync(credsFile);
+        if (stat.size > 150) {
+          const raw = fs.readFileSync(credsFile, 'utf8');
+          const data = JSON.parse(raw);
+          return Boolean(data && (data.registered === true || data.me || data.signedIdentityKey || data.account));
+        }
       }
     } catch (e) {}
     return false;
@@ -91,29 +98,38 @@ class WhatsAppService {
     if (this.watchdogInterval) clearInterval(this.watchdogInterval);
 
     this.watchdogInterval = setInterval(() => {
-      // Si hay sesión guardada vinculada, asegurar que siempre esté en ejecución
+      // Si hay sesión guardada vinculada, asegurar que siempre esté activa 24/7
       if (this.hasSavedSession()) {
-        const isStuckConnecting = (this.status === 'connecting' && (Date.now() - this.connectingStartedAt > 25000));
+        const now = Date.now();
+        const isStuckConnecting = (this.status === 'connecting' && (now - this.connectingStartedAt > 20000));
         const isDisconnected = (this.status === 'disconnected' && !this.sock);
+        // Verificar si el WebSocket subyacente cayó silenciosamente (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)
+        const isSocketDead = (this.status === 'connected' && (!this.sock || !this.sock.ws || this.sock.ws.readyState !== 1));
 
-        if (isDisconnected || isStuckConnecting) {
-          console.log(`🛡️ [WhatsApp Watchdog] Estado detectado: ${this.status} (Colgado: ${isStuckConnecting}). Reactivando servicio...`);
+        if (isDisconnected || isStuckConnecting || isSocketDead) {
+          console.log(`🛡️ [WhatsApp Watchdog] Alerta: estado="${this.status}" (Colgado: ${isStuckConnecting}, SocketMuerto: ${isSocketDead}). Reactivando conexión automáticamente...`);
           this.destroySocket();
           this.connect(true).catch(e => {
             console.warn('Advertencia en Watchdog de WhatsApp:', e.message);
           });
         }
       }
-    }, 20000); // Chequeo constante cada 20 segundos
+    }, 10000); // Chequeo constante cada 10 segundos
   }
 
   async init() {
-    // Si ya existe una sesión guardada válida y no está conectado, auto-conectar en segundo plano
-    if (this.hasSavedSession() && this.status === 'disconnected') {
-      console.log('📱 [WhatsApp] Sesión guardada detectada. Auto-conectando motor en segundo plano...');
+    console.log('📱 [WhatsApp] Inicializando servicio...');
+    const hasSession = this.hasSavedSession();
+    const currentDir = resolveAuthDir();
+    console.log(`📁 [WhatsApp] Directorio auth: "${currentDir}" (Sesión guardada detectada: ${hasSession})`);
+
+    if (hasSession) {
+      console.log('⚡ [WhatsApp] Auto-conectando sesión guardada en segundo plano...');
       this.connect(false).catch(err => {
         console.warn('⚠️ [WhatsApp] Auto-conexión inicial falló:', err.message);
       });
+    } else {
+      console.log('ℹ️ [WhatsApp] No hay credenciales de sesión previas. Esperando vinculación de usuario.');
     }
   }
 
@@ -128,8 +144,8 @@ class WhatsAppService {
   }
 
   async connect(force = false) {
-    // Si ya está conectado y el socket está vivo, retornar estado
-    if (this.sock && this.status === 'connected' && !force) {
+    // Si ya está conectado y el socket está vivo con WebSocket OPEN, no duplicar
+    if (this.sock && this.status === 'connected' && this.sock.ws?.readyState === 1 && !force) {
       return this.getStatus();
     }
 
@@ -154,7 +170,7 @@ class WhatsAppService {
     this.status = 'connecting';
     this.lastError = null;
 
-    // Destruir socket anterior de raíz para evitar duplicación o bloqueos
+    // Destruir socket anterior para limpiar estado
     this.destroySocket();
 
     const currentAuthDir = resolveAuthDir();
@@ -168,9 +184,9 @@ class WhatsAppService {
         printQRInTerminal: false,
         browser: ['WISI Casino System', 'Chrome', '1.0.0'],
         syncFullHistory: false,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
-        keepAliveIntervalMs: 25000,
+        connectTimeoutMs: 30000,
+        defaultQueryTimeoutMs: 30000,
+        keepAliveIntervalMs: 15000, // Enviar pings cada 15 segundos para detectar caídas de internet de inmediato
         retryRequestDelayMs: 250
       });
 
@@ -248,9 +264,9 @@ class WhatsAppService {
             console.log('🔄 [WhatsApp] Reinicio de flujo requerido (515). Reconectando de inmediato...');
             this.connect(true).catch(() => {});
           } else {
-            // Desconexión temporal de red o timeout
+            // Desconexión temporal de red, pérdida de wifi/datos en el teléfono o caída de servidor
             this.status = 'connecting';
-            console.log('⏳ [WhatsApp] Conexión caída. Reintentando en 3 segundos...');
+            console.log('⏳ [WhatsApp] Conexión caída. Reintentando automáticamente en 3 segundos...');
             this.reconnectTimeout = setTimeout(() => {
               this.connect(true).catch(() => {});
             }, 3000);
@@ -258,11 +274,29 @@ class WhatsAppService {
         }
       });
 
-      // Escuchador de mensajes entrantes
+      // Escuchador de mensajes entrantes (soporta tanto 'notify' como mensajes retrasados 'append')
       this.sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
+        // Procesar mensajes nuevos o en cola tras recuperar conexión a internet
         for (const m of messages) {
           if (!m.message || m.key.fromMe) continue;
+
+          // Evitar procesar mensajes duplicados que reenvía WhatsApp al reconectar
+          const msgId = m.key.id;
+          if (msgId) {
+            if (this.processedMessageIds.has(msgId)) continue;
+            this.processedMessageIds.add(msgId);
+            if (this.processedMessageIds.size > 1000) {
+              const it = this.processedMessageIds.values();
+              for (let i = 0; i < 200; i++) this.processedMessageIds.delete(it.next().value);
+            }
+          }
+
+          // Si el mensaje es más viejo de 15 minutos (ej. historial muy antiguo), omitir
+          const timestamp = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : Date.now();
+          if (Date.now() - timestamp > 15 * 60 * 1000) {
+            continue;
+          }
+
           await this.handleIncomingMessage(m);
         }
       });
@@ -275,6 +309,14 @@ class WhatsAppService {
       this.lastError = err.message;
       this.isConnecting = false;
       this.destroySocket();
+
+      // Si hay sesión guardada vinculada, reintentar automáticamente en 5 segundos
+      if (this.hasSavedSession()) {
+        console.log('⏳ [WhatsApp] Reintentando auto-conexión en 5 segundos...');
+        this.reconnectTimeout = setTimeout(() => {
+          this.connect(true).catch(() => {});
+        }, 5000);
+      }
     }
 
     return this.getStatus();

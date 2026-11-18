@@ -131,6 +131,7 @@
   let isTesting = false;
 
   let pollInterval = null;
+  let lastStatusCheck = Date.now();
 
   onMount(async () => {
     await Promise.all([
@@ -140,9 +141,11 @@
     ]);
     runTestParse();
 
-    // Polling de estado cada 2 segundos siempre que no esté conectado
+    // Polling inteligente: cada 2s al reconectar/esperar QR, y cada 8s cuando ya está conectado
     pollInterval = setInterval(() => {
-      if (status.status !== "connected") {
+      const now = Date.now();
+      if (status.status !== "connected" || (now - lastStatusCheck >= 8000)) {
+        lastStatusCheck = now;
         fetchStatus(true);
       }
     }, 2000);
