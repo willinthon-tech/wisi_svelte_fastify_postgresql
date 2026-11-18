@@ -34,8 +34,18 @@ class WhatsAppService {
   }
 
   async connect() {
-    if (this.sock && (this.status === 'connected' || this.status === 'connecting')) {
+    if (this.sock && this.status === 'connected') {
       return this.getStatus();
+    }
+    if (this.sock && this.status === 'waiting_qr' && this.qrDataUrl) {
+      return this.getStatus();
+    }
+
+    if (this.sock) {
+      try {
+        this.sock.end(new Error('Resetting socket'));
+      } catch (e) {}
+      this.sock = null;
     }
 
     try {
@@ -53,6 +63,20 @@ class WhatsAppService {
       });
 
       this.sock.ev.on('creds.update', saveCreds);
+
+      // Esperar activamente hasta que Baileys emita el primer código QR (típicamente 300ms a 1.2s)
+      const waitForFirstQR = new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(), 4000);
+
+        const checkHandler = (update) => {
+          if (update.qr || update.connection === 'open' || update.connection === 'close') {
+            clearTimeout(timeout);
+            setTimeout(() => resolve(), 200);
+          }
+        };
+
+        this.sock.ev.on('connection.update', checkHandler);
+      });
 
       this.sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -119,6 +143,9 @@ class WhatsAppService {
           await this.handleIncomingMessage(m);
         }
       });
+
+      // Esperar a que el QR esté listo antes de responder la petición HTTP
+      await waitForFirstQR;
 
     } catch (err) {
       console.error('❌ [WhatsApp] Error iniciando conexión:', err);

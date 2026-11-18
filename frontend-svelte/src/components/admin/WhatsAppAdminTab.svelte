@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import { triggerToast } from "../../controllers/ui.store.js";
+  import { toBackendUrl } from "../../config/api.config.js";
 
   export let salas = [];
 
@@ -51,12 +52,12 @@
     ]);
     runTestParse();
 
-    // Polling de estado cada 3 segundos si estamos conectando o esperando QR
+    // Polling de estado cada 2 segundos siempre que no esté conectado
     pollInterval = setInterval(() => {
-      if (status.status === "connecting" || status.status === "waiting_qr") {
+      if (status.status !== "connected") {
         fetchStatus(true);
       }
-    }, 3000);
+    }, 2000);
   });
 
   onDestroy(() => {
@@ -66,7 +67,7 @@
   async function fetchStatus(silent = false) {
     if (!silent) isLoadingStatus = true;
     try {
-      const res = await fetch("/api/whatsapp/status");
+      const res = await fetch(toBackendUrl("/api/whatsapp/status"));
       const json = await res.json();
       if (json && json.success) {
         status = json.data || status;
@@ -84,11 +85,16 @@
   async function handleConnect() {
     isConnecting = true;
     try {
-      const res = await fetch("/api/whatsapp/connect", { method: "POST" });
+      const res = await fetch(toBackendUrl("/api/whatsapp/connect"), { method: "POST" });
       const json = await res.json();
       if (json && json.success) {
-        status = json.data;
-        triggerToast("Iniciando servicio de WhatsApp. Esperando código QR...", "info");
+        status = json.data || status;
+        if (status.status === 'waiting_qr') {
+          triggerToast("Código QR generado. Escanéalo desde tu teléfono.", "success");
+        } else {
+          triggerToast("Iniciando motor de WhatsApp. Esperando código QR...", "info");
+          setTimeout(() => fetchStatus(true), 1000);
+        }
       } else {
         triggerToast(json?.error || "Error al conectar WhatsApp", "error");
       }
@@ -105,7 +111,7 @@
     }
     isDisconnecting = true;
     try {
-      const res = await fetch("/api/whatsapp/disconnect", { method: "POST" });
+      const res = await fetch(toBackendUrl("/api/whatsapp/disconnect"), { method: "POST" });
       const json = await res.json();
       if (json && json.success) {
         status = json.data;
@@ -122,7 +128,7 @@
   async function fetchGroups() {
     isLoadingGroups = true;
     try {
-      const res = await fetch("/api/whatsapp/groups");
+      const res = await fetch(toBackendUrl("/api/whatsapp/groups"));
       const json = await res.json();
       if (json && json.success) {
         availableGroups = json.data || [];
@@ -137,7 +143,7 @@
   async function fetchMappings() {
     isLoadingMappings = true;
     try {
-      const res = await fetch("/api/whatsapp/mappings");
+      const res = await fetch(toBackendUrl("/api/whatsapp/mappings"));
       const json = await res.json();
       if (json && json.success) {
         mappings = json.data || [];
@@ -152,7 +158,7 @@
   async function fetchLogs() {
     isLoadingLogs = true;
     try {
-      const res = await fetch("/api/whatsapp/logs?limit=50");
+      const res = await fetch(toBackendUrl("/api/whatsapp/logs?limit=50"));
       const json = await res.json();
       if (json && json.success) {
         logs = json.data || [];
@@ -210,7 +216,7 @@
 
     isSavingMapping = true;
     try {
-      const res = await fetch("/api/whatsapp/mappings", {
+      const res = await fetch(toBackendUrl("/api/whatsapp/mappings"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mappingForm)
@@ -235,7 +241,7 @@
       return;
     }
     try {
-      const res = await fetch(`/api/whatsapp/mappings/${m.id || m.uuid}`, {
+      const res = await fetch(toBackendUrl(`/api/whatsapp/mappings/${m.id || m.uuid}`), {
         method: "DELETE"
       });
       const json = await res.json();
@@ -254,7 +260,7 @@
         ...m,
         is_active: !m.is_active
       };
-      await fetch("/api/whatsapp/mappings", {
+      await fetch(toBackendUrl("/api/whatsapp/mappings"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated)
@@ -273,7 +279,7 @@
     }
     isTesting = true;
     try {
-      const res = await fetch("/api/whatsapp/test-parse", {
+      const res = await fetch(toBackendUrl("/api/whatsapp/test-parse"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: testInput })
@@ -351,27 +357,56 @@
     </div>
   </div>
 
-  <!-- 2. QR CODE CARD (SI ESTÁ ESPERANDO QR) -->
+  <!-- 2. ESTADO CONECTANDO / GENERANDO QR -->
+  {#if status.status === 'connecting'}
+    <div class="wa-card wa-connecting-banner">
+      <div class="spinner-circle"></div>
+      <div style="flex: 1;">
+        <h4 style="margin: 0; color: #1e40af; font-size: 15px; font-weight: 800;">
+          ⏳ Generando código QR de WhatsApp en pantalla...
+        </h4>
+        <p style="margin: 4px 0 0 0; color: #475569; font-size: 13px;">
+          Por favor espera unos segundos. El código QR aparecerá automáticamente aquí abajo. Luego debes escanearlo con la cámara de tu teléfono desde <strong>WhatsApp &gt; Dispositivos vinculados</strong>.
+        </p>
+      </div>
+      <button class="btn-secondary" on:click={() => fetchStatus()}>
+        🔄 Comprobar Ahora
+      </button>
+    </div>
+  {/if}
+
+  <!-- 3. QR CODE CARD (SI ESTÁ ESPERANDO QR) -->
   {#if status.status === 'waiting_qr' && status.qr}
     <div class="wa-card wa-qr-card">
       <div class="qr-info">
-        <h3>📲 Vincular WhatsApp al Sistema WISI</h3>
+        <div class="qr-alert-box">
+          <span style="font-size: 24px;">📱</span>
+          <div>
+            <strong style="color: #1e3a8a; font-size: 14px;">Escanear desde tu teléfono móvil:</strong>
+            <p style="margin: 3px 0 0 0; font-size: 12.5px; color: #334155; line-height: 1.5;">
+              En el teléfono <strong>no</strong> saldrá ningún aviso automático. Debes abrir WhatsApp en tu celular y apuntar con la cámara a este código QR.
+            </p>
+          </div>
+        </div>
         <ol class="qr-steps">
           <li>Abre <strong>WhatsApp</strong> en el teléfono que estará en los grupos del casino.</li>
-          <li>Toca el menú <strong>(⋮) o Configuración</strong> y selecciona <strong>Dispositivos vinculados</strong>.</li>
-          <li>Toca en <strong>Vincular un dispositivo</strong>.</li>
-          <li>Apunta la cámara de tu teléfono a este código QR.</li>
+          <li>Toca el menú de los tres puntos <strong>(⋮) o Ajustes</strong>.</li>
+          <li>Selecciona <strong>Dispositivos vinculados</strong>.</li>
+          <li>Toca el botón verde <strong>Vincular un dispositivo</strong>.</li>
+          <li>Apunta la cámara de tu teléfono móvil a este código QR.</li>
         </ol>
-        <p class="qr-note">
-          🔒 La sesión se almacena de forma segura y se mantendrá activa automáticamente.
-        </p>
-        <button class="btn-secondary" on:click={() => fetchStatus()}>
-          🔄 Actualizar Estado
-        </button>
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap;">
+          <button class="btn-primary" on:click={() => fetchStatus()} style="font-size: 13px;">
+            🔄 Ya escaneé / Comprobar conexión
+          </button>
+          <button class="btn-secondary" on:click={() => handleConnect()} style="font-size: 13px;">
+            ⚡ Regenerar Nuevo Código QR
+          </button>
+        </div>
       </div>
       <div class="qr-image-wrapper">
         <img src={status.qr} alt="Código QR WhatsApp" class="qr-img" />
-        <span class="qr-caption">Código QR válido para vinculación directa</span>
+        <span class="qr-caption">Apunta aquí la cámara de WhatsApp de tu celular</span>
       </div>
     </div>
   {/if}
@@ -918,6 +953,41 @@
     cursor: pointer;
   }
   .btn-secondary:hover { background: #e2e8f0; }
+
+  .wa-connecting-banner {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: #eff6ff;
+    border: 1.5px dashed #60a5fa;
+    padding: 18px 24px;
+    border-radius: 12px;
+  }
+
+  .spinner-circle {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #bfdbfe;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .qr-alert-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
 
   /* QR CARD */
   .wa-qr-card {
