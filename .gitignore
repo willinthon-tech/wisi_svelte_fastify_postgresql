@@ -27,6 +27,10 @@ backend-fastify/downloads/app-wisi-android-*.apk
 backend-fastify/scratch/
 scratch/
 
+# Sesiones y tokens de WhatsApp
+auth_whatsapp/
+**/auth_whatsapp/
+
 # Archivos de compilación / dist / build
 frontend-svelte/dist/
 frontend-svelte/build/

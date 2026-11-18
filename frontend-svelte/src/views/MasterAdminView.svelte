@@ -46,6 +46,7 @@
   import { handleDownloadApp } from "../utils/download.utils.js";
   import CamarasAdminTab from "../components/cecom/CamarasAdminTab.svelte";
   import MesasCamarasAdminTab from "../components/cecom/MesasCamarasAdminTab.svelte";
+  import WhatsAppAdminTab from "../components/admin/WhatsAppAdminTab.svelte";
 
   // Tab order: Salas -> Páginas -> Módulos -> Dispositivos -> Usuarios -> Permisos y Asignaciones -> Ajustes de Sistema
   let activeTab = "salas";
@@ -1962,6 +1963,23 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
       🎰 Mesas & Cámaras (IA)
     </button>
 
+    <button
+      on:click={() => {
+        activeTab = "whatsapp";
+        searchQuery = "";
+        editingInlineId = null;
+      }}
+      type="button"
+      style="padding: 10px 18px; border-radius: 8px; border: none; font-size: 13.5px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; background: {activeTab ===
+      'whatsapp'
+        ? '#10b981'
+        : '#1e293b'}; color: {activeTab === 'whatsapp'
+        ? '#ffffff'
+        : '#94a3b8'};"
+    >
+      🤖 Automatización WhatsApp
+    </button>
+
     <!-- Tab del Agente WISI Sync (Oculta temporalmente para el modo Nube Directa, conservada para el futuro) -->
     <!--
     <button 
@@ -2961,6 +2979,8 @@ SALAS CONFIGURADAS: ${salasInvolved.map((s) => s.nombre).join(", ")}
     <CamarasAdminTab salas={$masterSalasStore} />
   {:else if activeTab === "mesas_camaras"}
     <MesasCamarasAdminTab salas={$masterSalasStore} />
+  {:else if activeTab === "whatsapp"}
+    <WhatsAppAdminTab salas={$masterSalasStore} />
   {:else}
     <!-- Table Container Card for Other 5 Entities -->
     <div

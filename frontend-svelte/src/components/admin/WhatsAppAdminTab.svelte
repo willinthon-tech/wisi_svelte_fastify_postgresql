@@ -1,0 +1,1327 @@
+<script>
+  import { onMount, onDestroy } from "svelte";
+  import { triggerToast } from "../../controllers/ui.store.js";
+
+  export let salas = [];
+
+  let status = {
+    status: "disconnected", // 'disconnected' | 'connecting' | 'waiting_qr' | 'connected'
+    qr: null,
+    user: null,
+    error: null
+  };
+
+  let mappings = [];
+  let availableGroups = [];
+  let logs = [];
+  
+  let isLoadingStatus = false;
+  let isConnecting = false;
+  let isDisconnecting = false;
+  let isLoadingGroups = false;
+  let isLoadingMappings = false;
+  let isLoadingLogs = false;
+  let isSavingMapping = false;
+
+  // Modal para asociar/editar mapeo de grupo
+  let isModalOpen = false;
+  let isEditingMapping = false;
+  let mappingForm = {
+    group_jid: "",
+    group_name: "",
+    sala_uuid: "",
+    modulo_destino: "control_clientes",
+    caja_default: "Mesas",
+    auto_reply: true,
+    is_active: true
+  };
+
+  // Probador interactivo de sintaxis
+  let testInput = "Compra 200$ USDT Máquinas Abel Gonzáles";
+  let testResult = null;
+  let isTesting = false;
+
+  let pollInterval = null;
+
+  onMount(async () => {
+    await Promise.all([
+      fetchStatus(),
+      fetchMappings(),
+      fetchLogs()
+    ]);
+    runTestParse();
+
+    // Polling de estado cada 3 segundos si estamos conectando o esperando QR
+    pollInterval = setInterval(() => {
+      if (status.status === "connecting" || status.status === "waiting_qr") {
+        fetchStatus(true);
+      }
+    }, 3000);
+  });
+
+  onDestroy(() => {
+    if (pollInterval) clearInterval(pollInterval);
+  });
+
+  async function fetchStatus(silent = false) {
+    if (!silent) isLoadingStatus = true;
+    try {
+      const res = await fetch("/api/whatsapp/status");
+      const json = await res.json();
+      if (json && json.success) {
+        status = json.data || status;
+        if (status.status === "connected" && availableGroups.length === 0) {
+          fetchGroups();
+        }
+      }
+    } catch (e) {
+      if (!silent) console.warn("Error consultando estado de WhatsApp:", e.message);
+    } finally {
+      if (!silent) isLoadingStatus = false;
+    }
+  }
+
+  async function handleConnect() {
+    isConnecting = true;
+    try {
+      const res = await fetch("/api/whatsapp/connect", { method: "POST" });
+      const json = await res.json();
+      if (json && json.success) {
+        status = json.data;
+        triggerToast("Iniciando servicio de WhatsApp. Esperando código QR...", "info");
+      } else {
+        triggerToast(json?.error || "Error al conectar WhatsApp", "error");
+      }
+    } catch (e) {
+      triggerToast(`Error de conexión: ${e.message}`, "error");
+    } finally {
+      isConnecting = false;
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!confirm("¿Está seguro de cerrar sesión y desvincular el número de WhatsApp actual?")) {
+      return;
+    }
+    isDisconnecting = true;
+    try {
+      const res = await fetch("/api/whatsapp/disconnect", { method: "POST" });
+      const json = await res.json();
+      if (json && json.success) {
+        status = json.data;
+        availableGroups = [];
+        triggerToast("Sesión de WhatsApp cerrada exitosamente", "success");
+      }
+    } catch (e) {
+      triggerToast(`Error al desvincular: ${e.message}`, "error");
+    } finally {
+      isDisconnecting = false;
+    }
+  }
+
+  async function fetchGroups() {
+    isLoadingGroups = true;
+    try {
+      const res = await fetch("/api/whatsapp/groups");
+      const json = await res.json();
+      if (json && json.success) {
+        availableGroups = json.data || [];
+      }
+    } catch (e) {
+      console.warn("Error cargando grupos de WhatsApp:", e.message);
+    } finally {
+      isLoadingGroups = false;
+    }
+  }
+
+  async function fetchMappings() {
+    isLoadingMappings = true;
+    try {
+      const res = await fetch("/api/whatsapp/mappings");
+      const json = await res.json();
+      if (json && json.success) {
+        mappings = json.data || [];
+      }
+    } catch (e) {
+      console.warn("Error cargando mapeos:", e.message);
+    } finally {
+      isLoadingMappings = false;
+    }
+  }
+
+  async function fetchLogs() {
+    isLoadingLogs = true;
+    try {
+      const res = await fetch("/api/whatsapp/logs?limit=50");
+      const json = await res.json();
+      if (json && json.success) {
+        logs = json.data || [];
+      }
+    } catch (e) {
+      console.warn("Error cargando logs:", e.message);
+    } finally {
+      isLoadingLogs = false;
+    }
+  }
+
+  function openCreateMappingModal() {
+    isEditingMapping = false;
+    mappingForm = {
+      group_jid: "",
+      group_name: "",
+      sala_uuid: (salas && salas[0]?.uuid) || "",
+      modulo_destino: "control_clientes",
+      caja_default: "Mesas",
+      auto_reply: true,
+      is_active: true
+    };
+    isModalOpen = true;
+  }
+
+  function openEditMappingModal(m) {
+    isEditingMapping = true;
+    mappingForm = {
+      group_jid: m.group_jid,
+      group_name: m.group_name || "",
+      sala_uuid: m.sala_uuid || "",
+      modulo_destino: m.modulo_destino || "control_clientes",
+      caja_default: m.caja_default || "Mesas",
+      auto_reply: m.auto_reply !== false,
+      is_active: m.is_active !== false
+    };
+    isModalOpen = true;
+  }
+
+  async function handleSaveMapping() {
+    if (!mappingForm.group_jid) {
+      triggerToast("Seleccione o ingrese el ID/JID del grupo de WhatsApp", "warning");
+      return;
+    }
+    if (!mappingForm.sala_uuid) {
+      triggerToast("Seleccione la Sala asignada a este grupo", "warning");
+      return;
+    }
+
+    // Si seleccionó un grupo de la lista y no tenía nombre, rellenarlo
+    const foundGroup = availableGroups.find(g => g.id === mappingForm.group_jid);
+    if (foundGroup && !mappingForm.group_name) {
+      mappingForm.group_name = foundGroup.name;
+    }
+
+    isSavingMapping = true;
+    try {
+      const res = await fetch("/api/whatsapp/mappings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mappingForm)
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast("Grupo asociado correctamente a la sala", "success");
+        isModalOpen = false;
+        await fetchMappings();
+      } else {
+        triggerToast(json?.error || "Error guardando mapeo", "error");
+      }
+    } catch (e) {
+      triggerToast(`Error: ${e.message}`, "error");
+    } finally {
+      isSavingMapping = false;
+    }
+  }
+
+  async function handleDeleteMapping(m) {
+    if (!confirm(`¿Eliminar la asociación del grupo "${m.group_name || m.group_jid}"?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/whatsapp/mappings/${m.id || m.uuid}`, {
+        method: "DELETE"
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        triggerToast("Mapeo eliminado", "success");
+        await fetchMappings();
+      }
+    } catch (e) {
+      triggerToast(`Error al eliminar: ${e.message}`, "error");
+    }
+  }
+
+  async function toggleMappingActive(m) {
+    try {
+      const updated = {
+        ...m,
+        is_active: !m.is_active
+      };
+      await fetch("/api/whatsapp/mappings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated)
+      });
+      m.is_active = !m.is_active;
+      triggerToast(m.is_active ? "Grupo activado" : "Grupo pausado", "info");
+    } catch (e) {
+      triggerToast(`Error: ${e.message}`, "error");
+    }
+  }
+
+  async function runTestParse() {
+    if (!testInput.trim()) {
+      testResult = null;
+      return;
+    }
+    isTesting = true;
+    try {
+      const res = await fetch("/api/whatsapp/test-parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: testInput })
+      });
+      const json = await res.json();
+      if (json && json.success) {
+        testResult = json.data;
+      } else {
+        testResult = null;
+      }
+    } catch (e) {
+      testResult = null;
+    } finally {
+      isTesting = false;
+    }
+  }
+</script>
+
+<div class="wa-container">
+  <!-- 1. HEADER & STATUS OVERVIEW -->
+  <div class="wa-card wa-header-card">
+    <div class="wa-header-info">
+      <div class="wa-icon-badge">
+        <span style="font-size: 28px;">💬</span>
+      </div>
+      <div>
+        <h2 class="wa-title">Automatización de Operaciones vía WhatsApp</h2>
+        <p class="wa-subtitle">
+          Captura inteligente en tiempo real desde grupos de WhatsApp directo a <strong>Control de Clientes</strong> y <strong>Aportes / Devoluciones</strong>.
+        </p>
+      </div>
+    </div>
+
+    <!-- Status Pill -->
+    <div class="wa-status-box">
+      {#if status.status === 'connected'}
+        <div class="status-pill connected">
+          <span class="status-dot green"></span>
+          <div>
+            <strong>CONECTADO</strong>
+            <span class="phone-label">{status.user?.phone || ''} {status.user?.name ? `(${status.user.name})` : ''}</span>
+          </div>
+        </div>
+        <button class="btn-disconnect" on:click={handleDisconnect} disabled={isDisconnecting}>
+          {isDisconnecting ? "Desvinculando..." : "🔌 Desvincular Número"}
+        </button>
+      {:else if status.status === 'waiting_qr'}
+        <div class="status-pill waiting">
+          <span class="status-dot yellow"></span>
+          <div>
+            <strong>ESPERANDO ESCANEO DE QR</strong>
+            <span class="sub-label">Abre WhatsApp en tu teléfono y escanea</span>
+          </div>
+        </div>
+      {:else if status.status === 'connecting'}
+        <div class="status-pill connecting">
+          <span class="status-dot blue"></span>
+          <div>
+            <strong>INICIANDO MOTOR WHATSAPP...</strong>
+            <span class="sub-label">Generando credenciales de sesión</span>
+          </div>
+        </div>
+      {:else}
+        <div class="status-pill disconnected">
+          <span class="status-dot gray"></span>
+          <div>
+            <strong>DESCONECTADO</strong>
+            <span class="sub-label">Sin número de WhatsApp asociado</span>
+          </div>
+        </div>
+        <button class="btn-connect" on:click={handleConnect} disabled={isConnecting}>
+          {isConnecting ? "Iniciando..." : "📲 Generar QR / Vincular"}
+        </button>
+      {/if}
+    </div>
+  </div>
+
+  <!-- 2. QR CODE CARD (SI ESTÁ ESPERANDO QR) -->
+  {#if status.status === 'waiting_qr' && status.qr}
+    <div class="wa-card wa-qr-card">
+      <div class="qr-info">
+        <h3>📲 Vincular WhatsApp al Sistema WISI</h3>
+        <ol class="qr-steps">
+          <li>Abre <strong>WhatsApp</strong> en el teléfono que estará en los grupos del casino.</li>
+          <li>Toca el menú <strong>(⋮) o Configuración</strong> y selecciona <strong>Dispositivos vinculados</strong>.</li>
+          <li>Toca en <strong>Vincular un dispositivo</strong>.</li>
+          <li>Apunta la cámara de tu teléfono a este código QR.</li>
+        </ol>
+        <p class="qr-note">
+          🔒 La sesión se almacena de forma segura y se mantendrá activa automáticamente.
+        </p>
+        <button class="btn-secondary" on:click={() => fetchStatus()}>
+          🔄 Actualizar Estado
+        </button>
+      </div>
+      <div class="qr-image-wrapper">
+        <img src={status.qr} alt="Código QR WhatsApp" class="qr-img" />
+        <span class="qr-caption">Código QR válido para vinculación directa</span>
+      </div>
+    </div>
+  {/if}
+
+  <!-- 3. PROBADOR INTERACTIVO DE SINTAXIS -->
+  <div class="wa-card">
+    <div class="section-header">
+      <div>
+        <h3 class="section-title">🧪 Probador Interactivo de Sintaxis</h3>
+        <p class="section-desc">Escribe cualquier mensaje de prueba tal como lo escribirían en el grupo de WhatsApp para ver cómo el sistema lo desglosa.</p>
+      </div>
+      <span class="syntax-badge">Regex & NLP Engine v1.0</span>
+    </div>
+
+    <div class="tester-input-row">
+      <input 
+        type="text" 
+        class="test-input" 
+        bind:value={testInput} 
+        on:input={runTestParse}
+        placeholder="Ej: Compra 200$ USDT Máquinas Abel Gonzáles" 
+      />
+      <button class="btn-test" on:click={runTestParse} disabled={isTesting}>
+        Probar Análisis
+      </button>
+    </div>
+
+    {#if testResult && testResult.success}
+      <div class="test-preview-grid">
+        <div class="preview-item">
+          <span class="lbl">TIPO DE OPERACIÓN</span>
+          <span class="val bold {testResult.tipo === 'Compra' ? 'text-green' : (testResult.tipo === 'Pago' ? 'text-red' : 'text-blue')}">
+            {testResult.tipo}
+          </span>
+        </div>
+        <div class="preview-item">
+          <span class="lbl">MONTO</span>
+          <span class="val bold">${testResult.monto}</span>
+        </div>
+        <div class="preview-item">
+          <span class="lbl">MÉTODO DE PAGO</span>
+          <span class="val">{testResult.metodo}</span>
+        </div>
+        <div class="preview-item">
+          <span class="lbl">CAJA DESTINO</span>
+          <span class="val badge-box">{testResult.caja}</span>
+        </div>
+        <div class="preview-item">
+          <span class="lbl">CLIENTE / JUGADOR</span>
+          <span class="val highlight">{testResult.cliente}</span>
+        </div>
+        <div class="preview-item">
+          <span class="lbl">MÓDULO DESTINO</span>
+          <span class="val text-indigo">
+            {testResult.modulo === 'control_clientes' ? 'Control de Clientes' : 'Aportes / Devoluciones'}
+          </span>
+        </div>
+        {#if testResult.rango}
+          <div class="preview-item">
+            <span class="lbl">RANGO DETECTADO</span>
+            <span class="val text-purple">{testResult.rango}</span>
+          </div>
+        {/if}
+        {#if testResult.nota}
+          <div class="preview-item">
+            <span class="lbl">NOTA / REF</span>
+            <span class="val">{testResult.nota}</span>
+          </div>
+        {/if}
+      </div>
+    {:else if testInput.trim()}
+      <div class="test-no-match">
+        ⚠️ El mensaje no coincide con el formato de transacción (debe incluir: tipo de operación, monto numérico y nombre o método).
+      </div>
+    {/if}
+  </div>
+
+  <!-- 4. MAPEO DE GRUPOS A SALAS -->
+  <div class="wa-card">
+    <div class="section-header">
+      <div>
+        <h3 class="section-title">📋 Grupos de WhatsApp Mapeados a Salas</h3>
+        <p class="section-desc">
+          Asocia los grupos de WhatsApp donde opera cada sala. Cuando un cajero o supervisor escriba en ese grupo, el sistema sabrá a qué sala y libro imputar la transacción.
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        {#if status.status === 'connected'}
+          <button class="btn-secondary" on:click={fetchGroups} disabled={isLoadingGroups}>
+            {isLoadingGroups ? "Cargando..." : "🔄 Cargar Grupos de WhatsApp"}
+          </button>
+        {/if}
+        <button class="btn-primary" on:click={openCreateMappingModal}>
+          ➕ Mapear Nuevo Grupo
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabla de Mapeos -->
+    {#if isLoadingMappings}
+      <div class="empty-state">Cargando mapeos de grupos...</div>
+    {:else if mappings.length === 0}
+      <div class="empty-state">
+        <span style="font-size: 32px; display: block; margin-bottom: 8px;">📭</span>
+        No hay grupos de WhatsApp asociados todavía. Haz clic en <strong>"Mapear Nuevo Grupo"</strong> para comenzar.
+      </div>
+    {:else}
+      <div class="table-container">
+        <table class="wa-table">
+          <thead>
+            <tr>
+              <th>ESTADO</th>
+              <th>GRUPO DE WHATSAPP</th>
+              <th>SALA ASIGNADA</th>
+              <th>MÓDULO DESTINO</th>
+              <th>CAJA DEFECTO</th>
+              <th>AUTO-CONFIRMACIÓN</th>
+              <th style="text-align: right;">ACCIONES</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each mappings as m}
+              <tr>
+                <td>
+                  <button 
+                    type="button" 
+                    class="toggle-switch {m.is_active ? 'active' : ''}" 
+                    on:click={() => toggleMappingActive(m)}
+                    title={m.is_active ? 'Pausar este grupo' : 'Activar este grupo'}
+                  >
+                    <span class="toggle-slider"></span>
+                  </button>
+                </td>
+                <td>
+                  <div class="group-cell">
+                    <span class="group-name">{m.group_name || 'Grupo Sin Nombre'}</span>
+                    <span class="group-jid">{m.group_jid}</span>
+                  </div>
+                </td>
+                <td>
+                  <span class="sala-badge">🏛️ {m.sala_nombre || 'Sala no especificada'}</span>
+                </td>
+                <td>
+                  <span class="modulo-badge {m.modulo_destino}">
+                    {m.modulo_destino === 'control_clientes' ? 'Control de Clientes' : 'Aportes / Devoluciones'}
+                  </span>
+                </td>
+                <td>
+                  <span class="caja-badge {m.caja_default}">
+                    {m.caja_default || 'Mesas'}
+                  </span>
+                </td>
+                <td>
+                  {#if m.auto_reply !== false}
+                    <span class="reply-badge enabled">✅ Responde Confirmación</span>
+                  {:else}
+                    <span class="reply-badge disabled">Silencioso</span>
+                  {/if}
+                </td>
+                <td style="text-align: right;">
+                  <button class="btn-action-edit" on:click={() => openEditMappingModal(m)} title="Editar mapeo">
+                    ✏️
+                  </button>
+                  <button class="btn-action-delete" on:click={() => handleDeleteMapping(m)} title="Eliminar mapeo">
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+  </div>
+
+  <!-- 5. HISTORIAL DE MENSAJES RECIBIDOS (LOGS) -->
+  <div class="wa-card">
+    <div class="section-header">
+      <div>
+        <h3 class="section-title">📜 Registro de Mensajes Procesados en Vivo</h3>
+        <p class="section-desc">Últimos mensajes capturados desde los grupos de WhatsApp y su resultado en la base de datos.</p>
+      </div>
+      <button class="btn-secondary" on:click={fetchLogs} disabled={isLoadingLogs}>
+        {isLoadingLogs ? "Cargando..." : "🔄 Actualizar Historial"}
+      </button>
+    </div>
+
+    {#if isLoadingLogs}
+      <div class="empty-state">Cargando registros...</div>
+    {:else if logs.length === 0}
+      <div class="empty-state">
+        Aún no se han recibido mensajes en los grupos monitoreados.
+      </div>
+    {:else}
+      <div class="table-container">
+        <table class="wa-table logs-table">
+          <thead>
+            <tr>
+              <th>HORA / FECHA</th>
+              <th>GRUPO</th>
+              <th>REMITENTE</th>
+              <th>MENSAJE ORIGINAL</th>
+              <th>ESTADO</th>
+              <th>DETALLES EXTRAÍDOS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each logs as log}
+              <tr>
+                <td class="time-cell">
+                  {new Date(log.created_at).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  <span class="sub-date">{new Date(log.created_at).toLocaleDateString('es-VE')}</span>
+                </td>
+                <td>
+                  <strong>{log.group_name || 'Grupo'}</strong>
+                </td>
+                <td>
+                  <span class="sender-cell">{log.sender_name || 'Usuario'}</span>
+                </td>
+                <td class="raw-message-cell">
+                  <code>"{log.raw_message}"</code>
+                </td>
+                <td>
+                  {#if log.status === 'procesado'}
+                    <span class="status-chip success">✅ Registrado</span>
+                  {:else if log.status === 'sin_libro_activo'}
+                    <span class="status-chip warning">⚠️ Sin Libro Abierto</span>
+                  {:else}
+                    <span class="status-chip error">❌ Error: {log.error_message || 'Fallo'}</span>
+                  {/if}
+                </td>
+                <td class="parsed-cell">
+                  {#if log.parsed_data}
+                    <span class="parsed-pill">
+                      {log.parsed_data.tipo} ${log.parsed_data.monto} | {log.parsed_data.metodo} | {log.parsed_data.caja} | {log.parsed_data.cliente}
+                    </span>
+                  {:else}
+                    <span class="text-muted">-</span>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+  </div>
+</div>
+
+<!-- MODAL MAPEAR / EDITAR GRUPO -->
+{#if isModalOpen}
+  <div class="modal-overlay" on:click={() => (isModalOpen = false)}>
+    <div class="modal-box" on:click|stopPropagation>
+      <div class="modal-header">
+        <h3 class="modal-title">
+          {isEditingMapping ? "✏️ Editar Mapeo de Grupo" : "➕ Mapear Grupo de WhatsApp a Sala"}
+        </h3>
+        <button class="modal-close" on:click={() => (isModalOpen = false)}>✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Selector de Grupo -->
+        <div class="form-group">
+          <label class="form-label">Seleccionar Grupo de WhatsApp *</label>
+          {#if availableGroups.length > 0}
+            <select 
+              class="form-select" 
+              bind:value={mappingForm.group_jid}
+              on:change={(e) => {
+                const found = availableGroups.find(g => g.id === e.target.value);
+                if (found) mappingForm.group_name = found.name;
+              }}
+            >
+              <option value="">-- Seleccionar Grupo Detectado en WhatsApp --</option>
+              {#each availableGroups as g}
+                <option value={g.id}>{g.name} ({g.participantsCount} miembros)</option>
+              {/each}
+            </select>
+          {:else}
+            <input 
+              type="text" 
+              class="form-input" 
+              bind:value={mappingForm.group_jid} 
+              placeholder="Ej: 12036302482939@g.us (JID de WhatsApp)" 
+            />
+            <span class="field-hint">
+              {status.status === 'connected' ? 'Cargando grupos participantes...' : 'Vincula WhatsApp arriba para listar tus grupos automáticamente, o ingresa el JID manual.'}
+            </span>
+          {/if}
+        </div>
+
+        <!-- Nombre amigable del Grupo -->
+        <div class="form-group">
+          <label class="form-label">Nombre Identificador del Grupo</label>
+          <input 
+            type="text" 
+            class="form-input" 
+            bind:value={mappingForm.group_name} 
+            placeholder="Ej: Caja Central Sala Principal" 
+          />
+        </div>
+
+        <!-- Sala Asignada -->
+        <div class="form-group">
+          <label class="form-label">Sala a la que pertenece este Grupo *</label>
+          <select class="form-select" bind:value={mappingForm.sala_uuid}>
+            <option value="">-- Seleccionar Sala --</option>
+            {#each (salas || []) as s}
+              <option value={s.uuid || s.id}>{s.nombre || s.nombre_comercial}</option>
+            {/each}
+          </select>
+          <span class="field-hint">Las transacciones escritas en este grupo se registrarán en el Libro Diario activo de esta sala.</span>
+        </div>
+
+        <!-- Módulo Destino por defecto -->
+        <div class="form-group">
+          <label class="form-label">Módulo Destino por Defecto</label>
+          <select class="form-select" bind:value={mappingForm.modulo_destino}>
+            <option value="control_clientes">Control de Clientes (Compras y Pagos)</option>
+            <option value="aportes_maquinas">Aportes y Devoluciones (Máquinas)</option>
+          </select>
+        </div>
+
+        <!-- Caja por defecto -->
+        <div class="form-group">
+          <label class="form-label">Caja Predeterminada</label>
+          <select class="form-select" bind:value={mappingForm.caja_default}>
+            <option value="Mesas">Caja Mesas</option>
+            <option value="Máquinas">Caja Máquinas</option>
+          </select>
+          <span class="field-hint">Si el mensaje no menciona explícitamente "Mesas" o "Máquinas", se asignará a esta caja.</span>
+        </div>
+
+        <!-- Opciones adicionales -->
+        <div class="form-row">
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={mappingForm.auto_reply} />
+            <span>Enviar mensaje de confirmación automático (check) al grupo al procesar cada operación</span>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={mappingForm.is_active} />
+            <span>Monitoreo Activo (procesar mensajes inmediatamente)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" on:click={() => (isModalOpen = false)}>
+          Cancelar
+        </button>
+        <button class="btn-primary" on:click={handleSaveMapping} disabled={isSavingMapping}>
+          {isSavingMapping ? "Guardando..." : (isEditingMapping ? "Actualizar Mapeo" : "Guardar Mapeo")}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .wa-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 4px 0 30px 0;
+  }
+
+  .wa-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    padding: 24px;
+  }
+
+  .wa-header-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    background: linear-gradient(135deg, #ffffff, #f8fafc);
+  }
+
+  .wa-header-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .wa-icon-badge {
+    width: 54px;
+    height: 54px;
+    border-radius: 12px;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .wa-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .wa-subtitle {
+    margin: 4px 0 0 0;
+    font-size: 13.5px;
+    color: #64748b;
+  }
+
+  .wa-status-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .status-pill.connected {
+    background: #ecfdf5;
+    border: 1px solid #10b981;
+    color: #065f46;
+  }
+
+  .status-pill.waiting {
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
+    color: #92400e;
+  }
+
+  .status-pill.connecting {
+    background: #eff6ff;
+    border: 1px solid #3b82f6;
+    color: #1e40af;
+  }
+
+  .status-pill.disconnected {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+  }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .status-dot.green { background: #10b981; box-shadow: 0 0 8px #10b981; }
+  .status-dot.yellow { background: #f59e0b; animation: pulse 1.5s infinite; }
+  .status-dot.blue { background: #3b82f6; animation: pulse 1s infinite; }
+  .status-dot.gray { background: #94a3b8; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .phone-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.9;
+  }
+
+  .sub-label {
+    display: block;
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  /* BOTONES */
+  .btn-connect {
+    padding: 10px 18px;
+    background: #10b981;
+    color: #ffffff;
+    font-size: 13.5px;
+    font-weight: 700;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+    transition: all 0.15s ease;
+  }
+  .btn-connect:hover { background: #059669; }
+
+  .btn-disconnect {
+    padding: 9px 15px;
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    font-size: 12.5px;
+    font-weight: 700;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .btn-disconnect:hover { background: #fee2e2; }
+
+  .btn-primary {
+    padding: 10px 18px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 13.5px;
+    font-weight: 700;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-primary:hover { background: #1d4ed8; }
+
+  .btn-secondary {
+    padding: 10px 16px;
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 9px;
+    cursor: pointer;
+  }
+  .btn-secondary:hover { background: #e2e8f0; }
+
+  /* QR CARD */
+  .wa-qr-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 30px;
+    flex-wrap: wrap;
+    background: #f8fafc;
+    border: 2px dashed #93c5fd;
+  }
+
+  .qr-info {
+    max-width: 480px;
+  }
+
+  .qr-info h3 {
+    margin: 0 0 12px 0;
+    color: #1e3a8a;
+    font-size: 18px;
+  }
+
+  .qr-steps {
+    margin: 0 0 16px 0;
+    padding-left: 20px;
+    color: #334155;
+    line-height: 1.7;
+    font-size: 13.5px;
+  }
+
+  .qr-note {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 16px;
+  }
+
+  .qr-image-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  .qr-img {
+    width: 240px;
+    height: 240px;
+    display: block;
+    border-radius: 8px;
+  }
+
+  .qr-caption {
+    margin-top: 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  /* SECTION HEADER */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .section-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .section-desc {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  .syntax-badge {
+    background: #f1f5f9;
+    color: #475569;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* TESTER */
+  .tester-input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .test-input {
+    flex: 1;
+    padding: 11px 14px;
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    font-size: 14px;
+    color: #0f172a;
+    background: #f8fafc;
+  }
+  .test-input:focus {
+    background: #ffffff;
+    border-color: #3b82f6;
+    outline: none;
+  }
+
+  .btn-test {
+    padding: 11px 20px;
+    background: #0f172a;
+    color: #ffffff;
+    border: none;
+    border-radius: 9px;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .test-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    background: #f8fafc;
+    padding: 16px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+  }
+
+  .preview-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .preview-item .lbl {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #64748b;
+  }
+
+  .preview-item .val {
+    font-size: 13.5px;
+    color: #1e293b;
+  }
+
+  .preview-item .bold { font-weight: 800; }
+  .preview-item .highlight { font-weight: 800; color: #0284c7; }
+  .badge-box { background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: 12px; display: inline-block; width: fit-content; }
+  .text-green { color: #16a34a; }
+  .text-red { color: #dc2626; }
+  .text-blue { color: #2563eb; }
+  .text-indigo { color: #4338ca; font-weight: 700; }
+  .text-purple { color: #7c3aed; font-weight: 700; }
+
+  .test-no-match {
+    padding: 12px 16px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  /* TABLAS */
+  .table-container {
+    overflow-x: auto;
+  }
+
+  .wa-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .wa-table th {
+    background: #f8fafc;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 700;
+    color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+    font-size: 11.5px;
+  }
+
+  .wa-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  .group-cell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .group-name {
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .group-jid {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  .sala-badge {
+    background: #f0fdf4;
+    color: #166534;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 12px;
+    border: 1px solid #bbf7d0;
+  }
+
+  .modulo-badge {
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .modulo-badge.control_clientes { background: #e0f2fe; color: #0369a1; }
+  .modulo-badge.aportes_maquinas { background: #f3e8ff; color: #6b21a8; }
+
+  .caja-badge {
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 11.5px;
+  }
+  .caja-badge.Mesas { background: #fef3c7; color: #92400e; }
+  .caja-badge.Máquinas { background: #e2e8f0; color: #334155; }
+
+  .reply-badge {
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .reply-badge.enabled { color: #16a34a; }
+  .reply-badge.disabled { color: #94a3b8; }
+
+  .toggle-switch {
+    width: 36px;
+    height: 20px;
+    background: #cbd5e1;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    padding: 0;
+    transition: background 0.2s ease;
+  }
+  .toggle-switch.active { background: #10b981; }
+
+  .toggle-slider {
+    width: 16px;
+    height: 16px;
+    background: #ffffff;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s ease;
+  }
+  .toggle-switch.active .toggle-slider { transform: translateX(16px); }
+
+  .btn-action-edit, .btn-action-delete {
+    padding: 6px 10px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+  }
+  .btn-action-edit:hover { background: #e0f2fe; border-color: #7dd3fc; }
+  .btn-action-delete:hover { background: #fee2e2; border-color: #fca5a5; }
+
+  /* LOGS */
+  .logs-table td { font-size: 12.5px; }
+  .time-cell { font-weight: 700; color: #334155; white-space: nowrap; }
+  .sub-date { display: block; font-size: 10.5px; font-weight: 400; color: #94a3b8; }
+  .sender-cell { font-weight: 600; color: #475569; }
+  .raw-message-cell code { background: #f1f5f9; padding: 3px 6px; border-radius: 4px; font-size: 12px; color: #0f172a; }
+  
+  .status-chip {
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+  .status-chip.success { background: #ecfdf5; color: #065f46; }
+  .status-chip.warning { background: #fffbeb; color: #92400e; }
+  .status-chip.error { background: #fef2f2; color: #991b1b; }
+
+  .parsed-pill {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: #334155;
+    font-weight: 600;
+  }
+
+  .empty-state {
+    padding: 30px;
+    text-align: center;
+    color: #64748b;
+    font-size: 13.5px;
+  }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+  }
+
+  .modal-box {
+    background: #ffffff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 540px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 24px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .modal-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .modal-close {
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: #94a3b8;
+  }
+
+  .modal-body {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-label {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #334155;
+  }
+
+  .form-input, .form-select {
+    padding: 10px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13.5px;
+    color: #0f172a;
+    background: #ffffff;
+  }
+
+  .field-hint {
+    font-size: 11.5px;
+    color: #64748b;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #334155;
+    cursor: pointer;
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+</style>
