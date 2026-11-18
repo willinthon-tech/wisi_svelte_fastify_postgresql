@@ -1,22 +1,23 @@
 import postgres from 'postgres';
+import dotenv from 'dotenv';
+dotenv.config({ path: 'backend-fastify/.env' });
 
-const sql = postgres({ host: 'localhost', port: 5432, database: 'wisi', username: 'root', password: 'S0p0rt3R0y4l-2025' });
+const sql = postgres({
+  host: process.env.PGHOST || 'localhost',
+  port: parseInt(process.env.PGPORT || '5432', 10),
+  database: process.env.PGDATABASE || 'wisi',
+  username: process.env.PGUSER || 'root',
+  password: process.env.PGPASSWORD || 'S0p0rt3R0y4l-2025'
+});
 
-async function main() {
-  const tables = ['permissions', 'ciclos', 'ciclo_turnos', 'ciclo_empleados', 'horarios', 'config_marcas', 'config_modelos', 'config_juegos', 'maquinas', 'llaves', 'mesas', 'libros', 'rangos'];
-  for (const t of tables) {
-    const cols = await sql`
-      SELECT column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name = ${t}
-      ORDER BY ordinal_position;
-    `;
-    console.log(`=== ${t} ===`);
-    console.log(cols.map(c => `${c.column_name} (${c.data_type})`).join(', '));
-  }
-  const rangos = await sql`SELECT * FROM rangos LIMIT 5`;
-  console.log('Sample rangos:', rangos);
+async function run() {
+  const notNullsEmp = await sql`
+    SELECT column_name, is_nullable, column_default 
+    FROM information_schema.columns 
+    WHERE table_name = 'empleados' AND is_nullable = 'NO'
+  `;
+  console.log('empleados NOT NULL columns:', notNullsEmp);
   await sql.end();
 }
 
-main().catch(console.error);
+run().catch(console.error);
