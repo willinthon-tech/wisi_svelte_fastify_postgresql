@@ -364,6 +364,10 @@ class WhatsAppService {
           timeZone: 'America/Caracas'
         });
 
+        const notaStr = parsed.nota 
+          ? `${parsed.nota} (vía WhatsApp)` 
+          : `Vía WhatsApp por ${senderName}`;
+
         // D) Insertar en libro_control_clientes
         const insertRes = await sql`
           INSERT INTO libro_control_clientes (
@@ -385,7 +389,7 @@ class WhatsAppService {
             ${parsed.monto},
             ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
             ${horaStr},
-            ${parsed.nota ? sql`${parsed.nota} (vía WhatsApp)` : sql`Vía WhatsApp por ${senderName}`}
+            ${notaStr}
           )
           RETURNING uuid
         `;
@@ -555,11 +559,13 @@ class WhatsAppService {
     } catch (err) {
       console.error('❌ Error procesando mensaje de WhatsApp:', err);
       try {
+        const errSenderJid = m?.key?.participant || remoteJid;
+        const errSenderName = m?.pushName || 'Usuario WhatsApp';
         await sql`
           INSERT INTO whatsapp_logs (
-            group_jid, group_name, raw_message, status, error_message
+            group_jid, group_name, sender_jid, sender_name, raw_message, status, error_message
           ) VALUES (
-            ${remoteJid}, 'Error', ${messageText}, 'error_interno', ${err.message}
+            ${remoteJid}, ${mapping?.group_name || 'Grupo WhatsApp'}, ${errSenderJid}, ${errSenderName}, ${messageText}, 'error_interno', ${err.message}
           )
         `;
       } catch (e) {}
