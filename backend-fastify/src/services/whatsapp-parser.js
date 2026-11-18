@@ -152,7 +152,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   const isAporteDev = (tipo === 'Aporte' || tipo === 'Devolución');
 
   // 4. Extraer Monto numérico
-  // Enmascaramos el texto del RANGO y horas (ej. 12:30) para que sus números no se tomen como monto
+  // Enmascaramos el texto del RANGO y horas (ej. 12:30 o 04:16) para que sus números no se tomen como monto
   let textForMonto = textWithoutNota;
   if (rangoMatchedText) {
     textForMonto = textForMonto.replace(rangoMatchedText, ' ');
@@ -162,8 +162,8 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   let monto = 0;
   let montoRaw = '';
 
-  // Prioridad 1: Número con indicador monetario explícito ($200, 200$, 200usd, 200bs, etc.)
-  const explicitMontoMatch = textForMonto.match(/(?:\$)\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)|(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:\$|usd|usdt|bs)/i);
+  // Prioridad 1: Número con indicador monetario explícito ($1000, 1000$, 1000d, 1000usd, 1000bs, 1000 ref, etc.)
+  const explicitMontoMatch = textForMonto.match(/(?:[\$€£]|bs\.?|ref\.?)\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:[\$€£]|usd|usdt|bs\.?|ref|dlls?|d[oó]lares?|divisas?|d\b)/i);
   if (explicitMontoMatch) {
     montoRaw = explicitMontoMatch[0];
     let numStr = explicitMontoMatch[1] || explicitMontoMatch[2];
@@ -181,9 +181,9 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     }
   }
 
-  // Prioridad 2: Cualquier número aislado en el texto
+  // Prioridad 2: Cualquier número en el texto (incluso con letras o sufijos adjuntos)
   if (!monto || isNaN(monto) || monto <= 0) {
-    const anyNumberMatch = textForMonto.match(/\b(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)\b/);
+    const anyNumberMatch = textForMonto.match(/(?<![a-zA-Z])(\d+(?:[.,]\d+)?)(?:[a-zA-Z\$]+)?/);
     if (anyNumberMatch) {
       montoRaw = anyNumberMatch[0];
       let numStr = anyNumberMatch[1];
