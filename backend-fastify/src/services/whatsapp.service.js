@@ -356,16 +356,82 @@ class WhatsAppService {
         }
 
       } else if (parsed.modulo === 'aportes_maquinas') {
-        // Módulo de aportes y devoluciones
-        // Buscar rango
+        // Módulo de aportes y devoluciones en máquinas
+        // A) Buscar o resolver Rango
         let rangoUuid = null;
+        let rangoNombre = parsed.rango || 'General';
+
         if (parsed.rango) {
+          const rgClean = parsed.rango.trim().toLowerCase();
           const rangos = await sql`
-            SELECT uuid FROM rangos 
-            WHERE LOWER(TRIM(nombre)) LIKE ${`%${parsed.rango.toLowerCase()}%`}
+            SELECT uuid, nombre FROM rangos 
+            WHERE LOWER(TRIM(nombre)) = ${rgClean}
+               OR LOWER(TRIM(nombre)) LIKE ${`%${rgClean}%`}
+            ORDER BY 
+              CASE WHEN LOWER(TRIM(nombre)) = ${rgClean} THEN 0 ELSE 1 END
             LIMIT 1
           `;
-          if (rangos.length > 0) rangoUuid = rangos[0].uuid;
+          if (rangos.length > 0) {
+            rangoUuid = rangos[0].uuid;
+            rangoNombre = rangos[0].nombre;
+          }
+        }
+
+        if (!rangoUuid) {
+          const defRango = await sql`
+            SELECT uuid, nombre FROM rangos 
+            ORDER BY CASE WHEN LOWER(nombre) = 'rango 1' THEN 0 WHEN LOWER(nombre) = 'general' THEN 1 ELSE 2 END
+            LIMIT 1
+          `;
+          if (defRango.length > 0) {
+            rangoUuid = defRango[0].uuid;
+            rangoNombre = defRango[0].nombre;
+          }
+        }
+
+        // B) Buscar o resolver Empleado / Operador
+        let empleadoUuid = null;
+        let empleadoNombre = parsed.operador || 'Operador General';
+
+        if (parsed.operador && parsed.operador.toLowerCase() !== 'general') {
+          const opClean = parsed.operador.trim().toLowerCase();
+          const emps = await sql`
+            SELECT uuid, nombre FROM empleados 
+            WHERE (LOWER(TRIM(nombre)) = ${opClean}
+               OR LOWER(TRIM(nombre)) LIKE ${`%${opClean}%`})
+              AND COALESCE(is_deleted, false) = false
+            ORDER BY 
+              CASE WHEN LOWER(TRIM(nombre)) = ${opClean} THEN 0 ELSE 1 END,
+              LENGTH(nombre) ASC
+            LIMIT 1
+          `;
+
+          if (emps.length > 0) {
+            empleadoUuid = emps[0].uuid;
+            empleadoNombre = emps[0].nombre;
+          } else {
+            // Si el operador no existe aún en el sistema, crearlo como empleado para asociarlo
+            const newEmp = await sql`
+              INSERT INTO empleados (nombre, activo)
+              VALUES (${parsed.operador.trim()}, true)
+              RETURNING uuid, nombre
+            `;
+            if (newEmp.length > 0) {
+              empleadoUuid = newEmp[0].uuid;
+              empleadoNombre = newEmp[0].nombre;
+            }
+          }
+        } else {
+          // Si no se especificó operador, asignar al primer empleado activo disponible
+          const defEmp = await sql`
+            SELECT uuid, nombre FROM empleados 
+            WHERE COALESCE(activo, true) = true AND COALESCE(is_deleted, false) = false 
+            ORDER BY id ASC LIMIT 1
+          `;
+          if (defEmp.length > 0) {
+            empleadoUuid = defEmp[0].uuid;
+            empleadoNombre = defEmp[0].nombre;
+          }
         }
 
         const horaStr = new Date().toLocaleTimeString('es-VE', {
@@ -375,10 +441,12 @@ class WhatsAppService {
           timeZone: 'America/Caracas'
         });
 
+        // C) Insertar en libro_aportes
         const insertRes = await sql`
           INSERT INTO libro_aportes (
             libro_uuid,
             multisala_uuid,
+            empleado_uuid,
             rango_uuid,
             tipo,
             monto,
@@ -386,6 +454,7 @@ class WhatsAppService {
           ) VALUES (
             ${libro.uuid}::uuid,
             ${mapping.multisala_uuid ? sql`${mapping.multisala_uuid}::uuid` : sql`NULL`},
+            ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
             ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
             ${parsed.tipo},
             ${parsed.monto},
@@ -405,10 +474,17 @@ class WhatsAppService {
           )
         `;
 
+        console.log(`✅ [WhatsApp] ${parsed.tipo} registrado en Aportes: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
+
         if (mapping.auto_reply && this.sock) {
-          await this.sock.sendMessage(remoteJid, {
-            text: `✅ *Aporte/Devolución Registrado:* ${parsed.tipo} de $${parsed.monto} ${parsed.rango ? `(${parsed.rango})` : ''} a las ${horaStr}.`
-          }, { quoted: m });
+          const confirmText = 
+`✅ *${parsed.tipo} Registrado en WISI*
+• *Monto:* $${parsed.monto}
+• *Rango:* ${rangoNombre}
+• *Operador:* ${empleadoNombre}
+• *Hora:* ${horaStr}`;
+
+          await this.sock.sendMessage(remoteJid, { text: confirmText }, { quoted: m });
         }
       }
 
@@ -428,3 +504,4 @@ class WhatsAppService {
 }
 
 export const whatsappService = new WhatsAppService();
+

@@ -392,7 +392,7 @@
         class="test-input" 
         bind:value={testInput} 
         on:input={runTestParse}
-        placeholder="Ej: Compra 200$ USDT Máquinas Abel Gonzáles" 
+        placeholder="Ej: Compra 200$ USDT Máquinas Abel Gonzáles  |  Aporte 500$ Rango 1 Manuel Barrientos" 
       />
       <button class="btn-test" on:click={runTestParse} disabled={isTesting}>
         Probar Análisis
@@ -419,10 +419,17 @@
           <span class="lbl">CAJA DESTINO</span>
           <span class="val badge-box">{testResult.caja}</span>
         </div>
-        <div class="preview-item">
-          <span class="lbl">CLIENTE / JUGADOR</span>
-          <span class="val highlight">{testResult.cliente}</span>
-        </div>
+        {#if testResult.modulo === 'aportes_maquinas'}
+          <div class="preview-item">
+            <span class="lbl">OPERADOR (EMPLEADO)</span>
+            <span class="val highlight">{testResult.operador || 'General'}</span>
+          </div>
+        {:else}
+          <div class="preview-item">
+            <span class="lbl">CLIENTE / JUGADOR</span>
+            <span class="val highlight">{testResult.cliente}</span>
+          </div>
+        {/if}
         <div class="preview-item">
           <span class="lbl">MÓDULO DESTINO</span>
           <span class="val text-indigo">
@@ -606,7 +613,11 @@
                 <td class="parsed-cell">
                   {#if log.parsed_data}
                     <span class="parsed-pill">
-                      {log.parsed_data.tipo} ${log.parsed_data.monto} | {log.parsed_data.metodo} | {log.parsed_data.caja} | {log.parsed_data.cliente}
+                      {#if log.parsed_data.modulo === 'aportes_maquinas'}
+                        {log.parsed_data.tipo} ${log.parsed_data.monto} | {log.parsed_data.rango || 'Sin rango'} | Operador: {log.parsed_data.operador || 'General'}
+                      {:else}
+                        {log.parsed_data.tipo} ${log.parsed_data.monto} | {log.parsed_data.metodo} | {log.parsed_data.caja} | Cliente: {log.parsed_data.cliente}
+                      {/if}
                     </span>
                   {:else}
                     <span class="text-muted">-</span>
@@ -1325,3 +1336,4 @@
     background: #f8fafc;
   }
 </style>
+

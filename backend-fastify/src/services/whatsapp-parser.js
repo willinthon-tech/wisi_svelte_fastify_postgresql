@@ -1,6 +1,6 @@
 /**
  * Parser inteligente de mensajes de WhatsApp para el sistema WISI.
- * Extrae: tipo, monto, método de pago, caja (Mesas/Máquinas), cliente/jugador y notas.
+ * Extrae: tipo, monto, método de pago, caja (Mesas/Máquinas), cliente (jugador), operador (empleado), rango y notas.
  */
 
 export function parseWhatsAppMessage(text, defaultOptions = {}) {
@@ -23,6 +23,8 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   // Si no empieza con uno de estos comandos, se ignora
   if (!tipo) return null;
 
+  const isAporteDev = (tipo === 'Aporte' || tipo === 'Devolución');
+
   // 2. Extraer Monto numérico
   const montoMatch = clean.match(/(?:\$|\b)\s*(\d+(?:[.,]\d{1,2})?)\s*(?:\$|\b)/);
   let monto = 0;
@@ -34,7 +36,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   }
 
   // 3. Detectar Caja (Mesas o Máquinas)
-  let caja = defaultOptions.caja_default || 'Mesas';
+  let caja = isAporteDev ? 'Máquinas' : (defaultOptions.caja_default || 'Mesas');
   if (/\b(maquinas|máquinas|maquina|máquina|maq|slots)\b/i.test(clean)) {
     caja = 'Máquinas';
   } else if (/\b(mesas|mesa|tables)\b/i.test(clean)) {
@@ -57,11 +59,17 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     metodo = 'Transferencia';
   }
 
-  // 5. Detectar Rango (si es Aporte/Devolución de máquinas)
+  // 5. Detectar Rango (para Aportes/Devoluciones de máquinas o si se menciona)
   let rango = null;
-  const rangoMatch = clean.match(/\b(rango\s*[0-9]+|ruleta\s*electronica|sin\s*rango)\b/i);
+  const rangoRegex = /\b(rango\s*fumadores|ruleta\s*electr[oó]nica|sin\s*rango|rango\s*[0-9]+|rango\s+[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]+)\b/i;
+  const rangoMatch = clean.match(rangoRegex);
   if (rangoMatch) {
     rango = rangoMatch[1].trim();
+    // Normalizar capitalización de rango (ej. "Rango 1", "Rango Fumadores")
+    rango = rango
+      .split(' ')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
   }
 
   // 6. Extraer Nota (si existe "nota: ...", "ref: ...", "obs: ...")
@@ -73,28 +81,32 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     textWithoutNota = clean.slice(0, clean.indexOf(notaMatch[0])).trim();
   }
 
-  // 7. Extraer Cliente / Jugador o Empleado
-  // Limpiamos los tokens ya detectados para que el remanente sea el nombre
+  // 7. Extraer Cliente (para Control de Clientes) u Operador (para Aportes/Devoluciones)
   let remaining = textWithoutNota
     .replace(/^\b(compra|compras|pago|pagos|aporte|aportes|devolucion|devoluciones|devolución|dev)\b/i, '')
-    .replace(/(?:\$|\b)\s*(\d+(?:[.,]\d{1,2})?)\s*(?:\$|\b)/, '')
+    .replace(/(?:\$|\b)\s*(\d+(?:[.,]\d{1,2})?)\s*(?:\$|\b)/, '');
+
+  if (rangoMatch) {
+    remaining = remaining.replace(rangoRegex, '');
+  }
+
+  remaining = remaining
     .replace(/\b(maquinas|máquinas|maquina|máquina|maq|slots|mesas|mesa|tables)\b/gi, '')
     .replace(/\b(usdt|crypto|tether|binance|zelle|pago\s*movil|pagomovil|cash|dolares|dólares|efectivo|usd|punto|pos|debito|débito|tarjeta|transferencia|transf|banco)\b/gi, '')
-    .replace(/\b(rango\s*[0-9]+|ruleta\s*electronica|sin\s*rango)\b/gi, '')
-    .replace(/[$:,.-]/g, ' ')
+    .replace(/[$,:.-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  let cliente = (tipo === 'Aporte' || tipo === 'Devolución') ? 'General' : (remaining || 'General');
-
-  // Capitalizar nombre de cliente
-  cliente = cliente
+  let parsedName = remaining
     .split(' ')
     .filter(Boolean)
     .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(' ');
 
-  const modulo = (tipo === 'Aporte' || tipo === 'Devolución') 
+  const operador = isAporteDev ? (parsedName || 'General') : null;
+  const cliente = isAporteDev ? 'General' : (parsedName || 'General');
+
+  const modulo = isAporteDev 
     ? 'aportes_maquinas' 
     : (defaultOptions.modulo_destino || 'control_clientes');
 
@@ -105,6 +117,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     metodo,
     caja,
     cliente,
+    operador,
     rango,
     nota,
     modulo
