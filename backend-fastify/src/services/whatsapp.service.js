@@ -256,14 +256,30 @@ class WhatsAppService {
       console.log(`📩 [WhatsApp Group] [${mapping.group_name}] Mensaje detectado: "${messageText}"`);
 
       // 3. Buscar el libro operativo activo para la sala vinculada
-      const libros = await sql`
-        SELECT uuid, id, sala_uuid, fecha
-        FROM libros
-        WHERE (sala_uuid = ${mapping.sala_uuid}::uuid OR id::text = ${mapping.sala_uuid}::text)
-          AND (estado = 'abierto' OR estado = 'Activo' OR fecha = CURRENT_DATE)
-        ORDER BY id DESC
-        LIMIT 1
-      `;
+      let libros = [];
+      if (mapping.sala_uuid) {
+        libros = await sql`
+          SELECT uuid, sala_uuid, descripcion, created_at
+          FROM libros
+          WHERE sala_uuid = ${mapping.sala_uuid}::uuid
+            AND COALESCE(is_deleted, false) = false
+            AND COALESCE(active::int, 1) = 1
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+      }
+
+      // Si no hay libro con esa sala_uuid específica, tomar el libro operativo activo más reciente
+      if (libros.length === 0) {
+        libros = await sql`
+          SELECT uuid, sala_uuid, descripcion, created_at
+          FROM libros
+          WHERE COALESCE(is_deleted, false) = false
+            AND COALESCE(active::int, 1) = 1
+          ORDER BY created_at DESC
+          LIMIT 1
+        `;
+      }
 
       if (libros.length === 0) {
         console.warn(`⚠️ No hay libro activo para la sala ${mapping.sala_uuid}`);
@@ -438,9 +454,10 @@ class WhatsAppService {
             empleadoNombre = emps[0].nombre;
           } else {
             // Si el operador no existe aún en el sistema, crearlo como empleado para asociarlo
+            const tempCedula = `WA-${Date.now().toString().slice(-8)}`;
             const newEmp = await sql`
-              INSERT INTO empleados (nombre, activo)
-              VALUES (${parsed.operador.trim()}, true)
+              INSERT INTO empleados (nombre, cedula, activo)
+              VALUES (${parsed.operador.trim()}, ${tempCedula}, true)
               RETURNING uuid, nombre
             `;
             if (newEmp.length > 0) {
@@ -453,7 +470,7 @@ class WhatsAppService {
           const defEmp = await sql`
             SELECT uuid, nombre FROM empleados 
             WHERE COALESCE(activo, true) = true AND COALESCE(is_deleted, false) = false 
-            ORDER BY id ASC LIMIT 1
+            ORDER BY created_at ASC LIMIT 1
           `;
           if (defEmp.length > 0) {
             empleadoUuid = defEmp[0].uuid;
