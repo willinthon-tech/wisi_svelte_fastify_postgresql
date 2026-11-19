@@ -1878,7 +1878,10 @@
                     </div>
                   {/if}
                   <div class="kpi-card">
-                    <span class="kpi-label">COMPRAS Y PAGOS</span>
+                    <div class="kpi-subinfo-row">
+                      <span class="subinfo-item">PAGOS: <span class="subinfo-val text-rose font-bold">( {formatMoney(section.subData.clientesTotales?.totalPagos || 0)} )</span></span>
+                      <span class="subinfo-item">COMPRAS: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.clientesTotales?.totalCompras || 0)} )</span></span>
+                    </div>
                     <span
                       class="kpi-value {section.subData.produccionClientes > 0
                         ? 'text-emerald font-bold'
