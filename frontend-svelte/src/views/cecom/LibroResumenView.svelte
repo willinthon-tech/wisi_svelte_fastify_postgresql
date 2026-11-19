@@ -1720,13 +1720,12 @@
                       <span class="subinfo-item">FALTANTES: <span class="subinfo-val text-rose font-bold">( {formatMoney(section.subData.totalArqueoFaltantes)} )</span></span>
                       <span class="subinfo-item">SOBRANTES: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.totalArqueoSobrantes)} )</span></span>
                     </div>
-                    <span class="kpi-label">ARQUEO</span>
                     <span
                       class="kpi-value {section.subData.totalArqueoDiferencia > 0
                         ? 'text-emerald'
                         : (section.subData.totalArqueoDiferencia < 0 ? 'text-rose' : '')}"
                     >
-                      {formatMoney(section.subData.totalArqueoDiferencia)}
+                      {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
                     </span>
                   </div>
                   <div class="kpi-card {section.subData.produccionMesas > 0 ? 'kpi-card-positive' : (section.subData.produccionMesas < 0 ? 'kpi-card-negative' : '')}">
@@ -1772,7 +1771,6 @@
                       <span class="subinfo-item">APORTES: <span class="subinfo-val text-rose font-bold">( {formatMoney(section.subData.aportesTotales.totalAportes)} )</span></span>
                       <span class="subinfo-item">DEVOLUCIONES: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.aportesTotales.totalDevoluciones)} )</span></span>
                     </div>
-                    <span class="kpi-label">( APORTES - DEVOLUCIONES )</span>
                     <span
                       class="kpi-value {section.subData.aportesTotales.netoMonto < 0
                         ? 'text-emerald'
