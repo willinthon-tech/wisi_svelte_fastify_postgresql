@@ -824,34 +824,19 @@ class WhatsAppService {
           if (foundRango) {
             rangoUuid = foundRango.uuid;
             rangoNombre = foundRango.nombre;
-          } else if (parsed.rango) {
-            // El usuario especificó un rango explícito (ej: "Rango Fumadores", "Ruleta", "Rango Tal")
-            // No omitirlo: crearlo en la base de datos para registrarlo fielmente
-            try {
-              const newRango = await sql`
-                INSERT INTO rangos (nombre)
-                VALUES (${parsed.rango})
-                RETURNING uuid, nombre
-              `;
-              if (newRango.length > 0) {
-                rangoUuid = newRango[0].uuid;
-                rangoNombre = newRango[0].nombre;
-                foundRango = newRango[0];
-              }
-            } catch (eNewRango) {
-              console.warn('Error registrando nuevo rango:', eNewRango.message);
-            }
           }
         }
 
-        // Fallback por defecto si no encontró ninguno (prioridad: General)
+        // Si no encontró rango o no se especificó, NO CREAR: usar el valor genérico "General"
+        let rangoFallbackUsado = false;
         if (!rangoUuid && allRangos.length > 0) {
-          const defRango = allRangos.find(r => normalizeText(r.nombre) === 'general') ||
-                           allRangos.find(r => normalizeText(r.nombre) === 'rango 1') ||
+          const genRango = allRangos.find(r => normalizeText(r.nombre) === 'general') ||
+                           allRangos.find(r => normalizeText(r.nombre) === 'sin rango') ||
                            allRangos[0];
-          if (defRango) {
-            rangoUuid = defRango.uuid;
-            rangoNombre = defRango.nombre;
+          if (genRango) {
+            rangoUuid = genRango.uuid;
+            rangoNombre = genRango.nombre;
+            rangoFallbackUsado = true;
           }
         }
 
@@ -859,6 +844,7 @@ class WhatsAppService {
         let empleadoUuid = null;
         let empleadoNombre = parsed.operador || 'Operador General';
         let foundEmp = null;
+        let empFallbackUsado = false;
 
         const allEmps = await sql`
           SELECT e.uuid, e.nombre, e.cedula, d.sala_uuid 
@@ -898,28 +884,16 @@ class WhatsAppService {
           if (foundEmp) {
             empleadoUuid = foundEmp.uuid;
             empleadoNombre = foundEmp.nombre;
-          } else {
-            // Si el operador no existe aún en el sistema, crearlo como empleado para asociarlo
-            const tempCedula = `WA-${Date.now().toString().slice(-8)}`;
-            const newEmp = await sql`
-              INSERT INTO empleados (nombre, cedula, activo)
-              VALUES (${parsed.operador.trim()}, ${tempCedula}, true)
-              RETURNING uuid, nombre
-            `;
-            if (newEmp.length > 0) {
-              empleadoUuid = newEmp[0].uuid;
-              empleadoNombre = newEmp[0].nombre;
-            }
           }
-        } else {
-          // Si no se especificó operador, asignar al empleado "General" si existe, o al primer empleado activo
-          const genEmp = allEmps.find(e => normalizeText(e.nombre) === 'general');
+        }
+
+        // Si el operador no existe en la sala o no se especificó, NO CREAR: asignar al valor genérico "General"
+        if (!empleadoUuid && allEmps.length > 0) {
+          const genEmp = allEmps.find(e => normalizeText(e.nombre) === 'general') || allEmps[0];
           if (genEmp) {
             empleadoUuid = genEmp.uuid;
             empleadoNombre = genEmp.nombre;
-          } else if (allEmps.length > 0) {
-            empleadoUuid = allEmps[0].uuid;
-            empleadoNombre = allEmps[0].nombre;
+            empFallbackUsado = true;
           }
         }
 
@@ -927,16 +901,22 @@ class WhatsAppService {
         let esCoincidenciaExacta = true;
         let observaciones = [];
 
-        // 1. Verificación de Rango: ¿fue explícito o requirió fallback?
-        if (!parsed.explicit?.rango || !rangoUuid) {
+        // 1. Verificación de Rango: ¿existía ya en la BD o requirió fallback genérico?
+        if (!parsed.explicit?.rango) {
           esCoincidenciaExacta = false;
-          observaciones.push('Rango no especificado (asignado General)');
+          observaciones.push('Rango no especificado (asignado a General)');
+        } else if (rangoFallbackUsado || !foundRango) {
+          esCoincidenciaExacta = false;
+          observaciones.push(`Rango "${parsed.rango}" no registrado en BD (asignado a ${rangoNombre})`);
         }
 
-        // 2. Verificación de Operador: ¿coincidió con un empleado activo existente?
-        if (!parsed.explicit?.operador || !foundEmp) {
+        // 2. Verificación de Operador: ¿coincidió con un empleado activo de la sala o requirió fallback?
+        if (!parsed.explicit?.operador) {
           esCoincidenciaExacta = false;
-          observaciones.push(parsed.operador === 'General' ? 'Operador no especificado (asignado General)' : `Operador nuevo/no registrado (${parsed.operador})`);
+          observaciones.push('Operador no especificado (asignado a General)');
+        } else if (empFallbackUsado || !foundEmp) {
+          esCoincidenciaExacta = false;
+          observaciones.push(parsed.operador === 'General' ? 'Operador General' : `Operador "${parsed.operador}" no registrado en sala (asignado a ${empleadoNombre})`);
         }
 
         const logStatus = esCoincidenciaExacta ? 'procesado' : 'procesado_por_verificar';
