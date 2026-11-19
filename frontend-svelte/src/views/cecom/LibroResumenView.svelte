@@ -1939,7 +1939,6 @@
                     <tr>
                       <th class="th-center th-num">N°</th>
                       <th class="th-mesa">Mesa</th>
-                      <th class="th-center th-movimiento"></th>
                       {#each section.subData.arqueoSalaFichas as valor}
                         <th class="th-center">$ {valor}</th>
                       {/each}
@@ -1965,9 +1964,6 @@
                               <span class="mesa-sub-juego">{group.juegoNombre}</span>
                             {/if}
                           </div>
-                        </td>
-                        <td class="td-center td-movimiento">
-                          <span class="mov-badge mov-diferencia" title="Total">T</span>
                         </td>
                         {#each section.subData.arqueoSalaFichas as valor}
                           {@const apC = getChipCount(group.apertura, valor)}
@@ -2009,7 +2005,6 @@
                   <tfoot>
                     <tr class="total-row footer-diferencia">
                       <td colspan="2" class="total-label-cell">TOTAL</td>
-                      <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
                       {#each section.subData.arqueoSalaFichas as valor}
                         {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                         {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
