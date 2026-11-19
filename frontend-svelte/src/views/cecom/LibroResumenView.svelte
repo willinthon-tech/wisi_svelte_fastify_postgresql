@@ -1115,7 +1115,7 @@
 
     // Numeración dinámica de submódulos (se ajusta según los módulos que realmente tienen datos)
     // 1. Resumen de Producción
-    const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (dataClientesMesas && dataClientesMesas.totales.totalOps > 0));
+    const hasResumenMesas = Boolean(drop_mesas && drop_mesas.length > 0);
     const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0));
     let idxProd = 0;
     const numResumenMesas = hasResumenMesas ? ++idxProd : 0;
@@ -1667,7 +1667,7 @@
             </div>
 
             <!-- 1. Resumen Mesas -->
-            {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.clientesMesas && section.subData.clientesMesas.totales.totalOps > 0)}
+            {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
               <div class="sheet-section sub-module-section">
                 <div class="sub-header-row">
                   <div class="sub-title-group">
@@ -1689,16 +1689,6 @@
                     <span class="kpi-value {section.subData.dropTotales.grandTotal > 0 ? 'text-emerald' : ''}"
                       >{formatMoney(section.subData.dropTotales.grandTotal)}</span
                     >
-                  </div>
-                  <div class="kpi-card">
-                    <span class="kpi-label">BALANCE (COMPRA - PAGOS)</span>
-                    <span
-                      class="kpi-value {section.subData.clientesMesas.totales.balanceNeto > 0
-                        ? 'text-emerald'
-                        : (section.subData.clientesMesas.totales.balanceNeto < 0 ? 'text-rose' : '')}"
-                    >
-                      {formatMoney(Math.abs(section.subData.clientesMesas.totales.balanceNeto))}
-                    </span>
                   </div>
                   <div class="kpi-card {section.subData.produccionMesas > 0 ? 'kpi-card-positive' : (section.subData.produccionMesas < 0 ? 'kpi-card-negative' : '')}">
                     <span class="kpi-label">PRODUCCIÓN</span>
