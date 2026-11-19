@@ -64,6 +64,7 @@
   let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
 
   // Pestañas activas por sección
+  let tabMesa = 'drop';        // 'drop' | 'faltantes'
   let tabBilletero = 'rangos'; // 'rangos' | 'detallado'
   let tabAporte = 'rangos';    // 'rangos' | 'empleado' | 'detallado'
   let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
@@ -1142,30 +1143,38 @@
     const numResumenMaquinas = hasResumenMaquinas ? ++idxProd : 0;
     const numResumenProduccion = ++idxProd;
 
-    // 2. Detallado Mesas
+    // 2. Secciones operativas del reporte (numeradas secuencialmente)
+    let idxSeccion = 0;
+
+    // Mesas (unifica Drop y Faltantes y Sobrantes)
     const hasDropMesas = Boolean(drop_mesas && drop_mesas.length > 0);
     const hasArqueoFichas = Boolean(arqueoMesaGroups && arqueoMesaGroups.length > 0);
+    const hasMesas = Boolean(hasDropMesas || hasArqueoFichas);
+    const numMesas = hasMesas ? ++idxSeccion : 0;
+
+    // Novedades de Mesas
     const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
-    let idxMesas = 0;
-    const numDropMesas = hasDropMesas ? ++idxMesas : 0;
-    const numArqueoFichas = hasArqueoFichas ? ++idxMesas : 0;
-    const numNovedadesMesas = hasNovedadesMesas ? ++idxMesas : 0;
+    const numNovedadesMesas = hasNovedadesMesas ? ++idxSeccion : 0;
 
-    // 3. Detallado Máquinas
+    // Billetero
     const hasBilleteros = Boolean((sortedConteoList && sortedConteoList.length > 0) || (conteoPorRango && conteoPorRango.length > 0));
-    const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (aportesPorRango && aportesPorRango.length > 0) || (aportesPorEmpleado && aportesPorEmpleado.length > 0));
-    let idxMaquinas = 0;
-    const numBilleteros = hasBilleteros ? ++idxMaquinas : 0;
-    const numAportes = hasAportes ? ++idxMaquinas : 0;
-    const hasDetalladoMaquinas = Boolean(hasBilleteros || hasAportes);
+    const numBilleteros = hasBilleteros ? ++idxSeccion : 0;
 
-    // 4. Resumen de Incidencias
+    // Aportes y Devoluciones
+    const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (aportesPorRango && aportesPorRango.length > 0) || (aportesPorEmpleado && aportesPorEmpleado.length > 0));
+    const numAportes = hasAportes ? ++idxSeccion : 0;
+
+    // Compras y Pagos (Control de Clientes)
+    const hasClientes = Boolean(dataClientesGlobal && dataClientesGlobal.registros && dataClientesGlobal.registros.length > 0);
+    const numClientes = hasClientes ? ++idxSeccion : 0;
+
+    // Incidencias
     const incidenciasActivas = incidenciasPorTipo.filter(cat => cat.items && cat.items.length > 0);
     const hasBitacoraIncidencias = Boolean(sortedIncidencias && sortedIncidencias.length > 0 && incidenciasActivas && incidenciasActivas.length > 0);
+    const numBitacoraIncidencias = hasBitacoraIncidencias ? ++idxSeccion : 0;
+
     const hasControlLlaves = Boolean(sortedControlLlaves && sortedControlLlaves.length > 0);
-    let idxInc = 0;
-    const numBitacoraIncidencias = hasBitacoraIncidencias ? ++idxInc : 0;
-    const numControlLlaves = hasControlLlaves ? ++idxInc : 0;
+    const numControlLlaves = hasControlLlaves ? ++idxSeccion : 0;
 
     const numeracion = {
       hasResumenMesas,
@@ -1173,12 +1182,13 @@
       numResumenMesas,
       numResumenMaquinas,
       numResumenProduccion,
-      numDropMesas,
-      numArqueoFichas,
+      hasMesas,
+      numMesas,
       numNovedadesMesas,
       numBilleteros,
       numAportes,
-      hasDetalladoMaquinas,
+      hasClientes,
+      numClientes,
       numBitacoraIncidencias,
       numControlLlaves
     };
@@ -1846,177 +1856,179 @@
           {/if}
 
           <!-- ============================================================
-               DETALLADO MESAS (Encabezado Principal)
+               MESAS (Drop y Faltantes y Sobrantes con Selector de Pestañas)
                ============================================================ -->
-          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0) || (section.subData.novedades_mesas && section.subData.novedades_mesas.length > 0)}
-            <div class="sheet-main-title-box">
-              <h1 class="sheet-title-text">Detallado Mesas</h1>
-            </div>
-          {/if}
-
-          <!-- ============================================================
-               1. DROP MESAS
-               ============================================================ -->
-          {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
+          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0)}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    {section.subData.numeracion.numDropMesas}. Drop Mesas
+                    {section.subData.numeracion.numMesas}. Mesas
                   </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
-                  >
+                  <div class="tab-toggle-group">
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={tabMesa === 'drop'}
+                      on:click={() => (tabMesa = 'drop')}
+                    >
+                      Drop
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={tabMesa === 'faltantes'}
+                      on:click={() => (tabMesa = 'faltantes')}
+                    >
+                      Faltantes y Sobrantes
+                    </button>
+                  </div>
                 </div>
+
+                {#if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                  <span class="sub-count-badge">
+                    {section.subData.arqueoMesaGroups?.length || 0} {section.subData.arqueoMesaGroups?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
+                  </span>
+                {:else}
+                  <span class="sub-count-badge">
+                    {section.subData.drop_mesas?.length || 0} {section.subData.drop_mesas?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
+                  </span>
+                {/if}
               </div>
 
-              <div class="table-responsive-wrapper">
-                <table class="sheet-detail-table">
-                  <thead>
-                    <tr>
-                      <th class="th-mesa">MESA</th>
-                      <th class="th-num">$100</th>
-                      <th class="th-num">$50</th>
-                      <th class="th-num">$20</th>
-                      <th class="th-num">$10</th>
-                      <th class="th-num">$5</th>
-                      <th class="th-num">$1</th>
-                      <th class="th-total">TOTAL RECAUDADO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.drop_mesas as d}
+              {#if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                <!-- Tabla: Faltantes y Sobrantes -->
+                <div class="table-responsive-wrapper">
+                  <table class="drop-table arqueo-table">
+                    <thead>
                       <tr>
-                        <td class="cell-mesa-bold"
-                          >{d.mesa_nombre || (d.mesa_uuid ? `Mesa #${d.mesa_uuid.slice(0, 8)}` : `Mesa #${d.mesa_id}`)}</td
-                        >
-                        <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
-                        <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
-                        <td class="cell-num">{d.denominacion_20 ?? d.b20 ?? 0}</td>
-                        <td class="cell-num">{d.denominacion_10 ?? d.b10 ?? 0}</td>
-                        <td class="cell-num">{d.denominacion_5 ?? d.b5 ?? 0}</td>
-                        <td class="cell-num">{d.denominacion_1 ?? d.b1 ?? 0}</td>
-                        <td class="cell-total-money">{formatMoney(d.total)}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td>TOTALES</td>
-                      <td class="cell-num">{section.subData.dropTotales.sum100}</td>
-                      <td class="cell-num">{section.subData.dropTotales.sum50}</td>
-                      <td class="cell-num">{section.subData.dropTotales.sum20}</td>
-                      <td class="cell-num">{section.subData.dropTotales.sum10}</td>
-                      <td class="cell-num">{section.subData.dropTotales.sum5}</td>
-                      <td class="cell-num">{section.subData.dropTotales.sum1}</td>
-                      <td class="cell-grand-total"
-                        >{formatMoney(section.subData.dropTotales.grandTotal)}</td
-                      >
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          {/if}
-
-          <!-- ============================================================
-               ARQUEO DE FICHAS
-               ============================================================ -->
-          {#if section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    {section.subData.numeracion.numArqueoFichas}. Faltantes y Sobrantes
-                  </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
-                  >
-                </div>
-              </div>
-
-              <div class="table-responsive-wrapper">
-                <table class="drop-table arqueo-table">
-                  <thead>
-                    <tr>
-                      <th class="th-mesa">Mesa</th>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        <th class="th-center">$ {valor}</th>
-                      {/each}
-                      <th class="th-center th-total">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.arqueoMesaGroups as group, idx (group.mesaId)}
-                      {@const apTotal = Number(group.apertura?.total) || 0}
-                      {@const hasCierre = Boolean(group.cierre)}
-                      {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
-                      {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
-
-                      <!-- Fila: DIFERENCIA / TOTAL (FALTANTES Y SOBRANTES) -->
-                      <tr class="drop-row row-diferencia">
-                        <td class="td-mesa">
-                          <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
-                        </td>
+                        <th class="th-mesa">Mesa</th>
                         {#each section.subData.arqueoSalaFichas as valor}
-                          {@const apC = getChipCount(group.apertura, valor)}
-                          {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
-                          {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - apC) : null}
-                          <td class="td-center count-val">
-                            {#if difChips !== null}
+                          <th class="th-center">$ {valor}</th>
+                        {/each}
+                        <th class="th-center th-total">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.arqueoMesaGroups as group, idx (group.mesaId)}
+                        {@const apTotal = Number(group.apertura?.total) || 0}
+                        {@const hasCierre = Boolean(group.cierre)}
+                        {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
+                        {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
+
+                        <!-- Fila: DIFERENCIA / TOTAL (FALTANTES Y SOBRANTES) -->
+                        <tr class="drop-row row-diferencia">
+                          <td class="td-mesa">
+                            <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
+                          </td>
+                          {#each section.subData.arqueoSalaFichas as valor}
+                            {@const apC = getChipCount(group.apertura, valor)}
+                            {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
+                            {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - apC) : null}
+                            <td class="td-center count-val">
+                              {#if difChips !== null}
+                                <span 
+                                  class="dif-chips-val"
+                                  class:dif-pos={difChips > 0}
+                                  class:dif-neg={difChips < 0}
+                                >
+                                  {Math.abs(difChips)}
+                                </span>
+                              {:else}
+                                <span class="val-pending">—</span>
+                              {/if}
+                            </td>
+                          {/each}
+                          <td class="td-center td-total-val dif-total-cell font-bold">
+                            {#if difTotal !== null}
                               <span 
-                                class="dif-chips-val"
-                                class:dif-pos={difChips > 0}
-                                class:dif-neg={difChips < 0}
+                                class="dif-monto-badge"
+                                class:dif-pos={difTotal > 0}
+                                class:dif-neg={difTotal < 0}
+                                class:dif-neu={difTotal === 0}
                               >
-                                {Math.abs(difChips)}
+                                $ {formatMoney(Math.abs(difTotal))}
                               </span>
                             {:else}
                               <span class="val-pending">—</span>
                             {/if}
                           </td>
-                        {/each}
-                        <td class="td-center td-total-val dif-total-cell font-bold">
-                          {#if difTotal !== null}
-                            <span 
-                              class="dif-monto-badge"
-                              class:dif-pos={difTotal > 0}
-                              class:dif-neg={difTotal < 0}
-                              class:dif-neu={difTotal === 0}
-                            >
-                              $ {formatMoney(Math.abs(difTotal))}
-                            </span>
-                          {:else}
-                            <span class="val-pending">—</span>
-                          {/if}
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
+                        </tr>
+                      {/each}
+                    </tbody>
 
-                  <!-- Fila de Totales Generales -->
-                  <tfoot>
-                    <tr class="total-row footer-diferencia">
-                      <td class="total-label-cell">TOTAL</td>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
-                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                        {@const dif = sumCi - sumAp}
-                        <td class="td-center total-val-cell">
-                          <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
-                            {Math.abs(dif)}
+                    <!-- Fila de Totales Generales -->
+                    <tfoot>
+                      <tr class="total-row footer-diferencia">
+                        <td class="total-label-cell">TOTAL</td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                          {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                          {@const dif = sumCi - sumAp}
+                          <td class="td-center total-val-cell">
+                            <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
+                              {Math.abs(dif)}
+                            </span>
+                          </td>
+                        {/each}
+                        <td class="td-center grand-total-cell dif-grand-total">
+                          <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
+                            $ {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
                           </span>
                         </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else}
+                <!-- Tabla: Drop Mesas -->
+                <div class="table-responsive-wrapper">
+                  <table class="sheet-detail-table">
+                    <thead>
+                      <tr>
+                        <th class="th-mesa">MESA</th>
+                        <th class="th-num">$100</th>
+                        <th class="th-num">$50</th>
+                        <th class="th-num">$20</th>
+                        <th class="th-num">$10</th>
+                        <th class="th-num">$5</th>
+                        <th class="th-num">$1</th>
+                        <th class="th-total">TOTAL RECAUDADO</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.drop_mesas as d}
+                        <tr>
+                          <td class="cell-mesa-bold"
+                            >{d.mesa_nombre || (d.mesa_uuid ? `Mesa #${d.mesa_uuid.slice(0, 8)}` : `Mesa #${d.mesa_id}`)}</td
+                          >
+                          <td class="cell-num">{d.denominacion_100 ?? d.b100 ?? 0}</td>
+                          <td class="cell-num">{d.denominacion_50 ?? d.b50 ?? 0}</td>
+                          <td class="cell-num">{d.denominacion_20 ?? d.b20 ?? 0}</td>
+                          <td class="cell-num">{d.denominacion_10 ?? d.b10 ?? 0}</td>
+                          <td class="cell-num">{d.denominacion_5 ?? d.b5 ?? 0}</td>
+                          <td class="cell-num">{d.denominacion_1 ?? d.b1 ?? 0}</td>
+                          <td class="cell-total-money">{formatMoney(d.total)}</td>
+                        </tr>
                       {/each}
-                      <td class="td-center grand-total-cell dif-grand-total">
-                        <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
-                          $ {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
-                        </span>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td>TOTALES</td>
+                        <td class="cell-num">{section.subData.dropTotales.sum100}</td>
+                        <td class="cell-num">{section.subData.dropTotales.sum50}</td>
+                        <td class="cell-num">{section.subData.dropTotales.sum20}</td>
+                        <td class="cell-num">{section.subData.dropTotales.sum10}</td>
+                        <td class="cell-num">{section.subData.dropTotales.sum5}</td>
+                        <td class="cell-num">{section.subData.dropTotales.sum1}</td>
+                        <td class="cell-grand-total"
+                          >{formatMoney(section.subData.dropTotales.grandTotal)}</td
+                        >
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {/if}
             </div>
           {/if}
 
@@ -2071,14 +2083,7 @@
 
 
 
-          <!-- ============================================================
-               DETALLADO MÁQUINAS (Encabezado Principal)
-               ============================================================ -->
-          {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.conteoPorRango && section.subData.conteoPorRango.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0)}
-            <div class="sheet-main-title-box">
-              <h1 class="sheet-title-text">Detallado Máquinas</h1>
-            </div>
-          {/if}
+
 
           <!-- ============================================================
                BILLETERO (Conteo de Máquinas y Resumen por Rango)
@@ -2420,18 +2425,14 @@
           {/if}
 
           <!-- ============================================================
-               CONTROL DE CLIENTES (Compras y Pagos con Selector de Pestañas)
+               COMPRAS Y PAGOS (Control de Clientes con Selector de Pestañas)
                ============================================================ -->
           {#if section.subData.control_clientes && section.subData.control_clientes.length > 0}
-            <div class="sheet-main-title-box">
-              <h1 class="sheet-title-text">Control de Clientes</h1>
-            </div>
-
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    1. Compras y Pagos
+                    {section.subData.numeracion.numClientes}. Compras y Pagos
                   </h2>
                   <div class="tab-toggle-group">
                     <button
@@ -2637,14 +2638,7 @@
             </div>
           {/if}
 
-          <!-- ============================================================
-               RESUMEN DE INCIDENCIAS (Encabezado Principal)
-               ============================================================ -->
-          {#if (section.subData.incidencias_generales && section.subData.incidencias_generales.length > 0 && section.subData.incidenciasActivas && section.subData.incidenciasActivas.length > 0) || (section.subData.control_llaves && section.subData.control_llaves.length > 0)}
-            <div class="sheet-main-title-box">
-              <h1 class="sheet-title-text">Resumen de Incidencias</h1>
-            </div>
-          {/if}
+
 
           <!-- ============================================================
                BITÁCORA DE INCIDENCIAS
