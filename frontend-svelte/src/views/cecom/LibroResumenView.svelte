@@ -63,6 +63,26 @@
   // Selector de visualización en pantalla
   let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
 
+  // Pestañas activas por sección (clave de subsala o 'root')
+  let tabBilleteros = {}; // 'rangos' | 'detallado' (default: 'rangos')
+  let tabAportes = {};    // 'rangos' | 'empleado' | 'detallado' (default: 'rangos')
+  let tabClientes = {};   // 'jugador' | 'metodo' | 'detallado' (default: 'jugador')
+
+  const getTabBilleteros = (sKey) => tabBilleteros[sKey] || 'rangos';
+  const setTabBilleteros = (sKey, tab) => {
+    tabBilleteros = { ...tabBilleteros, [sKey]: tab };
+  };
+
+  const getTabAportes = (sKey) => tabAportes[sKey] || 'rangos';
+  const setTabAportes = (sKey, tab) => {
+    tabAportes = { ...tabAportes, [sKey]: tab };
+  };
+
+  const getTabClientes = (sKey) => tabClientes[sKey] || 'jugador';
+  const setTabClientes = (sKey, tab) => {
+    tabClientes = { ...tabClientes, [sKey]: tab };
+  };
+
   onMount(async () => {
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
     if (!libroId && typeof window !== "undefined") {
@@ -1147,14 +1167,14 @@
     const numNovedadesMesas = hasNovedadesMesas ? ++idxMesas : 0;
 
     // 3. Detallado Máquinas
-    const hasBilleteros = Boolean(sortedConteoList && sortedConteoList.length > 0);
-    const hasConteoPorRango = Boolean(conteoPorRango && conteoPorRango.length > 0);
-    const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (produccionPorRango && produccionPorRango.length > 0));
+    const hasBilleteros = Boolean((sortedConteoList && sortedConteoList.length > 0) || (conteoPorRango && conteoPorRango.length > 0));
+    const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (aportesPorRango && aportesPorRango.length > 0) || (aportesPorEmpleado && aportesPorEmpleado.length > 0));
+    const hasProduccionPorRango = Boolean(produccionPorRango && produccionPorRango.length > 0);
     let idxMaquinas = 0;
     const numBilleteros = hasBilleteros ? ++idxMaquinas : 0;
-    const numConteoPorRango = hasConteoPorRango ? ++idxMaquinas : 0;
     const numAportes = hasAportes ? ++idxMaquinas : 0;
-    const hasDetalladoMaquinas = Boolean(hasBilleteros || hasConteoPorRango || hasAportes);
+    const numProduccionPorRango = hasProduccionPorRango ? ++idxMaquinas : 0;
+    const hasDetalladoMaquinas = Boolean(hasBilleteros || hasAportes || hasProduccionPorRango);
 
     // 4. Resumen de Incidencias
     const incidenciasActivas = incidenciasPorTipo.filter(cat => cat.items && cat.items.length > 0);
@@ -1174,8 +1194,8 @@
       numArqueoFichas,
       numNovedadesMesas,
       numBilleteros,
-      numConteoPorRango,
       numAportes,
+      numProduccionPorRango,
       hasDetalladoMaquinas,
       numBitacoraIncidencias,
       numControlLlaves
@@ -2088,380 +2108,416 @@
           {/if}
 
           <!-- ============================================================
-               BILLETEROS (Conteo de Máquinas)
+               BILLETERO (Conteo de Máquinas y Resumen por Rango)
                ============================================================ -->
-          {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
+          {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.conteoPorRango && section.subData.conteoPorRango.length > 0)}
+            {@const sKey = section.subsala?.uuid || 'root'}
+            {@const activeTabBilletero = getTabBilleteros(sKey)}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    {section.subData.numeracion.numBilleteros}. Billeteros
+                    {section.subData.numeracion.numBilleteros}. Billetero
                   </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina contada' : 'máquinas contadas'}</span
-                  >
+                  <div class="tab-toggle-group">
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabBilletero === 'rangos'}
+                      on:click={() => setTabBilleteros(sKey, 'rangos')}
+                    >
+                      Rangos
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabBilletero === 'detallado'}
+                      on:click={() => setTabBilleteros(sKey, 'detallado')}
+                    >
+                      Detallado
+                    </button>
+                  </div>
                 </div>
+
+                {#if activeTabBilletero === 'rangos'}
+                  <span class="sub-count-badge">
+                    {section.subData.conteoPorRango?.length || 0} {section.subData.conteoPorRango?.length === 1 ? 'rango' : 'rangos'}
+                  </span>
+                {:else}
+                  <span class="sub-count-badge">
+                    {section.subData.conteo_maquinas?.length || 0} {section.subData.conteo_maquinas?.length === 1 ? 'máquina contada' : 'máquinas contadas'}
+                  </span>
+                {/if}
               </div>
 
-              <div class="table-responsive-wrapper">
-                <table class="sheet-detail-table">
-                  <thead>
-                    <tr>
-                      <th class="th-num">N°</th>
-                      <th class="th-mesa">MÁQUINA</th>
-                      <th class="th-mesa">RANGO</th>
-                      <th class="th-num">$100</th>
-                      <th class="th-num">$50</th>
-                      <th class="th-num">$20</th>
-                      <th class="th-num">$10</th>
-                      <th class="th-num">$5</th>
-                      <th class="th-num">$1</th>
-                      <th class="th-total">TOTAL RECAUDADO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.conteo_maquinas as m, idx}
+              {#if activeTabBilletero === 'rangos'}
+                <!-- Vista: Resumen de Conteo por Rango -->
+                <div class="table-responsive-wrapper">
+                  <table class="sheet-detail-table">
+                    <thead>
                       <tr>
-                        <td class="cell-num">{idx + 1}</td>
-                        <td class="cell-mesa-bold">{m.maquina_nombre || (m.maquina_uuid ? `Máquina #${m.maquina_uuid.slice(0, 8)}` : `Máquina #${m.maquina_id}`)}</td>
-                        <td class="cell-center">
-                          <span class="badge-rango-pill">{m.rango_nombre || 'Sin Rango'}</span>
-                        </td>
-                        <td class="cell-num">{m.denominacion_100 ?? m.b100 ?? 0}</td>
-                        <td class="cell-num">{m.denominacion_50 ?? m.b50 ?? 0}</td>
-                        <td class="cell-num">{m.denominacion_20 ?? m.b20 ?? 0}</td>
-                        <td class="cell-num">{m.denominacion_10 ?? m.b10 ?? 0}</td>
-                        <td class="cell-num">{m.denominacion_5 ?? m.b5 ?? 0}</td>
-                        <td class="cell-num">{m.denominacion_1 ?? m.b1 ?? 0}</td>
-                        <td class="cell-total-money">{formatMoney(m.total)}</td>
+                        <th class="th-num">N°</th>
+                        <th class="th-mesa">RANGO</th>
+                        <th class="th-num">MÁQUINAS</th>
+                        <th class="th-num">$100</th>
+                        <th class="th-num">$50</th>
+                        <th class="th-num">$20</th>
+                        <th class="th-num">$10</th>
+                        <th class="th-num">$5</th>
+                        <th class="th-num">$1</th>
+                        <th class="th-total">TOTAL RECAUDADO</th>
                       </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td colspan="3">TOTALES</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
-                      <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.conteoPorRango as rg, rIdx}
+                        <tr>
+                          <td class="cell-num">{rIdx + 1}</td>
+                          <td class="cell-mesa-bold">{rg.rango_nombre}</td>
+                          <td class="cell-num">{rg.maquinasCount}</td>
+                          <td class="cell-num">{rg.b100}</td>
+                          <td class="cell-num">{rg.b50}</td>
+                          <td class="cell-num">{rg.b20}</td>
+                          <td class="cell-num">{rg.b10}</td>
+                          <td class="cell-num">{rg.b5}</td>
+                          <td class="cell-num">{rg.b1}</td>
+                          <td class="cell-total-money">{formatMoney(rg.total)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td colspan="2">TOTAL GENERAL</td>
+                        <td class="cell-num">{section.subData.conteoTotales.totalMaquinas}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
+                        <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else}
+                <!-- Vista: Detallado de Billeteros por Máquina -->
+                <div class="table-responsive-wrapper">
+                  <table class="sheet-detail-table">
+                    <thead>
+                      <tr>
+                        <th class="th-num">N°</th>
+                        <th class="th-mesa">MÁQUINA</th>
+                        <th class="th-mesa">RANGO</th>
+                        <th class="th-num">$100</th>
+                        <th class="th-num">$50</th>
+                        <th class="th-num">$20</th>
+                        <th class="th-num">$10</th>
+                        <th class="th-num">$5</th>
+                        <th class="th-num">$1</th>
+                        <th class="th-total">TOTAL RECAUDADO</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.conteo_maquinas as m, idx}
+                        <tr>
+                          <td class="cell-num">{idx + 1}</td>
+                          <td class="cell-mesa-bold">{m.maquina_nombre || (m.maquina_uuid ? `Máquina #${m.maquina_uuid.slice(0, 8)}` : `Máquina #${m.maquina_id}`)}</td>
+                          <td class="cell-center">
+                            <span class="badge-rango-pill">{m.rango_nombre || 'Sin Rango'}</span>
+                          </td>
+                          <td class="cell-num">{m.denominacion_100 ?? m.b100 ?? 0}</td>
+                          <td class="cell-num">{m.denominacion_50 ?? m.b50 ?? 0}</td>
+                          <td class="cell-num">{m.denominacion_20 ?? m.b20 ?? 0}</td>
+                          <td class="cell-num">{m.denominacion_10 ?? m.b10 ?? 0}</td>
+                          <td class="cell-num">{m.denominacion_5 ?? m.b5 ?? 0}</td>
+                          <td class="cell-num">{m.denominacion_1 ?? m.b1 ?? 0}</td>
+                          <td class="cell-total-money">{formatMoney(m.total)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td colspan="3">TOTALES</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
+                        <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
+                        <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {/if}
             </div>
           {/if}
 
           <!-- ============================================================
-               RESUMEN DE CONTEO POR RANGO
+               APORTES Y DEVOLUCIONES (Con Selector de Pestañas)
                ============================================================ -->
-          {#if section.subData.conteoPorRango && section.subData.conteoPorRango.length > 0}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    {section.subData.numeracion.numConteoPorRango}. Resumen de Conteo por Rango
-                  </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.conteoPorRango.length} {section.subData.conteoPorRango.length === 1 ? 'rango' : 'rangos'}</span
-                  >
-                </div>
-              </div>
-
-              <div class="table-responsive-wrapper">
-                <table class="sheet-detail-table">
-                  <thead>
-                    <tr>
-                      <th class="th-num">N°</th>
-                      <th class="th-mesa">RANGO</th>
-                      <th class="th-num">MÁQUINAS</th>
-                      <th class="th-num">$100</th>
-                      <th class="th-num">$50</th>
-                      <th class="th-num">$20</th>
-                      <th class="th-num">$10</th>
-                      <th class="th-num">$5</th>
-                      <th class="th-num">$1</th>
-                      <th class="th-total">TOTAL RECAUDADO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.conteoPorRango as rg, rIdx}
-                      <tr>
-                        <td class="cell-num">{rIdx + 1}</td>
-                        <td class="cell-mesa-bold">{rg.rango_nombre}</td>
-                        <td class="cell-num">{rg.maquinasCount}</td>
-                        <td class="cell-num">{rg.b100}</td>
-                        <td class="cell-num">{rg.b50}</td>
-                        <td class="cell-num">{rg.b20}</td>
-                        <td class="cell-num">{rg.b10}</td>
-                        <td class="cell-num">{rg.b5}</td>
-                        <td class="cell-num">{rg.b1}</td>
-                        <td class="cell-total-money">{formatMoney(rg.total)}</td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td colspan="2">TOTAL GENERAL</td>
-                      <td class="cell-num">{section.subData.conteoTotales.totalMaquinas}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum100}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum50}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum20}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum10}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum5}</td>
-                      <td class="cell-num">{section.subData.conteoTotales.sum1}</td>
-                      <td class="cell-grand-total">{formatMoney(section.subData.conteoTotales.grandTotal)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          {/if}
-
-          <!-- ============================================================
-               APORTES Y DEVOLUCIONES
-               ============================================================ -->
-          {#if (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0)}
+          {#if (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.aportesPorRango && section.subData.aportesPorRango.length > 0) || (section.subData.aportesPorEmpleado && section.subData.aportesPorEmpleado.length > 0)}
+            {@const sKey = section.subsala?.uuid || 'root'}
+            {@const activeTabAporte = getTabAportes(sKey)}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
                     {section.subData.numeracion.numAportes}. Aportes y Devoluciones
                   </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}</span
-                  >
+                  <div class="tab-toggle-group">
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabAporte === 'rangos'}
+                      on:click={() => setTabAportes(sKey, 'rangos')}
+                    >
+                      Rangos
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabAporte === 'empleado'}
+                      on:click={() => setTabAportes(sKey, 'empleado')}
+                    >
+                      Empleado
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabAporte === 'detallado'}
+                      on:click={() => setTabAportes(sKey, 'detallado')}
+                    >
+                      Detallado
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <!-- 8.1 Detallado de Aportes y Devoluciones -->
-              {#if section.subData.aportes && section.subData.aportes.length > 0}
-                <div class="table-responsive-wrapper">
-                <table class="sheet-detail-table">
-                  <thead>
-                    <tr>
-                      <th class="th-num">N°</th>
-                      <th class="th-tipo">TIPO</th>
-                      <th class="th-hora">HORA</th>
-                      <th class="th-cliente">EMPLEADO</th>
-                      <th class="th-metodo">CARGO</th>
-                      <th class="th-tipo">RANGO</th>
-                      <th class="th-total">MONTO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.aportes as a, idx}
-                      {@const isAporte = (a.tipo || "Aporte") === "Aporte"}
-                      <tr>
-                        <td class="cell-center">{idx + 1}</td>
-                        <td class="cell-center">
-                          <span class="tag-tipo {isAporte ? 'tag-aporte' : 'tag-devolucion'}">
-                            {isAporte ? 'Aporte' : 'Devolución'}
-                          </span>
-                        </td>
-                        <td class="cell-center">{a.hora || (a.created_at ? new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—')}</td>
-                        <td class="cell-client-name font-bold">{a.empleado_nombre || "—"}</td>
-                        <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
-                        <td class="cell-center">
-                          <span class="tag-tipo tag-rango">
-                            {a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${a.rango_id}`)}
-                          </span>
-                        </td>
-                        <td class="cell-total-money font-bold {a.monto > 0 ? (isAporte ? 'text-rose' : 'text-emerald') : ''}">
-                          {formatMoney(Math.abs(a.monto))}
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td colspan="6">TOTAL</td>
-                      <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">
-                        {formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            {/if}
-
-            <!-- 8.2 Las 2 Tablitas Agrupadas (Por Rango y Por Empleado) -->
-            {#if (section.subData.aportesPorRango && section.subData.aportesPorRango.length > 0) || (section.subData.aportesPorEmpleado && section.subData.aportesPorEmpleado.length > 0)}
-              <div class="client-summaries-grid">
-                <!-- Tablita A: Resumen por Rango -->
-                {#if section.subData.aportesPorRango && section.subData.aportesPorRango.length > 0}
-                  <div class="summary-subtable-box">
-                    <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Rango</h4>
-                      <span class="incidencia-badge"
-                        >{section.subData.aportesPorRango.length} rangos</span
-                      >
-                    </div>
-                    <div class="table-responsive-wrapper">
-                      <table class="compact-table">
-                        <thead>
-                          <tr>
-                            <th>RANGO</th>
-                            <th>OPS</th>
-                            <th>APORTES</th>
-                            {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                              <th>DEVOLUCIONES</th>
-                              <th>TOTAL NETO</th>
-                            {:else}
-                              <th>MONTO TOTAL</th>
-                            {/if}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {#each section.subData.aportesPorRango as rg}
-                            <tr>
-                              <td class="cell-left font-bold">{rg.rango_nombre}</td>
-                              <td class="cell-center">{rg.cantidad} ops</td>
-                              <td class="cell-total-money font-bold {rg.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(rg.montoAportes))}</td>
-                              {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                                <td class="cell-total-money font-bold {rg.montoDevoluciones > 0 ? 'text-emerald' : ''}">{rg.montoDevoluciones > 0 ? formatMoney(Math.abs(rg.montoDevoluciones)) : '$0'}</td>
-                                <td class="cell-total-money font-bold {rg.neto > 0 ? 'text-rose' : (rg.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(rg.neto))}</td>
-                              {/if}
-                            </tr>
-                          {/each}
-                        </tbody>
-                        <tfoot>
-                          <tr class="tfoot-totals">
-                            <td>TOTAL</td>
-                            <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
-                            <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
-                            {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                              <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
-                              <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
-                            {/if}
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                {/if}
-
-                <!-- Tablita B: Resumen por Empleado -->
-                {#if section.subData.aportesPorEmpleado && section.subData.aportesPorEmpleado.length > 0}
-                  <div class="summary-subtable-box">
-                    <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Empleado</h4>
-                      <span class="incidencia-badge"
-                        >{section.subData.aportesPorEmpleado.length} empleados</span
-                      >
-                    </div>
-                    <div class="table-responsive-wrapper">
-                      <table class="compact-table">
-                        <thead>
-                          <tr>
-                            <th>EMPLEADO</th>
-                            <th>CARGO</th>
-                            <th>OPS</th>
-                            <th>APORTES</th>
-                            {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                              <th>DEVOLUCIONES</th>
-                              <th>TOTAL NETO</th>
-                            {:else}
-                              <th>MONTO TOTAL</th>
-                            {/if}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {#each section.subData.aportesPorEmpleado as emp}
-                            <tr>
-                              <td class="cell-left font-bold">{emp.empleado_nombre}</td>
-                              <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
-                              <td class="cell-center">{emp.cantidad} ops</td>
-                              <td class="cell-total-money font-bold {emp.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(emp.montoAportes))}</td>
-                              {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                                <td class="cell-total-money font-bold {emp.montoDevoluciones > 0 ? 'text-emerald' : ''}">{emp.montoDevoluciones > 0 ? formatMoney(Math.abs(emp.montoDevoluciones)) : '$0'}</td>
-                                <td class="cell-total-money font-bold {emp.neto > 0 ? 'text-rose' : (emp.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(emp.neto))}</td>
-                              {/if}
-                            </tr>
-                          {/each}
-                        </tbody>
-                        <tfoot>
-                          <tr class="tfoot-totals">
-                            <td>TOTAL</td>
-                            <td>—</td>
-                            <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
-                            <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
-                            {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                              <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
-                              <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
-                            {/if}
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
+                {#if activeTabAporte === 'rangos'}
+                  <span class="sub-count-badge">
+                    {section.subData.aportesPorRango?.length || 0} {section.subData.aportesPorRango?.length === 1 ? 'rango' : 'rangos'}
+                  </span>
+                {:else if activeTabAporte === 'empleado'}
+                  <span class="sub-count-badge">
+                    {section.subData.aportesPorEmpleado?.length || 0} {section.subData.aportesPorEmpleado?.length === 1 ? 'empleado' : 'empleados'}
+                  </span>
+                {:else}
+                  <span class="sub-count-badge">
+                    {section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}
+                  </span>
                 {/if}
               </div>
-            {/if}
 
-            <!-- 8.3 Resumen de Producción por Rango -->
-            {#if section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0}
-              <div class="summary-subtable-box" style="margin-top: 18px;">
-                <div class="subtable-header">
-                  <h4 class="subtable-title">Resumen de Producción por Rango ( BILLETERO / APORTES Y DEVOLUCIONES )</h4>
-                  <span class="incidencia-badge"
-                    >{section.subData.produccionPorRango.length} {section.subData.produccionPorRango.length === 1 ? 'rango' : 'rangos'}</span
-                  >
-                </div>
+              {#if activeTabAporte === 'rangos'}
+                <!-- Tab: Resumen por Rango -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
                     <thead>
                       <tr>
                         <th>RANGO</th>
-                        <th>MÁQUINAS</th>
-                        <th>BILLETERO</th>
-                        <th>APORTES Y DEVOLUCIONES</th>
-                        <th>TOTAL</th>
+                        <th>OPS</th>
+                        <th>APORTES</th>
+                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                          <th>DEVOLUCIONES</th>
+                          <th>TOTAL NETO</th>
+                        {:else}
+                          <th>MONTO TOTAL</th>
+                        {/if}
                       </tr>
                     </thead>
                     <tbody>
-                      {#each section.subData.produccionPorRango as rg}
+                      {#each section.subData.aportesPorRango as rg}
                         <tr>
                           <td class="cell-left font-bold">{rg.rango_nombre}</td>
-                          <td class="cell-center font-bold">{rg.maquinasCount}</td>
-                          <td class="cell-total-money font-bold {rg.billetero > 0 ? 'text-emerald' : ''}">{formatMoney(rg.billetero)}</td>
-                          <td class="cell-total-money font-bold {rg.aportesNeto > 0 ? 'text-rose' : (rg.aportesNeto < 0 ? 'text-emerald' : '')}">
-                            {formatMoney(rg.aportesNeto)}
-                          </td>
-                          <td class="cell-grand-total {rg.produccion > 0 ? 'text-emerald' : (rg.produccion < 0 ? 'text-rose' : '')}">
-                            {formatMoney(rg.produccion)}
-                          </td>
+                          <td class="cell-center">{rg.cantidad} ops</td>
+                          <td class="cell-total-money font-bold {rg.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(rg.montoAportes))}</td>
+                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                            <td class="cell-total-money font-bold {rg.montoDevoluciones > 0 ? 'text-emerald' : ''}">{rg.montoDevoluciones > 0 ? formatMoney(Math.abs(rg.montoDevoluciones)) : '$0'}</td>
+                            <td class="cell-total-money font-bold {rg.neto > 0 ? 'text-rose' : (rg.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(rg.neto))}</td>
+                          {/if}
                         </tr>
                       {/each}
                     </tbody>
                     <tfoot>
                       <tr class="tfoot-totals">
                         <td>TOTAL</td>
-                        <td class="cell-center font-bold">{section.subData.produccionTotales.totalMaquinas}</td>
-                        <td class="cell-total-money font-bold {section.subData.produccionTotales.totalBilletero > 0 ? 'text-emerald' : ''}">
-                          {formatMoney(section.subData.produccionTotales.totalBilletero)}
-                        </td>
-                        <td class="cell-total-money font-bold {section.subData.produccionTotales.totalAportesNeto > 0 ? 'text-rose' : (section.subData.produccionTotales.totalAportesNeto < 0 ? 'text-emerald' : '')}">
-                          {formatMoney(section.subData.produccionTotales.totalAportesNeto)}
-                        </td>
-                        <td class="cell-grand-total {section.subData.produccionTotales.totalProduccion > 0 ? 'text-emerald' : (section.subData.produccionTotales.totalProduccion < 0 ? 'text-rose' : '')}">
-                          {formatMoney(section.subData.produccionTotales.totalProduccion)}
+                        <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
+                        <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
+                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                          <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
+                          <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
+                        {/if}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else if activeTabAporte === 'empleado'}
+                <!-- Tab: Resumen por Empleado -->
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
+                      <tr>
+                        <th>EMPLEADO</th>
+                        <th>CARGO</th>
+                        <th>OPS</th>
+                        <th>APORTES</th>
+                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                          <th>DEVOLUCIONES</th>
+                          <th>TOTAL NETO</th>
+                        {:else}
+                          <th>MONTO TOTAL</th>
+                        {/if}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.aportesPorEmpleado as emp}
+                        <tr>
+                          <td class="cell-left font-bold">{emp.empleado_nombre}</td>
+                          <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
+                          <td class="cell-center">{emp.cantidad} ops</td>
+                          <td class="cell-total-money font-bold {emp.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(emp.montoAportes))}</td>
+                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                            <td class="cell-total-money font-bold {emp.montoDevoluciones > 0 ? 'text-emerald' : ''}">{emp.montoDevoluciones > 0 ? formatMoney(Math.abs(emp.montoDevoluciones)) : '$0'}</td>
+                            <td class="cell-total-money font-bold {emp.neto > 0 ? 'text-rose' : (emp.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(emp.neto))}</td>
+                          {/if}
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td>TOTAL</td>
+                        <td>—</td>
+                        <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
+                        <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
+                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
+                          <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
+                          <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
+                        {/if}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else}
+                <!-- Tab: Detallado de Aportes y Devoluciones -->
+                <div class="table-responsive-wrapper">
+                  <table class="sheet-detail-table">
+                    <thead>
+                      <tr>
+                        <th class="th-num">N°</th>
+                        <th class="th-tipo">TIPO</th>
+                        <th class="th-hora">HORA</th>
+                        <th class="th-cliente">EMPLEADO</th>
+                        <th class="th-metodo">CARGO</th>
+                        <th class="th-tipo">RANGO</th>
+                        <th class="th-total">MONTO</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.aportes as a, idx}
+                        {@const isAporte = (a.tipo || "Aporte") === "Aporte"}
+                        <tr>
+                          <td class="cell-center">{idx + 1}</td>
+                          <td class="cell-center">
+                            <span class="tag-tipo {isAporte ? 'tag-aporte' : 'tag-devolucion'}">
+                              {isAporte ? 'Aporte' : 'Devolución'}
+                            </span>
+                          </td>
+                          <td class="cell-center">{a.hora || (a.created_at ? new Date(a.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—')}</td>
+                          <td class="cell-client-name font-bold">{a.empleado_nombre || "—"}</td>
+                          <td class="cell-center tag-metodo-text">{a.cargo_nombre || "—"}</td>
+                          <td class="cell-center">
+                            <span class="tag-tipo tag-rango">
+                              {a.rango_nombre || (a.rango_uuid ? `Rango #${a.rango_uuid.slice(0, 8)}` : `Rango #${a.rango_id}`)}
+                            </span>
+                          </td>
+                          <td class="cell-total-money font-bold {a.monto > 0 ? (isAporte ? 'text-rose' : 'text-emerald') : ''}">
+                            {formatMoney(Math.abs(a.monto))}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td colspan="6">TOTAL</td>
+                        <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">
+                          {formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}
                         </td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
-              </div>
-            {/if}
+              {/if}
             </div>
           {/if}
 
           <!-- ============================================================
-               CONTROL DE CLIENTES (Encabezado Principal - Detallado Completo)
+               RESUMEN DE PRODUCCIÓN POR RANGO (BILLETERO / APORTES Y DEVOLUCIONES)
+               ============================================================ -->
+          {#if section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0}
+            <div class="sheet-section sub-module-section">
+              <div class="sub-header-row">
+                <div class="sub-title-group">
+                  <h2 class="sub-section-title">
+                    {section.subData.numeracion.numProduccionPorRango}. Resumen de Producción por Rango ( BILLETERO / APORTES Y DEVOLUCIONES )
+                  </h2>
+                  <span class="sub-count-badge">
+                    {section.subData.produccionPorRango.length} {section.subData.produccionPorRango.length === 1 ? 'rango' : 'rangos'}
+                  </span>
+                </div>
+              </div>
+
+              <div class="table-responsive-wrapper">
+                <table class="compact-table">
+                  <thead>
+                    <tr>
+                      <th>RANGO</th>
+                      <th>MÁQUINAS</th>
+                      <th>BILLETERO</th>
+                      <th>APORTES Y DEVOLUCIONES</th>
+                      <th>TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each section.subData.produccionPorRango as rg}
+                      <tr>
+                        <td class="cell-left font-bold">{rg.rango_nombre}</td>
+                        <td class="cell-center font-bold">{rg.maquinasCount}</td>
+                        <td class="cell-total-money font-bold {rg.billetero > 0 ? 'text-emerald' : ''}">{formatMoney(rg.billetero)}</td>
+                        <td class="cell-total-money font-bold {rg.aportesNeto > 0 ? 'text-rose' : (rg.aportesNeto < 0 ? 'text-emerald' : '')}">
+                          {formatMoney(rg.aportesNeto)}
+                        </td>
+                        <td class="cell-grand-total {rg.produccion > 0 ? 'text-emerald' : (rg.produccion < 0 ? 'text-rose' : '')}">
+                          {formatMoney(rg.produccion)}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                  <tfoot>
+                    <tr class="tfoot-totals">
+                      <td>TOTAL</td>
+                      <td class="cell-center font-bold">{section.subData.produccionTotales.totalMaquinas}</td>
+                      <td class="cell-total-money font-bold {section.subData.produccionTotales.totalBilletero > 0 ? 'text-emerald' : ''}">
+                        {formatMoney(section.subData.produccionTotales.totalBilletero)}
+                      </td>
+                      <td class="cell-total-money font-bold {section.subData.produccionTotales.totalAportesNeto > 0 ? 'text-rose' : (section.subData.produccionTotales.totalAportesNeto < 0 ? 'text-emerald' : '')}">
+                        {formatMoney(section.subData.produccionTotales.totalAportesNeto)}
+                      </td>
+                      <td class="cell-grand-total {section.subData.produccionTotales.totalProduccion > 0 ? 'text-emerald' : (section.subData.produccionTotales.totalProduccion < 0 ? 'text-rose' : '')}">
+                        {formatMoney(section.subData.produccionTotales.totalProduccion)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          {/if}
+
+          <!-- ============================================================
+               CONTROL DE CLIENTES (Compras y Pagos con Selector de Pestañas)
                ============================================================ -->
           {#if section.subData.control_clientes && section.subData.control_clientes.length > 0}
+            {@const sKey = section.subsala?.uuid || 'root'}
+            {@const activeTabCliente = getTabClientes(sKey)}
             <div class="sheet-main-title-box">
               <h1 class="sheet-title-text">Control de Clientes</h1>
             </div>
@@ -2470,193 +2526,209 @@
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    1. Detallado de Operaciones
+                    1. Compras y Pagos
                   </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.clientesTotales.totalOps} transacciones</span
-                  >
+                  <div class="tab-toggle-group">
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabCliente === 'jugador'}
+                      on:click={() => setTabClientes(sKey, 'jugador')}
+                    >
+                      Cliente / Jugador
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabCliente === 'metodo'}
+                      on:click={() => setTabClientes(sKey, 'metodo')}
+                    >
+                      Método de Pago
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={activeTabCliente === 'detallado'}
+                      on:click={() => setTabClientes(sKey, 'detallado')}
+                    >
+                      Detallado
+                    </button>
+                  </div>
                 </div>
+
+                {#if activeTabCliente === 'jugador'}
+                  <span class="sub-count-badge">
+                    {section.subData.clientesPorJugador?.length || 0} {section.subData.clientesPorJugador?.length === 1 ? 'cliente' : 'clientes'}
+                  </span>
+                {:else if activeTabCliente === 'metodo'}
+                  <span class="sub-count-badge">
+                    {section.subData.clientesPorMetodo?.length || 0} {section.subData.clientesPorMetodo?.length === 1 ? 'método' : 'métodos'}
+                  </span>
+                {:else}
+                  <span class="sub-count-badge">
+                    {section.subData.clientesTotales.totalOps} transacciones
+                  </span>
+                {/if}
               </div>
 
-              <!-- Detallado de Operación -->
-              <div class="table-responsive-wrapper">
-                <table class="sheet-detail-table">
-                  <thead>
-                    <tr>
-                      <th class="th-num">N°</th>
-                      <th class="th-hora">HORA</th>
-                      <th class="th-cliente">CLIENTE / JUGADOR</th>
-                      <th class="th-tipo">TIPO</th>
-                      <th class="th-metodo">MÉTODO</th>
-                      <th class="th-nota">NOTA</th>
-                      <th class="th-total">MONTO</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.control_clientes as c, idx}
-                      {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
+              {#if activeTabCliente === 'jugador'}
+                <!-- Tab: Resumen por Cliente / Jugador -->
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
                       <tr>
-                        <td class="cell-center">{idx + 1}</td>
-                        <td class="cell-center">{c.hora || "—"}</td>
-                        <td class="cell-client-name">{c.cliente || "—"}</td>
-                        <td class="cell-center">
-                          <span
-                            class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
+                        <th>CLIENTE</th>
+                        <th>OPS</th>
+                        <th>COMPRAS</th>
+                        <th>PAGOS</th>
+                        <th>BALANCE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.clientesPorJugador as cl}
+                        <tr>
+                          <td class="cell-left font-bold">{cl.cliente}</td>
+                          <td class="cell-center">{cl.ops}</td>
+                          <td class="cell-total-money font-bold {cl.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(cl.compras))}</td>
+                          <td class="cell-total-money font-bold {cl.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(cl.pagos))}</td>
+                          <td
+                            class="cell-total-money font-bold {cl.balance > 0
+                              ? 'text-emerald'
+                              : (cl.balance < 0 ? 'text-rose' : '')}"
                           >
-                            {c.tipo || "Compra"}
-                          </span>
-                        </td>
-                        <td class="cell-center">
-                          <span
-                            class="tag-metodo-badge"
-                            style="{getMetodoBadgeStyle(c.metodo, c.metodo_color)}"
+                            {formatMoney(Math.abs(cl.balance))}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td>TOTAL</td>
+                        <td class="cell-center">{section.subData.totalesPorJugador.ops}</td>
+                        <td class="cell-total-money font-bold {section.subData.totalesPorJugador.compras > 0 ? 'text-emerald' : ''}"
+                          >{formatMoney(Math.abs(section.subData.totalesPorJugador.compras))}</td
+                        >
+                        <td class="cell-total-money font-bold {section.subData.totalesPorJugador.pagos > 0 ? 'text-rose' : ''}"
+                          >{formatMoney(Math.abs(section.subData.totalesPorJugador.pagos))}</td
+                        >
+                        <td class="cell-grand-total {section.subData.totalesPorJugador.balance > 0 ? 'text-emerald' : (section.subData.totalesPorJugador.balance < 0 ? 'text-rose' : '')}"
+                          >{formatMoney(Math.abs(section.subData.totalesPorJugador.balance))}</td
+                        >
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else if activeTabCliente === 'metodo'}
+                <!-- Tab: Resumen por Método de Pago -->
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
+                      <tr>
+                        <th>MÉTODO</th>
+                        <th>OPS</th>
+                        <th>COMPRAS</th>
+                        <th>PAGOS</th>
+                        <th>BALANCE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.clientesPorMetodo as m}
+                        <tr>
+                          <td class="cell-left font-bold">
+                            <span
+                              class="tag-metodo-badge"
+                              style="{getMetodoBadgeStyle(m.metodo, m.color)}"
+                            >
+                              {m.metodo}
+                            </span>
+                          </td>
+                          <td class="cell-center">{m.ops}</td>
+                          <td class="cell-total-money font-bold {m.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(m.compras))}</td>
+                          <td class="cell-total-money font-bold {m.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(m.pagos))}</td>
+                          <td
+                            class="cell-total-money font-bold {m.balance > 0
+                              ? 'text-emerald'
+                              : (m.balance < 0 ? 'text-rose' : '')}"
                           >
-                            {c.metodo || "General"}
-                          </span>
-                        </td>
-                        <td class="cell-nota tag-nota-text" title={c.nota || ""}>
-                          {c.nota ? c.nota : "—"}
-                        </td>
-                        <td class="cell-total-money font-bold {c.monto > 0 ? (isCompra ? 'text-emerald' : 'text-rose') : ''}">
-                          {formatMoney(Math.abs(c.monto))}
+                            {formatMoney(Math.abs(m.balance))}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td>TOTAL</td>
+                        <td class="cell-center">{section.subData.totalesPorMetodo.ops}</td>
+                        <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.compras > 0 ? 'text-emerald' : ''}"
+                          >{formatMoney(Math.abs(section.subData.totalesPorMetodo.compras))}</td
+                        >
+                        <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.pagos > 0 ? 'text-rose' : ''}"
+                          >{formatMoney(Math.abs(section.subData.totalesPorMetodo.pagos))}</td
+                        >
+                        <td class="cell-grand-total {section.subData.totalesPorMetodo.balance > 0 ? 'text-emerald' : (section.subData.totalesPorMetodo.balance < 0 ? 'text-rose' : '')}"
+                          >{formatMoney(Math.abs(section.subData.totalesPorMetodo.balance))}</td
+                        >
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else}
+                <!-- Tab: Detallado de Operaciones -->
+                <div class="table-responsive-wrapper">
+                  <table class="sheet-detail-table">
+                    <thead>
+                      <tr>
+                        <th class="th-num">N°</th>
+                        <th class="th-hora">HORA</th>
+                        <th class="th-cliente">CLIENTE / JUGADOR</th>
+                        <th class="th-tipo">TIPO</th>
+                        <th class="th-metodo">MÉTODO</th>
+                        <th class="th-nota">NOTA</th>
+                        <th class="th-total">MONTO</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.control_clientes as c, idx}
+                        {@const isCompra = (c.tipo || "").toLowerCase() === "compra"}
+                        <tr>
+                          <td class="cell-center">{idx + 1}</td>
+                          <td class="cell-center">{c.hora || "—"}</td>
+                          <td class="cell-client-name">{c.cliente || "—"}</td>
+                          <td class="cell-center">
+                            <span
+                              class="tag-tipo {isCompra ? 'tag-compra' : 'tag-pago'}"
+                            >
+                              {c.tipo || "Compra"}
+                            </span>
+                          </td>
+                          <td class="cell-center">
+                            <span
+                              class="tag-metodo-badge"
+                              style="{getMetodoBadgeStyle(c.metodo, c.metodo_color)}"
+                            >
+                              {c.metodo || "General"}
+                            </span>
+                          </td>
+                          <td class="cell-nota tag-nota-text" title={c.nota || ""}>
+                            {c.nota ? c.nota : "—"}
+                          </td>
+                          <td class="cell-total-money font-bold {c.monto > 0 ? (isCompra ? 'text-emerald' : 'text-rose') : ''}">
+                            {formatMoney(Math.abs(c.monto))}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td colspan="6">BALANCE NETO (COMPRAS - PAGOS)</td>
+                        <td class="cell-grand-total {section.subData.clientesTotales.balanceNeto > 0 ? 'text-emerald' : (section.subData.clientesTotales.balanceNeto < 0 ? 'text-rose' : '')}">
+                          {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
                         </td>
                       </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td colspan="6">BALANCE NETO (COMPRAS - PAGOS)</td>
-                      <td class="cell-grand-total {section.subData.clientesTotales.balanceNeto > 0 ? 'text-emerald' : (section.subData.clientesTotales.balanceNeto < 0 ? 'text-rose' : '')}">
-                        {formatMoney(Math.abs(section.subData.clientesTotales.balanceNeto))}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              <!-- Las 2 Tablitas Agrupadas (Por Método de Pago y Por Cliente) -->
-              <div class="client-summaries-grid">
-                <!-- Tablita A: Agrupado por Método de Pago -->
-                {#if section.subData.clientesPorMetodo && section.subData.clientesPorMetodo.length > 0}
-                  <div class="summary-subtable-box">
-                    <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Método de Pago</h4>
-                      <span class="incidencia-badge"
-                        >{section.subData.clientesPorMetodo.length} métodos</span
-                      >
-                    </div>
-                    <div class="table-responsive-wrapper">
-                      <table class="compact-table">
-                        <thead>
-                          <tr>
-                            <th>MÉTODO</th>
-                            <th>OPS</th>
-                            <th>COMPRAS</th>
-                            <th>PAGOS</th>
-                            <th>BALANCE</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {#each section.subData.clientesPorMetodo as m}
-                            <tr>
-                              <td class="cell-left font-bold">
-                                <span
-                                  class="tag-metodo-badge"
-                                  style="{getMetodoBadgeStyle(m.metodo, m.color)}"
-                                >
-                                  {m.metodo}
-                                </span>
-                              </td>
-                              <td class="cell-center">{m.ops}</td>
-                              <td class="cell-total-money font-bold {m.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(m.compras))}</td>
-                              <td class="cell-total-money font-bold {m.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(m.pagos))}</td>
-                              <td
-                                class="cell-total-money font-bold {m.balance > 0
-                                  ? 'text-emerald'
-                                  : (m.balance < 0 ? 'text-rose' : '')}"
-                              >
-                                {formatMoney(Math.abs(m.balance))}
-                              </td>
-                            </tr>
-                          {/each}
-                        </tbody>
-                        <tfoot>
-                          <tr class="tfoot-totals">
-                            <td>TOTAL</td>
-                            <td class="cell-center">{section.subData.totalesPorMetodo.ops}</td>
-                            <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.compras > 0 ? 'text-emerald' : ''}"
-                              >{formatMoney(Math.abs(section.subData.totalesPorMetodo.compras))}</td
-                            >
-                            <td class="cell-total-money font-bold {section.subData.totalesPorMetodo.pagos > 0 ? 'text-rose' : ''}"
-                              >{formatMoney(Math.abs(section.subData.totalesPorMetodo.pagos))}</td
-                            >
-                            <td class="cell-grand-total {section.subData.totalesPorMetodo.balance > 0 ? 'text-emerald' : (section.subData.totalesPorMetodo.balance < 0 ? 'text-rose' : '')}"
-                              >{formatMoney(Math.abs(section.subData.totalesPorMetodo.balance))}</td
-                            >
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                {/if}
-
-                <!-- Tablita B: Agrupado por Cliente / Jugador -->
-                {#if section.subData.clientesPorJugador && section.subData.clientesPorJugador.length > 0}
-                  <div class="summary-subtable-box">
-                    <div class="subtable-header">
-                      <h4 class="subtable-title">Resumen por Cliente / Jugador</h4>
-                      <span class="incidencia-badge"
-                        >{section.subData.clientesPorJugador.length} clientes</span
-                      >
-                    </div>
-                    <div class="table-responsive-wrapper">
-                      <table class="compact-table">
-                        <thead>
-                          <tr>
-                            <th>CLIENTE</th>
-                            <th>OPS</th>
-                            <th>COMPRAS</th>
-                            <th>PAGOS</th>
-                            <th>BALANCE</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {#each section.subData.clientesPorJugador as cl}
-                            <tr>
-                              <td class="cell-left font-bold">{cl.cliente}</td>
-                              <td class="cell-center">{cl.ops}</td>
-                              <td class="cell-total-money font-bold {cl.compras > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(cl.compras))}</td>
-                              <td class="cell-total-money font-bold {cl.pagos > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(cl.pagos))}</td>
-                              <td
-                                class="cell-total-money font-bold {cl.balance > 0
-                                  ? 'text-emerald'
-                                  : (cl.balance < 0 ? 'text-rose' : '')}"
-                              >
-                                {formatMoney(Math.abs(cl.balance))}
-                              </td>
-                            </tr>
-                          {/each}
-                        </tbody>
-                        <tfoot>
-                          <tr class="tfoot-totals">
-                            <td>TOTAL</td>
-                            <td class="cell-center">{section.subData.totalesPorJugador.ops}</td>
-                            <td class="cell-total-money font-bold {section.subData.totalesPorJugador.compras > 0 ? 'text-emerald' : ''}"
-                              >{formatMoney(Math.abs(section.subData.totalesPorJugador.compras))}</td
-                            >
-                            <td class="cell-total-money font-bold {section.subData.totalesPorJugador.pagos > 0 ? 'text-rose' : ''}"
-                              >{formatMoney(Math.abs(section.subData.totalesPorJugador.pagos))}</td
-                            >
-                            <td class="cell-grand-total {section.subData.totalesPorJugador.balance > 0 ? 'text-emerald' : (section.subData.totalesPorJugador.balance < 0 ? 'text-rose' : '')}"
-                              >{formatMoney(Math.abs(section.subData.totalesPorJugador.balance))}</td
-                            >
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                {/if}
-              </div>
+                    </tfoot>
+                  </table>
+                </div>
+              {/if}
             </div>
           {/if}
 
@@ -3768,6 +3840,46 @@
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+  }
+
+  .tab-toggle-group {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    padding: 3px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    gap: 3px;
+  }
+
+  .tab-toggle-btn {
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    line-height: 1.2;
+    user-select: none;
+  }
+
+  .tab-toggle-btn:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .tab-toggle-btn.active {
+    background: #ffffff;
+    color: #1e40af;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+    font-weight: 800;
   }
 
   .sub-section-title {
