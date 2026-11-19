@@ -3368,8 +3368,8 @@
   .subsala-report-header {
     width: 100%;
     margin: 16px 0 12px 0;
-    padding: 10px 16px;
-    background: #0f172a;
+    padding: 12px 18px;
+    background: #1e40af;
     border-radius: 6px;
     box-sizing: border-box;
     display: flex;
@@ -3379,10 +3379,10 @@
 
   .subsala-report-title {
     margin: 0;
-    font-size: 15px;
-    font-weight: 800;
+    font-size: 18px;
+    font-weight: 900;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 1px;
     color: #ffffff;
   }
 
@@ -3428,7 +3428,7 @@
 
   /* Producción Global Multisala en el encabezado */
   .multisala-header-summary {
-    margin-bottom: 4px;
+    margin: 18px 0 16px 0;
   }
 
   /* Título principal */
@@ -4549,7 +4549,7 @@
     }
 
     .subsala-report-header {
-      background: #0f172a !important;
+      background: #1e40af !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       color: #ffffff !important;
@@ -4561,6 +4561,7 @@
 
     .subsala-report-title {
       color: #ffffff !important;
+      font-size: 18px !important;
     }
 
     .sub-module-section,
