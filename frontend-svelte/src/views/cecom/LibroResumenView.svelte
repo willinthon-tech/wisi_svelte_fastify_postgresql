@@ -64,6 +64,7 @@
   let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
 
   // Pestañas activas por sección
+  let tabResumenProd = 'total'; // 'total' | 'mesas' | 'maquinas'
   let tabMesa = 'drop';        // 'drop' | 'faltantes'
   let tabBilletero = 'rangos'; // 'rangos' | 'detallado'
   let tabAporte = 'rangos';    // 'rangos' | 'empleado' | 'detallado'
@@ -1165,7 +1166,7 @@
     const numAportes = hasAportes ? ++idxSeccion : 0;
 
     // Compras y Pagos (Control de Clientes)
-    const hasClientes = Boolean(dataClientesGlobal && dataClientesGlobal.registros && dataClientesGlobal.registros.length > 0);
+    const hasClientes = Boolean(sortedControlClientes && sortedControlClientes.length > 0);
     const numClientes = hasClientes ? ++idxSeccion : 0;
 
     // Incidencias
@@ -1611,9 +1612,6 @@
            ============================================================ -->
       {#if isMultisala && renderedSections.length > 0}
         <div class="multisala-header-summary">
-          <div class="sheet-main-title-box first-title-box">
-            <h1 class="sheet-title-text">Producción Global</h1>
-          </div>
           <div class="quick-kpi-grid">
             {#each renderedSections as sec}
               {@const prod = sec.subData?.produccionFinal || 0}
@@ -1633,10 +1631,6 @@
                 </span>
               </div>
             {/if}
-          </div>
-
-          <div class="sheet-main-title-box" style="margin-top: 22px;">
-            <h1 class="sheet-title-text">Detallado por Sala</h1>
           </div>
         </div>
       {/if}
@@ -1692,33 +1686,67 @@
           {/if}
 
           <!-- ============================================================
-               RESUMEN DE PRODUCCIÓN (Encabezado Principal y Submódulos 1, 2, 3)
+               RESUMEN PRODUCCIÓN (Selector de Pestañas: Total, Mesas, Máquinas)
                ============================================================ -->
           {#if section.subData.hasResumenMesas || section.subData.hasResumenMaquinas}
-            <div class="sheet-main-title-box">
-              <h1 class="sheet-title-text">Resumen de Producción</h1>
-            </div>
-
-            <!-- 1. Resumen Mesas -->
-            {#if section.subData.hasResumenMesas}
-              <div class="sheet-section sub-module-section">
-                <div class="sub-header-row">
-                  <div class="sub-title-group">
-                    <h2 class="sub-section-title">
-                      {section.subData.numeracion.numResumenMesas}. Resumen Mesas
-                    </h2>
-                    {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
-                      <span class="sub-count-badge"
-                        >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa' : 'mesas'}</span
+            <div class="sheet-section sub-module-section">
+              <div class="sub-header-row">
+                <div class="sub-title-group">
+                  <h2 class="sub-section-title">
+                    Resumen Producción
+                  </h2>
+                  <div class="tab-toggle-group">
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={tabResumenProd === 'total'}
+                      on:click={() => (tabResumenProd = 'total')}
+                    >
+                      Total
+                    </button>
+                    {#if section.subData.hasResumenMesas}
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabResumenProd === 'mesas'}
+                        on:click={() => (tabResumenProd = 'mesas')}
                       >
-                    {:else if section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
-                      <span class="sub-count-badge"
-                        >{section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa' : 'mesas'}</span
+                        Mesas
+                      </button>
+                    {/if}
+                    {#if section.subData.hasResumenMaquinas}
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabResumenProd === 'maquinas'}
+                        on:click={() => (tabResumenProd = 'maquinas')}
                       >
+                        Máquinas
+                      </button>
                     {/if}
                   </div>
                 </div>
 
+                {#if tabResumenProd === 'mesas'}
+                  {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
+                    <span class="sub-count-badge">
+                      {section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa' : 'mesas'}
+                    </span>
+                  {:else if section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                    <span class="sub-count-badge">
+                      {section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa' : 'mesas'}
+                    </span>
+                  {/if}
+                {:else if tabResumenProd === 'maquinas'}
+                  {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
+                    <span class="sub-count-badge">
+                      {section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina' : 'máquinas'}
+                    </span>
+                  {/if}
+                {/if}
+              </div>
+
+              {#if tabResumenProd === 'mesas'}
                 <!-- Indicadores de rendimiento de Mesas -->
                 <div class="quick-kpi-grid">
                   <div class="kpi-card">
@@ -1751,25 +1779,7 @@
                     </span>
                   </div>
                 </div>
-              </div>
-            {/if}
-
-            <!-- 2. Resumen Máquinas -->
-            {#if section.subData.hasResumenMaquinas}
-              <div class="sheet-section sub-module-section">
-                <div class="sub-header-row">
-                  <div class="sub-title-group">
-                    <h2 class="sub-section-title">
-                      {section.subData.numeracion.numResumenMaquinas}. Resumen Máquinas
-                    </h2>
-                    {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
-                      <span class="sub-count-badge"
-                        >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina' : 'máquinas'}</span
-                      >
-                    {/if}
-                  </div>
-                </div>
-
+              {:else if tabResumenProd === 'maquinas'}
                 <!-- Indicadores de rendimiento de Máquinas -->
                 <div class="quick-kpi-grid">
                   <div class="kpi-card">
@@ -1802,56 +1812,45 @@
                     </span>
                   </div>
                 </div>
-              </div>
-            {/if}
-
-            <!-- 3. Resumen Producción -->
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    {section.subData.numeracion.numResumenProduccion}. Resumen Producción
-                  </h2>
-                </div>
-              </div>
-
-              <!-- Indicadores consolidados de producción -->
-              <div class="quick-kpi-grid">
-                {#if section.subData.hasResumenMesas}
-                  <div class="kpi-card">
-                    <span class="kpi-label">MESAS</span>
+              {:else}
+                <!-- Indicadores consolidados de producción (Total) -->
+                <div class="quick-kpi-grid">
+                  {#if section.subData.hasResumenMesas}
+                    <div class="kpi-card">
+                      <span class="kpi-label">MESAS</span>
+                      <span
+                        class="kpi-value {section.subData.produccionMesas > 0
+                          ? 'text-emerald font-bold'
+                          : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
+                      >
+                        {formatMoney(Math.abs(section.subData.produccionMesas))}
+                      </span>
+                    </div>
+                  {/if}
+                  {#if section.subData.hasResumenMaquinas}
+                    <div class="kpi-card">
+                      <span class="kpi-label">MÁQUINAS</span>
+                      <span
+                        class="kpi-value {section.subData.produccionMaquinas > 0
+                          ? 'text-emerald font-bold'
+                          : (section.subData.produccionMaquinas < 0 ? 'text-rose font-bold' : 'font-bold')}"
+                      >
+                        {formatMoney(Math.abs(section.subData.produccionMaquinas))}
+                      </span>
+                    </div>
+                  {/if}
+                  <div class="kpi-card {section.subData.produccionFinal > 0 ? 'kpi-card-positive' : (section.subData.produccionFinal < 0 ? 'kpi-card-negative' : '')}">
+                    <span class="kpi-label">PRODUCCIÓN</span>
                     <span
-                      class="kpi-value {section.subData.produccionMesas > 0
+                      class="kpi-value {section.subData.produccionFinal > 0
                         ? 'text-emerald font-bold'
-                        : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
+                        : (section.subData.produccionFinal < 0 ? 'text-rose font-bold' : 'font-bold')}"
                     >
-                      {formatMoney(Math.abs(section.subData.produccionMesas))}
+                      {formatMoney(Math.abs(section.subData.produccionFinal))}
                     </span>
                   </div>
-                {/if}
-                {#if section.subData.hasResumenMaquinas}
-                  <div class="kpi-card">
-                    <span class="kpi-label">MÁQUINAS</span>
-                    <span
-                      class="kpi-value {section.subData.produccionMaquinas > 0
-                        ? 'text-emerald font-bold'
-                        : (section.subData.produccionMaquinas < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                    >
-                      {formatMoney(Math.abs(section.subData.produccionMaquinas))}
-                    </span>
-                  </div>
-                {/if}
-                <div class="kpi-card {section.subData.produccionFinal > 0 ? 'kpi-card-positive' : (section.subData.produccionFinal < 0 ? 'kpi-card-negative' : '')}">
-                  <span class="kpi-label">PRODUCCIÓN</span>
-                  <span
-                    class="kpi-value {section.subData.produccionFinal > 0
-                      ? 'text-emerald font-bold'
-                      : (section.subData.produccionFinal < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                  >
-                    {formatMoney(Math.abs(section.subData.produccionFinal))}
-                  </span>
                 </div>
-              </div>
+              {/if}
             </div>
           {/if}
 
