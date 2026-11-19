@@ -1957,7 +1957,6 @@
                 <table class="drop-table arqueo-table">
                   <thead>
                     <tr>
-                      <th class="th-center th-num">N°</th>
                       <th class="th-mesa">Mesa</th>
                       {#each section.subData.arqueoSalaFichas as valor}
                         <th class="th-center">$ {valor}</th>
@@ -1974,16 +1973,8 @@
 
                       <!-- Fila: DIFERENCIA / TOTAL (FALTANTES Y SOBRANTES) -->
                       <tr class="drop-row row-diferencia">
-                        <td class="td-center td-num">
-                          <span class="index-num">{idx + 1}</span>
-                        </td>
                         <td class="td-mesa">
-                          <div class="mesa-title-cell">
-                            <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
-                            {#if group.juegoNombre}
-                              <span class="mesa-sub-juego">{group.juegoNombre}</span>
-                            {/if}
-                          </div>
+                          <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
                         </td>
                         {#each section.subData.arqueoSalaFichas as valor}
                           {@const apC = getChipCount(group.apertura, valor)}
@@ -2024,7 +2015,7 @@
                   <!-- Fila de Totales Generales -->
                   <tfoot>
                     <tr class="total-row footer-diferencia">
-                      <td colspan="2" class="total-label-cell">TOTAL</td>
+                      <td class="total-label-cell">TOTAL</td>
                       {#each section.subData.arqueoSalaFichas as valor}
                         {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                         {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
