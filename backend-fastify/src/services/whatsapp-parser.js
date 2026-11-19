@@ -226,13 +226,28 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
 
   const isAporteDev = (tipo === 'Aporte' || tipo === 'Devolución');
 
-  // 4. Extraer Monto numérico
+  // 4. Extraer Hora explícita si el mensaje la contiene (ej: "12:30", "00:45", "24:15")
+  let hora = null;
+  let horaMatchedText = null;
+  const horaMatch = textWithoutNota.match(/\b([01]?\d|2[0-4]):([0-5]\d)(?::([0-5]\d))?\b/);
+  if (horaMatch) {
+    let h = horaMatch[1].padStart(2, '0');
+    if (h === '24') h = '00';
+    hora = `${h}:${horaMatch[2]}`;
+    horaMatchedText = horaMatch[0];
+  }
+
+  // 5. Extraer Monto numérico
   // Enmascaramos el texto del RANGO y horas (ej. 12:30 o 04:16) para que sus números no se tomen como monto
   let textForMonto = textWithoutNota;
   if (rangoMatchedText) {
     textForMonto = textForMonto.replace(rangoMatchedText, ' ');
   }
-  textForMonto = textForMonto.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
+  if (horaMatchedText) {
+    textForMonto = textForMonto.replace(horaMatchedText, ' ');
+  } else {
+    textForMonto = textForMonto.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
+  }
 
   let monto = 0;
   let montoRaw = '';
@@ -302,11 +317,12 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     }
   }
 
-  // 7. Extraer Cliente (para Control de Clientes) u Operador (para Aportes/Devoluciones)
+  // 8. Extraer Cliente (para Control de Clientes) u Operador (para Aportes/Devoluciones)
   let remaining = textWithoutNota;
 
   if (notaMatch) remaining = remaining.replace(notaMatch[0], ' ');
   if (rangoMatchedText) remaining = remaining.replace(rangoMatchedText, ' ');
+  if (horaMatchedText) remaining = remaining.replace(horaMatchedText, ' ');
   if (tipoMatchedText) remaining = remaining.replace(new RegExp(`\\b${tipoMatchedText}\\b`, 'i'), ' ');
   if (montoRaw) remaining = remaining.replace(montoRaw, ' ');
   if (cajaMatchedText) remaining = remaining.replace(new RegExp(`\\b${cajaMatchedText}\\b`, 'i'), ' ');
@@ -334,6 +350,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     cliente,
     operador,
     rango,
+    hora,
     nota,
     modulo,
     explicit: {

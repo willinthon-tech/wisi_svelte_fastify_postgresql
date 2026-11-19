@@ -46,6 +46,41 @@ function resolveAuthDir() {
   return defaultDir;
 }
 
+/**
+ * Formatea la hora en zona horaria de Caracas garantizando ciclo de 24 horas estándar (00:00 a 23:59).
+ * Previene el bug de ICU/locale donde las 12:xx de la madrugada se formatean erróneamente como "24:xx".
+ */
+export function formatCaracasTime(timestampOrStr) {
+  if (typeof timestampOrStr === 'string' && /^\d{1,2}:\d{2}/.test(timestampOrStr.trim())) {
+    const parts = timestampOrStr.trim().split(':');
+    let h = parts[0].padStart(2, '0');
+    let m = parts[1].padStart(2, '0');
+    if (h === '24') h = '00';
+    return `${h}:${m}`;
+  }
+
+  let date = new Date();
+  if (timestampOrStr) {
+    const num = Number(timestampOrStr);
+    if (!isNaN(num) && num > 0) {
+      date = new Date(num > 1e11 ? num : num * 1000);
+    }
+  }
+
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Caracas',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  });
+
+  let str = formatter.format(date);
+  if (str.startsWith('24:')) {
+    str = '00:' + str.slice(3);
+  }
+  return str;
+}
+
 class WhatsAppService {
   constructor() {
     this.sock = null;
@@ -686,13 +721,8 @@ class WhatsAppService {
         const checkEmoji = esCoincidenciaExacta ? '✅' : '☑️';
         const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
 
-        // D) Hora actual de Caracas
-        const horaStr = new Date().toLocaleTimeString('es-VE', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-          timeZone: 'America/Caracas'
-        });
+        // D) Hora de la transacción (Hora de Caracas, 00:00 a 23:59 garantizado)
+        const horaStr = formatCaracasTime(parsed.hora || m.messageTimestamp);
 
         const metodoExtraNota = (metodoFallbackUsado && parsed.metodo && normalizeText(parsed.metodo) !== normalizeText(metodoAsignadoNombre))
           ? ` [Método: ${parsed.metodo}]`
@@ -794,6 +824,23 @@ class WhatsAppService {
           if (foundRango) {
             rangoUuid = foundRango.uuid;
             rangoNombre = foundRango.nombre;
+          } else if (parsed.rango) {
+            // El usuario especificó un rango explícito (ej: "Rango Fumadores", "Ruleta", "Rango Tal")
+            // No omitirlo: crearlo en la base de datos para registrarlo fielmente
+            try {
+              const newRango = await sql`
+                INSERT INTO rangos (nombre)
+                VALUES (${parsed.rango})
+                RETURNING uuid, nombre
+              `;
+              if (newRango.length > 0) {
+                rangoUuid = newRango[0].uuid;
+                rangoNombre = newRango[0].nombre;
+                foundRango = newRango[0];
+              }
+            } catch (eNewRango) {
+              console.warn('Error registrando nuevo rango:', eNewRango.message);
+            }
           }
         }
 
@@ -880,10 +927,10 @@ class WhatsAppService {
         let esCoincidenciaExacta = true;
         let observaciones = [];
 
-        // 1. Verificación de Rango: ¿fue explícito y coincide con la BD?
-        if (!parsed.explicit?.rango || !foundRango) {
+        // 1. Verificación de Rango: ¿fue explícito o requirió fallback?
+        if (!parsed.explicit?.rango || !rangoUuid) {
           esCoincidenciaExacta = false;
-          observaciones.push('Rango no especificado o asignado por defecto');
+          observaciones.push('Rango no especificado (asignado General)');
         }
 
         // 2. Verificación de Operador: ¿coincidió con un empleado activo existente?
@@ -896,12 +943,8 @@ class WhatsAppService {
         const checkEmoji = esCoincidenciaExacta ? '✅' : '☑️';
         const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
 
-        const horaStr = new Date().toLocaleTimeString('es-VE', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-          timeZone: 'America/Caracas'
-        });
+        // D) Hora de la transacción (Hora de Caracas, 00:00 a 23:59 garantizado)
+        const horaStr = formatCaracasTime(parsed.hora || m.messageTimestamp);
 
         // D) Insertar en libro_aportes
         const insertRes = await sql`
