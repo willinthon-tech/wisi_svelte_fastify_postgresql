@@ -1176,8 +1176,6 @@
     const numeracion = {
       hasResumenMesas,
       hasResumenMaquinas,
-      numResumenMesas,
-      numResumenMaquinas,
       numResumenProduccion,
       hasMesas,
       numMesas,
