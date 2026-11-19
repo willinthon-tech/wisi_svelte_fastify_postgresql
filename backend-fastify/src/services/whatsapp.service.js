@@ -380,6 +380,36 @@ class WhatsAppService {
     }
   }
 
+  /**
+   * Envía una reacción emoji (check verde o azul) al mensaje con reintentos automáticos
+   * para garantizar que nunca se quede en espera o se pierda por latencia de red.
+   */
+  async sendReactionWithRetry(remoteJid, messageKey, emoji, maxRetries = 3) {
+    if (!this.sock || !remoteJid || !messageKey || !emoji) return false;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Pausa preventiva para sincronizar mensaje con el socket de Baileys
+        const delayMs = attempt === 1 ? 500 : 1200 * attempt;
+        await new Promise(r => setTimeout(r, delayMs));
+
+        if (!this.sock) break;
+
+        await this.sock.sendMessage(remoteJid, {
+          react: {
+            text: emoji,
+            key: messageKey
+          }
+        });
+        console.log(`✅ [WhatsApp React] Reacción "${emoji}" enviada correctamente (intento ${attempt})`);
+        return true;
+      } catch (err) {
+        console.warn(`⚠️ [WhatsApp React] Falló envío de reacción (intento ${attempt}/${maxRetries}):`, err.message);
+      }
+    }
+    return false;
+  }
+
   async handleIncomingMessage(m) {
     const remoteJid = m.key.remoteJid || '';
     if (!remoteJid.endsWith('@g.us')) return; // Solo procesar mensajes de grupos
@@ -496,24 +526,66 @@ class WhatsAppService {
 
       // 4. Inserción según módulo
       if (parsed.modulo === 'control_clientes') {
-        // A) Buscar o crear el Cliente
+        // A) Buscar o resolver Cliente asociado a la SALA del grupo de WhatsApp (con matching inteligente)
         let clienteUuid = null;
-        const existingClients = await sql`
-          SELECT uuid FROM clientes 
-          WHERE LOWER(TRIM(nombre)) = LOWER(${parsed.cliente.trim()})
-          LIMIT 1
+        let foundClient = null;
+
+        const allClients = await sql`
+          SELECT uuid, nombre 
+          FROM clientes 
+          WHERE ${mapping.sala_uuid ? sql`(sala_uuid = ${mapping.sala_uuid}::uuid OR sala_uuid IS NULL)` : sql`true`}
+            AND COALESCE(is_deleted, false) = false
         `;
 
-        if (existingClients.length > 0) {
-          clienteUuid = existingClients[0].uuid;
+        if (parsed.cliente && parsed.cliente.toLowerCase() !== 'general' && allClients.length > 0) {
+          const normTarget = normalizeText(parsed.cliente);
+
+          // 1. Coincidencia exacta normalizada
+          foundClient = allClients.find(c => normalizeText(c.nombre) === normTarget);
+
+          // 2. Coincidencia si el nombre empieza con el término (ej. "Hassan" -> "Hassan Hussenin Ghazale")
+          if (!foundClient) {
+            foundClient = allClients.find(c => normalizeText(c.nombre).startsWith(normTarget + ' '));
+          }
+
+          // 3. Coincidencia por palabra individual (ej. apellido "Ghazale" o "Coitez")
+          if (!foundClient) {
+            foundClient = allClients.find(c => {
+              const words = normalizeText(c.nombre).split(/\s+/);
+              return words.includes(normTarget);
+            });
+          }
+
+          // 4. Coincidencia substring
+          if (!foundClient) {
+            foundClient = allClients.find(c => normalizeText(c.nombre).includes(normTarget) || normTarget.includes(normalizeText(c.nombre)));
+          }
+
+          if (foundClient) {
+            clienteUuid = foundClient.uuid;
+          } else {
+            // Crear nuevo cliente asignado a la sala del grupo
+            const newClient = await sql`
+              INSERT INTO clientes (nombre, sala_uuid)
+              VALUES (${parsed.cliente.trim()}, ${mapping.sala_uuid ? sql`${mapping.sala_uuid}::uuid` : sql`NULL`})
+              RETURNING uuid
+            `;
+            clienteUuid = newClient[0]?.uuid;
+          }
         } else {
-          // Crear cliente tipo General
-          const newClient = await sql`
-            INSERT INTO clientes (nombre)
-            VALUES (${parsed.cliente.trim()})
-            RETURNING uuid
-          `;
-          clienteUuid = newClient[0]?.uuid;
+          // Cliente General
+          foundClient = allClients.find(c => normalizeText(c.nombre) === 'general');
+          if (foundClient) {
+            clienteUuid = foundClient.uuid;
+          } else {
+            // Buscar o crear cliente General para esta sala
+            const newGenClient = await sql`
+              INSERT INTO clientes (nombre, sala_uuid)
+              VALUES ('General', ${mapping.sala_uuid ? sql`${mapping.sala_uuid}::uuid` : sql`NULL`})
+              RETURNING uuid
+            `;
+            clienteUuid = newGenClient[0]?.uuid;
+          }
         }
 
         // B) Buscar método de pago por coincidencia inteligente (Diccionario & NLP)
@@ -595,8 +667,8 @@ class WhatsAppService {
         let esCoincidenciaExacta = true;
         let observaciones = [];
 
-        // 1. Verificación de Cliente: ¿existía ya en la base de datos?
-        if (existingClients.length === 0) {
+        // 1. Verificación de Cliente: ¿existía ya en la base de datos de esta sala?
+        if (!foundClient) {
           esCoincidenciaExacta = false;
           observaciones.push(parsed.cliente === 'General' ? 'Cliente no especificado (asignado General)' : `Cliente nuevo (${parsed.cliente})`);
         }
@@ -668,18 +740,9 @@ class WhatsAppService {
 
         console.log(`${checkEmoji} [WhatsApp] Operación registrada en Control de Clientes [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        // F) Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación)
+        // F) Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación) con reintentos
         if (mapping.auto_reply && this.sock) {
-          try {
-            await this.sock.sendMessage(remoteJid, {
-              react: {
-                text: checkEmoji,
-                key: m.key
-              }
-            });
-          } catch (eReact) {
-            console.warn('Error enviando reacción check en WhatsApp:', eReact.message);
-          }
+          await this.sendReactionWithRetry(remoteJid, m.key, checkEmoji);
         }
 
       } else if (parsed.modulo === 'aportes_maquinas') {
@@ -745,16 +808,20 @@ class WhatsAppService {
           }
         }
 
-        // B) Buscar o resolver Empleado / Operador con matching inteligente
+        // B) Buscar o resolver Empleado / Operador de la SALA con matching inteligente
         let empleadoUuid = null;
         let empleadoNombre = parsed.operador || 'Operador General';
         let foundEmp = null;
 
         const allEmps = await sql`
-          SELECT uuid, nombre, cedula 
-          FROM empleados 
-          WHERE COALESCE(activo, true) = true 
-            AND COALESCE(is_deleted, false) = false
+          SELECT e.uuid, e.nombre, e.cedula, d.sala_uuid 
+          FROM empleados e
+          LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+          LEFT JOIN areas a ON c.area_uuid = a.uuid
+          LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+          WHERE COALESCE(e.activo, true) = true 
+            AND COALESCE(e.is_deleted, false) = false
+            ${mapping.sala_uuid ? sql`AND (d.sala_uuid = ${mapping.sala_uuid}::uuid OR d.sala_uuid IS NULL)` : sql``}
         `;
 
         if (parsed.operador && parsed.operador.toLowerCase() !== 'general' && allEmps.length > 0) {
@@ -871,18 +938,9 @@ class WhatsAppService {
 
         console.log(`${checkEmoji} [WhatsApp] ${parsed.tipo} registrado en Aportes [${logStatus}]: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre} ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        // Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación)
+        // Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación) con reintentos
         if (mapping.auto_reply && this.sock) {
-          try {
-            await this.sock.sendMessage(remoteJid, {
-              react: {
-                text: checkEmoji,
-                key: m.key
-              }
-            });
-          } catch (eReact) {
-            console.warn('Error enviando reacción check en WhatsApp:', eReact.message);
-          }
+          await this.sendReactionWithRetry(remoteJid, m.key, checkEmoji);
         }
       }
 

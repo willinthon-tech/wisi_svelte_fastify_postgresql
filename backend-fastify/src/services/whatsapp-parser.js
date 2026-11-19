@@ -3,14 +3,8 @@
  * Soporta NLP tolerante a variaciones ortográficas, sinónimos, abreviaturas,
  * tildes/acentos, plurales/singulares, mayúsculas/minúsculas y ORDEN TOTALMENTE LIBRE.
  * 
- * Ejemplos soportados sin importar el orden:
- *  - "500 pago varchar mesa cash"
- *  - "rango 5 veronica 100 devolucion"
- *  - "compra 100 zinli juan"
- *  - "Compra 200$ USDT Máquinas WILLINTHONTEST"
- *  - "aporte 300 manuel rango 1"
- *  - "100 a carlos r2"
- *  - "500 c pedro usdt"
+ * Soporta números de miles con punto ("1.000" -> 1000, "1.500" -> 1500) y decimales con coma ("1.500,50" -> 1500.5).
+ * Elimina limpiamente conectores y preposiciones ("en", "por", "con", etc.) antes de métodos y en los nombres.
  */
 
 /**
@@ -23,6 +17,85 @@ export function normalizeText(str) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+}
+
+/**
+ * Parsea montos en formato habitual de WhatsApp en Venezuela/Latinoamérica:
+ * - El punto (.) se usa habitualmente como separador de miles: "1.000", "1.500", "10.000".
+ * - La coma (,) se usa como separador de decimales: "1.500,50", "500,50".
+ */
+export function parseWhatsAppAmount(rawStr) {
+  if (!rawStr) return 0;
+  let s = String(rawStr).trim();
+
+  // Caso 1: Contiene tanto punto como coma (ej. "1.500,50" o "1,500.50")
+  if (s.includes('.') && s.includes(',')) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      // Formato latino: 1.500,50 -> eliminar puntos de miles y convertir coma a punto
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Formato anglosajón: 1,500.50 -> eliminar comas de miles
+      s = s.replace(/,/g, '');
+    }
+  } else if (s.includes('.')) {
+    // Caso 2: Solo contiene puntos. En WhatsApp el punto es separador de miles (ej: "1.000", "1.500", "10.000")
+    s = s.replace(/\./g, '');
+  } else if (s.includes(',')) {
+    // Caso 3: Solo contiene comas.
+    // Si tiene coma seguida de exactamente 3 dígitos (ej: "1,000", "10,000"), es separador de miles
+    if (/^\d{1,3},\d{3}$/.test(s)) {
+      s = s.replace(',', '');
+    } else {
+      // Es separador de decimales (ej: "500,50")
+      s = s.replace(',', '.');
+    }
+  }
+
+  const val = parseFloat(s);
+  return isNaN(val) ? 0 : val;
+}
+
+/**
+ * Limpia y normaliza el nombre de la persona (cliente u operador):
+ * - Elimina palabras residuales de cajas o métodos de pago
+ * - Elimina conectores / preposiciones ("en", "por", "con", "a", "al", etc.) que no pertenecen al nombre
+ * - Formatea en Title Case
+ */
+export function cleanPersonName(rawName) {
+  if (!rawName) return '';
+  let name = String(rawName).trim();
+
+  // 1. Eliminar palabras residuales de cajas o métodos que hayan quedado en el texto
+  name = name.replace(/\b(mesas?|m[aá]quinas?|slots?|tables?|vivo|live)\b/gi, ' ');
+  name = name.replace(/\b(usdt|binance|cash|d[oó]lares?|dolar|efectivo|usd|zelle|zinli|pdv|pm|pago\s*m[oó]vil|bs|ves|euros?)\b/gi, ' ');
+
+  // 2. Limpiar caracteres especiales
+  name = name.replace(/[$,:.\-_*#~|/\\()]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // 3. Bucle para remover conectores y preposiciones sobrantes al inicio y final
+  let changed = true;
+  while (changed) {
+    changed = false;
+    // Conectores que NUNCA inician un nombre en este contexto: en, por, con, para, via, vía, al, a, del
+    const newStart = name.replace(/^(?:en|por|con|para|via|vía|al|a|del)\s+/i, '');
+    if (newStart !== name) {
+      name = newStart.trim();
+      changed = true;
+    }
+    // Conectores/artículos que NUNCA terminan un nombre: en, por, con, de, del, al, a, para, via, vía, el, la, los, las, y, e, o, u
+    const newEnd = name.replace(/\s+(?:en|por|con|de|del|al|a|para|via|vía|el|la|los|las|y|e|o|u)$/i, '');
+    if (newEnd !== name) {
+      name = newEnd.trim();
+      changed = true;
+    }
+  }
+
+  // 4. Formatear cada palabra en Title Case
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
 }
 
 // Diccionario de Rangos de Máquinas
@@ -53,7 +126,7 @@ const TIPO_SINGLE_RULES = [
   { tipo: 'Devolución', regex: /\b(d)\b/i }
 ];
 
-// Diccionario de Cajas
+// Diccionario de Cajas (conservado para limpiar el texto y no contaminar nombres)
 const CAJA_RULES = [
   { caja: 'Máquinas', regex: /\b(m[aá]quinas?|m[aá]quina|maq|maqs|slots?)\b/i },
   { caja: 'Mesas', regex: /\b(mesas?|mesa|tables?|vivo|live)\b/i }
@@ -95,12 +168,14 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   }
 
   // 2. Extraer Rango PRIMERO para proteger su número (ej. "rango 5" no debe extraer 5 como monto)
+  // Soporta conectores antes del rango ("por rango 3", "en rango 1")
   let rango = null;
   let rangoExplicit = false;
   let rangoMatchedText = null;
 
   for (const rule of RANGO_RULES) {
-    const m = textWithoutNota.match(rule.regex);
+    const connectorRegex = new RegExp(`(?:\\b(?:en|por|de|del|al|a|para)\\s+)?${rule.regex.source}`, 'i');
+    const m = textWithoutNota.match(connectorRegex);
     if (m) {
       rango = rule.rango;
       rangoExplicit = true;
@@ -110,7 +185,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   }
 
   if (!rango) {
-    const genericRangoMatch = textWithoutNota.match(/\b(rango\s+[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]+)\b/i);
+    const genericRangoMatch = textWithoutNota.match(/(?:\b(?:en|por|de|del|al|a|para)\s+)?\b(rango\s+[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]+)\b/i);
     if (genericRangoMatch) {
       rango = genericRangoMatch[1].trim()
         .split(' ')
@@ -162,41 +237,29 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   let monto = 0;
   let montoRaw = '';
 
+  // Patrón numérico completo que soporta separadores de miles y decimales
+  const NUM_PATTERN = '(?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)';
+
   // Prioridad 1: Número con indicador monetario explícito ($1000, 1000$, 1000d, 1000usd, 1000bs, 1000 ref, etc.)
-  const explicitMontoMatch = textForMonto.match(/(?:[\$€£]|bs\.?|ref\.?)\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:[\$€£]|usd|usdt|bs\.?|ref|dlls?|d[oó]lares?|divisas?|d\b)/i);
+  const explicitMontoRegex = new RegExp(
+    `(?:[\\$€£]|bs\\.?|ref\\.?)\\s*(${NUM_PATTERN})|(${NUM_PATTERN})\\s*(?:[\\$€£]|usd|usdt|bs\\.?|ref|dlls?|d[oó]lares?|divisas?|d\\b)`,
+    'i'
+  );
+  const explicitMontoMatch = textForMonto.match(explicitMontoRegex);
   if (explicitMontoMatch) {
     montoRaw = explicitMontoMatch[0];
-    let numStr = explicitMontoMatch[1] || explicitMontoMatch[2];
-    if (numStr) {
-      if (numStr.includes('.') && numStr.includes(',')) {
-        if (numStr.lastIndexOf(',') > numStr.lastIndexOf('.')) {
-          numStr = numStr.replace(/\./g, '').replace(',', '.');
-        } else {
-          numStr = numStr.replace(/,/g, '');
-        }
-      } else if (numStr.includes(',')) {
-        numStr = numStr.replace(',', '.');
-      }
-      monto = parseFloat(numStr);
-    }
+    const numStr = explicitMontoMatch[1] || explicitMontoMatch[2];
+    monto = parseWhatsAppAmount(numStr);
   }
 
-  // Prioridad 2: Cualquier número en el texto (incluso con letras o sufijos adjuntos)
+  // Prioridad 2: Cualquier número en el texto
   if (!monto || isNaN(monto) || monto <= 0) {
-    const anyNumberMatch = textForMonto.match(/(?<![a-zA-Z])(\d+(?:[.,]\d+)?)(?:[a-zA-Z\$]+)?/);
+    const anyNumberRegex = new RegExp(`(?<![a-zA-Z0-9])(${NUM_PATTERN})(?:[a-zA-Z\\$]+)?`, 'i');
+    const anyNumberMatch = textForMonto.match(anyNumberRegex);
     if (anyNumberMatch) {
       montoRaw = anyNumberMatch[0];
-      let numStr = anyNumberMatch[1];
-      if (numStr.includes('.') && numStr.includes(',')) {
-        if (numStr.lastIndexOf(',') > numStr.lastIndexOf('.')) {
-          numStr = numStr.replace(/\./g, '').replace(',', '.');
-        } else {
-          numStr = numStr.replace(/,/g, '');
-        }
-      } else if (numStr.includes(',')) {
-        numStr = numStr.replace(',', '.');
-      }
-      monto = parseFloat(numStr);
+      const numStr = anyNumberMatch[1];
+      monto = parseWhatsAppAmount(numStr);
     }
   }
 
@@ -204,13 +267,14 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     return null; // Si no hay monto válido, se ignora
   }
 
-  // 5. Detectar Caja
+  // 5. Detectar Caja (para limpiar el texto y no contaminar nombres)
   let caja = isAporteDev ? 'Máquinas' : (defaultOptions.caja_default || 'Mesas');
   let cajaExplicit = false;
   let cajaMatchedText = null;
 
   for (const rule of CAJA_RULES) {
-    const m = textWithoutNota.match(rule.regex);
+    const connectorRegex = new RegExp(`(?:\\b(?:en|de|del|para)\\s+)?${rule.regex.source}`, 'i');
+    const m = textWithoutNota.match(connectorRegex);
     if (m) {
       caja = rule.caja;
       cajaExplicit = true;
@@ -220,13 +284,15 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   }
 
   // 6. Detectar Método de Pago (SOLO para Control de Clientes; en Aportes/Devoluciones NO aplica)
+  // Soporta conectores previos: "en efectivo", "por pdv", "con zelle", etc.
   let metodo = isAporteDev ? null : (defaultOptions.metodo_default || 'General');
   let metodoExplicit = false;
   let metodoMatchedText = null;
 
   if (!isAporteDev) {
     for (const rule of METODO_RULES) {
-      const m = textWithoutNota.match(rule.regex);
+      const connectorRegex = new RegExp(`(?:\\b(?:en|por|con|de|del|al|a|para|via|vía)\\s+)?${rule.regex.source}`, 'i');
+      const m = textWithoutNota.match(connectorRegex);
       if (m) {
         metodo = rule.metodo;
         metodoExplicit = true;
@@ -246,22 +312,8 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   if (cajaMatchedText) remaining = remaining.replace(new RegExp(`\\b${cajaMatchedText}\\b`, 'i'), ' ');
   if (metodoMatchedText) remaining = remaining.replace(new RegExp(`\\b${metodoMatchedText}\\b`, 'i'), ' ');
 
-  // En Aportes y Devoluciones, remover cualquier palabra de método de pago si el usuario la escribió (ej. "cash")
-  if (isAporteDev) {
-    remaining = remaining.replace(/\b(usdt|binance|cash|d[oó]lares?|dolar|efectivo|usd|zelle|zinli|pdv|pm|pago\s*m[oó]vil|bs|ves|euros?)\b/gi, ' ');
-  }
-
-  // Limpiar caracteres especiales residuales
-  remaining = remaining
-    .replace(/[$,:.\-_*#~|/\\()]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  let parsedName = remaining
-    .split(' ')
-    .filter(Boolean)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
+  // Limpiar conectores, stopwords y palabras residuales para dejar solo el nombre contiguo
+  const parsedName = cleanPersonName(remaining);
 
   const operador = isAporteDev ? (parsedName || 'General') : null;
   const cliente = isAporteDev ? 'General' : (parsedName || 'General');
