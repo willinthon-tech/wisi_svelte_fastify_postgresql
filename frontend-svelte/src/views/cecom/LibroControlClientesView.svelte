@@ -42,7 +42,6 @@
 
   // Estado del formulario
   let cliente = '';
-  let caja = 'Mesas'; // 'Mesas' o 'Máquinas'
   let tipo = 'Compra'; // 'Compra' o 'Pago'
   let selectedMetodoPagoUuid = null;
   let monto = '';
@@ -604,7 +603,6 @@
       cliente: cleanCliente,
       cliente_uuid: selectedClienteUuid || null,
       tipo_cliente_uuid: targetTipoClienteUuid,
-      caja: caja || 'Mesas',
       tipo: tipo || 'Compra',
       monto: cleanMonto,
       metodo_pago_uuid: matchedMetodo.uuid || null,
@@ -634,7 +632,6 @@
     cliente = '';
     selectedClienteUuid = null;
     selectedTipoClienteNombre = '';
-    caja = 'Mesas';
     monto = '';
     nota = '';
     tipo = 'Compra';
@@ -763,7 +760,6 @@
     editingRecord = record;
     modalCliente = record.cliente || '';
     modalClienteUuid = record.cliente_uuid || null;
-    modalCaja = record.caja || 'Mesas';
     modalTipo = record.tipo || 'Compra';
     modalMonto = record.monto != null ? String(record.monto) : '';
     modalMetodoPagoUuid = record.metodo_pago_uuid || record.metodo_pago_id 
@@ -824,7 +820,6 @@
       cliente_uuid: modalClienteUuid || null,
       tipo_cliente_uuid: targetTipoClienteUuid,
       cliente: modalCliente.trim(),
-      caja: modalCaja || 'Mesas',
       tipo: modalTipo,
       monto: Number(modalMonto),
       metodo_pago_uuid: matchedMetodo?.uuid || null,
@@ -952,34 +947,6 @@
           {/if}
         </div>
         <span class="field-hint">Escriba nombre o tipo de cliente. Pulsa <b>Tab ⇥</b> para autocompletar. Si no existe, se creará automáticamente como General.</span>
-      </div>
-
-      <!-- Sección Caja: Mesas o Máquinas -->
-      <div class="form-group">
-        <label class="form-label">CAJA: *</label>
-        <div class="radio-toggle-group">
-          <label class="radio-option {caja === 'Mesas' ? 'selected-caja-mesas' : ''}">
-            <input 
-              type="radio" 
-              name="caja-operacion" 
-              value="Mesas" 
-              bind:group={caja}
-            />
-            <span class="radio-custom"></span>
-            <span class="radio-text">Mesas</span>
-          </label>
-
-          <label class="radio-option {caja === 'Máquinas' ? 'selected-caja-maquinas' : ''}">
-            <input 
-              type="radio" 
-              name="caja-operacion" 
-              value="Máquinas" 
-              bind:group={caja}
-            />
-            <span class="radio-custom"></span>
-            <span class="radio-text">Máquinas</span>
-          </label>
-        </div>
       </div>
 
       <!-- Sección Tipo: Compra o Pago (2 Radios) -->
@@ -1192,7 +1159,6 @@
               <tr>
                 <th class="th-center th-num">N°</th>
                 <th class="th-cliente">Cliente</th>
-                <th class="th-center th-caja">Caja</th>
                 <th class="th-center th-tipo">Tipo</th>
                 <th class="th-right th-monto">Monto</th>
                 <th class="th-center th-metodo">Método</th>
@@ -1205,7 +1171,7 @@
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="{canEdit || canDelete ? 8 : 7}" class="empty-state-cell">
+                  <td colspan="{canEdit || canDelete ? 7 : 6}" class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
                       <span>Cargando registros de clientes...</span>
@@ -1214,7 +1180,7 @@
                 </tr>
               {:else if records.length === 0}
                 <tr>
-                  <td colspan="{canEdit || canDelete ? 8 : 7}" class="empty-state-cell">
+                  <td colspan="{canEdit || canDelete ? 7 : 6}" class="empty-state-cell">
                     <div class="empty-msg-box">
                       <p class="empty-text">
                         No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
@@ -1233,13 +1199,6 @@
                           <span class="cliente-tipo-pill">{record.tipo_cliente_nombre}</span>
                         {/if}
                       </div>
-                    </td>
-                    <td class="td-center td-caja">
-                      {#if (record.caja || 'Mesas').toLowerCase() === 'máquinas' || (record.caja || 'Mesas').toLowerCase() === 'maquinas'}
-                        <span class="badge-caja badge-caja-maquinas">Máquinas</span>
-                      {:else}
-                        <span class="badge-caja badge-caja-mesas">Mesas</span>
-                      {/if}
                     </td>
                     <td class="td-center td-tipo">
                       {#if record.tipo === 'Compra'}
@@ -1479,27 +1438,6 @@
               bind:value={modalCliente} 
               required
             />
-          </div>
-
-          <!-- Caja: Mesas / Máquinas -->
-          <div class="modal-field-group">
-            <label class="modal-field-label">Caja: *</label>
-            <div class="modal-tipo-buttons">
-              <button 
-                type="button" 
-                class="modal-btn-tipo btn-caja-mesas {modalCaja === 'Mesas' ? 'active' : ''}" 
-                on:click={() => modalCaja = 'Mesas'}
-              >
-                MESAS
-              </button>
-              <button 
-                type="button" 
-                class="modal-btn-tipo btn-caja-maquinas {modalCaja === 'Máquinas' ? 'active' : ''}" 
-                on:click={() => modalCaja = 'Máquinas'}
-              >
-                MÁQUINAS
-              </button>
-            </div>
           </div>
 
           <!-- Tipo de Transacción: Compra / Pago -->

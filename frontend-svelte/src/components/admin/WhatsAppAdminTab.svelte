@@ -594,10 +594,12 @@
           <span class="lbl">MÉTODO DE PAGO</span>
           <span class="val">{testResult.metodo}</span>
         </div>
-        <div class="preview-item">
-          <span class="lbl">CAJA DESTINO</span>
-          <span class="val badge-box">{testResult.caja}</span>
-        </div>
+        {#if testResult.modulo === 'aportes_maquinas'}
+          <div class="preview-item">
+            <span class="lbl">DESTINO</span>
+            <span class="val badge-box">Máquinas</span>
+          </div>
+        {/if}
         {#if testResult.modulo === 'aportes_maquinas'}
           <div class="preview-item">
             <span class="lbl">OPERADOR (EMPLEADO)</span>
@@ -799,7 +801,7 @@
                       {#if log.parsed_data.modulo === 'aportes_maquinas'}
                         {log.parsed_data.tipo} ${log.parsed_data.monto} | {log.parsed_data.rango || 'Sin rango'} | Operador: {log.parsed_data.operador || 'General'}
                       {:else}
-                        {log.parsed_data.tipo} ${log.parsed_data.monto} | {log.parsed_data.metodo} | {log.parsed_data.caja} | Cliente: {log.parsed_data.cliente}
+                        {log.parsed_data.tipo} ${log.parsed_data.monto} | {log.parsed_data.metodo || 'General'} | Cliente: {log.parsed_data.cliente || 'General'}
                       {/if}
                     </span>
                   {:else}

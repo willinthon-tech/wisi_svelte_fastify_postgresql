@@ -301,8 +301,7 @@ export async function initDb() {
       for (const t of libroTables) {
         await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS multisala_uuid UUID;`);
       }
-      await sql.unsafe(`ALTER TABLE libro_control_clientes ADD COLUMN IF NOT EXISTS caja VARCHAR(50) DEFAULT 'Mesas';`);
-      await sql.unsafe(`UPDATE libro_control_clientes SET caja = 'Mesas' WHERE caja IS NULL OR caja = '';`);
+      await sql.unsafe(`ALTER TABLE libro_control_clientes DROP COLUMN IF EXISTS caja;`);
       await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS hora VARCHAR(20);`);
       await sql.unsafe(`ALTER TABLE libro_datos DROP CONSTRAINT IF EXISTS libro_datos_libro_uuid_key;`);
       await sql.unsafe(`DROP INDEX IF EXISTS libro_datos_libro_uuid_key;`);

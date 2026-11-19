@@ -636,7 +636,6 @@ class WhatsAppService {
             libro_uuid,
             multisala_uuid,
             cliente_uuid,
-            caja,
             tipo,
             monto,
             metodo_pago_uuid,
@@ -646,7 +645,6 @@ class WhatsAppService {
             ${libro.uuid}::uuid,
             ${targetMultisalaUuid ? sql`${targetMultisalaUuid}::uuid` : sql`NULL`},
             ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
-            ${parsed.caja},
             ${parsed.tipo},
             ${parsed.monto},
             ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
@@ -668,7 +666,7 @@ class WhatsAppService {
           )
         `;
 
-        console.log(`${checkEmoji} [WhatsApp] Operación registrada en Control de Clientes [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} (${parsed.caja}) ${obsTexto ? `(${obsTexto})` : ''}`);
+        console.log(`${checkEmoji} [WhatsApp] Operación registrada en Control de Clientes [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} ${obsTexto ? `(${obsTexto})` : ''}`);
 
         // F) Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación)
         if (mapping.auto_reply && this.sock) {

@@ -10759,7 +10759,7 @@ export async function getLibroControlClientesModel(libroId, multisalaUuid = null
       lcc.cliente_uuid,
       lcc.cliente_uuid AS cliente_id,
       COALESCE(c.nombre, '') AS cliente, 
-      COALESCE(lcc.caja, 'Mesas') AS caja,
+      'Mesas' AS caja,
       lcc.tipo, 
       lcc.monto, 
       lcc.metodo_pago_uuid,
@@ -11051,7 +11051,6 @@ export async function createLibroControlClienteModel(data) {
       libro_uuid,
       multisala_uuid,
       cliente_uuid,
-      caja,
       tipo,
       monto,
       metodo_pago_uuid,
@@ -11063,7 +11062,6 @@ export async function createLibroControlClienteModel(data) {
       ${libroUuid}::uuid,
       ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
       ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
-      ${caja},
       ${tipo},
       ${monto},
       ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
@@ -11075,7 +11073,6 @@ export async function createLibroControlClienteModel(data) {
       libro_uuid, libro_uuid AS libro_id, 
       multisala_uuid, multisala_uuid AS multisala_id,
       cliente_uuid, cliente_uuid AS cliente_id, 
-      caja,
       tipo, monto, 
       metodo_pago_uuid, metodo_pago_uuid AS metodo_pago_id, 
       hora, nota, created_at, updated_at
@@ -11286,7 +11283,6 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
     UPDATE libro_control_clientes
     SET 
       hora = ${hora},
-      caja = ${caja !== undefined ? caja : sql`caja`},
       metodo_pago_uuid = ${metodoPagoUuid !== undefined ? (metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`) : sql`metodo_pago_uuid`},
       cliente_uuid = ${clienteUuid !== undefined ? (clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`) : sql`cliente_uuid`},
       tipo = ${tipo !== undefined ? tipo : sql`tipo`},
@@ -11299,7 +11295,6 @@ export async function updateLibroControlClienteModel(controlId, libroId, data) {
       uuid, uuid AS id, 
       libro_uuid, libro_uuid AS libro_id, 
       cliente_uuid, cliente_uuid AS cliente_id, 
-      caja,
       tipo, monto, 
       metodo_pago_uuid, metodo_pago_uuid AS metodo_pago_id, 
       hora, nota, created_at, updated_at
