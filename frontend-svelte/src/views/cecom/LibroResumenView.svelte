@@ -63,25 +63,10 @@
   // Selector de visualización en pantalla
   let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
 
-  // Pestañas activas por sección (clave de subsala o 'root')
-  let tabBilleteros = {}; // 'rangos' | 'detallado' (default: 'rangos')
-  let tabAportes = {};    // 'rangos' | 'empleado' | 'detallado' (default: 'rangos')
-  let tabClientes = {};   // 'jugador' | 'metodo' | 'detallado' (default: 'jugador')
-
-  const getTabBilleteros = (sKey) => tabBilleteros[sKey] || 'rangos';
-  const setTabBilleteros = (sKey, tab) => {
-    tabBilleteros = { ...tabBilleteros, [sKey]: tab };
-  };
-
-  const getTabAportes = (sKey) => tabAportes[sKey] || 'rangos';
-  const setTabAportes = (sKey, tab) => {
-    tabAportes = { ...tabAportes, [sKey]: tab };
-  };
-
-  const getTabClientes = (sKey) => tabClientes[sKey] || 'jugador';
-  const setTabClientes = (sKey, tab) => {
-    tabClientes = { ...tabClientes, [sKey]: tab };
-  };
+  // Pestañas activas por sección
+  let tabBilletero = 'rangos'; // 'rangos' | 'detallado'
+  let tabAporte = 'rangos';    // 'rangos' | 'empleado' | 'detallado'
+  let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
 
   onMount(async () => {
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
@@ -1169,12 +1154,10 @@
     // 3. Detallado Máquinas
     const hasBilleteros = Boolean((sortedConteoList && sortedConteoList.length > 0) || (conteoPorRango && conteoPorRango.length > 0));
     const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (aportesPorRango && aportesPorRango.length > 0) || (aportesPorEmpleado && aportesPorEmpleado.length > 0));
-    const hasProduccionPorRango = Boolean(produccionPorRango && produccionPorRango.length > 0);
     let idxMaquinas = 0;
     const numBilleteros = hasBilleteros ? ++idxMaquinas : 0;
     const numAportes = hasAportes ? ++idxMaquinas : 0;
-    const numProduccionPorRango = hasProduccionPorRango ? ++idxMaquinas : 0;
-    const hasDetalladoMaquinas = Boolean(hasBilleteros || hasAportes || hasProduccionPorRango);
+    const hasDetalladoMaquinas = Boolean(hasBilleteros || hasAportes);
 
     // 4. Resumen de Incidencias
     const incidenciasActivas = incidenciasPorTipo.filter(cat => cat.items && cat.items.length > 0);
@@ -1195,7 +1178,6 @@
       numNovedadesMesas,
       numBilleteros,
       numAportes,
-      numProduccionPorRango,
       hasDetalladoMaquinas,
       numBitacoraIncidencias,
       numControlLlaves
@@ -2102,8 +2084,6 @@
                BILLETERO (Conteo de Máquinas y Resumen por Rango)
                ============================================================ -->
           {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.conteoPorRango && section.subData.conteoPorRango.length > 0)}
-            {@const sKey = section.subsala?.uuid || 'root'}
-            {@const activeTabBilletero = getTabBilleteros(sKey)}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
@@ -2114,23 +2094,23 @@
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabBilletero === 'rangos'}
-                      on:click={() => setTabBilleteros(sKey, 'rangos')}
+                      class:active={tabBilletero === 'rangos'}
+                      on:click={() => (tabBilletero = 'rangos')}
                     >
                       Rangos
                     </button>
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabBilletero === 'detallado'}
-                      on:click={() => setTabBilleteros(sKey, 'detallado')}
+                      class:active={tabBilletero === 'detallado'}
+                      on:click={() => (tabBilletero = 'detallado')}
                     >
                       Detallado
                     </button>
                   </div>
                 </div>
 
-                {#if activeTabBilletero === 'rangos'}
+                {#if tabBilletero === 'rangos'}
                   <span class="sub-count-badge">
                     {section.subData.conteoPorRango?.length || 0} {section.subData.conteoPorRango?.length === 1 ? 'rango' : 'rangos'}
                   </span>
@@ -2141,7 +2121,7 @@
                 {/if}
               </div>
 
-              {#if activeTabBilletero === 'rangos'}
+              {#if tabBilletero === 'rangos'}
                 <!-- Vista: Resumen de Conteo por Rango -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table">
@@ -2248,8 +2228,6 @@
                APORTES Y DEVOLUCIONES (Con Selector de Pestañas)
                ============================================================ -->
           {#if (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.aportesPorRango && section.subData.aportesPorRango.length > 0) || (section.subData.aportesPorEmpleado && section.subData.aportesPorEmpleado.length > 0)}
-            {@const sKey = section.subsala?.uuid || 'root'}
-            {@const activeTabAporte = getTabAportes(sKey)}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
@@ -2260,35 +2238,35 @@
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabAporte === 'rangos'}
-                      on:click={() => setTabAportes(sKey, 'rangos')}
+                      class:active={tabAporte === 'rangos'}
+                      on:click={() => (tabAporte = 'rangos')}
                     >
                       Rangos
                     </button>
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabAporte === 'empleado'}
-                      on:click={() => setTabAportes(sKey, 'empleado')}
+                      class:active={tabAporte === 'empleado'}
+                      on:click={() => (tabAporte = 'empleado')}
                     >
                       Empleado
                     </button>
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabAporte === 'detallado'}
-                      on:click={() => setTabAportes(sKey, 'detallado')}
+                      class:active={tabAporte === 'detallado'}
+                      on:click={() => (tabAporte = 'detallado')}
                     >
                       Detallado
                     </button>
                   </div>
                 </div>
 
-                {#if activeTabAporte === 'rangos'}
+                {#if tabAporte === 'rangos'}
                   <span class="sub-count-badge">
                     {section.subData.aportesPorRango?.length || 0} {section.subData.aportesPorRango?.length === 1 ? 'rango' : 'rangos'}
                   </span>
-                {:else if activeTabAporte === 'empleado'}
+                {:else if tabAporte === 'empleado'}
                   <span class="sub-count-badge">
                     {section.subData.aportesPorEmpleado?.length || 0} {section.subData.aportesPorEmpleado?.length === 1 ? 'empleado' : 'empleados'}
                   </span>
@@ -2299,7 +2277,7 @@
                 {/if}
               </div>
 
-              {#if activeTabAporte === 'rangos'}
+              {#if tabAporte === 'rangos'}
                 <!-- Tab: Resumen por Rango -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
@@ -2342,7 +2320,7 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if activeTabAporte === 'empleado'}
+              {:else if tabAporte === 'empleado'}
                 <!-- Tab: Resumen por Empleado -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
@@ -2442,73 +2420,9 @@
           {/if}
 
           <!-- ============================================================
-               RESUMEN DE PRODUCCIÓN POR RANGO (BILLETERO / APORTES Y DEVOLUCIONES)
-               ============================================================ -->
-          {#if section.subData.produccionPorRango && section.subData.produccionPorRango.length > 0}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    {section.subData.numeracion.numProduccionPorRango}. Resumen de Producción por Rango ( BILLETERO / APORTES Y DEVOLUCIONES )
-                  </h2>
-                  <span class="sub-count-badge">
-                    {section.subData.produccionPorRango.length} {section.subData.produccionPorRango.length === 1 ? 'rango' : 'rangos'}
-                  </span>
-                </div>
-              </div>
-
-              <div class="table-responsive-wrapper">
-                <table class="compact-table">
-                  <thead>
-                    <tr>
-                      <th>RANGO</th>
-                      <th>MÁQUINAS</th>
-                      <th>BILLETERO</th>
-                      <th>APORTES Y DEVOLUCIONES</th>
-                      <th>TOTAL</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {#each section.subData.produccionPorRango as rg}
-                      <tr>
-                        <td class="cell-left font-bold">{rg.rango_nombre}</td>
-                        <td class="cell-center font-bold">{rg.maquinasCount}</td>
-                        <td class="cell-total-money font-bold {rg.billetero > 0 ? 'text-emerald' : ''}">{formatMoney(rg.billetero)}</td>
-                        <td class="cell-total-money font-bold {rg.aportesNeto > 0 ? 'text-rose' : (rg.aportesNeto < 0 ? 'text-emerald' : '')}">
-                          {formatMoney(rg.aportesNeto)}
-                        </td>
-                        <td class="cell-grand-total {rg.produccion > 0 ? 'text-emerald' : (rg.produccion < 0 ? 'text-rose' : '')}">
-                          {formatMoney(rg.produccion)}
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                  <tfoot>
-                    <tr class="tfoot-totals">
-                      <td>TOTAL</td>
-                      <td class="cell-center font-bold">{section.subData.produccionTotales.totalMaquinas}</td>
-                      <td class="cell-total-money font-bold {section.subData.produccionTotales.totalBilletero > 0 ? 'text-emerald' : ''}">
-                        {formatMoney(section.subData.produccionTotales.totalBilletero)}
-                      </td>
-                      <td class="cell-total-money font-bold {section.subData.produccionTotales.totalAportesNeto > 0 ? 'text-rose' : (section.subData.produccionTotales.totalAportesNeto < 0 ? 'text-emerald' : '')}">
-                        {formatMoney(section.subData.produccionTotales.totalAportesNeto)}
-                      </td>
-                      <td class="cell-grand-total {section.subData.produccionTotales.totalProduccion > 0 ? 'text-emerald' : (section.subData.produccionTotales.totalProduccion < 0 ? 'text-rose' : '')}">
-                        {formatMoney(section.subData.produccionTotales.totalProduccion)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          {/if}
-
-          <!-- ============================================================
                CONTROL DE CLIENTES (Compras y Pagos con Selector de Pestañas)
                ============================================================ -->
           {#if section.subData.control_clientes && section.subData.control_clientes.length > 0}
-            {@const sKey = section.subsala?.uuid || 'root'}
-            {@const activeTabCliente = getTabClientes(sKey)}
             <div class="sheet-main-title-box">
               <h1 class="sheet-title-text">Control de Clientes</h1>
             </div>
@@ -2523,35 +2437,35 @@
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabCliente === 'jugador'}
-                      on:click={() => setTabClientes(sKey, 'jugador')}
+                      class:active={tabCliente === 'jugador'}
+                      on:click={() => (tabCliente = 'jugador')}
                     >
                       Cliente / Jugador
                     </button>
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabCliente === 'metodo'}
-                      on:click={() => setTabClientes(sKey, 'metodo')}
+                      class:active={tabCliente === 'metodo'}
+                      on:click={() => (tabCliente = 'metodo')}
                     >
                       Método de Pago
                     </button>
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={activeTabCliente === 'detallado'}
-                      on:click={() => setTabClientes(sKey, 'detallado')}
+                      class:active={tabCliente === 'detallado'}
+                      on:click={() => (tabCliente = 'detallado')}
                     >
                       Detallado
                     </button>
                   </div>
                 </div>
 
-                {#if activeTabCliente === 'jugador'}
+                {#if tabCliente === 'jugador'}
                   <span class="sub-count-badge">
                     {section.subData.clientesPorJugador?.length || 0} {section.subData.clientesPorJugador?.length === 1 ? 'cliente' : 'clientes'}
                   </span>
-                {:else if activeTabCliente === 'metodo'}
+                {:else if tabCliente === 'metodo'}
                   <span class="sub-count-badge">
                     {section.subData.clientesPorMetodo?.length || 0} {section.subData.clientesPorMetodo?.length === 1 ? 'método' : 'métodos'}
                   </span>
@@ -2562,7 +2476,7 @@
                 {/if}
               </div>
 
-              {#if activeTabCliente === 'jugador'}
+              {#if tabCliente === 'jugador'}
                 <!-- Tab: Resumen por Cliente / Jugador -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
@@ -2609,7 +2523,7 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if activeTabCliente === 'metodo'}
+              {:else if tabCliente === 'metodo'}
                 <!-- Tab: Resumen por Método de Pago -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
