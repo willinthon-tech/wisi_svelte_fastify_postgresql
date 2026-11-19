@@ -1925,7 +1925,7 @@
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    {section.subData.numeracion.numArqueoFichas}. Arqueo Fichas
+                    {section.subData.numeracion.numArqueoFichas}. Faltantes y Sobrantes
                   </h2>
                   <span class="sub-count-badge"
                     >{section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa registrada' : 'mesas registradas'}</span
@@ -1953,12 +1953,12 @@
                       {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
                       {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
 
-                      <!-- Sub-fila 1: APERTURA -->
-                      <tr class="drop-row row-apertura" class:mesa-first-row={true}>
-                        <td class="td-center td-num" rowspan="3">
+                      <!-- Fila: DIFERENCIA / TOTAL (FALTANTES Y SOBRANTES) -->
+                      <tr class="drop-row row-diferencia">
+                        <td class="td-center td-num">
                           <span class="index-num">{idx + 1}</span>
                         </td>
-                        <td class="td-mesa" rowspan="3">
+                        <td class="td-mesa">
                           <div class="mesa-title-cell">
                             <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
                             {#if group.juegoNombre}
@@ -1966,42 +1966,6 @@
                             {/if}
                           </div>
                         </td>
-                        <td class="td-center td-movimiento">
-                          <span class="mov-badge mov-apertura" title="Apertura">A</span>
-                        </td>
-                        {#each section.subData.arqueoSalaFichas as valor}
-                          {@const apCount = getChipCount(group.apertura, valor)}
-                          <td class="td-center count-val">
-                            {apCount !== null ? apCount : '—'}
-                          </td>
-                        {/each}
-                        <td class="td-center td-total-val ap-total-cell font-bold">
-                          $ {formatMoney(apTotal)}
-                        </td>
-                      </tr>
-
-                      <!-- Sub-fila 2: CIERRE -->
-                      <tr class="drop-row row-cierre">
-                        <td class="td-center td-movimiento">
-                          {#if hasCierre}
-                            <span class="mov-badge mov-cierre" title="Cierre">C</span>
-                          {:else}
-                            <span class="mov-badge mov-pendiente" title="Pendiente de Cierre">P</span>
-                          {/if}
-                        </td>
-                        {#each section.subData.arqueoSalaFichas as valor}
-                          {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
-                          <td class="td-center count-val" class:val-pending={!hasCierre}>
-                            {ciCount !== null ? ciCount : '—'}
-                          </td>
-                        {/each}
-                        <td class="td-center td-total-val ci-total-cell font-bold" class:val-pending={!hasCierre}>
-                          {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
-                        </td>
-                      </tr>
-
-                      <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
-                      <tr class="drop-row row-diferencia mesa-last-row">
                         <td class="td-center td-movimiento">
                           <span class="mov-badge mov-diferencia" title="Total">T</span>
                         </td>
@@ -2043,32 +2007,8 @@
 
                   <!-- Fila de Totales Generales -->
                   <tfoot>
-                    <tr class="total-row footer-apertura">
-                      <td colspan="2" class="total-label-cell">TOTAL APERTURA</td>
-                      <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">A</span></td>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
-                        <td class="td-center total-val-cell">{sumAp}</td>
-                      {/each}
-                      <td class="td-center grand-total-cell ap-grand-total">
-                        $ {formatMoney(section.subData.totalArqueoApertura)}
-                      </td>
-                    </tr>
-
-                    <tr class="total-row footer-cierre">
-                      <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
-                      <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">C</span></td>
-                      {#each section.subData.arqueoSalaFichas as valor}
-                        {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                        <td class="td-center total-val-cell">{sumCi}</td>
-                      {/each}
-                      <td class="td-center grand-total-cell ci-grand-total">
-                        $ {formatMoney(section.subData.totalArqueoCierre)}
-                      </td>
-                    </tr>
-
                     <tr class="total-row footer-diferencia">
-                      <td colspan="2" class="total-label-cell">DIFERENCIA NETA</td>
+                      <td colspan="2" class="total-label-cell">TOTAL</td>
                       <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
                       {#each section.subData.arqueoSalaFichas as valor}
                         {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
@@ -5019,6 +4959,7 @@
   }
 
   .footer-diferencia {
+    border-top: 2px solid #94a3b8 !important;
     border-bottom: 2px solid #94a3b8 !important;
     background: #f1f5f9;
   }
