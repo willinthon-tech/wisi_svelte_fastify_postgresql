@@ -1892,14 +1892,14 @@
               {#if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
                 <!-- Tabla: Faltantes y Sobrantes -->
                 <div class="table-responsive-wrapper">
-                  <table class="drop-table arqueo-table">
+                  <table class="sheet-detail-table arqueo-table">
                     <thead>
                       <tr>
-                        <th class="th-mesa">Mesa</th>
+                        <th class="th-mesa">MESA</th>
                         {#each section.subData.arqueoSalaFichas as valor}
                           <th class="th-center">$ {valor}</th>
                         {/each}
-                        <th class="th-center th-total">Total</th>
+                        <th class="th-center th-total">TOTAL</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3345,7 +3345,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
     border-bottom: 2px solid #0f172a;
     padding-bottom: 12px;
   }
@@ -3367,9 +3367,9 @@
 
   .subsala-report-header {
     width: 100%;
-    margin: 16px 0 12px 0;
+    margin: 0 0 14px 0;
     padding: 12px 18px;
-    background: #1e40af;
+    background: #1c2247;
     border-radius: 6px;
     box-sizing: border-box;
     display: flex;
@@ -3428,7 +3428,7 @@
 
   /* Producción Global Multisala en el encabezado */
   .multisala-header-summary {
-    margin: 18px 0 16px 0;
+    margin: 0 0 20px 0;
   }
 
   /* Título principal */
@@ -3594,30 +3594,32 @@
   .sheet-official-table {
     width: 100%;
     border-collapse: collapse;
-    border: 2px solid #000000;
+    border: 1px solid #6b7280;
     font-size: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
   }
 
   .sheet-official-table thead tr {
-    background: #b8cce4; /* Azul suave idéntico a las fotos */
-    color: #000000;
+    background: #e5e7eb;
+    color: #111827;
   }
 
   .sheet-official-table th {
-    border: 1px solid #000000;
+    border: 1px solid #9ca3af;
     padding: 6px 8px;
     font-size: 11px;
-    font-weight: 900;
+    font-weight: 800;
     letter-spacing: 0.3px;
     text-align: center;
     line-height: 1.2;
+    text-transform: uppercase;
   }
 
   .sheet-official-table td {
-    border: 1px solid #000000;
-    padding: 5px 8px;
+    border: 1px solid #d1d5db;
+    padding: 6px 8px;
     vertical-align: middle;
+    color: #111827;
   }
 
   .th-hora-a,
@@ -4327,25 +4329,44 @@
   .compact-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    border: 1px solid #6b7280;
+    font-size: 12px;
+    margin-bottom: 16px;
   }
 
   .compact-table thead tr {
-    background: #e2e8f0;
-    color: #0f172a;
+    background: #e5e7eb;
+    color: #111827;
   }
 
   .compact-table th {
-    border: 1px solid #cbd5e1;
-    padding: 5px 6px;
-    font-size: 10px;
+    border: 1px solid #9ca3af;
+    padding: 6px 8px;
+    font-size: 11px;
     font-weight: 800;
     text-align: center;
+    color: #111827;
+    text-transform: uppercase;
   }
 
   .compact-table td {
-    border: 1px solid #e2e8f0;
-    padding: 5px 6px;
+    border: 1px solid #d1d5db;
+    padding: 6px 8px;
+    color: #111827;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  .compact-table tfoot tr {
+    background: #f8fafc;
+    font-weight: 900;
+  }
+
+  .compact-table tfoot td {
+    border-top: 2px solid #64748b;
+    border-bottom: 1px solid #9ca3af;
+    padding: 6px 8px;
+    font-size: 12px;
   }
 
   .font-bold {
@@ -4549,7 +4570,7 @@
     }
 
     .subsala-report-header {
-      background: #1e40af !important;
+      background: #1c2247 !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
       color: #ffffff !important;
@@ -4766,61 +4787,77 @@
   /* ============================================================
      TABLA DE ARQUEO DE FICHAS EN RESUMEN DE LIBRO
      ============================================================ */
-  .drop-table.arqueo-table {
+  .drop-table.arqueo-table,
+  .sheet-detail-table.arqueo-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 12px;
     text-align: left;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #6b7280;
     margin-bottom: 16px;
   }
 
-  .drop-table.arqueo-table thead tr {
-    background: #2b3544;
-    color: #ffffff;
+  .drop-table.arqueo-table thead tr,
+  .sheet-detail-table.arqueo-table thead tr {
+    background: #e5e7eb;
+    color: #111827;
   }
 
-  .drop-table.arqueo-table th {
-    padding: 10px 10px;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.2px;
+  .drop-table.arqueo-table th,
+  .sheet-detail-table.arqueo-table th {
+    padding: 6px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
     white-space: nowrap;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid #9ca3af;
+    color: #111827;
+    text-align: center;
+    text-transform: uppercase;
   }
 
-  .drop-table.arqueo-table td {
-    padding: 7px 10px;
-    color: #1e293b;
-    font-size: 12.5px;
+  .drop-table.arqueo-table td,
+  .sheet-detail-table.arqueo-table td {
+    padding: 6px 8px;
+    color: #111827;
+    font-size: 12px;
     white-space: nowrap;
     vertical-align: middle;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #d1d5db;
   }
 
   .drop-table.arqueo-table .th-center,
-  .drop-table.arqueo-table .td-center {
+  .drop-table.arqueo-table .td-center,
+  .sheet-detail-table.arqueo-table .th-center,
+  .sheet-detail-table.arqueo-table .td-center {
     text-align: center;
   }
 
   .drop-table.arqueo-table .th-num,
-  .drop-table.arqueo-table .td-num {
+  .drop-table.arqueo-table .td-num,
+  .sheet-detail-table.arqueo-table .th-num,
+  .sheet-detail-table.arqueo-table .td-num {
     width: 45px;
   }
 
   .drop-table.arqueo-table .th-mesa,
-  .drop-table.arqueo-table .td-mesa {
+  .drop-table.arqueo-table .td-mesa,
+  .sheet-detail-table.arqueo-table .th-mesa,
+  .sheet-detail-table.arqueo-table .td-mesa {
     min-width: 170px;
     text-align: left;
-    padding-left: 12px;
+    padding-left: 10px;
   }
 
   .drop-table.arqueo-table .th-movimiento,
-  .drop-table.arqueo-table .td-movimiento {
+  .drop-table.arqueo-table .td-movimiento,
+  .sheet-detail-table.arqueo-table .th-movimiento,
+  .sheet-detail-table.arqueo-table .td-movimiento {
     width: 45px;
   }
 
-  .drop-table.arqueo-table .th-total {
+  .drop-table.arqueo-table .th-total,
+  .sheet-detail-table.arqueo-table .th-total {
     min-width: 110px;
     text-align: center;
   }
