@@ -814,7 +814,7 @@
     const clientesPorJugador = dataClientesGlobal.porJugador;
     const totalesPorJugador = dataClientesGlobal.totalesPorJugador;
 
-    const produccionMesas = dropTotales.grandTotal + dataClientesMesas.totales.balanceNeto;
+    const produccionMesas = dropTotales.grandTotal + totalArqueoDiferencia;
 
     // 7. Aportes máquinas
     const rawAportes = (rawData.aportes_maquinas || rawData.aportes || []).filter(a => matchesSub(a.multisala_uuid));
@@ -1115,7 +1115,7 @@
 
     // Numeración dinámica de submódulos (se ajusta según los módulos que realmente tienen datos)
     // 1. Resumen de Producción
-    const hasResumenMesas = Boolean(drop_mesas && drop_mesas.length > 0);
+    const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (arqueoMesaGroups && arqueoMesaGroups.length > 0));
     const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0));
     let idxProd = 0;
     const numResumenMesas = hasResumenMesas ? ++idxProd : 0;
@@ -1150,6 +1150,8 @@
     const numControlLlaves = hasControlLlaves ? ++idxInc : 0;
 
     const numeracion = {
+      hasResumenMesas,
+      hasResumenMaquinas,
       numResumenMesas,
       numResumenMaquinas,
       numResumenProduccion,
@@ -1167,6 +1169,8 @@
     return {
       datos,
       activeHorarios: getActiveHorarios(datos),
+      hasResumenMesas,
+      hasResumenMaquinas,
       numeracion,
       drop_mesas,
       dropTotales,
@@ -1661,22 +1665,26 @@
           <!-- ============================================================
                RESUMEN DE PRODUCCIÓN (Encabezado Principal y Submódulos 1, 2, 3)
                ============================================================ -->
-          {#if (section.subData.drop_mesas && section.subData.drop_mesas.length > 0) || (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.clientesTotales && section.subData.clientesTotales.totalOps > 0)}
+          {#if section.subData.hasResumenMesas || section.subData.hasResumenMaquinas}
             <div class="sheet-main-title-box">
               <h1 class="sheet-title-text">Resumen de Producción</h1>
             </div>
 
             <!-- 1. Resumen Mesas -->
-            {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
+            {#if section.subData.hasResumenMesas}
               <div class="sheet-section sub-module-section">
                 <div class="sub-header-row">
                   <div class="sub-title-group">
                     <h2 class="sub-section-title">
                       {section.subData.numeracion.numResumenMesas}. Resumen Mesas
                     </h2>
-                    {#if section.subData.drop_mesas.length > 0}
+                    {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
                       <span class="sub-count-badge"
                         >{section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa' : 'mesas'}</span
+                      >
+                    {:else if section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                      <span class="sub-count-badge"
+                        >{section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa' : 'mesas'}</span
                       >
                     {/if}
                   </div>
@@ -1689,6 +1697,16 @@
                     <span class="kpi-value {section.subData.dropTotales.grandTotal > 0 ? 'text-emerald' : ''}"
                       >{formatMoney(section.subData.dropTotales.grandTotal)}</span
                     >
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">ARQUEO</span>
+                    <span
+                      class="kpi-value {section.subData.totalArqueoDiferencia > 0
+                        ? 'text-emerald'
+                        : (section.subData.totalArqueoDiferencia < 0 ? 'text-rose' : '')}"
+                    >
+                      {formatMoney(section.subData.totalArqueoDiferencia)}
+                    </span>
                   </div>
                   <div class="kpi-card {section.subData.produccionMesas > 0 ? 'kpi-card-positive' : (section.subData.produccionMesas < 0 ? 'kpi-card-negative' : '')}">
                     <span class="kpi-label">PRODUCCIÓN</span>
@@ -1705,14 +1723,14 @@
             {/if}
 
             <!-- 2. Resumen Máquinas -->
-            {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.aportes && section.subData.aportes.length > 0)}
+            {#if section.subData.hasResumenMaquinas}
               <div class="sheet-section sub-module-section">
                 <div class="sub-header-row">
                   <div class="sub-title-group">
                     <h2 class="sub-section-title">
                       {section.subData.numeracion.numResumenMaquinas}. Resumen Máquinas
                     </h2>
-                    {#if section.subData.conteo_maquinas.length > 0}
+                    {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
                       <span class="sub-count-badge"
                         >{section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina' : 'máquinas'}</span
                       >
@@ -1729,19 +1747,7 @@
                     >
                   </div>
                   <div class="kpi-card">
-                    <span class="kpi-label">TOTAL APORTES A MÁQUINAS</span>
-                    <span class="kpi-value {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}"
-                      >{formatMoney(section.subData.aportesTotales.totalAportes)}</span
-                    >
-                  </div>
-                  <div class="kpi-card">
-                    <span class="kpi-label">TOTAL DEVOLUCIONES DE MÁQUINAS</span>
-                    <span class="kpi-value {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}"
-                      >{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</span
-                    >
-                  </div>
-                  <div class="kpi-card">
-                    <span class="kpi-label">BALANCE ( APORTES - DEVOLUCIONES )</span>
+                    <span class="kpi-label">( APORTES - DEVOLUCIONES )</span>
                     <span
                       class="kpi-value {section.subData.aportesTotales.netoMonto < 0
                         ? 'text-emerald'
@@ -1776,26 +1782,30 @@
 
               <!-- Indicadores consolidados de producción -->
               <div class="quick-kpi-grid">
-                <div class="kpi-card">
-                  <span class="kpi-label">MESAS</span>
-                  <span
-                    class="kpi-value {section.subData.produccionMesas > 0
-                      ? 'text-emerald font-bold'
-                      : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                  >
-                    {formatMoney(Math.abs(section.subData.produccionMesas))}
-                  </span>
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">MÁQUINAS</span>
-                  <span
-                    class="kpi-value {section.subData.produccionMaquinas > 0
-                      ? 'text-emerald font-bold'
-                      : (section.subData.produccionMaquinas < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                  >
-                    {formatMoney(Math.abs(section.subData.produccionMaquinas))}
-                  </span>
-                </div>
+                {#if section.subData.hasResumenMesas}
+                  <div class="kpi-card">
+                    <span class="kpi-label">MESAS</span>
+                    <span
+                      class="kpi-value {section.subData.produccionMesas > 0
+                        ? 'text-emerald font-bold'
+                        : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
+                    >
+                      {formatMoney(Math.abs(section.subData.produccionMesas))}
+                    </span>
+                  </div>
+                {/if}
+                {#if section.subData.hasResumenMaquinas}
+                  <div class="kpi-card">
+                    <span class="kpi-label">MÁQUINAS</span>
+                    <span
+                      class="kpi-value {section.subData.produccionMaquinas > 0
+                        ? 'text-emerald font-bold'
+                        : (section.subData.produccionMaquinas < 0 ? 'text-rose font-bold' : 'font-bold')}"
+                    >
+                      {formatMoney(Math.abs(section.subData.produccionMaquinas))}
+                    </span>
+                  </div>
+                {/if}
                 <div class="kpi-card {section.subData.produccionFinal > 0 ? 'kpi-card-positive' : (section.subData.produccionFinal < 0 ? 'kpi-card-negative' : '')}">
                   <span class="kpi-label">PRODUCCIÓN</span>
                   <span
