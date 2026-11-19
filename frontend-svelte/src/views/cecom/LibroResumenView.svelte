@@ -1135,17 +1135,13 @@
     const produccionFinal = produccionMesas + produccionMaquinas;
     const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + dataClientesGlobal.totales.totalCompras;
 
-    // Numeración dinámica de submódulos (se ajusta según los módulos que realmente tienen datos)
-    // 1. Resumen de Producción
+    // Numeración dinámica de secciones (empieza desde Resumen Producción)
     const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (arqueoMesaGroups && arqueoMesaGroups.length > 0));
     const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0));
-    let idxProd = 0;
-    const numResumenMesas = hasResumenMesas ? ++idxProd : 0;
-    const numResumenMaquinas = hasResumenMaquinas ? ++idxProd : 0;
-    const numResumenProduccion = ++idxProd;
+    const hasResumenProduccion = Boolean(hasResumenMesas || hasResumenMaquinas);
 
-    // 2. Secciones operativas del reporte (numeradas secuencialmente)
     let idxSeccion = 0;
+    const numResumenProduccion = hasResumenProduccion ? ++idxSeccion : 0;
 
     // Mesas (unifica Drop y Faltantes y Sobrantes)
     const hasDropMesas = Boolean(drop_mesas && drop_mesas.length > 0);
@@ -1693,7 +1689,7 @@
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    Resumen Producción
+                    {section.subData.numeracion.numResumenProduccion}. Resumen Producción
                   </h2>
                   <div class="tab-toggle-group">
                     <button
