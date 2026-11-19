@@ -651,6 +651,21 @@
     const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
     const totalArqueoDiferencia = totalArqueoCierre - totalArqueoApertura;
 
+    let totalArqueoFaltantes = 0;
+    let totalArqueoSobrantes = 0;
+    for (const g of arqueoMesaGroups) {
+      if (g.cierre) {
+        const ap = Number(g.apertura?.total) || 0;
+        const ci = Number(g.cierre?.total) || 0;
+        const dif = ci - ap;
+        if (dif < 0) {
+          totalArqueoFaltantes += Math.abs(dif);
+        } else if (dif > 0) {
+          totalArqueoSobrantes += dif;
+        }
+      }
+    }
+
     // 3. Novedades de mesas
     const novedades_mesas = (rawData.novedades_mesas || []).filter(n => matchesSub(n.multisala_uuid));
 
@@ -1180,6 +1195,8 @@
       totalArqueoApertura,
       totalArqueoCierre,
       totalArqueoDiferencia,
+      totalArqueoFaltantes,
+      totalArqueoSobrantes,
       novedades_mesas,
       incidencias_generales: sortedIncidencias,
       incidenciasPorTipo,
@@ -1699,6 +1716,10 @@
                     >
                   </div>
                   <div class="kpi-card">
+                    <div class="kpi-subinfo-row">
+                      <span class="subinfo-item">FALTANTES: <span class="subinfo-val text-rose font-bold">( {formatMoney(section.subData.totalArqueoFaltantes)} )</span></span>
+                      <span class="subinfo-item">SOBRANTES: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.totalArqueoSobrantes)} )</span></span>
+                    </div>
                     <span class="kpi-label">ARQUEO</span>
                     <span
                       class="kpi-value {section.subData.totalArqueoDiferencia > 0
@@ -1747,6 +1768,10 @@
                     >
                   </div>
                   <div class="kpi-card">
+                    <div class="kpi-subinfo-row">
+                      <span class="subinfo-item">APORTES: <span class="subinfo-val text-rose font-bold">( {formatMoney(section.subData.aportesTotales.totalAportes)} )</span></span>
+                      <span class="subinfo-item">DEVOLUCIONES: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.aportesTotales.totalDevoluciones)} )</span></span>
+                    </div>
                     <span class="kpi-label">( APORTES - DEVOLUCIONES )</span>
                     <span
                       class="kpi-value {section.subData.aportesTotales.netoMonto < 0
@@ -3915,6 +3940,31 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .kpi-subinfo-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    letter-spacing: 0.2px;
+    margin-bottom: 3px;
+    border-bottom: 1px dashed #e2e8f0;
+    padding-bottom: 3px;
+  }
+
+  .subinfo-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+  }
+
+  .subinfo-val {
+    font-weight: 800;
   }
 
   .kpi-card.kpi-card-positive {
