@@ -1,10 +1,4 @@
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-  isJidBroadcast,
-  isJidNewsletter,
-  isJidStatusBroadcast
-} from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode';
 import pino from 'pino';
 import path from 'path';
@@ -12,6 +6,11 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql, isPgConnected } from '../config/db.js';
 import { parseWhatsAppMessage, normalizeText } from './whatsapp-parser.js';
+
+// Helpers seguros para clasificar JIDs sin depender de exportaciones específicas de Baileys
+const isJidBroadcast = (jid) => typeof jid === 'string' && jid.endsWith('@broadcast');
+const isJidNewsletter = (jid) => typeof jid === 'string' && jid.endsWith('@newsletter');
+const isJidStatusBroadcast = (jid) => jid === 'status@broadcast';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
