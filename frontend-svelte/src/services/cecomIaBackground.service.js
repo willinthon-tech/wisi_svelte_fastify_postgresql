@@ -254,10 +254,6 @@ async function sampleLiveMesasMotion() {
 async function pollRecentEvents() {
   return;
 }
-  } catch (err) {
-    console.debug('[CECOM IA Background] Error al sincronizar eventos:', err.message);
-  }
-}
 
 /**
  * Registra un nuevo evento detectado por la IA (desde el motor de visión o simulador)
