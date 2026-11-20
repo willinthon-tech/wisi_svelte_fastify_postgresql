@@ -1,4 +1,10 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import makeWASocket, {
+  useMultiFileAuthState,
+  DisconnectReason,
+  isJidBroadcast,
+  isJidNewsletter,
+  isJidStatusBroadcast
+} from '@whiskeysockets/baileys';
 import qrcode from 'qrcode';
 import pino from 'pino';
 import path from 'path';
@@ -95,7 +101,18 @@ class WhatsAppService {
     this.watchdogInterval = null;
     this.processedMessageIds = new Set(); // Evita procesar duplicados ante reenvíos de red
 
-    // Iniciar Watchdog para asegurar que el servicio nunca se caiga ni se desconecte silenciosamente
+    // Gestión de Reconexión Inteligente y Circuit Breaker para proteger el VPS
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 6;
+    this.circuitBreakerUntil = 0;
+
+    // Caché en memoria para evitar saturar WhatsApp y PostgreSQL
+    this.groupsCache = null;
+    this.groupsCacheTime = 0;
+    this.activeMappingsCache = null;
+    this.activeMappingsCacheTime = 0;
+
+    // Iniciar Watchdog pasivo no destructivo cada 60 segundos
     this.startWatchdog();
   }
 
@@ -119,37 +136,73 @@ class WhatsAppService {
   }
 
   getStatus() {
+    const isPaused = Date.now() < this.circuitBreakerUntil;
     return {
       status: this.status,
       qr: this.qrDataUrl,
       user: this.userInfo,
       error: this.lastError,
       hasSavedSession: this.hasSavedSession(),
-      isConnecting: this.isConnecting
+      isConnecting: this.isConnecting,
+      isPaused,
+      pauseRemainingSec: isPaused ? Math.ceil((this.circuitBreakerUntil - Date.now()) / 1000) : 0,
+      reconnectAttempts: this.reconnectAttempts
     };
   }
 
+  /**
+   * Watchdog pasivo y seguro: se ejecuta cada 60 segundos (no cada 10s).
+   * Nunca destruye sockets vivos de manera precipitada y respeta el Circuit Breaker.
+   */
   startWatchdog() {
     if (this.watchdogInterval) clearInterval(this.watchdogInterval);
 
     this.watchdogInterval = setInterval(() => {
-      // Si hay sesión guardada vinculada, asegurar que siempre esté activa 24/7
-      if (this.hasSavedSession()) {
-        const now = Date.now();
-        const isStuckConnecting = (this.status === 'connecting' && (now - this.connectingStartedAt > 20000));
-        const isDisconnected = (this.status === 'disconnected' && !this.sock);
-        // Verificar si el WebSocket subyacente cayó silenciosamente (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)
-        const isSocketDead = (this.status === 'connected' && (!this.sock || !this.sock.ws || this.sock.ws.readyState !== 1));
+      // 1. Si no hay credenciales guardadas, no hay nada que vigilar
+      if (!this.hasSavedSession()) return;
 
-        if (isDisconnected || isStuckConnecting || isSocketDead) {
-          console.log(`🛡️ [WhatsApp Watchdog] Alerta: estado="${this.status}" (Colgado: ${isStuckConnecting}, SocketMuerto: ${isSocketDead}). Reactivando conexión automáticamente...`);
-          this.destroySocket();
-          this.connect(true).catch(e => {
-            console.warn('Advertencia en Watchdog de WhatsApp:', e.message);
-          });
-        }
+      const now = Date.now();
+
+      // 2. Si el Circuit Breaker está en período de enfriamiento, respetar el tiempo
+      if (now < this.circuitBreakerUntil) {
+        return;
       }
-    }, 10000); // Chequeo constante cada 10 segundos
+
+      // 3. Si lleva más de 60 segundos en 'connecting' atascado
+      if (this.status === 'connecting' && (now - this.connectingStartedAt > 60000)) {
+        console.warn('🛡️ [WhatsApp Watchdog] Conexión atascada (>60s). Limpiando socket preventivamente...');
+        this.destroySocket();
+        this.isConnecting = false;
+        this.status = 'disconnected';
+        return;
+      }
+
+      // 4. Si está desconectado y sin temporizador de reconexión pendiente, reactivar supervisado
+      if (this.status === 'disconnected' && !this.sock && !this.isConnecting && !this.reconnectTimeout) {
+        console.log('🛡️ [WhatsApp Watchdog] Sesión desconectada. Iniciando auto-conexión supervisada...');
+        this.connect(false).catch(e => {
+          console.warn('Advertencia en Watchdog de WhatsApp:', e.message);
+        });
+      }
+    }, 60000); // Chequeo prudente cada 60 segundos
+  }
+
+  scheduleReconnect(delayMs, resetCounter = false) {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
+      if (resetCounter) {
+        this.reconnectAttempts = 0;
+        this.circuitBreakerUntil = 0;
+      }
+      this.connect(false).catch(err => {
+        console.warn('⚠️ [WhatsApp] Fallo en reconexión programada:', err.message);
+      });
+    }, delayMs);
   }
 
   async init() {
@@ -171,7 +224,18 @@ class WhatsAppService {
   destroySocket() {
     if (this.sock) {
       try {
+        // 1. Remover todos los listeners antes de cerrar para evitar bucles de eventos
         this.sock.ev?.removeAllListeners();
+
+        // 2. Cerrar websocket subyacente si existe
+        if (this.sock.ws) {
+          try {
+            this.sock.ws.removeAllListeners?.();
+            this.sock.ws.close?.();
+          } catch (e) {}
+        }
+
+        // 3. Finalizar socket Baileys
         this.sock.end?.(new Error('Resetting socket'));
       } catch (e) {}
       this.sock = null;
@@ -179,25 +243,47 @@ class WhatsAppService {
   }
 
   async connect(force = false) {
-    // Si ya está conectado y el socket está vivo con WebSocket OPEN, no duplicar
-    if (this.sock && this.status === 'connected' && this.sock.ws?.readyState === 1 && !force) {
+    // Si el Circuit Breaker está activo y no es una acción explícita forzada por el usuario
+    if (!force && Date.now() < this.circuitBreakerUntil) {
+      const waitSec = Math.ceil((this.circuitBreakerUntil - Date.now()) / 1000);
+      console.log(`⏸️ [WhatsApp] Pausa preventiva de reconexión activa (${waitSec}s restantes).`);
       return this.getStatus();
     }
 
-    // Si ya está esperando QR y tenemos la imagen lista, retornar estado
+    // Si ya está conectado con socket vivo y no es forzado, retornar estado actual
+    if (this.sock && this.status === 'connected' && !force) {
+      return this.getStatus();
+    }
+
+    // Si ya está esperando QR y tenemos la imagen lista, retornar estado sin recrear
     if (this.sock && this.status === 'waiting_qr' && this.qrDataUrl && !force) {
       return this.getStatus();
     }
 
-    // Si ya está en proceso de conexión reciente (< 15s) y no es forzado, no duplicar
-    if (this.isConnecting && (Date.now() - this.connectingStartedAt < 15000) && !force) {
-      return this.getStatus();
+    // BLOQUEO ESTRICTO DE CONCURRENCIA:
+    // Si ya está en proceso de conexión reciente (< 45s), NUNCA ejecutar otra conexión simultánea
+    if (this.isConnecting) {
+      const elapsed = Date.now() - this.connectingStartedAt;
+      if (elapsed < 45000 && !force) {
+        console.log(`⏳ [WhatsApp] Ya hay una conexión en progreso (${Math.round(elapsed / 1000)}s). Petición paralela omitida.`);
+        return this.getStatus();
+      }
+      if (elapsed >= 45000) {
+        console.warn('⚠️ [WhatsApp] Conexión previa excedió 45s sin resolver. Limpiando recursos...');
+        this.destroySocket();
+      }
     }
 
-    // Cancelar cualquier temporizador de reconexión pendiente
+    // Cancelar cualquier temporizador de reconexión programado
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
+    }
+
+    // Si el usuario forzó la conexión manualmente, reiniciar Circuit Breaker
+    if (force) {
+      this.circuitBreakerUntil = 0;
+      this.reconnectAttempts = 0;
     }
 
     this.isConnecting = true;
@@ -205,7 +291,7 @@ class WhatsAppService {
     this.status = 'connecting';
     this.lastError = null;
 
-    // Destruir socket anterior para limpiar estado
+    // Destruir socket anterior de manera limpia
     this.destroySocket();
 
     const currentAuthDir = resolveAuthDir();
@@ -218,18 +304,21 @@ class WhatsAppService {
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
         browser: ['WISI Casino System', 'Chrome', '1.0.0'],
-        syncFullHistory: false,
-        connectTimeoutMs: 30000,
-        defaultQueryTimeoutMs: 30000,
-        keepAliveIntervalMs: 15000, // Enviar pings cada 15 segundos para detectar caídas de internet de inmediato
-        retryRequestDelayMs: 250
+        markOnlineOnConnect: false, // NO enviar paquetes de presencia continua (reduce CPU y tráfico)
+        syncFullHistory: false, // NO sincronizar historial antiguo de chats
+        generateHighQualityLinkPreview: false, // Desactivar previews pesadas
+        shouldIgnoreJid: (jid) => isJidBroadcast(jid) || isJidNewsletter(jid) || isJidStatusBroadcast(jid) || jid.endsWith('@broadcast'),
+        connectTimeoutMs: 45000,
+        defaultQueryTimeoutMs: 45000,
+        keepAliveIntervalMs: 30000, // Ping cada 30 segundos
+        retryRequestDelayMs: 3000 // Reintentos prudentes espaciados cada 3s, no 250ms
       });
 
       this.sock.ev.on('creds.update', saveCreds);
 
-      // Esperar activamente hasta que Baileys emita el primer código QR o abra la conexión
+      // Esperar hasta que Baileys emita el primer código QR o abra la conexión
       const waitForFirstEvent = new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve(), 3500);
+        const timeout = setTimeout(() => resolve(), 4000);
 
         const checkHandler = (update) => {
           if (update.qr || update.connection === 'open' || update.connection === 'close') {
@@ -254,6 +343,7 @@ class WhatsAppService {
             });
             this.status = 'waiting_qr';
             this.isConnecting = false;
+            this.reconnectAttempts = 0; // Código QR emitido con éxito
             console.log('⚡ [WhatsApp] Nuevo código QR generado para vinculación.');
           } catch (qrErr) {
             console.error('Error generando imagen QR:', qrErr);
@@ -265,6 +355,8 @@ class WhatsAppService {
           this.isConnecting = false;
           this.qrDataUrl = null;
           this.qrRaw = null;
+          this.reconnectAttempts = 0; // Conexión exitosa: resetear contador
+          this.circuitBreakerUntil = 0;
 
           const userJid = this.sock?.user?.id || '';
           const phone = userJid.split(':')[0] || userJid.split('@')[0] || '';
@@ -291,44 +383,69 @@ class WhatsAppService {
             this.status = 'disconnected';
             this.userInfo = null;
             this.qrDataUrl = null;
+            this.reconnectAttempts = 0;
             this.clearAuthFiles();
             console.log('🚪 [WhatsApp] Sesión cerrada desde el teléfono celular.');
-          } else if (isRestartRequired) {
-            // Código 515 es estándar en Baileys: exige reinicio inmediato del socket
-            this.status = 'connecting';
-            console.log('🔄 [WhatsApp] Reinicio de flujo requerido (515). Reconectando de inmediato...');
-            this.connect(true).catch(() => {});
-          } else {
-            // Desconexión temporal de red, pérdida de wifi/datos en el teléfono o caída de servidor
-            this.status = 'connecting';
-            console.log('⏳ [WhatsApp] Conexión caída. Reintentando automáticamente en 3 segundos...');
-            this.reconnectTimeout = setTimeout(() => {
-              this.connect(true).catch(() => {});
-            }, 3000);
+            return;
           }
+
+          if (isRestartRequired) {
+            // Código 515 es estándar en Baileys: exige reinicio ordenado de handshake
+            this.status = 'connecting';
+            console.log('🔄 [WhatsApp] Reinicio de handshake requerido (515). Reconectando de forma ordenada...');
+            this.scheduleReconnect(1500);
+            return;
+          }
+
+          // Desconexión temporal de red o servidor de WhatsApp
+          this.reconnectAttempts++;
+
+          if (this.reconnectAttempts > this.maxReconnectAttempts) {
+            const pauseMinutes = 5;
+            this.circuitBreakerUntil = Date.now() + (pauseMinutes * 60 * 1000);
+            this.status = 'disconnected';
+            this.lastError = `Pausa preventiva (${pauseMinutes} min) tras ${this.maxReconnectAttempts} intentos fallidos consecutivos de conexión.`;
+            console.warn(`🛑 [WhatsApp Circuit Breaker] Límite de ${this.maxReconnectAttempts} intentos consecutivos alcanzado. Pausando auto-reconexión por ${pauseMinutes} minutos para proteger el VPS.`);
+            // Programar reactivación al finalizar el enfriamiento
+            this.scheduleReconnect(pauseMinutes * 60 * 1000, true);
+            return;
+          }
+
+          // Backoff exponencial ordenado: 5s, 10s, 20s, 40s, 60s, 60s...
+          const delayMs = Math.min(5000 * Math.pow(2, this.reconnectAttempts - 1), 60000);
+          this.status = 'connecting';
+          console.log(`⏳ [WhatsApp] Conexión caída. Reintento ${this.reconnectAttempts}/${this.maxReconnectAttempts} en ${Math.round(delayMs / 1000)}s...`);
+          this.scheduleReconnect(delayMs);
         }
       });
 
-      // Escuchador de mensajes entrantes (soporta tanto 'notify' como mensajes retrasados 'append')
+      // Escuchador de mensajes entrantes filtrado y de bajo consumo
       this.sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        // Procesar mensajes nuevos o en cola tras recuperar conexión a internet
         for (const m of messages) {
+          // 1. Filtrar mensajes propios o vacíos
           if (!m.message || m.key.fromMe) continue;
 
-          // Evitar procesar mensajes duplicados que reenvía WhatsApp al reconectar
+          // 2. Filtrar mensajes que NO pertenezcan a grupos de WhatsApp (@g.us)
+          const remoteJid = m.key.remoteJid || '';
+          if (!remoteJid.endsWith('@g.us')) continue;
+
+          // 3. Filtrar mensajes de protocolo, reacciones y encuestas sin contenido transaccional
+          if (m.message.protocolMessage || m.message.reactionMessage || m.message.pollUpdateMessage) continue;
+
+          // 4. Evitar procesar mensajes duplicados que reenvía WhatsApp al reconectar
           const msgId = m.key.id;
           if (msgId) {
             if (this.processedMessageIds.has(msgId)) continue;
             this.processedMessageIds.add(msgId);
-            if (this.processedMessageIds.size > 1000) {
+            if (this.processedMessageIds.size > 500) {
               const it = this.processedMessageIds.values();
-              for (let i = 0; i < 200; i++) this.processedMessageIds.delete(it.next().value);
+              for (let i = 0; i < 150; i++) this.processedMessageIds.delete(it.next().value);
             }
           }
 
-          // Si el mensaje es más viejo de 15 minutos (ej. historial muy antiguo), omitir
+          // 5. Si el mensaje es más viejo de 10 minutos (ej. historial antiguo en cola), omitir
           const timestamp = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : Date.now();
-          if (Date.now() - timestamp > 15 * 60 * 1000) {
+          if (Date.now() - timestamp > 10 * 60 * 1000) {
             continue;
           }
 
@@ -345,12 +462,17 @@ class WhatsAppService {
       this.isConnecting = false;
       this.destroySocket();
 
-      // Si hay sesión guardada vinculada, reintentar automáticamente en 5 segundos
+      // Si hay sesión guardada vinculada, programar reintento con backoff
       if (this.hasSavedSession()) {
-        console.log('⏳ [WhatsApp] Reintentando auto-conexión en 5 segundos...');
-        this.reconnectTimeout = setTimeout(() => {
-          this.connect(true).catch(() => {});
-        }, 5000);
+        this.reconnectAttempts++;
+        if (this.reconnectAttempts <= this.maxReconnectAttempts) {
+          const delayMs = Math.min(5000 * Math.pow(2, this.reconnectAttempts - 1), 60000);
+          console.log(`⏳ [WhatsApp] Reintentando auto-conexión en ${Math.round(delayMs / 1000)}s...`);
+          this.scheduleReconnect(delayMs);
+        } else {
+          this.circuitBreakerUntil = Date.now() + (5 * 60 * 1000);
+          this.scheduleReconnect(5 * 60 * 1000, true);
+        }
       }
     }
 
@@ -359,6 +481,13 @@ class WhatsAppService {
 
   async disconnect() {
     try {
+      if (this.reconnectTimeout) {
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = null;
+      }
+      this.circuitBreakerUntil = 0;
+      this.reconnectAttempts = 0;
+
       if (this.sock) {
         await this.sock.logout().catch(() => {});
         this.sock.end(new Error('Logout manual'));
@@ -370,6 +499,7 @@ class WhatsAppService {
       this.status = 'disconnected';
       this.userInfo = null;
       this.qrDataUrl = null;
+      this.qrRaw = null;
       this.isConnecting = false;
       this.clearAuthFiles();
     }
@@ -393,9 +523,18 @@ class WhatsAppService {
     }
   }
 
-  async getParticipatingGroups() {
+  /**
+   * Obtiene la lista de grupos donde participa el bot con caché de 3 minutos
+   * para no saturar al socket con peticiones masivas continuas.
+   */
+  async getParticipatingGroups(forceRefresh = false) {
     if (!this.sock || this.status !== 'connected') {
-      return [];
+      return this.groupsCache || [];
+    }
+
+    const now = Date.now();
+    if (!forceRefresh && this.groupsCache && (now - this.groupsCacheTime < 180000)) {
+      return this.groupsCache;
     }
 
     try {
@@ -408,11 +547,49 @@ class WhatsAppService {
         creation: g.creation || null
       }));
 
-      return list.sort((a, b) => a.name.localeCompare(b.name));
+      this.groupsCache = list.sort((a, b) => a.name.localeCompare(b.name));
+      this.groupsCacheTime = now;
+      return this.groupsCache;
     } catch (err) {
       console.error('Error obteniendo grupos de WhatsApp:', err);
-      return [];
+      return this.groupsCache || [];
     }
+  }
+
+  /**
+   * Invalida la caché en memoria de mapeos de grupos para refresco inmediato
+   */
+  invalidateMappingsCache() {
+    this.activeMappingsCache = null;
+    this.activeMappingsCacheTime = 0;
+  }
+
+  /**
+   * Obtiene el mapeo de un grupo usando caché en memoria (30s) para evitar
+   * ejecutar queries SELECT en PostgreSQL por cada mensaje irrelevante en WhatsApp.
+   */
+  async getActiveGroupMapping(remoteJid) {
+    const now = Date.now();
+    if (!this.activeMappingsCache || (now - this.activeMappingsCacheTime > 30000)) {
+      if (!isPgConnected || !sql) return null;
+      try {
+        const rows = await sql`
+          SELECT * FROM whatsapp_group_mappings
+          WHERE is_active = true
+        `;
+        const map = new Map();
+        for (const r of rows) {
+          map.set(r.group_jid, r);
+        }
+        this.activeMappingsCache = map;
+        this.activeMappingsCacheTime = now;
+      } catch (e) {
+        console.warn('Error refrescando caché de mapeos:', e.message);
+        return null;
+      }
+    }
+
+    return this.activeMappingsCache.get(remoteJid) || null;
   }
 
   /**
@@ -463,18 +640,11 @@ class WhatsAppService {
     }
 
     try {
-      // 1. Verificar si el grupo está mapeado en la base de datos y activo
-      const mappings = await sql`
-        SELECT * FROM whatsapp_group_mappings
-        WHERE group_jid = ${remoteJid} AND is_active = true
-        LIMIT 1
-      `;
-
-      if (mappings.length === 0) {
-        return; // Grupo no monitoreado, ignorar silenciosamente
+      // 1. Verificar si el grupo está mapeado en la base de datos y activo (vía caché rápido)
+      const mapping = await this.getActiveGroupMapping(remoteJid);
+      if (!mapping) {
+        return; // Grupo no monitoreado, ignorar silenciosamente sin queries pesadas
       }
-
-      const mapping = mappings[0];
 
       // 2. Ejecutar el parser inteligente con diccionario y NLP
       const parsed = parseWhatsAppMessage(messageText, {

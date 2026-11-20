@@ -3,16 +3,8 @@ import { parseWhatsAppMessage } from '../services/whatsapp-parser.js';
 import { sql, isPgConnected } from '../config/db.js';
 
 export default async function whatsappRoutes(fastify, options) {
-  // 1. Estado de la conexión
+  // 1. Estado de la conexión (Lectura pura sin efectos secundarios para no saturar al consultar el estado)
   fastify.get('/api/whatsapp/status', async (req, reply) => {
-    // Si el servicio no está activo pero existen credenciales válidas guardadas, auto-reconectar en background
-    if (whatsappService.status === 'disconnected' && whatsappService.hasSavedSession()) {
-      console.log('🔄 [WhatsApp] Sesión guardada detectada. Auto-conectando motor en segundo plano...');
-      whatsappService.connect().catch(err => {
-        console.warn('⚠️ [WhatsApp] Auto-conexión en segundo plano falló:', err.message);
-      });
-    }
-
     return {
       success: true,
       data: whatsappService.getStatus()
@@ -38,9 +30,10 @@ export default async function whatsappRoutes(fastify, options) {
     };
   });
 
-  // 4. Lista de grupos donde participa el bot
+  // 4. Lista de grupos donde participa el bot (soporta caché y recarga forzada)
   fastify.get('/api/whatsapp/groups', async (req, reply) => {
-    const groups = await whatsappService.getParticipatingGroups();
+    const { refresh } = req.query || {};
+    const groups = await whatsappService.getParticipatingGroups(Boolean(refresh));
     return {
       success: true,
       data: groups
@@ -149,6 +142,8 @@ export default async function whatsappRoutes(fastify, options) {
       RETURNING *
     `;
 
+    whatsappService.invalidateMappingsCache();
+
     return {
       success: true,
       data: res[0]
@@ -166,6 +161,8 @@ export default async function whatsappRoutes(fastify, options) {
       DELETE FROM whatsapp_group_mappings
       WHERE id::text = ${id} OR uuid::text = ${id}
     `;
+
+    whatsappService.invalidateMappingsCache();
 
     return { success: true };
   });

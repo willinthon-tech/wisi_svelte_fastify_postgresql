@@ -141,14 +141,16 @@
     ]);
     runTestParse();
 
-    // Polling inteligente: cada 2s al reconectar/esperar QR, y cada 8s cuando ya está conectado
+    // Polling prudente: cada 3s al conectar o esperar QR, y cada 10s si está conectado o desconectado
     pollInterval = setInterval(() => {
       const now = Date.now();
-      if (status.status !== "connected" || (now - lastStatusCheck >= 8000)) {
+      const isFastPoll = (status.status === "connecting" || status.status === "waiting_qr");
+      const intervalLimit = isFastPoll ? 3000 : 10000;
+      if (now - lastStatusCheck >= intervalLimit) {
         lastStatusCheck = now;
         fetchStatus(true);
       }
-    }, 2000);
+    }, 1500);
   });
 
   onDestroy(() => {
@@ -443,16 +445,29 @@
           ⚡ Forzar
         </button>
       {:else}
-        <div class="status-pill disconnected">
-          <span class="status-dot gray"></span>
-          <div>
-            <strong>{status.hasSavedSession ? "SESIÓN GUARDADA" : "DESCONECTADO"}</strong>
-            <span class="sub-label">{status.hasSavedSession ? "Lista para reconectar automáticamente" : "Sin número de WhatsApp asociado"}</span>
+        {#if status.isPaused}
+          <div class="status-pill waiting" style="border-color: #f59e0b;">
+            <span class="status-dot yellow"></span>
+            <div>
+              <strong>PAUSA PREVENTIVA ACTIVA</strong>
+              <span class="sub-label">Enfriamiento de seguridad: reintento en {status.pauseRemainingSec || 60}s</span>
+            </div>
           </div>
-        </div>
-        <button class="btn-connect" on:click={() => handleConnect(false)} disabled={isConnecting}>
-          {isConnecting ? "Conectando..." : (status.hasSavedSession ? "⚡ Reconectar Sesión" : "📲 Generar QR / Vincular")}
-        </button>
+          <button class="btn-secondary" on:click={() => handleConnect(true)} disabled={isConnecting} style="margin-left: 6px; font-size: 12px; padding: 6px 12px;">
+            ⚡ Forzar Reconexión
+          </button>
+        {:else}
+          <div class="status-pill disconnected">
+            <span class="status-dot gray"></span>
+            <div>
+              <strong>{status.hasSavedSession ? "SESIÓN GUARDADA" : "DESCONECTADO"}</strong>
+              <span class="sub-label">{status.hasSavedSession ? "Lista para reconectar automáticamente" : "Sin número de WhatsApp asociado"}</span>
+            </div>
+          </div>
+          <button class="btn-connect" on:click={() => handleConnect(false)} disabled={isConnecting}>
+            {isConnecting ? "Conectando..." : (status.hasSavedSession ? "⚡ Reconectar Sesión" : "📲 Generar QR / Vincular")}
+          </button>
+        {/if}
       {/if}
     </div>
   </div>
