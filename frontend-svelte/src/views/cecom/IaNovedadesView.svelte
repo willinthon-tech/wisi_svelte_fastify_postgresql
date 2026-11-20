@@ -71,11 +71,6 @@
 
     await loadMesasConCamaras();
     await loadNovedades();
-
-    // Auto-refresco en segundo plano cada 5 segundos
-    refreshTimer = setInterval(() => {
-      loadNovedades(false);
-    }, 5000);
   });
 
   onDestroy(() => {

@@ -485,9 +485,6 @@
   }
 
   onMount(async () => {
-    // Iniciar worker de fondo si aún no corre
-    initCecomIaBackgroundWorker();
-
     // Fecha por defecto: hoy en hora local (evita bug de UTC +1 día)
     const today = getLocalDateStr();
     fechaDesde = today;
@@ -506,11 +503,6 @@
 
     await loadMesasConCamaras();
     await loadEvents();
-
-    // Auto-actualizar vista periódicamente cada 4 segundos
-    refreshTimer = setInterval(() => {
-      loadEvents(false);
-    }, 4000);
   });
 
   onDestroy(() => {

@@ -45,27 +45,10 @@ function getFrameSampleHash(str) {
 }
 
 /**
- * Inicializa el worker en segundo plano
+ * Inicializa el worker en segundo plano (DESACTIVADO a petición del usuario para evitar llamadas recurrentes que saturan la red)
  */
 export function initCecomIaBackgroundWorker() {
-  if (isWorkerRunning) return;
-  isWorkerRunning = true;
-
-  console.log('🤖 [CECOM IA] Worker de fondo iniciado. Monitoreando mesas activas y cámaras en LAN...');
-
-  // 1. Carga inicial y sondeo periódico de eventos en base de datos
-  pollRecentEvents();
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = setInterval(() => {
-    pollRecentEvents();
-  }, 5000);
-
-  // 2. Monitoreo en tiempo real de movimiento/juego e IA YOLO (Muestreo ultrarrápido a 600ms)
-  sampleLiveMesasMotion();
-  if (motionInterval) clearInterval(motionInterval);
-  motionInterval = setInterval(() => {
-    sampleLiveMesasMotion();
-  }, 600);
+  stopCecomIaBackgroundWorker();
 }
 
 /**
@@ -81,7 +64,6 @@ export function stopCecomIaBackgroundWorker() {
     motionInterval = null;
   }
   isWorkerRunning = false;
-  console.log('🛑 [CECOM IA] Worker de fondo detenido.');
 }
 
 /**
@@ -260,112 +242,18 @@ function processAiEngineResults(aiData, now) {
 }
 
 /**
- * Muestrea fotogramas y consulta el Motor YOLO de IA
+ * Muestrea fotogramas y consulta el Motor YOLO de IA (Desactivado para eliminar llamadas continuas)
  */
 async function sampleLiveMesasMotion() {
-  const now = Date.now();
-  // Refrescar lista de mesas con cámaras cada 20 segundos
-  if (now - lastMesaFetchTime > 20000 || cachedMesas.length === 0) {
-    try {
-      const res = await getMesasConCamaras();
-      if (res && res.success && Array.isArray(res.data)) {
-        cachedMesas = res.data;
-        lastMesaFetchTime = now;
-        syncMesasWithAiEngine();
-      }
-    } catch (e) {
-      console.debug('[CECOM IA Live] Error al refrescar mesas:', e.message);
-    }
-  }
-
-  if (cachedMesas.length === 0) return;
-
-  // 1. INTENTO PRIMARIO: Consultar el Motor de IA Python Local (YOLO en 127.0.0.1:5005)
-  try {
-    const aiRes = await fetch('http://127.0.0.1:5005/all_mesas', { signal: AbortSignal.timeout(3500) });
-    if (aiRes.ok) {
-      const aiData = await aiRes.json();
-      if (aiData && typeof aiData === 'object' && Object.keys(aiData).length > 0) {
-        processAiEngineResults(aiData, now);
-        return; // Éxito con Motor de IA YOLO local
-      }
-    }
-  } catch (errAi) {
-    // Si no hay motor Python local, procedemos a consultar el Hub central de Wisi
-  }
-
-  // 2. INTENTO SECUNDARIO (MULTI-PC): Consultar el estado sincronizado de IA en el backend central (wisi.space)
-  try {
-    const hubRes = await getCecomIaLiveStatus();
-    if (hubRes && hubRes.success && hubRes.data && Object.keys(hubRes.data).length > 0) {
-      processAiEngineResults(hubRes.data, now);
-      return; // Éxito con datos transmitidos por el backend central
-    }
-  } catch (errHub) {
-    // Backend central no disponible o sin sincronización aún
-  }
-
-  if (!isTauriWindows()) return;
-
-  // 3. FALLBACK TERCIARIO: En caso de no haber conexión con el motor, mantener estado en espera sin falsos positivos
-  for (const mesa of cachedMesas) {
-    const mesaUuid = mesa.mesa_uuid || mesa.uuid || mesa.id;
-    const canal = parseInt(mesa.numero_canal);
-
-    mesasLiveStatusStore.update(map => {
-      const curr = map[mesaUuid];
-      if (curr && curr.image_b64) return map; // Preservar si ya tiene imagen IA
-      return {
-        ...map,
-        [mesaUuid]: {
-          mesa_uuid: mesaUuid,
-          mesa_nombre: mesa.mesa_nombre || 'Mesa',
-          juego_nombre: mesa.juego_nombre || 'Juego',
-          ultimo_evento: 'SIN JUGADA (EN ESPERA)',
-          descripcion: `Mesa despejada (Canal ${canal || 1}) - En espera de jugada`,
-          nivel_alerta: 'INFO',
-          es_novedad: false,
-          is_moving: false,
-          ai_active: true,
-          hora: new Date().toLocaleTimeString()
-        }
-      };
-    });
-  }
+  return;
 }
 
 /**
- * Consulta eventos recientes en segundo plano desde la base de datos
+ * Consulta eventos recientes en segundo plano desde la base de datos (Desactivado para eliminar llamadas continuas)
  */
 async function pollRecentEvents() {
-  try {
-    const res = await getCecomIaEventos({ limit: 50 });
-    if (res && res.success && Array.isArray(res.data)) {
-      cecomIaLiveEventsStore.set(res.data);
-
-      // Actualizar mapa de badges en vivo de mesas solo si la mesa no está actualmente en movimiento activo
-      mesasLiveStatusStore.update(currentMap => {
-        const statusMap = { ...currentMap };
-        for (const ev of res.data) {
-          const mId = ev.mesa_uuid || ev.mesa_id;
-          if (!mId) continue;
-          if (!statusMap[mId] || !statusMap[mId].image_b64) {
-            statusMap[mId] = {
-              mesa_uuid: mId,
-              mesa_nombre: ev.mesa_nombre || statusMap[mId]?.mesa_nombre || 'Mesa',
-              juego_nombre: ev.juego_nombre || statusMap[mId]?.juego_nombre || 'Juego',
-              ultimo_evento: ev.tipo_evento,
-              descripcion: ev.descripcion,
-              nivel_alerta: ev.nivel_alerta,
-              es_novedad: ev.es_novedad,
-              is_moving: false,
-              hora: new Date(ev.created_at).toLocaleTimeString()
-            };
-          }
-        }
-        return statusMap;
-      });
-    }
+  return;
+}
   } catch (err) {
     console.debug('[CECOM IA Background] Error al sincronizar eventos:', err.message);
   }

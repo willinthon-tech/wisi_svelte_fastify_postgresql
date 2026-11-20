@@ -44,7 +44,6 @@
   import IaTiempoRealView from "./views/cecom/IaTiempoRealView.svelte";
   import IaNovedadesView from "./views/cecom/IaNovedadesView.svelte";
   import CecomIaMesasView from "./views/cecom/CecomIaMesasView.svelte";
-  import { initCecomIaBackgroundWorker } from "./services/cecomIaBackground.service.js";
 
   // Import RRHH Views
   import MarcajesView, { persistentMarcajesFilters, forceReloadMarcajesStore } from "./views/rrhh/MarcajesView.svelte";
@@ -577,7 +576,6 @@
 
   onMount(async () => {
     initRouter();
-    initCecomIaBackgroundWorker();
     await checkAppVersionOnStartup();
     await loadUserSession();
     await refreshData();
