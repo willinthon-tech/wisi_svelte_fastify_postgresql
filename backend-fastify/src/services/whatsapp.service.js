@@ -205,8 +205,26 @@ class WhatsAppService {
     }, delayMs);
   }
 
+  async ensureDbSchema() {
+    if (!isPgConnected || !sql) return;
+    try {
+      await sql`
+        ALTER TABLE public.whatsapp_logs ADD COLUMN IF NOT EXISTS message_id VARCHAR(100);
+      `;
+      await sql`
+        ALTER TABLE public.whatsapp_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_wa_logs_msg_id ON public.whatsapp_logs(message_id);
+      `;
+    } catch (e) {
+      console.warn('Advertencia asegurando esquema de whatsapp_logs:', e.message);
+    }
+  }
+
   async init() {
     console.log('📱 [WhatsApp] Inicializando servicio...');
+    await this.ensureDbSchema();
     const hasSession = this.hasSavedSession();
     const currentDir = resolveAuthDir();
     console.log(`📁 [WhatsApp] Directorio auth: "${currentDir}" (Sesión guardada detectada: ${hasSession})`);
@@ -429,10 +447,34 @@ class WhatsAppService {
           const remoteJid = m.key.remoteJid || '';
           if (!remoteJid.endsWith('@g.us')) continue;
 
-          // 3. Filtrar mensajes de protocolo, reacciones y encuestas sin contenido transaccional
+          // 3. Detectar mensajes EDITADOS en WhatsApp
+          // En Baileys, una edición llega con protocolMessage tipo 14 (MESSAGE_EDIT)
+          const isProtocolEdit = (m.message?.protocolMessage?.type === 14 || m.message?.protocolMessage?.type === 'MESSAGE_EDIT') &&
+                                 Boolean(m.message?.protocolMessage?.editedMessage);
+          if (isProtocolEdit) {
+            const targetKey = {
+              ...m.key,
+              id: m.message.protocolMessage.key?.id || m.key.id
+            };
+            await this.handleEditedMessage(m, targetKey, m.message.protocolMessage.editedMessage);
+            continue;
+          }
+
+          if (m.message?.editedMessage?.message) {
+            const innerProtocol = m.message.editedMessage.message?.protocolMessage;
+            const targetKey = {
+              ...m.key,
+              id: innerProtocol?.key?.id || m.key.id
+            };
+            const innerEdited = innerProtocol?.editedMessage || m.message.editedMessage.message;
+            await this.handleEditedMessage(m, targetKey, innerEdited);
+            continue;
+          }
+
+          // 4. Filtrar mensajes de protocolo no transaccionales, reacciones y encuestas
           if (m.message.protocolMessage || m.message.reactionMessage || m.message.pollUpdateMessage) continue;
 
-          // 4. Evitar procesar mensajes duplicados que reenvía WhatsApp al reconectar
+          // 5. Evitar procesar mensajes duplicados que reenvía WhatsApp al reconectar
           const msgId = m.key.id;
           if (msgId) {
             if (this.processedMessageIds.has(msgId)) continue;
@@ -443,13 +485,27 @@ class WhatsAppService {
             }
           }
 
-          // 5. Si el mensaje es más viejo de 10 minutos (ej. historial antiguo en cola), omitir
+          // 6. Si el mensaje es más viejo de 10 minutos (ej. historial antiguo en cola), omitir
           const timestamp = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : Date.now();
           if (Date.now() - timestamp > 10 * 60 * 1000) {
             continue;
           }
 
           await this.handleIncomingMessage(m);
+        }
+      });
+
+      // Escuchador de actualizaciones de mensajes para ediciones emitidas por Baileys
+      this.sock.ev.on('messages.update', async (updates) => {
+        for (const u of updates) {
+          if (!u.key || u.key.fromMe) continue;
+          const remoteJid = u.key.remoteJid || '';
+          if (!remoteJid.endsWith('@g.us')) continue;
+
+          const editedMsg = u.update?.message?.editedMessage?.message;
+          if (editedMsg) {
+            await this.handleEditedMessage(u, u.key, editedMsg);
+          }
         }
       });
 
@@ -689,10 +745,10 @@ class WhatsAppService {
         console.warn(`⚠️ No hay libro activo para la sala ${mapping.sala_uuid}`);
         await sql`
           INSERT INTO whatsapp_logs (
-            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message
+            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message, message_id
           ) VALUES (
             ${remoteJid}, ${mapping.group_name}, ${senderJid}, ${senderName}, ${messageText}, 
-            ${sql.json(parsed)}, 'sin_libro_activo', 'No hay ningún libro operativo abierto hoy para esta sala'
+            ${sql.json(parsed)}, 'sin_libro_activo', 'No hay ningún libro operativo abierto hoy para esta sala', ${m.key?.id || null}
           )
         `;
 
@@ -731,154 +787,17 @@ class WhatsAppService {
 
       // 4. Inserción según módulo
       if (parsed.modulo === 'control_clientes') {
-        // A) Buscar o resolver Cliente asociado a la SALA del grupo de WhatsApp (con matching inteligente)
-        let clienteUuid = null;
-        let foundClient = null;
+        const { clienteUuid, foundClient } = await this.resolveCliente(parsed.cliente, mapping.sala_uuid);
+        const { metodoPagoUuid, metodoAsignadoNombre, metodoFallbackUsado } = await this.resolveMetodoPago(parsed.metodo);
 
-        const allClients = await sql`
-          SELECT uuid, nombre 
-          FROM clientes 
-          WHERE ${mapping.sala_uuid ? sql`(sala_uuid = ${mapping.sala_uuid}::uuid OR sala_uuid IS NULL)` : sql`true`}
-            AND COALESCE(is_deleted, false) = false
-        `;
-
-        if (parsed.cliente && parsed.cliente.toLowerCase() !== 'general' && allClients.length > 0) {
-          const normTarget = normalizeText(parsed.cliente);
-
-          // 1. Coincidencia exacta normalizada
-          foundClient = allClients.find(c => normalizeText(c.nombre) === normTarget);
-
-          // 2. Coincidencia si el nombre empieza con el término (ej. "Hassan" -> "Hassan Hussenin Ghazale")
-          if (!foundClient) {
-            foundClient = allClients.find(c => normalizeText(c.nombre).startsWith(normTarget + ' '));
-          }
-
-          // 3. Coincidencia por palabra individual (ej. apellido "Ghazale" o "Coitez")
-          if (!foundClient) {
-            foundClient = allClients.find(c => {
-              const words = normalizeText(c.nombre).split(/\s+/);
-              return words.includes(normTarget);
-            });
-          }
-
-          // 4. Coincidencia substring
-          if (!foundClient) {
-            foundClient = allClients.find(c => normalizeText(c.nombre).includes(normTarget) || normTarget.includes(normalizeText(c.nombre)));
-          }
-
-          if (foundClient) {
-            clienteUuid = foundClient.uuid;
-          } else {
-            // Crear nuevo cliente asignado a la sala del grupo
-            const newClient = await sql`
-              INSERT INTO clientes (nombre, sala_uuid)
-              VALUES (${parsed.cliente.trim()}, ${mapping.sala_uuid ? sql`${mapping.sala_uuid}::uuid` : sql`NULL`})
-              RETURNING uuid
-            `;
-            clienteUuid = newClient[0]?.uuid;
-          }
-        } else {
-          // Cliente General
-          foundClient = allClients.find(c => normalizeText(c.nombre) === 'general');
-          if (foundClient) {
-            clienteUuid = foundClient.uuid;
-          } else {
-            // Buscar o crear cliente General para esta sala
-            const newGenClient = await sql`
-              INSERT INTO clientes (nombre, sala_uuid)
-              VALUES ('General', ${mapping.sala_uuid ? sql`${mapping.sala_uuid}::uuid` : sql`NULL`})
-              RETURNING uuid
-            `;
-            clienteUuid = newGenClient[0]?.uuid;
-          }
-        }
-
-        // B) Buscar método de pago por coincidencia inteligente (Diccionario & NLP)
-        let metodoPagoUuid = null;
-        let metodoFallbackUsado = false;
-        let metodoAsignadoNombre = 'General';
-
-        const allMetodos = await sql`
-          SELECT uuid, nombre FROM metodos_pago 
-          WHERE COALESCE(is_deleted, false) = false
-        `;
-
-        let foundMetodo = null;
-        if (parsed.metodo && allMetodos.length > 0) {
-          const normMetodo = normalizeText(parsed.metodo);
-
-          // 1. Coincidencia exacta normalizada
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === normMetodo);
-
-          // 2. Coincidencia por alias conocidos del diccionario
-          if (!foundMetodo) {
-            if (normMetodo === 'pdv' || normMetodo === 'punto') {
-              foundMetodo = allMetodos.find(m => {
-                const n = normalizeText(m.nombre);
-                return n === 'pdv' || n === 'punto' || n.includes('punto') || n === 'pos' || n.includes('debito') || n.includes('tarjeta');
-              });
-            } else if (normMetodo.includes('pago movil') || normMetodo.includes('pago mobil') || normMetodo === 'pm') {
-              foundMetodo = allMetodos.find(m => {
-                const n = normalizeText(m.nombre);
-                return n.includes('movil') || n.includes('mobil') || n === 'pm';
-              });
-            } else if (normMetodo === 'usdt') {
-              foundMetodo = allMetodos.find(m => {
-                const n = normalizeText(m.nombre);
-                return n === 'usdt' || n.includes('binance') || n.includes('crypto') || n.includes('tether');
-              });
-            } else if (normMetodo === 'cash') {
-              foundMetodo = allMetodos.find(m => {
-                const n = normalizeText(m.nombre);
-                return n === 'cash' || n.includes('efectivo') || n.includes('dolar') || n === 'usd';
-              });
-            } else if (normMetodo === 'zelle') {
-              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zelle') || normalizeText(m.nombre).includes('zele'));
-            } else if (normMetodo === 'transferencia') {
-              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('transf') || normalizeText(m.nombre).includes('banco'));
-            } else if (normMetodo === 'zinli') {
-              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zinli'));
-            } else if (normMetodo === 'wally') {
-              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('wally'));
-            } else if (normMetodo === 'paypal') {
-              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('paypal'));
-            } else if (normMetodo === 'general' || normMetodo === 'otros') {
-              foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('general') || normalizeText(m.nombre).includes('otro'));
-            }
-          }
-        }
-
-        // 3. Fallback Genérico: si no existe en BD (ej. "Zinli") o no se especificó método
-        if (!foundMetodo && allMetodos.length > 0) {
-          // Prioridad 1: Buscar método "General"
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'general');
-          // Prioridad 2: Buscar método "Cash" / "Efectivo"
-          if (!foundMetodo) {
-            foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'cash' || normalizeText(m.nombre).includes('efectivo'));
-          }
-          // Prioridad 3: Primer método de la lista
-          if (!foundMetodo) {
-            foundMetodo = allMetodos[0];
-          }
-          metodoFallbackUsado = true;
-        }
-
-        if (foundMetodo) {
-          metodoPagoUuid = foundMetodo.uuid;
-          metodoAsignadoNombre = foundMetodo.nombre;
-        }
-
-        // C) Evaluación de coincidencias para definir el chulito (Verde ✅ vs Azul ☑️)
         let esCoincidenciaExacta = true;
         let observaciones = [];
 
-        // 1. Verificación de Cliente: ¿existía ya en la base de datos de esta sala?
         if (!foundClient) {
           esCoincidenciaExacta = false;
           observaciones.push(parsed.cliente === 'General' ? 'Cliente no especificado (asignado General)' : `Cliente nuevo (${parsed.cliente})`);
         }
 
-        // 2. Verificación de Método de Pago: ¿fue explícito y coincide con la BD, o requirió genérico?
         if (!parsed.explicit?.metodo) {
           esCoincidenciaExacta = false;
           observaciones.push(`Método de pago no especificado (asignado ${metodoAsignadoNombre})`);
@@ -891,9 +810,7 @@ class WhatsAppService {
         const checkEmoji = esCoincidenciaExacta ? '✅' : '☑️';
         const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
 
-        // D) Hora de la transacción (Hora de Caracas, 00:00 a 23:59 garantizado)
         const horaStr = formatCaracasTime(parsed.hora || m.messageTimestamp);
-
         const metodoExtraNota = (metodoFallbackUsado && parsed.metodo && normalizeText(parsed.metodo) !== normalizeText(metodoAsignadoNombre))
           ? ` [Método: ${parsed.metodo}]`
           : '';
@@ -902,7 +819,6 @@ class WhatsAppService {
           ? (obsTexto ? `${parsed.nota} [Verificar: ${obsTexto}]${metodoExtraNota}` : `${parsed.nota} (vía WhatsApp)${metodoExtraNota}`)
           : (obsTexto ? `Vía WhatsApp por ${senderName} [Verificar: ${obsTexto}]${metodoExtraNota}` : `Vía WhatsApp por ${senderName}${metodoExtraNota}`);
 
-        // E) Insertar en libro_control_clientes
         const insertRes = await sql`
           INSERT INTO libro_control_clientes (
             libro_uuid,
@@ -928,150 +844,29 @@ class WhatsAppService {
 
         insertedUuid = insertRes[0]?.uuid;
 
-        // Registrar log
+        // Registrar log con message_id para asociar futuras ediciones
         await sql`
           INSERT INTO whatsapp_logs (
-            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message, inserted_record_uuid
+            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message, inserted_record_uuid, message_id
           ) VALUES (
             ${remoteJid}, ${mapping.group_name}, ${senderJid}, ${senderName}, ${messageText}, 
-            ${sql.json(parsed)}, ${logStatus}, ${obsTexto}, ${insertedUuid}
+            ${sql.json(parsed)}, ${logStatus}, ${obsTexto}, ${insertedUuid}, ${m.key?.id || null}
           )
         `;
 
         console.log(`${checkEmoji} [WhatsApp] Operación registrada en Control de Clientes [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        // F) Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación) con reintentos
         if (mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, m.key, checkEmoji);
         }
 
       } else if (parsed.modulo === 'aportes_maquinas') {
-        // Módulo de aportes y devoluciones en máquinas
-        // A) Buscar o resolver Rango con matching inteligente (Diccionario & NLP)
-        let rangoUuid = null;
-        let rangoNombre = parsed.rango || 'General';
+        const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango);
+        const { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
 
-        const allRangos = await sql`
-          SELECT uuid, nombre FROM rangos 
-          WHERE COALESCE(is_deleted, false) = false
-        `;
-
-        let foundRango = null;
-        if (parsed.rango && allRangos.length > 0) {
-          const normTarget = normalizeText(parsed.rango);
-
-          // 1. Coincidencia exacta normalizada
-          foundRango = allRangos.find(r => normalizeText(r.nombre) === normTarget);
-
-          // 2. Coincidencia por número de rango (ej. "Rango 1", "Rango 2"...)
-          if (!foundRango) {
-            const numMatch = normTarget.match(/\b([1-9])\b/);
-            if (numMatch) {
-              const targetNum = numMatch[1];
-              foundRango = allRangos.find(r => {
-                const rn = normalizeText(r.nombre);
-                return rn.endsWith(targetNum) || rn.includes(`rango ${targetNum}`) || rn.includes(`rg ${targetNum}`) || rn.includes(`rg${targetNum}`);
-              });
-            }
-          }
-
-          // 3. Coincidencia por fumadores, ruleta o sin rango
-          if (!foundRango) {
-            if (normTarget.includes('fuma')) {
-              foundRango = allRangos.find(r => normalizeText(r.nombre).includes('fuma'));
-            } else if (normTarget.includes('ruleta')) {
-              foundRango = allRangos.find(r => normalizeText(r.nombre).includes('ruleta'));
-            } else if (normTarget.includes('sin rango') || normTarget === 'sr') {
-              foundRango = allRangos.find(r => normalizeText(r.nombre).includes('sin rango') || normalizeText(r.nombre).includes('sinrango'));
-            }
-          }
-
-          // 4. Coincidencia substring
-          if (!foundRango) {
-            foundRango = allRangos.find(r => normalizeText(r.nombre).includes(normTarget) || normTarget.includes(normalizeText(r.nombre)));
-          }
-
-          if (foundRango) {
-            rangoUuid = foundRango.uuid;
-            rangoNombre = foundRango.nombre;
-          }
-        }
-
-        // Si no encontró rango o no se especificó, NO CREAR: usar el valor genérico "General"
-        let rangoFallbackUsado = false;
-        if (!rangoUuid && allRangos.length > 0) {
-          const genRango = allRangos.find(r => normalizeText(r.nombre) === 'general') ||
-                           allRangos.find(r => normalizeText(r.nombre) === 'sin rango') ||
-                           allRangos[0];
-          if (genRango) {
-            rangoUuid = genRango.uuid;
-            rangoNombre = genRango.nombre;
-            rangoFallbackUsado = true;
-          }
-        }
-
-        // B) Buscar o resolver Empleado / Operador de la SALA con matching inteligente
-        let empleadoUuid = null;
-        let empleadoNombre = parsed.operador || 'Operador General';
-        let foundEmp = null;
-        let empFallbackUsado = false;
-
-        const allEmps = await sql`
-          SELECT e.uuid, e.nombre, e.cedula, d.sala_uuid 
-          FROM empleados e
-          LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
-          LEFT JOIN areas a ON c.area_uuid = a.uuid
-          LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
-          WHERE COALESCE(e.activo, true) = true 
-            AND COALESCE(e.is_deleted, false) = false
-            ${mapping.sala_uuid ? sql`AND (d.sala_uuid = ${mapping.sala_uuid}::uuid OR d.sala_uuid IS NULL)` : sql``}
-        `;
-
-        if (parsed.operador && parsed.operador.toLowerCase() !== 'general' && allEmps.length > 0) {
-          const normTarget = normalizeText(parsed.operador);
-
-          // 1. Coincidencia exacta normalizada
-          foundEmp = allEmps.find(e => normalizeText(e.nombre) === normTarget);
-
-          // 2. Coincidencia si el nombre empieza con el término (ej. "Manuel" -> "Manuel Barrientos")
-          if (!foundEmp) {
-            foundEmp = allEmps.find(e => normalizeText(e.nombre).startsWith(normTarget + ' '));
-          }
-
-          // 3. Coincidencia por palabra individual (ej. "Jonas" en "Bonalde Jonas", o "Cesar" en "Cesar Mendoza")
-          if (!foundEmp) {
-            foundEmp = allEmps.find(e => {
-              const words = normalizeText(e.nombre).split(/\s+/);
-              return words.includes(normTarget);
-            });
-          }
-
-          // 4. Coincidencia substring
-          if (!foundEmp) {
-            foundEmp = allEmps.find(e => normalizeText(e.nombre).includes(normTarget) || normTarget.includes(normalizeText(e.nombre)));
-          }
-
-          if (foundEmp) {
-            empleadoUuid = foundEmp.uuid;
-            empleadoNombre = foundEmp.nombre;
-          }
-        }
-
-        // Si el operador no existe en la sala o no se especificó, NO CREAR: asignar al valor genérico "General"
-        if (!empleadoUuid && allEmps.length > 0) {
-          const genEmp = allEmps.find(e => normalizeText(e.nombre) === 'general') || allEmps[0];
-          if (genEmp) {
-            empleadoUuid = genEmp.uuid;
-            empleadoNombre = genEmp.nombre;
-            empFallbackUsado = true;
-          }
-        }
-
-        // C) Evaluación de coincidencias para definir el chulito (Verde ✅ vs Azul ☑️)
         let esCoincidenciaExacta = true;
         let observaciones = [];
 
-        // 1. Verificación de Rango: ¿existía ya en la BD o requirió fallback genérico?
         if (!parsed.explicit?.rango) {
           esCoincidenciaExacta = false;
           observaciones.push('Rango no especificado (asignado a General)');
@@ -1080,7 +875,6 @@ class WhatsAppService {
           observaciones.push(`Rango "${parsed.rango}" no registrado en BD (asignado a ${rangoNombre})`);
         }
 
-        // 2. Verificación de Operador: ¿coincidió con un empleado activo de la sala o requirió fallback?
         if (!parsed.explicit?.operador) {
           esCoincidenciaExacta = false;
           observaciones.push('Operador no especificado (asignado a General)');
@@ -1093,10 +887,8 @@ class WhatsAppService {
         const checkEmoji = esCoincidenciaExacta ? '✅' : '☑️';
         const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
 
-        // D) Hora de la transacción (Hora de Caracas, 00:00 a 23:59 garantizado)
         const horaStr = formatCaracasTime(parsed.hora || m.messageTimestamp);
 
-        // D) Insertar en libro_aportes
         const insertRes = await sql`
           INSERT INTO libro_aportes (
             libro_uuid,
@@ -1122,16 +914,15 @@ class WhatsAppService {
 
         await sql`
           INSERT INTO whatsapp_logs (
-            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message, inserted_record_uuid
+            group_jid, group_name, sender_jid, sender_name, raw_message, parsed_data, status, error_message, inserted_record_uuid, message_id
           ) VALUES (
             ${remoteJid}, ${mapping.group_name}, ${senderJid}, ${senderName}, ${messageText}, 
-            ${sql.json(parsed)}, ${logStatus}, ${obsTexto}, ${insertedUuid}
+            ${sql.json(parsed)}, ${logStatus}, ${obsTexto}, ${insertedUuid}, ${m.key?.id || null}
           )
         `;
 
         console.log(`${checkEmoji} [WhatsApp] ${parsed.tipo} registrado en Aportes [${logStatus}]: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre} ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        // Confirmación en WhatsApp: Reaccionar con el check (Verde ✅ si todo coincide, Azul ☑️ si requiere verificación) con reintentos
         if (mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, m.key, checkEmoji);
         }
@@ -1144,13 +935,447 @@ class WhatsAppService {
         const errSenderName = m?.pushName || 'Usuario WhatsApp';
         await sql`
           INSERT INTO whatsapp_logs (
-            group_jid, group_name, sender_jid, sender_name, raw_message, status, error_message
+            group_jid, group_name, sender_jid, sender_name, raw_message, status, error_message, message_id
           ) VALUES (
-            ${remoteJid}, ${mapping?.group_name || 'Grupo WhatsApp'}, ${errSenderJid}, ${errSenderName}, ${messageText}, 'error_interno', ${err.message}
+            ${remoteJid}, ${mapping?.group_name || 'Grupo WhatsApp'}, ${errSenderJid}, ${errSenderName}, ${messageText}, 'error_interno', ${err.message}, ${m?.key?.id || null}
           )
         `;
       } catch (e) {}
     }
+  }
+
+  /**
+   * Manejador de Mensajes EDITADOS en WhatsApp:
+   * Si un cajero o usuario corrige un monto, nombre o formato en WhatsApp,
+   * actualiza en tiempo real la fila correspondiente en libro_control_clientes o libro_aportes.
+   */
+  async handleEditedMessage(rawEvent, targetKey, editedMessageObj) {
+    const targetMsgId = targetKey?.id;
+    const remoteJid = targetKey?.remoteJid || rawEvent.key?.remoteJid || '';
+    if (!targetMsgId || !remoteJid.endsWith('@g.us')) return;
+
+    const messageText = (
+      editedMessageObj?.conversation ||
+      editedMessageObj?.extendedTextMessage?.text ||
+      ''
+    ).trim();
+
+    if (!messageText) return;
+
+    if (!isPgConnected || !sql) {
+      console.warn('PostgreSQL no disponible para procesar mensaje editado');
+      return;
+    }
+
+    try {
+      const mapping = await this.getActiveGroupMapping(remoteJid);
+      if (!mapping) return;
+
+      const senderJid = targetKey.participant || rawEvent.key?.participant || remoteJid;
+      const senderName = rawEvent.pushName || 'Usuario WhatsApp';
+
+      console.log(`✏️ [WhatsApp Edit] [${mapping.group_name}] Mensaje editado detectado (msgId=${targetMsgId}): "${messageText}"`);
+
+      // Buscar si el mensaje original tiene log registrado
+      const prevLogs = await sql`
+        SELECT * FROM whatsapp_logs
+        WHERE message_id = ${targetMsgId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+
+      // Si no existe log previo para ese ID (ej: mensaje antes de la migración o previo a la captura):
+      if (prevLogs.length === 0) {
+        console.log(`ℹ️ [WhatsApp Edit] No se encontró log previo para ${targetMsgId}. Procesando como transacción directa...`);
+        const syntheticMsg = {
+          key: targetKey,
+          message: editedMessageObj,
+          messageTimestamp: rawEvent.messageTimestamp || Math.floor(Date.now() / 1000),
+          pushName: senderName
+        };
+        await this.handleIncomingMessage(syntheticMsg);
+        return;
+      }
+
+      const prevLog = prevLogs[0];
+      const parsed = parseWhatsAppMessage(messageText, {
+        caja_default: 'Mesas',
+        modulo_destino: 'control_clientes'
+      });
+
+      if (!parsed || !parsed.success) {
+        console.warn(`⚠️ [WhatsApp Edit] El texto editado "${messageText}" no fue reconocido como transacción válida.`);
+        await sql`
+          UPDATE whatsapp_logs
+          SET raw_message = ${messageText},
+              status = 'editado_invalido',
+              error_message = 'El mensaje fue editado pero el nuevo formato no fue reconocido',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${prevLog.id}
+        `;
+        if (mapping.auto_reply && this.sock) {
+          await this.sendReactionWithRetry(remoteJid, targetKey, '⚠️');
+        }
+        return;
+      }
+
+      // Si el log previo no tenía registro insertado (ej. falló antes por falta de libro o formato inválido):
+      if (!prevLog.inserted_record_uuid) {
+        console.log(`ℹ️ [WhatsApp Edit] Log previo no tenía registro insertado. Reintentando registro completo...`);
+        const syntheticMsg = {
+          key: targetKey,
+          message: editedMessageObj,
+          messageTimestamp: rawEvent.messageTimestamp || Math.floor(Date.now() / 1000),
+          pushName: senderName
+        };
+        await this.handleIncomingMessage(syntheticMsg);
+        return;
+      }
+
+      // Si ya existía registro en BD, ACTUALIZARLO directamente
+      let esCoincidenciaExacta = true;
+      let observaciones = [];
+
+      if (parsed.modulo === 'control_clientes') {
+        const { clienteUuid, foundClient } = await this.resolveCliente(parsed.cliente, mapping.sala_uuid);
+        const { metodoPagoUuid, metodoAsignadoNombre, metodoFallbackUsado } = await this.resolveMetodoPago(parsed.metodo);
+
+        if (!foundClient) {
+          esCoincidenciaExacta = false;
+          observaciones.push(parsed.cliente === 'General' ? 'Cliente no especificado (asignado General)' : `Cliente nuevo (${parsed.cliente})`);
+        }
+
+        if (!parsed.explicit?.metodo) {
+          esCoincidenciaExacta = false;
+          observaciones.push(`Método no especificado (asignado ${metodoAsignadoNombre})`);
+        } else if (metodoFallbackUsado && parsed.metodo && normalizeText(parsed.metodo) !== normalizeText(metodoAsignadoNombre)) {
+          esCoincidenciaExacta = false;
+          observaciones.push(`Método "${parsed.metodo}" no registrado (asignado ${metodoAsignadoNombre})`);
+        }
+
+        const logStatus = esCoincidenciaExacta ? 'procesado_editado' : 'procesado_por_verificar_editado';
+        const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
+        const horaStr = formatCaracasTime(parsed.hora || prevLog.created_at);
+
+        const metodoExtraNota = (metodoFallbackUsado && parsed.metodo && normalizeText(parsed.metodo) !== normalizeText(metodoAsignadoNombre))
+          ? ` [Método: ${parsed.metodo}]`
+          : '';
+
+        const notaStr = parsed.nota 
+          ? (obsTexto ? `${parsed.nota} [Editado vía WhatsApp: ${obsTexto}]${metodoExtraNota}` : `${parsed.nota} (Editado vía WhatsApp)${metodoExtraNota}`)
+          : (obsTexto ? `Editado vía WhatsApp por ${senderName} [Verificar: ${obsTexto}]${metodoExtraNota}` : `Editado vía WhatsApp por ${senderName}${metodoExtraNota}`);
+
+        await sql`
+          UPDATE libro_control_clientes
+          SET tipo = ${parsed.tipo},
+              monto = ${parsed.monto},
+              cliente_uuid = ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
+              metodo_pago_uuid = ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
+              hora = ${horaStr},
+              nota = ${notaStr}
+          WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
+        `;
+
+        await sql`
+          UPDATE whatsapp_logs
+          SET raw_message = ${messageText},
+              parsed_data = ${sql.json(parsed)},
+              status = ${logStatus},
+              error_message = ${obsTexto},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${prevLog.id}
+        `;
+
+        console.log(`✏️ [WhatsApp Edit] Control de Clientes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente}`);
+        if (mapping.auto_reply && this.sock) {
+          await this.sendReactionWithRetry(remoteJid, targetKey, '✏️');
+        }
+
+      } else if (parsed.modulo === 'aportes_maquinas') {
+        const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango);
+        const { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
+
+        if (!parsed.explicit?.rango) {
+          esCoincidenciaExacta = false;
+          observaciones.push('Rango no especificado (asignado a General)');
+        } else if (rangoFallbackUsado || !foundRango) {
+          esCoincidenciaExacta = false;
+          observaciones.push(`Rango "${parsed.rango}" no registrado (asignado a ${rangoNombre})`);
+        }
+
+        if (!parsed.explicit?.operador) {
+          esCoincidenciaExacta = false;
+          observaciones.push('Operador no especificado (asignado a General)');
+        } else if (empFallbackUsado || !foundEmp) {
+          esCoincidenciaExacta = false;
+          observaciones.push(parsed.operador === 'General' ? 'Operador General' : `Operador "${parsed.operador}" no registrado (asignado a ${empleadoNombre})`);
+        }
+
+        const logStatus = esCoincidenciaExacta ? 'procesado_editado' : 'procesado_por_verificar_editado';
+        const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
+        const horaStr = formatCaracasTime(parsed.hora || prevLog.created_at);
+
+        await sql`
+          UPDATE libro_aportes
+          SET tipo = ${parsed.tipo},
+              monto = ${parsed.monto},
+              empleado_uuid = ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
+              rango_uuid = ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
+              hora = ${horaStr}
+          WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
+        `;
+
+        await sql`
+          UPDATE whatsapp_logs
+          SET raw_message = ${messageText},
+              parsed_data = ${sql.json(parsed)},
+              status = ${logStatus},
+              error_message = ${obsTexto},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${prevLog.id}
+        `;
+
+        console.log(`✏️ [WhatsApp Edit] Aportes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
+        if (mapping.auto_reply && this.sock) {
+          await this.sendReactionWithRetry(remoteJid, targetKey, '✏️');
+        }
+      }
+
+    } catch (err) {
+      console.error('❌ Error procesando mensaje editado de WhatsApp:', err);
+    }
+  }
+
+  async resolveCliente(parsedCliente, salaUuid) {
+    let clienteUuid = null;
+    let foundClient = null;
+
+    const allClients = await sql`
+      SELECT uuid, nombre 
+      FROM clientes 
+      WHERE ${salaUuid ? sql`(sala_uuid = ${salaUuid}::uuid OR sala_uuid IS NULL)` : sql`true`}
+        AND COALESCE(is_deleted, false) = false
+    `;
+
+    if (parsedCliente && parsedCliente.toLowerCase() !== 'general' && allClients.length > 0) {
+      const normTarget = normalizeText(parsedCliente);
+      foundClient = allClients.find(c => normalizeText(c.nombre) === normTarget);
+      if (!foundClient) {
+        foundClient = allClients.find(c => normalizeText(c.nombre).startsWith(normTarget + ' '));
+      }
+      if (!foundClient) {
+        foundClient = allClients.find(c => {
+          const words = normalizeText(c.nombre).split(/\s+/);
+          return words.includes(normTarget);
+        });
+      }
+      if (!foundClient) {
+        foundClient = allClients.find(c => normalizeText(c.nombre).includes(normTarget) || normTarget.includes(normalizeText(c.nombre)));
+      }
+
+      if (foundClient) {
+        clienteUuid = foundClient.uuid;
+      } else {
+        const newClient = await sql`
+          INSERT INTO clientes (nombre, sala_uuid)
+          VALUES (${parsedCliente.trim()}, ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`})
+          RETURNING uuid
+        `;
+        clienteUuid = newClient[0]?.uuid;
+      }
+    } else {
+      foundClient = allClients.find(c => normalizeText(c.nombre) === 'general');
+      if (foundClient) {
+        clienteUuid = foundClient.uuid;
+      } else {
+        const newGenClient = await sql`
+          INSERT INTO clientes (nombre, sala_uuid)
+          VALUES ('General', ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`})
+          RETURNING uuid
+        `;
+        clienteUuid = newGenClient[0]?.uuid;
+      }
+    }
+
+    return { clienteUuid, foundClient };
+  }
+
+  async resolveMetodoPago(parsedMetodo) {
+    let metodoPagoUuid = null;
+    let metodoFallbackUsado = false;
+    let metodoAsignadoNombre = 'General';
+
+    const allMetodos = await sql`
+      SELECT uuid, nombre FROM metodos_pago 
+      WHERE COALESCE(is_deleted, false) = false
+    `;
+
+    let foundMetodo = null;
+    if (parsedMetodo && allMetodos.length > 0) {
+      const normMetodo = normalizeText(parsedMetodo);
+      foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === normMetodo);
+      if (!foundMetodo) {
+        if (normMetodo === 'pdv' || normMetodo === 'punto') {
+          foundMetodo = allMetodos.find(m => {
+            const n = normalizeText(m.nombre);
+            return n === 'pdv' || n === 'punto' || n.includes('punto') || n === 'pos' || n.includes('debito') || n.includes('tarjeta');
+          });
+        } else if (normMetodo.includes('pago movil') || normMetodo.includes('pago mobil') || normMetodo === 'pm') {
+          foundMetodo = allMetodos.find(m => {
+            const n = normalizeText(m.nombre);
+            return n.includes('movil') || n.includes('mobil') || n === 'pm';
+          });
+        } else if (normMetodo === 'usdt') {
+          foundMetodo = allMetodos.find(m => {
+            const n = normalizeText(m.nombre);
+            return n === 'usdt' || n.includes('binance') || n.includes('crypto') || n.includes('tether');
+          });
+        } else if (normMetodo === 'cash') {
+          foundMetodo = allMetodos.find(m => {
+            const n = normalizeText(m.nombre);
+            return n === 'cash' || n.includes('efectivo') || n.includes('dolar') || n === 'usd';
+          });
+        } else if (normMetodo === 'zelle') {
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zelle') || normalizeText(m.nombre).includes('zele'));
+        } else if (normMetodo === 'transferencia') {
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('transf') || normalizeText(m.nombre).includes('banco'));
+        } else if (normMetodo === 'zinli') {
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zinli'));
+        } else if (normMetodo === 'wally') {
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('wally'));
+        } else if (normMetodo === 'paypal') {
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('paypal'));
+        } else if (normMetodo === 'general' || normMetodo === 'otros') {
+          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('general') || normalizeText(m.nombre).includes('otro'));
+        }
+      }
+    }
+
+    if (!foundMetodo && allMetodos.length > 0) {
+      foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'general');
+      if (!foundMetodo) {
+        foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'cash' || normalizeText(m.nombre).includes('efectivo'));
+      }
+      if (!foundMetodo) {
+        foundMetodo = allMetodos[0];
+      }
+      metodoFallbackUsado = true;
+    }
+
+    if (foundMetodo) {
+      metodoPagoUuid = foundMetodo.uuid;
+      metodoAsignadoNombre = foundMetodo.nombre;
+    }
+
+    return { metodoPagoUuid, metodoAsignadoNombre, metodoFallbackUsado, foundMetodo };
+  }
+
+  async resolveRango(parsedRango) {
+    let rangoUuid = null;
+    let rangoNombre = parsedRango || 'General';
+
+    const allRangos = await sql`
+      SELECT uuid, nombre FROM rangos 
+      WHERE COALESCE(is_deleted, false) = false
+    `;
+
+    let foundRango = null;
+    if (parsedRango && allRangos.length > 0) {
+      const normTarget = normalizeText(parsedRango);
+      foundRango = allRangos.find(r => normalizeText(r.nombre) === normTarget);
+      if (!foundRango) {
+        const numMatch = normTarget.match(/\b([1-9])\b/);
+        if (numMatch) {
+          const targetNum = numMatch[1];
+          foundRango = allRangos.find(r => {
+            const rn = normalizeText(r.nombre);
+            return rn.endsWith(targetNum) || rn.includes(`rango ${targetNum}`) || rn.includes(`rg ${targetNum}`) || rn.includes(`rg${targetNum}`);
+          });
+        }
+      }
+      if (!foundRango) {
+        if (normTarget.includes('fuma')) {
+          foundRango = allRangos.find(r => normalizeText(r.nombre).includes('fuma'));
+        } else if (normTarget.includes('ruleta')) {
+          foundRango = allRangos.find(r => normalizeText(r.nombre).includes('ruleta'));
+        } else if (normTarget.includes('sin rango') || normTarget === 'sr') {
+          foundRango = allRangos.find(r => normalizeText(r.nombre).includes('sin rango') || normalizeText(r.nombre).includes('sinrango'));
+        }
+      }
+      if (!foundRango) {
+        foundRango = allRangos.find(r => normalizeText(r.nombre).includes(normTarget) || normTarget.includes(normalizeText(r.nombre)));
+      }
+
+      if (foundRango) {
+        rangoUuid = foundRango.uuid;
+        rangoNombre = foundRango.nombre;
+      }
+    }
+
+    let rangoFallbackUsado = false;
+    if (!rangoUuid && allRangos.length > 0) {
+      const genRango = allRangos.find(r => normalizeText(r.nombre) === 'general') ||
+                       allRangos.find(r => normalizeText(r.nombre) === 'sin rango') ||
+                       allRangos[0];
+      if (genRango) {
+        rangoUuid = genRango.uuid;
+        rangoNombre = genRango.nombre;
+        rangoFallbackUsado = true;
+      }
+    }
+
+    return { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango };
+  }
+
+  async resolveEmpleado(parsedOperador, salaUuid) {
+    let empleadoUuid = null;
+    let empleadoNombre = parsedOperador || 'Operador General';
+    let foundEmp = null;
+    let empFallbackUsado = false;
+
+    const allEmps = await sql`
+      SELECT e.uuid, e.nombre, e.cedula, d.sala_uuid 
+      FROM empleados e
+      LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+      LEFT JOIN areas a ON c.area_uuid = a.uuid
+      LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+      WHERE COALESCE(e.activo, true) = true 
+        AND COALESCE(e.is_deleted, false) = false
+        ${salaUuid ? sql`AND (d.sala_uuid = ${salaUuid}::uuid OR d.sala_uuid IS NULL)` : sql``}
+    `;
+
+    if (parsedOperador && parsedOperador.toLowerCase() !== 'general' && allEmps.length > 0) {
+      const normTarget = normalizeText(parsedOperador);
+      foundEmp = allEmps.find(e => normalizeText(e.nombre) === normTarget);
+      if (!foundEmp) {
+        foundEmp = allEmps.find(e => normalizeText(e.nombre).startsWith(normTarget + ' '));
+      }
+      if (!foundEmp) {
+        foundEmp = allEmps.find(e => {
+          const words = normalizeText(e.nombre).split(/\s+/);
+          return words.includes(normTarget);
+        });
+      }
+      if (!foundEmp) {
+        foundEmp = allEmps.find(e => normalizeText(e.nombre).includes(normTarget) || normTarget.includes(normalizeText(e.nombre)));
+      }
+
+      if (foundEmp) {
+        empleadoUuid = foundEmp.uuid;
+        empleadoNombre = foundEmp.nombre;
+      }
+    }
+
+    if (!empleadoUuid && allEmps.length > 0) {
+      const genEmp = allEmps.find(e => normalizeText(e.nombre) === 'general') || allEmps[0];
+      if (genEmp) {
+        empleadoUuid = genEmp.uuid;
+        empleadoNombre = genEmp.nombre;
+        empFallbackUsado = true;
+      }
+    }
+
+    return { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp };
   }
 }
 

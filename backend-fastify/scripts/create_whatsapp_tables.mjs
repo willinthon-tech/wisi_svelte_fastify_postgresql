@@ -43,9 +43,16 @@ async function run() {
       status VARCHAR(50),
       error_message TEXT,
       inserted_record_uuid UUID,
-      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      message_id VARCHAR(100),
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     )
   `;
+
+  await sql`ALTER TABLE whatsapp_logs ADD COLUMN IF NOT EXISTS message_id VARCHAR(100)`;
+  await sql`ALTER TABLE whatsapp_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_wa_logs_msg_id ON whatsapp_logs(message_id)`;
+
   console.log('✅ Tablas whatsapp creadas con éxito');
   await sql.end();
 }

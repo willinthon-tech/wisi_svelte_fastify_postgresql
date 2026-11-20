@@ -43,10 +43,16 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_logs (
     status VARCHAR(50),                                 -- 'procesado', 'sin_libro_activo', 'error_interno'
     error_message TEXT,                                 -- Detalle del error en caso de fallo
     inserted_record_uuid UUID,                          -- UUID del registro creado en libro_control_clientes o libro_aportes
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    message_id VARCHAR(100),                            -- ID del mensaje de WhatsApp (para soportar ediciones)
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE public.whatsapp_logs ADD COLUMN IF NOT EXISTS message_id VARCHAR(100);
+ALTER TABLE public.whatsapp_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
 
 -- Índices de búsqueda para public.whatsapp_logs
 CREATE INDEX IF NOT EXISTS idx_wa_logs_created ON public.whatsapp_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wa_logs_jid ON public.whatsapp_logs(group_jid);
 CREATE INDEX IF NOT EXISTS idx_wa_logs_status ON public.whatsapp_logs(status);
+CREATE INDEX IF NOT EXISTS idx_wa_logs_msg_id ON public.whatsapp_logs(message_id);
