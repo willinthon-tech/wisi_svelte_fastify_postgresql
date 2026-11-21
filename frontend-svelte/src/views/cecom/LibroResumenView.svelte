@@ -654,10 +654,6 @@
       (a.mesaNombre || '').localeCompare(b.mesaNombre || '', undefined, { numeric: true, sensitivity: 'base' })
     );
 
-    const totalArqueoApertura = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.apertura?.total) || 0), 0);
-    const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
-    const totalArqueoDiferencia = totalArqueoCierre - totalArqueoApertura;
-
     let totalArqueoFaltantes = 0;
     let totalArqueoSobrantes = 0;
     for (const g of arqueoMesaGroups) {
@@ -672,6 +668,10 @@
         }
       }
     }
+
+    const totalArqueoApertura = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.apertura?.total) || 0), 0);
+    const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
+    const totalArqueoDiferencia = totalArqueoSobrantes - totalArqueoFaltantes;
 
     // 3. Novedades de mesas
     const novedades_mesas = (rawData.novedades_mesas || []).filter(n => matchesSub(n.multisala_uuid));
@@ -836,7 +836,8 @@
     const clientesPorJugador = dataClientesGlobal.porJugador;
     const totalesPorJugador = dataClientesGlobal.totalesPorJugador;
 
-    const produccionMesas = dropTotales.grandTotal + totalArqueoDiferencia;
+    // Producción de mesas: ((drop + sobrantes) - faltantes)
+    const produccionMesas = (dropTotales.grandTotal + totalArqueoSobrantes) - totalArqueoFaltantes;
 
     // 7. Aportes máquinas
     const rawAportes = (rawData.aportes_maquinas || rawData.aportes || []).filter(a => matchesSub(a.multisala_uuid));
@@ -1118,7 +1119,7 @@
         .filter(item => item.maquinasCount > 0 || item.billetero !== 0 || item.aportesNeto !== 0)
         .map(item => ({
           ...item,
-          produccion: item.billetero - item.aportesNeto
+          produccion: (item.billetero + item.montoDevoluciones) - item.montoAportes
         })).sort((a, b) => 
           (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
         );
@@ -1131,7 +1132,8 @@
       totalProduccion: produccionPorRango.reduce((acc, r) => acc + r.produccion, 0)
     };
 
-    const produccionMaquinas = conteoTotales.grandTotal - aportesTotales.totalAportes + aportesTotales.totalDevoluciones;
+    // Producción de máquinas: ((billetero + devoluciones) - aportes)
+    const produccionMaquinas = (conteoTotales.grandTotal + aportesTotales.totalDevoluciones) - aportesTotales.totalAportes;
     const produccionClientes = dataClientesGlobal.totales.balanceNeto || 0;
     const produccionFinal = produccionMesas + produccionMaquinas + produccionClientes;
     const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + dataClientesGlobal.totales.totalCompras;
@@ -2012,7 +2014,7 @@
                       <tr class="total-row footer-diferencia">
                         <td class="total-label-cell">TOTAL</td>
                         {#each section.subData.arqueoSalaFichas as valor}
-                          {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                          {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.apertura, valor) || 0) : 0), 0)}
                           {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
                           {@const dif = sumCi - sumAp}
                           <td class="td-center total-val-cell">
