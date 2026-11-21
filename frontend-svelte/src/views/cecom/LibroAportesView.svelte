@@ -1306,9 +1306,9 @@
             <thead>
               <tr>
                 <th class="th-center th-num">N°</th>
-                <th class="th-cliente">Rango</th>
-                <th class="th-right th-monto">Total Aportes</th>
-                <th class="th-right th-monto">Total Devoluciones</th>
+                <th class="th-center th-tipo">Rango</th>
+                <th class="th-right th-monto">Aportes</th>
+                <th class="th-right th-monto">Devoluciones</th>
                 <th class="th-right th-monto">Total</th>
                 <th class="th-center th-tipo">Operaciones</th>
               </tr>
@@ -1331,8 +1331,8 @@
                 {#each resumenRangos as rg, idx}
                   <tr class="cliente-row">
                     <td class="td-center td-num">{idx + 1}</td>
-                    <td class="td-cliente">
-                      <span class="cliente-name">{rg.rango_nombre}</span>
+                    <td class="td-center td-tipo">
+                      <span class="badge-tipo badge-pago">{rg.rango_nombre}</span>
                     </td>
                     <td class="td-right td-monto">
                       <span class="monto-value {rg.aportes_monto > 0 ? 'text-red font-bold' : 'text-slate'}">
@@ -1397,8 +1397,8 @@
                 <th class="th-center th-num">N°</th>
                 <th class="th-cliente">Empleado</th>
                 <th class="th-center th-metodo">Cargo</th>
-                <th class="th-right th-monto">Total Aportes</th>
-                <th class="th-right th-monto">Total Devoluciones</th>
+                <th class="th-right th-monto">Aportes</th>
+                <th class="th-right th-monto">Devoluciones</th>
                 <th class="th-right th-monto">Total</th>
                 <th class="th-center th-tipo">Operaciones</th>
               </tr>
@@ -1427,7 +1427,7 @@
                       </div>
                     </td>
                     <td class="td-center td-metodo">
-                      <span class="badge-metodo metodo-general">{emp.cargo_nombre}</span>
+                      <span class="badge-metodo metodo-pdv">{emp.cargo_nombre || 'General'}</span>
                     </td>
                     <td class="td-right td-monto">
                       <span class="monto-value {emp.aportes_monto > 0 ? 'text-red font-bold' : 'text-slate'}">

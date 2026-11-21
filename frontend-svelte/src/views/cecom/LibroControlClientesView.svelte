@@ -1284,14 +1284,14 @@
       <!-- Contenido Tab 1: Desglose por Métodos de Pago -->
       {#if activeResumenTab === 'metodos'}
         <div class="table-wrapper">
-          <table class="resumen-table">
+          <table class="clientes-table">
             <thead>
               <tr>
-                <th class="th-metodo-name">Método de Pago</th>
-                <th class="th-right">Compras</th>
-                <th class="th-right">Pagos</th>
-                <th class="th-right">Total</th>
-                <th class="th-center">Operaciones</th>
+                <th class="th-metodo">Método de Pago</th>
+                <th class="th-right th-monto">Compras</th>
+                <th class="th-right th-monto">Pagos</th>
+                <th class="th-right th-monto">Total</th>
+                <th class="th-center th-tipo">Operaciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1306,21 +1306,25 @@
                 </tr>
               {:else}
                 {#each resumenMetodos as m}
-                <tr>
-                  <td>
+                <tr class="cliente-row">
+                  <td class="td-metodo">
                     <span class="badge-metodo metodo-{m.metodo.toLowerCase()}" style="{getMetodoBadgeStyle(m)}">{m.metodo}</span>
                   </td>
-                  <td class="td-right font-mono text-green">
-                    ${formatMonto(m.compras)}
+                  <td class="td-right td-monto">
+                    <span class="monto-value text-green font-bold">${formatMonto(m.compras)}</span>
                   </td>
-                  <td class="td-right font-mono {m.pagos > 0 ? 'text-red' : 'text-slate'}">
-                    {m.pagos > 0 ? `( - $${formatMonto(m.pagos)} )` : '$0.00'}
+                  <td class="td-right td-monto">
+                    <span class="monto-value font-bold {m.pagos > 0 ? 'text-red' : 'text-slate'}">
+                      {m.pagos > 0 ? `( - $${formatMonto(m.pagos)} )` : '$0.00'}
+                    </span>
                   </td>
-                  <td class="td-right font-mono font-bold {m.neto > 0 ? 'text-green' : (m.neto < 0 ? 'text-red' : 'text-slate')}">
-                    {m.neto < 0 ? `( - $${formatMonto(Math.abs(m.neto))} )` : `$${formatMonto(m.neto)}`}
+                  <td class="td-right td-monto">
+                    <span class="monto-value font-bold {m.neto > 0 ? 'text-green' : (m.neto < 0 ? 'text-red' : 'text-slate')}">
+                      {m.neto < 0 ? `( - $${formatMonto(Math.abs(m.neto))} )` : `$${formatMonto(m.neto)}`}
+                    </span>
                   </td>
-                  <td class="td-center">
-                    <span class="ops-badge">{m.count} ({m.countCompras}C / {m.countPagos}P)</span>
+                  <td class="td-center td-tipo">
+                    <span class="badge-tipo badge-compra">{m.count} ops ({m.countCompras}C / {m.countPagos}P)</span>
                   </td>
                 </tr>
               {/each}
@@ -1329,12 +1333,14 @@
             <tfoot>
               <tr class="tfoot-totals-row">
                 <td class="font-bold">TOTALES</td>
-                <td class="td-right font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                <td class="td-right font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
-                <td class="td-right font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
+                <td class="td-right td-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
+                <td class="td-right td-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
+                <td class="td-right td-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
                   {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                 </td>
-                <td class="td-center font-bold">{records.length}</td>
+                <td class="td-center td-tipo font-bold">
+                  <span class="badge-tipo badge-compra">{records.length} ops</span>
+                </td>
               </tr>
             </tfoot>
           </table>
@@ -1344,15 +1350,15 @@
       <!-- Contenido Tab 2: Desglose por Cliente -->
       {#if activeResumenTab === 'clientes'}
         <div class="table-wrapper">
-          <table class="resumen-table">
+          <table class="clientes-table">
             <thead>
               <tr>
                 <th class="th-center th-num">N°</th>
-                <th>Cliente</th>
-                <th class="th-right">Compras</th>
-                <th class="th-right">Pagos</th>
-                <th class="th-right">Total</th>
-                <th class="th-center">Operaciones</th>
+                <th class="th-cliente">Cliente</th>
+                <th class="th-right th-monto">Compras</th>
+                <th class="th-right th-monto">Pagos</th>
+                <th class="th-right th-monto">Total</th>
+                <th class="th-center th-tipo">Operaciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1373,22 +1379,28 @@
                 </tr>
               {:else}
                 {#each resumenClientesFiltrados as c, idx}
-                  <tr>
+                  <tr class="cliente-row">
                     <td class="td-center td-num">{idx + 1}</td>
-                    <td>
-                      <span class="cliente-resumen-name">{c.cliente}</span>
+                    <td class="td-cliente">
+                      <div class="cliente-cell-content">
+                        <span class="cliente-name">{c.cliente}</span>
+                      </div>
                     </td>
-                    <td class="td-right font-mono text-green">
-                      ${formatMonto(c.compras)}
+                    <td class="td-right td-monto">
+                      <span class="monto-value text-green font-bold">${formatMonto(c.compras)}</span>
                     </td>
-                    <td class="td-right font-mono {c.pagos > 0 ? 'text-red' : 'text-slate'}">
-                      {c.pagos > 0 ? `( - $${formatMonto(c.pagos)} )` : '$0.00'}
+                    <td class="td-right td-monto">
+                      <span class="monto-value font-bold {c.pagos > 0 ? 'text-red' : 'text-slate'}">
+                        {c.pagos > 0 ? `( - $${formatMonto(c.pagos)} )` : '$0.00'}
+                      </span>
                     </td>
-                    <td class="td-right font-mono font-bold {c.balance > 0 ? 'text-green' : (c.balance < 0 ? 'text-red' : 'text-slate')}">
-                      {c.balance < 0 ? `( - $${formatMonto(Math.abs(c.balance))} )` : `$${formatMonto(c.balance)}`}
+                    <td class="td-right td-monto">
+                      <span class="monto-value font-bold {c.balance > 0 ? 'text-green' : (c.balance < 0 ? 'text-red' : 'text-slate')}">
+                        {c.balance < 0 ? `( - $${formatMonto(Math.abs(c.balance))} )` : `$${formatMonto(c.balance)}`}
+                      </span>
                     </td>
-                    <td class="td-center">
-                      <span class="ops-badge">{c.count} ({c.countCompras}C / {c.countPagos}P)</span>
+                    <td class="td-center td-tipo">
+                      <span class="badge-tipo badge-compra">{c.count} ops ({c.countCompras}C / {c.countPagos}P)</span>
                     </td>
                   </tr>
                 {/each}
@@ -1398,12 +1410,14 @@
               <tfoot>
                 <tr class="tfoot-totals-row">
                   <td colspan="2" class="font-bold">TOTALES ({resumenClientes.length} {resumenClientes.length === 1 ? 'cliente' : 'clientes'})</td>
-                  <td class="td-right font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                  <td class="td-right font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
-                  <td class="td-right font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
+                  <td class="td-right td-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
+                  <td class="td-right td-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
+                  <td class="td-right td-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
                     {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                   </td>
-                  <td class="td-center font-bold">{records.length}</td>
+                  <td class="td-center td-tipo font-bold">
+                    <span class="badge-tipo badge-compra">{records.length} ops</span>
+                  </td>
                 </tr>
               </tfoot>
             {/if}
