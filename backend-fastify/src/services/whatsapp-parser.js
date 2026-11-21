@@ -119,12 +119,48 @@ const TIPO_FULL_RULES = [
 ];
 
 // Abreviaturas de una sola letra para Tipos (prioridad secundaria)
+// Nota: La letra 'a' es preposición común en español. Para evitar falsos positivos ("pago a Juan", "dia 20"),
+// solo se reconoce si va seguida de un monto, dos puntos o al inicio de la línea.
 const TIPO_SINGLE_RULES = [
-  { tipo: 'Compra', regex: /\b(c)\b/i },
-  { tipo: 'Pago', regex: /\b(p)\b/i },
-  { tipo: 'Aporte', regex: /\b(a)\b/i },
-  { tipo: 'Devolución', regex: /\b(d)\b/i }
+  { tipo: 'Compra', regex: /(?:^|\s)(c)(?:\s+\$?[\d]|\s*[:=]|\s*$)/i },
+  { tipo: 'Pago', regex: /(?:^|\s)(p)(?:\s+\$?[\d]|\s*[:=]|\s*$)/i },
+  { tipo: 'Aporte', regex: /(?:^|\s)(a)(?:\s+\$?[\d]|\s*[:=])/i },
+  { tipo: 'Devolución', regex: /(?:^|\s)(d)(?:\s+\$?[\d]|\s*[:=]|\s*$)/i }
 ];
+
+/**
+ * Detecta mensajes informativos de apertura, cierre, inicio de turno/día/caja o avisos operativos.
+ * Estos mensajes se envían para avisar a los integrantes del grupo (ej: "Inicio Día 20-11-2026", "CIERRE DEL DIA 19/11")
+ * pero NO representan transacciones contables y DEBEN ser ignorados por completo, sin colocar reacciones ni registrar nada.
+ */
+export function isSystemStatusOrInformationalMessage(text) {
+  if (!text || typeof text !== 'string') return false;
+  const norm = normalizeText(text);
+  if (!norm || norm.length < 2) return false;
+
+  // 1. Mensajes que comienzan con indicadores de inicio/cierre/apertura/saludo
+  if (/^(?:inicio|iniciamos|iniciando|iniciar|cierre|cerrando|cerrado|cerrar|apertura|abriendo|abierta|abierto|abrir|fin\s+de\s+(?:turno|dia|jornada)|saludos?|aviso|comunicado)\b/i.test(norm)) {
+    return true;
+  }
+
+  // 2. Patrones que combinen inicio/cierre/apertura con conceptos de tiempo o caja
+  // ej: "cierre del dia 19/11", "inicio dia 20-11-2026", "apertura de caja", "cierre de turno"
+  if (/\b(?:inicio|iniciamos|iniciando|cierre|cerrando|cerrado|apertura|abriendo)\b.*?\b(?:dia|dias|fecha|turno|turnos|caja|cajas|jornada|labores|operacion|operaciones)\b/i.test(norm)) {
+    return true;
+  }
+
+  // 3. Frases de apertura o cierre comunes
+  if (/\b(?:cierre|inicio|apertura)\s+del?\s+(?:dia|turno|caja|jornada)\b/i.test(norm)) {
+    return true;
+  }
+
+  // 4. Mensajes exactos o muy cortos
+  if (/^(?:cierre|inicio|apertura|abierto|cerrado)$/i.test(norm)) {
+    return true;
+  }
+
+  return false;
+}
 
 // Diccionario de Cajas (conservado para limpiar el texto y no contaminar nombres)
 const CAJA_RULES = [
@@ -157,6 +193,11 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     .trim();
 
   if (clean.length < 2) return null;
+
+  // FILTRO GLOBAL: Si es un mensaje informativo de inicio, cierre, apertura de turno/día/caja, ignorar inmediatamente
+  if (isSystemStatusOrInformationalMessage(clean)) {
+    return null;
+  }
 
   // 1. Extraer Nota (si existe "nota: ...", "ref: ...", "obs: ...")
   let nota = '';
@@ -211,12 +252,15 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   }
 
   // Si no se encontró palabra completa, buscar token abreviado de una sola letra
+  // IMPORTANTE: Normalizar texto sin tildes para evitar que palabras como "Día" 
+  // hagan match erróneo con "a" por fronteras \b sobre caracteres acentuados.
   if (!tipo) {
+    const textNormForSingle = normalizeText(textWithoutNota);
     for (const rule of TIPO_SINGLE_RULES) {
-      const m = textWithoutNota.match(rule.regex);
+      const m = textNormForSingle.match(rule.regex);
       if (m) {
         tipo = rule.tipo;
-        tipoMatchedText = m[0];
+        tipoMatchedText = m[1] || m[0];
         break;
       }
     }
@@ -238,8 +282,12 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   }
 
   // 5. Extraer Monto numérico
-  // Enmascaramos el texto del RANGO y horas (ej. 12:30 o 04:16) para que sus números no se tomen como monto
+  // Enmascaramos el texto del RANGO, HORAS y FECHAS (ej. 20-11-2026, 19/11) para que sus números no se tomen como monto
   let textForMonto = textWithoutNota;
+
+  // Enmascarar fechas (ej: 20-11-2026, 20/11/2026, 20-11, 20/11, 19/11, 2026-11-20)
+  textForMonto = textForMonto.replace(/\b\d{1,4}[-/]\d{1,2}(?:[-/]\d{2,4})?\b/g, ' ');
+
   if (rangoMatchedText) {
     textForMonto = textForMonto.replace(rangoMatchedText, ' ');
   }

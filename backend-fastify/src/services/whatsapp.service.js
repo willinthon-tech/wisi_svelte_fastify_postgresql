@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql, isPgConnected } from '../config/db.js';
-import { parseWhatsAppMessage, normalizeText } from './whatsapp-parser.js';
+import { parseWhatsAppMessage, normalizeText, isSystemStatusOrInformationalMessage } from './whatsapp-parser.js';
 
 // Helpers seguros para clasificar JIDs sin depender de exportaciones específicas de Baileys
 const isJidBroadcast = (jid) => typeof jid === 'string' && jid.endsWith('@broadcast');
@@ -689,6 +689,12 @@ class WhatsAppService {
 
     if (!messageText) return;
 
+    // FILTRO GLOBAL: Ignorar mensajes informativos de inicio, apertura, cierre, fin de jornada, etc.
+    if (isSystemStatusOrInformationalMessage(messageText)) {
+      console.log(`ℹ️ [WhatsApp] Mensaje informativo de apertura/cierre ignorado globalmente: "${messageText}"`);
+      return;
+    }
+
     if (!isPgConnected || !sql) {
       console.warn('PostgreSQL no disponible para procesar mensaje de WhatsApp');
       return;
@@ -855,7 +861,8 @@ class WhatsAppService {
 
         console.log(`${checkEmoji} [WhatsApp] Operación registrada en Control de Clientes [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        if (mapping.auto_reply && this.sock) {
+        // Los chulitos se colocan ÚNICAMENTE cuando la información ya se insertó con éxito en la base de datos
+        if (insertedUuid && mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, m.key, checkEmoji);
         }
 
@@ -922,7 +929,8 @@ class WhatsAppService {
 
         console.log(`${checkEmoji} [WhatsApp] ${parsed.tipo} registrado en Aportes [${logStatus}]: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre} ${obsTexto ? `(${obsTexto})` : ''}`);
 
-        if (mapping.auto_reply && this.sock) {
+        // Los chulitos se colocan ÚNICAMENTE cuando la información ya se insertó con éxito en la base de datos
+        if (insertedUuid && mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, m.key, checkEmoji);
         }
       }
@@ -960,6 +968,12 @@ class WhatsAppService {
     ).trim();
 
     if (!messageText) return;
+
+    // FILTRO GLOBAL: Mensajes informativos de apertura, cierre, inicio de turno/día/caja
+    if (isSystemStatusOrInformationalMessage(messageText)) {
+      console.log(`ℹ️ [WhatsApp Edit] Mensaje informativo de apertura/cierre ignorado: "${messageText}"`);
+      return;
+    }
 
     if (!isPgConnected || !sql) {
       console.warn('PostgreSQL no disponible para procesar mensaje editado');
