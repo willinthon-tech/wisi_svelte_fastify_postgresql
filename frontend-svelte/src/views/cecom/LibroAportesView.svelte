@@ -1091,10 +1091,10 @@
 
       <!-- Tarjetas de Métricas Globales (KPIs) -->
       <div class="kpi-metrics-grid">
-        <!-- KPI 1: Total Aportes $ -->
+        <!-- KPI 1: Aportes $ -->
         <div class="kpi-card kpi-compras">
           <div class="kpi-header">
-            <span class="kpi-label">TOTAL APORTES</span>
+            <span class="kpi-label">APORTES</span>
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalAportesMonto > 0 ? 'text-red' : 'text-slate'}">
@@ -1106,10 +1106,10 @@
           </div>
         </div>
 
-        <!-- KPI 2: Total Devoluciones $ -->
+        <!-- KPI 2: Devoluciones $ -->
         <div class="kpi-card kpi-pagos">
           <div class="kpi-header">
-            <span class="kpi-label">TOTAL DEVOLUCIONES</span>
+            <span class="kpi-label">DEVOLUCIONES</span>
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalDevolucionesMonto > 0 ? 'text-green' : 'text-slate'}">
@@ -1121,10 +1121,10 @@
           </div>
         </div>
 
-        <!-- KPI 3: Neto Aportes $ -->
+        <!-- KPI 3: Total $ -->
         <div class="kpi-card kpi-balance">
           <div class="kpi-header">
-            <span class="kpi-label">NETO APORTES</span>
+            <span class="kpi-label">TOTAL</span>
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
@@ -1139,19 +1139,6 @@
           </div>
           <div class="kpi-subtext">
             <span>Devoluciones - Aportes</span>
-          </div>
-        </div>
-
-        <!-- KPI 4: Rango Líder -->
-        <div class="kpi-card kpi-drop">
-          <div class="kpi-header">
-            <span class="kpi-label">RANGO CON MÁS APORTES</span>
-          </div>
-          <div class="kpi-value-row">
-            <span class="kpi-value text-slate font-truncate">{resumenRangos.length > 0 ? resumenRangos[0].rango_nombre : '—'}</span>
-          </div>
-          <div class="kpi-subtext">
-            <span>{resumenRangos.length > 0 ? `$${formatMonto(Math.abs(resumenRangos[0].total_monto))} (${resumenRangos[0].cantidad} ops)` : 'Sin datos'}</span>
           </div>
         </div>
       </div>
@@ -2009,7 +1996,7 @@
   /* Grid de Métricas (KPIs) */
   .kpi-metrics-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
     padding: 16px;
     background: #f8fafc;
@@ -2018,7 +2005,7 @@
 
   @media (max-width: 900px) {
     .kpi-metrics-grid {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
     }
   }
 
