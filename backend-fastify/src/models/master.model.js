@@ -9728,6 +9728,7 @@ export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
       a.mesa_uuid AS mesa_id,
       a.tipo,
       a.fichas,
+      a.rellenos_devoluciones,
       a.total,
       a.observaciones,
       a.created_at,
@@ -9751,7 +9752,8 @@ export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
     ...r,
     mesa_nombre: r.mesa_nombre ? toTitleCase(r.mesa_nombre) : '',
     juego_nombre: r.juego_nombre ? toTitleCase(r.juego_nombre) : '',
-    fichas: Array.isArray(r.fichas) ? r.fichas : (typeof r.fichas === 'string' ? JSON.parse(r.fichas || '[]') : [])
+    fichas: Array.isArray(r.fichas) ? r.fichas : (typeof r.fichas === 'string' ? JSON.parse(r.fichas || '[]') : []),
+    rellenos_devoluciones: Array.isArray(r.rellenos_devoluciones) ? r.rellenos_devoluciones : (typeof r.rellenos_devoluciones === 'string' ? JSON.parse(r.rellenos_devoluciones || '[]') : [])
   }));
 }
 
@@ -9793,6 +9795,11 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
   const total = data.total !== undefined && !isNaN(Number(data.total)) ? Number(data.total) : calculatedTotal;
   const arqueoUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : crypto.randomUUID();
 
+  const rawRellenosDevoluciones = data.rellenos_devoluciones !== undefined ? data.rellenos_devoluciones : null;
+  const rellenosDevolucionesClean = Array.isArray(rawRellenosDevoluciones)
+    ? rawRellenosDevoluciones
+    : (typeof rawRellenosDevoluciones === 'string' ? (() => { try { return JSON.parse(rawRellenosDevoluciones); } catch(e) { return null; } })() : null);
+
   if (!isPgConnected || !sql) {
     inMemoryData.libro_arqueo_fichas = inMemoryData.libro_arqueo_fichas || [];
     const existingIdx = inMemoryData.libro_arqueo_fichas.findIndex(
@@ -9809,6 +9816,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
       inMemoryData.libro_arqueo_fichas[existingIdx] = {
         ...inMemoryData.libro_arqueo_fichas[existingIdx],
         fichas: fichasClean,
+        rellenos_devoluciones: rellenosDevolucionesClean !== null ? rellenosDevolucionesClean : (inMemoryData.libro_arqueo_fichas[existingIdx].rellenos_devoluciones || []),
         total,
         observaciones,
         updated_at: new Date().toISOString()
@@ -9826,6 +9834,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
       mesa_uuid: mesaUuid,
       tipo,
       fichas: fichasClean,
+      rellenos_devoluciones: rellenosDevolucionesClean || [],
       total,
       observaciones,
       mesa_nombre: mesa.nombre || `Mesa #${mesaUuid}`,
@@ -9865,6 +9874,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     const updated = await sql`
       UPDATE libro_arqueo_fichas SET
         fichas = ${JSON.stringify(fichasClean)}::jsonb,
+        rellenos_devoluciones = COALESCE(${rellenosDevolucionesClean !== null ? JSON.stringify(rellenosDevolucionesClean) : null}::jsonb, rellenos_devoluciones, '[]'::jsonb),
         total = ${total},
         observaciones = ${observaciones},
         is_deleted = false,
@@ -9878,7 +9888,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     const res = await sql`
       INSERT INTO libro_arqueo_fichas (
         uuid, libro_uuid, mesa_uuid, multisala_uuid,
-        tipo, fichas, total, observaciones
+        tipo, fichas, rellenos_devoluciones, total, observaciones
       )
       VALUES (
         ${arqueoUuid}::uuid,
@@ -9887,6 +9897,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
         ${multisalaUuid ? multisalaUuid : null}::uuid,
         ${tipo},
         ${JSON.stringify(fichasClean)}::jsonb,
+        ${JSON.stringify(rellenosDevolucionesClean || [])}::jsonb,
         ${total},
         ${observaciones}
       )
@@ -9906,6 +9917,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
       a.mesa_uuid AS mesa_id,
       a.tipo,
       a.fichas,
+      a.rellenos_devoluciones,
       a.total,
       a.observaciones,
       a.created_at,
@@ -9929,7 +9941,8 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     ...finalRow,
     mesa_nombre: finalRow.mesa_nombre ? toTitleCase(finalRow.mesa_nombre) : '',
     juego_nombre: finalRow.juego_nombre ? toTitleCase(finalRow.juego_nombre) : '',
-    fichas: Array.isArray(finalRow.fichas) ? finalRow.fichas : (typeof finalRow.fichas === 'string' ? JSON.parse(finalRow.fichas || '[]') : [])
+    fichas: Array.isArray(finalRow.fichas) ? finalRow.fichas : (typeof finalRow.fichas === 'string' ? JSON.parse(finalRow.fichas || '[]') : []),
+    rellenos_devoluciones: Array.isArray(finalRow.rellenos_devoluciones) ? finalRow.rellenos_devoluciones : (typeof finalRow.rellenos_devoluciones === 'string' ? JSON.parse(finalRow.rellenos_devoluciones || '[]') : [])
   };
 }
 

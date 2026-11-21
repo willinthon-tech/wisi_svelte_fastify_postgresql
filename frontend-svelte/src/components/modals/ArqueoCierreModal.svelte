@@ -90,9 +90,22 @@
   }
 
   // Cálculos en tiempo real
+  $: allMovements = (() => {
+    const raw = aperturaRecord?.rellenos_devoluciones || cierreRecord?.rellenos_devoluciones || [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch (e) { return []; }
+    }
+    return [];
+  })();
+
+  $: totalRellenosMonto = allMovements.filter(m => m.tipo === 'relleno').reduce((acc, m) => acc + (Number(m.total) || 0), 0);
+  $: totalDevolucionesMonto = allMovements.filter(m => m.tipo === 'devolucion').reduce((acc, m) => acc + (Number(m.total) || 0), 0);
+
   $: totalApertura = rows.reduce((acc, r) => acc + (Number(r.valor) * (Number(r.cantApertura) || 0)), 0);
   $: totalCierre = rows.reduce((acc, r) => acc + (Number(r.valor) * (Number(r.cantCierre) || 0)), 0);
-  $: diferenciaMonto = totalCierre - totalApertura;
+  // Diferencia Neta = (Total Cierre + Total Devoluciones) - (Total Apertura + Total Rellenos)
+  $: diferenciaMonto = (totalCierre + totalDevolucionesMonto) - (totalApertura + totalRellenosMonto);
 
   function formatMoney(num) {
     if (isNaN(num)) return '0.00';
@@ -134,6 +147,7 @@
         multisala_uuid: multisalaUuid || null,
         tipo: 'cierre',
         fichas: fichasPayload,
+        rellenos_devoluciones: allMovements,
         total: totalCierre,
         observaciones: observaciones ? observaciones.trim() : null,
         mesa_nombre: mesa.nombre || '',
@@ -238,6 +252,20 @@
             <span class="comp-label">Total Apertura</span>
             <span class="comp-val apertura">$ {formatMoney(totalApertura)}</span>
           </div>
+          {#if totalRellenosMonto > 0}
+            <div class="comp-sep">+</div>
+            <div class="comp-col">
+              <span class="comp-label">Rellenos (R)</span>
+              <span class="comp-val text-blue">$ {formatMoney(totalRellenosMonto)}</span>
+            </div>
+          {/if}
+          {#if totalDevolucionesMonto > 0}
+            <div class="comp-sep">-</div>
+            <div class="comp-col">
+              <span class="comp-label">Devoluciones (D)</span>
+              <span class="comp-val text-purple">$ {formatMoney(totalDevolucionesMonto)}</span>
+            </div>
+          {/if}
           <div class="comp-sep">➔</div>
           <div class="comp-col">
             <span class="comp-label">Total Cierre</span>
@@ -252,7 +280,7 @@
               class:negative={diferenciaMonto < 0}
               class:neutral={diferenciaMonto === 0}
             >
-              $ {formatMoney(Math.abs(diferenciaMonto))}
+              {diferenciaMonto < 0 ? `( - $${formatMoney(Math.abs(diferenciaMonto))} )` : `$ ${formatMoney(diferenciaMonto)}`}
             </span>
           </div>
         </div>
@@ -269,14 +297,22 @@
                 <tr>
                   <th class="th-denom">Ficha</th>
                   <th class="th-center">Cant. Apertura</th>
+                  {#each allMovements as mov}
+                    <th class="th-center th-mov-header" class:th-mov-relleno={mov.tipo === 'relleno'} class:th-mov-devolucion={mov.tipo === 'devolucion'} title="{mov.tipo === 'relleno' ? 'Relleno' : 'Devolución'} {mov.codigo}: $ {formatMoney(mov.total)}">
+                      {mov.codigo || (mov.tipo === 'relleno' ? `R${mov.numero}` : `D${mov.numero}`)}
+                    </th>
+                  {/each}
                   <th class="th-center">Cant. Cierre</th>
-                  <th class="th-right">Subtotal Cierre</th>
+                  <th class="th-right">Subtotal</th>
                   <th class="th-center">Dif. Fichas</th>
                 </tr>
               </thead>
               <tbody>
                 {#each rows as r (r.valor)}
-                  {@const difChips = (Number(r.cantCierre) || 0) - (Number(r.cantApertura) || 0)}
+                  {@const rellenosChips = allMovements.filter(m => m.tipo === 'relleno').reduce((acc, m) => acc + ((m.fichas || []).find(f => Number(f.valor ?? f.denominacion) === Number(r.valor))?.cantidad || 0), 0)}
+                  {@const devolucionesChips = allMovements.filter(m => m.tipo === 'devolucion').reduce((acc, m) => acc + ((m.fichas || []).find(f => Number(f.valor ?? f.denominacion) === Number(r.valor))?.cantidad || 0), 0)}
+                  {@const expectedChips = (Number(r.cantApertura) || 0) + rellenosChips - devolucionesChips}
+                  {@const difChips = (Number(r.cantCierre) || 0) - expectedChips}
                   {@const subtotal = Number(r.valor) * (Number(r.cantCierre) || 0)}
                   <tr>
                     <td class="td-denom">
@@ -285,6 +321,18 @@
                     <td class="td-center">
                       <span class="apertura-badge">{r.cantApertura || 0}</span>
                     </td>
+                    {#each allMovements as mov}
+                      {@const mCount = (mov.fichas || []).find(f => Number(f.valor ?? f.denominacion) === Number(r.valor))?.cantidad || 0}
+                      <td class="td-center count-rd-cell" class:cell-relleno={mov.tipo === 'relleno'} class:cell-devolucion={mov.tipo === 'devolucion'}>
+                        {#if mCount > 0}
+                          <span class="badge-mov-count {mov.tipo === 'relleno' ? 'badge-r-count' : 'badge-d-count'}">
+                            {mCount}
+                          </span>
+                        {:else}
+                          <span class="zero-dash">—</span>
+                        {/if}
+                      </td>
+                    {/each}
                     <td class="td-center">
                       <input 
                         type="number" 
@@ -295,7 +343,7 @@
                         bind:value={r.cantCierre}
                       />
                     </td>
-                    <td class="td-right subtotal-cell">
+                    <td class="td-right subtotal-cell font-mono font-bold">
                       $ {formatMoney(subtotal)}
                     </td>
                     <td class="td-center">
@@ -304,7 +352,7 @@
                         class:diff-pos={difChips > 0}
                         class:diff-neg={difChips < 0}
                       >
-                        {Math.abs(difChips)}
+                        {difChips < 0 ? `( - ${Math.abs(difChips)} )` : (difChips > 0 ? `+${difChips}` : 0)}
                       </span>
                     </td>
                   </tr>
@@ -735,6 +783,51 @@
   .btn-save-cierre:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .text-blue { color: #2563eb !important; }
+  .text-purple { color: #9333ea !important; }
+
+  .th-mov-header {
+    background: #1e293b;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 8px 6px;
+    min-width: 48px;
+  }
+  .th-mov-relleno {
+    color: #60a5fa !important;
+  }
+  .th-mov-devolucion {
+    color: #c084fc !important;
+  }
+
+  .count-rd-cell {
+    padding: 6px 4px !important;
+  }
+
+  .badge-mov-count {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 800;
+    font-family: monospace;
+  }
+  .badge-r-count {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+  .badge-d-count {
+    background: #faf5ff;
+    color: #7e22ce;
+    border: 1px solid #e9d5ff;
+  }
+
+  .zero-dash {
+    color: #cbd5e1;
+    font-weight: 700;
   }
 
   @keyframes fadeIn {

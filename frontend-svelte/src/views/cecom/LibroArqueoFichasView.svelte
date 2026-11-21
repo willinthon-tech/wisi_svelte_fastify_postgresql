@@ -19,6 +19,7 @@
   } from '../../services/localDb.service.js';
   import { toBackendUrl } from '../../config/api.config.js';
   import ArqueoCierreModal from '../../components/modals/ArqueoCierreModal.svelte';
+  import RellenoDevolucionModal from '../../components/modals/RellenoDevolucionModal.svelte';
 
   export let libro = null;
   export let libroId = null;
@@ -40,7 +41,7 @@
   let arqueoRecords = [];
   let isLoadingRecords = true;
 
-  // Estado del formulario de Apertura (Tarjeta Izquierda: "Arqueo")
+  // Estado del formulario de Apertura (Tarjeta Izquierda: "Sobrantes y Faltantes")
   let selectedMesaId = '';
   let formQuantities = {}; // { [valor]: cantidad }
   let isSaving = false;
@@ -50,6 +51,12 @@
   let modalMesa = null;
   let modalAperturaRecord = null;
   let modalCierreRecord = null;
+
+  // Modal de Rellenos y Devoluciones
+  let isRDModalOpen = false;
+  let rdModalTipo = 'relleno'; // 'relleno' | 'devolucion'
+  let rdModalMesa = null;
+  let rdModalApertura = null;
 
   // Resolver Sala del Libro
   $: currentSala = ($masterSalasStore || []).find(s => 
@@ -347,7 +354,17 @@
     }
   }
 
-  // Agrupación de registros por mesa para mostrar 3 sub-líneas (Apertura, Cierre, Diferencia)
+  function extractMovements(record) {
+    if (!record) return [];
+    const raw = record.rellenos_devoluciones;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch (e) { return []; }
+    }
+    return [];
+  }
+
+  // Agrupación de registros por mesa para mostrar sub-líneas (Apertura, Rellenos/Devoluciones, Cierre, Diferencia)
   $: mesaGroups = (() => {
     const groupsMap = new Map();
 
@@ -362,7 +379,10 @@
           juegoNombre: r.juego_nombre || mesaObj?.juego_nombre || '',
           mesaObj,
           apertura: null,
-          cierre: null
+          cierre: null,
+          rellenosDevoluciones: [],
+          totalRellenos: 0,
+          totalDevoluciones: 0
         });
       }
 
@@ -372,6 +392,15 @@
       } else if (r.tipo === 'cierre') {
         g.cierre = r;
       }
+    }
+
+    // Calcular movimientos consolidados y totales para cada mesa
+    for (const g of groupsMap.values()) {
+      const apMovs = extractMovements(g.apertura);
+      const ciMovs = extractMovements(g.cierre);
+      g.rellenosDevoluciones = apMovs.length > 0 ? apMovs : ciMovs;
+      g.totalRellenos = g.rellenosDevoluciones.filter(m => m.tipo === 'relleno').reduce((a, b) => a + (Number(b.total) || 0), 0);
+      g.totalDevoluciones = g.rellenosDevoluciones.filter(m => m.tipo === 'devolucion').reduce((a, b) => a + (Number(b.total) || 0), 0);
     }
 
     // Ordenar mesas alfabéticamente
@@ -391,12 +420,54 @@
     return found ? (Number(found.cantidad) || 0) : 0;
   }
 
+  // Obtener cantidad de fichas de un movimiento de relleno o devolución
+  function getMovChipCount(mov, valor) {
+    if (!mov || !Array.isArray(mov.fichas)) return 0;
+    const found = mov.fichas.find(f => Number(f.valor ?? f.denominacion) === Number(valor));
+    return found ? (Number(found.cantidad) || 0) : 0;
+  }
+
   // Abrir Modal de Cierre ("Arquear")
   function handleOpenCierreModal(group) {
     modalMesa = group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre };
     modalAperturaRecord = group.apertura;
     modalCierreRecord = group.cierre;
     isModalOpen = true;
+  }
+
+  // Abrir Modal de Rellenos y Devoluciones
+  function handleOpenRellenoModal(tipo = 'relleno', mesaObj = null) {
+    const targetMesa = mesaObj || availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId));
+    if (!targetMesa) {
+      triggerToast('Debe seleccionar una mesa primero', 'warning');
+      return;
+    }
+
+    const mId = String(targetMesa.uuid || targetMesa.id);
+    const ap = arqueoRecords.find(r => 
+      String(r.mesa_uuid || r.mesa_id) === mId &&
+      r.tipo === 'apertura'
+    );
+
+    rdModalTipo = tipo;
+    rdModalMesa = targetMesa;
+    rdModalApertura = ap || null;
+    isRDModalOpen = true;
+  }
+
+  // Callback cuando se guardan Rellenos o Devoluciones desde el Modal
+  function handleRDSaved(event) {
+    const updatedApertura = event.detail;
+    if (!updatedApertura) return;
+
+    const existingIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(updatedApertura.uuid || updatedApertura.id));
+    if (existingIdx !== -1) {
+      arqueoRecords[existingIdx] = updatedApertura;
+      arqueoRecords = [...arqueoRecords];
+    } else {
+      arqueoRecords = [...arqueoRecords, updatedApertura];
+    }
+    rdModalApertura = updatedApertura;
   }
 
   // Callback cuando se guarda el Cierre desde el Modal
@@ -471,8 +542,10 @@
 
   // Totales consolidados para el footer de la tabla
   $: totalGeneralApertura = mesaGroups.reduce((acc, g) => acc + (Number(g.apertura?.total) || 0), 0);
+  $: totalGeneralRellenos = mesaGroups.reduce((acc, g) => acc + (Number(g.totalRellenos) || 0), 0);
+  $: totalGeneralDevoluciones = mesaGroups.reduce((acc, g) => acc + (Number(g.totalDevoluciones) || 0), 0);
   $: totalGeneralCierre = mesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
-  $: totalGeneralDiferencia = totalGeneralCierre - totalGeneralApertura;
+  $: totalGeneralDiferencia = (totalGeneralCierre + totalGeneralDevoluciones) - (totalGeneralApertura + totalGeneralRellenos);
 
   onMount(() => {
     loadArqueoRecords();
@@ -544,6 +617,24 @@
             <span>Aperturar</span>
           {/if}
         </button>
+
+        <!-- Botones RELLENOS y DEVOLUCIONES -->
+        <div class="btn-rd-actions-row">
+          <button
+            type="button"
+            class="btn-rd-action btn-rd-rellenos"
+            on:click={() => handleOpenRellenoModal('relleno')}
+          >
+            RELLENOS
+          </button>
+          <button
+            type="button"
+            class="btn-rd-action btn-rd-devoluciones"
+            on:click={() => handleOpenRellenoModal('devolucion')}
+          >
+            DEVOLUCIONES
+          </button>
+        </div>
       {/if}
     </form>
   </div>
@@ -595,14 +686,18 @@
               {@const apTotal = Number(group.apertura?.total) || 0}
               {@const hasCierre = Boolean(group.cierre)}
               {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
-              {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
+              {@const allMovs = group.rellenosDevoluciones || []}
+              {@const totalR = group.totalRellenos || 0}
+              {@const totalD = group.totalDevoluciones || 0}
+              {@const difTotal = hasCierre ? ((ciTotal + totalD) - (apTotal + totalR)) : null}
+              {@const totalRowsForMesa = 2 + allMovs.length + 1}
 
               <!-- Sub-fila 1: APERTURA -->
               <tr class="drop-row row-apertura" class:mesa-first-row={true}>
-                <td class="td-center td-num" rowspan="3">
+                <td class="td-center td-num" rowspan={totalRowsForMesa}>
                   <span class="index-num">{idx + 1}</span>
                 </td>
-                <td class="td-mesa" rowspan="3">
+                <td class="td-mesa" rowspan={totalRowsForMesa}>
                   <div class="mesa-title-cell">
                     <span class="mesa-main-name">{group.mesaNombre}</span>
                     {#if group.juegoNombre}
@@ -622,7 +717,7 @@
                 <td class="td-center td-total-val ap-total-cell">
                   $ {formatMoney(apTotal)}
                 </td>
-                <td class="td-center td-acciones-cell" rowspan="3">
+                <td class="td-center td-acciones-cell" rowspan={totalRowsForMesa}>
                   <div class="acciones-btn-col">
                     <button 
                       type="button" 
@@ -631,6 +726,14 @@
                       title="Registrar o editar el Cierre de esta mesa"
                     >
                       Arquear
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn-rd-table"
+                      on:click={() => handleOpenRellenoModal('relleno', group.mesaObj)}
+                      title="Gestionar Rellenos y Devoluciones de esta mesa"
+                    >
+                      R / D
                     </button>
                     {#if canDelete}
                       <button 
@@ -645,6 +748,26 @@
                   </div>
                 </td>
               </tr>
+
+              <!-- Sub-filas dinámicas para cada RELLENO / DEVOLUCIÓN -->
+              {#each allMovs as mov}
+                <tr class="drop-row row-mov" class:row-relleno={mov.tipo === 'relleno'} class:row-devolucion={mov.tipo === 'devolucion'}>
+                  <td class="td-center td-movimiento">
+                    <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}" title="{mov.tipo === 'relleno' ? 'Relleno' : 'Devolución'} {mov.codigo}">
+                      {mov.codigo || (mov.tipo === 'relleno' ? `R${mov.numero}` : `D${mov.numero}`)}
+                    </span>
+                  </td>
+                  {#each salaFichas as valor}
+                    {@const count = getMovChipCount(mov, valor)}
+                    <td class="td-center count-val font-mono">
+                      {count > 0 ? count : '—'}
+                    </td>
+                  {/each}
+                  <td class="td-center td-total-val font-mono {mov.tipo === 'relleno' ? 'text-blue' : 'text-purple'}">
+                    $ {formatMoney(mov.total)}
+                  </td>
+                </tr>
+              {/each}
 
               <!-- Sub-fila 2: CIERRE -->
               <tr class="drop-row row-cierre">
@@ -674,7 +797,10 @@
                 {#each salaFichas as valor}
                   {@const apC = getChipCount(group.apertura, valor)}
                   {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
-                  {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - apC) : null}
+                  {@const rChips = allMovs.filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0)}
+                  {@const dChips = allMovs.filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0)}
+                  {@const expected = (apC !== null ? apC : 0) + rChips - dChips}
+                  {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - expected) : null}
                   <td class="td-center count-val">
                     {#if difChips !== null}
                       <span 
@@ -682,7 +808,7 @@
                         class:dif-pos={difChips > 0}
                         class:dif-neg={difChips < 0}
                       >
-                        {Math.abs(difChips)}
+                        {difChips < 0 ? `( - ${Math.abs(difChips)} )` : (difChips > 0 ? `+${difChips}` : 0)}
                       </span>
                     {:else}
                       <span class="val-pending">—</span>
@@ -697,7 +823,7 @@
                       class:dif-neg={difTotal < 0}
                       class:dif-neu={difTotal === 0}
                     >
-                      $ {formatMoney(Math.abs(difTotal))}
+                      {difTotal < 0 ? `( - $${formatMoney(Math.abs(difTotal))} )` : `$ ${formatMoney(difTotal)}`}
                     </span>
                   {:else}
                     <span class="val-pending">—</span>
@@ -724,6 +850,36 @@
               <td></td>
             </tr>
 
+            {#if totalGeneralRellenos > 0}
+              <tr class="total-row footer-rellenos">
+                <td colspan="2" class="total-label-cell">TOTAL RELLENOS</td>
+                <td class="td-center"><span class="mov-badge mov-relleno" title="Rellenos">R</span></td>
+                {#each salaFichas as valor}
+                  {@const sumR = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                  <td class="td-center total-val-cell font-mono">{sumR > 0 ? sumR : '—'}</td>
+                {/each}
+                <td class="td-center grand-total-cell text-blue">
+                  $ {formatMoney(totalGeneralRellenos)}
+                </td>
+                <td></td>
+              </tr>
+            {/if}
+
+            {#if totalGeneralDevoluciones > 0}
+              <tr class="total-row footer-devoluciones">
+                <td colspan="2" class="total-label-cell">TOTAL DEVOLUCIONES</td>
+                <td class="td-center"><span class="mov-badge mov-devolucion" title="Devoluciones">D</span></td>
+                {#each salaFichas as valor}
+                  {@const sumD = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                  <td class="td-center total-val-cell font-mono">{sumD > 0 ? sumD : '—'}</td>
+                {/each}
+                <td class="td-center grand-total-cell text-purple">
+                  $ {formatMoney(totalGeneralDevoluciones)}
+                </td>
+                <td></td>
+              </tr>
+            {/if}
+
             <tr class="total-row footer-cierre">
               <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
               <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">C</span></td>
@@ -742,17 +898,20 @@
               <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
               {#each salaFichas as valor}
                 {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                {@const sumR = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                {@const sumD = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
                 {@const sumCi = mesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                {@const dif = sumCi - sumAp}
+                {@const expectedTotal = sumAp + sumR - sumD}
+                {@const dif = sumCi - expectedTotal}
                 <td class="td-center total-val-cell">
                   <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
-                    {Math.abs(dif)}
+                    {dif < 0 ? `( - ${Math.abs(dif)} )` : (dif > 0 ? `+${dif}` : 0)}
                   </span>
                 </td>
               {/each}
               <td class="td-center grand-total-cell dif-grand-total">
                 <span class:dif-pos={totalGeneralDiferencia > 0} class:dif-neg={totalGeneralDiferencia < 0}>
-                  $ {formatMoney(Math.abs(totalGeneralDiferencia))}
+                  {totalGeneralDiferencia < 0 ? `( - $${formatMoney(Math.abs(totalGeneralDiferencia))} )` : `$ ${formatMoney(totalGeneralDiferencia)}`}
                 </span>
               </td>
               <td></td>
@@ -776,6 +935,20 @@
   availableDenominaciones={salaFichas}
   on:close={() => { isModalOpen = false; }}
   on:saved={handleCierreSaved}
+/>
+
+<!-- Modal de Rellenos y Devoluciones -->
+<RellenoDevolucionModal
+  show={isRDModalOpen}
+  mesa={rdModalMesa}
+  {libro}
+  {libroId}
+  {multisalaUuid}
+  aperturaRecord={rdModalApertura}
+  availableDenominaciones={salaFichas}
+  initialTipo={rdModalTipo}
+  on:close={() => { isRDModalOpen = false; }}
+  on:saved={handleRDSaved}
 />
 
 <style>
@@ -1125,6 +1298,90 @@
     background: #f1f5f9;
     color: #334155;
     border: 1px solid #cbd5e1;
+  }
+
+  .mov-relleno {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+  }
+
+  .mov-devolucion {
+    background: #faf5ff;
+    color: #7e22ce;
+    border: 1px solid #d8b4fe;
+  }
+
+  .btn-rd-actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .btn-rd-action {
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+  }
+
+  .btn-rd-rellenos {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1.5px solid #93c5fd;
+  }
+
+  .btn-rd-rellenos:hover {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #3b82f6;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
+  }
+
+  .btn-rd-devoluciones {
+    background: #faf5ff;
+    color: #7e22ce;
+    border: 1.5px solid #d8b4fe;
+  }
+
+  .btn-rd-devoluciones:hover {
+    background: #f3e8ff;
+    color: #6b21a8;
+    border-color: #a855f7;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(147, 51, 234, 0.15);
+  }
+
+  .btn-rd-table {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    width: 75px;
+  }
+
+  .btn-rd-table:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+
+  .text-blue {
+    color: #2563eb !important;
+  }
+
+  .text-purple {
+    color: #9333ea !important;
   }
 
   .count-val {
