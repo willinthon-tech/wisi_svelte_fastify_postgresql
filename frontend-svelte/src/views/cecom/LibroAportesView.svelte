@@ -1305,12 +1305,12 @@
           <table class="clientes-table">
             <thead>
               <tr>
-                <th class="th-center th-num">N°</th>
-                <th class="th-center th-tipo">Rango</th>
-                <th class="th-right th-monto">Aportes</th>
-                <th class="th-right th-monto">Devoluciones</th>
-                <th class="th-right th-monto">Total</th>
-                <th class="th-center th-tipo">Operaciones</th>
+                <th class="th-num">N°</th>
+                <th class="th-res-rango">Rango</th>
+                <th class="th-res-monto">Aportes</th>
+                <th class="th-res-monto">Devoluciones</th>
+                <th class="th-res-monto">Total</th>
+                <th class="th-res-ops">Operaciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1330,21 +1330,21 @@
               {:else}
                 {#each resumenRangos as rg, idx}
                   <tr class="cliente-row">
-                    <td class="td-center td-num">{idx + 1}</td>
-                    <td class="td-center td-tipo">
+                    <td class="td-num">{idx + 1}</td>
+                    <td class="td-center">
                       <span class="badge-tipo badge-pago">{rg.rango_nombre}</span>
                     </td>
-                    <td class="td-right td-monto">
+                    <td class="td-res-monto">
                       <span class="monto-value {rg.aportes_monto > 0 ? 'text-red font-bold' : 'text-slate'}">
                         ${formatMonto(rg.aportes_monto)}
                       </span>
                     </td>
-                    <td class="td-right td-monto">
+                    <td class="td-res-monto">
                       <span class="monto-value {rg.devoluciones_monto > 0 ? 'text-green font-bold' : 'text-slate'}">
                         ${formatMonto(rg.devoluciones_monto)}
                       </span>
                     </td>
-                    <td class="td-right td-monto">
+                    <td class="td-res-monto">
                       {#if rg.total_monto < 0}
                         <span class="monto-value text-red font-bold">( - ${formatMonto(Math.abs(rg.total_monto))} )</span>
                       {:else if rg.total_monto > 0}
@@ -1353,7 +1353,7 @@
                         <span class="monto-value text-slate font-bold">$0.00</span>
                       {/if}
                     </td>
-                    <td class="td-center td-tipo">
+                    <td class="td-res-ops">
                       <span class="badge-tipo badge-compra">{rg.cantidad} ops</span>
                     </td>
                   </tr>
@@ -1363,14 +1363,14 @@
             {#if !isLoadingRecords && resumenRangos.length > 0}
               <tfoot>
                 <tr class="tfoot-totals-row">
-                  <td colspan="2" class="font-bold">TOTALES ({resumenRangos.length} {resumenRangos.length === 1 ? 'rango' : 'rangos'})</td>
-                  <td class="td-right td-monto font-mono font-bold {resumenRangos.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
+                  <td colspan="2" class="td-left font-bold">TOTALES ({resumenRangos.length} {resumenRangos.length === 1 ? 'rango' : 'rangos'})</td>
+                  <td class="td-res-monto font-mono font-bold {resumenRangos.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
                     ${formatMonto(resumenRangos.reduce((a, b) => a + (b.aportes_monto || 0), 0))}
                   </td>
-                  <td class="td-right td-monto font-mono font-bold {resumenRangos.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
+                  <td class="td-res-monto font-mono font-bold {resumenRangos.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
                     ${formatMonto(resumenRangos.reduce((a, b) => a + (b.devoluciones_monto || 0), 0))}
                   </td>
-                  <td class="td-right td-monto font-mono font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
+                  <td class="td-res-monto font-mono font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
                     {#if netoMonto < 0}
                       ( - ${formatMonto(Math.abs(netoMonto))} )
                     {:else if netoMonto > 0}
@@ -1379,7 +1379,7 @@
                       $0.00
                     {/if}
                   </td>
-                  <td class="td-center font-bold">
+                  <td class="td-res-ops font-bold">
                     <span class="badge-tipo badge-compra">{resumenRangos.reduce((a, b) => a + (b.cantidad || 0), 0)} ops</span>
                   </td>
                 </tr>
@@ -1394,13 +1394,13 @@
           <table class="clientes-table">
             <thead>
               <tr>
-                <th class="th-center th-num">N°</th>
-                <th class="th-cliente">Empleado</th>
-                <th class="th-center th-metodo">Cargo</th>
-                <th class="th-right th-monto">Aportes</th>
-                <th class="th-right th-monto">Devoluciones</th>
-                <th class="th-right th-monto">Total</th>
-                <th class="th-center th-tipo">Operaciones</th>
+                <th class="th-num">N°</th>
+                <th class="th-res-empleado">Empleado</th>
+                <th class="th-metodo">Cargo</th>
+                <th class="th-res-monto">Aportes</th>
+                <th class="th-res-monto">Devoluciones</th>
+                <th class="th-res-monto">Total</th>
+                <th class="th-res-ops">Operaciones</th>
               </tr>
             </thead>
             <tbody>
@@ -1420,26 +1420,26 @@
               {:else}
                 {#each resumenEmpleados as emp, idx}
                   <tr class="cliente-row">
-                    <td class="td-center td-num">{idx + 1}</td>
-                    <td class="td-cliente">
+                    <td class="td-num">{idx + 1}</td>
+                    <td class="td-left">
                       <div class="cliente-cell-content">
                         <span class="cliente-name">{emp.empleado_nombre}</span>
                       </div>
                     </td>
-                    <td class="td-center td-metodo">
+                    <td class="td-metodo">
                       <span class="badge-metodo metodo-pdv">{emp.cargo_nombre || 'General'}</span>
                     </td>
-                    <td class="td-right td-monto">
+                    <td class="td-res-monto">
                       <span class="monto-value {emp.aportes_monto > 0 ? 'text-red font-bold' : 'text-slate'}">
                         ${formatMonto(emp.aportes_monto)}
                       </span>
                     </td>
-                    <td class="td-right td-monto">
+                    <td class="td-res-monto">
                       <span class="monto-value {emp.devoluciones_monto > 0 ? 'text-green font-bold' : 'text-slate'}">
                         ${formatMonto(emp.devoluciones_monto)}
                       </span>
                     </td>
-                    <td class="td-right td-monto">
+                    <td class="td-res-monto">
                       {#if emp.total_monto < 0}
                         <span class="monto-value text-red font-bold">( - ${formatMonto(Math.abs(emp.total_monto))} )</span>
                       {:else if emp.total_monto > 0}
@@ -1448,7 +1448,7 @@
                         <span class="monto-value text-slate font-bold">$0.00</span>
                       {/if}
                     </td>
-                    <td class="td-center td-tipo">
+                    <td class="td-res-ops">
                       <span class="badge-tipo badge-compra">{emp.cantidad} ops</span>
                     </td>
                   </tr>
@@ -1458,14 +1458,14 @@
             {#if !isLoadingRecords && resumenEmpleados.length > 0}
               <tfoot>
                 <tr class="tfoot-totals-row">
-                  <td colspan="3" class="font-bold">TOTALES ({resumenEmpleados.length} {resumenEmpleados.length === 1 ? 'empleado' : 'empleados'})</td>
-                  <td class="td-right td-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
+                  <td colspan="3" class="td-left font-bold">TOTALES ({resumenEmpleados.length} {resumenEmpleados.length === 1 ? 'empleado' : 'empleados'})</td>
+                  <td class="td-res-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
                     ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.aportes_monto || 0), 0))}
                   </td>
-                  <td class="td-right td-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
+                  <td class="td-res-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
                     ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.devoluciones_monto || 0), 0))}
                   </td>
-                  <td class="td-right td-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0 ? 'text-green' : (resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) < 0 ? 'text-red' : 'text-slate')}">
+                  <td class="td-res-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0 ? 'text-green' : (resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) < 0 ? 'text-red' : 'text-slate')}">
                     {#if resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) < 0}
                       ( - ${formatMonto(Math.abs(resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0)))} )
                     {:else if resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0}
@@ -1474,7 +1474,7 @@
                       $0.00
                     {/if}
                   </td>
-                  <td class="td-center font-bold">
+                  <td class="td-res-ops font-bold">
                     <span class="badge-tipo badge-compra">{resumenEmpleados.reduce((a, b) => a + (b.cantidad || 0), 0)} ops</span>
                   </td>
                 </tr>
@@ -2170,18 +2170,42 @@
     white-space: nowrap;
   }
 
-  .th-center { text-align: center; }
-  .th-right { text-align: right; }
-  .th-num { width: 45px; }
-  .th-tipo-col { width: 130px; }
-  .td-tipo-col { width: 130px; }
-  .th-cliente { min-width: 180px; }
-  .th-tipo { width: 140px; }
-  .th-monto { width: 120px; }
-  .td-monto { white-space: nowrap; }
-  .th-metodo { width: 120px; }
-  .th-hora { width: 90px; }
-  .th-acciones { width: 180px; }
+  .th-center, .td-center { text-align: center; }
+  .th-right, .td-right { text-align: right; }
+  .th-left, .td-left { text-align: left; }
+  .th-num, .td-num { width: 48px; text-align: center; }
+  .th-tipo-col, .td-tipo-col { width: 130px; text-align: center; }
+  .th-cliente { min-width: 200px; text-align: left; }
+  .th-tipo, .td-tipo { width: 130px; text-align: center; }
+  .th-monto { width: 125px; text-align: right; }
+  .td-monto { text-align: right; white-space: nowrap; }
+  .th-metodo, .td-metodo { width: 120px; text-align: center; }
+  .th-hora, .td-hora, .td-hora-val { width: 90px; text-align: center; }
+  .th-acciones, .td-acciones { width: 180px; text-align: center; }
+
+  /* Columnas y balance proporcional para tablas de Resumen */
+  .th-res-rango {
+    min-width: 160px;
+    text-align: center;
+  }
+
+  .th-res-empleado {
+    min-width: 180px;
+    text-align: left;
+  }
+
+  .th-res-monto, .td-res-monto {
+    width: 18%;
+    min-width: 120px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .th-res-ops, .td-res-ops {
+    width: 16%;
+    min-width: 120px;
+    text-align: center;
+  }
 
   /* Filas de la Tabla */
   .cliente-row {
