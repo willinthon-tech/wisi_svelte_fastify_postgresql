@@ -26,13 +26,13 @@
   // Subvistas disponibles
   const SUBVISTAS = [
     { id: 'datos', label: 'Datos', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
-    { id: 'drop-mesas', label: 'Drop Mesas', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
-    { id: 'arqueo-fichas', label: 'Arqueo Fichas', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
-    { id: 'conteo-maquinas', label: 'Conteo Máquinas', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
+    { id: 'drop-mesas', label: 'Drop', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
+    { id: 'arqueo-fichas', label: 'Sobrantes y Faltantes', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
+    { id: 'conteo-maquinas', label: 'Billetero', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
     { id: 'control-llaves', label: 'Control Llaves', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '', description: 'Eventos e incidentes reportados en sala' },
     { id: 'control-clientes', label: 'Control Clientes', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
-    { id: 'aportes-maquinas', label: 'Aportes Máquinas', icon: '', description: 'Registro y control de aportes de máquinas por empleado y rango' },
+    { id: 'aportes-maquinas', label: 'Aportes y Devoluciones', icon: '', description: 'Registro y control de aportes y devoluciones de máquinas por empleado y rango' },
     { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
     { id: 'resumen-libro', label: 'Resumen Libro', icon: '', description: 'Consolidado general y auditoría de la jornada' }
   ];
@@ -93,12 +93,14 @@
     }
 
     if (secondPart) {
-      if (secondPart === 'aportes') {
+      if (secondPart === 'aportes' || secondPart === 'aportes-maquinas' || secondPart === 'aportes-devoluciones') {
         activeSubvista = 'aportes-maquinas';
-      } else if (secondPart === 'conteo') {
+      } else if (secondPart === 'conteo' || secondPart === 'conteo-maquinas' || secondPart === 'billetero') {
         activeSubvista = 'conteo-maquinas';
-      } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas') {
+      } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas' || secondPart === 'sobrantes-faltantes') {
         activeSubvista = 'arqueo-fichas';
+      } else if (secondPart === 'drop' || secondPart === 'drop-mesas') {
+        activeSubvista = 'drop-mesas';
       } else if (SUBVISTAS.some(s => s.id === secondPart)) {
         activeSubvista = secondPart;
       }

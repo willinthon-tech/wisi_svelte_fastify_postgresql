@@ -900,10 +900,10 @@
 </script>
 
 <div class="clientes-layout-grid">
-  <!-- Tarjeta Izquierda: Formulario "Aportes Máquinas" -->
+  <!-- Tarjeta Izquierda: Formulario "Aportes y Devoluciones" -->
   <div class="card-form-cliente">
     <div class="card-title-box">
-      <h3 class="card-title">Aportes Máquinas</h3>
+      <h3 class="card-title">Aportes y Devoluciones</h3>
       <div class="title-underline"></div>
     </div>
 
