@@ -65,7 +65,7 @@
 
   // Pestañas activas por sección
   let tabResumenProd = 'total'; // 'total' | 'mesas' | 'maquinas'
-  let tabMesa = 'total';        // 'total' | 'drop' | 'faltantes'
+  let tabMesa = 'total';        // 'total' | 'grupo' | 'drop' | 'faltantes'
   let tabBilletero = 'rangos'; // 'rangos' | 'detallado'
   let tabAporte = 'rangos';    // 'rangos' | 'empleado' | 'detallado'
   let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
@@ -746,6 +746,35 @@
         (a.mesaNombre || '').localeCompare(b.mesaNombre || '', undefined, { numeric: true, sensitivity: 'base' })
       );
 
+    // 2.3 Consolidado agrupado por juego/grupo
+    const mapJuegosConsolidado = new Map();
+
+    for (const m of resumenMesasLista) {
+      const jNom = (m.juegoNombre || '').trim() || 'Otros';
+      const jKey = jNom.toLowerCase();
+      if (!mapJuegosConsolidado.has(jKey)) {
+        mapJuegosConsolidado.set(jKey, {
+          juegoKey: jKey,
+          juegoNombre: jNom,
+          mesasCount: 0,
+          drop: 0,
+          sobrantes: 0,
+          faltantes: 0,
+          total: 0
+        });
+      }
+      const item = mapJuegosConsolidado.get(jKey);
+      item.mesasCount += 1;
+      item.drop += m.drop;
+      item.sobrantes += m.sobrantes;
+      item.faltantes += m.faltantes;
+      item.total += m.total;
+    }
+
+    const resumenMesasPorJuego = Array.from(mapJuegosConsolidado.values()).sort((a, b) => 
+      (a.juegoNombre || '').localeCompare(b.juegoNombre || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
+
     // 3. Novedades de mesas
     const novedades_mesas = (rawData.novedades_mesas || []).filter(n => matchesSub(n.multisala_uuid));
 
@@ -1282,6 +1311,7 @@
       arqueoSalaFichas,
       arqueoMesaGroups,
       resumenMesasLista,
+      resumenMesasPorJuego,
       totalArqueoApertura,
       totalArqueoCierre,
       totalArqueoDiferencia,
@@ -1955,6 +1985,14 @@
                     <button
                       type="button"
                       class="tab-toggle-btn"
+                      class:active={tabMesa === 'grupo'}
+                      on:click={() => (tabMesa = 'grupo')}
+                    >
+                      Total por grupo
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
                       class:active={tabMesa === 'drop'}
                       on:click={() => (tabMesa = 'drop')}
                     >
@@ -1978,6 +2016,10 @@
                 {:else if tabMesa === 'drop'}
                   <span class="sub-count-badge">
                     {section.subData.drop_mesas?.length || 0} {section.subData.drop_mesas?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
+                  </span>
+                {:else if tabMesa === 'grupo'}
+                  <span class="sub-count-badge">
+                    {section.subData.resumenMesasPorJuego?.length || 0} {section.subData.resumenMesasPorJuego?.length === 1 ? 'grupo' : 'grupos'}
                   </span>
                 {:else}
                   <span class="sub-count-badge">
@@ -2003,12 +2045,7 @@
                       {#each section.subData.resumenMesasLista as m}
                         <tr>
                           <td class="cell-left font-bold">
-                            <div class="mesa-title-cell">
-                              <span class="mesa-main-name">{m.mesaNombre}</span>
-                              {#if m.juegoNombre}
-                                <span class="mesa-sub-juego">{m.juegoNombre}</span>
-                              {/if}
-                            </div>
+                            <span class="mesa-main-name">{m.mesaNombre}</span>
                           </td>
                           <td class="cell-total-money font-bold {m.drop > 0 ? 'text-emerald' : ''}">{formatMoney(m.drop)}</td>
                           <td class="cell-total-money font-bold {m.sobrantes > 0 ? 'text-emerald' : ''}">{m.sobrantes > 0 ? formatMoney(m.sobrantes) : '$0'}</td>
@@ -2020,6 +2057,43 @@
                     <tfoot>
                       <tr class="tfoot-totals">
                         <td class="cell-left font-bold">TOTALES ({section.subData.resumenMesasLista.length} {section.subData.resumenMesasLista.length === 1 ? 'mesa' : 'mesas'})</td>
+                        <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.dropTotales.grandTotal)}</td>
+                        <td class="cell-total-money font-bold text-emerald">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</td>
+                        <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(section.subData.totalArqueoFaltantes) : '$0'}</td>
+                        <td class="cell-grand-total {section.subData.produccionMesas > 0 ? 'text-emerald' : (section.subData.produccionMesas < 0 ? 'text-rose' : '')}">{formatMoney(section.subData.produccionMesas)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else if tabMesa === 'grupo'}
+                <!-- Cuadro Resumen Total por Grupo / Juego -->
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
+                      <tr>
+                        <th class="th-left">GRUPO</th>
+                        <th class="th-right">DROP</th>
+                        <th class="th-right">SOBRANTES</th>
+                        <th class="th-right">FALTANTES</th>
+                        <th class="th-right">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.resumenMesasPorJuego as g}
+                        <tr>
+                          <td class="cell-left font-bold">
+                            <span class="mesa-main-name">{g.juegoNombre}</span>
+                          </td>
+                          <td class="cell-total-money font-bold {g.drop > 0 ? 'text-emerald' : ''}">{formatMoney(g.drop)}</td>
+                          <td class="cell-total-money font-bold {g.sobrantes > 0 ? 'text-emerald' : ''}">{g.sobrantes > 0 ? formatMoney(g.sobrantes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {g.faltantes > 0 ? 'text-rose' : ''}">{g.faltantes > 0 ? formatMoney(g.faltantes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {g.total > 0 ? 'text-emerald' : (g.total < 0 ? 'text-rose' : '')}">{formatMoney(g.total)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td class="cell-left font-bold">TOTALES ({section.subData.resumenMesasPorJuego.length} {section.subData.resumenMesasPorJuego.length === 1 ? 'grupo' : 'grupos'})</td>
                         <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.dropTotales.grandTotal)}</td>
                         <td class="cell-total-money font-bold text-emerald">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</td>
                         <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(section.subData.totalArqueoFaltantes) : '$0'}</td>
