@@ -66,8 +66,7 @@
   // Pestañas activas por sección
   let tabResumenProd = 'total'; // 'total' | 'mesas' | 'maquinas'
   let tabMesa = 'total';        // 'total' | 'grupo' | 'drop' | 'faltantes'
-  let tabBilletero = 'rangos'; // 'rangos' | 'detallado'
-  let tabAporte = 'rangos';    // 'rangos' | 'empleado' | 'detallado'
+  let tabMaquina = 'total';     // 'total' | 'billetero_rango' | 'billetero_detallado' | 'aportes_rango' | 'aportes_empleado' | 'aportes_detallado'
   let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
 
   onMount(async () => {
@@ -1230,6 +1229,8 @@
     const produccionTotales = {
       totalMaquinas: produccionPorRango.reduce((acc, r) => acc + (r.maquinasCount || 0), 0),
       totalBilletero: produccionPorRango.reduce((acc, r) => acc + r.billetero, 0),
+      totalAportes: produccionPorRango.reduce((acc, r) => acc + (r.montoAportes || 0), 0),
+      totalDevoluciones: produccionPorRango.reduce((acc, r) => acc + (r.montoDevoluciones || 0), 0),
       totalAportesNeto: produccionPorRango.reduce((acc, r) => acc + r.aportesNeto, 0),
       totalProduccion: produccionPorRango.reduce((acc, r) => acc + r.produccion, 0)
     };
@@ -1265,13 +1266,11 @@
     const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
     const numNovedadesMesas = hasNovedadesMesas ? ++idxSeccion : 0;
 
-    // Billetero
+    // Máquinas (unifica Billetero y Aportes/Devoluciones)
     const hasBilleteros = Boolean((sortedConteoList && sortedConteoList.length > 0) || (conteoPorRango && conteoPorRango.length > 0));
-    const numBilleteros = hasBilleteros ? ++idxSeccion : 0;
-
-    // Aportes y Devoluciones
     const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (aportesPorRango && aportesPorRango.length > 0) || (aportesPorEmpleado && aportesPorEmpleado.length > 0));
-    const numAportes = hasAportes ? ++idxSeccion : 0;
+    const hasMaquinas = Boolean(hasBilleteros || hasAportes || (produccionPorRango && produccionPorRango.length > 0));
+    const numMaquinas = hasMaquinas ? ++idxSeccion : 0;
 
     // Compras y Pagos (Control de Clientes)
     const numClientes = hasClientes ? ++idxSeccion : 0;
@@ -1291,8 +1290,8 @@
       hasMesas,
       numMesas,
       numNovedadesMesas,
-      numBilleteros,
-      numAportes,
+      hasMaquinas,
+      numMaquinas,
       hasClientes,
       numClientes,
       numBitacoraIncidencias,
@@ -1304,6 +1303,7 @@
       activeHorarios: getActiveHorarios(datos),
       hasResumenMesas,
       hasResumenMaquinas,
+      hasMaquinas,
       numeracion,
       drop_mesas,
       dropTotales,
@@ -2292,48 +2292,134 @@
 
 
           <!-- ============================================================
-               BILLETERO (Conteo de Máquinas y Resumen por Rango)
+               3. MÁQUINAS (Total por rango, Billeteros y Aportes con pestañas)
                ============================================================ -->
-          {#if (section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0) || (section.subData.conteoPorRango && section.subData.conteoPorRango.length > 0)}
+          {#if section.subData.hasMaquinas}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
                   <h2 class="sub-section-title">
-                    {section.subData.numeracion.numBilleteros}. Billetero
+                    {section.subData.numeracion.numMaquinas}. Máquinas
                   </h2>
                   <div class="tab-toggle-group">
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={tabBilletero === 'rangos'}
-                      on:click={() => (tabBilletero = 'rangos')}
+                      class:active={tabMaquina === 'total'}
+                      on:click={() => (tabMaquina = 'total')}
                     >
-                      Rangos
+                      Total
                     </button>
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={tabBilletero === 'detallado'}
-                      on:click={() => (tabBilletero = 'detallado')}
+                      class:active={tabMaquina === 'billetero_rango'}
+                      on:click={() => (tabMaquina = 'billetero_rango')}
                     >
-                      Detallado
+                      Billetero por rango
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={tabMaquina === 'billetero_detallado'}
+                      on:click={() => (tabMaquina = 'billetero_detallado')}
+                    >
+                      Billetero detallado
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={tabMaquina === 'aportes_rango'}
+                      on:click={() => (tabMaquina = 'aportes_rango')}
+                    >
+                      Aportes y Devoluciones por rango
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={tabMaquina === 'aportes_empleado'}
+                      on:click={() => (tabMaquina = 'aportes_empleado')}
+                    >
+                      Aportes y Devoluciones por empleado
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
+                      class:active={tabMaquina === 'aportes_detallado'}
+                      on:click={() => (tabMaquina = 'aportes_detallado')}
+                    >
+                      Aportes y Devoluciones detallado
                     </button>
                   </div>
                 </div>
 
-                {#if tabBilletero === 'rangos'}
+                {#if tabMaquina === 'total'}
+                  <span class="sub-count-badge">
+                    {section.subData.produccionPorRango?.length || 0} {section.subData.produccionPorRango?.length === 1 ? 'rango' : 'rangos'}
+                  </span>
+                {:else if tabMaquina === 'billetero_rango'}
                   <span class="sub-count-badge">
                     {section.subData.conteoPorRango?.length || 0} {section.subData.conteoPorRango?.length === 1 ? 'rango' : 'rangos'}
                   </span>
-                {:else}
+                {:else if tabMaquina === 'billetero_detallado'}
                   <span class="sub-count-badge">
                     {section.subData.conteo_maquinas?.length || 0} {section.subData.conteo_maquinas?.length === 1 ? 'máquina contada' : 'máquinas contadas'}
+                  </span>
+                {:else if tabMaquina === 'aportes_rango'}
+                  <span class="sub-count-badge">
+                    {section.subData.aportesPorRango?.length || 0} {section.subData.aportesPorRango?.length === 1 ? 'rango' : 'rangos'}
+                  </span>
+                {:else if tabMaquina === 'aportes_empleado'}
+                  <span class="sub-count-badge">
+                    {section.subData.aportesPorEmpleado?.length || 0} {section.subData.aportesPorEmpleado?.length === 1 ? 'empleado' : 'empleados'}
+                  </span>
+                {:else if tabMaquina === 'aportes_detallado'}
+                  <span class="sub-count-badge">
+                    {section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}
                   </span>
                 {/if}
               </div>
 
-              {#if tabBilletero === 'rangos'}
-                <!-- Vista: Resumen de Conteo por Rango -->
+              {#if tabMaquina === 'total'}
+                <!-- Tab: Total (Producción por Rango: Billetero + Devoluciones - Aportes) -->
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
+                      <tr>
+                        <th class="th-left">RANGO</th>
+                        <th class="th-center">MÁQUINAS</th>
+                        <th class="th-right">BILLETERO</th>
+                        <th class="th-right">DEVOLUCIONES</th>
+                        <th class="th-right">APORTES</th>
+                        <th class="th-right">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.produccionPorRango as rg}
+                        <tr>
+                          <td class="cell-left font-bold">{rg.rango_nombre}</td>
+                          <td class="cell-center">{rg.maquinasCount}</td>
+                          <td class="cell-total-money font-bold {rg.billetero > 0 ? 'text-emerald' : ''}">{formatMoney(rg.billetero)}</td>
+                          <td class="cell-total-money font-bold {rg.montoDevoluciones > 0 ? 'text-emerald' : ''}">{rg.montoDevoluciones > 0 ? formatMoney(rg.montoDevoluciones) : '$0'}</td>
+                          <td class="cell-total-money font-bold {rg.montoAportes > 0 ? 'text-rose' : ''}">{rg.montoAportes > 0 ? formatMoney(rg.montoAportes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {rg.produccion > 0 ? 'text-emerald' : (rg.produccion < 0 ? 'text-rose' : '')}">{formatMoney(rg.produccion)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td class="cell-left font-bold">TOTALES ({section.subData.produccionPorRango.length} {section.subData.produccionPorRango.length === 1 ? 'rango' : 'rangos'})</td>
+                        <td class="cell-center">{section.subData.produccionTotales.totalMaquinas}</td>
+                        <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.produccionTotales.totalBilletero)}</td>
+                        <td class="cell-total-money font-bold text-emerald">{section.subData.produccionTotales.totalDevoluciones > 0 ? formatMoney(section.subData.produccionTotales.totalDevoluciones) : '$0'}</td>
+                        <td class="cell-total-money font-bold text-rose">{section.subData.produccionTotales.totalAportes > 0 ? formatMoney(section.subData.produccionTotales.totalAportes) : '$0'}</td>
+                        <td class="cell-grand-total {section.subData.produccionTotales.totalProduccion > 0 ? 'text-emerald' : (section.subData.produccionTotales.totalProduccion < 0 ? 'text-rose' : '')}">{formatMoney(section.subData.produccionTotales.totalProduccion)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else if tabMaquina === 'billetero_rango'}
+                <!-- Tab: Conteo de Billeteros por Rango -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table">
                     <thead>
@@ -2381,8 +2467,8 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else}
-                <!-- Vista: Detallado de Billeteros por Máquina -->
+              {:else if tabMaquina === 'billetero_detallado'}
+                <!-- Tab: Conteo Detallado de Máquinas -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table">
                     <thead>
@@ -2431,65 +2517,8 @@
                     </tfoot>
                   </table>
                 </div>
-              {/if}
-            </div>
-          {/if}
-
-          <!-- ============================================================
-               APORTES Y DEVOLUCIONES (Con Selector de Pestañas)
-               ============================================================ -->
-          {#if (section.subData.aportes && section.subData.aportes.length > 0) || (section.subData.aportesPorRango && section.subData.aportesPorRango.length > 0) || (section.subData.aportesPorEmpleado && section.subData.aportesPorEmpleado.length > 0)}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    {section.subData.numeracion.numAportes}. Aportes y Devoluciones
-                  </h2>
-                  <div class="tab-toggle-group">
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabAporte === 'rangos'}
-                      on:click={() => (tabAporte = 'rangos')}
-                    >
-                      Rangos
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabAporte === 'empleado'}
-                      on:click={() => (tabAporte = 'empleado')}
-                    >
-                      Empleado
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabAporte === 'detallado'}
-                      on:click={() => (tabAporte = 'detallado')}
-                    >
-                      Detallado
-                    </button>
-                  </div>
-                </div>
-
-                {#if tabAporte === 'rangos'}
-                  <span class="sub-count-badge">
-                    {section.subData.aportesPorRango?.length || 0} {section.subData.aportesPorRango?.length === 1 ? 'rango' : 'rangos'}
-                  </span>
-                {:else if tabAporte === 'empleado'}
-                  <span class="sub-count-badge">
-                    {section.subData.aportesPorEmpleado?.length || 0} {section.subData.aportesPorEmpleado?.length === 1 ? 'empleado' : 'empleados'}
-                  </span>
-                {:else}
-                  <span class="sub-count-badge">
-                    {section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}
-                  </span>
-                {/if}
-              </div>
-
-              {#if tabAporte === 'rangos'}
-                <!-- Tab: Resumen por Rango -->
+              {:else if tabMaquina === 'aportes_rango'}
+                <!-- Tab: Aportes y Devoluciones por Rango -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
                     <thead>
@@ -2523,8 +2552,8 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if tabAporte === 'empleado'}
-                <!-- Tab: Resumen por Empleado -->
+              {:else if tabMaquina === 'aportes_empleado'}
+                <!-- Tab: Aportes y Devoluciones por Empleado -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
                     <thead>
@@ -2561,7 +2590,7 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else}
+              {:else if tabMaquina === 'aportes_detallado'}
                 <!-- Tab: Detallado de Aportes y Devoluciones -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table">
@@ -2613,6 +2642,7 @@
               {/if}
             </div>
           {/if}
+
 
           <!-- ============================================================
                COMPRAS Y PAGOS (Control de Clientes con Selector de Pestañas)
@@ -3941,6 +3971,7 @@
     border-radius: 8px;
     border: 1px solid #cbd5e1;
     gap: 3px;
+    flex-wrap: wrap;
   }
 
   .tab-toggle-btn {
