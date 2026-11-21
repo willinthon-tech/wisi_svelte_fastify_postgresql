@@ -65,7 +65,7 @@
 
   // Pestañas activas por sección
   let tabResumenProd = 'total'; // 'total' | 'mesas' | 'maquinas'
-  let tabMesa = 'total';        // 'total' | 'grupo' | 'drop' | 'faltantes'
+  let tabMesa = 'grupo';        // 'grupo' (Total por juego) | 'total' (Total por mesa) | 'drop' | 'faltantes'
   let tabMaquina = 'total';     // 'total' | 'billetero_rango' | 'billetero_detallado' | 'aportes_rango' | 'aportes_empleado' | 'aportes_detallado'
   let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
 
@@ -1977,18 +1977,18 @@
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={tabMesa === 'total'}
-                      on:click={() => (tabMesa = 'total')}
+                      class:active={tabMesa === 'grupo'}
+                      on:click={() => (tabMesa = 'grupo')}
                     >
-                      Total
+                      Total por juego
                     </button>
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={tabMesa === 'grupo'}
-                      on:click={() => (tabMesa = 'grupo')}
+                      class:active={tabMesa === 'total'}
+                      on:click={() => (tabMesa = 'total')}
                     >
-                      Total por grupo
+                      Total por mesa
                     </button>
                     <button
                       type="button"
@@ -2009,27 +2009,64 @@
                   </div>
                 </div>
 
-                {#if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                {#if tabMesa === 'grupo'}
                   <span class="sub-count-badge">
-                    {section.subData.arqueoMesaGroups?.length || 0} {section.subData.arqueoMesaGroups?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
+                    {section.subData.resumenMesasPorJuego?.length || 0} {section.subData.resumenMesasPorJuego?.length === 1 ? 'juego' : 'juegos'}
+                  </span>
+                {:else if tabMesa === 'total'}
+                  <span class="sub-count-badge">
+                    {section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0} {(section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0) === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
                 {:else if tabMesa === 'drop'}
                   <span class="sub-count-badge">
                     {section.subData.drop_mesas?.length || 0} {section.subData.drop_mesas?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
-                {:else if tabMesa === 'grupo'}
+                {:else if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
                   <span class="sub-count-badge">
-                    {section.subData.resumenMesasPorJuego?.length || 0} {section.subData.resumenMesasPorJuego?.length === 1 ? 'grupo' : 'grupos'}
-                  </span>
-                {:else}
-                  <span class="sub-count-badge">
-                    {section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0} {(section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0) === 1 ? 'mesa registrada' : 'mesas registradas'}
+                    {section.subData.arqueoMesaGroups?.length || 0} {section.subData.arqueoMesaGroups?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
                 {/if}
               </div>
 
-              {#if tabMesa === 'total'}
-                <!-- Cuadro Resumen Total de Mesas -->
+              {#if tabMesa === 'grupo'}
+                <!-- Cuadro Resumen Total por Juego -->
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
+                      <tr>
+                        <th class="th-left">JUEGO</th>
+                        <th class="th-right">DROP</th>
+                        <th class="th-right">SOBRANTES</th>
+                        <th class="th-right">FALTANTES</th>
+                        <th class="th-right">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.resumenMesasPorJuego as g}
+                        <tr>
+                          <td class="cell-left font-bold">
+                            <span class="mesa-main-name">{g.juegoNombre}</span>
+                          </td>
+                          <td class="cell-total-money font-bold {g.drop > 0 ? 'text-emerald' : ''}">{formatMoney(g.drop)}</td>
+                          <td class="cell-total-money font-bold {g.sobrantes > 0 ? 'text-emerald' : ''}">{g.sobrantes > 0 ? formatMoney(g.sobrantes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {g.faltantes > 0 ? 'text-rose' : ''}">{g.faltantes > 0 ? formatMoney(g.faltantes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {g.total > 0 ? 'text-emerald' : (g.total < 0 ? 'text-rose' : '')}">{formatMoney(g.total)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td class="cell-left font-bold">TOTALES ({section.subData.resumenMesasPorJuego.length} {section.subData.resumenMesasPorJuego.length === 1 ? 'juego' : 'juegos'})</td>
+                        <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.dropTotales.grandTotal)}</td>
+                        <td class="cell-total-money font-bold text-emerald">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</td>
+                        <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(section.subData.totalArqueoFaltantes) : '$0'}</td>
+                        <td class="cell-grand-total {section.subData.produccionMesas > 0 ? 'text-emerald' : (section.subData.produccionMesas < 0 ? 'text-rose' : '')}">{formatMoney(section.subData.produccionMesas)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else if tabMesa === 'total'}
+                <!-- Cuadro Resumen Total por Mesa -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
                     <thead>
@@ -2057,43 +2094,6 @@
                     <tfoot>
                       <tr class="tfoot-totals">
                         <td class="cell-left font-bold">TOTALES ({section.subData.resumenMesasLista.length} {section.subData.resumenMesasLista.length === 1 ? 'mesa' : 'mesas'})</td>
-                        <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.dropTotales.grandTotal)}</td>
-                        <td class="cell-total-money font-bold text-emerald">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</td>
-                        <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(section.subData.totalArqueoFaltantes) : '$0'}</td>
-                        <td class="cell-grand-total {section.subData.produccionMesas > 0 ? 'text-emerald' : (section.subData.produccionMesas < 0 ? 'text-rose' : '')}">{formatMoney(section.subData.produccionMesas)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              {:else if tabMesa === 'grupo'}
-                <!-- Cuadro Resumen Total por Grupo / Juego -->
-                <div class="table-responsive-wrapper">
-                  <table class="compact-table">
-                    <thead>
-                      <tr>
-                        <th class="th-left">GRUPO</th>
-                        <th class="th-right">DROP</th>
-                        <th class="th-right">SOBRANTES</th>
-                        <th class="th-right">FALTANTES</th>
-                        <th class="th-right">TOTAL</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each section.subData.resumenMesasPorJuego as g}
-                        <tr>
-                          <td class="cell-left font-bold">
-                            <span class="mesa-main-name">{g.juegoNombre}</span>
-                          </td>
-                          <td class="cell-total-money font-bold {g.drop > 0 ? 'text-emerald' : ''}">{formatMoney(g.drop)}</td>
-                          <td class="cell-total-money font-bold {g.sobrantes > 0 ? 'text-emerald' : ''}">{g.sobrantes > 0 ? formatMoney(g.sobrantes) : '$0'}</td>
-                          <td class="cell-total-money font-bold {g.faltantes > 0 ? 'text-rose' : ''}">{g.faltantes > 0 ? formatMoney(g.faltantes) : '$0'}</td>
-                          <td class="cell-total-money font-bold {g.total > 0 ? 'text-emerald' : (g.total < 0 ? 'text-rose' : '')}">{formatMoney(g.total)}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                    <tfoot>
-                      <tr class="tfoot-totals">
-                        <td class="cell-left font-bold">TOTALES ({section.subData.resumenMesasPorJuego.length} {section.subData.resumenMesasPorJuego.length === 1 ? 'grupo' : 'grupos'})</td>
                         <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.dropTotales.grandTotal)}</td>
                         <td class="cell-total-money font-bold text-emerald">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</td>
                         <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(section.subData.totalArqueoFaltantes) : '$0'}</td>
