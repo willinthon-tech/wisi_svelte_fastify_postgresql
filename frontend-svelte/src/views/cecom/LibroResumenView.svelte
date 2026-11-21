@@ -1134,8 +1134,14 @@
 
     // Producción de máquinas: ((billetero + devoluciones) - aportes)
     const produccionMaquinas = (conteoTotales.grandTotal + aportesTotales.totalDevoluciones) - aportesTotales.totalAportes;
-    const produccionClientes = dataClientesGlobal.totales.balanceNeto || 0;
-    const produccionFinal = produccionMesas + produccionMaquinas + produccionClientes;
+
+    // Compras y Pagos (Control de Clientes): Compras - Pagos
+    const comprasClientes = Number(dataClientesGlobal.totales.totalCompras) || 0;
+    const pagosClientes = Number(dataClientesGlobal.totales.totalPagos) || 0;
+    const produccionClientes = comprasClientes - pagosClientes;
+
+    // Producción de cada sala: (((produccion de mesa + produccion de maquina) + compras de control cliente) - pago de control cliente)
+    const produccionFinal = (((produccionMesas + produccionMaquinas) + comprasClientes) - pagosClientes);
     const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + dataClientesGlobal.totales.totalCompras;
 
     // Numeración dinámica de secciones (empieza desde Resumen Producción)
@@ -1879,7 +1885,7 @@
                       </span>
                     </div>
                   {/if}
-                  <div class="kpi-card">
+                  <div class="kpi-card {section.subData.produccionClientes > 0 ? 'kpi-card-positive' : (section.subData.produccionClientes < 0 ? 'kpi-card-negative' : '')}">
                     <div class="kpi-subinfo-row">
                       <span class="subinfo-item">PAGOS: <span class="subinfo-val text-rose font-bold">( {formatMoney(section.subData.clientesTotales?.totalPagos || 0)} )</span></span>
                       <span class="subinfo-item">COMPRAS: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.clientesTotales?.totalCompras || 0)} )</span></span>
