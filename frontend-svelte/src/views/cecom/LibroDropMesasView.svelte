@@ -560,10 +560,10 @@
 </script>
 
 <div class="drop-layout-grid">
-  <!-- Tarjeta Izquierda: Formulario "Drop de Mesas" -->
+  <!-- Tarjeta Izquierda: Formulario "Drop" -->
   <div class="card-form-drop">
     <div class="card-title-box">
-      <h3 class="card-title">Drop de Mesas</h3>
+      <h3 class="card-title">Drop</h3>
       <div class="title-underline"></div>
     </div>
 

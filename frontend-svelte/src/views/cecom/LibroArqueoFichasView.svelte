@@ -480,10 +480,10 @@
 </script>
 
 <div class="drop-layout-grid">
-  <!-- Tarjeta Izquierda: Formulario "Arqueo" -->
+  <!-- Tarjeta Izquierda: Formulario "Sobrantes y Faltantes" -->
   <div class="card-form-drop">
     <div class="card-title-box">
-      <h3 class="card-title">Arqueo</h3>
+      <h3 class="card-title">Sobrantes y Faltantes</h3>
       <div class="title-underline"></div>
     </div>
 

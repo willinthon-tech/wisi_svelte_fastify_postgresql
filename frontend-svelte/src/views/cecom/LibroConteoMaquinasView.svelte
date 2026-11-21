@@ -933,10 +933,10 @@
        ═══════════════════════════════════════════════════════════════ -->
   <div class="conteo-layout-grid">
     
-    <!-- TARJETA IZQUIERDA: FORMULARIO DE CONTEO -->
+    <!-- TARJETA IZQUIERDA: FORMULARIO DE BILLETERO -->
     <div class="card-form-conteo">
       <div class="card-title-box">
-        <h3 class="card-title">Conteo de Máquinas</h3>
+        <h3 class="card-title">Billetero</h3>
         <div class="title-underline"></div>
       </div>
 
