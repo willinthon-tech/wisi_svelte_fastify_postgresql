@@ -1778,8 +1778,8 @@
                   </div>
                   <div class="kpi-card">
                     <div class="kpi-subinfo-row">
-                      <span class="subinfo-item">FALTANTES: <span class="subinfo-val text-rose font-bold">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(-section.subData.totalArqueoFaltantes) : '( $0 )'}</span></span>
-                      <span class="subinfo-item">SOBRANTES: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.totalArqueoSobrantes)} )</span></span>
+                      <span class="subinfo-item">FALTANTES: <span class="subinfo-val text-rose font-bold">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(-section.subData.totalArqueoFaltantes) : '$0'}</span></span>
+                      <span class="subinfo-item">SOBRANTES: <span class="subinfo-val text-emerald font-bold">{formatMoney(section.subData.totalArqueoSobrantes)}</span></span>
                     </div>
                     <span
                       class="kpi-value {section.subData.totalArqueoDiferencia > 0
@@ -1811,8 +1811,8 @@
                   </div>
                   <div class="kpi-card">
                     <div class="kpi-subinfo-row">
-                      <span class="subinfo-item">APORTES: <span class="subinfo-val text-rose font-bold">{section.subData.aportesTotales.totalAportes > 0 ? formatMoney(-section.subData.aportesTotales.totalAportes) : '( $0 )'}</span></span>
-                      <span class="subinfo-item">DEVOLUCIONES: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.aportesTotales.totalDevoluciones)} )</span></span>
+                      <span class="subinfo-item">APORTES: <span class="subinfo-val text-rose font-bold">{section.subData.aportesTotales.totalAportes > 0 ? formatMoney(-section.subData.aportesTotales.totalAportes) : '$0'}</span></span>
+                      <span class="subinfo-item">DEVOLUCIONES: <span class="subinfo-val text-emerald font-bold">{formatMoney(section.subData.aportesTotales.totalDevoluciones)}</span></span>
                     </div>
                     <span
                       class="kpi-value {section.subData.aportesTotales.netoMonto > 0
@@ -1888,8 +1888,8 @@
                   {/if}
                   <div class="kpi-card {section.subData.produccionClientes > 0 ? 'kpi-card-positive' : (section.subData.produccionClientes < 0 ? 'kpi-card-negative' : '')}">
                     <div class="kpi-subinfo-row">
-                      <span class="subinfo-item">PAGOS: <span class="subinfo-val text-rose font-bold">{(section.subData.clientesTotales?.totalPagos || 0) > 0 ? formatMoney(-(section.subData.clientesTotales?.totalPagos || 0)) : '( $0 )'}</span></span>
-                      <span class="subinfo-item">COMPRAS: <span class="subinfo-val text-emerald font-bold">( {formatMoney(section.subData.clientesTotales?.totalCompras || 0)} )</span></span>
+                      <span class="subinfo-item">PAGOS: <span class="subinfo-val text-rose font-bold">{(section.subData.clientesTotales?.totalPagos || 0) > 0 ? formatMoney(-(section.subData.clientesTotales?.totalPagos || 0)) : '$0'}</span></span>
+                      <span class="subinfo-item">COMPRAS: <span class="subinfo-val text-emerald font-bold">{formatMoney(section.subData.clientesTotales?.totalCompras || 0)}</span></span>
                     </div>
                     <span
                       class="kpi-value {section.subData.produccionClientes > 0
