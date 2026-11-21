@@ -1265,6 +1265,23 @@
                 {/each}
               {/if}
             </tbody>
+            {#if !isLoadingRecords && sortedRecords.length > 0}
+              <tfoot>
+                <tr class="tfoot-totals-row">
+                  <td colspan="3" class="font-bold">TOTALES ({sortedRecords.length} {sortedRecords.length === 1 ? 'operación' : 'operaciones'})</td>
+                  <td class="td-right td-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
+                    {#if balanceNeto < 0}
+                      ( - ${formatMonto(Math.abs(balanceNeto))} )
+                    {:else if balanceNeto > 0}
+                      ${formatMonto(balanceNeto)}
+                    {:else}
+                      $0.00
+                    {/if}
+                  </td>
+                  <td colspan={canEdit || canDelete ? 3 : 2}></td>
+                </tr>
+              </tfoot>
+            {/if}
           </table>
         </div>
       {/if}
