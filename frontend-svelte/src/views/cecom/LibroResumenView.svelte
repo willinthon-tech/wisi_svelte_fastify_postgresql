@@ -2343,12 +2343,8 @@
                         <th>RANGO</th>
                         <th>OPS</th>
                         <th>APORTES</th>
-                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                          <th>DEVOLUCIONES</th>
-                          <th>TOTAL NETO</th>
-                        {:else}
-                          <th>MONTO TOTAL</th>
-                        {/if}
+                        <th>DEVOLUCIONES</th>
+                        <th>TOTAL NETO</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2357,10 +2353,8 @@
                           <td class="cell-left font-bold">{rg.rango_nombre}</td>
                           <td class="cell-center">{rg.cantidad} ops</td>
                           <td class="cell-total-money font-bold {rg.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(rg.montoAportes))}</td>
-                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                            <td class="cell-total-money font-bold {rg.montoDevoluciones > 0 ? 'text-emerald' : ''}">{rg.montoDevoluciones > 0 ? formatMoney(Math.abs(rg.montoDevoluciones)) : '$0'}</td>
-                            <td class="cell-total-money font-bold {rg.neto > 0 ? 'text-rose' : (rg.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(rg.neto))}</td>
-                          {/if}
+                          <td class="cell-total-money font-bold {rg.montoDevoluciones > 0 ? 'text-emerald' : ''}">{rg.montoDevoluciones > 0 ? formatMoney(Math.abs(rg.montoDevoluciones)) : '$0'}</td>
+                          <td class="cell-total-money font-bold {rg.neto > 0 ? 'text-rose' : (rg.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(rg.neto))}</td>
                         </tr>
                       {/each}
                     </tbody>
@@ -2369,10 +2363,8 @@
                         <td>TOTAL</td>
                         <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
                         <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
-                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                          <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
-                          <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
-                        {/if}
+                        <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{section.subData.aportesTotales.totalDevoluciones > 0 ? formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones)) : '$0'}</td>
+                        <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -2387,12 +2379,8 @@
                         <th>CARGO</th>
                         <th>OPS</th>
                         <th>APORTES</th>
-                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                          <th>DEVOLUCIONES</th>
-                          <th>TOTAL NETO</th>
-                        {:else}
-                          <th>MONTO TOTAL</th>
-                        {/if}
+                        <th>DEVOLUCIONES</th>
+                        <th>TOTAL NETO</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2402,10 +2390,8 @@
                           <td class="cell-center tag-metodo-text">{emp.cargo_nombre}</td>
                           <td class="cell-center">{emp.cantidad} ops</td>
                           <td class="cell-total-money font-bold {emp.montoAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(emp.montoAportes))}</td>
-                          {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                            <td class="cell-total-money font-bold {emp.montoDevoluciones > 0 ? 'text-emerald' : ''}">{emp.montoDevoluciones > 0 ? formatMoney(Math.abs(emp.montoDevoluciones)) : '$0'}</td>
-                            <td class="cell-total-money font-bold {emp.neto > 0 ? 'text-rose' : (emp.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(emp.neto))}</td>
-                          {/if}
+                          <td class="cell-total-money font-bold {emp.montoDevoluciones > 0 ? 'text-emerald' : ''}">{emp.montoDevoluciones > 0 ? formatMoney(Math.abs(emp.montoDevoluciones)) : '$0'}</td>
+                          <td class="cell-total-money font-bold {emp.neto > 0 ? 'text-rose' : (emp.neto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(emp.neto))}</td>
                         </tr>
                       {/each}
                     </tbody>
@@ -2415,10 +2401,8 @@
                         <td>—</td>
                         <td class="cell-center">{section.subData.aportesTotales.totalOps} ops</td>
                         <td class="cell-total-money font-bold {section.subData.aportesTotales.totalAportes > 0 ? 'text-rose' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalAportes))}</td>
-                        {#if section.subData.aportesTotales.totalDevoluciones > 0}
-                          <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones))}</td>
-                          <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
-                        {/if}
+                        <td class="cell-total-money font-bold {section.subData.aportesTotales.totalDevoluciones > 0 ? 'text-emerald' : ''}">{section.subData.aportesTotales.totalDevoluciones > 0 ? formatMoney(Math.abs(section.subData.aportesTotales.totalDevoluciones)) : '$0'}</td>
+                        <td class="cell-grand-total {section.subData.aportesTotales.netoMonto > 0 ? 'text-rose' : (section.subData.aportesTotales.netoMonto < 0 ? 'text-emerald' : '')}">{formatMoney(Math.abs(section.subData.aportesTotales.netoMonto))}</td>
                       </tr>
                     </tfoot>
                   </table>
