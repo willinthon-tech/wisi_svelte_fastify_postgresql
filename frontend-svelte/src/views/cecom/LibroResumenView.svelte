@@ -64,8 +64,8 @@
   let viewMode = "documento"; // 'documento' (completo ordenado) | 'drop' | 'resumen' | 'llaves' | 'clientes' | 'incidencias'
 
   // Pestañas activas por sección
-  let tabResumenProd = 'total'; // 'total' | 'mesas' | 'maquinas' | 'clientes'
-  let tabMesa = 'drop';        // 'drop' | 'faltantes'
+  let tabResumenProd = 'total'; // 'total' | 'mesas' | 'maquinas'
+  let tabMesa = 'total';        // 'total' | 'drop' | 'faltantes'
   let tabBilletero = 'rangos'; // 'rangos' | 'detallado'
   let tabAporte = 'rangos';    // 'rangos' | 'empleado' | 'detallado'
   let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
@@ -673,6 +673,79 @@
     const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
     const totalArqueoDiferencia = totalArqueoSobrantes - totalArqueoFaltantes;
 
+    // 2.2 Consolidado por mesa para el Cuadro Total (Drop + Sobrantes - Faltantes = Total)
+    const mapMesasConsolidado = new Map();
+
+    for (const d of drop_mesas) {
+      const mId = String(d.mesa_uuid || d.mesa_id || d.id || '');
+      const mNom = d.mesa_nombre || (d.mesa_uuid ? `Mesa #${d.mesa_uuid.slice(0, 8)}` : `Mesa #${mId}`);
+      const key = mId || mNom.trim().toLowerCase();
+      if (!mapMesasConsolidado.has(key)) {
+        mapMesasConsolidado.set(key, {
+          mesaId: mId,
+          mesaNombre: mNom,
+          juegoNombre: d.juego_nombre || '',
+          drop: 0,
+          sobrantes: 0,
+          faltantes: 0,
+          total: 0
+        });
+      }
+      const item = mapMesasConsolidado.get(key);
+      item.drop += (Number(d.total) || 0);
+    }
+
+    for (const g of arqueoMesaGroups) {
+      const mId = String(g.mesaId || '');
+      const mNom = g.mesaNombre || '';
+      let key = mId;
+      if (!mapMesasConsolidado.has(key)) {
+        for (const [k, v] of mapMesasConsolidado.entries()) {
+          if (v.mesaNombre && mNom && v.mesaNombre.trim().toLowerCase() === mNom.trim().toLowerCase()) {
+            key = k;
+            break;
+          }
+        }
+      }
+
+      if (!mapMesasConsolidado.has(key)) {
+        mapMesasConsolidado.set(key, {
+          mesaId: mId,
+          mesaNombre: mNom || `Mesa #${mId.slice(0, 8)}`,
+          juegoNombre: g.juegoNombre || '',
+          drop: 0,
+          sobrantes: 0,
+          faltantes: 0,
+          total: 0
+        });
+      }
+
+      const item = mapMesasConsolidado.get(key);
+      if (g.juegoNombre && !item.juegoNombre) {
+        item.juegoNombre = g.juegoNombre;
+      }
+
+      if (g.cierre) {
+        const ap = Number(g.apertura?.total) || 0;
+        const ci = Number(g.cierre?.total) || 0;
+        const dif = ci - ap;
+        if (dif > 0) {
+          item.sobrantes += dif;
+        } else if (dif < 0) {
+          item.faltantes += Math.abs(dif);
+        }
+      }
+    }
+
+    const resumenMesasLista = Array.from(mapMesasConsolidado.values())
+      .map(m => ({
+        ...m,
+        total: (m.drop + m.sobrantes) - m.faltantes
+      }))
+      .sort((a, b) => 
+        (a.mesaNombre || '').localeCompare(b.mesaNombre || '', undefined, { numeric: true, sensitivity: 'base' })
+      );
+
     // 3. Novedades de mesas
     const novedades_mesas = (rawData.novedades_mesas || []).filter(n => matchesSub(n.multisala_uuid));
 
@@ -1208,6 +1281,7 @@
       arqueo_fichas: rawArqueo,
       arqueoSalaFichas,
       arqueoMesaGroups,
+      resumenMesasLista,
       totalArqueoApertura,
       totalArqueoCierre,
       totalArqueoDiferencia,
@@ -1873,6 +1947,14 @@
                     <button
                       type="button"
                       class="tab-toggle-btn"
+                      class:active={tabMesa === 'total'}
+                      on:click={() => (tabMesa = 'total')}
+                    >
+                      Total
+                    </button>
+                    <button
+                      type="button"
+                      class="tab-toggle-btn"
                       class:active={tabMesa === 'drop'}
                       on:click={() => (tabMesa = 'drop')}
                     >
@@ -1893,14 +1975,93 @@
                   <span class="sub-count-badge">
                     {section.subData.arqueoMesaGroups?.length || 0} {section.subData.arqueoMesaGroups?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
-                {:else}
+                {:else if tabMesa === 'drop'}
                   <span class="sub-count-badge">
                     {section.subData.drop_mesas?.length || 0} {section.subData.drop_mesas?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
+                  </span>
+                {:else}
+                  <span class="sub-count-badge">
+                    {section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0} {(section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0) === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
                 {/if}
               </div>
 
-              {#if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+              {#if tabMesa === 'total'}
+                <!-- Indicadores de rendimiento de Mesas (Total) -->
+                <div class="quick-kpi-grid">
+                  <div class="kpi-card">
+                    <span class="kpi-label">DROP TOTAL</span>
+                    <span class="kpi-value {section.subData.dropTotales.grandTotal > 0 ? 'text-emerald font-bold' : 'font-bold'}">
+                      {formatMoney(section.subData.dropTotales.grandTotal)}
+                    </span>
+                  </div>
+                  <div class="kpi-card">
+                    <div class="kpi-subinfo-row">
+                      <span class="subinfo-item">FALTANTES: <span class="subinfo-val text-rose font-bold">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(-section.subData.totalArqueoFaltantes) : '$0'}</span></span>
+                      <span class="subinfo-item">SOBRANTES: <span class="subinfo-val text-emerald font-bold">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</span></span>
+                    </div>
+                    <span
+                      class="kpi-value {section.subData.totalArqueoDiferencia > 0
+                        ? 'text-emerald font-bold'
+                        : (section.subData.totalArqueoDiferencia < 0 ? 'text-rose font-bold' : 'font-bold')}"
+                    >
+                      {formatMoney(section.subData.totalArqueoDiferencia)}
+                    </span>
+                  </div>
+                  <div class="kpi-card {section.subData.produccionMesas > 0 ? 'kpi-card-positive' : (section.subData.produccionMesas < 0 ? 'kpi-card-negative' : '')}">
+                    <span class="kpi-label">TOTAL PRODUCCIÓN</span>
+                    <span
+                      class="kpi-value {section.subData.produccionMesas > 0
+                        ? 'text-emerald font-bold'
+                        : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
+                    >
+                      {formatMoney(section.subData.produccionMesas)}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Cuadro Resumen Total de Mesas -->
+                <div class="table-responsive-wrapper">
+                  <table class="compact-table">
+                    <thead>
+                      <tr>
+                        <th class="th-left">MESA</th>
+                        <th class="th-right">DROP</th>
+                        <th class="th-right">SOBRANTES</th>
+                        <th class="th-right">FALTANTES</th>
+                        <th class="th-right">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.resumenMesasLista as m}
+                        <tr>
+                          <td class="cell-left font-bold">
+                            <div class="mesa-title-cell">
+                              <span class="mesa-main-name">{m.mesaNombre}</span>
+                              {#if m.juegoNombre}
+                                <span class="mesa-sub-juego">{m.juegoNombre}</span>
+                              {/if}
+                            </div>
+                          </td>
+                          <td class="cell-total-money font-bold {m.drop > 0 ? 'text-emerald' : ''}">{formatMoney(m.drop)}</td>
+                          <td class="cell-total-money font-bold {m.sobrantes > 0 ? 'text-emerald' : ''}">{m.sobrantes > 0 ? formatMoney(m.sobrantes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {m.faltantes > 0 ? 'text-rose' : ''}">{m.faltantes > 0 ? formatMoney(-m.faltantes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {m.total > 0 ? 'text-emerald' : (m.total < 0 ? 'text-rose' : '')}">{formatMoney(m.total)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                    <tfoot>
+                      <tr class="tfoot-totals">
+                        <td class="cell-left font-bold">TOTALES ({section.subData.resumenMesasLista.length} {section.subData.resumenMesasLista.length === 1 ? 'mesa' : 'mesas'})</td>
+                        <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.dropTotales.grandTotal)}</td>
+                        <td class="cell-total-money font-bold text-emerald">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</td>
+                        <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(-section.subData.totalArqueoFaltantes) : '$0'}</td>
+                        <td class="cell-grand-total {section.subData.produccionMesas > 0 ? 'text-emerald' : (section.subData.produccionMesas < 0 ? 'text-rose' : '')}">{formatMoney(section.subData.produccionMesas)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              {:else if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
                 <!-- Tabla: Faltantes y Sobrantes -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table arqueo-table">
@@ -4342,6 +4503,16 @@
     text-align: center;
     color: #111827;
     text-transform: uppercase;
+  }
+
+  .compact-table .th-left {
+    text-align: left;
+    padding-left: 10px;
+  }
+
+  .compact-table .th-right {
+    text-align: right;
+    padding-right: 10px;
   }
 
   .compact-table td {
