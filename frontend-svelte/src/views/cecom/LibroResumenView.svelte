@@ -1987,39 +1987,6 @@
               </div>
 
               {#if tabMesa === 'total'}
-                <!-- Indicadores de rendimiento de Mesas (Total) -->
-                <div class="quick-kpi-grid">
-                  <div class="kpi-card">
-                    <span class="kpi-label">DROP TOTAL</span>
-                    <span class="kpi-value {section.subData.dropTotales.grandTotal > 0 ? 'text-emerald font-bold' : 'font-bold'}">
-                      {formatMoney(section.subData.dropTotales.grandTotal)}
-                    </span>
-                  </div>
-                  <div class="kpi-card">
-                    <div class="kpi-subinfo-row">
-                      <span class="subinfo-item">FALTANTES: <span class="subinfo-val text-rose font-bold">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(-section.subData.totalArqueoFaltantes) : '$0'}</span></span>
-                      <span class="subinfo-item">SOBRANTES: <span class="subinfo-val text-emerald font-bold">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</span></span>
-                    </div>
-                    <span
-                      class="kpi-value {section.subData.totalArqueoDiferencia > 0
-                        ? 'text-emerald font-bold'
-                        : (section.subData.totalArqueoDiferencia < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                    >
-                      {formatMoney(section.subData.totalArqueoDiferencia)}
-                    </span>
-                  </div>
-                  <div class="kpi-card {section.subData.produccionMesas > 0 ? 'kpi-card-positive' : (section.subData.produccionMesas < 0 ? 'kpi-card-negative' : '')}">
-                    <span class="kpi-label">TOTAL PRODUCCIÓN</span>
-                    <span
-                      class="kpi-value {section.subData.produccionMesas > 0
-                        ? 'text-emerald font-bold'
-                        : (section.subData.produccionMesas < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                    >
-                      {formatMoney(section.subData.produccionMesas)}
-                    </span>
-                  </div>
-                </div>
-
                 <!-- Cuadro Resumen Total de Mesas -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
@@ -2045,7 +2012,7 @@
                           </td>
                           <td class="cell-total-money font-bold {m.drop > 0 ? 'text-emerald' : ''}">{formatMoney(m.drop)}</td>
                           <td class="cell-total-money font-bold {m.sobrantes > 0 ? 'text-emerald' : ''}">{m.sobrantes > 0 ? formatMoney(m.sobrantes) : '$0'}</td>
-                          <td class="cell-total-money font-bold {m.faltantes > 0 ? 'text-rose' : ''}">{m.faltantes > 0 ? formatMoney(-m.faltantes) : '$0'}</td>
+                          <td class="cell-total-money font-bold {m.faltantes > 0 ? 'text-rose' : ''}">{m.faltantes > 0 ? formatMoney(m.faltantes) : '$0'}</td>
                           <td class="cell-total-money font-bold {m.total > 0 ? 'text-emerald' : (m.total < 0 ? 'text-rose' : '')}">{formatMoney(m.total)}</td>
                         </tr>
                       {/each}
@@ -2055,7 +2022,7 @@
                         <td class="cell-left font-bold">TOTALES ({section.subData.resumenMesasLista.length} {section.subData.resumenMesasLista.length === 1 ? 'mesa' : 'mesas'})</td>
                         <td class="cell-total-money font-bold text-emerald">{formatMoney(section.subData.dropTotales.grandTotal)}</td>
                         <td class="cell-total-money font-bold text-emerald">{section.subData.totalArqueoSobrantes > 0 ? formatMoney(section.subData.totalArqueoSobrantes) : '$0'}</td>
-                        <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(-section.subData.totalArqueoFaltantes) : '$0'}</td>
+                        <td class="cell-total-money font-bold text-rose">{section.subData.totalArqueoFaltantes > 0 ? formatMoney(section.subData.totalArqueoFaltantes) : '$0'}</td>
                         <td class="cell-grand-total {section.subData.produccionMesas > 0 ? 'text-emerald' : (section.subData.produccionMesas < 0 ? 'text-rose' : '')}">{formatMoney(section.subData.produccionMesas)}</td>
                       </tr>
                     </tfoot>
