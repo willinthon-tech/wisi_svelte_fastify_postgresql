@@ -1999,7 +1999,7 @@
                                 class:dif-neg={difTotal < 0}
                                 class:dif-neu={difTotal === 0}
                               >
-                                $ {formatMoney(Math.abs(difTotal))}
+                                {formatMoney(Math.abs(difTotal))}
                               </span>
                             {:else}
                               <span class="val-pending">—</span>
@@ -2025,7 +2025,7 @@
                         {/each}
                         <td class="td-center grand-total-cell dif-grand-total">
                           <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
-                            $ {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
+                            {formatMoney(Math.abs(section.subData.totalArqueoDiferencia))}
                           </span>
                         </td>
                       </tr>
