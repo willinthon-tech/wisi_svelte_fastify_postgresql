@@ -2624,7 +2624,7 @@
                             </span>
                           </td>
                           <td class="cell-total-money font-bold {a.monto > 0 ? (isAporte ? 'text-rose' : 'text-emerald') : ''}">
-                            {formatMoney(Math.abs(a.monto))}
+                            {formatMoney(isAporte ? -Math.abs(a.monto) : Math.abs(a.monto))}
                           </td>
                         </tr>
                       {/each}
@@ -2839,7 +2839,7 @@
                             {c.nota ? c.nota : "—"}
                           </td>
                           <td class="cell-total-money font-bold {c.monto > 0 ? (isCompra ? 'text-emerald' : 'text-rose') : ''}">
-                            {formatMoney(Math.abs(c.monto))}
+                            {formatMoney(isCompra ? Math.abs(c.monto) : -Math.abs(c.monto))}
                           </td>
                         </tr>
                       {/each}

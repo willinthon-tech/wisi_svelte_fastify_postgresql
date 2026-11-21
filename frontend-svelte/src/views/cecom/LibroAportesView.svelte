@@ -245,7 +245,7 @@
 
   $: totalAportesMonto = aportesList.reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
   $: totalDevolucionesMonto = devolucionesList.reduce((acc, r) => acc + (Number(r.monto) || 0), 0);
-  $: netoMonto = totalAportesMonto - totalDevolucionesMonto;
+  $: netoMonto = totalDevolucionesMonto - totalAportesMonto;
 
   $: totalAportesCount = aportesList.length;
   $: totalDevolucionesCount = devolucionesList.length;
@@ -271,19 +271,19 @@
       entry.cantidad += 1;
       const val = Number(r.monto) || 0;
       if (r.tipo === 'Devolución') {
-        entry.total_monto -= val;
-      } else {
         entry.total_monto += val;
+      } else {
+        entry.total_monto -= val;
       }
     }
 
     const list = Array.from(map.values()).map(item => ({
       ...item,
-      porcentaje: netoMonto > 0 ? ((item.total_monto / netoMonto) * 100) : 0,
-      promedio: item.cantidad > 0 ? (item.total_monto / item.cantidad) : 0
+      porcentaje: Math.abs(netoMonto) > 0 ? ((Math.abs(item.total_monto) / Math.abs(netoMonto)) * 100) : 0,
+      promedio: item.cantidad > 0 ? (Math.abs(item.total_monto) / item.cantidad) : 0
     }));
 
-    return list.sort((a, b) => b.total_monto - a.total_monto);
+    return list.sort((a, b) => Math.abs(b.total_monto) - Math.abs(a.total_monto));
   })();
 
   // Resumen agrupado por Empleado (ordenado por monto mayor a menor)
@@ -307,9 +307,9 @@
       entry.cantidad += 1;
       const val = Number(r.monto) || 0;
       if (r.tipo === 'Devolución') {
-        entry.total_monto -= val;
-      } else {
         entry.total_monto += val;
+      } else {
+        entry.total_monto -= val;
       }
       if (r.rango_nombre) entry.rangos_usados.add(r.rango_nombre);
     }
@@ -317,8 +317,8 @@
     const list = Array.from(map.values()).map(item => ({
       ...item,
       rangos_texto: Array.from(item.rangos_usados).join(', '),
-      porcentaje: netoMonto > 0 ? ((item.total_monto / netoMonto) * 100) : 0,
-      promedio: item.cantidad > 0 ? (item.total_monto / item.cantidad) : 0
+      porcentaje: Math.abs(netoMonto) > 0 ? ((Math.abs(item.total_monto) / Math.abs(netoMonto)) * 100) : 0,
+      promedio: item.cantidad > 0 ? (Math.abs(item.total_monto) / item.cantidad) : 0
     }));
 
     let filtered = list;
@@ -1081,7 +1081,9 @@
             <span class="kpi-label">TOTAL APORTES</span>
           </div>
           <div class="kpi-value-row">
-            <span class="kpi-value text-green">${formatMonto(totalAportesMonto)}</span>
+            <span class="kpi-value {totalAportesMonto > 0 ? 'text-red' : 'text-slate'}">
+              {totalAportesMonto > 0 ? `( - $${formatMonto(totalAportesMonto)} )` : '$0.00'}
+            </span>
           </div>
           <div class="kpi-subtext">
             <span>{totalAportesCount} {totalAportesCount === 1 ? 'operación' : 'operaciones'}</span>
@@ -1094,7 +1096,9 @@
             <span class="kpi-label">TOTAL DEVOLUCIONES</span>
           </div>
           <div class="kpi-value-row">
-            <span class="kpi-value text-purple">${formatMonto(totalDevolucionesMonto)}</span>
+            <span class="kpi-value {totalDevolucionesMonto > 0 ? 'text-green' : 'text-slate'}">
+              ${formatMonto(totalDevolucionesMonto)}
+            </span>
           </div>
           <div class="kpi-subtext">
             <span>{totalDevolucionesCount} {totalDevolucionesCount === 1 ? 'operación' : 'operaciones'}</span>
@@ -1107,10 +1111,18 @@
             <span class="kpi-label">NETO APORTES</span>
           </div>
           <div class="kpi-value-row">
-            <span class="kpi-value text-blue">${formatMonto(netoMonto)}</span>
+            <span class="kpi-value {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
+              {#if netoMonto < 0}
+                ( - ${formatMonto(Math.abs(netoMonto))} )
+              {:else if netoMonto > 0}
+                ${formatMonto(netoMonto)}
+              {:else}
+                $0.00
+              {/if}
+            </span>
           </div>
           <div class="kpi-subtext">
-            <span>Aportes - Devoluciones</span>
+            <span>Devoluciones - Aportes</span>
           </div>
         </div>
 
@@ -1220,9 +1232,11 @@
                       <span class="badge-tipo badge-pago">{record.rango_nombre || (record.rango_uuid ? `Rango #${record.rango_uuid.slice(0, 8)}` : `Rango #${record.rango_id}`)}</span>
                     </td>
                     <td class="td-right td-monto">
-                      <span class="monto-value {record.tipo === 'Devolución' ? 'monto-devolucion' : ''}">
-                        {record.tipo === 'Devolución' ? '-' : ''}${formatMonto(record.monto)}
-                      </span>
+                      {#if (record.tipo || 'Aporte') === 'Devolución'}
+                        <span class="monto-value text-green font-bold">${formatMonto(record.monto)}</span>
+                      {:else}
+                        <span class="monto-value text-red font-bold">( - ${formatMonto(record.monto)} )</span>
+                      {/if}
                     </td>
                     <td class="td-center td-metodo">
                       <span class="badge-metodo metodo-pdv">
@@ -1304,7 +1318,13 @@
                       <span class="badge-tipo badge-compra">{rg.cantidad} ops</span>
                     </td>
                     <td class="td-right td-monto">
-                      <span class="monto-value">${formatMonto(rg.total_monto)}</span>
+                      {#if rg.total_monto < 0}
+                        <span class="monto-value text-red font-bold">( - ${formatMonto(Math.abs(rg.total_monto))} )</span>
+                      {:else if rg.total_monto > 0}
+                        <span class="monto-value text-green font-bold">${formatMonto(rg.total_monto)}</span>
+                      {:else}
+                        <span class="monto-value text-slate font-bold">$0.00</span>
+                      {/if}
                     </td>
                     <td class="td-center td-metodo">
                       <span class="badge-metodo metodo-pdv">{rg.porcentaje.toFixed(1)}%</span>
@@ -1364,7 +1384,13 @@
                       <span class="badge-tipo badge-compra">{emp.cantidad} ops</span>
                     </td>
                     <td class="td-right td-monto">
-                      <span class="monto-value">${formatMonto(emp.total_monto)}</span>
+                      {#if emp.total_monto < 0}
+                        <span class="monto-value text-red font-bold">( - ${formatMonto(Math.abs(emp.total_monto))} )</span>
+                      {:else if emp.total_monto > 0}
+                        <span class="monto-value text-green font-bold">${formatMonto(emp.total_monto)}</span>
+                      {:else}
+                        <span class="monto-value text-slate font-bold">$0.00</span>
+                      {/if}
                     </td>
                     <td class="td-center td-metodo">
                       <span class="badge-metodo metodo-pdv">{emp.porcentaje.toFixed(1)}%</span>
@@ -1944,7 +1970,8 @@
     letter-spacing: -0.3px;
   }
 
-  .text-green { color: #16a34a; }
+  .text-green { color: #16a34a !important; }
+  .text-red { color: #dc2626 !important; }
   .text-purple { color: #7c3aed; }
   .text-blue { color: #2563eb; }
   .text-slate { color: #0f172a; }
@@ -2161,7 +2188,10 @@
   }
 
   .monto-value.monto-devolucion {
-    color: #dc2626;
+    color: #16a34a !important;
+  }
+  .monto-value.monto-aporte {
+    color: #dc2626 !important;
   }
 
   /* Badges de Método */
