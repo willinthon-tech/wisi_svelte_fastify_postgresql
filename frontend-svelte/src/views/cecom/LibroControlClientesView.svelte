@@ -1352,14 +1352,13 @@
                 <th class="th-right">Compras</th>
                 <th class="th-right">Pagos</th>
                 <th class="th-right">Total</th>
-                <th class="th-center">Resultado</th>
                 <th class="th-center">Operaciones</th>
               </tr>
             </thead>
             <tbody>
               {#if isLoadingRecords}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
+                  <td colspan="6" class="empty-state-cell">
                     <div class="loading-state-inline">
                       <div class="spinner-small"></div>
                       <span>Cargando resumen de clientes...</span>
@@ -1368,7 +1367,7 @@
                 </tr>
               {:else if resumenClientesFiltrados.length === 0}
                 <tr>
-                  <td colspan="7" class="empty-state-cell">
+                  <td colspan="6" class="empty-state-cell">
                     <span class="empty-text">No hay clientes coincidentes registrados en esta fecha.</span>
                   </td>
                 </tr>
@@ -1389,21 +1388,6 @@
                       {c.balance < 0 ? `( - $${formatMonto(Math.abs(c.balance))} )` : `$${formatMonto(c.balance)}`}
                     </td>
                     <td class="td-center">
-                      {#if c.balance < 0}
-                        <span class="badge-jugador-res ganando" title="El jugador cobró más premios de lo que compró">
-                          Ganando (${formatMonto(Math.abs(c.balance))})
-                        </span>
-                      {:else if c.balance > 0}
-                        <span class="badge-jugador-res perdiendo" title="La sala retuvo más compras de este jugador">
-                          En Contra (-${formatMonto(c.balance)})
-                        </span>
-                      {:else}
-                        <span class="badge-jugador-res tablas">
-                          En Tablas ($0.00)
-                        </span>
-                      {/if}
-                    </td>
-                    <td class="td-center">
                       <span class="ops-badge">{c.count} ({c.countCompras}C / {c.countPagos}P)</span>
                     </td>
                   </tr>
@@ -1413,20 +1397,11 @@
             {#if resumenClientes.length > 0}
               <tfoot>
                 <tr class="tfoot-totals-row">
-                  <td colspan="2" class="font-bold">TOTAL ({resumenClientes.length} Clientes)</td>
+                  <td colspan="2" class="font-bold">TOTALES ({resumenClientes.length} {resumenClientes.length === 1 ? 'cliente' : 'clientes'})</td>
                   <td class="td-right font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                  <td class="td-right font-mono font-bold text-purple">${formatMonto(totalPagos)}</td>
-                  <td class="td-right font-mono font-bold {balanceNeto >= 0 ? 'text-blue' : 'text-amber'}">
-                    {balanceNeto >= 0 ? '+' : '-'}${formatMonto(Math.abs(balanceNeto))}
-                  </td>
-                  <td class="td-center font-bold">
-                    {#if balanceNeto > 0}
-                      <span class="text-blue">Casa a Favor</span>
-                    {:else if balanceNeto < 0}
-                      <span class="text-amber">Clientes a Favor</span>
-                    {:else}
-                      <span>Nivelado</span>
-                    {/if}
+                  <td class="td-right font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
+                  <td class="td-right font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
+                    {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                   </td>
                   <td class="td-center font-bold">{records.length}</td>
                 </tr>
