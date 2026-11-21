@@ -1140,15 +1140,15 @@
     const pagosClientes = Number(dataClientesGlobal.totales.totalPagos) || 0;
     const produccionClientes = comprasClientes - pagosClientes;
 
-    // Producción de cada sala: (((produccion de mesa + produccion de maquina) + compras de control cliente) - pago de control cliente)
-    const produccionFinal = (((produccionMesas + produccionMaquinas) + comprasClientes) - pagosClientes);
+    // Producción de cada sala: (produccion de mesa + produccion de maquina)
+    const produccionFinal = produccionMesas + produccionMaquinas;
     const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + dataClientesGlobal.totales.totalCompras;
 
     // Numeración dinámica de secciones (empieza desde Resumen Producción)
     const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (arqueoMesaGroups && arqueoMesaGroups.length > 0));
     const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0));
     const hasClientes = Boolean(sortedControlClientes && sortedControlClientes.length > 0);
-    const hasResumenProduccion = Boolean(hasResumenMesas || hasResumenMaquinas || hasClientes);
+    const hasResumenProduccion = Boolean(hasResumenMesas || hasResumenMaquinas);
 
     let idxSeccion = 0;
     const numResumenProduccion = hasResumenProduccion ? ++idxSeccion : 0;
@@ -1693,7 +1693,7 @@
           <!-- ============================================================
                RESUMEN PRODUCCIÓN (Selector de Pestañas: Total, Mesas, Máquinas)
                ============================================================ -->
-          {#if section.subData.hasResumenMesas || section.subData.hasResumenMaquinas || section.subData.hasClientes}
+          {#if section.subData.hasResumenMesas || section.subData.hasResumenMaquinas}
             <div class="sheet-section sub-module-section">
               <div class="sub-header-row">
                 <div class="sub-title-group">
@@ -1729,16 +1729,6 @@
                         Máquinas
                       </button>
                     {/if}
-                    {#if section.subData.hasClientes}
-                      <button
-                        type="button"
-                        class="tab-toggle-btn"
-                        class:active={tabResumenProd === 'clientes'}
-                        on:click={() => (tabResumenProd = 'clientes')}
-                      >
-                        Compras y Pagos
-                      </button>
-                    {/if}
                   </div>
                 </div>
 
@@ -1756,12 +1746,6 @@
                   {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
                     <span class="sub-count-badge">
                       {section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina' : 'máquinas'}
-                    </span>
-                  {/if}
-                {:else if tabResumenProd === 'clientes'}
-                  {#if section.subData.control_clientes && section.subData.control_clientes.length > 0}
-                    <span class="sub-count-badge">
-                      {section.subData.control_clientes.length} {section.subData.control_clientes.length === 1 ? 'operación' : 'operaciones'}
                     </span>
                   {/if}
                 {/if}
@@ -1833,32 +1817,6 @@
                     </span>
                   </div>
                 </div>
-              {:else if tabResumenProd === 'clientes'}
-                <!-- Indicadores de rendimiento de Compras y Pagos -->
-                <div class="quick-kpi-grid">
-                  <div class="kpi-card">
-                    <span class="kpi-label">COMPRAS</span>
-                    <span class="kpi-value text-emerald font-bold">
-                      {formatMoney(section.subData.clientesTotales?.totalCompras || 0)}
-                    </span>
-                  </div>
-                  <div class="kpi-card">
-                    <span class="kpi-label">PAGOS</span>
-                    <span class="kpi-value text-rose font-bold">
-                      {formatMoney(section.subData.clientesTotales?.totalPagos || 0)}
-                    </span>
-                  </div>
-                  <div class="kpi-card {section.subData.produccionClientes > 0 ? 'kpi-card-positive' : (section.subData.produccionClientes < 0 ? 'kpi-card-negative' : '')}">
-                    <span class="kpi-label">PRODUCCIÓN</span>
-                    <span
-                      class="kpi-value {section.subData.produccionClientes > 0
-                        ? 'text-emerald font-bold'
-                        : (section.subData.produccionClientes < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                    >
-                      {formatMoney(section.subData.produccionClientes)}
-                    </span>
-                  </div>
-                </div>
               {:else}
                 <!-- Indicadores consolidados de producción (Total) -->
                 <div class="quick-kpi-grid">
@@ -1886,19 +1844,6 @@
                       </span>
                     </div>
                   {/if}
-                  <div class="kpi-card {section.subData.produccionClientes > 0 ? 'kpi-card-positive' : (section.subData.produccionClientes < 0 ? 'kpi-card-negative' : '')}">
-                    <div class="kpi-subinfo-row">
-                      <span class="subinfo-item">PAGOS: <span class="subinfo-val text-rose font-bold">{(section.subData.clientesTotales?.totalPagos || 0) > 0 ? formatMoney(-(section.subData.clientesTotales?.totalPagos || 0)) : '$0'}</span></span>
-                      <span class="subinfo-item">COMPRAS: <span class="subinfo-val text-emerald font-bold">{formatMoney(section.subData.clientesTotales?.totalCompras || 0)}</span></span>
-                    </div>
-                    <span
-                      class="kpi-value {section.subData.produccionClientes > 0
-                        ? 'text-emerald font-bold'
-                        : (section.subData.produccionClientes < 0 ? 'text-rose font-bold' : 'font-bold')}"
-                    >
-                      {formatMoney(section.subData.produccionClientes)}
-                    </span>
-                  </div>
                   <div class="kpi-card {section.subData.produccionFinal > 0 ? 'kpi-card-positive' : (section.subData.produccionFinal < 0 ? 'kpi-card-negative' : '')}">
                     <span class="kpi-label">PRODUCCIÓN</span>
                     <span
