@@ -1294,9 +1294,9 @@
             <thead>
               <tr>
                 <th class="th-metodo-name">Método de Pago</th>
-                <th class="th-right">Total Compras</th>
-                <th class="th-right">Total Pagos</th>
-                <th class="th-right">Balance Neto (Compras - Pagos)</th>
+                <th class="th-right">Compras</th>
+                <th class="th-right">Pagos</th>
+                <th class="th-right">Total</th>
                 <th class="th-center">Operaciones</th>
               </tr>
             </thead>
@@ -1355,9 +1355,9 @@
               <tr>
                 <th class="th-center th-num">N°</th>
                 <th>Cliente</th>
-                <th class="th-right">Compras Realizadas</th>
-                <th class="th-right">Pagos Recibidos</th>
-                <th class="th-right">Balance Neto</th>
+                <th class="th-right">Compras</th>
+                <th class="th-right">Pagos</th>
+                <th class="th-right">Total</th>
                 <th class="th-center">Resultado</th>
                 <th class="th-center">Operaciones</th>
               </tr>
