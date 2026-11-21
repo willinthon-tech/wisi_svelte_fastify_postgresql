@@ -1219,7 +1219,7 @@
                     </td>
                     <td class="td-right td-monto">
                       {#if record.tipo === 'Pago'}
-                        <span class="monto-value text-red font-bold">( - ${formatMonto(record.monto)} )</span>
+                        <span class="monto-value text-red font-bold">${formatMonto(record.monto)}</span>
                       {:else}
                         <span class="monto-value text-green font-bold">${formatMonto(record.monto)}</span>
                       {/if}
@@ -2087,6 +2087,7 @@
     font-weight: 700;
     color: #0f172a;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   /* Badges de Método */
