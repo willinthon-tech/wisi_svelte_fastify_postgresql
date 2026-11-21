@@ -352,7 +352,7 @@
                         class:diff-pos={difChips > 0}
                         class:diff-neg={difChips < 0}
                       >
-                        {difChips < 0 ? `( - ${Math.abs(difChips)} )` : (difChips > 0 ? `+${difChips}` : 0)}
+                        {Math.abs(difChips)}
                       </span>
                     </td>
                   </tr>

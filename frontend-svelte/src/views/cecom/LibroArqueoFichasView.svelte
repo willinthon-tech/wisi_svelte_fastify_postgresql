@@ -808,7 +808,7 @@
                         class:dif-pos={difChips > 0}
                         class:dif-neg={difChips < 0}
                       >
-                        {difChips < 0 ? `( - ${Math.abs(difChips)} )` : (difChips > 0 ? `+${difChips}` : 0)}
+                        {Math.abs(difChips)}
                       </span>
                     {:else}
                       <span class="val-pending">—</span>
@@ -905,7 +905,7 @@
                 {@const dif = sumCi - expectedTotal}
                 <td class="td-center total-val-cell">
                   <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
-                    {dif < 0 ? `( - ${Math.abs(dif)} )` : (dif > 0 ? `+${dif}` : 0)}
+                    {Math.abs(dif)}
                   </span>
                 </td>
               {/each}
