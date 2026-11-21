@@ -1284,13 +1284,15 @@
                 <tr class="tfoot-totals-row">
                   <td colspan="4" class="font-bold">TOTALES ({sortedRecords.length} {sortedRecords.length === 1 ? 'operación' : 'operaciones'})</td>
                   <td class="td-right td-monto font-mono font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
-                    {#if netoMonto < 0}
-                      ( - ${formatMonto(Math.abs(netoMonto))} )
-                    {:else if netoMonto > 0}
-                      ${formatMonto(netoMonto)}
-                    {:else}
-                      $0.00
-                    {/if}
+                    <span class="monto-value font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
+                      {#if netoMonto < 0}
+                        ( - ${formatMonto(Math.abs(netoMonto))} )
+                      {:else if netoMonto > 0}
+                        ${formatMonto(netoMonto)}
+                      {:else}
+                        $0.00
+                      {/if}
+                    </span>
                   </td>
                   <td colspan={canEdit || canDelete ? 3 : 2}></td>
                 </tr>
@@ -1364,20 +1366,26 @@
               <tfoot>
                 <tr class="tfoot-totals-row">
                   <td colspan="2" class="td-left font-bold">TOTALES ({resumenRangos.length} {resumenRangos.length === 1 ? 'rango' : 'rangos'})</td>
-                  <td class="td-res-monto font-mono font-bold {resumenRangos.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
-                    ${formatMonto(resumenRangos.reduce((a, b) => a + (b.aportes_monto || 0), 0))}
+                  <td class="td-res-monto">
+                    <span class="monto-value font-bold {resumenRangos.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
+                      ${formatMonto(resumenRangos.reduce((a, b) => a + (b.aportes_monto || 0), 0))}
+                    </span>
                   </td>
-                  <td class="td-res-monto font-mono font-bold {resumenRangos.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
-                    ${formatMonto(resumenRangos.reduce((a, b) => a + (b.devoluciones_monto || 0), 0))}
+                  <td class="td-res-monto">
+                    <span class="monto-value font-bold {resumenRangos.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
+                      ${formatMonto(resumenRangos.reduce((a, b) => a + (b.devoluciones_monto || 0), 0))}
+                    </span>
                   </td>
-                  <td class="td-res-monto font-mono font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
-                    {#if netoMonto < 0}
-                      ( - ${formatMonto(Math.abs(netoMonto))} )
-                    {:else if netoMonto > 0}
-                      ${formatMonto(netoMonto)}
-                    {:else}
-                      $0.00
-                    {/if}
+                  <td class="td-res-monto">
+                    <span class="monto-value font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
+                      {#if netoMonto < 0}
+                        ( - ${formatMonto(Math.abs(netoMonto))} )
+                      {:else if netoMonto > 0}
+                        ${formatMonto(netoMonto)}
+                      {:else}
+                        $0.00
+                      {/if}
+                    </span>
                   </td>
                   <td class="td-res-ops font-bold">
                     <span class="badge-tipo badge-compra">{resumenRangos.reduce((a, b) => a + (b.cantidad || 0), 0)} ops</span>
@@ -1459,20 +1467,26 @@
               <tfoot>
                 <tr class="tfoot-totals-row">
                   <td colspan="3" class="td-left font-bold">TOTALES ({resumenEmpleados.length} {resumenEmpleados.length === 1 ? 'empleado' : 'empleados'})</td>
-                  <td class="td-res-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
-                    ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.aportes_monto || 0), 0))}
+                  <td class="td-res-monto">
+                    <span class="monto-value font-bold {resumenEmpleados.reduce((a, b) => a + (b.aportes_monto || 0), 0) > 0 ? 'text-red' : 'text-slate'}">
+                      ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.aportes_monto || 0), 0))}
+                    </span>
                   </td>
-                  <td class="td-res-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
-                    ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.devoluciones_monto || 0), 0))}
+                  <td class="td-res-monto">
+                    <span class="monto-value font-bold {resumenEmpleados.reduce((a, b) => a + (b.devoluciones_monto || 0), 0) > 0 ? 'text-green' : 'text-slate'}">
+                      ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.devoluciones_monto || 0), 0))}
+                    </span>
                   </td>
-                  <td class="td-res-monto font-mono font-bold {resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0 ? 'text-green' : (resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) < 0 ? 'text-red' : 'text-slate')}">
-                    {#if resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) < 0}
-                      ( - ${formatMonto(Math.abs(resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0)))} )
-                    {:else if resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0}
-                      ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0))}
-                    {:else}
-                      $0.00
-                    {/if}
+                  <td class="td-res-monto">
+                    <span class="monto-value font-bold {resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0 ? 'text-green' : (resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) < 0 ? 'text-red' : 'text-slate')}">
+                      {#if resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) < 0}
+                        ( - ${formatMonto(Math.abs(resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0)))} )
+                      {:else if resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0}
+                        ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0))}
+                      {:else}
+                        $0.00
+                      {/if}
+                    </span>
                   </td>
                   <td class="td-res-ops font-bold">
                     <span class="badge-tipo badge-compra">{resumenEmpleados.reduce((a, b) => a + (b.cantidad || 0), 0)} ops</span>
@@ -2300,6 +2314,15 @@
     padding: 11px 14px;
     font-size: 13px;
     color: #0f172a;
+    font-weight: 700 !important;
+  }
+
+  .font-bold {
+    font-weight: 700 !important;
+  }
+
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
 
   .monto-value.monto-devolucion {
