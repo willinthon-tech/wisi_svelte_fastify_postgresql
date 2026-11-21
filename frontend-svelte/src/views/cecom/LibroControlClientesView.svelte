@@ -1068,7 +1068,7 @@
         <!-- KPI 1: Compras -->
         <div class="kpi-card kpi-compras">
           <div class="kpi-header">
-            <span class="kpi-label">TOTAL COMPRAS</span>
+            <span class="kpi-label">COMPRAS</span>
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalCompras < 0 ? 'text-red' : 'text-green'}">
@@ -1083,7 +1083,7 @@
         <!-- KPI 2: Pagos -->
         <div class="kpi-card kpi-pagos">
           <div class="kpi-header">
-            <span class="kpi-label">TOTAL PAGOS</span>
+            <span class="kpi-label">PAGOS</span>
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalPagos > 0 ? 'text-red' : 'text-slate'}">
@@ -1095,10 +1095,10 @@
           </div>
         </div>
 
-        <!-- KPI 3: Balance Neto Clientes (Compras - Pagos) -->
-        <div class="kpi-card kpi-balance {balanceNeto >= 0 ? 'border-favor-casa' : 'border-favor-cliente'}">
+        <!-- KPI 3: Total (Compras - Pagos) -->
+        <div class="kpi-card kpi-balance">
           <div class="kpi-header">
-            <span class="kpi-label">RESULTADO CLIENTES (COMPRA - PAGO)</span>
+            <span class="kpi-label">TOTAL</span>
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
@@ -1112,13 +1112,7 @@
             </span>
           </div>
           <div class="kpi-subtext">
-            {#if balanceNeto > 0}
-              <span class="badge-kpi-status status-casa">Casa a favor</span>
-            {:else if balanceNeto < 0}
-              <span class="badge-kpi-status status-jugadores">Clientes a favor</span>
-            {:else}
-              <span class="badge-kpi-status status-tablas">En tablas</span>
-            {/if}
+            <span>Compras - Pagos</span>
           </div>
         </div>
       </div>
