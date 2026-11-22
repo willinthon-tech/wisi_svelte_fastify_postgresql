@@ -91,7 +91,7 @@
 
   // Cálculos en tiempo real
   $: allMovements = (() => {
-    const raw = aperturaRecord?.rellenos_devoluciones || cierreRecord?.rellenos_devoluciones || [];
+    const raw = aperturaRecord ? aperturaRecord.rellenos_devoluciones : (cierreRecord?.rellenos_devoluciones || []);
     if (Array.isArray(raw)) return raw;
     if (typeof raw === 'string') {
       try { return JSON.parse(raw); } catch (e) { return []; }

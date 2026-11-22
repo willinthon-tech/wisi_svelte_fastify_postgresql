@@ -164,6 +164,7 @@
 
       // 1. Guardar en local DB (<5ms)
       await upsertLocalItem('libro_arqueo_fichas', updatedApertura);
+      aperturaRecord = updatedApertura;
 
       // Notificar al componente padre de forma inmediata (0ms)
       dispatch('saved', updatedApertura);
@@ -231,7 +232,7 @@
     const mId = mesa?.uuid || mesa?.id;
     if (!lId || !mId || !aperturaRecord) return;
 
-    const filteredMovements = allMovements.filter(m => (m.id || m.uuid) !== movId);
+    const filteredMovements = allMovements.filter(m => String(m.id || m.uuid) !== String(movId));
     
     // Re-indexar los códigos si es necesario o conservarlos
     const updatedApertura = {
@@ -242,16 +243,55 @@
 
     try {
       await upsertLocalItem('libro_arqueo_fichas', updatedApertura);
+      aperturaRecord = updatedApertura;
       dispatch('saved', updatedApertura);
 
-      fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedApertura)
-      }).catch(() => {});
+      const recordUuid = updatedApertura.uuid || updatedApertura.id;
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'libro_arqueo_fichas',
+          action: 'save',
+          endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+          method: 'POST',
+          payload: updatedApertura,
+          uuid: recordUuid
+        });
+      } else {
+        (async () => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4500);
+            const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatedApertura),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.data) {
+                await upsertLocalItem('libro_arqueo_fichas', json.data);
+              }
+            }
+          } catch (syncErr) {
+            console.warn('[RellenoDevolucionModal] Encolando en Outbox:', syncErr);
+            await queueOutboxAction({
+              entity: 'libro_arqueo_fichas',
+              action: 'save',
+              endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+              method: 'POST',
+              payload: updatedApertura,
+              uuid: recordUuid
+            });
+          }
+        })();
+      }
 
       triggerToast('Registro eliminado con éxito', 'success');
     } catch (err) {
+      console.error('Error eliminando registro:', err);
       triggerToast('Error eliminando registro', 'error');
     }
   }

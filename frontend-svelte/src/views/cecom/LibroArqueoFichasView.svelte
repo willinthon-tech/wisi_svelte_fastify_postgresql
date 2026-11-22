@@ -398,7 +398,8 @@
     for (const g of groupsMap.values()) {
       const apMovs = extractMovements(g.apertura);
       const ciMovs = extractMovements(g.cierre);
-      g.rellenosDevoluciones = apMovs.length > 0 ? apMovs : ciMovs;
+      // Apertura es siempre la fuente primaria de verdad si existe
+      g.rellenosDevoluciones = g.apertura ? apMovs : ciMovs;
       g.totalRellenos = g.rellenosDevoluciones.filter(m => m.tipo === 'relleno').reduce((a, b) => a + (Number(b.total) || 0), 0);
       g.totalDevoluciones = g.rellenosDevoluciones.filter(m => m.tipo === 'devolucion').reduce((a, b) => a + (Number(b.total) || 0), 0);
     }
@@ -472,10 +473,36 @@
     const existingIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(updatedApertura.uuid || updatedApertura.id));
     if (existingIdx !== -1) {
       arqueoRecords[existingIdx] = updatedApertura;
-      arqueoRecords = [...arqueoRecords];
     } else {
       arqueoRecords = [...arqueoRecords, updatedApertura];
     }
+
+    // Sincronizar también con el cierre de esta misma mesa si existe
+    const mesaId = String(updatedApertura.mesa_uuid || updatedApertura.mesa_id || '');
+    if (mesaId) {
+      const cierreIdx = arqueoRecords.findIndex(r => 
+        String(r.mesa_uuid || r.mesa_id || '') === mesaId && r.tipo === 'cierre' && !r.is_deleted
+      );
+      if (cierreIdx !== -1) {
+        const updatedCierre = {
+          ...arqueoRecords[cierreIdx],
+          rellenos_devoluciones: updatedApertura.rellenos_devoluciones || [],
+          updated_at: new Date().toISOString()
+        };
+        arqueoRecords[cierreIdx] = updatedCierre;
+        upsertLocalItem('libro_arqueo_fichas', updatedCierre).catch(() => {});
+        const lId = libro?.uuid || libroId || libro?.id;
+        if (lId) {
+          fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedCierre)
+          }).catch(() => {});
+        }
+      }
+    }
+
+    arqueoRecords = [...arqueoRecords];
     rdModalApertura = updatedApertura;
   }
 
