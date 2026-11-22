@@ -12277,10 +12277,30 @@ export async function deleteLibroNovedadesMesaModel(recordId) {
 // --- REPORTE CONSOLIDADO DEL LIBRO (TABLA libro_reporte - HISTÓRICO Y COMPARTIR) ---
 export async function saveLibroReporteModel(libroId) {
   if (!libroId) throw new Error('ID de libro inválido');
-  const isLibU = isUuid(libroId);
+  const targetStr = String(libroId).trim();
+  const isLibU = isUuid(targetStr);
 
+  // 1. Resolver el libro primero para obtener su UUID canónico y datos
+  let libroRes = await getLibroByIdModel(targetStr).catch(e => null);
+  let libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
+  let resolvedLibroUuid = libroObj?.uuid || (isLibU ? targetStr : null);
+
+  if (!resolvedLibroUuid && sql && isPgConnected) {
+    const lRow = await sql`SELECT uuid FROM libros WHERE uuid::text = ${targetStr} OR id::text = ${targetStr} LIMIT 1`;
+    if (lRow.length > 0) {
+      resolvedLibroUuid = lRow[0].uuid;
+      if (!libroObj) {
+        libroRes = await getLibroByIdModel(resolvedLibroUuid).catch(() => null);
+        libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
+      }
+    }
+  }
+  if (!resolvedLibroUuid) throw new Error('Libro no encontrado');
+
+  const queryTarget = resolvedLibroUuid;
+
+  // 2. Consulta en paralelo de las subvistas en vivo con el UUID canónico del libro
   const [
-    libroRes,
     datosRes,
     dropRes,
     novedadesRes,
@@ -12291,26 +12311,16 @@ export async function saveLibroReporteModel(libroId) {
     conteoMaquinasRes,
     arqueoFichasRes
   ] = await Promise.all([
-    getLibroByIdModel(libroId).catch(e => null),
-    getLibroDatosModel(libroId, 'all').catch(e => null),
-    getLibroDropMesasModel(libroId, 'all').catch(e => []),
-    getLibroNovedadesMesasModel(libroId, 'all').catch(e => []),
-    getLibroAportesModel(libroId, 'all').catch(e => []),
-    getLibroControlLlavesModel(libroId, 'all').catch(e => []),
-    getLibroControlClientesModel(libroId, 'all').catch(e => []),
-    getLibroIncidenciasGeneralesModel(libroId, 'all').catch(e => []),
-    getLibroConteoMaquinasModel(libroId, 'all').catch(e => []),
-    getLibroArqueoFichasModel(libroId, 'all').catch(e => [])
+    getLibroDatosModel(queryTarget, 'all').catch(e => null),
+    getLibroDropMesasModel(queryTarget, 'all').catch(e => []),
+    getLibroNovedadesMesasModel(queryTarget, 'all').catch(e => []),
+    getLibroAportesModel(queryTarget, 'all').catch(e => []),
+    getLibroControlLlavesModel(queryTarget, 'all').catch(e => []),
+    getLibroControlClientesModel(queryTarget, 'all').catch(e => []),
+    getLibroIncidenciasGeneralesModel(queryTarget, 'all').catch(e => []),
+    getLibroConteoMaquinasModel(queryTarget, 'all').catch(e => []),
+    getLibroArqueoFichasModel(queryTarget, 'all').catch(e => [])
   ]);
-
-  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
-  let resolvedLibroUuid = libroObj?.uuid || (isLibU ? String(libroId).trim() : null);
-
-  if (!resolvedLibroUuid && sql && isPgConnected) {
-    const lRow = await sql`SELECT uuid FROM libros WHERE uuid::text = ${String(libroId)} LIMIT 1`;
-    if (lRow.length > 0) resolvedLibroUuid = lRow[0].uuid;
-  }
-  if (!resolvedLibroUuid) throw new Error('Libro no encontrado');
 
   const salaUuid = libroObj?.sala_uuid || null;
   const salaNombre = libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala';
@@ -12450,11 +12460,42 @@ export async function saveLibroReporteModel(libroId) {
 
 export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
   if (!idOrLibroId) throw new Error('ID de reporte o libro inválido');
-  const isU = isUuid(idOrLibroId);
+  const targetStr = String(idOrLibroId).trim();
+  const isU = isUuid(targetStr);
 
-  // Consulta en paralelo de las subvistas en vivo para conteos y vista previa
+  // 1. Resolver el libro primero para obtener su UUID canónico y datos
+  let libroRes = await getLibroByIdModel(targetStr).catch(() => null);
+  let libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
+
+  // Si no se encontró por getLibroByIdModel y es UUID, tal vez idOrLibroId es el UUID de un libro_reporte
+  if (!libroObj && isU && sql && isPgConnected) {
+    try {
+      const repRow = await sql`SELECT libro_uuid FROM libro_reporte WHERE uuid = ${targetStr}::uuid LIMIT 1`;
+      if (repRow.length > 0 && repRow[0].libro_uuid) {
+        libroRes = await getLibroByIdModel(repRow[0].libro_uuid).catch(() => null);
+        libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
+      }
+    } catch (eRep) {}
+  }
+
+  let resolvedLibroUuid = libroObj?.uuid || (isU ? targetStr : null);
+  if (!resolvedLibroUuid && sql && isPgConnected) {
+    try {
+      const lRow = await sql`SELECT uuid FROM libros WHERE uuid::text = ${targetStr} OR id::text = ${targetStr} LIMIT 1`;
+      if (lRow.length > 0) {
+        resolvedLibroUuid = lRow[0].uuid;
+        if (!libroObj) {
+          libroRes = await getLibroByIdModel(resolvedLibroUuid).catch(() => null);
+          libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
+        }
+      }
+    } catch (eL) {}
+  }
+
+  const queryTarget = resolvedLibroUuid || targetStr;
+
+  // 2. Consulta en paralelo de las subvistas en vivo con el UUID canónico del libro
   const [
-    libroRes,
     datosRes,
     dropRes,
     novedadesRes,
@@ -12465,16 +12506,15 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     conteoMaquinasRes,
     arqueoFichasRes
   ] = await Promise.all([
-    getLibroByIdModel(idOrLibroId).catch(() => null),
-    getLibroDatosModel(idOrLibroId, 'all').catch(() => []),
-    getLibroDropMesasModel(idOrLibroId, 'all').catch(() => []),
-    getLibroNovedadesMesasModel(idOrLibroId, 'all').catch(() => []),
-    getLibroAportesModel(idOrLibroId, 'all').catch(() => []),
-    getLibroControlLlavesModel(idOrLibroId, 'all').catch(() => []),
-    getLibroControlClientesModel(idOrLibroId, 'all').catch(() => []),
-    getLibroIncidenciasGeneralesModel(idOrLibroId, 'all').catch(() => []),
-    getLibroConteoMaquinasModel(idOrLibroId, 'all').catch(() => []),
-    getLibroArqueoFichasModel(idOrLibroId, 'all').catch(() => [])
+    getLibroDatosModel(queryTarget, 'all').catch(() => []),
+    getLibroDropMesasModel(queryTarget, 'all').catch(() => []),
+    getLibroNovedadesMesasModel(queryTarget, 'all').catch(() => []),
+    getLibroAportesModel(queryTarget, 'all').catch(() => []),
+    getLibroControlLlavesModel(queryTarget, 'all').catch(() => []),
+    getLibroControlClientesModel(queryTarget, 'all').catch(() => []),
+    getLibroIncidenciasGeneralesModel(queryTarget, 'all').catch(() => []),
+    getLibroConteoMaquinasModel(queryTarget, 'all').catch(() => []),
+    getLibroArqueoFichasModel(queryTarget, 'all').catch(() => [])
   ]);
 
   const datosList = Array.isArray(datosRes) ? datosRes : (datosRes ? [datosRes] : []);
@@ -12492,14 +12532,6 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0,
     arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes.length : 0
   };
-
-  const libroObj = (libroRes && libroRes.data) ? libroRes.data : (libroRes?.uuid || libroRes?.id ? libroRes : null);
-  let resolvedLibroUuid = libroObj?.uuid || (isU ? String(idOrLibroId).trim() : null);
-
-  if (!resolvedLibroUuid && sql && isPgConnected) {
-    const lRow = await sql`SELECT uuid FROM libros WHERE uuid::text = ${String(idOrLibroId)} LIMIT 1`;
-    if (lRow.length > 0) resolvedLibroUuid = lRow[0].uuid;
-  }
 
   const targetSalaUuid = libroObj?.sala_uuid || null;
   let maquinasSala = [];
@@ -12604,7 +12636,7 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
       }
       if (datosList && datosList.length > 0) {
         rData.all_datos = datosList;
-        if (!rData.datos) rData.datos = defaultDatos;
+        rData.datos = defaultDatos;
       }
 
       return {

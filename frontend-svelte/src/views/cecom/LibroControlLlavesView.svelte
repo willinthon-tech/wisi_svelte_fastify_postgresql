@@ -140,8 +140,8 @@
 
   onMount(async () => {
     unsubWs = subscribeToLibroUpdates(
-      () => libro?.uuid || libroId || libro?.id,
-      ['control_llaves', 'all'],
+      () => [libro?.uuid, libroId, libro?.id].filter(Boolean),
+      ['control_llaves'],
       () => {
         loadRecords();
       }

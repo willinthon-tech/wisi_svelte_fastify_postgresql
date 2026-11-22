@@ -84,7 +84,7 @@
   onMount(async () => {
     unsubWs = subscribeToLibroUpdates(
       null,
-      ['libro', 'all'],
+      ['libro'],
       () => {
         loadServerData(currentParams);
       }

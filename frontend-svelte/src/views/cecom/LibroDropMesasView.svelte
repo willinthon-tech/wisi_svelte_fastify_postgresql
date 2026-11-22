@@ -175,10 +175,10 @@
 
   onMount(async () => {
     unsubWs = subscribeToLibroUpdates(
-      () => libro?.uuid || libroId || libro?.id,
-      ['drop_mesas', 'all'],
+      () => [libro?.uuid, libroId, libro?.id].filter(Boolean),
+      ['drop_mesas'],
       () => {
-        loadDropRecords();
+        loadDropRecords(true);
       }
     );
 
@@ -193,8 +193,11 @@
     if (unsubWs) unsubWs();
   });
 
-  // Reaccionar a cambios en libroId
-  $: if (libroId || libro?.id || libro?.uuid) {
+  // Reaccionar únicamente a cambios reales de libro
+  let lastLoadedLibroKey = null;
+  $: currentLibroKey = String(libro?.uuid || libroId || libro?.id || '');
+  $: if (currentLibroKey && currentLibroKey !== lastLoadedLibroKey) {
+    lastLoadedLibroKey = currentLibroKey;
     loadDropRecords();
   }
 
@@ -224,10 +227,12 @@
     }
   }
 
-  async function loadDropRecords() {
+  async function loadDropRecords(isBackground = false) {
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
-    isLoadingRecords = true;
+    if (!isBackground && dropRecords.length === 0) {
+      isLoadingRecords = true;
+    }
 
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
@@ -238,15 +243,15 @@
       );
       if (Array.isArray(local) && local.length > 0) {
         dropRecords = local;
-        if (selectedMesaId) {
+        if (selectedMesaId && !isBackground) {
           handleMesaChange();
         }
         isLoadingRecords = false;
-      } else {
+      } else if (!isBackground) {
         dropRecords = [];
       }
     } catch (e) {
-      dropRecords = [];
+      if (!isBackground) dropRecords = [];
     }
 
     // Si no hay conexión o estamos offline, finalizar carga local sin esperar timeout de red
@@ -268,7 +273,7 @@
         const json = await res.json();
         if (json && json.success) {
           dropRecords = json.data || [];
-          if (selectedMesaId) {
+          if (selectedMesaId && !isBackground) {
             handleMesaChange();
           }
           saveLocalItems('libro_drop_mesas', json.data).catch(() => {});

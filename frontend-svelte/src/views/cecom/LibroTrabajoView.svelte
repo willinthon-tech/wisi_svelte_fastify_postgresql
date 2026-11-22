@@ -121,10 +121,10 @@
     });
 
     unsubWs = subscribeToLibroUpdates(
-      () => libroId || libro?.uuid || libro?.id,
-      ['libro', 'all'],
+      () => [libroId, libro?.uuid, libro?.id].filter(Boolean),
+      ['libro'],
       () => {
-        if (libroId) loadLibro(libroId);
+        if (libroId) loadLibro(libroId, true);
       }
     );
 
@@ -142,8 +142,10 @@
     if (unsubWs) unsubWs();
   });
 
-  async function loadLibro(id) {
-    isLoading = true;
+  async function loadLibro(id, isBackground = false) {
+    if (!libro && !isBackground) {
+      isLoading = true;
+    }
     loadError = null;
 
     // 1. Carga inmediata desde base de datos local (0ms)

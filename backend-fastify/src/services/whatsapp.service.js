@@ -1130,9 +1130,10 @@ class WhatsAppService {
         console.log(`✏️ [WhatsApp Edit] Control de Clientes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente}`);
         try {
           broadcastLibroUpdate({
+            libroId: prevLog.libro_uuid || prevLog.libro_id,
             modulo: 'control_clientes',
             action: 'update',
-            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp' }
+            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', libro_uuid: prevLog.libro_uuid, libro_id: prevLog.libro_id }
           });
         } catch (wsErr) {}
         if (mapping.auto_reply && this.sock) {
@@ -1184,9 +1185,10 @@ class WhatsAppService {
         console.log(`✏️ [WhatsApp Edit] Aportes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
         try {
           broadcastLibroUpdate({
+            libroId: prevLog.libro_uuid || prevLog.libro_id,
             modulo: 'aportes',
             action: 'update',
-            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp' }
+            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', libro_uuid: prevLog.libro_uuid, libro_id: prevLog.libro_id }
           });
         } catch (wsErr) {}
         if (mapping.auto_reply && this.sock) {

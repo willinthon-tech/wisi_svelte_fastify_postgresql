@@ -290,14 +290,31 @@ export function subscribeToLibroUpdates(getLibroIdFn, targetModulos, onUpdateCal
   let timer = null;
   return latestLibroUpdateStore.subscribe((evt) => {
     if (!evt) return;
-    const currentId = typeof getLibroIdFn === 'function' ? String(getLibroIdFn() || '') : String(getLibroIdFn || '');
-    const evtLibroId = String(evt.libroId || '');
-    
-    // Si el evento tiene libroId y el cliente tiene un libroId cargado, ignorar eventos de otros libros
-    if (evtLibroId && currentId && evtLibroId !== currentId) return;
+
+    // Obtener los IDs conocidos del libro en el cliente (pueden ser array o valor único)
+    let rawCurrent = typeof getLibroIdFn === 'function' ? getLibroIdFn() : getLibroIdFn;
+    const currentIds = (Array.isArray(rawCurrent) ? rawCurrent : [rawCurrent])
+      .map(id => String(id || '').trim().toLowerCase())
+      .filter(Boolean);
+
+    // Obtener los IDs referenciados en el evento del websocket
+    const eventIds = [
+      evt.libroId,
+      evt.data?.libro_id,
+      evt.data?.libro_uuid,
+      evt.data?.libroId
+    ].map(id => String(id || '').trim().toLowerCase()).filter(Boolean);
+
+    // Si tanto el componente como el evento tienen IDs identificados, comprobar coincidencia
+    if (eventIds.length > 0 && currentIds.length > 0) {
+      const match = eventIds.some(eid => currentIds.includes(eid));
+      if (!match) return; // Pertenece a otro libro
+    }
 
     const modulosList = Array.isArray(targetModulos) ? targetModulos : [targetModulos];
-    const matches = modulosList.includes('all') || modulosList.includes(evt.modulo) || evt.modulo === 'all';
+    const isTargetAll = modulosList.includes('all');
+    const isEvtAll = evt.modulo === 'all';
+    const matches = isTargetAll || isEvtAll || modulosList.includes(evt.modulo);
     if (!matches) return;
 
     if (timer) clearTimeout(timer);

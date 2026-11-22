@@ -74,13 +74,13 @@
 
   onMount(async () => {
     unsubWs = subscribeToLibroUpdates(
-      () => libroId || libro?.uuid || libro?.id,
+      () => [libroId, libro?.uuid, libro?.id].filter(Boolean),
       'all',
       () => {
         const targetId = libroId || libro?.uuid || libro?.id;
-        if (targetId) loadFullResumen(targetId);
+        if (targetId) loadFullResumen(targetId, true);
       },
-      400
+      300
     );
 
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
@@ -120,10 +120,12 @@
     loadFullResumen(currentTargetId);
   }
 
-  async function loadFullResumen(id) {
+  async function loadFullResumen(id, isBackground = false) {
     if (!id) return;
     lastLoadedId = String(id);
-    isLoading = true;
+    if (!isBackground && !resumenData?.libro) {
+      isLoading = true;
+    }
     loadError = null;
 
     // Recuperar cualquier conteo de máquinas guardado localmente en IndexedDB para asegurar visualización inmediata

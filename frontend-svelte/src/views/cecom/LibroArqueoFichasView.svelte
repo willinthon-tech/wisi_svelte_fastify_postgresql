@@ -202,11 +202,13 @@
   }, 0);
 
   // Carga de registros de arqueo (Local-First: IndexedDB -> Backend)
-  async function loadArqueoRecords() {
+  async function loadArqueoRecords(isBackground = false) {
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
 
-    isLoadingRecords = true;
+    if (!isBackground && arqueoRecords.length === 0) {
+      isLoadingRecords = true;
+    }
     try {
       // 1. LocalDB (<5ms)
       const local = await getLocalItems('libro_arqueo_fichas', r => 
@@ -761,10 +763,10 @@
 
   onMount(() => {
     unsubWs = subscribeToLibroUpdates(
-      () => libro?.uuid || libroId || libro?.id,
-      ['arqueo_fichas', 'all'],
+      () => [libro?.uuid, libroId, libro?.id].filter(Boolean),
+      ['arqueo_fichas'],
       () => {
-        loadArqueoRecords();
+        loadArqueoRecords(true);
       }
     );
     loadArqueoRecords();
@@ -776,10 +778,10 @@
 </script>
 
 <div class="drop-layout-grid">
-  <!-- Tarjeta Izquierda: Formulario "Sobrantes y Faltantes" -->
+  <!-- Tarjeta Izquierda: Formulario "Apertura de mesas" -->
   <div class="card-form-drop">
     <div class="card-title-box">
-      <h3 class="card-title">Sobrantes y Faltantes</h3>
+      <h3 class="card-title">Apertura de mesas</h3>
       <div class="title-underline"></div>
     </div>
 

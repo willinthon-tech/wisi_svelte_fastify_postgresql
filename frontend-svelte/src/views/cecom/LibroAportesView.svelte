@@ -453,10 +453,10 @@
 
   onMount(async () => {
     unsubWs = subscribeToLibroUpdates(
-      () => libro?.uuid || libroId || libro?.id,
-      ['aportes', 'all'],
+      () => [libro?.uuid, libroId, libro?.id].filter(Boolean),
+      ['aportes'],
       () => {
-        loadRecords();
+        loadRecords(true);
       }
     );
 
@@ -473,7 +473,10 @@
     if (unsubWs) unsubWs();
   });
 
-  $: if (libroId || libro?.id || libro?.uuid) {
+  let lastLoadedLibroKey = null;
+  $: currentLibroKey = String(libro?.uuid || libroId || libro?.id || '');
+  $: if (currentLibroKey && currentLibroKey !== lastLoadedLibroKey) {
+    lastLoadedLibroKey = currentLibroKey;
     loadRecords();
   }
 
@@ -505,10 +508,12 @@
     }
   }
 
-  async function loadRecords() {
+  async function loadRecords(isBackground = false) {
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId) return;
-    isLoadingRecords = true;
+    if (!isBackground && records.length === 0) {
+      isLoadingRecords = true;
+    }
 
     // 1. Carga inmediata desde base de datos local IndexedDB (0ms)
     try {
