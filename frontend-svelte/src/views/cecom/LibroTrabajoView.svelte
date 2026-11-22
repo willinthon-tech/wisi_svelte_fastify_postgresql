@@ -26,16 +26,16 @@
 
   // Subvistas disponibles
   const SUBVISTAS = [
-    { id: 'datos', label: 'Datos', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
-    { id: 'drop-mesas', label: 'Drop', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
-    { id: 'arqueo-fichas', label: 'Sobrantes y Faltantes', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
-    { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
-    { id: 'conteo-maquinas', label: 'Billetero', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
-    { id: 'aportes-maquinas', label: 'Aportes y Devoluciones', icon: '', description: 'Registro y control de aportes y devoluciones de máquinas por empleado y rango' },
-    { id: 'control-clientes', label: 'Control Clientes', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
-    { id: 'control-llaves', label: 'Control Llaves', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
-    { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '', description: 'Eventos e incidentes reportados en sala' },
-    { id: 'resumen-libro', label: 'Resumen Libro', icon: '', description: 'Consolidado general y auditoría de la jornada' }
+    { id: 'datos', label: 'Datos', category: 'Libro', categoryKey: 'libro', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
+    { id: 'drop-mesas', label: 'Drop', category: 'Mesas', categoryKey: 'mesas', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
+    { id: 'arqueo-fichas', label: 'Apertura y Cierre', category: 'Mesas', categoryKey: 'mesas', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
+    { id: 'novedades-mesas', label: 'Novedades', category: 'Mesas', categoryKey: 'mesas', icon: '', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
+    { id: 'conteo-maquinas', label: 'Billetero', category: 'Máquinas', categoryKey: 'maquinas', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
+    { id: 'aportes-maquinas', label: 'Aporte y Devoluciones', category: 'Máquinas', categoryKey: 'maquinas', icon: '', description: 'Registro y control de aportes y devoluciones de máquinas por empleado y rango' },
+    { id: 'control-clientes', label: 'Clientes', category: 'Control', categoryKey: 'control', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
+    { id: 'control-llaves', label: 'Llaves', category: 'Control', categoryKey: 'control', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
+    { id: 'incidencias-generales', label: 'Incidencias', category: 'Control', categoryKey: 'control', icon: '', description: 'Eventos e incidentes reportados en sala' },
+    { id: 'resumen-libro', label: 'Resumen', category: 'Libro', categoryKey: 'libro', icon: '', description: 'Consolidado general y auditoría de la jornada' }
   ];
 
   let activeSubvista = 'datos';
@@ -97,12 +97,22 @@
     }
 
     if (secondPart) {
-      if (secondPart === 'aportes' || secondPart === 'aportes-maquinas' || secondPart === 'aportes-devoluciones') {
+      if (secondPart === 'aportes' || secondPart === 'aportes-maquinas' || secondPart === 'aportes-devoluciones' || secondPart === 'aporte-devoluciones') {
         activeSubvista = 'aportes-maquinas';
       } else if (secondPart === 'conteo' || secondPart === 'conteo-maquinas' || secondPart === 'billetero') {
         activeSubvista = 'conteo-maquinas';
-      } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas' || secondPart === 'sobrantes-faltantes') {
+      } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas' || secondPart === 'sobrantes-faltantes' || secondPart === 'apertura-cierre') {
         activeSubvista = 'arqueo-fichas';
+      } else if (secondPart === 'novedades' || secondPart === 'novedades-mesas') {
+        activeSubvista = 'novedades-mesas';
+      } else if (secondPart === 'clientes' || secondPart === 'control-clientes') {
+        activeSubvista = 'control-clientes';
+      } else if (secondPart === 'llaves' || secondPart === 'control-llaves') {
+        activeSubvista = 'control-llaves';
+      } else if (secondPart === 'incidencias' || secondPart === 'incidencias-generales') {
+        activeSubvista = 'incidencias-generales';
+      } else if (secondPart === 'resumen' || secondPart === 'resumen-libro') {
+        activeSubvista = 'resumen-libro';
       } else if (secondPart === 'drop' || secondPart === 'drop-mesas') {
         activeSubvista = 'drop-mesas';
       } else if (SUBVISTAS.some(s => s.id === secondPart)) {
@@ -316,6 +326,11 @@
           on:click={() => handleSelectSubvista(sub.id)}
         >
           <span class="tab-label">{sub.label}</span>
+          {#if sub.category}
+            <span class="tab-category-badge cat-{sub.categoryKey}">
+              {sub.category}
+            </span>
+          {/if}
         </button>
       {/each}
     </div>
@@ -537,29 +552,107 @@
 
   .subvista-tab-btn {
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 14px;
     background: transparent;
     border: 1px solid transparent;
     border-radius: 8px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #475569;
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
+    min-width: 68px;
+  }
+
+  .multisalas-tabs-wrapper .subvista-tab-btn {
+    flex-direction: row;
+    padding: 8px 16px;
+    min-width: auto;
   }
 
   .subvista-tab-btn:hover {
     background: #f8fafc;
-    color: #0f172a;
   }
 
   .subvista-tab-btn.active {
     background: #0f172a;
-    color: #ffffff;
     box-shadow: 0 2px 4px rgba(15, 23, 42, 0.2);
+  }
+
+  .tab-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+    line-height: 1.2;
+    text-align: center;
+    transition: color 0.15s ease;
+  }
+
+  .subvista-tab-btn:hover .tab-label {
+    color: #0f172a;
+  }
+
+  .subvista-tab-btn.active .tab-label {
+    color: #ffffff;
+  }
+
+  .tab-category-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    line-height: 1.25;
+    text-align: center;
+    transition: all 0.15s ease;
+  }
+
+  /* Badge colors when tab is inactive */
+  .tab-category-badge.cat-libro {
+    background: #f3e8ff;
+    color: #7e22ce;
+    border: 1px solid #e9d5ff;
+  }
+  .tab-category-badge.cat-mesas {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+  .tab-category-badge.cat-maquinas {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+  .tab-category-badge.cat-control {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+  }
+
+  /* Badge colors when tab is active (dark background) */
+  .subvista-tab-btn.active .tab-category-badge.cat-libro {
+    background: #9333ea;
+    color: #ffffff;
+    border: 1px solid #a855f7;
+  }
+  .subvista-tab-btn.active .tab-category-badge.cat-mesas {
+    background: #16a34a;
+    color: #ffffff;
+    border: 1px solid #22c55e;
+  }
+  .subvista-tab-btn.active .tab-category-badge.cat-maquinas {
+    background: #d97706;
+    color: #ffffff;
+    border: 1px solid #f59e0b;
+  }
+  .subvista-tab-btn.active .tab-category-badge.cat-control {
+    background: #0284c7;
+    color: #ffffff;
+    border: 1px solid #38bdf8;
   }
 
   .tab-icon {
