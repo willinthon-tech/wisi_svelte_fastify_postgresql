@@ -1,5 +1,6 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
+  import { subscribeToLibroUpdates } from "../../controllers/websocket.store.js";
   import html2canvas from "html2canvas";
   import { jsPDF } from "jspdf";
   import { saveOrShareFile } from "../../utils/fileSaver.js";
@@ -69,7 +70,19 @@
   let tabMaquina = 'total';     // 'total' | 'billetero_rango' | 'billetero_detallado' | 'aportes_rango' | 'aportes_empleado' | 'aportes_detallado'
   let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
 
+  let unsubWs = null;
+
   onMount(async () => {
+    unsubWs = subscribeToLibroUpdates(
+      () => libroId || libro?.uuid || libro?.id,
+      'all',
+      () => {
+        const targetId = libroId || libro?.uuid || libro?.id;
+        if (targetId) loadFullResumen(targetId);
+      },
+      400
+    );
+
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
     if (!libroId && typeof window !== "undefined") {
       const hash = window.location.hash || "";
@@ -94,6 +107,10 @@
       isLoading = false;
       loadError = "No se especificó ningún libro para generar el reporte";
     }
+  });
+
+  onDestroy(() => {
+    if (unsubWs) unsubWs();
   });
 
   let lastLoadedId = null;

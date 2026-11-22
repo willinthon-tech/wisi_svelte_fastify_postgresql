@@ -52,7 +52,7 @@ import {
   getLibroAportesModel, createLibroAporteModel, updateLibroAporteModel, deleteLibroAporteModel,
   getDeltaSyncModel
 } from '../models/master.model.js';
-import { broadcastMasterSync, broadcastSystemVersionUpdate } from '../config/websocket.js';
+import { broadcastMasterSync, broadcastSystemVersionUpdate, broadcastLibroUpdate } from '../config/websocket.js';
 
 function parseIds(val) {
   if (!val) return null;
@@ -2022,6 +2022,7 @@ export async function createLibro(request, reply) {
   try {
     const data = parseBody(request.body);
     const result = await createLibroModel(data);
+    try { broadcastLibroUpdate({ libroId: result?.uuid || result?.id, modulo: 'libro', action: 'create', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2033,6 +2034,7 @@ export async function updateLibro(request, reply) {
     const { id } = request.params;
     const data = parseBody(request.body);
     const result = await updateLibroModel(id, data);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'libro', action: 'update', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2043,6 +2045,7 @@ export async function deleteLibro(request, reply) {
   try {
     const { id } = request.params;
     const result = await deleteLibroModel(id);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'libro', action: 'delete', data: { id } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2066,6 +2069,7 @@ export async function createLibroDropMesa(request, reply) {
     const body = parseBody(request.body);
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroDropMesaModel(data);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'drop_mesas', action: 'create', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2076,6 +2080,7 @@ export async function deleteLibroDropMesa(request, reply) {
   try {
     const { id, dropId } = request.params;
     const result = await deleteLibroDropMesaModel(dropId, id);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'drop_mesas', action: 'delete', data: { dropId } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2100,6 +2105,7 @@ export async function createLibroConteoMaquina(request, reply) {
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroConteoMaquinaModel(data);
     try { broadcastMasterSync('libro_conteo_maquinas', 'create', result); } catch (e) {}
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'conteo_maquinas', action: 'create', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2112,6 +2118,7 @@ export async function updateLibroConteoMaquina(request, reply) {
     const body = parseBody(request.body);
     const result = await updateLibroConteoMaquinaModel(conteoId, id, body);
     try { broadcastMasterSync('libro_conteo_maquinas', 'update', result); } catch (e) {}
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'conteo_maquinas', action: 'update', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2123,6 +2130,7 @@ export async function deleteLibroConteoMaquina(request, reply) {
     const { id, conteoId } = request.params;
     const result = await deleteLibroConteoMaquinaModel(conteoId, id);
     try { broadcastMasterSync('libro_conteo_maquinas', 'delete', { id: conteoId, uuid: conteoId, libro_id: id }); } catch (e) {}
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'conteo_maquinas', action: 'delete', data: { conteoId } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2147,6 +2155,7 @@ export async function createOrUpdateLibroArqueoFicha(request, reply) {
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createOrUpdateLibroArqueoFichaModel(data);
     try { broadcastMasterSync('libro_arqueo_fichas', 'save', result); } catch (e) {}
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'arqueo_fichas', action: 'save', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2158,6 +2167,7 @@ export async function deleteLibroArqueoFicha(request, reply) {
     const { id, targetId } = request.params;
     const result = await deleteLibroArqueoFichaModel(targetId, id);
     try { broadcastMasterSync('libro_arqueo_fichas', 'delete', { id: targetId, uuid: targetId, libro_id: id }); } catch (e) {}
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'arqueo_fichas', action: 'delete', data: { targetId } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2181,6 +2191,7 @@ export async function createLibroControlLlaves(request, reply) {
     const body = parseBody(request.body);
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroControlLlavesModel(data);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'control_llaves', action: 'create', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2192,6 +2203,7 @@ export async function updateLibroControlLlavesHoras(request, reply) {
     const { id, controlId } = request.params;
     const body = parseBody(request.body);
     const result = await updateLibroControlLlavesHorasModel(controlId, id, body);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'control_llaves', action: 'update', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2202,6 +2214,7 @@ export async function deleteLibroControlLlaves(request, reply) {
   try {
     const { id, controlId } = request.params;
     const result = await deleteLibroControlLlavesModel(controlId, id);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'control_llaves', action: 'delete', data: { controlId } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2225,6 +2238,7 @@ export async function createLibroIncidenciaGeneral(request, reply) {
     const body = parseBody(request.body);
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroIncidenciaGeneralModel(data);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'incidencias', action: 'create', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2236,6 +2250,7 @@ export async function updateLibroIncidenciaGeneralHora(request, reply) {
     const { id, incidenciaId } = request.params;
     const body = parseBody(request.body);
     const result = await updateLibroIncidenciaGeneralHoraModel(incidenciaId, id, body);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'incidencias', action: 'update', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2248,6 +2263,7 @@ export async function deleteLibroIncidenciaGeneral(request, reply) {
   try {
     const { id, incidenciaId } = request.params;
     const result = await deleteLibroIncidenciaGeneralModel(incidenciaId, id);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'incidencias', action: 'delete', data: { incidenciaId } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2283,6 +2299,7 @@ export async function createLibroControlCliente(request, reply) {
     const body = parseBody(request.body);
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroControlClienteModel(data);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'control_clientes', action: 'create', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2294,6 +2311,7 @@ export async function updateLibroControlCliente(request, reply) {
     const { id, controlId } = request.params;
     const body = parseBody(request.body);
     const result = await updateLibroControlClienteModel(controlId, id, body);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'control_clientes', action: 'update', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2304,6 +2322,7 @@ export async function deleteLibroControlCliente(request, reply) {
   try {
     const { id, controlId } = request.params;
     const result = await deleteLibroControlClienteModel(controlId, id);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'control_clientes', action: 'delete', data: { controlId } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2326,6 +2345,7 @@ export async function saveLibroDatos(request, reply) {
     const { id } = request.params;
     const body = parseBody(request.body);
     const result = await saveLibroDatosModel(id, body, request.query?.multisala_uuid);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'datos', action: 'save', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2348,6 +2368,7 @@ export async function saveLibroNovedadesMesa(request, reply) {
     const { id } = request.params;
     const body = parseBody(request.body);
     const result = await saveLibroNovedadesMesaModel(id, body, request.query?.multisala_uuid);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'novedades_mesas', action: 'save', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2358,6 +2379,7 @@ export async function deleteLibroNovedadesMesa(request, reply) {
   try {
     const { id, recordId } = request.params;
     const result = await deleteLibroNovedadesMesaModel(recordId);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'novedades_mesas', action: 'delete', data: { recordId } }); } catch (e) {}
     return reply.send({ success: true, ...result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2390,6 +2412,7 @@ export async function saveLibroReporte(request, reply) {
   try {
     const { id } = request.params;
     const result = await saveLibroReporteModel(id);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'resumen', action: 'save', data: result }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2514,6 +2537,7 @@ export async function createLibroAporte(request, reply) {
     const body = parseBody(request.body);
     const data = { ...body, libro_id: id, multisala_uuid: body.multisala_uuid || request.query?.multisala_uuid };
     const result = await createLibroAporteModel(data);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'aportes', action: 'create', data: result }); } catch (e) {}
     return reply.status(201).send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2525,6 +2549,7 @@ export async function updateLibroAporte(request, reply) {
     const { id, aporteId } = request.params;
     const body = parseBody(request.body);
     const result = await updateLibroAporteModel(aporteId, id, body);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'aportes', action: 'update', data: result }); } catch (e) {}
     return reply.send({ success: true, data: result });
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });
@@ -2535,6 +2560,7 @@ export async function deleteLibroAporte(request, reply) {
   try {
     const { id, aporteId } = request.params;
     const result = await deleteLibroAporteModel(aporteId, id);
+    try { broadcastLibroUpdate({ libroId: id, modulo: 'aportes', action: 'delete', data: { aporteId } }); } catch (e) {}
     return reply.send(result);
   } catch (err) {
     return reply.status(400).send({ success: false, error: err.message });

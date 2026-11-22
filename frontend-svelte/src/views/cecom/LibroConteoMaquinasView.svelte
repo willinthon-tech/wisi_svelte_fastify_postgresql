@@ -1,6 +1,7 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { subscribeToLibroUpdates } from '../../controllers/websocket.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { 
     masterMaquinasStore, 
@@ -830,10 +831,23 @@
     }
   }
 
+  let unsubWs = null;
+
   onMount(async () => {
+    unsubWs = subscribeToLibroUpdates(
+      () => libro?.uuid || libroId || libro?.id,
+      ['conteo_maquinas', 'all'],
+      () => {
+        loadRecords();
+      }
+    );
     loadLocalMasterData();
     loadMasterStoresFromBackend().catch(() => {});
     loadRecords();
+  });
+
+  onDestroy(() => {
+    if (unsubWs) unsubWs();
   });
 </script>
 

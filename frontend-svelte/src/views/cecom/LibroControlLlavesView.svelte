@@ -1,6 +1,7 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { subscribeToLibroUpdates } from '../../controllers/websocket.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { 
     masterLlavesStore, 
@@ -135,12 +136,26 @@
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   }
 
+  let unsubWs = null;
+
   onMount(async () => {
+    unsubWs = subscribeToLibroUpdates(
+      () => libro?.uuid || libroId || libro?.id,
+      ['control_llaves', 'all'],
+      () => {
+        loadRecords();
+      }
+    );
+
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchServerLlaves(),
       loadRecords()
     ]);
+  });
+
+  onDestroy(() => {
+    if (unsubWs) unsubWs();
   });
 
   $: if (libroId || libro?.id || libro?.uuid) {

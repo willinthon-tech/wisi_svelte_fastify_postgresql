@@ -9,7 +9,8 @@
 </script>
 
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { subscribeToLibroUpdates } from '../../controllers/websocket.store.js';
   import PaginatedDataTable from '../../components/common/PaginatedDataTable.svelte';
   import SmartMultiSelect from '../../components/common/SmartMultiSelect.svelte';
   import { 
@@ -78,12 +79,26 @@
     sortDir: 'desc'
   };
 
+  let unsubWs = null;
+
   onMount(async () => {
+    unsubWs = subscribeToLibroUpdates(
+      null,
+      ['libro', 'all'],
+      () => {
+        loadServerData(currentParams);
+      }
+    );
+
     isLoading = true;
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadServerData(currentParams)
     ]);
+  });
+
+  onDestroy(() => {
+    if (unsubWs) unsubWs();
   });
 
   // Fetch filter options ONLY when active filters, user assigned salas or search change

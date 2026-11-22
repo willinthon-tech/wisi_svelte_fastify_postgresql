@@ -18,6 +18,9 @@ export const latestMarcajeAlertStore = writable(null);
 // Baccarat live table updates (synchronized across players/operators watching same table)
 export const latestBaccaratUpdateStore = writable(null);
 
+// Libro de operaciones real-time sync (Control Clientes, Aportes, Sobrantes/Faltantes, Drop, Billetero, Llaves, Incidencias, etc.)
+export const latestLibroUpdateStore = writable(null);
+
 let socket = null;
 let reconnectTimer = null;
 let pingInterval = null;
@@ -160,6 +163,8 @@ export function initWebSocketConnection(onNewMarcajeCallback) {
           latestBaccaratUpdateStore.set(payload.data);
         } else if (payload.type === 'BACCARAT_SESSION_UPDATE') {
           latestBaccaratUpdateStore.set({ isSessionUpdate: true, ...(payload.data || payload) });
+        } else if (payload.type === 'LIBRO_UPDATE') {
+          latestLibroUpdateStore.set(payload);
         }
       } catch (err) {
         console.warn('Error parseando mensaje WebSocket:', err);
@@ -261,4 +266,47 @@ export function closeWebSocketConnection() {
     socket = null;
   }
   isWsConnectedStore.set(false);
+}
+
+/**
+ * Emite una notificación de actualización de libro a través de WebSocket a otros clientes
+ */
+export function sendLibroUpdateNotification(libroId, modulo, action, data = {}) {
+  sendWebSocketMessage({
+    type: 'LIBRO_UPDATE',
+    libroId: libroId ? String(libroId) : null,
+    modulo,
+    action,
+    data
+  });
+}
+
+/**
+ * Suscribe un componente a actualizaciones de un libro y módulo específico.
+ * Gestiona filtrado por libroId, módulo y debounce automático para evitar recargas duplicadas.
+ * Retorna la función unsubscribe lista para usar en onDestroy.
+ */
+export function subscribeToLibroUpdates(getLibroIdFn, targetModulos, onUpdateCallback, debounceMs = 250) {
+  let timer = null;
+  return latestLibroUpdateStore.subscribe((evt) => {
+    if (!evt) return;
+    const currentId = typeof getLibroIdFn === 'function' ? String(getLibroIdFn() || '') : String(getLibroIdFn || '');
+    const evtLibroId = String(evt.libroId || '');
+    
+    // Si el evento tiene libroId y el cliente tiene un libroId cargado, ignorar eventos de otros libros
+    if (evtLibroId && currentId && evtLibroId !== currentId) return;
+
+    const modulosList = Array.isArray(targetModulos) ? targetModulos : [targetModulos];
+    const matches = modulosList.includes('all') || modulosList.includes(evt.modulo) || evt.modulo === 'all';
+    if (!matches) return;
+
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      try {
+        onUpdateCallback(evt);
+      } catch (err) {
+        console.warn('[WS Libro Update Callback Error]:', err);
+      }
+    }, debounceMs);
+  });
 }

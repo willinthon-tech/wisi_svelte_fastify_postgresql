@@ -4,6 +4,7 @@
   import { triggerToast } from '../../controllers/ui.store.js';
   import { getPublicWebUrl } from '../../config/api.config.js';
   import { masterSalasStore } from '../../controllers/master.store.js';
+  import { subscribeToLibroUpdates, isWsConnectedStore } from '../../controllers/websocket.store.js';
   import LibroDropMesasView from './LibroDropMesasView.svelte';
   import LibroArqueoFichasView from './LibroArqueoFichasView.svelte';
   import LibroConteoMaquinasView from './LibroConteoMaquinasView.svelte';
@@ -68,6 +69,7 @@
 
   // Suscribirse a cambios en currentRouteStore para sincronizar la subvista y la multisala
   let unsubRoute = null;
+  let unsubWs = null;
 
   function parseRoute(routeStr) {
     if (!routeStr) return;
@@ -118,6 +120,14 @@
       parseRoute(val);
     });
 
+    unsubWs = subscribeToLibroUpdates(
+      () => libroId || libro?.uuid || libro?.id,
+      ['libro', 'all'],
+      () => {
+        if (libroId) loadLibro(libroId);
+      }
+    );
+
     if (!libroId && typeof window !== 'undefined') {
       parseRoute(window.location.hash || window.location.pathname);
     }
@@ -129,6 +139,7 @@
 
   onDestroy(() => {
     if (unsubRoute) unsubRoute();
+    if (unsubWs) unsubWs();
   });
 
   async function loadLibro(id) {
@@ -249,6 +260,9 @@
           {/if}
           {#if libro?.id}
             <span class="badge-id">#{libro.id}</span>
+          {/if}
+          {#if $isWsConnectedStore}
+            <span class="badge-live-ws" title="Sincronización en tiempo real activa">⚡ En vivo</span>
           {/if}
         </div>
         <p class="subtitle">
@@ -450,6 +464,20 @@
     border-radius: 6px;
     font-size: 11.5px;
     font-weight: 800;
+  }
+
+  .badge-live-ws {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+    font-size: 11.5px;
+    font-weight: 800;
+    padding: 2px 9px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
   }
 
   .subtitle {

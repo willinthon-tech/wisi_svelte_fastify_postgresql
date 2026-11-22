@@ -1,6 +1,7 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { subscribeToLibroUpdates } from '../../controllers/websocket.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { 
     masterMesasStore, 
@@ -170,12 +171,26 @@
                             (currentMesaBilletes5 * 5) + 
                             (currentMesaBilletes1 * 1);
 
+  let unsubWs = null;
+
   onMount(async () => {
+    unsubWs = subscribeToLibroUpdates(
+      () => libro?.uuid || libroId || libro?.id,
+      ['drop_mesas', 'all'],
+      () => {
+        loadDropRecords();
+      }
+    );
+
     await Promise.all([
       loadMasterStoresFromBackend(),
       fetchServerMesas(),
       loadDropRecords()
     ]);
+  });
+
+  onDestroy(() => {
+    if (unsubWs) unsubWs();
   });
 
   // Reaccionar a cambios en libroId

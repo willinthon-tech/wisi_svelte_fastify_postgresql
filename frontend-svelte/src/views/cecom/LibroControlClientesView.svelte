@@ -1,6 +1,7 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { subscribeToLibroUpdates } from '../../controllers/websocket.store.js';
   import { 
     masterSalasStore, 
     masterLibrosStore, 
@@ -390,13 +391,30 @@
   $: balanceNetoClientesFiltrados = totalComprasClientesFiltrados - totalPagosClientesFiltrados;
   $: totalOpsClientesFiltrados = resumenClientesFiltrados.reduce((acc, c) => acc + (c.count || 0), 0);
 
+  let unsubWs = null;
+
   onMount(async () => {
+    unsubWs = subscribeToLibroUpdates(
+      () => libro?.uuid || libroId || libro?.id,
+      ['control_clientes', 'drop_mesas', 'all'],
+      (evt) => {
+        loadRecords();
+        if (evt?.modulo === 'drop_mesas' || evt?.modulo === 'all') {
+          loadDropRecords();
+        }
+      }
+    );
+
     await Promise.all([
       loadMasterStoresFromBackend(),
       loadRecords(),
       loadDropRecords(),
       loadSugerenciasRemotas()
     ]);
+  });
+
+  onDestroy(() => {
+    if (unsubWs) unsubWs();
   });
 
   $: if (libroId || targetSalaUuid) {

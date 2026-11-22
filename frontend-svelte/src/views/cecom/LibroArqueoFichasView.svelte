@@ -1,6 +1,7 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { triggerToast } from '../../controllers/ui.store.js';
+  import { subscribeToLibroUpdates } from '../../controllers/websocket.store.js';
   import { currentUserStore, userSalasStore as authUserSalasStore } from '../../controllers/auth.store.js';
   import { 
     masterMesasStore, 
@@ -756,8 +757,21 @@
   $: totalGeneralCierre = mesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
   $: totalGeneralDiferencia = (totalGeneralCierre + totalGeneralDevoluciones) - (totalGeneralApertura + totalGeneralRellenos);
 
+  let unsubWs = null;
+
   onMount(() => {
+    unsubWs = subscribeToLibroUpdates(
+      () => libro?.uuid || libroId || libro?.id,
+      ['arqueo_fichas', 'all'],
+      () => {
+        loadArqueoRecords();
+      }
+    );
     loadArqueoRecords();
+  });
+
+  onDestroy(() => {
+    if (unsubWs) unsubWs();
   });
 </script>
 

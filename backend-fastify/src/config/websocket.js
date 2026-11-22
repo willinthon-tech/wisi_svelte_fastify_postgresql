@@ -144,6 +144,11 @@ export async function initWebsockets(fastify) {
         }
         return;
       }
+
+      if (data.type === 'LIBRO_UPDATE') {
+        broadcastLibroUpdate(data);
+        return;
+      }
     } catch (e) {
       // silent parse error
     }
@@ -317,6 +322,32 @@ export function broadcastBaccaratSessionUpdate(sessionData) {
 
   for (const client of activeClients) {
     if (client.readyState === 1) {
+      try {
+        client.send(payload);
+      } catch (err) {
+        activeClients.delete(client);
+      }
+    }
+  }
+}
+
+/**
+ * Broadcasts Libro updates (create, update, delete, or incoming via WhatsApp)
+ * to all connected clients in real time.
+ */
+export function broadcastLibroUpdate({ libroId, modulo, action, data }) {
+  if (activeClients.size === 0) return;
+  const payload = JSON.stringify({
+    type: 'LIBRO_UPDATE',
+    modulo: modulo || 'all',
+    libroId: libroId ? String(libroId) : null,
+    action: action || 'update',
+    data: data || {},
+    timestamp: new Date().toISOString()
+  });
+
+  for (const client of activeClients) {
+    if (client.readyState === 1) { // 1 = OPEN
       try {
         client.send(payload);
       } catch (err) {

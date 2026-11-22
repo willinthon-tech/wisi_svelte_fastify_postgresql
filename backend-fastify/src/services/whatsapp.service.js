@@ -6,6 +6,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql, isPgConnected } from '../config/db.js';
 import { parseWhatsAppMessage, normalizeText, isSystemStatusOrInformationalMessage } from './whatsapp-parser.js';
+import { broadcastLibroUpdate } from '../config/websocket.js';
 
 // Helpers seguros para clasificar JIDs sin depender de exportaciones específicas de Baileys
 const isJidBroadcast = (jid) => typeof jid === 'string' && jid.endsWith('@broadcast');
@@ -861,6 +862,17 @@ class WhatsAppService {
 
         console.log(`${checkEmoji} [WhatsApp] Operación registrada en Control de Clientes [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente} ${obsTexto ? `(${obsTexto})` : ''}`);
 
+        if (insertedUuid) {
+          try {
+            broadcastLibroUpdate({
+              libroId: libro.uuid || libro.id,
+              modulo: 'control_clientes',
+              action: 'create',
+              data: { uuid: insertedUuid, source: 'whatsapp', tipo: parsed.tipo, monto: parsed.monto }
+            });
+          } catch (wsErr) {}
+        }
+
         // Los chulitos se colocan ÚNICAMENTE cuando la información ya se insertó con éxito en la base de datos
         if (insertedUuid && mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, m.key, checkEmoji);
@@ -928,6 +940,17 @@ class WhatsAppService {
         `;
 
         console.log(`${checkEmoji} [WhatsApp] ${parsed.tipo} registrado en Aportes [${logStatus}]: $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre} ${obsTexto ? `(${obsTexto})` : ''}`);
+
+        if (insertedUuid) {
+          try {
+            broadcastLibroUpdate({
+              libroId: libro.uuid || libro.id,
+              modulo: 'aportes',
+              action: 'create',
+              data: { uuid: insertedUuid, source: 'whatsapp', tipo: parsed.tipo, monto: parsed.monto }
+            });
+          } catch (wsErr) {}
+        }
 
         // Los chulitos se colocan ÚNICAMENTE cuando la información ya se insertó con éxito en la base de datos
         if (insertedUuid && mapping.auto_reply && this.sock) {
@@ -1100,6 +1123,13 @@ class WhatsAppService {
         `;
 
         console.log(`✏️ [WhatsApp Edit] Control de Clientes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente}`);
+        try {
+          broadcastLibroUpdate({
+            modulo: 'control_clientes',
+            action: 'update',
+            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp' }
+          });
+        } catch (wsErr) {}
         if (mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, targetKey, '✏️');
         }
@@ -1149,6 +1179,13 @@ class WhatsAppService {
         `;
 
         console.log(`✏️ [WhatsApp Edit] Aportes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
+        try {
+          broadcastLibroUpdate({
+            modulo: 'aportes',
+            action: 'update',
+            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp' }
+          });
+        } catch (wsErr) {}
         if (mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, targetKey, '✏️');
         }
