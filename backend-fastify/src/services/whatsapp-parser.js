@@ -93,11 +93,18 @@ export function cleanPersonName(rawName) {
   }
 
   // 4. Formatear cada palabra en Title Case
-  return name
+  const formatted = name
     .split(/\s+/)
     .filter(Boolean)
     .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(' ');
+
+  // Si después del saneamiento queda una sola letra o conector suelto, no es un nombre válido
+  if (formatted.length < 2 || ['a', 'de', 'del', 'el', 'la', 'c', 'p', 'd'].includes(formatted.toLowerCase())) {
+    return '';
+  }
+
+  return formatted;
 }
 
 /**
@@ -274,8 +281,21 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   let tipo = null;
   let tipoMatchedText = null;
 
+  // Filtrar tipos de transacción permitidos según la configuración del grupo:
+  // 'control_clientes' => Solo Compra y Pago
+  // 'aportes_maquinas' => Solo Aporte y Devolución
+  // 'todo' => Todos los tipos
+  const allowedTipos = defaultOptions.tipo_operaciones === 'control_clientes'
+    ? ['Compra', 'Pago']
+    : defaultOptions.tipo_operaciones === 'aportes_maquinas'
+      ? ['Aporte', 'Devolución']
+      : ['Compra', 'Pago', 'Aporte', 'Devolución'];
+
+  const filteredFullRules = TIPO_FULL_RULES.filter(r => allowedTipos.includes(r.tipo));
+  const filteredSingleRules = TIPO_SINGLE_RULES.filter(r => allowedTipos.includes(r.tipo));
+
   // Palabras completas primero
-  for (const rule of TIPO_FULL_RULES) {
+  for (const rule of filteredFullRules) {
     const m = textWithoutNota.match(rule.regex);
     if (m) {
       tipo = rule.tipo;
@@ -289,7 +309,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   // hagan match erróneo con "a" por fronteras \b sobre caracteres acentuados.
   if (!tipo) {
     const textNormForSingle = normalizeText(textWithoutNota);
-    for (const rule of TIPO_SINGLE_RULES) {
+    for (const rule of filteredSingleRules) {
       const m = textNormForSingle.match(rule.regex);
       if (m) {
         tipo = rule.tipo;
@@ -299,7 +319,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     }
   }
 
-  if (!tipo) return null; // No es un mensaje de transacción de WISI
+  if (!tipo) return null; // No es un mensaje de transacción de WISI para este tipo de grupo
 
   const isAporteDev = (tipo === 'Aporte' || tipo === 'Devolución');
 

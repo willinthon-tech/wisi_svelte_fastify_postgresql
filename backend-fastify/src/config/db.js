@@ -346,7 +346,14 @@ export async function initDb() {
       console.warn('Advertencia verificando fk_maquinas_juego_uuid en initDb:', eFkMaq.message);
     }
 
-    // Sanear nombres de clientes con prefijos "De " / "Del " residuales de WhatsApp
+    // Garantizar columna tipo_operaciones en whatsapp_group_mappings ('todo', 'control_clientes', 'aportes_maquinas')
+    try {
+      await sql.unsafe(`ALTER TABLE whatsapp_group_mappings ADD COLUMN IF NOT EXISTS tipo_operaciones VARCHAR(50) DEFAULT 'todo';`);
+    } catch (eWaCol) {
+      console.warn('Advertencia migrando tipo_operaciones en whatsapp_group_mappings:', eWaCol.message);
+    }
+
+    // Sanear nombres de clientes con prefijos "De " / "Del " residuales de WhatsApp y corregir clientes inválidos ('a')
     try {
       await sql.unsafe(`
         DO $$
@@ -354,7 +361,33 @@ export async function initDb() {
           r RECORD;
           v_clean_nombre TEXT;
           v_target_uuid UUID;
+          v_real_cliente TEXT;
         BEGIN
+          -- 1. Arreglar registros en libro_control_clientes que apuntaban a clientes inválidos de 1 letra (ej: 'a')
+          FOR r IN 
+            SELECT lcc.uuid as lcc_uuid, lcc.cliente_uuid, c.nombre as cliente_nombre, wl.parsed_data->>'cliente' as parsed_cliente
+            FROM libro_control_clientes lcc
+            JOIN clientes c ON lcc.cliente_uuid = c.uuid
+            LEFT JOIN whatsapp_logs wl ON wl.inserted_record_uuid = lcc.uuid
+            WHERE (LENGTH(TRIM(c.nombre)) < 2 OR LOWER(TRIM(c.nombre)) IN ('a', 'de', 'del', 'el', 'la', 'c', 'p', 'd'))
+          LOOP
+            v_real_cliente := TRIM(COALESCE(r.parsed_cliente, ''));
+            IF LENGTH(v_real_cliente) >= 2 AND LOWER(v_real_cliente) NOT IN ('a', 'general') THEN
+              SELECT uuid INTO v_target_uuid FROM clientes WHERE LOWER(TRIM(nombre)) = LOWER(v_real_cliente) AND COALESCE(is_deleted, false) = false LIMIT 1;
+              IF v_target_uuid IS NULL THEN
+                INSERT INTO clientes (nombre) VALUES (v_real_cliente) RETURNING uuid INTO v_target_uuid;
+              END IF;
+              UPDATE libro_control_clientes SET cliente_uuid = v_target_uuid WHERE uuid = r.lcc_uuid;
+            END IF;
+          END LOOP;
+
+          -- 2. Desactivar clientes de 1 letra o preposiciones sueltas
+          UPDATE clientes 
+          SET is_deleted = true, deleted_at = NOW(), nombre = nombre || ' (inválido)'
+          WHERE (LENGTH(TRIM(nombre)) < 2 OR LOWER(TRIM(nombre)) IN ('a', 'de', 'del', 'el', 'la', 'c', 'p', 'd'))
+            AND COALESCE(is_deleted, false) = false;
+
+          -- 3. Sanear prefijos "De " / "Del " en clientes válidos
           FOR r IN 
             SELECT uuid, nombre, sala_uuid 
             FROM clientes 
@@ -362,7 +395,7 @@ export async function initDb() {
               AND COALESCE(is_deleted, false) = false
           LOOP
             v_clean_nombre := TRIM(REGEXP_REPLACE(r.nombre, '^(?:de\\s+|del\\s+)+', '', 'i'));
-            IF length(v_clean_nombre) > 0 THEN
+            IF length(v_clean_nombre) >= 2 THEN
               SELECT uuid INTO v_target_uuid
               FROM clientes
               WHERE LOWER(TRIM(nombre)) = LOWER(v_clean_nombre)

@@ -95,6 +95,7 @@ export default async function whatsappRoutes(fastify, options) {
       group_name,
       sala_uuid,
       multisala_uuid,
+      tipo_operaciones,
       auto_reply,
       is_active
     } = req.body || {};
@@ -114,12 +115,17 @@ export default async function whatsappRoutes(fastify, options) {
       ? String(multisala_uuid).trim() 
       : null;
 
+    const safeTipoOperaciones = ['control_clientes', 'aportes_maquinas'].includes(tipo_operaciones)
+      ? tipo_operaciones
+      : 'todo';
+
     const res = await sql`
       INSERT INTO whatsapp_group_mappings (
         group_jid,
         group_name,
         sala_uuid,
         multisala_uuid,
+        tipo_operaciones,
         auto_reply,
         is_active,
         updated_at
@@ -128,6 +134,7 @@ export default async function whatsappRoutes(fastify, options) {
         ${group_name || 'Grupo WhatsApp'},
         ${sala_uuid}::uuid,
         ${safeMultisalaUuid ? sql`${safeMultisalaUuid}::uuid` : sql`NULL`},
+        ${safeTipoOperaciones},
         ${auto_reply !== false},
         ${is_active !== false},
         CURRENT_TIMESTAMP
@@ -136,6 +143,7 @@ export default async function whatsappRoutes(fastify, options) {
         group_name = EXCLUDED.group_name,
         sala_uuid = EXCLUDED.sala_uuid,
         multisala_uuid = EXCLUDED.multisala_uuid,
+        tipo_operaciones = EXCLUDED.tipo_operaciones,
         auto_reply = EXCLUDED.auto_reply,
         is_active = EXCLUDED.is_active,
         updated_at = CURRENT_TIMESTAMP

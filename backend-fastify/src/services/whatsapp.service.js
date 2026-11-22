@@ -708,15 +708,21 @@ class WhatsAppService {
         return; // Grupo no monitoreado, ignorar silenciosamente sin queries pesadas
       }
 
-      // 2. Ejecutar el parser inteligente con diccionario y NLP
+      // 2. Ejecutar el parser inteligente con diccionario y NLP según la configuración del grupo
+      const groupTipoOps = mapping.tipo_operaciones || 'todo';
       const parsed = parseWhatsAppMessage(messageText, {
         caja_default: 'Mesas',
-        modulo_destino: 'control_clientes'
+        modulo_destino: groupTipoOps === 'aportes_maquinas' ? 'aportes_maquinas' : 'control_clientes',
+        tipo_operaciones: groupTipoOps
       });
 
       if (!parsed || !parsed.success) {
-        return; // No es un formato de transacción reconocido, ignorar para no responder a chats casuales
+        return; // No es un formato de transacción reconocido para este grupo, ignorar
       }
+
+      // Restricción estricta de grupo si está configurado para un módulo exclusivo
+      if (groupTipoOps === 'control_clientes' && parsed.modulo !== 'control_clientes') return;
+      if (groupTipoOps === 'aportes_maquinas' && parsed.modulo !== 'aportes_maquinas') return;
 
       const senderJid = m.key.participant || remoteJid;
       const senderName = m.pushName || 'Usuario WhatsApp';
@@ -1031,9 +1037,11 @@ class WhatsAppService {
       }
 
       const prevLog = prevLogs[0];
+      const groupTipoOps = mapping.tipo_operaciones || 'todo';
       const parsed = parseWhatsAppMessage(messageText, {
         caja_default: 'Mesas',
-        modulo_destino: 'control_clientes'
+        modulo_destino: groupTipoOps === 'aportes_maquinas' ? 'aportes_maquinas' : 'control_clientes',
+        tipo_operaciones: groupTipoOps
       });
 
       if (!parsed || !parsed.success) {
@@ -1197,7 +1205,7 @@ class WhatsAppService {
 
     // Sanear el nombre del cliente eliminando preposiciones como "de", "del" que provienen del mensaje de WhatsApp
     let cleanCliente = cleanPersonName(parsedCliente);
-    if (!cleanCliente || cleanCliente.toLowerCase() === 'general') {
+    if (!cleanCliente || cleanCliente.toLowerCase() === 'general' || cleanCliente.length < 2 || ['a', 'de', 'del', 'el', 'la', 'c', 'p', 'd'].includes(cleanCliente.toLowerCase())) {
       cleanCliente = 'General';
     }
 
@@ -1206,6 +1214,8 @@ class WhatsAppService {
       FROM clientes 
       WHERE ${salaUuid ? sql`(sala_uuid = ${salaUuid}::uuid OR sala_uuid IS NULL)` : sql`true`}
         AND COALESCE(is_deleted, false) = false
+        AND length(trim(nombre)) >= 2
+        AND lower(trim(nombre)) NOT IN ('a', 'de', 'del', 'el', 'la', 'c', 'p', 'd')
     `;
 
     if (cleanCliente !== 'General' && allClients.length > 0) {
@@ -1234,11 +1244,14 @@ class WhatsAppService {
         });
       }
 
-      // 4. Coincidencia parcial contenida
+      // 4. Coincidencia contenida estricta (solo si ambas cadenas tienen al menos 3 caracteres)
       if (!foundClient) {
         foundClient = allClients.find(c => {
           const cleanCn = normalizeText(cleanPersonName(c.nombre));
-          return cleanCn.includes(normTarget) || normTarget.includes(cleanCn);
+          if (cleanCn.length < 3 || normTarget.length < 3) return false;
+          if (cleanCn.includes(normTarget)) return true;
+          const targetWords = normTarget.split(/\s+/);
+          return targetWords.includes(cleanCn);
         });
       }
 

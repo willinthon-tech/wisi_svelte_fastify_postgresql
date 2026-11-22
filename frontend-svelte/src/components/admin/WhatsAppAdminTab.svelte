@@ -112,6 +112,7 @@
     group_name: "",
     sala_uuid: "",
     multisala_uuid: "",
+    tipo_operaciones: "todo",
     auto_reply: true,
     is_active: true
   };
@@ -278,6 +279,7 @@
       group_name: "",
       sala_uuid: defaultSala,
       multisala_uuid: "",
+      tipo_operaciones: "todo",
       auto_reply: true,
       is_active: true
     };
@@ -291,6 +293,7 @@
       group_name: m.group_name || "",
       sala_uuid: m.sala_uuid || "",
       multisala_uuid: m.multisala_uuid || "",
+      tipo_operaciones: m.tipo_operaciones || "todo",
       auto_reply: m.auto_reply !== false,
       is_active: m.is_active !== false
     };
@@ -695,6 +698,7 @@
               <th>ESTADO</th>
               <th>GRUPO DE WHATSAPP</th>
               <th>SALA ASIGNADA</th>
+              <th>OPERACIONES</th>
               <th>CONFIRMACIÓN (CHECK)</th>
               <th style="text-align: right;">ACCIONES</th>
             </tr>
@@ -725,6 +729,15 @@
                       <span class="subsala-pill">📍 Sub-sala: {m.sub_sala_nombre}</span>
                     {/if}
                   </div>
+                </td>
+                <td>
+                  {#if m.tipo_operaciones === 'control_clientes'}
+                    <span class="op-badge op-clientes" title="Solo procesa Compras y Pagos">💳 Solo Compras y Pagos</span>
+                  {:else if m.tipo_operaciones === 'aportes_maquinas'}
+                    <span class="op-badge op-aportes" title="Solo procesa Aportes y Devoluciones">🎰 Solo Aportes y Devoluciones</span>
+                  {:else}
+                    <span class="op-badge op-todo" title="Procesa todas las operaciones">🔄 Todo</span>
+                  {/if}
                 </td>
                 <td>
                   {#if m.auto_reply !== false}
@@ -912,6 +925,17 @@
             <span class="field-hint">Esta sala cuenta con sucursales o salas hijas configuradas. Selecciona si este grupo corresponde a una en particular.</span>
           </div>
         {/if}
+
+        <!-- Tipo de Operaciones -->
+        <div class="form-group">
+          <label class="form-label">Operaciones a Procesar en este Grupo *</label>
+          <select class="form-select" bind:value={mappingForm.tipo_operaciones}>
+            <option value="todo">🔄 Todo (Compras, Pagos, Aportes y Devoluciones)</option>
+            <option value="control_clientes">💳 Solo Compras y Pagos (Control de Clientes)</option>
+            <option value="aportes_maquinas">🎰 Solo Aportes y Devoluciones (Máquinas)</option>
+          </select>
+          <span class="field-hint">Permite definir el propósito del grupo: si este grupo de WhatsApp es solo para clientes o solo para aportes/devoluciones de máquinas, el bot solo interpretará lo que corresponda.</span>
+        </div>
 
         <!-- Opciones adicionales -->
         <div class="form-row">
@@ -1449,6 +1473,32 @@
   }
   .modulo-badge.control_clientes { background: #e0f2fe; color: #0369a1; }
   .modulo-badge.aportes_maquinas { background: #f3e8ff; color: #6b21a8; }
+
+  .op-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .op-badge.op-todo {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+  }
+  .op-badge.op-clientes {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+  }
+  .op-badge.op-aportes {
+    background: #f3e8ff;
+    color: #7e22ce;
+    border: 1px solid #e9d5ff;
+  }
 
   .caja-badge {
     padding: 3px 8px;
