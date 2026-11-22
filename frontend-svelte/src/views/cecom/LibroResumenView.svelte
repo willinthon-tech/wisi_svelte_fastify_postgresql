@@ -2493,7 +2493,7 @@
                       class:active={tabMaquina === 'billetero_detallado'}
                       on:click={() => (tabMaquina = 'billetero_detallado')}
                     >
-                      Billetero detallado
+                      Billetero por maquina
                     </button>
                     <button
                       type="button"
@@ -2501,7 +2501,7 @@
                       class:active={tabMaquina === 'aportes_rango'}
                       on:click={() => (tabMaquina = 'aportes_rango')}
                     >
-                      Aportes y Devoluciones por rango
+                      A y D por rango
                     </button>
                     <button
                       type="button"
@@ -2509,7 +2509,7 @@
                       class:active={tabMaquina === 'aportes_empleado'}
                       on:click={() => (tabMaquina = 'aportes_empleado')}
                     >
-                      Aportes y Devoluciones por empleado
+                      A y D por empleado
                     </button>
                     <button
                       type="button"
@@ -2517,7 +2517,7 @@
                       class:active={tabMaquina === 'aportes_detallado'}
                       on:click={() => (tabMaquina = 'aportes_detallado')}
                     >
-                      Aportes y Devoluciones detallado
+                      A y D detallados
                     </button>
                   </div>
                 </div>
