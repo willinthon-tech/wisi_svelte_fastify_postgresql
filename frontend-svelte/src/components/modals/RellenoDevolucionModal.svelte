@@ -59,7 +59,7 @@
   $: currentList = activeTipo === 'relleno' ? rellenosList : devolucionesList;
 
   $: nextNumero = (activeTipo === 'relleno' ? rellenosList.length : devolucionesList.length) + 1;
-  $: nextCodigo = activeTipo === 'relleno' ? `R${nextNumero}` : `D${nextNumero}`;
+  $: nextCodigo = activeTipo === 'relleno' ? `Fill ${nextNumero}` : `Cred ${nextNumero}`;
 
   // Cálculo en vivo del monto del formulario
   $: formTotal = (availableDenominaciones || []).reduce((acc, denom) => {
@@ -217,7 +217,7 @@
   }
 
   async function handleEliminarMovimiento(movId) {
-    if (!confirm('¿Está seguro de eliminar este registro?')) return;
+    if (!movId) return;
 
     const lId = libro?.uuid || libroId || libro?.id;
     const mId = mesa?.uuid || mesa?.id;
@@ -392,7 +392,7 @@
                     <tr>
                       <td class="td-center">
                         <span class="badge-code" class:code-relleno={mov.tipo === 'relleno'} class:code-devolucion={mov.tipo === 'devolucion'}>
-                          {mov.codigo || (mov.tipo === 'relleno' ? `R${mov.numero}` : `D${mov.numero}`)}
+                          {mov.tipo === 'relleno' ? `Fill ${mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1)}` : `Cred ${mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1)}`}
                         </span>
                       </td>
                       <td class="td-center font-mono">{mov.hora || '—'}</td>

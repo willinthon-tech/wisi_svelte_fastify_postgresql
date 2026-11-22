@@ -427,6 +427,13 @@
     return found ? (Number(found.cantidad) || 0) : 0;
   }
 
+  // Formatear texto del badge de movimiento (Fill 1, Cred 1, etc.)
+  function formatMovBadge(mov) {
+    if (!mov) return '';
+    const num = mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : '1');
+    return mov.tipo === 'relleno' ? `Fill ${num}` : `Cred ${num}`;
+  }
+
   // Abrir Modal de Cierre ("Arquear")
   function handleOpenCierreModal(group) {
     modalMesa = group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre };
@@ -486,8 +493,7 @@
 
   // Eliminar Arqueo completo de una Mesa (Apertura y Cierre)
   async function handleEliminarMesa(group) {
-    const confirmed = confirm(`¿Está seguro de eliminar el registro de arqueo (apertura y cierre) de la mesa "${group.mesaNombre}"?`);
-    if (!confirmed) return;
+    if (!group) return;
 
     const lId = libro?.uuid || libroId || libro?.id;
     const mId = group.mesaId;
@@ -688,7 +694,7 @@
                   </div>
                 </td>
                 <td class="td-center td-movimiento">
-                  <span class="mov-badge mov-apertura" title="Apertura">A</span>
+                  <span class="mov-badge mov-apertura" title="Apertura">Apertura</span>
                 </td>
                 {#each salaFichas as valor}
                   {@const apCount = getChipCount(group.apertura, valor)}
@@ -745,8 +751,8 @@
               {#each allMovs as mov}
                 <tr class="drop-row row-mov" class:row-relleno={mov.tipo === 'relleno'} class:row-devolucion={mov.tipo === 'devolucion'}>
                   <td class="td-center td-movimiento">
-                    <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}" title="{mov.tipo === 'relleno' ? 'Relleno' : 'Devolución'} {mov.codigo}">
-                      {mov.codigo || (mov.tipo === 'relleno' ? `R${mov.numero}` : `D${mov.numero}`)}
+                    <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}" title="{mov.tipo === 'relleno' ? 'Fill' : 'Cred'} {mov.numero || mov.codigo}">
+                      {formatMovBadge(mov)}
                     </span>
                   </td>
                   {#each salaFichas as valor}
@@ -764,11 +770,9 @@
               <!-- Sub-fila 2: CIERRE -->
               <tr class="drop-row row-cierre">
                 <td class="td-center td-movimiento">
-                  {#if hasCierre}
-                    <span class="mov-badge mov-cierre" title="Cierre">C</span>
-                  {:else}
-                    <span class="mov-badge mov-pendiente" title="Pendiente de Cierre">P</span>
-                  {/if}
+                  <span class="mov-badge {hasCierre ? 'mov-cierre' : 'mov-pendiente'}" title="{hasCierre ? 'Cierre' : 'Pendiente de Cierre'}">
+                    Cierre
+                  </span>
                 </td>
                 {#each salaFichas as valor}
                   {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
@@ -784,7 +788,7 @@
               <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
               <tr class="drop-row row-diferencia mesa-last-row">
                 <td class="td-center td-movimiento">
-                  <span class="mov-badge mov-diferencia" title="Total">T</span>
+                  <span class="mov-badge mov-diferencia" title="Total">Total</span>
                 </td>
                 {#each salaFichas as valor}
                   {@const apC = getChipCount(group.apertura, valor)}
@@ -831,7 +835,7 @@
           <tfoot>
             <tr class="total-row footer-apertura">
               <td colspan="2" class="total-label-cell">TOTAL APERTURA</td>
-              <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">A</span></td>
+              <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">Apertura</span></td>
               {#each salaFichas as valor}
                 {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                 <td class="td-center total-val-cell">{sumAp}</td>
@@ -844,8 +848,8 @@
 
             {#if totalGeneralRellenos > 0}
               <tr class="total-row footer-rellenos">
-                <td colspan="2" class="total-label-cell">TOTAL RELLENOS</td>
-                <td class="td-center"><span class="mov-badge mov-relleno" title="Rellenos">R</span></td>
+                <td colspan="2" class="total-label-cell">TOTAL FILL</td>
+                <td class="td-center"><span class="mov-badge mov-relleno" title="Fill">Fill</span></td>
                 {#each salaFichas as valor}
                   {@const sumR = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
                   <td class="td-center total-val-cell font-mono">{sumR > 0 ? sumR : '—'}</td>
@@ -859,8 +863,8 @@
 
             {#if totalGeneralDevoluciones > 0}
               <tr class="total-row footer-devoluciones">
-                <td colspan="2" class="total-label-cell">TOTAL DEVOLUCIONES</td>
-                <td class="td-center"><span class="mov-badge mov-devolucion" title="Devoluciones">D</span></td>
+                <td colspan="2" class="total-label-cell">TOTAL CRED</td>
+                <td class="td-center"><span class="mov-badge mov-devolucion" title="Cred">Cred</span></td>
                 {#each salaFichas as valor}
                   {@const sumD = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
                   <td class="td-center total-val-cell font-mono">{sumD > 0 ? sumD : '—'}</td>
@@ -874,7 +878,7 @@
 
             <tr class="total-row footer-cierre">
               <td colspan="2" class="total-label-cell">TOTAL CIERRE</td>
-              <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">C</span></td>
+              <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">Cierre</span></td>
               {#each salaFichas as valor}
                 {@const sumCi = mesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
                 <td class="td-center total-val-cell">{sumCi}</td>
@@ -887,7 +891,7 @@
 
             <tr class="total-row footer-diferencia">
               <td colspan="2" class="total-label-cell">DIFERENCIA NETA</td>
-              <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">T</span></td>
+              <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">Total</span></td>
               {#each salaFichas as valor}
                 {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                 {@const sumR = mesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
@@ -1175,11 +1179,13 @@
   }
 
   .th-mesa {
-    min-width: 140px;
+    min-width: 95px;
+    max-width: 130px;
   }
 
   .th-movimiento {
-    width: 36px;
+    width: 82px;
+    min-width: 80px;
   }
 
   .th-total {
@@ -1256,16 +1262,23 @@
     font-weight: 500;
   }
 
+  .td-movimiento {
+    padding: 6px 4px !important;
+  }
+
   /* Badges de Movimiento */
   .mov-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    padding: 2.5px 8px;
+    min-width: 62px;
     border-radius: 4px;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 800;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .mov-apertura {
