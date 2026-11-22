@@ -64,6 +64,7 @@
   // Pestaña activa: 'detallado', 'metodos' o 'clientes'
   let activeResumenTab = 'detallado';
   let busquedaClienteResumen = '';
+  let busquedaClienteDetallado = '';
 
   // Estado para el cliente seleccionado
   let selectedClienteUuid = null;
@@ -135,13 +136,30 @@
       .slice(0, 10);
   })();
 
-  // Ordenadas por UUID / fecha
-  $: sortedRecords = [...records].sort((a, b) => {
-    if (a.created_at && b.created_at && a.created_at !== b.created_at) {
-      return new Date(b.created_at) - new Date(a.created_at);
+  // Ordenadas por UUID / fecha con filtro opcional de cliente
+  $: sortedRecords = (() => {
+    let list = [...records];
+    const q = (busquedaClienteDetallado || '').trim().toLowerCase();
+    if (q) {
+      list = list.filter(r => (r.cliente || '').toLowerCase().includes(q));
     }
-    return String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || ''), undefined, { numeric: true });
-  });
+    return list.sort((a, b) => {
+      if (a.created_at && b.created_at && a.created_at !== b.created_at) {
+        return new Date(b.created_at) - new Date(a.created_at);
+      }
+      return String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || ''), undefined, { numeric: true });
+    });
+  })();
+
+  $: sortedTotalCompras = sortedRecords
+    .filter(r => r.tipo === 'Compra')
+    .reduce((acc, r) => acc + (parseFloat(r.monto) || 0), 0);
+
+  $: sortedTotalPagos = sortedRecords
+    .filter(r => r.tipo === 'Pago')
+    .reduce((acc, r) => acc + (parseFloat(r.monto) || 0), 0);
+
+  $: sortedBalanceNeto = sortedTotalCompras - sortedTotalPagos;
 
   // Modal para editar Registro
   let showModalEditar = false;
@@ -1087,7 +1105,7 @@
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalPagos > 0 ? 'text-red' : 'text-slate'}">
-              {totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}
+              ${formatMonto(totalPagos)}
             </span>
           </div>
           <div class="kpi-subtext">
@@ -1143,7 +1161,16 @@
           </button>
         </div>
 
-        {#if activeResumenTab === 'clientes'}
+        {#if activeResumenTab === 'detallado'}
+          <div class="tab-search-wrapper">
+            <input 
+              type="text" 
+              class="input-search-cliente-resumen" 
+              placeholder="Buscar cliente..." 
+              bind:value={busquedaClienteDetallado} 
+            />
+          </div>
+        {:else if activeResumenTab === 'clientes'}
           <div class="tab-search-wrapper">
             <input 
               type="text" 
@@ -1188,6 +1215,16 @@
                     <div class="empty-msg-box">
                       <p class="empty-text">
                         No se han registrado operaciones de clientes para esta fecha. Use el formulario de la izquierda para registrar una Compra o Pago.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              {:else if sortedRecords.length === 0}
+                <tr>
+                  <td colspan="{canEdit || canDelete ? 7 : 6}" class="empty-state-cell">
+                    <div class="empty-msg-box">
+                      <p class="empty-text">
+                        No se encontraron operaciones para el cliente "{busquedaClienteDetallado}".
                       </p>
                     </div>
                   </td>
@@ -1263,11 +1300,11 @@
               <tfoot>
                 <tr class="tfoot-totals-row">
                   <td colspan="3" class="font-bold">TOTALES ({sortedRecords.length} {sortedRecords.length === 1 ? 'operación' : 'operaciones'})</td>
-                  <td class="td-right td-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
-                    {#if balanceNeto < 0}
-                      ( - ${formatMonto(Math.abs(balanceNeto))} )
-                    {:else if balanceNeto > 0}
-                      ${formatMonto(balanceNeto)}
+                  <td class="td-right td-monto font-mono font-bold {sortedBalanceNeto > 0 ? 'text-green' : (sortedBalanceNeto < 0 ? 'text-red' : 'text-slate')}">
+                    {#if sortedBalanceNeto < 0}
+                      ( - ${formatMonto(Math.abs(sortedBalanceNeto))} )
+                    {:else if sortedBalanceNeto > 0}
+                      ${formatMonto(sortedBalanceNeto)}
                     {:else}
                       $0.00
                     {/if}
@@ -1315,7 +1352,7 @@
                   </td>
                   <td class="td-res-monto">
                     <span class="monto-value font-bold {m.pagos > 0 ? 'text-red' : 'text-slate'}">
-                      {m.pagos > 0 ? `( - $${formatMonto(m.pagos)} )` : '$0.00'}
+                      ${formatMonto(m.pagos)}
                     </span>
                   </td>
                   <td class="td-res-monto">
@@ -1334,7 +1371,7 @@
               <tr class="tfoot-totals-row">
                 <td class="td-left font-bold">TOTALES</td>
                 <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
+                <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">${formatMonto(totalPagos)}</td>
                 <td class="td-res-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
                   {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                 </td>
@@ -1391,7 +1428,7 @@
                     </td>
                     <td class="td-res-monto">
                       <span class="monto-value font-bold {c.pagos > 0 ? 'text-red' : 'text-slate'}">
-                        {c.pagos > 0 ? `( - $${formatMonto(c.pagos)} )` : '$0.00'}
+                        ${formatMonto(c.pagos)}
                       </span>
                     </td>
                     <td class="td-res-monto">
@@ -1411,7 +1448,7 @@
                 <tr class="tfoot-totals-row">
                   <td colspan="2" class="td-left font-bold">TOTALES ({resumenClientes.length} {resumenClientes.length === 1 ? 'cliente' : 'clientes'})</td>
                   <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                  <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
+                  <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">${formatMonto(totalPagos)}</td>
                   <td class="td-res-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
                     {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                   </td>
