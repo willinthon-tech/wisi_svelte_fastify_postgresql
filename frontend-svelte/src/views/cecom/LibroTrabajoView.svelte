@@ -262,7 +262,7 @@
             <span class="badge-id">#{libro.id}</span>
           {/if}
           {#if $isWsConnectedStore}
-            <span class="badge-live-ws" title="Sincronización en tiempo real activa">⚡ En vivo</span>
+            <span class="badge-live-ws" title="Sincronización en tiempo real activa">Socket ON</span>
           {/if}
         </div>
         <p class="subtitle">

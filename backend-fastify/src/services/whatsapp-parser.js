@@ -100,6 +100,37 @@ export function cleanPersonName(rawName) {
     .join(' ');
 }
 
+/**
+ * Calcula la similaridad de cadenas (coeficiente Dice de bigramas)
+ * para identificar empleados cuyos nombres se asemejan con pequeñas diferencias o errores tipográficos.
+ */
+export function calculateSimilarity(str1, str2) {
+  if (!str1 || !str2) return 0;
+  const s1 = String(str1).toLowerCase().trim();
+  const s2 = String(str2).toLowerCase().trim();
+  if (s1 === s2) return 1;
+  if (s1.includes(s2) || s2.includes(s1)) return 0.85;
+
+  const getBigrams = (str) => {
+    const s = str.replace(/\s+/g, '');
+    const bigrams = new Set();
+    for (let i = 0; i < s.length - 1; i++) {
+      bigrams.add(s.slice(i, i + 2));
+    }
+    return bigrams;
+  };
+
+  const b1 = getBigrams(s1);
+  const b2 = getBigrams(s2);
+  if (b1.size === 0 || b2.size === 0) return 0;
+
+  let intersection = 0;
+  for (const bg of b1) {
+    if (b2.has(bg)) intersection++;
+  }
+  return (2 * intersection) / (b1.size + b2.size);
+}
+
 // Diccionario de Rangos de Máquinas
 const RANGO_RULES = [
   { rango: 'Rango 1', regex: /\b(r(?:ango|g)?\s*[-_]?\s*1)\b/i },

@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql, isPgConnected } from '../config/db.js';
-import { parseWhatsAppMessage, normalizeText, isSystemStatusOrInformationalMessage, cleanPersonName } from './whatsapp-parser.js';
+import { parseWhatsAppMessage, normalizeText, isSystemStatusOrInformationalMessage, cleanPersonName, calculateSimilarity } from './whatsapp-parser.js';
 import { broadcastLibroUpdate } from '../config/websocket.js';
 
 // Helpers seguros para clasificar JIDs sin depender de exportaciones específicas de Baileys
@@ -882,27 +882,24 @@ class WhatsAppService {
         const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango);
         const { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
 
-        let esCoincidenciaExacta = true;
+        // Regla: si encontró al empleado el chulito es verde (✅).
+        // Si no lo encontró del todo y tuvo que elegir el primero de la lista, es del otro color (☑️).
+        const encontroEmpleado = Boolean(foundEmp && !empFallbackUsado);
+        const checkEmoji = encontroEmpleado ? '✅' : '☑️';
+        const logStatus = encontroEmpleado ? 'procesado' : 'procesado_por_verificar';
+
         let observaciones = [];
-
-        if (!parsed.explicit?.rango) {
-          esCoincidenciaExacta = false;
-          observaciones.push('Rango no especificado (asignado a General)');
-        } else if (rangoFallbackUsado || !foundRango) {
-          esCoincidenciaExacta = false;
-          observaciones.push(`Rango "${parsed.rango}" no registrado en BD (asignado a ${rangoNombre})`);
+        if (!encontroEmpleado) {
+          const rawOp = cleanPersonName(parsed.operador);
+          observaciones.push(rawOp 
+            ? `Empleado "${rawOp}" no encontrado en sala (asignado a ${empleadoNombre})` 
+            : `Empleado no especificado (asignado a ${empleadoNombre})`
+          );
+        }
+        if (!foundRango) {
+          observaciones.push(`Rango "${parsed.rango || 'no especificado'}" asignado a ${rangoNombre}`);
         }
 
-        if (!parsed.explicit?.operador) {
-          esCoincidenciaExacta = false;
-          observaciones.push('Operador no especificado (asignado a General)');
-        } else if (empFallbackUsado || !foundEmp) {
-          esCoincidenciaExacta = false;
-          observaciones.push(parsed.operador === 'General' ? 'Operador General' : `Operador "${parsed.operador}" no registrado en sala (asignado a ${empleadoNombre})`);
-        }
-
-        const logStatus = esCoincidenciaExacta ? 'procesado' : 'procesado_por_verificar';
-        const checkEmoji = esCoincidenciaExacta ? '✅' : '☑️';
         const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
 
         const horaStr = formatCaracasTime(parsed.hora || m.messageTimestamp);
@@ -1138,23 +1135,21 @@ class WhatsAppService {
         const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango);
         const { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
 
-        if (!parsed.explicit?.rango) {
-          esCoincidenciaExacta = false;
-          observaciones.push('Rango no especificado (asignado a General)');
-        } else if (rangoFallbackUsado || !foundRango) {
-          esCoincidenciaExacta = false;
-          observaciones.push(`Rango "${parsed.rango}" no registrado (asignado a ${rangoNombre})`);
+        const encontroEmpleado = Boolean(foundEmp && !empFallbackUsado);
+        const logStatus = encontroEmpleado ? 'procesado_editado' : 'procesado_por_verificar_editado';
+
+        let observaciones = [];
+        if (!encontroEmpleado) {
+          const rawOp = cleanPersonName(parsed.operador);
+          observaciones.push(rawOp 
+            ? `Empleado "${rawOp}" no encontrado (asignado a ${empleadoNombre})` 
+            : `Empleado no especificado (asignado a ${empleadoNombre})`
+          );
+        }
+        if (!foundRango) {
+          observaciones.push(`Rango "${parsed.rango || 'no especificado'}" asignado a ${rangoNombre}`);
         }
 
-        if (!parsed.explicit?.operador) {
-          esCoincidenciaExacta = false;
-          observaciones.push('Operador no especificado (asignado a General)');
-        } else if (empFallbackUsado || !foundEmp) {
-          esCoincidenciaExacta = false;
-          observaciones.push(parsed.operador === 'General' ? 'Operador General' : `Operador "${parsed.operador}" no registrado (asignado a ${empleadoNombre})`);
-        }
-
-        const logStatus = esCoincidenciaExacta ? 'procesado_editado' : 'procesado_por_verificar_editado';
         const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
         const horaStr = formatCaracasTime(parsed.hora || prevLog.created_at);
 
@@ -1364,12 +1359,12 @@ class WhatsAppService {
       const normTarget = normalizeText(parsedRango);
       foundRango = allRangos.find(r => normalizeText(r.nombre) === normTarget);
       if (!foundRango) {
-        const numMatch = normTarget.match(/\b([1-9])\b/);
+        const numMatch = normTarget.match(/\b([1-9]|1\d|20)\b/);
         if (numMatch) {
           const targetNum = numMatch[1];
           foundRango = allRangos.find(r => {
             const rn = normalizeText(r.nombre);
-            return rn.endsWith(targetNum) || rn.includes(`rango ${targetNum}`) || rn.includes(`rg ${targetNum}`) || rn.includes(`rg${targetNum}`);
+            return rn.endsWith(targetNum) || rn.includes(`rango ${targetNum}`) || rn.includes(`rg ${targetNum}`) || rn.includes(`rg${targetNum}`) || rn.includes(`r${targetNum}`);
           });
         }
       }
@@ -1393,15 +1388,26 @@ class WhatsAppService {
     }
 
     let rangoFallbackUsado = false;
-    if (!rangoUuid && allRangos.length > 0) {
+    // Si no coincide o no se especificó, registrar como General
+    if (!rangoUuid) {
       const genRango = allRangos.find(r => normalizeText(r.nombre) === 'general') ||
                        allRangos.find(r => normalizeText(r.nombre) === 'sin rango') ||
                        allRangos[0];
       if (genRango) {
         rangoUuid = genRango.uuid;
         rangoNombre = genRango.nombre;
-        rangoFallbackUsado = true;
+      } else {
+        try {
+          const [createdGen] = await sql`
+            INSERT INTO rangos (nombre) VALUES ('General') RETURNING uuid, nombre
+          `;
+          if (createdGen) {
+            rangoUuid = createdGen.uuid;
+            rangoNombre = createdGen.nombre;
+          }
+        } catch (e) {}
       }
+      rangoFallbackUsado = true;
     }
 
     return { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango };
@@ -1413,31 +1419,92 @@ class WhatsAppService {
     let foundEmp = null;
     let empFallbackUsado = false;
 
-    const allEmps = await sql`
-      SELECT e.uuid, e.nombre, e.cedula, d.sala_uuid 
-      FROM empleados e
-      LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
-      LEFT JOIN areas a ON c.area_uuid = a.uuid
-      LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
-      WHERE COALESCE(e.activo, true) = true 
-        AND COALESCE(e.is_deleted, false) = false
-        ${salaUuid ? sql`AND (d.sala_uuid = ${salaUuid}::uuid OR d.sala_uuid IS NULL)` : sql``}
-    `;
+    // Sanear el nombre del operador removiendo prefijos residuales como "de", "del"
+    let cleanOperador = cleanPersonName(parsedOperador);
+    if (!cleanOperador || cleanOperador.toLowerCase() === 'general') {
+      cleanOperador = '';
+    }
 
-    if (parsedOperador && parsedOperador.toLowerCase() !== 'general' && allEmps.length > 0) {
-      const normTarget = normalizeText(parsedOperador);
+    let allEmps = [];
+    if (salaUuid) {
+      try {
+        allEmps = await sql`
+          SELECT e.uuid, e.nombre, e.cedula, d.sala_uuid 
+          FROM empleados e
+          LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+          LEFT JOIN areas a ON c.area_uuid = a.uuid
+          LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
+          WHERE COALESCE(e.activo, true) = true 
+            AND COALESCE(e.is_deleted, false) = false
+            AND (d.sala_uuid = ${salaUuid}::uuid OR d.sala_uuid IS NULL)
+          ORDER BY e.nombre ASC
+        `;
+      } catch (e) {
+        console.warn('Error consultando empleados por sala:', e.message);
+      }
+    }
+
+    if (allEmps.length === 0) {
+      try {
+        allEmps = await sql`
+          SELECT e.uuid, e.nombre, e.cedula 
+          FROM empleados e
+          WHERE COALESCE(e.activo, true) = true 
+            AND COALESCE(e.is_deleted, false) = false
+          ORDER BY e.nombre ASC
+        `;
+      } catch (e) {
+        console.warn('Error consultando todos los empleados:', e.message);
+      }
+    }
+
+    if (cleanOperador && allEmps.length > 0) {
+      const normTarget = normalizeText(cleanOperador);
+
+      // 1. Coincidencia exacta
       foundEmp = allEmps.find(e => normalizeText(e.nombre) === normTarget);
+
+      // 2. Coincidencia por inicio de nombre (ej. "Pedro" coincide con "Pedro Perez")
       if (!foundEmp) {
         foundEmp = allEmps.find(e => normalizeText(e.nombre).startsWith(normTarget + ' '));
       }
+
+      // 3. El texto buscado inicia con el nombre completo
+      if (!foundEmp) {
+        foundEmp = allEmps.find(e => normTarget.startsWith(normalizeText(e.nombre) + ' '));
+      }
+
+      // 4. Alguna palabra / apellido coincide exactamente
       if (!foundEmp) {
         foundEmp = allEmps.find(e => {
-          const words = normalizeText(e.nombre).split(/\s+/);
-          return words.includes(normTarget);
+          const empWords = normalizeText(e.nombre).split(/\s+/).filter(Boolean);
+          const targetWords = normTarget.split(/\s+/).filter(Boolean);
+          return targetWords.some(tw => tw.length > 2 && empWords.includes(tw));
         });
       }
+
+      // 5. Coincidencia contenida (subcadena)
       if (!foundEmp) {
-        foundEmp = allEmps.find(e => normalizeText(e.nombre).includes(normTarget) || normTarget.includes(normalizeText(e.nombre)));
+        foundEmp = allEmps.find(e => {
+          const en = normalizeText(e.nombre);
+          return en.includes(normTarget) || normTarget.includes(en);
+        });
+      }
+
+      // 6. Si no coincide exactamente, buscar el que se le asemeje (similaridad fonética / bigramas)
+      if (!foundEmp) {
+        let bestScore = 0;
+        let bestEmp = null;
+        for (const e of allEmps) {
+          const score = calculateSimilarity(normTarget, normalizeText(e.nombre));
+          if (score > bestScore && score >= 0.55) {
+            bestScore = score;
+            bestEmp = e;
+          }
+        }
+        if (bestEmp) {
+          foundEmp = bestEmp;
+        }
       }
 
       if (foundEmp) {
@@ -1446,11 +1513,12 @@ class WhatsAppService {
       }
     }
 
+    // 7. Si no se encontró el empleado del todo o no se indicó operador, elegir el primero de la lista
     if (!empleadoUuid && allEmps.length > 0) {
-      const genEmp = allEmps.find(e => normalizeText(e.nombre) === 'general') || allEmps[0];
-      if (genEmp) {
-        empleadoUuid = genEmp.uuid;
-        empleadoNombre = genEmp.nombre;
+      const firstEmp = allEmps.find(e => normalizeText(e.nombre) === 'general') || allEmps[0];
+      if (firstEmp) {
+        empleadoUuid = firstEmp.uuid;
+        empleadoNombre = firstEmp.nombre;
         empFallbackUsado = true;
       }
     }
