@@ -282,7 +282,7 @@
           </div>
           <div class="comp-sep">=</div>
           <div class="comp-col">
-            <span class="comp-label">Diferencia Neta</span>
+            <span class="comp-label">Total Final</span>
             <span 
               class="comp-val diff" 
               class:positive={diferenciaMonto > 0} 

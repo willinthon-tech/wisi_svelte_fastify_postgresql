@@ -892,7 +892,7 @@
             </tr>
 
             <tr class="total-row footer-diferencia">
-              <td colspan="2" class="total-label-cell">DIFERENCIA NETA</td>
+              <td colspan="2" class="total-label-cell">TOTAL FINAL</td>
               <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">Total</span></td>
               {#each salaFichas as valor}
                 {@const sumAp = mesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
