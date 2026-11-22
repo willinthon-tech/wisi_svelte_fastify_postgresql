@@ -92,6 +92,14 @@
       .join(', ') || '—';
   }
 
+  function formatMovBadge(mov) {
+    if (!mov) return '';
+    const sameType = allMovements.filter(m => m.tipo === mov.tipo);
+    const pos = sameType.findIndex(m => (m.id || m.uuid) === (mov.id || mov.uuid));
+    const num = pos !== -1 ? (pos + 1) : (mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1));
+    return mov.tipo === 'relleno' ? `FILL ${num}` : `CRED ${num}`;
+  }
+
   async function handleGuardar() {
     errorMessage = '';
 
@@ -392,7 +400,7 @@
                     <tr>
                       <td class="td-center">
                         <span class="badge-code" class:code-relleno={mov.tipo === 'relleno'} class:code-devolucion={mov.tipo === 'devolucion'}>
-                          {mov.tipo === 'relleno' ? `Fill ${mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1)}` : `Cred ${mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1)}`}
+                          {formatMovBadge(mov)}
                         </span>
                       </td>
                       <td class="td-center font-mono">{mov.hora || '—'}</td>

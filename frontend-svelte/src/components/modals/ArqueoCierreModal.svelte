@@ -115,6 +115,15 @@
     });
   }
 
+  // Generar etiqueta de encabezado de movimiento (FILL 1, FILL 2, CRED 1, etc.)
+  function getMovHeader(mov) {
+    if (!mov) return '';
+    const sameType = allMovements.filter(m => m.tipo === mov.tipo);
+    const pos = sameType.findIndex(m => (m.id || m.uuid) === (mov.id || mov.uuid));
+    const num = pos !== -1 ? (pos + 1) : (mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1));
+    return mov.tipo === 'relleno' ? `FILL ${num}` : `CRED ${num}`;
+  }
+
   function handleClose() {
     dispatch('close');
   }
@@ -298,8 +307,8 @@
                   <th class="th-denom">Ficha</th>
                   <th class="th-center">Cant. Apertura</th>
                   {#each allMovements as mov}
-                    <th class="th-center th-mov-header" class:th-mov-relleno={mov.tipo === 'relleno'} class:th-mov-devolucion={mov.tipo === 'devolucion'} title="{mov.tipo === 'relleno' ? 'Relleno' : 'Devolución'} {mov.codigo}: $ {formatMoney(mov.total)}">
-                      {mov.codigo || (mov.tipo === 'relleno' ? `R${mov.numero}` : `D${mov.numero}`)}
+                    <th class="th-center th-mov-header" class:th-mov-relleno={mov.tipo === 'relleno'} class:th-mov-devolucion={mov.tipo === 'devolucion'} title="{mov.tipo === 'relleno' ? 'Relleno' : 'Devolución'} {getMovHeader(mov)}: $ {formatMoney(mov.total)}">
+                      {getMovHeader(mov)}
                     </th>
                   {/each}
                   <th class="th-center">Cant. Cierre</th>
@@ -421,7 +430,7 @@
     border-radius: 16px;
     box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
     width: 100%;
-    max-width: 680px;
+    max-width: 820px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
@@ -792,8 +801,11 @@
     background: #1e293b;
     font-size: 11px;
     font-weight: 800;
-    padding: 8px 6px;
-    min-width: 48px;
+    padding: 8px 8px;
+    min-width: 65px;
+    white-space: nowrap;
+    text-align: center;
+    letter-spacing: 0.3px;
   }
   .th-mov-relleno {
     color: #60a5fa !important;
@@ -804,6 +816,7 @@
 
   .count-rd-cell {
     padding: 6px 4px !important;
+    min-width: 65px;
   }
 
   .badge-mov-count {

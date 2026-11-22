@@ -427,11 +427,13 @@
     return found ? (Number(found.cantidad) || 0) : 0;
   }
 
-  // Formatear texto del badge de movimiento (Fill 1, Cred 1, etc.)
-  function formatMovBadge(mov) {
+  // Formatear texto del badge de movimiento (FILL 1, CRED 1, etc.)
+  function formatMovBadge(mov, allMovs = []) {
     if (!mov) return '';
-    const num = mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : '1');
-    return mov.tipo === 'relleno' ? `Fill ${num}` : `Cred ${num}`;
+    const sameType = (allMovs && allMovs.length > 0) ? allMovs.filter(m => m.tipo === mov.tipo) : [];
+    const pos = sameType.findIndex(m => (m.id || m.uuid) === (mov.id || mov.uuid));
+    const num = pos !== -1 ? (pos + 1) : (mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1));
+    return mov.tipo === 'relleno' ? `FILL ${num}` : `CRED ${num}`;
   }
 
   // Abrir Modal de Cierre ("Arquear")
@@ -752,7 +754,7 @@
                 <tr class="drop-row row-mov" class:row-relleno={mov.tipo === 'relleno'} class:row-devolucion={mov.tipo === 'devolucion'}>
                   <td class="td-center td-movimiento">
                     <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}" title="{mov.tipo === 'relleno' ? 'Fill' : 'Cred'} {mov.numero || mov.codigo}">
-                      {formatMovBadge(mov)}
+                      {formatMovBadge(mov, allMovs)}
                     </span>
                   </td>
                   {#each salaFichas as valor}
