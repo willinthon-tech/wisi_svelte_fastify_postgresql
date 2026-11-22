@@ -242,24 +242,66 @@
   // Registros ordenados y filtrados para Detallado de Operaciones (MÁS RECIENTE PRIMERO: UUID / ID DESC)
   $: filteredRecords = (() => {
     let list = [...records];
-    const q = (busquedaDetallado || '').trim();
-    if (q) {
-      const normQ = normalizeSearchStr(q);
-      const tokens = normQ.split(/\s+/).filter(Boolean);
-      list = list.filter(r => {
-        return tokens.every(token => {
-          if (token === 'aporte' || token === 'aportes') {
-            return (r.tipo || 'Aporte').toLowerCase().includes('aporte');
-          }
-          if (token === 'devolucion' || token === 'devoluciones' || token === 'devolución') {
-            return (r.tipo || '').toLowerCase().includes('devoluc');
-          }
-          const fullText = normalizeSearchStr(`${r.tipo || ''} ${r.empleado_nombre || ''} ${r.rango_nombre || ''} ${r.cargo_nombre || ''} ${r.monto || ''}`);
-          return fullText.includes(token);
-        });
-      });
+    const rawQ = (busquedaDetallado || '').trim();
+    if (!rawQ) {
+      return list.sort((a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime() || String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')));
     }
-    return list.sort((a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime() || String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')));
+
+    const normQ = normalizeSearchStr(rawQ);
+
+    // 1. Coincidencia directa de la frase completa (ej: "rango 1", "cinthia", "aporte", "ct slot")
+    let matched = list.filter(r => {
+      const fieldRango = normalizeSearchStr(r.rango_nombre);
+      const fieldEmp = normalizeSearchStr(r.empleado_nombre);
+      const fieldTipo = normalizeSearchStr(r.tipo || 'Aporte');
+      const fieldCargo = normalizeSearchStr(r.cargo_nombre);
+
+      if (fieldRango.includes(normQ)) return true;
+      if (fieldEmp.includes(normQ)) return true;
+      if (fieldTipo.includes(normQ)) return true;
+      if (fieldCargo.includes(normQ)) return true;
+
+      // Si el usuario buscó por monto con signo $ (ej: "$1000")
+      if (rawQ.startsWith('$') && `${formatMonto(r.monto)}`.includes(rawQ.replace('$', '').trim())) {
+        return true;
+      }
+
+      // Combinación directa tipo + empleado + rango + cargo
+      const combined = `${fieldTipo} ${fieldEmp} ${fieldRango} ${fieldCargo}`;
+      return combined.includes(normQ);
+    });
+
+    // 2. Si no hubo coincidencia de frase completa (ej: escribió "cinthia aporte" o "aporte rango 1"),
+    // buscar que todos los tokens estén presentes, asegurando que números como "1" no hagan falso positivo
+    if (matched.length === 0) {
+      const tokens = normQ.split(/\s+/).filter(Boolean);
+      if (tokens.length > 1) {
+        matched = list.filter(r => {
+          const fieldRango = normalizeSearchStr(r.rango_nombre);
+          const fieldEmp = normalizeSearchStr(r.empleado_nombre);
+          const fieldTipo = normalizeSearchStr(r.tipo || 'Aporte');
+          const fieldCargo = normalizeSearchStr(r.cargo_nombre);
+          const combined = `${fieldTipo} ${fieldEmp} ${fieldRango} ${fieldCargo}`;
+
+          return tokens.every(token => {
+            // Si el token es numérico (ej: "1", "2"), debe coincidir exactamente como palabra/número completo
+            if (/^\d+$/.test(token)) {
+              const regex = new RegExp(`(?:^|\\s)${token}(?:$|\\s)`);
+              return regex.test(fieldRango) || regex.test(fieldEmp);
+            }
+            if (token === 'aporte' || token === 'aportes') {
+              return fieldTipo.includes('aporte');
+            }
+            if (token === 'devolucion' || token === 'devoluciones' || token === 'devolución') {
+              return fieldTipo.includes('devoluc');
+            }
+            return combined.includes(token);
+          });
+        });
+      }
+    }
+
+    return matched.sort((a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime() || String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')));
   })();
 
   $: sortedRecords = filteredRecords;
@@ -329,10 +371,17 @@
     let list = resumenRangosTotal;
     if (busquedaRangoResumen.trim()) {
       const normQ = normalizeSearchStr(busquedaRangoResumen.trim());
-      const tokens = normQ.split(/\s+/).filter(Boolean);
       list = list.filter(item => {
         const targetText = normalizeSearchStr(`${item.rango_nombre || ''}`);
-        return tokens.every(t => targetText.includes(t));
+        if (targetText.includes(normQ)) return true;
+        const tokens = normQ.split(/\s+/).filter(Boolean);
+        return tokens.every(token => {
+          if (/^\d+$/.test(token)) {
+            const regex = new RegExp(`(?:^|\\s)${token}(?:$|\\s)`);
+            return regex.test(targetText);
+          }
+          return targetText.includes(token);
+        });
       });
     }
     return list.sort((a, b) => Math.abs(b.total_monto) - Math.abs(a.total_monto));
