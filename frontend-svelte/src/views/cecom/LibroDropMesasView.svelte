@@ -1149,7 +1149,7 @@
 
   .grand-total-cell {
     font-weight: 800;
-    color: #16a34a !important;
+    color: #0f172a !important;
     font-size: 14.5px;
   }
 
