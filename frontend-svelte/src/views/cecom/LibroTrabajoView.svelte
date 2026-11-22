@@ -314,8 +314,8 @@
   {/if}
 
   <!-- Subviews Horizontal Tab Bar ("BOTONES DE SUBVISTAS") -->
-  <div class="subvistas-tabs-wrapper">
-    <div class="subvistas-tabs" role="tablist">
+  <div class="subvistas-tabs-wrapper main-subvistas-wrapper">
+    <div class="subvistas-tabs main-subvistas-grid" role="tablist">
       {#each SUBVISTAS as sub}
         <button
           type="button"
@@ -550,6 +550,22 @@
     min-width: max-content;
   }
 
+  .main-subvistas-grid {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    width: 100%;
+    gap: 4px;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  @media (max-width: 1024px) {
+    .main-subvistas-grid {
+      grid-template-columns: repeat(10, minmax(88px, 1fr));
+      min-width: 880px;
+    }
+  }
+
   .subvista-tab-btn {
     display: inline-flex;
     flex-direction: column;
@@ -564,6 +580,13 @@
     transition: all 0.15s ease;
     white-space: nowrap;
     min-width: 68px;
+  }
+
+  .main-subvistas-grid .subvista-tab-btn {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 3px;
+    box-sizing: border-box;
   }
 
   .multisalas-tabs-wrapper .subvista-tab-btn {
@@ -582,12 +605,16 @@
   }
 
   .tab-label {
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
     color: #475569;
     line-height: 1.2;
     text-align: center;
     transition: color 0.15s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   }
 
   .subvista-tab-btn:hover .tab-label {
@@ -600,12 +627,12 @@
 
   .tab-category-badge {
     display: inline-block;
-    font-size: 9px;
+    font-size: 7.5px;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 1px 6px;
-    border-radius: 4px;
+    letter-spacing: 0.4px;
+    padding: 0px 4.5px;
+    border-radius: 3px;
     line-height: 1.25;
     text-align: center;
     transition: all 0.15s ease;
