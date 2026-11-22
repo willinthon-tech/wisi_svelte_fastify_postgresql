@@ -701,27 +701,10 @@
       (a.mesaNombre || '').localeCompare(b.mesaNombre || '', undefined, { numeric: true, sensitivity: 'base' })
     );
 
-    let totalArqueoFaltantes = 0;
-    let totalArqueoSobrantes = 0;
-    for (const g of arqueoMesaGroups) {
-      if (g.cierre) {
-        const ap = Number(g.apertura?.total) || 0;
-        const ci = Number(g.cierre?.total) || 0;
-        const expected = ap + (g.totalRellenos || 0) - (g.totalDevoluciones || 0);
-        const dif = ci - expected;
-        if (dif < 0) {
-          totalArqueoFaltantes += Math.abs(dif);
-        } else if (dif > 0) {
-          totalArqueoSobrantes += dif;
-        }
-      }
-    }
-
     const totalArqueoApertura = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.apertura?.total) || 0), 0);
     const totalArqueoRellenos = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.totalRellenos) || 0), 0);
     const totalArqueoDevoluciones = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.totalDevoluciones) || 0), 0);
     const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
-    const totalArqueoDiferencia = totalArqueoSobrantes - totalArqueoFaltantes;
 
     // 2.2 Consolidado por mesa para el Cuadro Total (Drop + Sobrantes - Faltantes = Total)
     const mapMesasConsolidado = new Map();
@@ -775,14 +758,18 @@
         item.juegoNombre = g.juegoNombre;
       }
 
+      // Sumar todos los cred a sobrantes y todos los fill a faltantes
+      item.sobrantes += (Number(g.totalDevoluciones) || 0);
+      item.faltantes += (Number(g.totalRellenos) || 0);
+
       if (g.cierre) {
         const ap = Number(g.apertura?.total) || 0;
         const ci = Number(g.cierre?.total) || 0;
-        const dif = ci - ap;
-        if (dif > 0) {
-          item.sobrantes += dif;
-        } else if (dif < 0) {
-          item.faltantes += Math.abs(dif);
+        const difCierre = ci - ap;
+        if (difCierre > 0) {
+          item.sobrantes += difCierre;
+        } else if (difCierre < 0) {
+          item.faltantes += Math.abs(difCierre);
         }
       }
     }
@@ -795,6 +782,10 @@
       .sort((a, b) => 
         (a.mesaNombre || '').localeCompare(b.mesaNombre || '', undefined, { numeric: true, sensitivity: 'base' })
       );
+
+    const totalArqueoSobrantes = resumenMesasLista.reduce((acc, m) => acc + (m.sobrantes || 0), 0);
+    const totalArqueoFaltantes = resumenMesasLista.reduce((acc, m) => acc + (m.faltantes || 0), 0);
+    const totalArqueoDiferencia = totalArqueoSobrantes - totalArqueoFaltantes;
 
     // 2.3 Consolidado agrupado por juego/grupo
     const mapJuegosConsolidado = new Map();
@@ -2199,7 +2190,7 @@
                             </td>
                           {/each}
                           <td class="td-center td-total-val ap-total-cell font-mono">
-                            $ {formatMoney(apTotal)}
+                            {formatMoney(apTotal)}
                           </td>
                         </tr>
 
@@ -2218,7 +2209,7 @@
                               </td>
                             {/each}
                             <td class="td-center td-total-val font-mono {mov.tipo === 'relleno' ? 'text-blue' : 'text-purple'}">
-                              $ {formatMoney(mov.total)}
+                              {formatMoney(mov.total)}
                             </td>
                           </tr>
                         {/each}
@@ -2237,7 +2228,7 @@
                             </td>
                           {/each}
                           <td class="td-center td-total-val ci-total-cell" class:val-pending={!hasCierre}>
-                            {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
+                            {hasCierre ? formatMoney(ciTotal) : '—'}
                           </td>
                         </tr>
 
@@ -2275,7 +2266,7 @@
                                 class:dif-neg={difTotal < 0}
                                 class:dif-neu={difTotal === 0}
                               >
-                                {difTotal < 0 ? `( - $${formatMoney(Math.abs(difTotal))} )` : `$ ${formatMoney(difTotal)}`}
+                                {formatMoney(difTotal)}
                               </span>
                             {:else}
                               <span class="val-pending">—</span>
@@ -2295,7 +2286,7 @@
                           <td class="td-center total-val-cell">{sumAp}</td>
                         {/each}
                         <td class="td-center grand-total-cell ap-grand-total">
-                          $ {formatMoney(section.subData.totalArqueoApertura)}
+                          {formatMoney(section.subData.totalArqueoApertura)}
                         </td>
                       </tr>
 
@@ -2308,7 +2299,7 @@
                             <td class="td-center total-val-cell font-mono">{sumR > 0 ? sumR : '—'}</td>
                           {/each}
                           <td class="td-center grand-total-cell text-blue">
-                            $ {formatMoney(section.subData.totalArqueoRellenos)}
+                            {formatMoney(section.subData.totalArqueoRellenos)}
                           </td>
                         </tr>
                       {/if}
@@ -2322,7 +2313,7 @@
                             <td class="td-center total-val-cell font-mono">{sumD > 0 ? sumD : '—'}</td>
                           {/each}
                           <td class="td-center grand-total-cell text-purple">
-                            $ {formatMoney(section.subData.totalArqueoDevoluciones)}
+                            {formatMoney(section.subData.totalArqueoDevoluciones)}
                           </td>
                         </tr>
                       {/if}
@@ -2335,7 +2326,7 @@
                           <td class="td-center total-val-cell">{sumCi}</td>
                         {/each}
                         <td class="td-center grand-total-cell ci-grand-total">
-                          $ {formatMoney(section.subData.totalArqueoCierre)}
+                          {formatMoney(section.subData.totalArqueoCierre)}
                         </td>
                       </tr>
 
@@ -2357,7 +2348,7 @@
                         {/each}
                         <td class="td-center grand-total-cell dif-grand-total">
                           <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
-                            {section.subData.totalArqueoDiferencia < 0 ? `( - $${formatMoney(Math.abs(section.subData.totalArqueoDiferencia))} )` : `$ ${formatMoney(section.subData.totalArqueoDiferencia)}`}
+                            {formatMoney(section.subData.totalArqueoDiferencia)}
                           </span>
                         </td>
                       </tr>
