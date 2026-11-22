@@ -29,12 +29,12 @@
     { id: 'datos', label: 'Datos', icon: '', description: 'Horarios operativos de sala y asignación de operadores' },
     { id: 'drop-mesas', label: 'Drop', icon: '', description: 'Registro y cuadre de drop de mesas en vivo' },
     { id: 'arqueo-fichas', label: 'Sobrantes y Faltantes', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
+    { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
     { id: 'conteo-maquinas', label: 'Billetero', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
+    { id: 'aportes-maquinas', label: 'Aportes y Devoluciones', icon: '', description: 'Registro y control de aportes y devoluciones de máquinas por empleado y rango' },
     { id: 'control-llaves', label: 'Control Llaves', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias Generales', icon: '', description: 'Eventos e incidentes reportados en sala' },
     { id: 'control-clientes', label: 'Control Clientes', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
-    { id: 'aportes-maquinas', label: 'Aportes y Devoluciones', icon: '', description: 'Registro y control de aportes y devoluciones de máquinas por empleado y rango' },
-    { id: 'novedades-mesas', label: 'Novedades Mesas', icon: '', description: 'Control de aperturas, cierres, pitboss y croupiers de mesas' },
     { id: 'resumen-libro', label: 'Resumen Libro', icon: '', description: 'Consolidado general y auditoría de la jornada' }
   ];
 
@@ -341,18 +341,18 @@
         <LibroDropMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'arqueo-fichas' || activeSubvista === 'arqueo'}
         <LibroArqueoFichasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
+      {:else if activeSubvista === 'novedades-mesas'}
+        <LibroNovedadesMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'conteo-maquinas'}
         <LibroConteoMaquinasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
+      {:else if activeSubvista === 'aportes-maquinas' || activeSubvista === 'aportes'}
+        <LibroAportesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'control-llaves'}
         <LibroControlLlavesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'incidencias-generales'}
         <LibroIncidenciasGeneralesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'control-clientes'}
         <LibroControlClientesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
-      {:else if activeSubvista === 'aportes-maquinas' || activeSubvista === 'aportes'}
-        <LibroAportesView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
-      {:else if activeSubvista === 'novedades-mesas'}
-        <LibroNovedadesMesasView {libro} {libroId} multisalaUuid={activeMultisalaUuid} />
       {:else if activeSubvista === 'resumen-libro'}
         <LibroResumenView isPublic={false} {libro} {libroId} onSelectSubvista={handleSelectSubvista} />
       {/if}
