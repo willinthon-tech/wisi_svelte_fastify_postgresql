@@ -70,6 +70,8 @@
 
   // Pestaña activa en la tarjeta derecha: 'detallado' | 'rangos' | 'empleados'
   let activeTab = 'detallado';
+  let busquedaDetallado = '';
+  let busquedaRangoResumen = '';
   let busquedaEmpleadoResumen = '';
 
   // Modal de Edición
@@ -237,10 +239,38 @@
     }).slice(0, 10);
   })();
 
-  // Registros ordenados por el más reciente primero (UUID / ID DESC)
-  $: sortedRecords = [...records].sort((a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime() || String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')));
+  // Registros ordenados y filtrados para Detallado de Operaciones (MÁS RECIENTE PRIMERO: UUID / ID DESC)
+  $: filteredRecords = (() => {
+    let list = [...records];
+    const q = (busquedaDetallado || '').trim();
+    if (q) {
+      const normQ = normalizeSearchStr(q);
+      const tokens = normQ.split(/\s+/).filter(Boolean);
+      list = list.filter(r => {
+        return tokens.every(token => {
+          if (token === 'aporte' || token === 'aportes') {
+            return (r.tipo || 'Aporte').toLowerCase().includes('aporte');
+          }
+          if (token === 'devolucion' || token === 'devoluciones' || token === 'devolución') {
+            return (r.tipo || '').toLowerCase().includes('devoluc');
+          }
+          const fullText = normalizeSearchStr(`${r.tipo || ''} ${r.empleado_nombre || ''} ${r.rango_nombre || ''} ${r.cargo_nombre || ''} ${r.monto || ''}`);
+          return fullText.includes(token);
+        });
+      });
+    }
+    return list.sort((a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime() || String(b.uuid || b.id || '').localeCompare(String(a.uuid || a.id || '')));
+  })();
 
-  // --- CÁLCULOS ESTADÍSTICOS Y TOTALES ---
+  $: sortedRecords = filteredRecords;
+
+  // Neto de la lista de detallado filtrada (recalcula el total inferior según el filtro activo)
+  $: filteredNetoMonto = filteredRecords.reduce((acc, r) => {
+    const m = Number(r.monto) || 0;
+    return acc + ((r.tipo === 'Devolución') ? m : -m);
+  }, 0);
+
+  // --- CÁLCULOS ESTADÍSTICOS Y TOTALES GLOBALES ---
   $: aportesList = records.filter(r => (r.tipo || 'Aporte') === 'Aporte');
   $: devolucionesList = records.filter(r => r.tipo === 'Devolución');
 
@@ -254,7 +284,7 @@
   $: promedioMonto = totalAportesCount > 0 ? (totalAportesMonto / totalAportesCount) : 0;
 
   // Resumen agrupado por Rango (ordenado por monto mayor a menor)
-  $: resumenRangos = (() => {
+  $: resumenRangosTotal = (() => {
     const map = new Map();
     for (const r of records) {
       const rKey = r.rango_uuid || r.rango_id || 0;
@@ -292,11 +322,26 @@
       promedio: item.cantidad > 0 ? (Math.abs(item.total_monto) / item.cantidad) : 0
     }));
 
+    return list;
+  })();
+
+  $: resumenRangos = (() => {
+    let list = resumenRangosTotal;
+    if (busquedaRangoResumen.trim()) {
+      const normQ = normalizeSearchStr(busquedaRangoResumen.trim());
+      const tokens = normQ.split(/\s+/).filter(Boolean);
+      list = list.filter(item => {
+        const targetText = normalizeSearchStr(`${item.rango_nombre || ''}`);
+        return tokens.every(t => targetText.includes(t));
+      });
+    }
     return list.sort((a, b) => Math.abs(b.total_monto) - Math.abs(a.total_monto));
   })();
 
+  $: resumenRangosNeto = resumenRangos.reduce((a, b) => a + (b.total_monto || 0), 0);
+
   // Resumen agrupado por Empleado (ordenado por monto mayor a menor)
-  $: resumenEmpleados = (() => {
+  $: resumenEmpleadosTotal = (() => {
     const map = new Map();
     for (const r of records) {
       const eKey = r.empleado_uuid || r.empleado_id || 0;
@@ -338,11 +383,15 @@
       promedio: item.cantidad > 0 ? (Math.abs(item.total_monto) / item.cantidad) : 0
     }));
 
-    let filtered = list;
+    return list;
+  })();
+
+  $: resumenEmpleados = (() => {
+    let filtered = resumenEmpleadosTotal;
     if (busquedaEmpleadoResumen.trim()) {
       const normQ = normalizeSearchStr(busquedaEmpleadoResumen.trim());
       const tokens = normQ.split(/\s+/).filter(Boolean);
-      filtered = list.filter(item => {
+      filtered = filtered.filter(item => {
         const targetText = normalizeSearchStr(`${item.empleado_nombre || ''} ${item.cargo_nombre || ''} ${item.empleado_cedula || ''}`);
         return tokens.every(t => targetText.includes(t));
       });
@@ -1166,25 +1215,43 @@
             class="tab-nav-btn {activeTab === 'detallado' ? 'active' : ''}"
             on:click={() => activeTab = 'detallado'}
           >
-            <span>Detallado de Operaciones ({records.length})</span>
+            <span>Detallado de Operaciones ({busquedaDetallado ? `${filteredRecords.length} de ${records.length}` : records.length})</span>
           </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeTab === 'rangos' ? 'active' : ''}"
             on:click={() => activeTab = 'rangos'}
           >
-            <span>Resumen por Rango ({resumenRangos.length})</span>
+            <span>Resumen por Rango ({busquedaRangoResumen ? `${resumenRangos.length} de ${resumenRangosTotal.length}` : resumenRangosTotal.length})</span>
           </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeTab === 'empleados' ? 'active' : ''}"
             on:click={() => activeTab = 'empleados'}
           >
-            <span>Resumen por Empleado ({resumenEmpleados.length})</span>
+            <span>Resumen por Empleado ({busquedaEmpleadoResumen ? `${resumenEmpleados.length} de ${resumenEmpleadosTotal.length}` : resumenEmpleadosTotal.length})</span>
           </button>
         </div>
 
-        {#if activeTab === 'empleados'}
+        {#if activeTab === 'detallado'}
+          <div class="tab-search-wrapper">
+            <input 
+              type="text" 
+              class="input-search-cliente-resumen" 
+              placeholder="Buscar tipo, empleado, rango..." 
+              bind:value={busquedaDetallado} 
+            />
+          </div>
+        {:else if activeTab === 'rangos'}
+          <div class="tab-search-wrapper">
+            <input 
+              type="text" 
+              class="input-search-cliente-resumen" 
+              placeholder="Buscar rango..." 
+              bind:value={busquedaRangoResumen} 
+            />
+          </div>
+        {:else if activeTab === 'empleados'}
           <div class="tab-search-wrapper">
             <input 
               type="text" 
@@ -1224,10 +1291,16 @@
                     </div>
                   </td>
                 </tr>
-              {:else if sortedRecords.length === 0}
+              {:else if filteredRecords.length === 0}
                 <tr>
                   <td colspan={canEdit || canDelete ? 8 : 7} class="empty-state-cell">
-                    <span class="empty-text">No hay operaciones registradas en esta fecha.</span>
+                    <span class="empty-text">
+                      {#if busquedaDetallado}
+                        No se encontraron operaciones que coincidan con "{busquedaDetallado}".
+                      {:else}
+                        No hay operaciones registradas en esta fecha.
+                      {/if}
+                    </span>
                   </td>
                 </tr>
               {:else}
@@ -1294,16 +1367,16 @@
                 {/each}
               {/if}
             </tbody>
-            {#if !isLoadingRecords && sortedRecords.length > 0}
+            {#if !isLoadingRecords && filteredRecords.length > 0}
               <tfoot>
                 <tr class="tfoot-totals-row">
-                  <td colspan="4" class="font-bold">TOTALES ({sortedRecords.length} {sortedRecords.length === 1 ? 'operación' : 'operaciones'})</td>
-                  <td class="td-right td-monto font-mono font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
-                    <span class="monto-value font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
-                      {#if netoMonto < 0}
-                        ( - ${formatMonto(Math.abs(netoMonto))} )
-                      {:else if netoMonto > 0}
-                        ${formatMonto(netoMonto)}
+                  <td colspan="4" class="font-bold">TOTALES ({filteredRecords.length} {filteredRecords.length === 1 ? 'operación' : 'operaciones'})</td>
+                  <td class="td-right td-monto font-mono font-bold {filteredNetoMonto > 0 ? 'text-green' : (filteredNetoMonto < 0 ? 'text-red' : 'text-slate')}">
+                    <span class="monto-value font-bold {filteredNetoMonto > 0 ? 'text-green' : (filteredNetoMonto < 0 ? 'text-red' : 'text-slate')}">
+                      {#if filteredNetoMonto < 0}
+                        ( - ${formatMonto(Math.abs(filteredNetoMonto))} )
+                      {:else if filteredNetoMonto > 0}
+                        ${formatMonto(filteredNetoMonto)}
                       {:else}
                         $0.00
                       {/if}
@@ -1341,7 +1414,13 @@
               {:else if resumenRangos.length === 0}
                 <tr>
                   <td colspan="6" class="empty-state-cell">
-                    <span class="empty-text">Sin datos de aportes por rango para esta fecha.</span>
+                    <span class="empty-text">
+                      {#if busquedaRangoResumen}
+                        No se encontraron rangos que coincidan con "{busquedaRangoResumen}".
+                      {:else}
+                        Sin datos de aportes por rango para esta fecha.
+                      {/if}
+                    </span>
                   </td>
                 </tr>
               {:else}
@@ -1392,11 +1471,11 @@
                     </span>
                   </td>
                   <td class="td-res-monto">
-                    <span class="monto-value font-bold {netoMonto > 0 ? 'text-green' : (netoMonto < 0 ? 'text-red' : 'text-slate')}">
-                      {#if netoMonto < 0}
-                        ( - ${formatMonto(Math.abs(netoMonto))} )
-                      {:else if netoMonto > 0}
-                        ${formatMonto(netoMonto)}
+                    <span class="monto-value font-bold {resumenRangosNeto > 0 ? 'text-green' : (resumenRangosNeto < 0 ? 'text-red' : 'text-slate')}">
+                      {#if resumenRangosNeto < 0}
+                        ( - ${formatMonto(Math.abs(resumenRangosNeto))} )
+                      {:else if resumenRangosNeto > 0}
+                        ${formatMonto(resumenRangosNeto)}
                       {:else}
                         $0.00
                       {/if}
@@ -1437,7 +1516,13 @@
               {:else if resumenEmpleados.length === 0}
                 <tr>
                   <td colspan="7" class="empty-state-cell">
-                    <span class="empty-text">Sin datos de aportes por empleado para esta fecha.</span>
+                    <span class="empty-text">
+                      {#if busquedaEmpleadoResumen}
+                        No se encontraron empleados que coincidan con "{busquedaEmpleadoResumen}".
+                      {:else}
+                        Sin datos de aportes por empleado para esta fecha.
+                      {/if}
+                    </span>
                   </td>
                 </tr>
               {:else}
@@ -2155,19 +2240,20 @@
   }
 
   .input-search-cliente-resumen {
-    padding: 5px 10px 5px 26px;
+    padding: 6px 12px;
     border: 1px solid #cbd5e1;
     border-radius: 6px;
     font-size: 12px;
     outline: none;
-    width: 170px;
+    width: 210px;
     background: #ffffff;
     transition: all 0.2s ease;
   }
 
   .input-search-cliente-resumen:focus {
     border-color: #3b82f6;
-    width: 200px;
+    width: 250px;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
   }
 
   /* ─────────────────────────────────────────────────────────────
