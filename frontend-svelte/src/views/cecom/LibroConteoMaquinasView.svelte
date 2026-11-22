@@ -33,10 +33,13 @@
   $: currentLibroKey = String(libro?.uuid || libroId || libro?.id || '');
 
   $: if (multisalaUuid !== prevMultisala) {
+    const isFirstTime = prevMultisala === undefined;
     prevMultisala = multisalaUuid;
-    selectedMaquinaId = '';
-    records = [];
-    limpiarCampos();
+    if (!isFirstTime) {
+      selectedMaquinaId = '';
+      records = [];
+      limpiarCampos();
+    }
     loadRecords();
   }
 

@@ -9739,13 +9739,13 @@ export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
       s.nombre_comercial AS sala_nombre_comercial,
       m.banca AS mesa_banca
     FROM libro_arqueo_fichas a
-    JOIN mesas m ON a.mesa_uuid = m.uuid
+    LEFT JOIN mesas m ON a.mesa_uuid = m.uuid
     LEFT JOIN juegos j ON m.juego_uuid = j.uuid
     LEFT JOIN salas s ON m.sala_uuid = s.uuid
     WHERE a.libro_uuid = ${targetLibroUuid}::uuid
       AND (a.is_deleted IS FALSE OR a.is_deleted IS NULL)
       ${whereMultisala}
-    ORDER BY m.nombre ASC, a.tipo ASC, a.created_at ASC
+    ORDER BY COALESCE(m.nombre, a.mesa_uuid::text) ASC, a.tipo ASC, a.created_at ASC
   `;
 
   return rows.map(r => ({

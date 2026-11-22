@@ -73,16 +73,6 @@
   let unsubWs = null;
 
   onMount(async () => {
-    unsubWs = subscribeToLibroUpdates(
-      () => [libroId, libro?.uuid, libro?.id].filter(Boolean),
-      'all',
-      () => {
-        const targetId = libroId || libro?.uuid || libro?.id;
-        if (targetId) loadFullResumen(targetId, true);
-      },
-      300
-    );
-
     // Si no viene libroId, extraerlo de la URL (/reportes/cecom/libro/:id o /reportes/cecom/ibro/:id)
     if (!libroId && typeof window !== "undefined") {
       const hash = window.location.hash || "";
@@ -95,6 +85,16 @@
         if (matchPath) libroId = matchPath[1];
       }
     }
+
+    unsubWs = subscribeToLibroUpdates(
+      () => [libroId, libro?.uuid, libro?.id].filter(Boolean),
+      'all',
+      () => {
+        const targetId = libroId || libro?.uuid || libro?.id;
+        if (targetId) loadFullResumen(targetId, true);
+      },
+      300
+    );
 
     await loadMasterStoresFromBackend();
 
@@ -150,36 +150,66 @@
       localMaquinas = await getLocalItems('maquinas');
     } catch (e) {}
 
-    const mergeConteoMaquinas = (baseList = []) => {
-      const list = Array.isArray(baseList) ? [...baseList] : [];
-      if (Array.isArray(localConteos) && localConteos.length > 0) {
-        for (const lc of localConteos) {
-          const lcUuid = String(lc.uuid || lc.id || '');
-          const lcMaq = String(lc.maquina_uuid || lc.maquina_id || '');
-          const exists = list.some(c => 
-            (lcUuid && String(c.uuid || c.id) === lcUuid) ||
-            (lcMaq && String(c.maquina_uuid || c.maquina_id) === lcMaq)
-          );
-          if (!exists) {
-            list.push(lc);
-          }
+    let liveBackendArqueos = [];
+    try {
+      const arqRes = await fetch(toBackendUrl(`/api/master/libros/${id}/arqueo-fichas?multisala_uuid=all`));
+      if (arqRes.ok) {
+        const arqJson = await arqRes.json();
+        if (Array.isArray(arqJson?.data)) {
+          liveBackendArqueos = arqJson.data;
         }
       }
-      return list;
+    } catch (e) {}
+
+    const mergeConteoMaquinas = (baseList = []) => {
+      const map = new Map();
+      const addOrUpdate = (item) => {
+        if (!item || item.is_deleted) return;
+        const mKey = String(item.maquina_uuid || item.maquina_id || item.uuid || item.id || '');
+        const existing = map.get(mKey);
+        if (!existing) {
+          map.set(mKey, item);
+        } else {
+          const itemDate = new Date(item.updated_at || item.created_at || 0).getTime();
+          const existDate = new Date(existing.updated_at || existing.created_at || 0).getTime();
+          if (itemDate >= existDate || (Number(item.total) > 0 && !Number(existing.total))) {
+            map.set(mKey, { ...existing, ...item });
+          }
+        }
+      };
+      for (const c of (Array.isArray(baseList) ? baseList : [])) addOrUpdate(c);
+      for (const c of (Array.isArray(localConteos) ? localConteos : [])) addOrUpdate(c);
+      return Array.from(map.values());
     };
 
     const mergeArqueoFichas = (baseList = []) => {
-      const list = Array.isArray(baseList) ? [...baseList] : [];
-      if (Array.isArray(localArqueos) && localArqueos.length > 0) {
-        for (const la of localArqueos) {
-          const laUuid = String(la.uuid || la.id || '');
-          const exists = list.some(a => laUuid && String(a.uuid || a.id) === laUuid);
-          if (!exists) {
-            list.push(la);
+      const map = new Map();
+      const addOrUpdate = (item) => {
+        if (!item || item.is_deleted) return;
+        const mKey = item.mesa_uuid || item.mesa_id || '';
+        const tKey = item.tipo || '';
+        const uKey = String(item.uuid || item.id || '');
+        const compositeKey = mKey ? `${mKey}_${tKey}` : uKey;
+        const existing = map.get(compositeKey) || (uKey ? map.get(uKey) : null);
+        if (!existing) {
+          map.set(compositeKey, item);
+          if (uKey && uKey !== compositeKey) map.set(uKey, item);
+        } else {
+          const itemDate = new Date(item.updated_at || item.created_at || 0).getTime();
+          const existDate = new Date(existing.updated_at || existing.created_at || 0).getTime();
+          if (itemDate >= existDate || (Number(item.total) > 0 && !Number(existing.total))) {
+            const merged = { ...existing, ...item };
+            map.set(compositeKey, merged);
+            if (uKey && uKey !== compositeKey) map.set(uKey, merged);
           }
         }
-      }
-      return list;
+      };
+
+      for (const a of (Array.isArray(baseList) ? baseList : [])) addOrUpdate(a);
+      for (const a of liveBackendArqueos) addOrUpdate(a);
+      for (const a of (Array.isArray(localArqueos) ? localArqueos : [])) addOrUpdate(a);
+
+      return Array.from(new Set(map.values()));
     };
 
     // 1. Carga previa inmediata desde base de datos local IndexedDB (0ms)
@@ -674,24 +704,55 @@
     const arqueoGroupsMap = new Map();
     for (const r of rawArqueo) {
       if (r.is_deleted) continue;
-      const mId = String(r.mesa_uuid || r.mesa_id || r.id);
-      if (!arqueoGroupsMap.has(mId)) {
-        arqueoGroupsMap.set(mId, {
-          mesaId: mId,
-          mesaNombre: r.mesa_nombre || `Mesa #${mId.slice(0, 8)}`,
+
+      const rawMesaId = r.mesa_uuid || r.mesa_id;
+      let groupKey = rawMesaId ? String(rawMesaId) : null;
+      let existingGroup = null;
+
+      // 1. Buscar por mesa_uuid / mesa_id
+      if (groupKey && arqueoGroupsMap.has(groupKey)) {
+        existingGroup = arqueoGroupsMap.get(groupKey);
+      } else if (r.mesa_nombre) {
+        // 2. Buscar por nombre de mesa normalizado para que apertura y cierre de la misma mesa siempre coincidan
+        const normName = r.mesa_nombre.trim().toLowerCase();
+        for (const [k, g] of arqueoGroupsMap.entries()) {
+          if (g.mesaNombre && g.mesaNombre.trim().toLowerCase() === normName) {
+            existingGroup = g;
+            groupKey = k;
+            break;
+          }
+        }
+      }
+
+      if (!existingGroup) {
+        groupKey = groupKey || String(r.uuid || r.id);
+        existingGroup = {
+          mesaId: groupKey,
+          mesaNombre: r.mesa_nombre || `Mesa #${groupKey.slice(0, 8)}`,
           juegoNombre: r.juego_nombre || '',
           apertura: null,
           cierre: null,
           rellenosDevoluciones: [],
           totalRellenos: 0,
           totalDevoluciones: 0
-        });
+        };
+        arqueoGroupsMap.set(groupKey, existingGroup);
       }
-      const g = arqueoGroupsMap.get(mId);
+
+      if (r.mesa_nombre && (!existingGroup.mesaNombre || existingGroup.mesaNombre.startsWith('Mesa #'))) {
+        existingGroup.mesaNombre = r.mesa_nombre;
+      }
+      if (r.juego_nombre && !existingGroup.juegoNombre) {
+        existingGroup.juegoNombre = r.juego_nombre;
+      }
+
       if (r.tipo === 'apertura') {
-        g.apertura = r;
+        existingGroup.apertura = r;
       } else if (r.tipo === 'cierre') {
-        g.cierre = r;
+        // Si ya hay un cierre, conservar el que tenga total > 0 o sea el más actualizado
+        if (!existingGroup.cierre || (Number(r.total) > 0 && !Number(existingGroup.cierre.total))) {
+          existingGroup.cierre = r;
+        }
       }
     }
 
@@ -704,6 +765,7 @@
           mesa_uuid: g.mesaId,
           mesa_id: g.mesaId,
           tipo: 'cierre',
+          is_virtual: true,
           fichas: (arqueoSalaFichas || []).map(v => ({ valor: v, cantidad: 0, total: 0 })),
           total: 0
         };
@@ -777,13 +839,23 @@
         item.juegoNombre = g.juegoNombre;
       }
 
-      // Sumar todos los cred a sobrantes y todos los fill a faltantes
-      item.sobrantes += (Number(g.totalDevoluciones) || 0);
-      item.faltantes += (Number(g.totalRellenos) || 0);
+      const ap = Number(g.apertura?.total) || 0;
+      const hasRealCierre = Boolean(
+        g.cierre && 
+        !g.cierre.is_virtual && 
+        !String(g.cierre.uuid || '').startsWith('virtual-') &&
+        (Number(g.cierre.total) > 0 || !g.apertura)
+      );
+      const ci = hasRealCierre ? (Number(g.cierre?.total) || 0) : 0;
+      const r = Number(g.totalRellenos) || 0;
+      const d = Number(g.totalDevoluciones) || 0;
 
-      if (g.cierre) {
-        const ap = Number(g.apertura?.total) || 0;
-        const ci = Number(g.cierre?.total) || 0;
+      // Sumar todos los cred a sobrantes y todos los fill a faltantes
+      item.sobrantes += d;
+      item.faltantes += r;
+
+      // Diferencia de cierre vs apertura (solo cuando la mesa ha cerrado de verdad)
+      if (hasRealCierre) {
         const difCierre = ci - ap;
         if (difCierre > 0) {
           item.sobrantes += difCierre;

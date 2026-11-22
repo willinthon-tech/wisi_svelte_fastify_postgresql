@@ -57,9 +57,11 @@
 
   // Si la sala es multisala y aún no se ha seleccionado una o la seleccionada no existe, asignar la primera por defecto
   $: if (subsalasList.length > 0) {
-    if (!activeMultisalaUuid || !subsalasList.some(s => s.uuid === activeMultisalaUuid)) {
+    const match = activeMultisalaUuid && subsalasList.some(s => String(s.uuid || s.id) === String(activeMultisalaUuid));
+    if (!match) {
       activeMultisalaUuid = subsalasList[0].uuid;
-      if (libroId && activeSubvista) {
+      const targetHash = `#/cecom/libro/${libroId}/${activeSubvista}/${activeMultisalaUuid}`;
+      if (libroId && activeSubvista && typeof window !== 'undefined' && window.location.hash !== targetHash) {
         navigateToRoute(`cecom/libro/${libroId}/${activeSubvista}/${activeMultisalaUuid}`);
       }
     }

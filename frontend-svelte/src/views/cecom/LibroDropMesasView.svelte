@@ -27,9 +27,12 @@
 
   let prevMultisala = undefined;
   $: if (multisalaUuid !== prevMultisala) {
+    const isFirstTime = prevMultisala === undefined;
     prevMultisala = multisalaUuid;
-    selectedMesaId = '';
-    limpiarCampos();
+    if (!isFirstTime) {
+      selectedMesaId = '';
+      limpiarCampos();
+    }
     loadDropRecords();
   }
 

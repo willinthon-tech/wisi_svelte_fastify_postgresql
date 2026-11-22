@@ -28,9 +28,12 @@
 
   let prevMultisala = undefined;
   $: if (multisalaUuid !== prevMultisala) {
+    const isFirstTime = prevMultisala === undefined;
     prevMultisala = multisalaUuid;
-    selectedMesaId = '';
-    limpiarFormulario();
+    if (!isFirstTime) {
+      selectedMesaId = '';
+      limpiarFormulario();
+    }
     loadArqueoRecords();
   }
 
