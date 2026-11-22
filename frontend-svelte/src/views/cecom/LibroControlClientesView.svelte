@@ -152,11 +152,11 @@
   })();
 
   $: sortedTotalCompras = sortedRecords
-    .filter(r => r.tipo === 'Compra')
+    .filter(r => (r.tipo || '').toLowerCase() === 'compra')
     .reduce((acc, r) => acc + (parseFloat(r.monto) || 0), 0);
 
   $: sortedTotalPagos = sortedRecords
-    .filter(r => r.tipo === 'Pago')
+    .filter(r => (r.tipo || '').toLowerCase() === 'pago')
     .reduce((acc, r) => acc + (parseFloat(r.monto) || 0), 0);
 
   $: sortedBalanceNeto = sortedTotalCompras - sortedTotalPagos;
@@ -368,6 +368,11 @@
     if (!q) return resumenClientes;
     return resumenClientes.filter(c => c.cliente.toLowerCase().includes(q));
   })();
+
+  $: totalComprasClientesFiltrados = resumenClientesFiltrados.reduce((acc, c) => acc + (c.compras || 0), 0);
+  $: totalPagosClientesFiltrados = resumenClientesFiltrados.reduce((acc, c) => acc + (c.pagos || 0), 0);
+  $: balanceNetoClientesFiltrados = totalComprasClientesFiltrados - totalPagosClientesFiltrados;
+  $: totalOpsClientesFiltrados = resumenClientesFiltrados.reduce((acc, c) => acc + (c.count || 0), 0);
 
   onMount(async () => {
     await Promise.all([
@@ -1143,7 +1148,7 @@
             class="tab-nav-btn {activeResumenTab === 'detallado' ? 'active' : ''}"
             on:click={() => activeResumenTab = 'detallado'}
           >
-            <span>Detallado de Operaciones ({records.length})</span>
+            <span>Detallado de Operaciones ({busquedaClienteDetallado ? `${sortedRecords.length} de ${records.length}` : records.length})</span>
           </button>
           <button 
             type="button" 
@@ -1157,7 +1162,7 @@
             class="tab-nav-btn {activeResumenTab === 'clientes' ? 'active' : ''}"
             on:click={() => activeResumenTab = 'clientes'}
           >
-            <span>Resumen por Cliente ({resumenClientes.length})</span>
+            <span>Resumen por Cliente ({busquedaClienteResumen ? `${resumenClientesFiltrados.length} de ${resumenClientes.length}` : resumenClientes.length})</span>
           </button>
         </div>
 
@@ -1443,17 +1448,17 @@
                 {/each}
               {/if}
             </tbody>
-            {#if resumenClientes.length > 0}
+            {#if resumenClientesFiltrados.length > 0}
               <tfoot>
                 <tr class="tfoot-totals-row">
-                  <td colspan="2" class="td-left font-bold">TOTALES ({resumenClientes.length} {resumenClientes.length === 1 ? 'cliente' : 'clientes'})</td>
-                  <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                  <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
-                  <td class="td-res-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
-                    {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
+                  <td colspan="2" class="td-left font-bold">TOTALES ({resumenClientesFiltrados.length} {resumenClientesFiltrados.length === 1 ? 'cliente' : 'clientes'})</td>
+                  <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalComprasClientesFiltrados)}</td>
+                  <td class="td-res-monto font-mono font-bold {totalPagosClientesFiltrados > 0 ? 'text-red' : 'text-slate'}">{totalPagosClientesFiltrados > 0 ? `( - $${formatMonto(totalPagosClientesFiltrados)} )` : '$0.00'}</td>
+                  <td class="td-res-monto font-mono font-bold {balanceNetoClientesFiltrados > 0 ? 'text-green' : (balanceNetoClientesFiltrados < 0 ? 'text-red' : 'text-slate')}">
+                    {balanceNetoClientesFiltrados < 0 ? `( - $${formatMonto(Math.abs(balanceNetoClientesFiltrados))} )` : `$${formatMonto(balanceNetoClientesFiltrados)}`}
                   </td>
                   <td class="td-res-ops font-bold">
-                    <span class="badge-tipo badge-compra">{records.length} ops</span>
+                    <span class="badge-tipo badge-compra">{totalOpsClientesFiltrados} ops</span>
                   </td>
                 </tr>
               </tfoot>
