@@ -570,6 +570,30 @@
     return found ? (Number(found.cantidad) || 0) : 0;
   }
 
+  function extractMovements(record) {
+    if (!record) return [];
+    const raw = record.rellenos_devoluciones;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch (e) { return []; }
+    }
+    return [];
+  }
+
+  function getMovChipCount(mov, valor) {
+    if (!mov || !Array.isArray(mov.fichas)) return 0;
+    const found = mov.fichas.find(f => Number(f.valor ?? f.denominacion) === Number(valor));
+    return found ? (Number(found.cantidad) || 0) : 0;
+  }
+
+  function formatMovBadge(mov, allMovs = []) {
+    if (!mov) return '';
+    const sameType = (allMovs && allMovs.length > 0) ? allMovs.filter(m => m.tipo === mov.tipo) : [];
+    const pos = sameType.findIndex(m => (m.id || m.uuid) === (mov.id || mov.uuid));
+    const num = pos !== -1 ? (pos + 1) : (mov.numero || (mov.codigo ? String(mov.codigo).replace(/[^0-9]/g, '') : 1));
+    return mov.tipo === 'relleno' ? `FILL ${num}` : `CRED ${num}`;
+  }
+
   // Helper que procesa y calcula las subvistas operativas para una sala (única o hija)
   function computeSubsalaReport(subsalaUuid, rawData) {
     const isMultisalaTarget = Boolean(subsalaUuid);
@@ -638,7 +662,10 @@
           mesaNombre: r.mesa_nombre || `Mesa #${mId.slice(0, 8)}`,
           juegoNombre: r.juego_nombre || '',
           apertura: null,
-          cierre: null
+          cierre: null,
+          rellenosDevoluciones: [],
+          totalRellenos: 0,
+          totalDevoluciones: 0
         });
       }
       const g = arqueoGroupsMap.get(mId);
@@ -647,6 +674,27 @@
       } else if (r.tipo === 'cierre') {
         g.cierre = r;
       }
+    }
+
+    // Inicializar cierre virtual en 0 si está aperturada sin cierre, y procesar movimientos
+    for (const g of arqueoGroupsMap.values()) {
+      if (g.apertura && !g.cierre) {
+        g.cierre = {
+          uuid: `virtual-cierre-${g.mesaId}`,
+          id: `virtual-cierre-${g.mesaId}`,
+          mesa_uuid: g.mesaId,
+          mesa_id: g.mesaId,
+          tipo: 'cierre',
+          fichas: (arqueoSalaFichas || []).map(v => ({ valor: v, cantidad: 0, total: 0 })),
+          total: 0
+        };
+      }
+
+      const apMovs = extractMovements(g.apertura);
+      const ciMovs = extractMovements(g.cierre);
+      g.rellenosDevoluciones = g.apertura ? apMovs : ciMovs;
+      g.totalRellenos = g.rellenosDevoluciones.filter(m => m.tipo === 'relleno').reduce((a, b) => a + (Number(b.total) || 0), 0);
+      g.totalDevoluciones = g.rellenosDevoluciones.filter(m => m.tipo === 'devolucion').reduce((a, b) => a + (Number(b.total) || 0), 0);
     }
 
     const arqueoMesaGroups = Array.from(arqueoGroupsMap.values()).sort((a, b) => 
@@ -659,7 +707,8 @@
       if (g.cierre) {
         const ap = Number(g.apertura?.total) || 0;
         const ci = Number(g.cierre?.total) || 0;
-        const dif = ci - ap;
+        const expected = ap + (g.totalRellenos || 0) - (g.totalDevoluciones || 0);
+        const dif = ci - expected;
         if (dif < 0) {
           totalArqueoFaltantes += Math.abs(dif);
         } else if (dif > 0) {
@@ -669,6 +718,8 @@
     }
 
     const totalArqueoApertura = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.apertura?.total) || 0), 0);
+    const totalArqueoRellenos = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.totalRellenos) || 0), 0);
+    const totalArqueoDevoluciones = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.totalDevoluciones) || 0), 0);
     const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
     const totalArqueoDiferencia = totalArqueoSobrantes - totalArqueoFaltantes;
 
@@ -1313,6 +1364,8 @@
       resumenMesasLista,
       resumenMesasPorJuego,
       totalArqueoApertura,
+      totalArqueoRellenos,
+      totalArqueoDevoluciones,
       totalArqueoCierre,
       totalArqueoDiferencia,
       totalArqueoFaltantes,
@@ -2001,10 +2054,10 @@
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={tabMesa === 'faltantes'}
-                      on:click={() => (tabMesa = 'faltantes')}
+                      class:active={tabMesa === 'cierre' || tabMesa === 'faltantes'}
+                      on:click={() => (tabMesa = 'cierre')}
                     >
-                      Faltantes y Sobrantes
+                      Cierre
                     </button>
                   </div>
                 </div>
@@ -2021,7 +2074,7 @@
                   <span class="sub-count-badge">
                     {section.subData.drop_mesas?.length || 0} {section.subData.drop_mesas?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
-                {:else if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                {:else if (tabMesa === 'cierre' || tabMesa === 'faltantes') && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
                   <span class="sub-count-badge">
                     {section.subData.arqueoMesaGroups?.length || 0} {section.subData.arqueoMesaGroups?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
@@ -2102,13 +2155,14 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if tabMesa === 'faltantes' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
-                <!-- Tabla: Faltantes y Sobrantes -->
+              {:else if (tabMesa === 'cierre' || tabMesa === 'faltantes') && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                <!-- Tabla: Cierre de Mesas con Apertura, Fill, Cred, Cierre y Total -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table arqueo-table">
                     <thead>
                       <tr>
                         <th class="th-mesa">MESA</th>
+                        <th class="th-center th-mov">MOVIMIENTO</th>
                         {#each section.subData.arqueoSalaFichas as valor}
                           <th class="th-center">$ {valor}</th>
                         {/each}
@@ -2120,17 +2174,85 @@
                         {@const apTotal = Number(group.apertura?.total) || 0}
                         {@const hasCierre = Boolean(group.cierre)}
                         {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
-                        {@const difTotal = hasCierre ? (ciTotal - apTotal) : null}
+                        {@const allMovs = group.rellenosDevoluciones || []}
+                        {@const totalR = group.totalRellenos || 0}
+                        {@const totalD = group.totalDevoluciones || 0}
+                        {@const expectedTotal = apTotal + totalR - totalD}
+                        {@const difTotal = hasCierre ? (ciTotal - expectedTotal) : null}
+                        {@const rowSpanTotal = 3 + allMovs.length}
 
-                        <!-- Fila: DIFERENCIA / TOTAL (FALTANTES Y SOBRANTES) -->
-                        <tr class="drop-row row-diferencia">
-                          <td class="td-mesa">
+                        <!-- Fila 1: APERTURA -->
+                        <tr class="drop-row row-apertura">
+                          <td class="td-mesa" rowspan="{rowSpanTotal}">
                             <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
+                            {#if group.juegoNombre}
+                              <span class="mesa-sub-game">{group.juegoNombre}</span>
+                            {/if}
+                          </td>
+                          <td class="td-center td-movimiento">
+                            <span class="mov-badge mov-apertura" title="Apertura">Apertura</span>
+                          </td>
+                          {#each section.subData.arqueoSalaFichas as valor}
+                            {@const apCount = getChipCount(group.apertura, valor)}
+                            <td class="td-center count-val">
+                              {apCount !== null ? apCount : '—'}
+                            </td>
+                          {/each}
+                          <td class="td-center td-total-val ap-total-cell font-mono">
+                            $ {formatMoney(apTotal)}
+                          </td>
+                        </tr>
+
+                        <!-- Sub-filas dinámicas para cada FILL / CRED -->
+                        {#each allMovs as mov}
+                          <tr class="drop-row row-mov" class:row-relleno={mov.tipo === 'relleno'} class:row-devolucion={mov.tipo === 'devolucion'}>
+                            <td class="td-center td-movimiento">
+                              <span class="mov-badge {mov.tipo === 'relleno' ? 'mov-relleno' : 'mov-devolucion'}" title="{mov.tipo === 'relleno' ? 'Fill' : 'Cred'}">
+                                {formatMovBadge(mov, allMovs)}
+                              </span>
+                            </td>
+                            {#each section.subData.arqueoSalaFichas as valor}
+                              {@const count = getMovChipCount(mov, valor)}
+                              <td class="td-center count-val font-mono">
+                                {count > 0 ? count : '—'}
+                              </td>
+                            {/each}
+                            <td class="td-center td-total-val font-mono {mov.tipo === 'relleno' ? 'text-blue' : 'text-purple'}">
+                              $ {formatMoney(mov.total)}
+                            </td>
+                          </tr>
+                        {/each}
+
+                        <!-- Sub-fila 2: CIERRE -->
+                        <tr class="drop-row row-cierre">
+                          <td class="td-center td-movimiento">
+                            <span class="mov-badge {hasCierre ? 'mov-cierre' : 'mov-pendiente'}" title="{hasCierre ? 'Cierre' : 'Pendiente de Cierre'}">
+                              Cierre
+                            </span>
+                          </td>
+                          {#each section.subData.arqueoSalaFichas as valor}
+                            {@const ciCount = hasCierre ? getChipCount(group.cierre, valor) : null}
+                            <td class="td-center count-val" class:val-pending={!hasCierre}>
+                              {ciCount !== null ? ciCount : '—'}
+                            </td>
+                          {/each}
+                          <td class="td-center td-total-val ci-total-cell" class:val-pending={!hasCierre}>
+                            {hasCierre ? `$ ${formatMoney(ciTotal)}` : '—'}
+                          </td>
+                        </tr>
+
+                        <!-- Sub-fila 3: DIFERENCIA / TOTAL -->
+                        <tr class="drop-row row-diferencia mesa-last-row">
+                          <td class="td-center td-movimiento">
+                            <span class="mov-badge mov-diferencia" title="Total">Total</span>
                           </td>
                           {#each section.subData.arqueoSalaFichas as valor}
                             {@const apC = getChipCount(group.apertura, valor)}
                             {@const ciC = hasCierre ? getChipCount(group.cierre, valor) : null}
-                            {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - apC) : null}
+                            {@const rChips = allMovs.filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0)}
+                            {@const dChips = allMovs.filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0)}
+                            {@const expected = (apC !== null ? apC : 0) + rChips - dChips}
+                            {@const difChips = (hasCierre && ciC !== null && apC !== null) ? (ciC - expected) : null}
                             <td class="td-center count-val">
                               {#if difChips !== null}
                                 <span 
@@ -2153,7 +2275,7 @@
                                 class:dif-neg={difTotal < 0}
                                 class:dif-neu={difTotal === 0}
                               >
-                                {formatMoney(difTotal)}
+                                {difTotal < 0 ? `( - $${formatMoney(Math.abs(difTotal))} )` : `$ ${formatMoney(difTotal)}`}
                               </span>
                             {:else}
                               <span class="val-pending">—</span>
@@ -2165,12 +2287,68 @@
 
                     <!-- Fila de Totales Generales -->
                     <tfoot>
-                      <tr class="total-row footer-diferencia">
-                        <td class="total-label-cell">TOTAL</td>
+                      <tr class="total-row footer-apertura">
+                        <td class="total-label-cell">TOTAL APERTURA</td>
+                        <td class="td-center"><span class="mov-badge mov-apertura" title="Apertura">Apertura</span></td>
                         {#each section.subData.arqueoSalaFichas as valor}
-                          {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.apertura, valor) || 0) : 0), 0)}
+                          {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                          <td class="td-center total-val-cell">{sumAp}</td>
+                        {/each}
+                        <td class="td-center grand-total-cell ap-grand-total">
+                          $ {formatMoney(section.subData.totalArqueoApertura)}
+                        </td>
+                      </tr>
+
+                      {#if section.subData.totalArqueoRellenos > 0}
+                        <tr class="total-row footer-rellenos">
+                          <td class="total-label-cell">TOTAL FILL</td>
+                          <td class="td-center"><span class="mov-badge mov-relleno" title="Fill">Fill</span></td>
+                          {#each section.subData.arqueoSalaFichas as valor}
+                            {@const sumR = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                            <td class="td-center total-val-cell font-mono">{sumR > 0 ? sumR : '—'}</td>
+                          {/each}
+                          <td class="td-center grand-total-cell text-blue">
+                            $ {formatMoney(section.subData.totalArqueoRellenos)}
+                          </td>
+                        </tr>
+                      {/if}
+
+                      {#if section.subData.totalArqueoDevoluciones > 0}
+                        <tr class="total-row footer-devoluciones">
+                          <td class="total-label-cell">TOTAL CRED</td>
+                          <td class="td-center"><span class="mov-badge mov-devolucion" title="Cred">Cred</span></td>
+                          {#each section.subData.arqueoSalaFichas as valor}
+                            {@const sumD = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                            <td class="td-center total-val-cell font-mono">{sumD > 0 ? sumD : '—'}</td>
+                          {/each}
+                          <td class="td-center grand-total-cell text-purple">
+                            $ {formatMoney(section.subData.totalArqueoDevoluciones)}
+                          </td>
+                        </tr>
+                      {/if}
+
+                      <tr class="total-row footer-cierre">
+                        <td class="total-label-cell">TOTAL CIERRE</td>
+                        <td class="td-center"><span class="mov-badge mov-cierre" title="Cierre">Cierre</span></td>
+                        {#each section.subData.arqueoSalaFichas as valor}
                           {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
-                          {@const dif = sumCi - sumAp}
+                          <td class="td-center total-val-cell">{sumCi}</td>
+                        {/each}
+                        <td class="td-center grand-total-cell ci-grand-total">
+                          $ {formatMoney(section.subData.totalArqueoCierre)}
+                        </td>
+                      </tr>
+
+                      <tr class="total-row footer-diferencia">
+                        <td class="total-label-cell">TOTAL FINAL</td>
+                        <td class="td-center"><span class="mov-badge mov-diferencia" title="Total">Total</span></td>
+                        {#each section.subData.arqueoSalaFichas as valor}
+                          {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
+                          {@const sumR = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                          {@const sumD = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
+                          {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                          {@const expectedTotal = sumAp + sumR - sumD}
+                          {@const dif = sumCi - expectedTotal}
                           <td class="td-center total-val-cell">
                             <span class:dif-pos={dif > 0} class:dif-neg={dif < 0}>
                               {Math.abs(dif)}
@@ -2179,7 +2357,7 @@
                         {/each}
                         <td class="td-center grand-total-cell dif-grand-total">
                           <span class:dif-pos={section.subData.totalArqueoDiferencia > 0} class:dif-neg={section.subData.totalArqueoDiferencia < 0}>
-                            {formatMoney(section.subData.totalArqueoDiferencia)}
+                            {section.subData.totalArqueoDiferencia < 0 ? `( - $${formatMoney(Math.abs(section.subData.totalArqueoDiferencia))} )` : `$ ${formatMoney(section.subData.totalArqueoDiferencia)}`}
                           </span>
                         </td>
                       </tr>
@@ -5139,15 +5317,22 @@
     border-bottom: 2px solid #cbd5e1 !important;
   }
 
+  .td-movimiento {
+    padding: 6px 4px !important;
+  }
+
   .mov-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    padding: 2.5px 8px;
+    min-width: 62px;
     border-radius: 4px;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 800;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .mov-apertura {
@@ -5172,6 +5357,34 @@
     background: #f1f5f9;
     color: #334155;
     border: 1px solid #cbd5e1;
+  }
+
+  .mov-relleno {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+  }
+
+  .mov-devolucion {
+    background: #faf5ff;
+    color: #7e22ce;
+    border: 1px solid #d8b4fe;
+  }
+
+  .row-mov.row-relleno {
+    background: #f8fbff;
+  }
+
+  .row-mov.row-devolucion {
+    background: #fdfaff;
+  }
+
+  .text-blue {
+    color: #2563eb !important;
+  }
+
+  .text-purple {
+    color: #7e22ce !important;
   }
 
   .count-val {

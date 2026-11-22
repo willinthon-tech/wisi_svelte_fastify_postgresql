@@ -166,6 +166,8 @@
   let editingRecord = null;
   let modalCliente = '';
   let modalClienteUuid = null;
+  let showModalSugerencias = false;
+  let selectedModalSugerenciaIndex = -1;
   let modalCaja = 'Mesas';
   let modalTipo = 'Compra';
   let modalMonto = '';
@@ -174,6 +176,20 @@
   let modalHora = '';
   let modalNota = '';
   let isSavingModal = false;
+
+  $: modalSugerenciasFiltradas = (() => {
+    const q = (modalCliente || '').trim();
+    if (!q) return allClientesList.slice(0, 10);
+    const normQ = normalizeSearchStr(q);
+    const tokens = normQ.split(/\s+/).filter(Boolean);
+
+    return allClientesList
+      .filter(item => {
+        const targetText = normalizeSearchStr(`${item.nombre || ''} ${item.tipo_cliente_nombre || ''}`);
+        return tokens.every(token => targetText.includes(token));
+      })
+      .slice(0, 10);
+  })();
 
   $: metodosDisponibles = $masterMetodosPagoStore || [];
 
@@ -585,6 +601,80 @@
     }, 250);
   }
 
+  // Manejo de autocompletado en el input cliente del Modal de Edición
+  function onModalClienteFocus() {
+    showModalSugerencias = true;
+    selectedModalSugerenciaIndex = -1;
+    loadSugerenciasRemotas((modalCliente || '').trim());
+  }
+
+  function onModalClienteInput() {
+    showModalSugerencias = true;
+    selectedModalSugerenciaIndex = -1;
+    const q = (modalCliente || '').trim().toLowerCase();
+    const match = allClientesList.find(s => 
+      s.nombre.toLowerCase().trim() === q
+    );
+    if (match) {
+      modalClienteUuid = match.uuid || null;
+    } else {
+      modalClienteUuid = null;
+    }
+    loadSugerenciasRemotas(modalCliente.trim());
+  }
+
+  function onModalClienteKeyDown(e) {
+    if (!showModalSugerencias || modalSugerenciasFiltradas.length === 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        showModalSugerencias = true;
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedModalSugerenciaIndex = (selectedModalSugerenciaIndex + 1) % modalSugerenciasFiltradas.length;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedModalSugerenciaIndex = (selectedModalSugerenciaIndex - 1 + modalSugerenciasFiltradas.length) % modalSugerenciasFiltradas.length;
+    } else if (e.key === 'Tab') {
+      const match = selectedModalSugerenciaIndex >= 0 
+        ? modalSugerenciasFiltradas[selectedModalSugerenciaIndex] 
+        : modalSugerenciasFiltradas[0];
+      if (match) {
+        e.preventDefault();
+        seleccionarModalSugerencia(match);
+      }
+    } else if (e.key === 'Enter') {
+      if (selectedModalSugerenciaIndex >= 0 && modalSugerenciasFiltradas[selectedModalSugerenciaIndex]) {
+        e.preventDefault();
+        seleccionarModalSugerencia(modalSugerenciasFiltradas[selectedModalSugerenciaIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      showModalSugerencias = false;
+      selectedModalSugerenciaIndex = -1;
+    }
+  }
+
+  function seleccionarModalSugerencia(sug) {
+    if (typeof sug === 'object' && sug !== null) {
+      modalCliente = sug.nombre || '';
+      modalClienteUuid = sug.uuid || null;
+    } else {
+      modalCliente = String(sug || '');
+      modalClienteUuid = null;
+    }
+    showModalSugerencias = false;
+    selectedModalSugerenciaIndex = -1;
+  }
+
+  function onModalClienteBlur() {
+    setTimeout(() => {
+      showModalSugerencias = false;
+      selectedModalSugerenciaIndex = -1;
+    }, 250);
+  }
+
   async function handleGuardar() {
     if (!canAdd) {
       triggerToast('No tienes permiso para registrar operaciones en este módulo', 'warning');
@@ -782,7 +872,9 @@
     }
     editingRecord = record;
     modalCliente = record.cliente || '';
-    modalClienteUuid = record.cliente_uuid || null;
+    modalClienteUuid = record.cliente_uuid || record.cliente_id || null;
+    showModalSugerencias = false;
+    selectedModalSugerenciaIndex = -1;
     modalTipo = record.tipo || 'Compra';
     modalMonto = record.monto != null ? String(record.monto) : '';
     modalMetodoPagoUuid = record.metodo_pago_uuid || record.metodo_pago_id 
@@ -800,6 +892,8 @@
     editingRecord = null;
     modalCliente = '';
     modalClienteUuid = null;
+    showModalSugerencias = false;
+    selectedModalSugerenciaIndex = -1;
     modalCaja = 'Mesas';
     modalTipo = 'Compra';
     modalMonto = '';
@@ -838,11 +932,21 @@
     isSavingModal = true;
     const targetUuid = editingRecord.uuid || editingRecord.id;
     const matchedMetodo = metodosDisponibles.find(m => String(m.uuid || m.id) === String(modalMetodoPagoUuid));
-    const targetTipoClienteUuid = modalClienteUuid ? undefined : (generalTipoCliente?.uuid || generalTipoCliente?.id || null);
+    
+    const trimmedCliente = modalCliente.trim();
+    let targetClienteUuid = modalClienteUuid;
+    if (!targetClienteUuid) {
+      const match = allClientesList.find(s => s.nombre.toLowerCase().trim() === trimmedCliente.toLowerCase());
+      if (match) {
+        targetClienteUuid = match.uuid || null;
+      }
+    }
+
+    const targetTipoClienteUuid = targetClienteUuid ? undefined : (generalTipoCliente?.uuid || generalTipoCliente?.id || null);
     const editPayload = {
-      cliente_uuid: modalClienteUuid || null,
+      cliente_uuid: targetClienteUuid || null,
       tipo_cliente_uuid: targetTipoClienteUuid,
-      cliente: modalCliente.trim(),
+      cliente: trimmedCliente,
       tipo: modalTipo,
       monto: Number(modalMonto),
       metodo_pago_uuid: matchedMetodo?.uuid || null,
@@ -1483,17 +1587,54 @@
 
       <form on:submit|preventDefault={handleGuardarModal} class="modal-body-form">
         <div class="modal-inputs-grid">
-          <!-- Campo Cliente -->
-          <div class="modal-field-group">
-            <label for="m-cliente-nombre" class="modal-field-label">Cliente: *</label>
-            <input 
-              id="m-cliente-nombre" 
-              type="text" 
-              class="form-input" 
-              placeholder="Nombre del cliente..." 
-              bind:value={modalCliente} 
-              required
-            />
+          <!-- Campo Cliente con Autocompletado / Coincidencias -->
+          <div class="modal-field-group relative-autocomplete">
+            <label for="m-cliente-nombre" class="modal-field-label">CLIENTE: *</label>
+            <div class="cell-autocomplete-container">
+              <input 
+                id="m-cliente-nombre" 
+                type="text" 
+                class="form-input {showModalSugerencias && modalSugerenciasFiltradas.length > 0 ? 'input-active' : ''}" 
+                placeholder="Escriba Cliente (coincidencias con Tab ⇥)..." 
+                bind:value={modalCliente} 
+                on:focus={onModalClienteFocus}
+                on:input={onModalClienteInput}
+                on:keydown={onModalClienteKeyDown}
+                on:blur={onModalClienteBlur}
+                autocomplete="off"
+                required
+              />
+
+              <!-- Desplegable visual de sugerencias rápidas -->
+              {#if showModalSugerencias && modalSugerenciasFiltradas.length > 0}
+                <div class="inline-dropdown modal-dropdown">
+                  <div class="inline-dropdown-header">
+                    <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+                  </div>
+                  <ul class="inline-dropdown-list">
+                    {#each modalSugerenciasFiltradas as sug, idx}
+                      <!-- svelte-ignore a11y-click-events-have-key-events -->
+                      <li 
+                        class="inline-dropdown-item {idx === selectedModalSugerenciaIndex ? 'selected' : ''}"
+                        on:mousedown|preventDefault={() => seleccionarModalSugerencia(sug)}
+                      >
+                        <span class="sug-avatar">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b2b73">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                          </svg>
+                        </span>
+                        <div class="sug-info">
+                          <span class="sug-name">{sug.nombre}</span>
+                          <span class="sug-cargo">{sug.tipo_cliente_nombre || 'General'}</span>
+                        </div>
+                        <span class="sug-tab-badge">Tab ⇥</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
+            </div>
+            <span class="field-hint">Escriba nombre o tipo de cliente. Pulsa <b>Tab ⇥</b> para autocompletar.</span>
           </div>
 
           <!-- Tipo de Transacción: Compra / Pago -->
@@ -2658,8 +2799,14 @@
     width: 100%;
     max-width: 460px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
+    overflow: visible;
     animation: modalScale 0.15s ease-out;
+  }
+
+  .modal-dropdown {
+    z-index: 10001;
+    max-height: 240px;
+    overflow-y: auto;
   }
 
   @keyframes modalScale {
@@ -2680,6 +2827,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
   }
 
   .modal-title {
