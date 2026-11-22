@@ -258,11 +258,11 @@
           <div class="header-badges-row">
             <span class="header-badge">Control de Fichas</span>
             <span class="header-type-pill" class:pill-relleno={activeTipo === 'relleno'} class:pill-devolucion={activeTipo === 'devolucion'}>
-              {activeTipo === 'relleno' ? 'Relleno (Entrada de Fichas)' : 'Devolución (Salida de Fichas)'}
+              {activeTipo === 'relleno' ? 'Fill (Relleno de Mesa)' : 'Cred (Devolución de Mesa)'}
             </span>
           </div>
           <h3 class="header-main-title">
-            {activeTipo === 'relleno' ? 'Rellenos de Mesa' : 'Devoluciones de Mesa'}: 
+            {activeTipo === 'relleno' ? 'Fill (Relleno)' : 'Cred (Devolución)'}: 
             <span class="mesa-highlight">{mesa?.nombre || 'Mesa'}</span>
           </h3>
           <p class="header-sub">
@@ -275,28 +275,6 @@
         <button type="button" class="btn-close" on:click={handleClose} title="Cerrar">✕</button>
       </div>
 
-      <!-- Selector de Tipo (Rellenos vs Devoluciones) -->
-      <div class="tipo-tabs-bar">
-        <button
-          type="button"
-          class="tab-btn"
-          class:active={activeTipo === 'relleno'}
-          on:click={() => { activeTipo = 'relleno'; }}
-        >
-          <span class="tab-indicator ind-relleno"></span>
-          Rellenos ({rellenosList.length})
-        </button>
-        <button
-          type="button"
-          class="tab-btn"
-          class:active={activeTipo === 'devolucion'}
-          on:click={() => { activeTipo = 'devolucion'; }}
-        >
-          <span class="tab-indicator ind-devolucion"></span>
-          Devoluciones ({devolucionesList.length})
-        </button>
-      </div>
-
       <!-- Modal Body -->
       <div class="modal-body">
         {#if errorMessage}
@@ -305,22 +283,18 @@
           </div>
         {/if}
 
-        <!-- Resumen de totales de Rellenos y Devoluciones -->
-        <div class="comparative-banner">
+        <!-- Resumen de totales de este movimiento -->
+        <div class="comparative-banner" class:banner-fill={activeTipo === 'relleno'} class:banner-cred={activeTipo === 'devolucion'}>
           <div class="comp-col">
-            <span class="comp-label">Total Rellenos (R)</span>
-            <span class="comp-val text-blue">$ {formatMoney(totalRellenosMonto)}</span>
-            <span class="comp-sub">{rellenosList.length} {rellenosList.length === 1 ? 'operación' : 'operaciones'}</span>
+            <span class="comp-label">{activeTipo === 'relleno' ? 'Total Fills (Rellenos)' : 'Total Credits (Devoluciones)'}</span>
+            <span class="comp-val {activeTipo === 'relleno' ? 'text-blue' : 'text-purple'}">
+              $ {formatMoney(activeTipo === 'relleno' ? totalRellenosMonto : totalDevolucionesMonto)}
+            </span>
+            <span class="comp-sub">{currentList.length} {currentList.length === 1 ? 'operación' : 'operaciones'}</span>
           </div>
-          <div class="comp-sep">vs</div>
+          <div class="comp-sep">&bull;</div>
           <div class="comp-col">
-            <span class="comp-label">Total Devoluciones (D)</span>
-            <span class="comp-val text-purple">$ {formatMoney(totalDevolucionesMonto)}</span>
-            <span class="comp-sub">{devolucionesList.length} {devolucionesList.length === 1 ? 'operación' : 'operaciones'}</span>
-          </div>
-          <div class="comp-sep">=</div>
-          <div class="comp-col">
-            <span class="comp-label">Neto (Rellenos - Devoluciones)</span>
+            <span class="comp-label">Neto Mesa (R - D)</span>
             <span class="comp-val font-bold {netoMonto >= 0 ? 'text-blue' : 'text-purple'}">
               {netoMonto < 0 ? `( - $${formatMoney(Math.abs(netoMonto))} )` : `$ ${formatMoney(netoMonto)}`}
             </span>
@@ -332,7 +306,7 @@
         <div class="form-section-box">
           <div class="form-section-header">
             <h4 class="form-section-title">
-              Nuevo {activeTipo === 'relleno' ? 'Relleno' : 'Devolución'}: 
+              Nuevo {activeTipo === 'relleno' ? 'Fill (Relleno)' : 'Cred (Devolución)'}: 
               <span class="badge-code" class:code-relleno={activeTipo === 'relleno'} class:code-devolucion={activeTipo === 'devolucion'}>
                 {nextCodigo}
               </span>
@@ -366,7 +340,7 @@
           <!-- Total del formulario y botón de guardar -->
           <div class="form-actions-row">
             <div class="form-total-box">
-              <span class="total-label">TOTAL {activeTipo === 'relleno' ? 'RELLENO' : 'DEVOLUCIÓN'} ({nextCodigo}):</span>
+              <span class="total-label">TOTAL {activeTipo === 'relleno' ? 'FILL' : 'CRED'} ({nextCodigo}):</span>
               <span class="total-monto {activeTipo === 'relleno' ? 'text-blue' : 'text-purple'}">
                 $ {formatMoney(formTotal)}
               </span>
@@ -384,7 +358,7 @@
                 {#if isSaving}
                   <span>Guardando...</span>
                 {:else}
-                  <span>+ Agregar {activeTipo === 'relleno' ? 'Relleno' : 'Devolución'} ({nextCodigo})</span>
+                  <span>+ Agregar {activeTipo === 'relleno' ? 'Fill' : 'Cred'} ({nextCodigo})</span>
                 {/if}
               </button>
             </div>
@@ -394,12 +368,12 @@
         <!-- Tabla de historial de movimientos de este tipo -->
         <div class="history-section-box">
           <h4 class="history-title">
-            Historial de {activeTipo === 'relleno' ? 'Rellenos' : 'Devoluciones'} de esta mesa
+            Historial de {activeTipo === 'relleno' ? 'Fills (Rellenos)' : 'Credits (Devoluciones)'} de esta mesa
           </h4>
 
           {#if currentList.length === 0}
             <div class="empty-movs-box">
-              <p>No hay {activeTipo === 'relleno' ? 'rellenos' : 'devoluciones'} registrados aún para esta mesa.</p>
+              <p>No hay {activeTipo === 'relleno' ? 'fills (rellenos)' : 'credits (devoluciones)'} registrados aún para esta mesa.</p>
             </div>
           {:else}
             <div class="table-container">
@@ -589,56 +563,6 @@
     background: #e2e8f0;
   }
 
-  /* Tipo Tabs Bar */
-  .tipo-tabs-bar {
-    display: flex;
-    background: #f1f5f9;
-    padding: 4px 16px;
-    border-bottom: 1px solid #e2e8f0;
-    gap: 8px;
-  }
-
-  .tab-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 18px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #64748b;
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .tab-btn:hover {
-    color: #0f172a;
-    background: #e2e8f0;
-  }
-
-  .tab-btn.active {
-    background: #ffffff;
-    color: #0f172a;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  }
-
-  .tab-indicator {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-
-  .ind-relleno {
-    background: #2563eb;
-  }
-
-  .ind-devolucion {
-    background: #9333ea;
-  }
-
   /* Body */
   .modal-body {
     padding: 16px 22px;
@@ -668,6 +592,16 @@
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     padding: 12px 18px;
+  }
+
+  .banner-fill {
+    background: #f0f7ff;
+    border-color: #bfdbfe;
+  }
+
+  .banner-cred {
+    background: #faf5ff;
+    border-color: #e9d5ff;
   }
 
   .comp-col {

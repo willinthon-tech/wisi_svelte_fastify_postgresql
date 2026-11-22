@@ -435,16 +435,16 @@
     isModalOpen = true;
   }
 
-  // Abrir Modal de Rellenos y Devoluciones
-  function handleOpenRellenoModal(tipo = 'relleno', mesaObj = null) {
-    const targetMesa = mesaObj || availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId));
+  // Abrir Modal de Rellenos y Devoluciones (Fill / Cred)
+  function handleOpenRellenoModal(tipo = 'relleno', mesaObj = null, aperturaRecord = null) {
+    const targetMesa = mesaObj || (selectedMesaId ? availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId)) : null);
     if (!targetMesa) {
       triggerToast('Debe seleccionar una mesa primero', 'warning');
       return;
     }
 
     const mId = String(targetMesa.uuid || targetMesa.id);
-    const ap = arqueoRecords.find(r => 
+    const ap = aperturaRecord || arqueoRecords.find(r => 
       String(r.mesa_uuid || r.mesa_id) === mId &&
       r.tipo === 'apertura'
     );
@@ -617,24 +617,6 @@
             <span>Aperturar</span>
           {/if}
         </button>
-
-        <!-- Botones RELLENOS y DEVOLUCIONES -->
-        <div class="btn-rd-actions-row">
-          <button
-            type="button"
-            class="btn-rd-action btn-rd-rellenos"
-            on:click={() => handleOpenRellenoModal('relleno')}
-          >
-            RELLENOS
-          </button>
-          <button
-            type="button"
-            class="btn-rd-action btn-rd-devoluciones"
-            on:click={() => handleOpenRellenoModal('devolucion')}
-          >
-            DEVOLUCIONES
-          </button>
-        </div>
       {/if}
     </form>
   </div>
@@ -725,16 +707,26 @@
                       on:click={() => handleOpenCierreModal(group)}
                       title="Registrar o editar el Cierre de esta mesa"
                     >
-                      Arquear
+                      Cierre
                     </button>
-                    <button 
-                      type="button" 
-                      class="btn-rd-table"
-                      on:click={() => handleOpenRellenoModal('relleno', group.mesaObj)}
-                      title="Gestionar Rellenos y Devoluciones de esta mesa"
-                    >
-                      R / D
-                    </button>
+                    <div class="acciones-rd-row">
+                      <button 
+                        type="button" 
+                        class="btn-table-fill"
+                        on:click={() => handleOpenRellenoModal('relleno', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
+                        title="Registrar Fill (Relleno) para esta mesa"
+                      >
+                        Fill
+                      </button>
+                      <button 
+                        type="button" 
+                        class="btn-table-cred"
+                        on:click={() => handleOpenRellenoModal('devolucion', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
+                        title="Registrar Cred (Devolución) para esta mesa"
+                      >
+                        Cred
+                      </button>
+                    </div>
                     {#if canDelete}
                       <button 
                         type="button" 
@@ -1312,68 +1304,45 @@
     border: 1px solid #d8b4fe;
   }
 
-  .btn-rd-actions-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-top: 10px;
+  .acciones-rd-row {
+    display: flex;
+    gap: 5px;
+    width: 75px;
   }
 
-  .btn-rd-action {
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 12.5px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.15s ease;
-  }
-
-  .btn-rd-rellenos {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1.5px solid #93c5fd;
-  }
-
-  .btn-rd-rellenos:hover {
-    background: #dbeafe;
-    color: #1e40af;
-    border-color: #3b82f6;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
-  }
-
-  .btn-rd-devoluciones {
-    background: #faf5ff;
-    color: #7e22ce;
-    border: 1.5px solid #d8b4fe;
-  }
-
-  .btn-rd-devoluciones:hover {
-    background: #f3e8ff;
-    color: #6b21a8;
-    border-color: #a855f7;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(147, 51, 234, 0.15);
-  }
-
-  .btn-rd-table {
-    background: #f1f5f9;
-    color: #334155;
-    border: 1px solid #cbd5e1;
+  .btn-table-fill,
+  .btn-table-cred {
+    flex: 1;
     border-radius: 4px;
-    padding: 4px 10px;
+    padding: 4px 1px;
     font-size: 11px;
     font-weight: 800;
     cursor: pointer;
     transition: all 0.15s ease;
-    width: 75px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   }
 
-  .btn-rd-table:hover {
-    background: #e2e8f0;
-    color: #0f172a;
+  .btn-table-fill {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+  }
+
+  .btn-table-fill:hover {
+    background: #dbeafe;
+    border-color: #3b82f6;
+  }
+
+  .btn-table-cred {
+    background: #faf5ff;
+    color: #7e22ce;
+    border: 1px solid #d8b4fe;
+  }
+
+  .btn-table-cred:hover {
+    background: #f3e8ff;
+    border-color: #a855f7;
   }
 
   .text-blue {

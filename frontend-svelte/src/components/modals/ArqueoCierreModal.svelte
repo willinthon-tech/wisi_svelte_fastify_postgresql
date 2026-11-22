@@ -226,7 +226,7 @@
         <div>
           <span class="header-badge">Control de Cierre</span>
           <h3 class="header-main-title">
-            Arquear Cierre: <span class="mesa-highlight">{mesa?.nombre || 'Mesa'}</span>
+            Cierre: <span class="mesa-highlight">{mesa?.nombre || 'Mesa'}</span>
           </h3>
           <p class="header-sub">
             Juego: <strong class="mesa-sub-highlight">{mesa?.juego_nombre || 'Mesa en Vivo'}</strong>
