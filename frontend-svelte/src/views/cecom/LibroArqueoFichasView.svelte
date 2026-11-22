@@ -582,10 +582,116 @@
     }
   }
 
-  // Liquidar mesa
-  function handleLiquidarMesa(group) {
+  // Liquidar mesa: cierra la mesa con las mismas cantidades de fichas con las que se abrió
+  async function handleLiquidarMesa(group) {
     if (!group) return;
-    triggerToast(`Mesa "${group.mesaNombre}" liquidada correctamente`, 'success');
+
+    const lId = libro?.uuid || libroId || libro?.id;
+    const mId = group.mesaId;
+    if (!lId || !mId) return;
+
+    if (!group.apertura) {
+      triggerToast(`La mesa "${group.mesaNombre}" no tiene registro de apertura.`, 'warning');
+      return;
+    }
+
+    // Obtener desglose de fichas de apertura
+    const apFichas = Array.isArray(group.apertura.fichas)
+      ? group.apertura.fichas
+      : (typeof group.apertura.fichas === 'string' ? JSON.parse(group.apertura.fichas || '[]') : []);
+
+    const clonedFichas = apFichas.map(f => ({
+      valor: Number(f.valor ?? f.denominacion),
+      cantidad: Number(f.cantidad || 0),
+      total: Number(f.total || (Number(f.valor ?? f.denominacion) * Number(f.cantidad || 0)))
+    }));
+
+    const apTotal = Number(group.apertura.total) || clonedFichas.reduce((a, b) => a + b.total, 0);
+
+    // Buscar si ya existe registro de cierre real en arqueoRecords
+    const existingCierre = arqueoRecords.find(r => 
+      String(r.mesa_uuid || r.mesa_id) === String(mId) && 
+      r.tipo === 'cierre' && !r.is_deleted &&
+      !String(r.uuid || r.id).startsWith('virtual-')
+    );
+
+    const cierreUuid = existingCierre?.uuid || existingCierre?.id || generateSafeUuid();
+
+    const updatedCierre = {
+      ...(existingCierre || {}),
+      uuid: cierreUuid,
+      id: cierreUuid,
+      libro_uuid: lId,
+      libro_id: lId,
+      mesa_uuid: mId,
+      mesa_id: mId,
+      multisala_uuid: multisalaUuid || null,
+      tipo: 'cierre',
+      fichas: clonedFichas,
+      total: apTotal,
+      rellenos_devoluciones: group.rellenosDevoluciones || group.apertura.rellenos_devoluciones || [],
+      mesa_nombre: group.mesaNombre || '',
+      juego_nombre: group.juegoNombre || '',
+      observaciones: existingCierre?.observaciones || 'Liquidado automáticamente (Cierre = Apertura)',
+      updated_at: new Date().toISOString()
+    };
+
+    // 1. Actualizar estado en memoria inmediatamente (0ms)
+    const existingIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(cierreUuid));
+    if (existingIdx !== -1) {
+      arqueoRecords[existingIdx] = updatedCierre;
+    } else {
+      arqueoRecords = [...arqueoRecords, updatedCierre];
+    }
+    arqueoRecords = [...arqueoRecords];
+
+    triggerToast(`Mesa "${group.mesaNombre}" liquidada (Cierre igualado a Apertura: $${formatMoney(apTotal)}).`, 'success');
+
+    // 2. Guardar en base de datos local IndexedDB (<5ms)
+    await upsertLocalItem('libro_arqueo_fichas', updatedCierre);
+
+    // 3. Sincronizar en segundo plano con el backend
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      await queueOutboxAction({
+        entity: 'libro_arqueo_fichas',
+        action: 'save',
+        endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+        method: 'POST',
+        payload: updatedCierre,
+        uuid: cierreUuid
+      });
+    } else {
+      (async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4500);
+          const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatedCierre),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const json = await res.json();
+            if (json?.data) {
+              await upsertLocalItem('libro_arqueo_fichas', json.data);
+            }
+          }
+        } catch (syncErr) {
+          console.warn('[ArqueoFichas] Encolando liquidación en Outbox:', syncErr);
+          await queueOutboxAction({
+            entity: 'libro_arqueo_fichas',
+            action: 'save',
+            endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+            method: 'POST',
+            payload: updatedCierre,
+            uuid: cierreUuid
+          });
+        }
+      })();
+    }
   }
 
   // Eliminar Arqueo completo de una Mesa (Apertura y Cierre)
