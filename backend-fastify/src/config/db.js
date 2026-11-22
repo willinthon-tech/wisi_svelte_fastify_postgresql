@@ -346,6 +346,52 @@ export async function initDb() {
       console.warn('Advertencia verificando fk_maquinas_juego_uuid en initDb:', eFkMaq.message);
     }
 
+    // Sanear nombres de clientes con prefijos "De " / "Del " residuales de WhatsApp
+    try {
+      await sql.unsafe(`
+        DO $$
+        DECLARE
+          r RECORD;
+          v_clean_nombre TEXT;
+          v_target_uuid UUID;
+        BEGIN
+          FOR r IN 
+            SELECT uuid, nombre, sala_uuid 
+            FROM clientes 
+            WHERE nombre ~* '^(?:de\\s+|del\\s+)+' 
+              AND COALESCE(is_deleted, false) = false
+          LOOP
+            v_clean_nombre := TRIM(REGEXP_REPLACE(r.nombre, '^(?:de\\s+|del\\s+)+', '', 'i'));
+            IF length(v_clean_nombre) > 0 THEN
+              SELECT uuid INTO v_target_uuid
+              FROM clientes
+              WHERE LOWER(TRIM(nombre)) = LOWER(v_clean_nombre)
+                AND (sala_uuid = r.sala_uuid OR (sala_uuid IS NULL AND r.sala_uuid IS NULL))
+                AND COALESCE(is_deleted, false) = false
+                AND uuid != r.uuid
+              LIMIT 1;
+
+              IF v_target_uuid IS NOT NULL THEN
+                UPDATE libro_control_clientes 
+                SET cliente_uuid = v_target_uuid 
+                WHERE cliente_uuid = r.uuid;
+
+                UPDATE clientes 
+                SET is_deleted = true, deleted_at = NOW(), nombre = v_clean_nombre || ' (duplicado fusionado)' 
+                WHERE uuid = r.uuid;
+              ELSE
+                UPDATE clientes 
+                SET nombre = v_clean_nombre 
+                WHERE uuid = r.uuid;
+              END IF;
+            END IF;
+          END LOOP;
+        END $$;
+      `);
+    } catch (eSanear) {
+      console.warn('Advertencia saneando nombres de clientes en initDb:', eSanear.message);
+    }
+
     isPgConnected = true;
     console.log(`\x1b[32m[CONECTADO]\x1b[0m Base de Datos: PostgreSQL | Host: ${PGHOST}:${PGPORT} | Base: ${PGDATABASE}`);
   } catch (err) {

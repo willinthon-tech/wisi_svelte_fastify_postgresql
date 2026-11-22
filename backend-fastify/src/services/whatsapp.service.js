@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql, isPgConnected } from '../config/db.js';
-import { parseWhatsAppMessage, normalizeText, isSystemStatusOrInformationalMessage } from './whatsapp-parser.js';
+import { parseWhatsAppMessage, normalizeText, isSystemStatusOrInformationalMessage, cleanPersonName } from './whatsapp-parser.js';
 import { broadcastLibroUpdate } from '../config/websocket.js';
 
 // Helpers seguros para clasificar JIDs sin depender de exportaciones específicas de Baileys
@@ -1200,6 +1200,12 @@ class WhatsAppService {
     let clienteUuid = null;
     let foundClient = null;
 
+    // Sanear el nombre del cliente eliminando preposiciones como "de", "del" que provienen del mensaje de WhatsApp
+    let cleanCliente = cleanPersonName(parsedCliente);
+    if (!cleanCliente || cleanCliente.toLowerCase() === 'general') {
+      cleanCliente = 'General';
+    }
+
     const allClients = await sql`
       SELECT uuid, nombre 
       FROM clientes 
@@ -1207,28 +1213,52 @@ class WhatsAppService {
         AND COALESCE(is_deleted, false) = false
     `;
 
-    if (parsedCliente && parsedCliente.toLowerCase() !== 'general' && allClients.length > 0) {
-      const normTarget = normalizeText(parsedCliente);
-      foundClient = allClients.find(c => normalizeText(c.nombre) === normTarget);
-      if (!foundClient) {
-        foundClient = allClients.find(c => normalizeText(c.nombre).startsWith(normTarget + ' '));
-      }
+    if (cleanCliente !== 'General' && allClients.length > 0) {
+      const normTarget = normalizeText(cleanCliente);
+
+      // 1. Coincidencia exacta con nombre normalizado o con nombre saneado (removiendo "De " existente en BD)
+      foundClient = allClients.find(c => {
+        const cn = normalizeText(c.nombre);
+        const cleanCn = normalizeText(cleanPersonName(c.nombre));
+        return cn === normTarget || cleanCn === normTarget;
+      });
+
+      // 2. Coincidencia por prefijo
       if (!foundClient) {
         foundClient = allClients.find(c => {
-          const words = normalizeText(c.nombre).split(/\s+/);
+          const cleanCn = normalizeText(cleanPersonName(c.nombre));
+          return cleanCn.startsWith(normTarget + ' ');
+        });
+      }
+
+      // 3. Coincidencia por palabras individuales
+      if (!foundClient) {
+        foundClient = allClients.find(c => {
+          const words = normalizeText(cleanPersonName(c.nombre)).split(/\s+/);
           return words.includes(normTarget);
         });
       }
+
+      // 4. Coincidencia parcial contenida
       if (!foundClient) {
-        foundClient = allClients.find(c => normalizeText(c.nombre).includes(normTarget) || normTarget.includes(normalizeText(c.nombre)));
+        foundClient = allClients.find(c => {
+          const cleanCn = normalizeText(cleanPersonName(c.nombre));
+          return cleanCn.includes(normTarget) || normTarget.includes(cleanCn);
+        });
       }
 
       if (foundClient) {
         clienteUuid = foundClient.uuid;
+        // Si el cliente en BD tenía "De " o "Del " al inicio, sanearlo de una vez en BD
+        const saneadoNombre = cleanPersonName(foundClient.nombre);
+        if (saneadoNombre && saneadoNombre !== foundClient.nombre) {
+          await sql`UPDATE clientes SET nombre = ${saneadoNombre} WHERE uuid = ${foundClient.uuid}`.catch(() => {});
+          foundClient.nombre = saneadoNombre;
+        }
       } else {
         const newClient = await sql`
           INSERT INTO clientes (nombre, sala_uuid)
-          VALUES (${parsedCliente.trim()}, ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`})
+          VALUES (${cleanCliente}, ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`})
           RETURNING uuid
         `;
         clienteUuid = newClient[0]?.uuid;

@@ -76,14 +76,16 @@ export function cleanPersonName(rawName) {
   let changed = true;
   while (changed) {
     changed = false;
-    // Conectores que NUNCA inician un nombre en este contexto: en, por, con, para, via, vía, al, a, del
-    const newStart = name.replace(/^(?:en|por|con|para|via|vía|al|a|del)\s+/i, '');
+    // Conectores/etiquetas que NUNCA inician un nombre en este contexto:
+    // de, del, en, por, con, para, via, vía, al, a, cliente, operador, cajero, sr, sra, don, doña
+    const newStart = name.replace(/^(?:de|del|en|por|con|para|via|vía|al|a|cliente|operador|cajero|sr\.?|sra\.?|don|do[ñn]a)(?:\s+|$)/i, '');
     if (newStart !== name) {
       name = newStart.trim();
       changed = true;
     }
-    // Conectores/artículos que NUNCA terminan un nombre: en, por, con, de, del, al, a, para, via, vía, el, la, los, las, y, e, o, u
-    const newEnd = name.replace(/\s+(?:en|por|con|de|del|al|a|para|via|vía|el|la|los|las|y|e|o|u)$/i, '');
+    // Conectores/artículos que NUNCA terminan un nombre:
+    // en, por, con, de, del, al, a, para, via, vía, el, la, los, las, y, e, o, u
+    const newEnd = name.replace(/(?:^|\s+)(?:en|por|con|de|del|al|a|para|via|vía|el|la|los|las|y|e|o|u)$/i, '');
     if (newEnd !== name) {
       name = newEnd.trim();
       changed = true;
@@ -122,10 +124,10 @@ const TIPO_FULL_RULES = [
 // Nota: La letra 'a' es preposición común en español. Para evitar falsos positivos ("pago a Juan", "dia 20"),
 // solo se reconoce si va seguida de un monto, dos puntos o al inicio de la línea.
 const TIPO_SINGLE_RULES = [
-  { tipo: 'Compra', regex: /(?:^|\s)(c)(?:\s+\$?[\d]|\s*[:=]|\s*$)/i },
-  { tipo: 'Pago', regex: /(?:^|\s)(p)(?:\s+\$?[\d]|\s*[:=]|\s*$)/i },
+  { tipo: 'Compra', regex: /(?:^|\s)(c)(?:\s+\$?[\d]|\s*[:=]|\s*$|\s+(?:zelle|cash|pdv|pm|pago\s*m[oó]vil|usdt|zinli|wally|paypal|bs|ves|d[oó]lares?|dolar|usd|efectivo)\b)/i },
+  { tipo: 'Pago', regex: /(?:^|\s)(p)(?:\s+\$?[\d]|\s*[:=]|\s*$|\s+(?:zelle|cash|pdv|pm|pago\s*m[oó]vil|usdt|zinli|wally|paypal|bs|ves|d[oó]lares?|dolar|usd|efectivo)\b)/i },
   { tipo: 'Aporte', regex: /(?:^|\s)(a)(?:\s+\$?[\d]|\s*[:=])/i },
-  { tipo: 'Devolución', regex: /(?:^|\s)(d)(?:\s+\$?[\d]|\s*[:=]|\s*$)/i }
+  { tipo: 'Devolución', regex: /(?:^|\s)(d)(?:\s+\$?[\d]|\s*[:=]|\s*$|\s+(?:zelle|cash|pdv|pm|pago\s*m[oó]vil|usdt|zinli|wally|paypal|bs|ves|d[oó]lares?|dolar|usd|efectivo)\b)/i }
 ];
 
 /**

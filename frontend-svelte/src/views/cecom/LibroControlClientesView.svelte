@@ -77,8 +77,14 @@
     !(t.nombre || '').toLowerCase().includes('denegad')
   ) || null;
 
+  // Helper para sanear nombres de clientes removiendo prefijos residuales ("De ", "Del ")
+  function cleanClienteDisplay(name) {
+    if (!name) return '';
+    return String(name).replace(/^(?:de\s+|del\s+)+/i, '').trim();
+  }
+
   // Extraer clientes únicos para sugerencias locales
-  $: clientesLocales = [...new Set(records.map(r => r.cliente).filter(Boolean))];
+  $: clientesLocales = [...new Set(records.map(r => cleanClienteDisplay(r.cliente)).filter(Boolean))];
 
   // Lista unificada y enriquecida de clientes para sugerencias
   $: allClientesList = (() => {
@@ -86,7 +92,8 @@
     // 1. Sugerencias remotas de la tabla clientes (vinculadas a la sala)
     for (const item of sugerenciasRemotas) {
       if (!item) continue;
-      const nombre = typeof item === 'object' ? item.nombre : String(item);
+      const rawNombre = typeof item === 'object' ? item.nombre : String(item);
+      const nombre = cleanClienteDisplay(rawNombre);
       if (!nombre) continue;
       const key = `${item.uuid || item.id || nombre.toLowerCase().trim()}`;
       if (!map.has(key)) {
@@ -101,11 +108,13 @@
     // 2. Clientes locales de registros previos
     for (const r of records) {
       if (!r || !r.cliente) continue;
-      const key = `${r.cliente_uuid || r.cliente_id || r.cliente.toLowerCase().trim()}`;
+      const nombre = cleanClienteDisplay(r.cliente);
+      if (!nombre) continue;
+      const key = `${r.cliente_uuid || r.cliente_id || nombre.toLowerCase().trim()}`;
       if (!map.has(key)) {
         map.set(key, {
           uuid: r.cliente_uuid || r.cliente_id || null,
-          nombre: r.cliente,
+          nombre: nombre,
           tipo_cliente_nombre: r.tipo_cliente_nombre || 'General'
         });
       }
@@ -142,7 +151,7 @@
     let list = [...records];
     const q = (busquedaClienteDetallado || '').trim().toLowerCase();
     if (q) {
-      list = list.filter(r => (r.cliente || '').toLowerCase().includes(q));
+      list = list.filter(r => cleanClienteDisplay(r.cliente).toLowerCase().includes(q));
     }
     return list.sort((a, b) => {
       if (a.created_at && b.created_at && a.created_at !== b.created_at) {
@@ -350,11 +359,11 @@
     };
   });
 
-  // 7. Resumen detallado por Cliente
+  // 7. Resumen detallado por Cliente (agrupa saneando prefijos "De " / "Del ")
   $: resumenClientes = (() => {
     const map = {};
     for (const r of records) {
-      const cli = (r.cliente || '').trim();
+      const cli = cleanClienteDisplay(r.cliente);
       if (!cli) continue;
       if (!map[cli]) {
         map[cli] = { cliente: cli, compras: 0, pagos: 0, count: 0, countCompras: 0, countPagos: 0 };
@@ -383,7 +392,7 @@
   $: resumenClientesFiltrados = (() => {
     const q = (busquedaClienteResumen || '').trim().toLowerCase();
     if (!q) return resumenClientes;
-    return resumenClientes.filter(c => c.cliente.toLowerCase().includes(q));
+    return resumenClientes.filter(c => cleanClienteDisplay(c.cliente).toLowerCase().includes(q));
   })();
 
   $: totalComprasClientesFiltrados = resumenClientesFiltrados.reduce((acc, c) => acc + (c.compras || 0), 0);
@@ -889,7 +898,7 @@
       return;
     }
     editingRecord = record;
-    modalCliente = record.cliente || '';
+    modalCliente = cleanClienteDisplay(record.cliente) || '';
     modalClienteUuid = record.cliente_uuid || record.cliente_id || null;
     showModalSugerencias = false;
     selectedModalSugerenciaIndex = -1;
@@ -1362,7 +1371,7 @@
                     <td class="td-center td-num">{idx + 1}</td>
                     <td class="td-cliente">
                       <div class="cliente-cell-content">
-                        <span class="cliente-name">{record.cliente}</span>
+                        <span class="cliente-name">{cleanClienteDisplay(record.cliente)}</span>
                         {#if record.tipo_cliente_nombre}
                           <span class="cliente-tipo-pill">{record.tipo_cliente_nombre}</span>
                         {/if}
@@ -1547,7 +1556,7 @@
                     <td class="td-num">{idx + 1}</td>
                     <td class="td-left">
                       <div class="cliente-cell-content">
-                        <span class="cliente-name">{c.cliente}</span>
+                        <span class="cliente-name">{cleanClienteDisplay(c.cliente)}</span>
                       </div>
                     </td>
                     <td class="td-res-monto">
