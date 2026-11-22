@@ -89,9 +89,17 @@
     unsubWs = subscribeToLibroUpdates(
       () => [libroId, libro?.uuid, libro?.id].filter(Boolean),
       'all',
-      () => {
+      (evt) => {
         const targetId = libroId || libro?.uuid || libro?.id;
-        if (targetId) loadFullResumen(targetId, true);
+        if (!targetId) return;
+        if (evt?.modulo !== 'resumen') {
+          // Un cambio operacional se registró en alguna subvista o whatsapp
+          // Actualiza o genera el snapshot estático en la tabla histórica libro_reporte
+          handleGenerarOActualizarReporte(true);
+        } else {
+          // El reporte estático fue generado o actualizado, recargar desde libro_reporte
+          loadFullResumen(targetId, true);
+        }
       },
       300
     );
@@ -128,90 +136,6 @@
     }
     loadError = null;
 
-    // Recuperar cualquier conteo de máquinas guardado localmente en IndexedDB para asegurar visualización inmediata
-    let localConteos = [];
-    try {
-      localConteos = await getLocalItems('libro_conteo_maquinas', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(id) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(id) || String(r.libro_id) === String(libro?.id)))
-      );
-    } catch (e) {}
-
-    let localArqueos = [];
-    try {
-      localArqueos = await getLocalItems('libro_arqueo_fichas', r => 
-        (r.libro_uuid && (String(r.libro_uuid) === String(id) || String(r.libro_uuid) === String(libro?.uuid))) ||
-        (r.libro_id && (String(r.libro_id) === String(id) || String(r.libro_id) === String(libro?.id)))
-      );
-    } catch (e) {}
-
-    let localMaquinas = [];
-    try {
-      localMaquinas = await getLocalItems('maquinas');
-    } catch (e) {}
-
-    let liveBackendArqueos = [];
-    try {
-      const arqRes = await fetch(toBackendUrl(`/api/master/libros/${id}/arqueo-fichas?multisala_uuid=all`));
-      if (arqRes.ok) {
-        const arqJson = await arqRes.json();
-        if (Array.isArray(arqJson?.data)) {
-          liveBackendArqueos = arqJson.data;
-        }
-      }
-    } catch (e) {}
-
-    const mergeConteoMaquinas = (baseList = []) => {
-      const map = new Map();
-      const addOrUpdate = (item) => {
-        if (!item || item.is_deleted) return;
-        const mKey = String(item.maquina_uuid || item.maquina_id || item.uuid || item.id || '');
-        const existing = map.get(mKey);
-        if (!existing) {
-          map.set(mKey, item);
-        } else {
-          const itemDate = new Date(item.updated_at || item.created_at || 0).getTime();
-          const existDate = new Date(existing.updated_at || existing.created_at || 0).getTime();
-          if (itemDate >= existDate || (Number(item.total) > 0 && !Number(existing.total))) {
-            map.set(mKey, { ...existing, ...item });
-          }
-        }
-      };
-      for (const c of (Array.isArray(baseList) ? baseList : [])) addOrUpdate(c);
-      for (const c of (Array.isArray(localConteos) ? localConteos : [])) addOrUpdate(c);
-      return Array.from(map.values());
-    };
-
-    const mergeArqueoFichas = (baseList = []) => {
-      const map = new Map();
-      const addOrUpdate = (item) => {
-        if (!item || item.is_deleted) return;
-        const mKey = item.mesa_uuid || item.mesa_id || '';
-        const tKey = item.tipo || '';
-        const uKey = String(item.uuid || item.id || '');
-        const compositeKey = mKey ? `${mKey}_${tKey}` : uKey;
-        const existing = map.get(compositeKey) || (uKey ? map.get(uKey) : null);
-        if (!existing) {
-          map.set(compositeKey, item);
-          if (uKey && uKey !== compositeKey) map.set(uKey, item);
-        } else {
-          const itemDate = new Date(item.updated_at || item.created_at || 0).getTime();
-          const existDate = new Date(existing.updated_at || existing.created_at || 0).getTime();
-          if (itemDate >= existDate || (Number(item.total) > 0 && !Number(existing.total))) {
-            const merged = { ...existing, ...item };
-            map.set(compositeKey, merged);
-            if (uKey && uKey !== compositeKey) map.set(uKey, merged);
-          }
-        }
-      };
-
-      for (const a of (Array.isArray(baseList) ? baseList : [])) addOrUpdate(a);
-      for (const a of liveBackendArqueos) addOrUpdate(a);
-      for (const a of (Array.isArray(localArqueos) ? localArqueos : [])) addOrUpdate(a);
-
-      return Array.from(new Set(map.values()));
-    };
-
     // 1. Carga previa inmediata desde base de datos local IndexedDB (0ms)
     try {
       const local = await getLocalItems('libro_reporte', r => 
@@ -228,14 +152,14 @@
           datos: payload.datos || null,
           all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
           drop_mesas: payload.drop_mesas || [],
-          arqueo_fichas: mergeArqueoFichas(payload.arqueo_fichas),
-          conteo_maquinas: mergeConteoMaquinas(payload.conteo_maquinas),
+          arqueo_fichas: payload.arqueo_fichas || [],
+          conteo_maquinas: payload.conteo_maquinas || [],
           novedades_mesas: payload.novedades_mesas || [],
           aportes: payload.aportes_maquinas || payload.aportes || [],
           control_llaves: payload.control_llaves || [],
           control_clientes: payload.control_clientes || [],
           incidencias_generales: payload.incidencias_generales || [],
-          maquinas: payload.maquinas || (localMaquinas && localMaquinas.length > 0 ? localMaquinas : ($masterMaquinasStore || []))
+          maquinas: payload.maquinas || ($masterMaquinasStore || [])
         };
         if (!libro && resumenData.libro) {
           libro = resumenData.libro;
@@ -245,7 +169,7 @@
     } catch (e) {}
 
     try {
-      // Consume directamente del endpoint de la tabla libro_reporte
+      // Consume estrictamente de la tabla histórica libro_reporte
       const res = await fetch(toBackendUrl(`/api/master/libros/${id}/reporte`));
       if (res.ok) {
         const json = await res.json();
@@ -264,29 +188,19 @@
                 ? libro
                 : payload.libro || libro;
 
-          const finalConteoMaquinas = mergeConteoMaquinas(payload.conteo_maquinas);
-          if (liveCounts && finalConteoMaquinas.length > (liveCounts.conteo_maquinas || 0)) {
-            liveCounts.conteo_maquinas = finalConteoMaquinas.length;
-          }
-
-          const finalArqueoFichas = mergeArqueoFichas(payload.arqueo_fichas);
-          if (liveCounts && finalArqueoFichas.length > (liveCounts.arqueo_fichas || 0)) {
-            liveCounts.arqueo_fichas = finalArqueoFichas.length;
-          }
-
           resumenData = {
             libro: loadedLibro,
             datos: payload.datos || null,
             all_datos: payload.all_datos || (payload.datos ? (Array.isArray(payload.datos) ? payload.datos : [payload.datos]) : []),
             drop_mesas: payload.drop_mesas || [],
-            arqueo_fichas: finalArqueoFichas,
-            conteo_maquinas: finalConteoMaquinas,
+            arqueo_fichas: payload.arqueo_fichas || [],
+            conteo_maquinas: payload.conteo_maquinas || [],
             novedades_mesas: payload.novedades_mesas || [],
             aportes: payload.aportes_maquinas || payload.aportes || [],
             control_llaves: payload.control_llaves || [],
             control_clientes: payload.control_clientes || [],
             incidencias_generales: payload.incidencias_generales || [],
-            maquinas: payload.maquinas || (localMaquinas && localMaquinas.length > 0 ? localMaquinas : ($masterMaquinasStore || []))
+            maquinas: payload.maquinas || ($masterMaquinasStore || [])
           };
           if (!libro && resumenData.libro) {
             libro = resumenData.libro;
@@ -298,7 +212,8 @@
       }
 
       if (!reporteExists) {
-        loadError = "No se pudo cargar la información del libro";
+        // Si aún no está creado, generarlo automáticamente en la tabla histórica
+        await handleGenerarOActualizarReporte(true);
       }
     } catch (err) {
       console.warn("[LocalDb] Error o sin conexión al cargar reporte consolidado (usando local si existe):", err);
@@ -310,11 +225,12 @@
     }
   }
 
-  // Generar o actualizar instantánea en la tabla libro_reporte (Botón principal solicitado)
-  async function handleGenerarOActualizarReporte() {
+  // Generar o actualizar instantánea en la tabla libro_reporte
+  async function handleGenerarOActualizarReporte(silent = false) {
+    const isSilent = silent === true;
     const id = libroId || libro?.uuid || libro?.id || activeLibro?.uuid || activeLibro?.id || resumenData.libro?.uuid || resumenData.libro?.id;
     if (!id) return;
-    isSyncing = true;
+    if (!isSilent) isSyncing = true;
     try {
       const res = await fetch(toBackendUrl(`/api/master/libros/${id}/reporte`), {
         method: "POST",
@@ -358,22 +274,28 @@
           }
           upsertLocalItem('libro_reporte', json.data).catch(() => {});
         }
-        triggerToast(
-          wasExisting
-            ? "Reporte consolidado actualizado exitosamente en libro_reporte"
-            : "Reporte consolidado generado y guardado exitosamente en libro_reporte",
-          "success",
-        );
+        if (!isSilent) {
+          triggerToast(
+            wasExisting
+              ? "Reporte consolidado actualizado exitosamente en libro_reporte"
+              : "Reporte consolidado generado y guardado exitosamente en libro_reporte",
+            "success",
+          );
+        }
       } else {
-        triggerToast(
-          json?.error || "Error al procesar reporte consolidado",
-          "error",
-        );
+        if (!isSilent) {
+          triggerToast(
+            json?.error || "Error al procesar reporte consolidado",
+            "error",
+          );
+        }
       }
     } catch (err) {
-      triggerToast(`Error: ${err.message}`, "error");
+      if (!isSilent) {
+        triggerToast(`Error: ${err.message}`, "error");
+      }
     } finally {
-      isSyncing = false;
+      if (!isSilent) isSyncing = false;
     }
   }
 
@@ -1761,7 +1683,7 @@
             class="btn-action-primary {reporteExists
               ? 'btn-actualizar'
               : 'btn-generar'}"
-            on:click={handleGenerarOActualizarReporte}
+            on:click={() => handleGenerarOActualizarReporte(false)}
             disabled={isSyncing || isGeneratingPdf}
             title={reporteExists
               ? "Actualizar y sincronizar snapshot en tabla libro_reporte"

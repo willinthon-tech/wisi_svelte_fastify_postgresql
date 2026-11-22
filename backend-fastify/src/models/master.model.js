@@ -12420,7 +12420,7 @@ export async function saveLibroReporteModel(libroId) {
       `;
     }
 
-    return {
+    const result = {
       success: true,
       exists: true,
       liveCounts,
@@ -12429,6 +12429,19 @@ export async function saveLibroReporteModel(libroId) {
         data: fullData
       }
     };
+
+    try {
+      import('../config/websocket.js').then(({ broadcastLibroUpdate }) => {
+        broadcastLibroUpdate({
+          libroId: resolvedLibroUuid,
+          modulo: 'resumen',
+          action: 'save',
+          data: result
+        });
+      }).catch(() => {});
+    } catch (eWs) {}
+
+    return result;
   }
 
   if (!inMemoryData.libro_reporte) inMemoryData.libro_reporte = [];
@@ -12455,10 +12468,22 @@ export async function saveLibroReporteModel(libroId) {
     inMemoryData.libro_reporte.push(record);
   }
 
-  return { success: true, exists: true, liveCounts, data: record };
+  const resRecord = { success: true, exists: true, liveCounts, data: record };
+  try {
+    import('../config/websocket.js').then(({ broadcastLibroUpdate }) => {
+      broadcastLibroUpdate({
+        libroId: resolvedLibroUuid,
+        modulo: 'resumen',
+        action: 'save',
+        data: resRecord
+      });
+    }).catch(() => {});
+  } catch (eWs) {}
+
+  return resRecord;
 }
 
-export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
+export async function getLibroReporteModel(idOrLibroId, autoGenerate = true) {
   if (!idOrLibroId) throw new Error('ID de reporte o libro inválido');
   const targetStr = String(idOrLibroId).trim();
   const isU = isUuid(targetStr);
@@ -12494,90 +12519,6 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
 
   const queryTarget = resolvedLibroUuid || targetStr;
 
-  // 2. Consulta en paralelo de las subvistas en vivo con el UUID canónico del libro
-  const [
-    datosRes,
-    dropRes,
-    novedadesRes,
-    aportesRes,
-    llavesRes,
-    clientesRes,
-    incidenciasRes,
-    conteoMaquinasRes,
-    arqueoFichasRes
-  ] = await Promise.all([
-    getLibroDatosModel(queryTarget, 'all').catch(() => []),
-    getLibroDropMesasModel(queryTarget, 'all').catch(() => []),
-    getLibroNovedadesMesasModel(queryTarget, 'all').catch(() => []),
-    getLibroAportesModel(queryTarget, 'all').catch(() => []),
-    getLibroControlLlavesModel(queryTarget, 'all').catch(() => []),
-    getLibroControlClientesModel(queryTarget, 'all').catch(() => []),
-    getLibroIncidenciasGeneralesModel(queryTarget, 'all').catch(() => []),
-    getLibroConteoMaquinasModel(queryTarget, 'all').catch(() => []),
-    getLibroArqueoFichasModel(queryTarget, 'all').catch(() => [])
-  ]);
-
-  const datosList = Array.isArray(datosRes) ? datosRes : (datosRes ? [datosRes] : []);
-  const defaultDatos = datosList.find(d => !d.multisala_uuid) || datosList[0] || null;
-
-  const liveCounts = {
-    datos: datosList.length,
-    drop_mesas: Array.isArray(dropRes) ? dropRes.length : 0,
-    novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes.length : 0,
-    aportes: Array.isArray(aportesRes) ? aportesRes.length : 0,
-    aportes_maquinas: Array.isArray(aportesRes) ? aportesRes.length : 0,
-    control_llaves: Array.isArray(llavesRes) ? llavesRes.length : 0,
-    control_clientes: Array.isArray(clientesRes) ? clientesRes.length : 0,
-    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes.length : 0,
-    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes.length : 0,
-    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes.length : 0
-  };
-
-  const targetSalaUuid = libroObj?.sala_uuid || null;
-  let maquinasSala = [];
-  if (targetSalaUuid && sql && isPgConnected) {
-    try {
-      maquinasSala = await sql`
-        SELECT 
-          m.uuid,
-          m.nombre,
-          m.serial,
-          m.puestos,
-          m.rango_uuid,
-          r.nombre AS rango_nombre
-        FROM maquinas m
-        LEFT JOIN rangos r ON m.rango_uuid = r.uuid
-        WHERE m.sala_uuid = ${targetSalaUuid}::uuid
-          AND COALESCE(m.is_deleted, false) = false
-        ORDER BY m.nombre ASC
-      `;
-    } catch (eMq) {
-      console.warn('Error consultando maquinas de sala en getLibroReporteModel:', eMq.message);
-    }
-  }
-
-  const previewData = {
-    libro_id: resolvedLibroUuid,
-    libro_uuid: resolvedLibroUuid,
-    sala_id: targetSalaUuid,
-    sala_uuid: targetSalaUuid,
-    sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
-    fecha: libroObj?.descripcion || null,
-    libro: libroObj || null,
-    datos: defaultDatos,
-    all_datos: datosList,
-    drop_mesas: Array.isArray(dropRes) ? dropRes : [],
-    novedades_mesas: Array.isArray(novedadesRes) ? novedadesRes : [],
-    aportes: Array.isArray(aportesRes) ? aportesRes : [],
-    aportes_maquinas: Array.isArray(aportesRes) ? aportesRes : [],
-    control_llaves: Array.isArray(llavesRes) ? llavesRes : [],
-    control_clientes: Array.isArray(clientesRes) ? clientesRes : [],
-    incidencias_generales: Array.isArray(incidenciasRes) ? incidenciasRes : [],
-    conteo_maquinas: Array.isArray(conteoMaquinasRes) ? conteoMaquinasRes : [],
-    arqueo_fichas: Array.isArray(arqueoFichasRes) ? arqueoFichasRes : [],
-    maquinas: Array.isArray(maquinasSala) ? maquinasSala : []
-  };
-
   if (isPgConnected && sql) {
     let rows = [];
     if (resolvedLibroUuid) {
@@ -12605,39 +12546,18 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
       }
       if (!rData || typeof rData !== 'object') rData = {};
 
-      // Siempre reflejar las subvistas en vivo más recientes en el reporte
-      if (Array.isArray(conteoMaquinasRes)) {
-        rData.conteo_maquinas = conteoMaquinasRes;
-      }
-      if (Array.isArray(aportesRes)) {
-        rData.aportes = aportesRes;
-        rData.aportes_maquinas = aportesRes;
-      }
-      if (Array.isArray(dropRes)) {
-        rData.drop_mesas = dropRes;
-      }
-      if (Array.isArray(novedadesRes)) {
-        rData.novedades_mesas = novedadesRes;
-      }
-      if (Array.isArray(llavesRes)) {
-        rData.control_llaves = llavesRes;
-      }
-      if (Array.isArray(clientesRes)) {
-        rData.control_clientes = clientesRes;
-      }
-      if (Array.isArray(incidenciasRes)) {
-        rData.incidencias_generales = incidenciasRes;
-      }
-      if (Array.isArray(arqueoFichasRes)) {
-        rData.arqueo_fichas = arqueoFichasRes;
-      }
-      if (Array.isArray(maquinasSala)) {
-        rData.maquinas = maquinasSala;
-      }
-      if (datosList && datosList.length > 0) {
-        rData.all_datos = datosList;
-        rData.datos = defaultDatos;
-      }
+      const liveCounts = {
+        datos: Array.isArray(rData.all_datos) ? rData.all_datos.length : (rData.datos ? 1 : 0),
+        drop_mesas: Array.isArray(rData.drop_mesas) ? rData.drop_mesas.length : 0,
+        novedades_mesas: Array.isArray(rData.novedades_mesas) ? rData.novedades_mesas.length : 0,
+        aportes: Array.isArray(rData.aportes) ? rData.aportes.length : 0,
+        aportes_maquinas: Array.isArray(rData.aportes_maquinas || rData.aportes) ? (rData.aportes_maquinas || rData.aportes).length : 0,
+        control_llaves: Array.isArray(rData.control_llaves) ? rData.control_llaves.length : 0,
+        control_clientes: Array.isArray(rData.control_clientes) ? rData.control_clientes.length : 0,
+        incidencias_generales: Array.isArray(rData.incidencias_generales) ? rData.incidencias_generales.length : 0,
+        conteo_maquinas: Array.isArray(rData.conteo_maquinas) ? rData.conteo_maquinas.length : 0,
+        arqueo_fichas: Array.isArray(rData.arqueo_fichas) ? rData.arqueo_fichas.length : 0
+      };
 
       return {
         success: true,
@@ -12662,6 +12582,19 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
       );
     }
     if (found) {
+      const rData = found.data || {};
+      const liveCounts = {
+        datos: Array.isArray(rData.all_datos) ? rData.all_datos.length : (rData.datos ? 1 : 0),
+        drop_mesas: Array.isArray(rData.drop_mesas) ? rData.drop_mesas.length : 0,
+        novedades_mesas: Array.isArray(rData.novedades_mesas) ? rData.novedades_mesas.length : 0,
+        aportes: Array.isArray(rData.aportes) ? rData.aportes.length : 0,
+        aportes_maquinas: Array.isArray(rData.aportes_maquinas || rData.aportes) ? (rData.aportes_maquinas || rData.aportes).length : 0,
+        control_llaves: Array.isArray(rData.control_llaves) ? rData.control_llaves.length : 0,
+        control_clientes: Array.isArray(rData.control_clientes) ? rData.control_clientes.length : 0,
+        incidencias_generales: Array.isArray(rData.incidencias_generales) ? rData.incidencias_generales.length : 0,
+        conteo_maquinas: Array.isArray(rData.conteo_maquinas) ? rData.conteo_maquinas.length : 0,
+        arqueo_fichas: Array.isArray(rData.arqueo_fichas) ? rData.arqueo_fichas.length : 0
+      };
       return {
         success: true,
         exists: true,
@@ -12671,14 +12604,15 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
     }
   }
 
+  // Si no está creado aún en la tabla histórica libro_reporte, generarlo automáticamente
   if (autoGenerate) {
-    return await saveLibroReporteModel(idOrLibroId);
+    return await saveLibroReporteModel(queryTarget);
   }
 
   return {
     success: true,
     exists: false,
-    liveCounts,
+    liveCounts: {},
     data: {
       id: null,
       uuid: null,
@@ -12688,9 +12622,8 @@ export async function getLibroReporteModel(idOrLibroId, autoGenerate = false) {
       sala_uuid: libroObj?.sala_uuid || null,
       sala_nombre: libroObj?.sala_nombre || libroObj?.sala_nombre_comercial || 'Sala',
       fecha: libroObj?.descripcion || null,
-      data: previewData,
-      created_at: null,
-      updated_at: null
+      libro: libroObj || null,
+      data: {}
     }
   };
 }
