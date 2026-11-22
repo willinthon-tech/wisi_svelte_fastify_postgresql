@@ -1105,7 +1105,7 @@
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalPagos > 0 ? 'text-red' : 'text-slate'}">
-              ${formatMonto(totalPagos)}
+              {totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}
             </span>
           </div>
           <div class="kpi-subtext">
@@ -1371,7 +1371,7 @@
               <tr class="tfoot-totals-row">
                 <td class="td-left font-bold">TOTALES</td>
                 <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">${formatMonto(totalPagos)}</td>
+                <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
                 <td class="td-res-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
                   {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                 </td>
@@ -1448,7 +1448,7 @@
                 <tr class="tfoot-totals-row">
                   <td colspan="2" class="td-left font-bold">TOTALES ({resumenClientes.length} {resumenClientes.length === 1 ? 'cliente' : 'clientes'})</td>
                   <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                  <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">${formatMonto(totalPagos)}</td>
+                  <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
                   <td class="td-res-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
                     {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                   </td>
