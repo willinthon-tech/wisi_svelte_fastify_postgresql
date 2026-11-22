@@ -284,19 +284,65 @@
         updated_at: new Date().toISOString()
       };
 
+      // Si no existe registro de cierre para esta mesa, inicializarlo automáticamente a 0 fichas
+      const existingCierre = arqueoRecords.find(r => 
+        String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) && 
+        r.tipo === 'cierre' && !r.is_deleted
+      );
+
+      let newCierreRecord = null;
+      if (!existingCierre) {
+        const cierreUuid = generateSafeUuid();
+        const cierreFichasPayload = salaFichas.map(valor => ({
+          valor,
+          cantidad: 0,
+          total: 0
+        })).filter(f => f.valor > 0).sort((a, b) => b.valor - a.valor);
+
+        newCierreRecord = {
+          uuid: cierreUuid,
+          id: cierreUuid,
+          libro_uuid: lId,
+          libro_id: lId,
+          mesa_uuid: selectedMesaId,
+          mesa_id: selectedMesaId,
+          multisala_uuid: multisalaUuid || null,
+          tipo: 'cierre',
+          fichas: cierreFichasPayload,
+          total: 0,
+          rellenos_devoluciones: [],
+          mesa_nombre: mesaObj?.nombre || '',
+          juego_nombre: mesaObj?.juego_nombre || '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      }
+
       // 1. Actualizar estado en memoria inmediatamente (0ms)
       const existingIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(recordUuid));
       if (existingIdx !== -1) {
         arqueoRecords[existingIdx] = newRecord;
-        arqueoRecords = [...arqueoRecords];
       } else {
         arqueoRecords = [...arqueoRecords, newRecord];
       }
 
+      if (newCierreRecord) {
+        const cIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(newCierreRecord.uuid || newCierreRecord.id));
+        if (cIdx !== -1) {
+          arqueoRecords[cIdx] = newCierreRecord;
+        } else {
+          arqueoRecords = [...arqueoRecords, newCierreRecord];
+        }
+      }
+      arqueoRecords = [...arqueoRecords];
+
       // 2. Guardar en base de datos local IndexedDB (<5ms)
       await upsertLocalItem('libro_arqueo_fichas', newRecord);
+      if (newCierreRecord) {
+        await upsertLocalItem('libro_arqueo_fichas', newCierreRecord);
+      }
 
-      triggerToast(`Mesa "${mesaObj?.nombre || 'Mesa'}" aperturada correctamente ($${formatMoney(total)}).`, 'success');
+      triggerToast(`Mesa "${mesaObj?.nombre || 'Mesa'}" aperturada con cierre inicial en $0.00.`, 'success');
 
       // Limpiar y resetear el formulario tras aperturar
       selectedMesaId = '';
@@ -304,47 +350,50 @@
 
       // 3. Sincronizar en segundo plano con el backend
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-      if (isOffline) {
-        await queueOutboxAction({
-          entity: 'libro_arqueo_fichas',
-          action: 'save',
-          endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
-          method: 'POST',
-          payload: newRecord,
-          uuid: recordUuid
-        });
-      } else {
-        (async () => {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4500);
-            const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(newRecord),
-              signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            if (res.ok) {
-              const json = await res.json();
-              if (json?.data) {
-                await upsertLocalItem('libro_arqueo_fichas', json.data);
+      const recordsToSync = [newRecord, ...(newCierreRecord ? [newCierreRecord] : [])];
+
+      for (const rec of recordsToSync) {
+        const recUuid = rec.uuid || rec.id;
+        if (isOffline) {
+          await queueOutboxAction({
+            entity: 'libro_arqueo_fichas',
+            action: 'save',
+            endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+            method: 'POST',
+            payload: rec,
+            uuid: recUuid
+          });
+        } else {
+          (async () => {
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 4500);
+              const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rec),
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              if (res.ok) {
+                const json = await res.json();
+                if (json?.data) {
+                  await upsertLocalItem('libro_arqueo_fichas', json.data);
+                }
               }
-            } else {
-              throw new Error(`Server returned ${res.status}`);
+            } catch (syncErr) {
+              console.warn('[ArqueoFichas] Encolando en Outbox:', syncErr);
+              await queueOutboxAction({
+                entity: 'libro_arqueo_fichas',
+                action: 'save',
+                endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+                method: 'POST',
+                payload: rec,
+                uuid: recUuid
+              });
             }
-          } catch (syncErr) {
-            console.warn('[ArqueoFichas] Encolando en Outbox:', syncErr);
-            await queueOutboxAction({
-              entity: 'libro_arqueo_fichas',
-              action: 'save',
-              endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
-              method: 'POST',
-              payload: newRecord,
-              uuid: recordUuid
-            });
-          }
-        })();
+          })();
+        }
       }
     } catch (err) {
       console.error('Error aperturando mesa:', err);
@@ -396,6 +445,19 @@
 
     // Calcular movimientos consolidados y totales para cada mesa
     for (const g of groupsMap.values()) {
+      // Si la mesa está aperturada pero no tiene cierre aún, inicializar cierre a 0 fichas
+      if (g.apertura && !g.cierre) {
+        g.cierre = {
+          uuid: `virtual-cierre-${g.mesaId}`,
+          id: `virtual-cierre-${g.mesaId}`,
+          mesa_uuid: g.mesaId,
+          mesa_id: g.mesaId,
+          tipo: 'cierre',
+          fichas: salaFichas.map(v => ({ valor: v, cantidad: 0, total: 0 })),
+          total: 0
+        };
+      }
+
       const apMovs = extractMovements(g.apertura);
       const ciMovs = extractMovements(g.cierre);
       // Apertura es siempre la fuente primaria de verdad si existe
@@ -518,6 +580,12 @@
     } else {
       arqueoRecords = [...arqueoRecords, savedRecord];
     }
+  }
+
+  // Liquidar mesa
+  function handleLiquidarMesa(group) {
+    if (!group) return;
+    triggerToast(`Mesa "${group.mesaNombre}" liquidada correctamente`, 'success');
   }
 
   // Eliminar Arqueo completo de una Mesa (Apertura y Cierre)
@@ -738,30 +806,36 @@
                   <div class="acciones-btn-col">
                     <button 
                       type="button" 
+                      class="btn-table-fill"
+                      on:click={() => handleOpenRellenoModal('relleno', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
+                      title="Registrar Fill (Relleno) para esta mesa"
+                    >
+                      Fill
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn-table-cred"
+                      on:click={() => handleOpenRellenoModal('devolucion', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
+                      title="Registrar Cred (Devolución) para esta mesa"
+                    >
+                      Cred
+                    </button>
+                    <button 
+                      type="button" 
                       class="btn-arquear"
                       on:click={() => handleOpenCierreModal(group)}
                       title="Registrar o editar el Cierre de esta mesa"
                     >
                       Cierre
                     </button>
-                    <div class="acciones-rd-row">
-                      <button 
-                        type="button" 
-                        class="btn-table-fill"
-                        on:click={() => handleOpenRellenoModal('relleno', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
-                        title="Registrar Fill (Relleno) para esta mesa"
-                      >
-                        Fill
-                      </button>
-                      <button 
-                        type="button" 
-                        class="btn-table-cred"
-                        on:click={() => handleOpenRellenoModal('devolucion', group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre }, group.apertura)}
-                        title="Registrar Cred (Devolución) para esta mesa"
-                      >
-                        Cred
-                      </button>
-                    </div>
+                    <button 
+                      type="button" 
+                      class="btn-liquidar"
+                      on:click={() => handleLiquidarMesa(group)}
+                      title="Liquidar mesa"
+                    >
+                      Liquidar
+                    </button>
                     {#if canDelete}
                       <button 
                         type="button" 
@@ -1346,47 +1420,6 @@
     border: 1px solid #d8b4fe;
   }
 
-  .acciones-rd-row {
-    display: flex;
-    gap: 5px;
-    width: 75px;
-  }
-
-  .btn-table-fill,
-  .btn-table-cred {
-    flex: 1;
-    border-radius: 4px;
-    padding: 4px 1px;
-    font-size: 11px;
-    font-weight: 800;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    text-align: center;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  }
-
-  .btn-table-fill {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1px solid #93c5fd;
-  }
-
-  .btn-table-fill:hover {
-    background: #dbeafe;
-    border-color: #3b82f6;
-  }
-
-  .btn-table-cred {
-    background: #faf5ff;
-    color: #7e22ce;
-    border: 1px solid #d8b4fe;
-  }
-
-  .btn-table-cred:hover {
-    background: #f3e8ff;
-    border-color: #a855f7;
-  }
-
   .text-blue {
     color: #2563eb !important;
   }
@@ -1455,40 +1488,80 @@
   .acciones-btn-col {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+  }
+
+  .btn-table-fill,
+  .btn-table-cred,
+  .btn-arquear,
+  .btn-liquidar,
+  .btn-eliminar {
+    width: 78px;
+    border-radius: 4px;
+    padding: 4.5px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+    box-sizing: border-box;
+    line-height: 1.2;
+  }
+
+  .btn-table-fill {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+    box-shadow: 0 1px 2px rgba(37, 99, 235, 0.1);
+  }
+
+  .btn-table-fill:hover {
+    background: #dbeafe;
+    border-color: #3b82f6;
+  }
+
+  .btn-table-cred {
+    background: #faf5ff;
+    color: #7e22ce;
+    border: 1px solid #d8b4fe;
+    box-shadow: 0 1px 2px rgba(126, 34, 206, 0.1);
+  }
+
+  .btn-table-cred:hover {
+    background: #f3e8ff;
+    border-color: #a855f7;
   }
 
   .btn-arquear {
     background: #2563eb;
     color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    padding: 5px 12px;
-    font-size: 11.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    border: 1px solid #1d4ed8;
     box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
-    width: 75px;
   }
 
   .btn-arquear:hover {
     background: #1d4ed8;
   }
 
+  .btn-liquidar {
+    background: #059669;
+    color: #ffffff;
+    border: 1px solid #047857;
+    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.25);
+  }
+
+  .btn-liquidar:hover {
+    background: #047857;
+  }
+
   .btn-eliminar {
     background: #dc2626;
     color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    padding: 4px 10px;
-    font-size: 11px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    border: 1px solid #b91c1c;
     box-shadow: 0 1px 2px rgba(220, 38, 38, 0.25);
-    width: 75px;
   }
 
   .btn-eliminar:hover {
