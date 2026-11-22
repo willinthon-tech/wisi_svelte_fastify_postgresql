@@ -133,8 +133,12 @@
 
   function formatMonto(val) {
     const num = parseFloat(val);
-    if (isNaN(num)) return '0.00';
-    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (isNaN(num)) return '0';
+    const hasDecimals = num % 1 !== 0;
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2
+    });
   }
 
   let localEmpleados = [];
@@ -384,7 +388,7 @@
         });
       });
     }
-    return list.sort((a, b) => Math.abs(b.total_monto) - Math.abs(a.total_monto));
+    return list.sort((a, b) => (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' }));
   })();
 
   $: resumenRangosNeto = resumenRangos.reduce((a, b) => a + (b.total_monto || 0), 0);
@@ -446,7 +450,7 @@
       });
     }
 
-    return filtered.sort((a, b) => Math.abs(b.total_monto) - Math.abs(a.total_monto));
+    return filtered.sort((a, b) => (a.empleado_nombre || '').localeCompare(b.empleado_nombre || '', undefined, { sensitivity: 'base' }));
   })();
 
   let unsubWs = null;
@@ -1216,7 +1220,7 @@
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalAportesMonto > 0 ? 'text-red' : 'text-slate'}">
-              {totalAportesMonto > 0 ? `( - $${formatMonto(totalAportesMonto)} )` : '$0.00'}
+              {totalAportesMonto > 0 ? `( - $${formatMonto(totalAportesMonto)} )` : '$0'}
             </span>
           </div>
           <div class="kpi-subtext">
@@ -1251,7 +1255,7 @@
               {:else if netoMonto > 0}
                 ${formatMonto(netoMonto)}
               {:else}
-                $0.00
+                $0
               {/if}
             </span>
           </div>
@@ -1432,7 +1436,7 @@
                       {:else if filteredNetoMonto > 0}
                         ${formatMonto(filteredNetoMonto)}
                       {:else}
-                        $0.00
+                        $0
                       {/if}
                     </span>
                   </td>
@@ -1500,7 +1504,7 @@
                       {:else if rg.total_monto > 0}
                         <span class="monto-value text-green font-bold">${formatMonto(rg.total_monto)}</span>
                       {:else}
-                        <span class="monto-value text-slate font-bold">$0.00</span>
+                        <span class="monto-value text-slate font-bold">$0</span>
                       {/if}
                     </td>
                     <td class="td-res-ops">
@@ -1531,7 +1535,7 @@
                       {:else if resumenRangosNeto > 0}
                         ${formatMonto(resumenRangosNeto)}
                       {:else}
-                        $0.00
+                        $0
                       {/if}
                     </span>
                   </td>
@@ -1607,7 +1611,7 @@
                       {:else if emp.total_monto > 0}
                         <span class="monto-value text-green font-bold">${formatMonto(emp.total_monto)}</span>
                       {:else}
-                        <span class="monto-value text-slate font-bold">$0.00</span>
+                        <span class="monto-value text-slate font-bold">$0</span>
                       {/if}
                     </td>
                     <td class="td-res-ops">
@@ -1638,7 +1642,7 @@
                       {:else if resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0) > 0}
                         ${formatMonto(resumenEmpleados.reduce((a, b) => a + (b.total_monto || 0), 0))}
                       {:else}
-                        $0.00
+                        $0
                       {/if}
                     </span>
                   </td>

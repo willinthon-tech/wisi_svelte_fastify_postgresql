@@ -88,8 +88,21 @@
       }
 
       return true;
-    });
+    }).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', undefined, { numeric: true, sensitivity: 'base' }));
   })();
+
+  function formatMoney(num) {
+    const val = Number(num) || 0;
+    const hasDecimals = val % 1 !== 0;
+    return val.toLocaleString('en-US', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2
+    });
+  }
+
+  $: sortedDropRecords = [...dropRecords].sort((a, b) => 
+    (a.mesa_nombre || '').localeCompare(b.mesa_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
+  );
 
   // Formato de opción de mesa: BJ 1 - Blackjacks
   function formatMesaOptionLabel(m) {
@@ -761,7 +774,7 @@
               </td>
             </tr>
           {:else}
-            {#each dropRecords as record, idx (record.uuid || record.id || idx)}
+            {#each sortedDropRecords as record, idx (record.uuid || record.id || idx)}
               {@const rec100 = Number(record.denominacion_100 ?? record.b100 ?? 0) || 0}
               {@const rec50 = Number(record.denominacion_50 ?? record.b50 ?? 0) || 0}
               {@const rec20 = Number(record.denominacion_20 ?? record.b20 ?? 0) || 0}
@@ -784,7 +797,7 @@
                 <td class="td-center">{rec10}</td>
                 <td class="td-center">{rec5}</td>
                 <td class="td-center">{rec1}</td>
-                <td class="td-center td-total-val">${recTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="td-center td-total-val">${formatMoney(recTotal)}</td>
                 {#if canDelete}
                   <td class="td-center td-acciones">
                     <button 
@@ -815,7 +828,7 @@
             <td class="td-center total-val-cell">$ {totalMoney10.toLocaleString()}</td>
             <td class="td-center total-val-cell">$ {totalMoney5.toLocaleString()}</td>
             <td class="td-center total-val-cell">$ {totalMoney1.toLocaleString()}</td>
-            <td class="td-center grand-total-cell">$ {grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td class="td-center grand-total-cell">$ {formatMoney(grandTotal)}</td>
             {#if canDelete}
               <td class="td-center"></td>
             {/if}

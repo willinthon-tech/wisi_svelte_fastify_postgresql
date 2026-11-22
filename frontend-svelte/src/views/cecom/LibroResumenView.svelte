@@ -931,7 +931,7 @@
       }
       const porMetodo = Object.values(mapMetodo)
         .map((item) => ({ ...item, balance: item.compras - item.pagos }))
-        .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
+        .sort((a, b) => (a.metodo || '').localeCompare(b.metodo || '', undefined, { sensitivity: 'base' }));
 
       const opsMet = porMetodo.reduce((acc, r) => acc + r.ops, 0);
       const comprasMet = porMetodo.reduce((acc, r) => acc + r.compras, 0);
@@ -955,7 +955,7 @@
       }
       const porJugador = Object.values(mapJugador)
         .map((item) => ({ ...item, balance: item.compras - item.pagos }))
-        .sort((a, b) => b.compras + b.pagos - (a.compras + a.pagos));
+        .sort((a, b) => (a.cliente || '').localeCompare(b.cliente || '', undefined, { sensitivity: 'base' }));
 
       const opsJug = porJugador.reduce((acc, r) => acc + r.ops, 0);
       const comprasJug = porJugador.reduce((acc, r) => acc + r.compras, 0);
@@ -1102,7 +1102,7 @@
         porcentaje: (item.montoAportes / grandTotalAportes) * 100,
         promedio: item.cantAportes > 0 ? item.montoAportes / item.cantAportes : 0
       }))
-      .sort((a, b) => b.montoAportes - a.montoAportes);
+      .sort((a, b) => (a.empleado_nombre || '').localeCompare(b.empleado_nombre || '', undefined, { sensitivity: 'base' }));
 
     // 8. Conteo de máquinas (Billeteros)
     const rawConteo = (rawData.conteo_maquinas || []).filter(c => matchesSub(c.multisala_uuid));
@@ -1443,11 +1443,12 @@
   function formatMoney(n) {
     if (n == null || isNaN(n)) return "$0";
     const num = Number(n);
+    const hasDecimals = num % 1 !== 0;
     if (num < 0) {
       return (
         "( - $" +
         Math.abs(num).toLocaleString("en-US", {
-          minimumFractionDigits: 0,
+          minimumFractionDigits: hasDecimals ? 2 : 0,
           maximumFractionDigits: 2,
         }) +
         " )"
@@ -1456,7 +1457,7 @@
     return (
       "$" +
       num.toLocaleString("en-US", {
-        minimumFractionDigits: 0,
+        minimumFractionDigits: hasDecimals ? 2 : 0,
         maximumFractionDigits: 2,
       })
     );

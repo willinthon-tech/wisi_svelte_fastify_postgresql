@@ -343,7 +343,9 @@
       g.total += Number(r.total || 0);
     }
 
-    const list = Array.from(groups.values()).sort((a, b) => b.total - a.total);
+    const list = Array.from(groups.values()).sort((a, b) => 
+      (a.rango_nombre || '').localeCompare(b.rango_nombre || '', undefined, { numeric: true, sensitivity: 'base' })
+    );
     return list;
   })();
 
@@ -373,8 +375,12 @@
 
   function formatMonto(val) {
     const num = parseFloat(val);
-    if (isNaN(num)) return '0.00';
-    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (isNaN(num)) return '0';
+    const hasDecimals = num % 1 !== 0;
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2
+    });
   }
 
   function formatNumber(val) {
@@ -385,7 +391,11 @@
 
   function formatMoney(num) {
     const val = Number(num) || 0;
-    return `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const hasDecimals = val % 1 !== 0;
+    return `$${val.toLocaleString('en-US', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2
+    })}`;
   }
 
   function limpiarCampos() {

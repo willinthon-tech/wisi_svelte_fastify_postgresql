@@ -293,8 +293,12 @@
 
   function formatMonto(val) {
     const num = parseFloat(val);
-    if (isNaN(num)) return '0.00';
-    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (isNaN(num)) return '0';
+    const hasDecimals = num % 1 !== 0;
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+      maximumFractionDigits: 2
+    });
   }
 
   function getCurrentTimeString() {
@@ -357,7 +361,7 @@
       countCompras: ops.filter(r => (r.tipo || '').toLowerCase() === 'compra').length,
       countPagos: ops.filter(r => (r.tipo || '').toLowerCase() === 'pago').length
     };
-  });
+  }).sort((a, b) => (a.metodo || '').localeCompare(b.metodo || '', undefined, { sensitivity: 'base' }));
 
   // 7. Resumen detallado por Cliente (agrupa saneando prefijos "De " / "Del ")
   $: resumenClientes = (() => {
@@ -386,7 +390,7 @@
         ...c,
         balance
       };
-    }).sort((a, b) => (b.compras + b.pagos) - (a.compras + a.pagos));
+    }).sort((a, b) => (a.cliente || '').localeCompare(b.cliente || '', undefined, { sensitivity: 'base' }));
   })();
 
   $: resumenClientesFiltrados = (() => {
@@ -1246,7 +1250,7 @@
           </div>
           <div class="kpi-value-row">
             <span class="kpi-value {totalPagos > 0 ? 'text-red' : 'text-slate'}">
-              {totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}
+              {totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0'}
             </span>
           </div>
           <div class="kpi-subtext">
@@ -1266,7 +1270,7 @@
               {:else if balanceNeto > 0}
                 ${formatMonto(balanceNeto)}
               {:else}
-                $0.00
+                $0
               {/if}
             </span>
           </div>
@@ -1447,7 +1451,7 @@
                     {:else if sortedBalanceNeto > 0}
                       ${formatMonto(sortedBalanceNeto)}
                     {:else}
-                      $0.00
+                      $0
                     {/if}
                   </td>
                   <td colspan={canEdit || canDelete ? 3 : 2}></td>
@@ -1512,7 +1516,7 @@
               <tr class="tfoot-totals-row">
                 <td class="td-left font-bold">TOTALES</td>
                 <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalCompras)}</td>
-                <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0.00'}</td>
+                <td class="td-res-monto font-mono font-bold {totalPagos > 0 ? 'text-red' : 'text-slate'}">{totalPagos > 0 ? `( - $${formatMonto(totalPagos)} )` : '$0'}</td>
                 <td class="td-res-monto font-mono font-bold {balanceNeto > 0 ? 'text-green' : (balanceNeto < 0 ? 'text-red' : 'text-slate')}">
                   {balanceNeto < 0 ? `( - $${formatMonto(Math.abs(balanceNeto))} )` : `$${formatMonto(balanceNeto)}`}
                 </td>
@@ -1589,7 +1593,7 @@
                 <tr class="tfoot-totals-row">
                   <td colspan="2" class="td-left font-bold">TOTALES ({resumenClientesFiltrados.length} {resumenClientesFiltrados.length === 1 ? 'cliente' : 'clientes'})</td>
                   <td class="td-res-monto font-mono font-bold text-green">${formatMonto(totalComprasClientesFiltrados)}</td>
-                  <td class="td-res-monto font-mono font-bold {totalPagosClientesFiltrados > 0 ? 'text-red' : 'text-slate'}">{totalPagosClientesFiltrados > 0 ? `( - $${formatMonto(totalPagosClientesFiltrados)} )` : '$0.00'}</td>
+                  <td class="td-res-monto font-mono font-bold {totalPagosClientesFiltrados > 0 ? 'text-red' : 'text-slate'}">{totalPagosClientesFiltrados > 0 ? `( - $${formatMonto(totalPagosClientesFiltrados)} )` : '$0'}</td>
                   <td class="td-res-monto font-mono font-bold {balanceNetoClientesFiltrados > 0 ? 'text-green' : (balanceNetoClientesFiltrados < 0 ? 'text-red' : 'text-slate')}">
                     {balanceNetoClientesFiltrados < 0 ? `( - $${formatMonto(Math.abs(balanceNetoClientesFiltrados))} )` : `$${formatMonto(balanceNetoClientesFiltrados)}`}
                   </td>

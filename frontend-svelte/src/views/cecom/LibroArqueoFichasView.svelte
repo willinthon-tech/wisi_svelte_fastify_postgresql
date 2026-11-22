@@ -134,9 +134,11 @@
   }
 
   function formatMoney(num) {
-    if (isNaN(num)) return '0.00';
-    return Number(num).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
+    if (isNaN(num)) return '0';
+    const val = Number(num) || 0;
+    const hasDecimals = val % 1 !== 0;
+    return val.toLocaleString('en-US', {
+      minimumFractionDigits: hasDecimals ? 2 : 0,
       maximumFractionDigits: 2
     });
   }
@@ -348,7 +350,7 @@
         await upsertLocalItem('libro_arqueo_fichas', newCierreRecord);
       }
 
-      triggerToast(`Mesa "${mesaObj?.nombre || 'Mesa'}" aperturada con cierre inicial en $0.00.`, 'success');
+      triggerToast(`Mesa "${mesaObj?.nombre || 'Mesa'}" aperturada con cierre inicial en $0.`, 'success');
 
       // Limpiar y resetear el formulario tras aperturar
       selectedMesaId = '';
