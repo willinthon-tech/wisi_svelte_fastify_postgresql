@@ -1161,8 +1161,10 @@
     );
 
     // 9. Resumen de Producción por Rango (Conteo Billeteros - Aportes y Devoluciones Netos)
+    // Solo se calcula y anexa si se han colocado datos de billetero
+    const hasBilleteros = Boolean((sortedConteoList && sortedConteoList.length > 0) || (conteoPorRango && conteoPorRango.length > 0));
     let produccionPorRango = [];
-    const hasAnyMaquinaOps = sortedConteoList.length > 0 || sortedAportesList.length > 0;
+    const hasAnyMaquinaOps = hasBilleteros;
 
     if (hasAnyMaquinaOps) {
       const mapProduccionRango = {};
@@ -1291,40 +1293,49 @@
     };
 
     // Producción de máquinas: ((billetero + devoluciones) - aportes)
-    const produccionMaquinas = (conteoTotales.grandTotal + aportesTotales.totalDevoluciones) - aportesTotales.totalAportes;
+    // Solo se calcula si se cuenta con datos de billetero
+    const produccionMaquinas = hasBilleteros ? ((conteoTotales.grandTotal + aportesTotales.totalDevoluciones) - aportesTotales.totalAportes) : 0;
 
     // Compras y Pagos (Control de Clientes): Compras - Pagos
     const comprasClientes = Number(dataClientesGlobal.totales.totalCompras) || 0;
     const pagosClientes = Number(dataClientesGlobal.totales.totalPagos) || 0;
     const produccionClientes = comprasClientes - pagosClientes;
 
-    // Producción de cada sala: (produccion de mesa + produccion de maquina)
-    const produccionFinal = produccionMesas + produccionMaquinas;
-    const totalIngresosBrutos = dropTotales.grandTotal + conteoTotales.grandTotal + dataClientesGlobal.totales.totalCompras;
-
-    // Numeración dinámica de secciones (empieza desde Resumen Producción)
-    const hasResumenMesas = Boolean((drop_mesas && drop_mesas.length > 0) || (arqueoMesaGroups && arqueoMesaGroups.length > 0));
-    const hasResumenMaquinas = Boolean((sortedConteoList && sortedConteoList.length > 0) || (sortedAportesList && sortedAportesList.length > 0));
-    const hasClientes = Boolean(sortedControlClientes && sortedControlClientes.length > 0);
-    const hasResumenProduccion = Boolean(hasResumenMesas || hasResumenMaquinas);
-
-    let idxSeccion = 0;
-    const numResumenProduccion = hasResumenProduccion ? ++idxSeccion : 0;
-
     // Mesas (unifica Drop y Faltantes y Sobrantes)
     const hasDropMesas = Boolean(drop_mesas && drop_mesas.length > 0);
     const hasArqueoFichas = Boolean(arqueoMesaGroups && arqueoMesaGroups.length > 0);
     const hasMesas = Boolean(hasDropMesas || hasArqueoFichas);
+
+    // Máquinas (unifica Billetero y Aportes/Devoluciones)
+    const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (aportesPorRango && aportesPorRango.length > 0) || (aportesPorEmpleado && aportesPorEmpleado.length > 0));
+
+    // Producción de mesas: NO anexar si no hay datos de sobrantes y faltantes (arqueo de fichas)
+    const hasResumenMesas = Boolean(hasArqueoFichas);
+
+    // Producción de máquinas: NO colocar si no colocan dato de billetero (conteo de máquinas)
+    const hasResumenMaquinas = Boolean(hasBilleteros);
+
+    // Resumen de Producción solo si al menos uno tiene datos completos de producción
+    const hasResumenProduccion = Boolean(hasResumenMesas || hasResumenMaquinas);
+
+    // Producción de cada sala: solo suma los módulos con producción válidamente anexada
+    const effectiveProduccionMesas = hasResumenMesas ? produccionMesas : 0;
+    const effectiveProduccionMaquinas = hasResumenMaquinas ? produccionMaquinas : 0;
+    const produccionFinal = effectiveProduccionMesas + effectiveProduccionMaquinas;
+    const totalIngresosBrutos = (hasDropMesas ? dropTotales.grandTotal : 0) + (hasBilleteros ? conteoTotales.grandTotal : 0) + dataClientesGlobal.totales.totalCompras;
+
+    // Numeración dinámica de secciones (empieza desde Resumen Producción)
+    const hasClientes = Boolean(sortedControlClientes && sortedControlClientes.length > 0);
+    let idxSeccion = 0;
+    const numResumenProduccion = hasResumenProduccion ? ++idxSeccion : 0;
     const numMesas = hasMesas ? ++idxSeccion : 0;
 
     // Novedades de Mesas
     const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
     const numNovedadesMesas = hasNovedadesMesas ? ++idxSeccion : 0;
 
-    // Máquinas (unifica Billetero y Aportes/Devoluciones)
-    const hasBilleteros = Boolean((sortedConteoList && sortedConteoList.length > 0) || (conteoPorRango && conteoPorRango.length > 0));
-    const hasAportes = Boolean((sortedAportesList && sortedAportesList.length > 0) || (aportesPorRango && aportesPorRango.length > 0) || (aportesPorEmpleado && aportesPorEmpleado.length > 0));
-    const hasMaquinas = Boolean(hasBilleteros || hasAportes || (produccionPorRango && produccionPorRango.length > 0));
+    // Máquinas
+    const hasMaquinas = Boolean(hasBilleteros || hasAportes);
     const numMaquinas = hasMaquinas ? ++idxSeccion : 0;
 
     // Compras y Pagos (Control de Clientes)
@@ -1341,6 +1352,7 @@
     const numeracion = {
       hasResumenMesas,
       hasResumenMaquinas,
+      hasResumenProduccion,
       numResumenProduccion,
       hasMesas,
       numMesas,
@@ -1358,6 +1370,11 @@
       activeHorarios: getActiveHorarios(datos),
       hasResumenMesas,
       hasResumenMaquinas,
+      hasResumenProduccion,
+      hasDropMesas,
+      hasArqueoFichas,
+      hasBilleteros,
+      hasAportes,
       hasMaquinas,
       numeracion,
       drop_mesas,
@@ -1777,7 +1794,7 @@
       <!-- ============================================================
            PRODUCCIÓN GLOBAL (Consolidado General de Multisalas)
            ============================================================ -->
-      {#if isMultisala && renderedSections.length > 0}
+      {#if isMultisala && renderedSections.length > 0 && renderedSections.some(sec => sec.subData?.hasResumenProduccion)}
         <div class="multisala-header-summary">
           <div class="quick-kpi-grid">
             {#each renderedSections as sec}
@@ -1894,7 +1911,7 @@
                   </div>
                 </div>
 
-                {#if tabResumenProd === 'mesas'}
+                {#if tabResumenProd === 'mesas' && section.subData.hasResumenMesas}
                   {#if section.subData.drop_mesas && section.subData.drop_mesas.length > 0}
                     <span class="sub-count-badge">
                       {section.subData.drop_mesas.length} {section.subData.drop_mesas.length === 1 ? 'mesa' : 'mesas'}
@@ -1904,7 +1921,7 @@
                       {section.subData.arqueoMesaGroups.length} {section.subData.arqueoMesaGroups.length === 1 ? 'mesa' : 'mesas'}
                     </span>
                   {/if}
-                {:else if tabResumenProd === 'maquinas'}
+                {:else if tabResumenProd === 'maquinas' && section.subData.hasResumenMaquinas}
                   {#if section.subData.conteo_maquinas && section.subData.conteo_maquinas.length > 0}
                     <span class="sub-count-badge">
                       {section.subData.conteo_maquinas.length} {section.subData.conteo_maquinas.length === 1 ? 'máquina' : 'máquinas'}
@@ -1913,7 +1930,7 @@
                 {/if}
               </div>
 
-              {#if tabResumenProd === 'mesas'}
+              {#if tabResumenProd === 'mesas' && section.subData.hasResumenMesas}
                 <!-- Indicadores de rendimiento de Mesas -->
                 <div class="quick-kpi-grid">
                   <div class="kpi-card">
@@ -1946,7 +1963,7 @@
                     </span>
                   </div>
                 </div>
-              {:else if tabResumenProd === 'maquinas'}
+              {:else if tabResumenProd === 'maquinas' && section.subData.hasResumenMaquinas}
                 <!-- Indicadores de rendimiento de Máquinas -->
                 <div class="quick-kpi-grid">
                   <div class="kpi-card">
@@ -2032,61 +2049,67 @@
                     {section.subData.numeracion.numMesas}. Mesas
                   </h2>
                   <div class="tab-toggle-group">
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabMesa === 'grupo'}
-                      on:click={() => (tabMesa = 'grupo')}
-                    >
-                      Total por juego
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabMesa === 'total'}
-                      on:click={() => (tabMesa = 'total')}
-                    >
-                      Total por mesa
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabMesa === 'drop'}
-                      on:click={() => (tabMesa = 'drop')}
-                    >
-                      Drop
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabMesa === 'cierre' || tabMesa === 'faltantes'}
-                      on:click={() => (tabMesa = 'cierre')}
-                    >
-                      Cierre
-                    </button>
+                    {#if section.subData.hasArqueoFichas}
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMesa === 'grupo'}
+                        on:click={() => (tabMesa = 'grupo')}
+                      >
+                        Total por juego
+                      </button>
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMesa === 'total'}
+                        on:click={() => (tabMesa = 'total')}
+                      >
+                        Total por mesa
+                      </button>
+                    {/if}
+                    {#if section.subData.hasDropMesas}
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMesa === 'drop' || (!section.subData.hasArqueoFichas && (tabMesa === 'grupo' || tabMesa === 'total'))}
+                        on:click={() => (tabMesa = 'drop')}
+                      >
+                        Drop
+                      </button>
+                    {/if}
+                    {#if section.subData.hasArqueoFichas}
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMesa === 'cierre' || tabMesa === 'faltantes'}
+                        on:click={() => (tabMesa = 'cierre')}
+                      >
+                        Cierre
+                      </button>
+                    {/if}
                   </div>
                 </div>
 
-                {#if tabMesa === 'grupo'}
+                {#if tabMesa === 'grupo' && section.subData.hasArqueoFichas}
                   <span class="sub-count-badge">
                     {section.subData.resumenMesasPorJuego?.length || 0} {section.subData.resumenMesasPorJuego?.length === 1 ? 'juego' : 'juegos'}
                   </span>
-                {:else if tabMesa === 'total'}
+                {:else if tabMesa === 'total' && section.subData.hasArqueoFichas}
                   <span class="sub-count-badge">
                     {section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0} {(section.subData.resumenMesasLista?.length || section.subData.drop_mesas?.length || 0) === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
-                {:else if tabMesa === 'drop'}
-                  <span class="sub-count-badge">
-                    {section.subData.drop_mesas?.length || 0} {section.subData.drop_mesas?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
-                  </span>
-                {:else if (tabMesa === 'cierre' || tabMesa === 'faltantes') && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                {:else if (tabMesa === 'cierre' || tabMesa === 'faltantes') && section.subData.hasArqueoFichas && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
                   <span class="sub-count-badge">
                     {section.subData.arqueoMesaGroups?.length || 0} {section.subData.arqueoMesaGroups?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
+                  </span>
+                {:else}
+                  <span class="sub-count-badge">
+                    {section.subData.drop_mesas?.length || 0} {section.subData.drop_mesas?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
                   </span>
                 {/if}
               </div>
 
-              {#if tabMesa === 'grupo'}
+              {#if tabMesa === 'grupo' && section.subData.hasArqueoFichas}
                 <!-- Cuadro Resumen Total por Juego -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
@@ -2123,7 +2146,7 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if tabMesa === 'total'}
+              {:else if tabMesa === 'total' && section.subData.hasArqueoFichas}
                 <!-- Cuadro Resumen Total por Mesa -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
@@ -2485,34 +2508,36 @@
                     {section.subData.numeracion.numMaquinas}. Máquinas
                   </h2>
                   <div class="tab-toggle-group">
+                    {#if section.subData.hasBilleteros}
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMaquina === 'total'}
+                        on:click={() => (tabMaquina = 'total')}
+                      >
+                        Total
+                      </button>
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMaquina === 'billetero_rango'}
+                        on:click={() => (tabMaquina = 'billetero_rango')}
+                      >
+                        Billetero por rango
+                      </button>
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMaquina === 'billetero_detallado'}
+                        on:click={() => (tabMaquina = 'billetero_detallado')}
+                      >
+                        Billetero por maquina
+                      </button>
+                    {/if}
                     <button
                       type="button"
                       class="tab-toggle-btn"
-                      class:active={tabMaquina === 'total'}
-                      on:click={() => (tabMaquina = 'total')}
-                    >
-                      Total
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabMaquina === 'billetero_rango'}
-                      on:click={() => (tabMaquina = 'billetero_rango')}
-                    >
-                      Billetero por rango
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabMaquina === 'billetero_detallado'}
-                      on:click={() => (tabMaquina = 'billetero_detallado')}
-                    >
-                      Billetero por maquina
-                    </button>
-                    <button
-                      type="button"
-                      class="tab-toggle-btn"
-                      class:active={tabMaquina === 'aportes_rango'}
+                      class:active={tabMaquina === 'aportes_rango' || (!section.subData.hasBilleteros && (tabMaquina === 'total' || tabMaquina === 'billetero_rango' || tabMaquina === 'billetero_detallado'))}
                       on:click={() => (tabMaquina = 'aportes_rango')}
                     >
                       A y D por rango
@@ -2536,21 +2561,17 @@
                   </div>
                 </div>
 
-                {#if tabMaquina === 'total'}
+                {#if tabMaquina === 'total' && section.subData.hasBilleteros}
                   <span class="sub-count-badge">
                     {section.subData.produccionPorRango?.length || 0} {section.subData.produccionPorRango?.length === 1 ? 'rango' : 'rangos'}
                   </span>
-                {:else if tabMaquina === 'billetero_rango'}
+                {:else if tabMaquina === 'billetero_rango' && section.subData.hasBilleteros}
                   <span class="sub-count-badge">
                     {section.subData.conteoPorRango?.length || 0} {section.subData.conteoPorRango?.length === 1 ? 'rango' : 'rangos'}
                   </span>
-                {:else if tabMaquina === 'billetero_detallado'}
+                {:else if tabMaquina === 'billetero_detallado' && section.subData.hasBilleteros}
                   <span class="sub-count-badge">
                     {section.subData.conteo_maquinas?.length || 0} {section.subData.conteo_maquinas?.length === 1 ? 'máquina contada' : 'máquinas contadas'}
-                  </span>
-                {:else if tabMaquina === 'aportes_rango'}
-                  <span class="sub-count-badge">
-                    {section.subData.aportesPorRango?.length || 0} {section.subData.aportesPorRango?.length === 1 ? 'rango' : 'rangos'}
                   </span>
                 {:else if tabMaquina === 'aportes_empleado'}
                   <span class="sub-count-badge">
@@ -2560,10 +2581,14 @@
                   <span class="sub-count-badge">
                     {section.subData.aportesTotales.totalOps} {section.subData.aportesTotales.totalOps === 1 ? 'operación registrada' : 'operaciones registradas'}
                   </span>
+                {:else}
+                  <span class="sub-count-badge">
+                    {section.subData.aportesPorRango?.length || 0} {section.subData.aportesPorRango?.length === 1 ? 'rango' : 'rangos'}
+                  </span>
                 {/if}
               </div>
 
-              {#if tabMaquina === 'total'}
+              {#if tabMaquina === 'total' && section.subData.hasBilleteros}
                 <!-- Tab: Total (Producción por Rango: Billetero + Devoluciones - Aportes) -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
@@ -2601,7 +2626,7 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if tabMaquina === 'billetero_rango'}
+              {:else if tabMaquina === 'billetero_rango' && section.subData.hasBilleteros}
                 <!-- Tab: Conteo de Billeteros por Rango -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table">
@@ -2650,7 +2675,7 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if tabMaquina === 'billetero_detallado'}
+              {:else if tabMaquina === 'billetero_detallado' && section.subData.hasBilleteros}
                 <!-- Tab: Conteo Detallado de Máquinas -->
                 <div class="table-responsive-wrapper">
                   <table class="sheet-detail-table">
@@ -2700,7 +2725,7 @@
                     </tfoot>
                   </table>
                 </div>
-              {:else if tabMaquina === 'aportes_rango'}
+              {:else if tabMaquina === 'aportes_rango' || (!section.subData.hasBilleteros && (tabMaquina === 'total' || tabMaquina === 'billetero_rango' || tabMaquina === 'billetero_detallado'))}
                 <!-- Tab: Aportes y Devoluciones por Rango -->
                 <div class="table-responsive-wrapper">
                   <table class="compact-table">
