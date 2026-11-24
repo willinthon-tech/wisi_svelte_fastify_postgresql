@@ -2454,9 +2454,6 @@
                         <tr>
                           <td class="td-mesa font-bold" style="vertical-align: middle;">
                             <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
-                            {#if group.juegoNombre}
-                              <span class="mesa-sub-juego" style="display: block; font-size: 11px; color: #64748b; font-weight: normal; margin-top: 2px;">{group.juegoNombre}</span>
-                            {/if}
                           </td>
                           <td class="td-left nota-cell-expanded" style="vertical-align: middle; padding: 12px 18px; font-size: 13.5px; line-height: 1.5; color: {notaText ? '#0f172a' : '#94a3b8'};">
                             {#if notaText}
