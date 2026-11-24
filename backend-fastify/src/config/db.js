@@ -304,6 +304,7 @@ export async function initDb() {
       }
       await sql.unsafe(`ALTER TABLE libro_control_clientes DROP COLUMN IF EXISTS caja;`);
       await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS hora VARCHAR(20);`);
+      await sql.unsafe(`ALTER TABLE libro_aportes ADD COLUMN IF NOT EXISTS operador VARCHAR(150);`);
       await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS rellenos_devoluciones JSONB DEFAULT '[]'::jsonb;`);
       await sql.unsafe(`ALTER TABLE libro_datos DROP CONSTRAINT IF EXISTS libro_datos_libro_uuid_key;`);
       await sql.unsafe(`DROP INDEX IF EXISTS libro_datos_libro_uuid_key;`);

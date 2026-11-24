@@ -76,9 +76,9 @@ export function cleanPersonName(rawName) {
   let changed = true;
   while (changed) {
     changed = false;
-    // Conectores/etiquetas que NUNCA inician un nombre en este contexto:
-    // de, del, en, por, con, para, via, vía, al, a, cliente, operador, cajero, sr, sra, don, doña
-    const newStart = name.replace(/^(?:de|del|en|por|con|para|via|vía|al|a|cliente|operador|cajero|sr\.?|sra\.?|don|do[ñn]a)(?:\s+|$)/i, '');
+    // Conectores/etiquetas/letras residuales que NUNCA inician un nombre en este contexto:
+    // de, del, en, por, con, para, via, vía, al, a, cliente, operador, cajero, sr, sra, don, doña, o una letra huérfana
+    const newStart = name.replace(/^(?:de|del|en|por|con|para|via|vía|al|a|cliente|operador|cajero|sr\.?|sra\.?|don|do[ñn]a|[a-z]\b)(?:\s+|$)/i, '');
     if (newStart !== name) {
       name = newStart.trim();
       changed = true;
@@ -140,11 +140,16 @@ export function calculateSimilarity(str1, str2) {
 
 // Diccionario de Rangos de Máquinas
 const RANGO_RULES = [
-  { rango: 'Rango 1', regex: /\b(r(?:ango|g)?\s*[-_]?\s*1)\b/i },
-  { rango: 'Rango 2', regex: /\b(r(?:ango|g)?\s*[-_]?\s*2)\b/i },
-  { rango: 'Rango 3', regex: /\b(r(?:ango|g)?\s*[-_]?\s*3)\b/i },
-  { rango: 'Rango 4', regex: /\b(r(?:ango|g)?\s*[-_]?\s*4)\b/i },
-  { rango: 'Rango 5', regex: /\b(r(?:ango|g)?\s*[-_]?\s*5)\b/i },
+  { rango: 'Rango 10', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:10|diez))\b/i },
+  { rango: 'Rango 1', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:1|uno))\b/i },
+  { rango: 'Rango 2', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:2|dos))\b/i },
+  { rango: 'Rango 3', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:3|tres))\b/i },
+  { rango: 'Rango 4', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:4|cuatro))\b/i },
+  { rango: 'Rango 5', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:5|cinco))\b/i },
+  { rango: 'Rango 6', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:6|seis))\b/i },
+  { rango: 'Rango 7', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:7|siete))\b/i },
+  { rango: 'Rango 8', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:8|ocho))\b/i },
+  { rango: 'Rango 9', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:9|nueve))\b/i },
   { rango: 'Rango Fumadores', regex: /\b(r(?:ango)?\s*fumadores?|fumadores?|fuma)\b/i },
   { rango: 'Ruleta Electrónica', regex: /\b(ruleta(?:\s+electr[oó]nica)?|ruleta\s*elec)\b/i },
   { rango: 'Sin Rango', regex: /\b(sin\s*rango|sinrango|sr)\b/i }
@@ -451,9 +456,10 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     // Patrón numérico completo que soporta separadores de miles y decimales
     const NUM_PATTERN = '(?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)';
 
-    // Prioridad 1: Número con indicador monetario explícito ($1000, 1000$, 1000d, 1000usd, 1000bs, 1000 ref, etc.)
+    // Prioridad 1: Número con indicador monetario explícito ($1000, 1000$, 1000d, 1000usdt, 1000usd, 1000bs, 1000 ref, etc.)
+    // NOTA CLAVE: usdt\b debe ir ANTES de usd\b para evitar que 100 USDT haga match parcial con "100 USD" y deje una "T" huérfana
     const explicitMontoRegex = new RegExp(
-      `(?:[\\$€£]|bs\\.?|ref\\.?)\\s*(${NUM_PATTERN})|(${NUM_PATTERN})\\s*(?:[\\$€£]|usd|usdt|bs\\.?|ref|dlls?|d[oó]lares?|divisas?|d\\b)`,
+      `(?:[\\$€£]|bs\\.?|ref\\.?)\\s*(${NUM_PATTERN})|(${NUM_PATTERN})\\s*(?:[\\$€£]|usdt\\b|usd\\b|bs\\.?|ref|dlls?|d[oó]lares?|dolar|divisas?|d\\b)`,
       'i'
     );
     const explicitMontoMatch = textForMonto.match(explicitMontoRegex);

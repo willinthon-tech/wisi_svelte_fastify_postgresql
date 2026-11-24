@@ -961,7 +961,8 @@ class WhatsAppService {
             rango_uuid,
             tipo,
             monto,
-            hora
+            hora,
+            operador
           ) VALUES (
             ${libro.uuid}::uuid,
             ${targetMultisalaUuid ? sql`${targetMultisalaUuid}::uuid` : sql`NULL`},
@@ -969,7 +970,8 @@ class WhatsAppService {
             ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
             ${parsed.tipo},
             ${parsed.monto},
-            ${horaStr}
+            ${horaStr},
+            ${empleadoNombre || null}
           )
           RETURNING uuid
         `;
@@ -1432,7 +1434,7 @@ class WhatsAppService {
 
           const insertRes = await sql`
             INSERT INTO libro_aportes (
-              libro_uuid, multisala_uuid, empleado_uuid, rango_uuid, tipo, monto, hora
+              libro_uuid, multisala_uuid, empleado_uuid, rango_uuid, tipo, monto, hora, operador
             ) VALUES (
               ${libroUuid}::uuid,
               ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
@@ -1440,7 +1442,8 @@ class WhatsAppService {
               ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
               ${parsed.tipo},
               ${parsed.monto},
-              ${horaStr}
+              ${horaStr},
+              ${empleadoNombre || null}
             ) RETURNING uuid
           `;
           const newRecordUuid = insertRes[0]?.uuid;
@@ -1475,7 +1478,8 @@ class WhatsAppService {
                 monto = ${parsed.monto},
                 empleado_uuid = ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
                 rango_uuid = ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
-                hora = ${horaStr}
+                hora = ${horaStr},
+                operador = ${empleadoNombre || null}
             WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
           `;
 

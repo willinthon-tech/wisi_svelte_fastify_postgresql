@@ -202,6 +202,20 @@ class WhatsAppDictionaryService {
     const norm = normalizeText(nombre);
     aliases.add(norm);
 
+    // Mapeo de números textuales a dígitos
+    const numWords = {
+      '1': ['uno'],
+      '2': ['dos'],
+      '3': ['tres'],
+      '4': ['cuatro'],
+      '5': ['cinco'],
+      '6': ['seis'],
+      '7': ['siete'],
+      '8': ['ocho'],
+      '9': ['nueve'],
+      '10': ['diez']
+    };
+
     // Si tiene número de rango (ej. "Rango 1", "Rango 2", "Rango 10")
     const numMatch = norm.match(/\b([1-9]|1\d|20)\b/);
     if (numMatch) {
@@ -212,9 +226,27 @@ class WhatsAppDictionaryService {
       aliases.add(`r ${num}`);
       aliases.add(`rg${num}`);
       aliases.add(`rg ${num}`);
+      aliases.add(`ran${num}`);
+      aliases.add(`ran ${num}`);
       aliases.add(`r-${num}`);
       aliases.add(`r_${num}`);
+      aliases.add(`r.${num}`);
+      aliases.add(`r:${num}`);
+      aliases.add(`rg-${num}`);
+      aliases.add(`rg_${num}`);
+      aliases.add(`rg.${num}`);
+      aliases.add(`rg:${num}`);
       aliases.add(`rango-${num}`);
+
+      // Añadir variantes con palabra escrita (ej. "rango dos", "r dos")
+      const words = numWords[num] || [];
+      for (const w of words) {
+        aliases.add(`rango ${w}`);
+        aliases.add(`rango${w}`);
+        aliases.add(`r ${w}`);
+        aliases.add(`rg ${w}`);
+        aliases.add(`ran ${w}`);
+      }
     }
 
     if (norm.includes('fuma')) {
@@ -331,11 +363,16 @@ class WhatsAppDictionaryService {
 
     // Reglas de fallback habituales por si algún rango estándar no estuviera en BD
     const standardFallbacks = [
-      { rango: 'Rango 1', regex: /\b(r(?:ango|g)?\s*[-_]?\s*1)\b/i },
-      { rango: 'Rango 2', regex: /\b(r(?:ango|g)?\s*[-_]?\s*2)\b/i },
-      { rango: 'Rango 3', regex: /\b(r(?:ango|g)?\s*[-_]?\s*3)\b/i },
-      { rango: 'Rango 4', regex: /\b(r(?:ango|g)?\s*[-_]?\s*4)\b/i },
-      { rango: 'Rango 5', regex: /\b(r(?:ango|g)?\s*[-_]?\s*5)\b/i },
+      { rango: 'Rango 10', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:10|diez))\b/i },
+      { rango: 'Rango 1', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:1|uno))\b/i },
+      { rango: 'Rango 2', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:2|dos))\b/i },
+      { rango: 'Rango 3', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:3|tres))\b/i },
+      { rango: 'Rango 4', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:4|cuatro))\b/i },
+      { rango: 'Rango 5', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:5|cinco))\b/i },
+      { rango: 'Rango 6', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:6|seis))\b/i },
+      { rango: 'Rango 7', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:7|siete))\b/i },
+      { rango: 'Rango 8', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:8|ocho))\b/i },
+      { rango: 'Rango 9', regex: /\b(r(?:ango|g|an)?\s*[-_.:]?\s*(?:9|nueve))\b/i },
       { rango: 'Rango Fumadores', regex: /\b(r(?:ango)?\s*fumadores?|fumadores?|fuma)\b/i },
       { rango: 'Ruleta Electrónica', regex: /\b(ruleta(?:\s+electr[oó]nica)?|ruleta\s*elec)\b/i },
       { rango: 'Sin Rango', regex: /\b(sin\s*rango|sinrango|sr)\b/i }
@@ -759,15 +796,16 @@ class WhatsAppDictionaryService {
       candidates = this.allEmpleadosCache;
     }
 
-    if (!cleanOperador || candidates.length === 0) {
+    if (!cleanOperador) {
       // Sin operador especificado
-      const genEmp = candidates.find(e => e.normName === 'general') || candidates[0];
+      const genEmp = candidates.find(e => e.normName === 'general') || 
+                     this.allEmpleadosCache.find(e => e.normName === 'general') || null;
       return {
         empleadoUuid: genEmp?.uuid || null,
         empleadoNombre: genEmp?.nombre || 'Operador General',
         cargo: genEmp?.cargo || '',
-        foundEmp: false,
-        score: 0,
+        foundEmp: Boolean(genEmp),
+        score: genEmp ? 100 : 0,
         empFallbackUsado: true,
         esCoincidenciaExacta: false,
         ambiguedad: false,
@@ -777,12 +815,56 @@ class WhatsAppDictionaryService {
 
     const normTarget = normalizeText(cleanOperador);
 
-    // Calcular score para cada candidato en la sala
-    const scoredList = candidates.map(emp => {
+    // 1. Calcular score para cada candidato en la sala especificada
+    let scoredList = candidates.map(emp => {
       const score = this.scoreNameMatch(normTarget, emp.normName, emp.tokens, emp.cargo);
       return { emp, score };
     }).filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score);
+
+    // 2. Si no se encontró en la sala y la búsqueda fue restringida a sala, buscar en toda la empresa (allEmpleadosCache)
+    if ((scoredList.length === 0 || scoredList[0].score < 50) && candidates !== this.allEmpleadosCache && this.allEmpleadosCache.length > 0) {
+      const globalScored = this.allEmpleadosCache.map(emp => {
+        const score = this.scoreNameMatch(normTarget, emp.normName, emp.tokens, emp.cargo);
+        return { emp, score };
+      }).filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      if (globalScored.length > 0 && globalScored[0].score >= 50) {
+        scoredList = globalScored;
+      }
+    }
+
+    // 3. Si aún no se encontró en caché, consultar directamente en PostgreSQL
+    if ((scoredList.length === 0 || scoredList[0].score < 50) && isPgConnected && sql) {
+      try {
+        const dbEmps = await sql`
+          SELECT e.uuid, e.nombre, COALESCE(c.nombre, '') AS cargo
+          FROM empleados e
+          LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
+          WHERE (lower(trim(e.nombre)) = ${normTarget} OR e.nombre ILIKE ${'%' + normTarget + '%'})
+            AND COALESCE(e.activo, true) = true
+            AND COALESCE(e.is_deleted, false) = false
+          ORDER BY CASE WHEN lower(trim(e.nombre)) = ${normTarget} THEN 1 ELSE 2 END, e.nombre ASC
+          LIMIT 1
+        `;
+        if (dbEmps.length > 0) {
+          return {
+            empleadoUuid: dbEmps[0].uuid,
+            empleadoNombre: dbEmps[0].nombre,
+            cargo: dbEmps[0].cargo || '',
+            foundEmp: true,
+            score: 95,
+            empFallbackUsado: false,
+            esCoincidenciaExacta: true,
+            ambiguedad: false,
+            candidatos: []
+          };
+        }
+      } catch (eDb) {
+        console.warn('Error en fallback directo a PostgreSQL para empleado:', eDb.message);
+      }
+    }
 
     if (scoredList.length > 0) {
       const best = scoredList[0];
@@ -824,13 +906,13 @@ class WhatsAppDictionaryService {
       }
     }
 
-    // Si el score fue menor a 50 (no se encontró al empleado en la sala)
-    // Asignar primer empleado como fallback PERO con flag explícito de NO encontrado
-    const fallbackEmp = candidates.find(e => e.normName === 'general') || candidates[0];
+    // Si el score fue menor a 50 (el operador NO está registrado en la base de datos)
+    // REGLA CRÍTICA: NUNCA asignar candidates[0] (Abel Gonzalez) ni otro empleado aleatorio.
+    // Preservar el nombre exacto que escribió el usuario (ej. "Monica Almedo") y dejar empleadoUuid = null
     return {
-      empleadoUuid: fallbackEmp?.uuid || null,
-      empleadoNombre: fallbackEmp?.nombre || 'Operador General',
-      cargo: fallbackEmp?.cargo || '',
+      empleadoUuid: null,
+      empleadoNombre: cleanOperador,
+      cargo: '',
       foundEmp: false,
       score: 0,
       empFallbackUsado: true,
@@ -891,11 +973,24 @@ class WhatsAppDictionaryService {
     const normTarget = normalizeText(cleanCliente);
 
     // Calcular score con los clientes de la sala
-    const scoredList = candidates.map(cli => {
+    let scoredList = candidates.map(cli => {
       const score = this.scoreNameMatch(normTarget, cli.normName, cli.tokens);
       return { cli, score };
     }).filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score);
+
+    // 2. Si no se encontró en la sala, buscar en toda la base de clientes en memoria
+    if ((scoredList.length === 0 || scoredList[0].score < 60) && candidates !== this.allClientesCache && this.allClientesCache.length > 0) {
+      const globalScored = this.allClientesCache.map(cli => {
+        const score = this.scoreNameMatch(normTarget, cli.normName, cli.tokens);
+        return { cli, score };
+      }).filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      if (globalScored.length > 0 && globalScored[0].score >= 60) {
+        scoredList = globalScored;
+      }
+    }
 
     if (scoredList.length > 0 && scoredList[0].score >= 60) {
       const best = scoredList[0];
@@ -906,6 +1001,30 @@ class WhatsAppDictionaryService {
         score: best.score,
         esCoincidenciaExacta: best.score >= 80
       };
+    }
+
+    // 3. Fallback directo a PostgreSQL por si fue creado recientemente
+    if (isPgConnected && sql) {
+      try {
+        const dbClients = await sql`
+          SELECT uuid, nombre FROM clientes 
+          WHERE (lower(trim(nombre)) = ${normTarget} OR nombre ILIKE ${'%' + normTarget + '%'})
+            AND COALESCE(is_deleted, false) = false
+          ORDER BY CASE WHEN lower(trim(nombre)) = ${normTarget} THEN 1 ELSE 2 END, nombre ASC
+          LIMIT 1
+        `;
+        if (dbClients.length > 0) {
+          return {
+            clienteUuid: dbClients[0].uuid,
+            clienteNombre: dbClients[0].nombre,
+            foundClient: dbClients[0],
+            score: 95,
+            esCoincidenciaExacta: true
+          };
+        }
+      } catch (eDbCli) {
+        console.warn('Error en fallback directo a PostgreSQL para cliente:', eDbCli.message);
+      }
     }
 
     // Cliente no encontrado en la sala -> Crear nuevo cliente en BD y agregar a la caché RAM
@@ -966,11 +1085,27 @@ class WhatsAppDictionaryService {
         return r.aliases && r.aliases.includes(normTarget);
       });
 
-      // 2. Coincidencia por número de rango
+      // 2. Coincidencia por número de rango (dígito o palabra en español: dos, tres, etc.)
       if (!foundRango) {
-        const numMatch = normTarget.match(/\b([1-9]|1\d|20)\b/);
-        if (numMatch) {
-          const num = numMatch[1];
+        const wordToNum = {
+          uno: '1', un: '1', dos: '2', tres: '3', cuatro: '4', cinco: '5',
+          seis: '6', siete: '7', ocho: '8', nueve: '9', diez: '10'
+        };
+
+        let num = null;
+        const digitMatch = normTarget.match(/\b([1-9]|1\d|20)\b/);
+        if (digitMatch) {
+          num = digitMatch[1];
+        } else {
+          for (const [w, n] of Object.entries(wordToNum)) {
+            if (new RegExp(`\\b${w}\\b`, 'i').test(normTarget)) {
+              num = n;
+              break;
+            }
+          }
+        }
+
+        if (num) {
           foundRango = this.rangosCache.find(r => {
             const rn = r.normName;
             return rn.endsWith(num) || rn.includes(`rango ${num}`) || rn.includes(`r${num}`) || rn.includes(`rg ${num}`);
@@ -1000,14 +1135,71 @@ class WhatsAppDictionaryService {
       }
     }
 
-    // Si no se encontró rango, asignar General o Sin Rango
+    // Fallback directo a PostgreSQL por si el rango no estaba en caché
+    if (!rangoUuid && parsedRango && isPgConnected && sql) {
+      try {
+        const normTarget = normalizeText(parsedRango);
+        const wordToNum = {
+          uno: '1', un: '1', dos: '2', tres: '3', cuatro: '4', cinco: '5',
+          seis: '6', siete: '7', ocho: '8', nueve: '9', diez: '10'
+        };
+
+        let num = null;
+        const digitMatch = normTarget.match(/\b([1-9]|1\d|20)\b/);
+        if (digitMatch) {
+          num = digitMatch[1];
+        } else {
+          for (const [w, n] of Object.entries(wordToNum)) {
+            if (new RegExp(`\\b${w}\\b`, 'i').test(normTarget)) {
+              num = n;
+              break;
+            }
+          }
+        }
+
+        let dbRows = [];
+        if (num) {
+          dbRows = await sql`
+            SELECT uuid, nombre FROM rangos 
+            WHERE (nombre ILIKE ${'%' + num} OR nombre ILIKE ${'% ' + num + '%'} OR lower(trim(nombre)) = ${normTarget})
+              AND COALESCE(is_deleted, false) = false
+            ORDER BY CASE WHEN nombre ILIKE ${'%' + num} THEN 1 ELSE 2 END, nombre ASC
+            LIMIT 1
+          `;
+        } else if (normTarget) {
+          dbRows = await sql`
+            SELECT uuid, nombre FROM rangos 
+            WHERE (lower(trim(nombre)) = ${normTarget} OR nombre ILIKE ${'%' + normTarget + '%'})
+              AND COALESCE(is_deleted, false) = false
+            LIMIT 1
+          `;
+        }
+        if (dbRows.length > 0) {
+          rangoUuid = dbRows[0].uuid;
+          rangoNombre = dbRows[0].nombre;
+          foundRango = dbRows[0];
+          rangoFallbackUsado = false;
+        }
+      } catch (eDbRango) {
+        console.warn('Error en fallback directo a PostgreSQL para rango:', eDbRango.message);
+      }
+    }
+
+    // Si no se encontró rango en BD ni en caché
     if (!rangoUuid) {
-      const gen = this.rangosCache.find(r => r.normName === 'general') ||
-                  this.rangosCache.find(r => r.normName === 'sin rango') ||
-                  this.rangosCache[0];
-      if (gen) {
-        rangoUuid = gen.uuid;
-        rangoNombre = gen.nombre;
+      const isGenericRequest = !parsedRango || ['general', 'sin rango', 'sr'].includes(parsedRango.toLowerCase());
+      if (isGenericRequest) {
+        const gen = this.rangosCache.find(r => r.normName === 'general') ||
+                    this.rangosCache.find(r => r.normName === 'sin rango') || null;
+        if (gen) {
+          rangoUuid = gen.uuid;
+          rangoNombre = gen.nombre;
+        } else {
+          rangoNombre = 'General';
+        }
+      } else {
+        // REGLA CRÍTICA: El usuario especificó un rango (ej. "Rango 2"), NUNCA sobrescribir con "Rango 1"
+        rangoNombre = parsedRango;
       }
       rangoFallbackUsado = true;
     }
