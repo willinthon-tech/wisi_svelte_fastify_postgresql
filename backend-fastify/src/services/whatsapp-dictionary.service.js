@@ -301,6 +301,12 @@ class WhatsAppDictionaryService {
       aliases.add('general');
       aliases.add('otros');
       aliases.add('otro');
+    } else if (norm.includes('multiple') || norm.includes('múltiple')) {
+      aliases.add('multiple');
+      aliases.add('múltiple');
+      aliases.add('multiples');
+      aliases.add('múltiples');
+      aliases.add('varios');
     }
 
     return Array.from(aliases);
@@ -1033,6 +1039,29 @@ class WhatsAppDictionaryService {
         foundMetodo = this.metodosCache.find(m => {
           return m.aliases && m.aliases.some(a => normTarget.includes(a) || a.includes(normTarget));
         });
+      }
+
+      // 3. Fallback directo a BD si no está en caché (ej. Método 'Múltiple' o método recién creado)
+      if (!foundMetodo && isPgConnected && sql) {
+        try {
+          const dbRows = await sql`
+            SELECT uuid, nombre 
+            FROM metodos_pago 
+            WHERE (lower(trim(nombre)) = ${normTarget} 
+               OR (lower(trim(nombre)) IN ('múltiple', 'multiple') AND ${normTarget} IN ('múltiple', 'multiple', 'multiples')))
+              AND COALESCE(is_deleted, false) = false
+            LIMIT 1
+          `;
+          if (dbRows.length > 0) {
+            foundMetodo = {
+              uuid: dbRows[0].uuid,
+              nombre: dbRows[0].nombre,
+              normName: normalizeText(dbRows[0].nombre),
+              aliases: this.generateMetodoAliases(dbRows[0].nombre)
+            };
+            this.metodosCache.push(foundMetodo);
+          }
+        } catch (e) {}
       }
     }
 

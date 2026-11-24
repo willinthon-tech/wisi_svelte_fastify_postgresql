@@ -441,76 +441,26 @@ class WhatsAppService {
         }
       });
 
-      // Escuchador de mensajes entrantes filtrado y de bajo consumo
+      // Escuchador de mensajes entrantes concurrente y no bloqueante
       this.sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        for (const m of messages) {
-          // 1. Filtrar mensajes propios o vacíos
-          if (!m.message || m.key.fromMe) continue;
-
-          // 2. Filtrar mensajes que NO pertenezcan a grupos de WhatsApp (@g.us)
-          const remoteJid = m.key.remoteJid || '';
-          if (!remoteJid.endsWith('@g.us')) continue;
-
-          // 3. Detectar mensajes EDITADOS en WhatsApp
-          // En Baileys, una edición llega con protocolMessage tipo 14 (MESSAGE_EDIT)
-          const isProtocolEdit = (m.message?.protocolMessage?.type === 14 || m.message?.protocolMessage?.type === 'MESSAGE_EDIT') &&
-                                 Boolean(m.message?.protocolMessage?.editedMessage);
-          if (isProtocolEdit) {
-            const targetKey = {
-              ...m.key,
-              id: m.message.protocolMessage.key?.id || m.key.id
-            };
-            await this.handleEditedMessage(m, targetKey, m.message.protocolMessage.editedMessage);
-            continue;
-          }
-
-          if (m.message?.editedMessage?.message) {
-            const innerProtocol = m.message.editedMessage.message?.protocolMessage;
-            const targetKey = {
-              ...m.key,
-              id: innerProtocol?.key?.id || m.key.id
-            };
-            const innerEdited = innerProtocol?.editedMessage || m.message.editedMessage.message;
-            await this.handleEditedMessage(m, targetKey, innerEdited);
-            continue;
-          }
-
-          // 4. Filtrar mensajes de protocolo no transaccionales, reacciones y encuestas
-          if (m.message.protocolMessage || m.message.reactionMessage || m.message.pollUpdateMessage) continue;
-
-          // 5. Evitar procesar mensajes duplicados que reenvía WhatsApp al reconectar
-          const msgId = m.key.id;
-          if (msgId) {
-            if (this.processedMessageIds.has(msgId)) continue;
-            this.processedMessageIds.add(msgId);
-            if (this.processedMessageIds.size > 500) {
-              const it = this.processedMessageIds.values();
-              for (let i = 0; i < 150; i++) this.processedMessageIds.delete(it.next().value);
-            }
-          }
-
-          // 6. Si el mensaje es más viejo de 10 minutos (ej. historial antiguo en cola), omitir
-          const timestamp = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : Date.now();
-          if (Date.now() - timestamp > 10 * 60 * 1000) {
-            continue;
-          }
-
-          await this.handleIncomingMessage(m);
-        }
+        if (!Array.isArray(messages)) return;
+        // Procesar en paralelo sin que un mensaje bloquee a otros grupos o mensajes del lote
+        await Promise.allSettled(messages.map(m => this.processSingleUpsertMessage(m)));
       });
 
       // Escuchador de actualizaciones de mensajes para ediciones emitidas por Baileys
       this.sock.ev.on('messages.update', async (updates) => {
-        for (const u of updates) {
-          if (!u.key || u.key.fromMe) continue;
+        if (!Array.isArray(updates)) return;
+        await Promise.allSettled(updates.map(async (u) => {
+          if (!u.key || u.key.fromMe) return;
           const remoteJid = u.key.remoteJid || '';
-          if (!remoteJid.endsWith('@g.us')) continue;
+          if (!remoteJid.endsWith('@g.us')) return;
 
           const editedMsg = u.update?.message?.editedMessage?.message;
           if (editedMsg) {
             await this.handleEditedMessage(u, u.key, editedMsg);
           }
-        }
+        }));
       });
 
       await waitForFirstEvent;
@@ -653,27 +603,107 @@ class WhatsAppService {
   }
 
   /**
+   * Procesa de forma aislada y no bloqueante un mensaje recibido de un grupo
+   */
+  async processSingleUpsertMessage(m) {
+    if (!m || !m.message || m.key?.fromMe) return;
+
+    const remoteJid = m.key.remoteJid || '';
+    if (!remoteJid.endsWith('@g.us')) return;
+
+    // 1. Detectar mensajes ELIMINADOS ("Eliminar para todos" en WhatsApp / REVOKE)
+    const protoMsg = m.message.protocolMessage;
+    const isProtocolRevoke = (protoMsg?.type === 0 || protoMsg?.type === 'REVOKE');
+    if (isProtocolRevoke && protoMsg?.key) {
+      const targetKey = {
+        remoteJid: protoMsg.key.remoteJid || remoteJid,
+        id: protoMsg.key.id,
+        participant: protoMsg.key.participant || m.key.participant || undefined,
+        fromMe: protoMsg.key.fromMe || false
+      };
+      await this.handleDeletedMessage(m, targetKey);
+      return;
+    }
+
+    // 2. Detectar mensajes EDITADOS en WhatsApp
+    const isProtocolEdit = (protoMsg?.type === 14 || protoMsg?.type === 'MESSAGE_EDIT') &&
+                           Boolean(protoMsg?.editedMessage);
+    if (isProtocolEdit) {
+      const targetKey = {
+        ...m.key,
+        id: protoMsg.key?.id || m.key.id,
+        remoteJid: protoMsg.key?.remoteJid || remoteJid,
+        participant: protoMsg.key?.participant || m.key.participant
+      };
+      await this.handleEditedMessage(m, targetKey, protoMsg.editedMessage);
+      return;
+    }
+
+    if (m.message?.editedMessage?.message) {
+      const innerProtocol = m.message.editedMessage.message?.protocolMessage;
+      const targetKey = {
+        ...m.key,
+        id: innerProtocol?.key?.id || m.key.id,
+        remoteJid: innerProtocol?.key?.remoteJid || remoteJid,
+        participant: innerProtocol?.key?.participant || m.key.participant
+      };
+      const innerEdited = innerProtocol?.editedMessage || m.message.editedMessage.message;
+      await this.handleEditedMessage(m, targetKey, innerEdited);
+      return;
+    }
+
+    // 3. Filtrar mensajes de protocolo no transaccionales, reacciones y encuestas
+    if (m.message.protocolMessage || m.message.reactionMessage || m.message.pollUpdateMessage) return;
+
+    // 4. Evitar procesar mensajes duplicados que reenvía WhatsApp al reconectar
+    const msgId = m.key.id;
+    if (msgId) {
+      if (this.processedMessageIds.has(msgId)) return;
+      this.processedMessageIds.add(msgId);
+      if (this.processedMessageIds.size > 500) {
+        const it = this.processedMessageIds.values();
+        for (let i = 0; i < 150; i++) this.processedMessageIds.delete(it.next().value);
+      }
+    }
+
+    // 5. Si el mensaje es más viejo de 10 minutos (ej. historial antiguo en cola), omitir
+    const timestamp = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : Date.now();
+    if (Date.now() - timestamp > 10 * 60 * 1000) {
+      return;
+    }
+
+    await this.handleIncomingMessage(m);
+  }
+
+  /**
    * Envía una reacción emoji (check verde o azul) al mensaje con reintentos automáticos
    * para garantizar que nunca se quede en espera o se pierda por latencia de red.
    */
   async sendReactionWithRetry(remoteJid, messageKey, emoji, maxRetries = 3) {
     if (!this.sock || !remoteJid || !messageKey || !emoji) return false;
 
+    const reactionKey = {
+      remoteJid: messageKey.remoteJid || remoteJid,
+      id: messageKey.id,
+      participant: messageKey.participant || undefined
+    };
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Pausa preventiva para sincronizar mensaje con el socket de Baileys
-        const delayMs = attempt === 1 ? 500 : 1200 * attempt;
-        await new Promise(r => setTimeout(r, delayMs));
+        // En el primer intento enviar de inmediato sin delay bloqueante (0ms)
+        if (attempt > 1) {
+          await new Promise(r => setTimeout(r, 600 * attempt));
+        }
 
         if (!this.sock) break;
 
         await this.sock.sendMessage(remoteJid, {
           react: {
             text: emoji,
-            key: messageKey
+            key: reactionKey
           }
         });
-        console.log(`✅ [WhatsApp React] Reacción "${emoji}" enviada correctamente (intento ${attempt})`);
+        console.log(`✅ [WhatsApp React] Reacción "${emoji}" enviada correctamente a ${reactionKey.id} (intento ${attempt})`);
         return true;
       } catch (err) {
         console.warn(`⚠️ [WhatsApp React] Falló envío de reacción (intento ${attempt}/${maxRetries}):`, err.message);
@@ -991,9 +1021,119 @@ class WhatsAppService {
   }
 
   /**
+   * Manejador de Mensajes ELIMINADOS ("Eliminar para todos" en WhatsApp):
+   * Si un usuario elimina un mensaje que ya había sido registrado en el sistema,
+   * anula/soft-delete la fila en libro_control_clientes o libro_aportes,
+   * actualiza whatsapp_logs y emite un evento WebSocket al frontend para reflejar la eliminación.
+   */
+  async handleDeletedMessage(rawEvent, targetKey) {
+    const targetMsgId = targetKey?.id;
+    const remoteJid = targetKey?.remoteJid || rawEvent.key?.remoteJid || '';
+    if (!targetMsgId || !remoteJid.endsWith('@g.us')) return;
+
+    if (!isPgConnected || !sql) return;
+
+    try {
+      const mapping = await this.getActiveGroupMapping(remoteJid);
+      if (!mapping) return;
+
+      console.log(`🗑️ [WhatsApp Revoke] Solicitud de eliminación para mensaje ${targetMsgId} en [${mapping.group_name}]`);
+
+      const prevLogs = await sql`
+        SELECT * FROM whatsapp_logs
+        WHERE message_id = ${targetMsgId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+
+      if (prevLogs.length === 0 || !prevLogs[0].inserted_record_uuid) {
+        console.log(`ℹ️ [WhatsApp Revoke] No se encontró registro insertado para el mensaje ${targetMsgId}.`);
+        return;
+      }
+
+      const prevLog = prevLogs[0];
+      const recordUuid = prevLog.inserted_record_uuid;
+      let libroUuid = null;
+      let modulo = 'control_clientes';
+
+      // 1. Intentar anular en libro_control_clientes
+      const clientRows = await sql`
+        UPDATE libro_control_clientes
+        SET is_deleted = true,
+            deleted_at = CURRENT_TIMESTAMP
+        WHERE uuid = ${recordUuid}::uuid
+        RETURNING libro_uuid
+      `;
+
+      if (clientRows.length > 0) {
+        libroUuid = clientRows[0].libro_uuid;
+        modulo = 'control_clientes';
+      } else {
+        // 2. Si no estaba en control_clientes, anular en libro_aportes
+        const aporteRows = await sql`
+          UPDATE libro_aportes
+          SET is_deleted = true,
+              deleted_at = CURRENT_TIMESTAMP
+          WHERE uuid = ${recordUuid}::uuid
+          RETURNING libro_uuid
+        `;
+        if (aporteRows.length > 0) {
+          libroUuid = aporteRows[0].libro_uuid;
+          modulo = 'aportes';
+        }
+      }
+
+      // 3. Actualizar log de auditoría
+      await sql`
+        UPDATE whatsapp_logs
+        SET status = 'eliminado_por_usuario',
+            error_message = 'Transacción anulada porque el usuario eliminó el mensaje en WhatsApp',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${prevLog.id}
+      `;
+
+      console.log(`🗑️ [WhatsApp Revoke] Transacción ${recordUuid} (${modulo}) anulada en base de datos.`);
+
+      // 4. Emitir broadcast WebSocket de eliminación en tiempo real
+      if (libroUuid) {
+        try {
+          broadcastLibroUpdate({
+            libroId: libroUuid,
+            modulo: modulo,
+            action: 'delete',
+            data: { uuid: recordUuid, source: 'whatsapp', is_deleted: true }
+          });
+        } catch (wsErr) {
+          console.warn('Error emitiendo broadcast de eliminación:', wsErr.message);
+        }
+      }
+
+      // 5. Intentar limpiar la reacción en WhatsApp
+      if (mapping.auto_reply && this.sock) {
+        try {
+          await this.sock.sendMessage(remoteJid, {
+            react: {
+              text: '',
+              key: {
+                remoteJid: targetKey.remoteJid || remoteJid,
+                id: targetMsgId,
+                participant: targetKey.participant || undefined
+              }
+            }
+          });
+        } catch (e) {}
+      }
+
+    } catch (err) {
+      console.error('❌ Error manejando mensaje eliminado de WhatsApp:', err);
+    }
+  }
+
+  /**
    * Manejador de Mensajes EDITADOS en WhatsApp:
    * Si un cajero o usuario corrige un monto, nombre o formato en WhatsApp,
-   * actualiza en tiempo real la fila correspondiente en libro_control_clientes o libro_aportes.
+   * actualiza en tiempo real la fila correspondiente en libro_control_clientes o libro_aportes,
+   * incluyendo cambios cruzados de módulo (ej: de compra a aporte o viceversa).
    */
   async handleEditedMessage(rawEvent, targetKey, editedMessageObj) {
     const targetMsgId = targetKey?.id;
@@ -1036,7 +1176,7 @@ class WhatsAppService {
         LIMIT 1
       `;
 
-      // Si no existe log previo para ese ID (ej: mensaje antes de la migración o previo a la captura):
+      // Si no existe log previo para ese ID: procesar como nueva transacción
       if (prevLogs.length === 0) {
         console.log(`ℹ️ [WhatsApp Edit] No se encontró log previo para ${targetMsgId}. Procesando como transacción directa...`);
         const syntheticMsg = {
@@ -1074,7 +1214,7 @@ class WhatsAppService {
         return;
       }
 
-      // Si el log previo no tenía registro insertado (ej. falló antes por falta de libro o formato inválido):
+      // Si el log previo no tenía registro insertado: reintentar registro completo
       if (!prevLog.inserted_record_uuid) {
         console.log(`ℹ️ [WhatsApp Edit] Log previo no tenía registro insertado. Reintentando registro completo...`);
         const syntheticMsg = {
@@ -1087,7 +1227,30 @@ class WhatsAppService {
         return;
       }
 
-      // Si ya existía registro en BD, ACTUALIZARLO directamente
+      // Detectar en qué tabla estaba originalmente guardado el registro
+      const origClientRows = await sql`
+        SELECT uuid, libro_uuid, multisala_uuid 
+        FROM libro_control_clientes 
+        WHERE uuid = ${prevLog.inserted_record_uuid}::uuid AND COALESCE(is_deleted, false) = false
+      `;
+      const origAporteRows = (origClientRows.length === 0) ? await sql`
+        SELECT uuid, libro_uuid, multisala_uuid 
+        FROM libro_aportes 
+        WHERE uuid = ${prevLog.inserted_record_uuid}::uuid AND COALESCE(is_deleted, false) = false
+      ` : [];
+
+      const originalModulo = origClientRows.length > 0 ? 'control_clientes' : (origAporteRows.length > 0 ? 'aportes_maquinas' : (prevLog.parsed_data?.modulo || 'control_clientes'));
+      let libroUuid = origClientRows[0]?.libro_uuid || origAporteRows[0]?.libro_uuid || null;
+      let multisalaUuid = origClientRows[0]?.multisala_uuid || origAporteRows[0]?.multisala_uuid || mapping.multisala_uuid || null;
+
+      // Si no pudimos rescatar el libro_uuid, buscar el más reciente de la sala
+      if (!libroUuid && mapping.sala_uuid) {
+        const lbRows = await sql`
+          SELECT uuid FROM libros WHERE sala_uuid = ${mapping.sala_uuid}::uuid AND COALESCE(is_deleted, false) = false ORDER BY created_at DESC LIMIT 1
+        `;
+        if (lbRows.length > 0) libroUuid = lbRows[0].uuid;
+      }
+
       let esCoincidenciaExacta = true;
       let observaciones = [];
 
@@ -1124,36 +1287,99 @@ class WhatsAppService {
           ? (obsTexto ? `${parsed.nota} [Editado vía WhatsApp: ${obsTexto}]${metodoExtraNota}` : `${parsed.nota} (Editado vía WhatsApp)${metodoExtraNota}`)
           : (obsTexto ? `Editado vía WhatsApp por ${senderName} [Verificar: ${obsTexto}]${metodoExtraNota}` : `Editado vía WhatsApp por ${senderName}${metodoExtraNota}`);
 
-        await sql`
-          UPDATE libro_control_clientes
-          SET tipo = ${parsed.tipo},
-              monto = ${parsed.monto},
-              cliente_uuid = ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
-              metodo_pago_uuid = ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
-              hora = ${horaStr},
-              nota = ${notaStr}
-          WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
-        `;
+        if (originalModulo === 'aportes_maquinas') {
+          // Cambio cruzado: Era un Aporte/Devolución y ahora es Compra/Pago
+          console.log(`🔄 [WhatsApp Edit] Cambio de módulo detectado: Aporte -> Control de Clientes`);
+          await sql`
+            UPDATE libro_aportes
+            SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP
+            WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
+          `;
+          if (libroUuid) {
+            try {
+              broadcastLibroUpdate({
+                libroId: libroUuid,
+                modulo: 'aportes',
+                action: 'delete',
+                data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', is_deleted: true }
+              });
+            } catch (wsErr) {}
+          }
 
-        await sql`
-          UPDATE whatsapp_logs
-          SET raw_message = ${messageText},
-              parsed_data = ${sql.json(parsed)},
-              status = ${logStatus},
-              error_message = ${obsTexto},
-              updated_at = CURRENT_TIMESTAMP
-          WHERE id = ${prevLog.id}
-        `;
+          const insertRes = await sql`
+            INSERT INTO libro_control_clientes (
+              libro_uuid, multisala_uuid, cliente_uuid, tipo, monto, metodo_pago_uuid, hora, nota
+            ) VALUES (
+              ${libroUuid}::uuid,
+              ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
+              ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
+              ${parsed.tipo},
+              ${parsed.monto},
+              ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
+              ${horaStr},
+              ${notaStr}
+            ) RETURNING uuid
+          `;
+          const newRecordUuid = insertRes[0]?.uuid;
 
-        console.log(`✏️ [WhatsApp Edit] Control de Clientes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente}`);
-        try {
-          broadcastLibroUpdate({
-            libroId: prevLog.libro_uuid || prevLog.libro_id,
-            modulo: 'control_clientes',
-            action: 'update',
-            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', libro_uuid: prevLog.libro_uuid, libro_id: prevLog.libro_id }
-          });
-        } catch (wsErr) {}
+          await sql`
+            UPDATE whatsapp_logs
+            SET raw_message = ${messageText},
+                parsed_data = ${sql.json(parsed)},
+                status = ${logStatus},
+                error_message = ${obsTexto},
+                inserted_record_uuid = ${newRecordUuid},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${prevLog.id}
+          `;
+
+          if (newRecordUuid && libroUuid) {
+            try {
+              broadcastLibroUpdate({
+                libroId: libroUuid,
+                modulo: 'control_clientes',
+                action: 'create',
+                data: { uuid: newRecordUuid, source: 'whatsapp', tipo: parsed.tipo, monto: parsed.monto }
+              });
+            } catch (wsErr) {}
+          }
+
+        } else {
+          // Mismo módulo: Actualización directa in-place
+          await sql`
+            UPDATE libro_control_clientes
+            SET tipo = ${parsed.tipo},
+                monto = ${parsed.monto},
+                cliente_uuid = ${clienteUuid ? sql`${clienteUuid}::uuid` : sql`NULL`},
+                metodo_pago_uuid = ${metodoPagoUuid ? sql`${metodoPagoUuid}::uuid` : sql`NULL`},
+                hora = ${horaStr},
+                nota = ${notaStr}
+            WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
+          `;
+
+          await sql`
+            UPDATE whatsapp_logs
+            SET raw_message = ${messageText},
+                parsed_data = ${sql.json(parsed)},
+                status = ${logStatus},
+                error_message = ${obsTexto},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${prevLog.id}
+          `;
+
+          if (libroUuid) {
+            try {
+              broadcastLibroUpdate({
+                libroId: libroUuid,
+                modulo: 'control_clientes',
+                action: 'update',
+                data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', tipo: parsed.tipo, monto: parsed.monto }
+              });
+            } catch (wsErr) {}
+          }
+        }
+
+        console.log(`✏️ [WhatsApp Edit] Control de Clientes guardado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - ${parsed.cliente}`);
         if (mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, targetKey, '✏️');
         }
@@ -1185,35 +1411,97 @@ class WhatsAppService {
         const obsTexto = observaciones.length > 0 ? observaciones.join('; ') : null;
         const horaStr = formatCaracasTime(parsed.hora || prevLog.created_at);
 
-        await sql`
-          UPDATE libro_aportes
-          SET tipo = ${parsed.tipo},
-              monto = ${parsed.monto},
-              empleado_uuid = ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
-              rango_uuid = ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
-              hora = ${horaStr}
-          WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
-        `;
+        if (originalModulo === 'control_clientes') {
+          // Cambio cruzado: Era Compra/Pago y ahora es Aporte/Devolución
+          console.log(`🔄 [WhatsApp Edit] Cambio de módulo detectado: Control de Clientes -> Aporte`);
+          await sql`
+            UPDATE libro_control_clientes
+            SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP
+            WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
+          `;
+          if (libroUuid) {
+            try {
+              broadcastLibroUpdate({
+                libroId: libroUuid,
+                modulo: 'control_clientes',
+                action: 'delete',
+                data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', is_deleted: true }
+              });
+            } catch (wsErr) {}
+          }
 
-        await sql`
-          UPDATE whatsapp_logs
-          SET raw_message = ${messageText},
-              parsed_data = ${sql.json(parsed)},
-              status = ${logStatus},
-              error_message = ${obsTexto},
-              updated_at = CURRENT_TIMESTAMP
-          WHERE id = ${prevLog.id}
-        `;
+          const insertRes = await sql`
+            INSERT INTO libro_aportes (
+              libro_uuid, multisala_uuid, empleado_uuid, rango_uuid, tipo, monto, hora
+            ) VALUES (
+              ${libroUuid}::uuid,
+              ${multisalaUuid ? sql`${multisalaUuid}::uuid` : sql`NULL`},
+              ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
+              ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
+              ${parsed.tipo},
+              ${parsed.monto},
+              ${horaStr}
+            ) RETURNING uuid
+          `;
+          const newRecordUuid = insertRes[0]?.uuid;
 
-        console.log(`✏️ [WhatsApp Edit] Aportes actualizado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
-        try {
-          broadcastLibroUpdate({
-            libroId: prevLog.libro_uuid || prevLog.libro_id,
-            modulo: 'aportes',
-            action: 'update',
-            data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', libro_uuid: prevLog.libro_uuid, libro_id: prevLog.libro_id }
-          });
-        } catch (wsErr) {}
+          await sql`
+            UPDATE whatsapp_logs
+            SET raw_message = ${messageText},
+                parsed_data = ${sql.json(parsed)},
+                status = ${logStatus},
+                error_message = ${obsTexto},
+                inserted_record_uuid = ${newRecordUuid},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${prevLog.id}
+          `;
+
+          if (newRecordUuid && libroUuid) {
+            try {
+              broadcastLibroUpdate({
+                libroId: libroUuid,
+                modulo: 'aportes',
+                action: 'create',
+                data: { uuid: newRecordUuid, source: 'whatsapp', tipo: parsed.tipo, monto: parsed.monto }
+              });
+            } catch (wsErr) {}
+          }
+
+        } else {
+          // Mismo módulo: Actualización directa in-place
+          await sql`
+            UPDATE libro_aportes
+            SET tipo = ${parsed.tipo},
+                monto = ${parsed.monto},
+                empleado_uuid = ${empleadoUuid ? sql`${empleadoUuid}::uuid` : sql`NULL`},
+                rango_uuid = ${rangoUuid ? sql`${rangoUuid}::uuid` : sql`NULL`},
+                hora = ${horaStr}
+            WHERE uuid = ${prevLog.inserted_record_uuid}::uuid
+          `;
+
+          await sql`
+            UPDATE whatsapp_logs
+            SET raw_message = ${messageText},
+                parsed_data = ${sql.json(parsed)},
+                status = ${logStatus},
+                error_message = ${obsTexto},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${prevLog.id}
+          `;
+
+          if (libroUuid) {
+            try {
+              broadcastLibroUpdate({
+                libroId: libroUuid,
+                modulo: 'aportes',
+                action: 'update',
+                data: { uuid: prevLog.inserted_record_uuid, source: 'whatsapp', tipo: parsed.tipo, monto: parsed.monto }
+              });
+            } catch (wsErr) {}
+          }
+        }
+
+        console.log(`✏️ [WhatsApp Edit] Aportes guardado [${logStatus}]: ${parsed.tipo} $${parsed.monto} - Rango: ${rangoNombre} - Operador: ${empleadoNombre}`);
         if (mapping.auto_reply && this.sock) {
           await this.sendReactionWithRetry(remoteJid, targetKey, '✏️');
         }

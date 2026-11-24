@@ -63,13 +63,13 @@ export function parseWhatsAppAmount(rawStr) {
  */
 export function cleanPersonName(rawName) {
   if (!rawName) return '';
-  let name = String(rawName).trim();
+  let name = String(rawName).replace(/[\r\n]+/g, ' ').trim();
 
   // 1. Eliminar palabras residuales de cajas o métodos que hayan quedado en el texto
   name = name.replace(/\b(mesas?|m[aá]quinas?|slots?|tables?|vivo|live)\b/gi, ' ');
-  name = name.replace(/\b(usdt|binance|cash|d[oó]lares?|dolar|efectivo|usd|zelle|zinli|pdv|pm|pago\s*m[oó]vil|bs|ves|euros?)\b/gi, ' ');
+  name = name.replace(/\b(usdt|binance|cash|d[oó]lares?|dolar|efectivo|usd|zelle|zinli|pdv|pm|pago\s*m[oó]vil|bs|ves|euros?|m[uú]ltiple)\b/gi, ' ');
 
-  // 2. Limpiar caracteres especiales
+  // 2. Limpiar caracteres especiales (incluyendo paréntesis)
   name = name.replace(/[$,:.\-_*#~|/\\()]/g, ' ').replace(/\s+/g, ' ').trim();
 
   // 3. Bucle para remover conectores y preposiciones sobrantes al inicio y final
@@ -224,11 +224,88 @@ const METODO_RULES = [
   { metodo: 'General', regex: /\b(general|otros?)\b/i }
 ];
 
+/**
+ * Detecta y extrae múltiples métodos de pago con sus respectivos montos
+ * Ejemplo: "100 USDT 50 Cash", "200$ (100 usdt y 100 pdv)", "usdt 50 cash 30"
+ */
+export function extractMultiplePayments(clean) {
+  if (!clean || typeof clean !== 'string') return [];
+  const NUM_PATTERN = '(?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)';
+
+  // 1. Patrón Monto seguido de Método (ej: "100 USDT", "$50 Cash", "1500,50 pdv", "100 en usdt")
+  const amountThenMethod = new RegExp(
+    `(?:[\\$€£]|bs\\.?|ref\\.?)?\\s*(${NUM_PATTERN})\\s*(?:[\\$€£]|usd|usdt|bs\\.?|ref)?\\s*(?:en|por|con|de)?\\s*\\b(${METODO_RULES.map(r=>r.regex.source).join('|')})\\b`,
+    'gi'
+  );
+
+  const pairs = [];
+  const matchedRanges = [];
+
+  let m;
+  while ((m = amountThenMethod.exec(clean)) !== null) {
+    const numStr = m[1];
+    const methodStr = m[2];
+    const amt = parseWhatsAppAmount(numStr);
+
+    const matchedRule = METODO_RULES.find(r => r.regex.test(methodStr));
+    if (matchedRule && amt > 0) {
+      pairs.push({
+        metodo: matchedRule.metodo,
+        monto: amt,
+        rawText: m[0],
+        startIndex: m.index,
+        endIndex: m.index + m[0].length
+      });
+      matchedRanges.push([m.index, m.index + m[0].length]);
+    }
+  }
+
+  // 2. Patrón Método seguido de Monto (ej: "usdt 100", "cash 50", "pdv 200")
+  const methodThenAmount = new RegExp(
+    `\\b(${METODO_RULES.map(r=>r.regex.source).join('|')})\\b\\s*(?:de|por|en)?\\s*(?:[\\$€£]|bs\\.?|ref\\.?)?\\s*(${NUM_PATTERN})(?:[\\$€£]|usd|usdt|bs\\.?|ref)?`,
+    'gi'
+  );
+
+  while ((m = methodThenAmount.exec(clean)) !== null) {
+    const methodStr = m[1];
+    const numStr = m[2];
+    const amt = parseWhatsAppAmount(numStr);
+    const start = m.index;
+    const end = m.index + m[0].length;
+
+    const overlaps = matchedRanges.some(([rStart, rEnd]) => (start < rEnd && end > rStart));
+    if (!overlaps) {
+      const matchedRule = METODO_RULES.find(r => r.regex.test(methodStr));
+      if (matchedRule && amt > 0) {
+        pairs.push({
+          metodo: matchedRule.metodo,
+          monto: amt,
+          rawText: m[0],
+          startIndex: start,
+          endIndex: end
+        });
+        matchedRanges.push([start, end]);
+      }
+    }
+  }
+
+  pairs.sort((a, b) => a.startIndex - b.startIndex);
+  return pairs;
+}
+
 export function parseWhatsAppMessage(text, defaultOptions = {}) {
   if (!text || typeof text !== 'string') return null;
 
-  // Limpiar caracteres de formato al inicio (emojis, markdown, asteriscos, viñetas)
+  // 1. Saneamiento integral: soporte multilínea (conversión de saltos de línea a espacios)
+  // y omisión de símbolos de paréntesis '(' y ')'
   let clean = text
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Limpiar caracteres de formato al inicio (emojis, markdown, asteriscos, viñetas)
+  clean = clean
     .replace(/^[\s*#~_>🟢💵✅🪙👍🚀💎💰🎰🎲\-]+/, '')
     .trim();
 
@@ -327,6 +404,16 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
 
   const isAporteDev = (tipo === 'Aporte' || tipo === 'Devolución');
 
+  // Detección de pagos múltiples en Compras y Pagos (Control de Clientes)
+  let isMultiplePayment = false;
+  let multiPairs = [];
+  if (!isAporteDev) {
+    multiPairs = extractMultiplePayments(textWithoutNota);
+    if (multiPairs.length > 1) {
+      isMultiplePayment = true;
+    }
+  }
+
   // 4. Extraer Hora explícita si el mensaje la contiene (ej: "12:30", "00:45", "24:15")
   let hora = null;
   let horaMatchedText = null;
@@ -339,47 +426,52 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   }
 
   // 5. Extraer Monto numérico
-  // Enmascaramos el texto del RANGO, HORAS y FECHAS (ej. 20-11-2026, 19/11) para que sus números no se tomen como monto
-  let textForMonto = textWithoutNota;
-
-  // Enmascarar fechas (ej: 20-11-2026, 20/11/2026, 20-11, 20/11, 19/11, 2026-11-20)
-  textForMonto = textForMonto.replace(/\b\d{1,4}[-/]\d{1,2}(?:[-/]\d{2,4})?\b/g, ' ');
-
-  if (rangoMatchedText) {
-    textForMonto = textForMonto.replace(rangoMatchedText, ' ');
-  }
-  if (horaMatchedText) {
-    textForMonto = textForMonto.replace(horaMatchedText, ' ');
-  } else {
-    textForMonto = textForMonto.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
-  }
-
   let monto = 0;
   let montoRaw = '';
 
-  // Patrón numérico completo que soporta separadores de miles y decimales
-  const NUM_PATTERN = '(?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)';
+  if (isMultiplePayment) {
+    monto = multiPairs.reduce((sum, p) => sum + p.monto, 0);
+    montoRaw = multiPairs.map(p => p.rawText).join(' + ');
+  } else {
+    // Enmascaramos el texto del RANGO, HORAS y FECHAS (ej. 20-11-2026, 19/11) para que sus números no se tomen como monto
+    let textForMonto = textWithoutNota;
 
-  // Prioridad 1: Número con indicador monetario explícito ($1000, 1000$, 1000d, 1000usd, 1000bs, 1000 ref, etc.)
-  const explicitMontoRegex = new RegExp(
-    `(?:[\\$€£]|bs\\.?|ref\\.?)\\s*(${NUM_PATTERN})|(${NUM_PATTERN})\\s*(?:[\\$€£]|usd|usdt|bs\\.?|ref|dlls?|d[oó]lares?|divisas?|d\\b)`,
-    'i'
-  );
-  const explicitMontoMatch = textForMonto.match(explicitMontoRegex);
-  if (explicitMontoMatch) {
-    montoRaw = explicitMontoMatch[0];
-    const numStr = explicitMontoMatch[1] || explicitMontoMatch[2];
-    monto = parseWhatsAppAmount(numStr);
-  }
+    // Enmascarar fechas (ej: 20-11-2026, 20/11/2026, 20-11, 20/11, 19/11, 2026-11-20)
+    textForMonto = textForMonto.replace(/\b\d{1,4}[-/]\d{1,2}(?:[-/]\d{2,4})?\b/g, ' ');
 
-  // Prioridad 2: Cualquier número en el texto
-  if (!monto || isNaN(monto) || monto <= 0) {
-    const anyNumberRegex = new RegExp(`(?<![a-zA-Z0-9])(${NUM_PATTERN})(?:[a-zA-Z\\$]+)?`, 'i');
-    const anyNumberMatch = textForMonto.match(anyNumberRegex);
-    if (anyNumberMatch) {
-      montoRaw = anyNumberMatch[0];
-      const numStr = anyNumberMatch[1];
+    if (rangoMatchedText) {
+      textForMonto = textForMonto.replace(rangoMatchedText, ' ');
+    }
+    if (horaMatchedText) {
+      textForMonto = textForMonto.replace(horaMatchedText, ' ');
+    } else {
+      textForMonto = textForMonto.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ');
+    }
+
+    // Patrón numérico completo que soporta separadores de miles y decimales
+    const NUM_PATTERN = '(?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?)';
+
+    // Prioridad 1: Número con indicador monetario explícito ($1000, 1000$, 1000d, 1000usd, 1000bs, 1000 ref, etc.)
+    const explicitMontoRegex = new RegExp(
+      `(?:[\\$€£]|bs\\.?|ref\\.?)\\s*(${NUM_PATTERN})|(${NUM_PATTERN})\\s*(?:[\\$€£]|usd|usdt|bs\\.?|ref|dlls?|d[oó]lares?|divisas?|d\\b)`,
+      'i'
+    );
+    const explicitMontoMatch = textForMonto.match(explicitMontoRegex);
+    if (explicitMontoMatch) {
+      montoRaw = explicitMontoMatch[0];
+      const numStr = explicitMontoMatch[1] || explicitMontoMatch[2];
       monto = parseWhatsAppAmount(numStr);
+    }
+
+    // Prioridad 2: Cualquier número en el texto
+    if (!monto || isNaN(monto) || monto <= 0) {
+      const anyNumberRegex = new RegExp(`(?<![a-zA-Z0-9])(${NUM_PATTERN})(?:[a-zA-Z\\$]+)?`, 'i');
+      const anyNumberMatch = textForMonto.match(anyNumberRegex);
+      if (anyNumberMatch) {
+        montoRaw = anyNumberMatch[0];
+        const numStr = anyNumberMatch[1];
+        monto = parseWhatsAppAmount(numStr);
+      }
     }
   }
 
@@ -387,7 +479,7 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     return null; // Si no hay monto válido, se ignora
   }
 
-  // 5. Detectar Caja (para limpiar el texto y no contaminar nombres)
+  // 6. Detectar Caja (para limpiar el texto y no contaminar nombres)
   let caja = isAporteDev ? 'Máquinas' : (defaultOptions.caja_default || 'Mesas');
   let cajaExplicit = false;
   let cajaMatchedText = null;
@@ -403,13 +495,19 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     }
   }
 
-  // 6. Detectar Método de Pago (SOLO para Control de Clientes; en Aportes/Devoluciones NO aplica)
-  // Soporta conectores previos: "en efectivo", "por pdv", "con zelle", etc.
+  // 7. Detectar Método de Pago (SOLO para Control de Clientes; en Aportes/Devoluciones NO aplica)
   let metodo = isAporteDev ? null : (defaultOptions.metodo_default || 'General');
   let metodoExplicit = false;
   let metodoMatchedText = null;
 
-  if (!isAporteDev) {
+  if (isMultiplePayment) {
+    metodo = 'Múltiple';
+    metodoExplicit = true;
+    metodoMatchedText = multiPairs.map(p => p.rawText).join(' ');
+    const desgloseStr = multiPairs.map(p => `$${p.monto} ${p.metodo}`).join(', ');
+    const desgloseNota = `Múltiple: ${desgloseStr}`;
+    nota = nota ? `${desgloseNota} | ${nota}` : desgloseNota;
+  } else if (!isAporteDev) {
     for (const rule of METODO_RULES) {
       const connectorRegex = new RegExp(`(?:\\b(?:en|por|con|de|del|al|a|para|via|vía)\\s+)?${rule.regex.source}`, 'i');
       const m = textWithoutNota.match(connectorRegex);
@@ -429,9 +527,19 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   if (rangoMatchedText) remaining = remaining.replace(rangoMatchedText, ' ');
   if (horaMatchedText) remaining = remaining.replace(horaMatchedText, ' ');
   if (tipoMatchedText) remaining = remaining.replace(new RegExp(`\\b${tipoMatchedText}\\b`, 'i'), ' ');
-  if (montoRaw) remaining = remaining.replace(montoRaw, ' ');
   if (cajaMatchedText) remaining = remaining.replace(new RegExp(`\\b${cajaMatchedText}\\b`, 'i'), ' ');
-  if (metodoMatchedText) remaining = remaining.replace(new RegExp(`\\b${metodoMatchedText}\\b`, 'i'), ' ');
+
+  if (isMultiplePayment) {
+    for (const pair of multiPairs) {
+      remaining = remaining.replace(pair.rawText, ' ');
+    }
+    // Remover cualquier número total remanente del mensaje
+    remaining = remaining.replace(/\b\d+(?:[.,]\d+)?\s*(?:[\$€£]|usd|usdt|bs\.?|ref)?\b/gi, ' ');
+    remaining = remaining.replace(/\b(y|e|en|con|por|de|del)\b/gi, ' ');
+  } else {
+    if (montoRaw) remaining = remaining.replace(montoRaw, ' ');
+    if (metodoMatchedText) remaining = remaining.replace(new RegExp(`\\b${metodoMatchedText}\\b`, 'i'), ' ');
+  }
 
   // Limpiar conectores, stopwords y palabras residuales para dejar solo el nombre contiguo
   const parsedName = cleanPersonName(remaining);
@@ -458,6 +566,8 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
     hora,
     nota,
     modulo,
+    desglose: isMultiplePayment ? multiPairs.map(p => ({ metodo: p.metodo, monto: p.monto })) : null,
+    isMultiple: isMultiplePayment,
     explicit: {
       metodo: metodoExplicit,
       caja: cajaExplicit,

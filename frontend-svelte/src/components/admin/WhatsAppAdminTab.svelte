@@ -791,13 +791,13 @@
     </div>
 
     <div class="tester-input-row">
-      <input 
-        type="text" 
+      <textarea 
+        rows="2" 
         class="test-input" 
         bind:value={testInput} 
         on:input={runTestParse}
-        placeholder="Ej: Compra 200$ USDT Máquinas Abel Gonzáles  |  Aporte 500$ Rango 1 Manuel Barrientos" 
-      />
+        placeholder="Ej: Compra 200$ USDT Máquinas Abel Gonzáles  |  Compra 100 USDT 50 Cash Abel  |  Aporte 500$ Rango 1 Manuel (Soporta multilínea y paréntesis)" 
+      ></textarea>
       <button class="btn-test" on:click={runTestParse} disabled={isTesting}>
         Probar Análisis
       </button>
@@ -806,6 +806,12 @@
     <!-- Píldoras con ejemplos de prueba del diccionario inteligente -->
     <div class="test-examples-row">
       <span class="examples-label">💡 Ejemplos de prueba:</span>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "Compra 100 USDT 50 Cash Abel Gonzales"; runTestParse(); }}>
+        Compra 100 USDT 50 Cash Abel
+      </button>
+      <button class="pill-btn" type="button" on:click={() => { testInput = "c 200 (100 usdt y 100 pdv) Pedro"; runTestParse(); }}>
+        c 200 (100 usdt y 100 pdv) Pedro
+      </button>
       <button class="pill-btn" type="button" on:click={() => { testInput = "c 100 pdv maquina Willinthon"; runTestParse(); }}>
         c 100 pdv maquina Willinthon
       </button>
@@ -814,9 +820,6 @@
       </button>
       <button class="pill-btn" type="button" on:click={() => { testInput = "pago 50 pm mesas Pedro"; runTestParse(); }}>
         pago 50 pm mesas Pedro
-      </button>
-      <button class="pill-btn" type="button" on:click={() => { testInput = "pago mobil 50 mesas Juan"; runTestParse(); }}>
-        pago mobil 50 mesas Juan
       </button>
       <button class="pill-btn" type="button" on:click={() => { testInput = "aporte 200 r1 Carlos"; runTestParse(); }}>
         aporte 200 r1 Carlos
@@ -846,8 +849,27 @@
         </div>
         <div class="preview-item">
           <span class="lbl">MÉTODO DE PAGO</span>
-          <span class="val">{testResult.metodo}</span>
+          <span class="val {testResult.metodo === 'Múltiple' ? 'bold text-indigo' : ''}">
+            {testResult.metodo}
+            {#if testResult.isMultiple || (testResult.desglose && testResult.desglose.length > 0)}
+              <span style="font-size: 10px; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 4px; font-weight: 700;">
+                Múltiple ({testResult.desglose?.length || 2})
+              </span>
+            {/if}
+          </span>
         </div>
+        {#if testResult.desglose && testResult.desglose.length > 0}
+          <div class="preview-item" style="grid-column: span 2; background: #f8fafc; border: 1px dashed #c7d2fe; border-radius: 7px; padding: 6px 10px;">
+            <span class="lbl" style="color: #4338ca; font-weight: 700; font-size: 11px;">DESGLOSE MÚLTIPLE:</span>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+              {#each testResult.desglose as d}
+                <span style="background: #ffffff; border: 1px solid #c7d2fe; border-radius: 5px; padding: 2px 8px; font-size: 12px; color: #1e1b4b;">
+                  <strong>${d.monto}</strong> <span style="color: #4f46e5; font-weight: 600;">{d.metodo}</span>
+                </span>
+              {/each}
+            </div>
+          </div>
+        {/if}
         {#if testResult.modulo === 'aportes_maquinas'}
           <div class="preview-item">
             <span class="lbl">DESTINO</span>
@@ -1546,12 +1568,16 @@
 
   .test-input {
     flex: 1;
-    padding: 11px 14px;
+    padding: 10px 14px;
     border-radius: 9px;
     border: 1px solid #cbd5e1;
-    font-size: 14px;
+    font-size: 13.5px;
     color: #0f172a;
     background: #f8fafc;
+    resize: vertical;
+    min-height: 48px;
+    font-family: inherit;
+    line-height: 1.4;
   }
   .test-input:focus {
     background: #ffffff;
