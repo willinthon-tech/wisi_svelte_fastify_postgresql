@@ -312,6 +312,10 @@ export async function initDb() {
       await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS hora_cierre VARCHAR(10);`);
       await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS empleado_cierre_uuid UUID;`);
       await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS empleado_cierre_nombre VARCHAR(255);`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS fichas_cierre JSONB DEFAULT '[]'::jsonb;`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS total_apertura NUMERIC(14, 2) DEFAULT 0.00;`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS total_cierre NUMERIC(14, 2) DEFAULT 0.00;`);
+      await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS diferencia NUMERIC(14, 2) DEFAULT 0.00;`);
       await sql.unsafe(`ALTER TABLE libro_arqueo_fichas ADD COLUMN IF NOT EXISTS nota TEXT;`);
       await sql.unsafe(`ALTER TABLE libro_datos DROP CONSTRAINT IF EXISTS libro_datos_libro_uuid_key;`);
       await sql.unsafe(`DROP INDEX IF EXISTS libro_datos_libro_uuid_key;`);

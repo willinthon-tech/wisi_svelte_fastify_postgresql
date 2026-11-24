@@ -234,34 +234,50 @@
         total: Number(r.valor) * Math.max(0, parseInt(r.cantCierre, 10) || 0)
       })).filter(f => f.valor > 0).sort((a, b) => b.valor - a.valor);
 
-      const recordUuid = cierreRecord?.uuid || cierreRecord?.id || generateSafeUuid();
+      const targetUuid = (aperturaRecord?.uuid && !String(aperturaRecord.uuid).startsWith('virtual-'))
+        ? (aperturaRecord.uuid || aperturaRecord.id)
+        : ((cierreRecord?.uuid && !String(cierreRecord.uuid).startsWith('virtual-')) ? (cierreRecord.uuid || cierreRecord.id) : generateSafeUuid());
 
-      const newCierreRecord = {
-        uuid: recordUuid,
-        id: recordUuid,
+      const unifiedRecord = {
+        ...(aperturaRecord || {}),
+        uuid: targetUuid,
+        id: targetUuid,
         libro_uuid: lId,
         libro_id: lId,
         mesa_uuid: mId,
         mesa_id: mId,
         multisala_uuid: multisalaUuid || null,
-        tipo: 'cierre',
-        fichas: fichasPayload,
+        tipo: 'apertura',
+        fichas: aperturaRecord?.fichas || [],
+        fichas_cierre: fichasPayload,
+        total: aperturaRecord?.total || 0,
+        total_apertura: aperturaRecord?.total_apertura || aperturaRecord?.total || 0,
+        total_cierre: totalCierre,
+        diferencia: diferenciaMonto,
         rellenos_devoluciones: allMovements,
-        total: totalCierre,
+        hora_apertura: aperturaRecord?.hora_apertura || null,
+        empleado_apertura_uuid: aperturaRecord?.empleado_apertura_uuid || null,
+        empleado_apertura_nombre: aperturaRecord?.empleado_apertura_nombre || null,
         hora_cierre: horaCierre || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
         empleado_cierre_uuid: empleadoCierreUuid || null,
         empleado_cierre_nombre: empleadoCierreNombre?.trim() || null,
-        observaciones: observaciones ? observaciones.trim() : null,
+        observaciones: observaciones ? observaciones.trim() : (aperturaRecord?.observaciones || null),
+        nota: observaciones ? observaciones.trim() : (aperturaRecord?.nota || null),
         mesa_nombre: mesa.nombre || '',
         juego_nombre: mesa.juego_nombre || '',
         updated_at: new Date().toISOString()
       };
 
+      // Si existía un registro de cierre legado con otro UUID, limpiarlo de localDB
+      if (cierreRecord?.uuid && cierreRecord.uuid !== targetUuid && !String(cierreRecord.uuid).startsWith('virtual-')) {
+        deleteLocalItem('libro_arqueo_fichas', cierreRecord.uuid).catch(() => {});
+      }
+
       // 1. Guardar en local DB (<5ms)
-      await upsertLocalItem('libro_arqueo_fichas', newCierreRecord);
+      await upsertLocalItem('libro_arqueo_fichas', unifiedRecord);
 
       // Notificar al padre inmediatamente para respuesta instantánea (0ms)
-      dispatch('saved', newCierreRecord);
+      dispatch('saved', unifiedRecord);
 
       // 2. Sincronizar en segundo plano con el backend
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
@@ -271,8 +287,8 @@
           action: 'save',
           endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
           method: 'POST',
-          payload: newCierreRecord,
-          uuid: recordUuid
+          payload: unifiedRecord,
+          uuid: targetUuid
         });
       } else {
         (async () => {
@@ -282,7 +298,7 @@
             const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(newCierreRecord),
+              body: JSON.stringify(unifiedRecord),
               signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -301,8 +317,8 @@
               action: 'save',
               endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
               method: 'POST',
-              payload: newCierreRecord,
-              uuid: recordUuid
+              payload: unifiedRecord,
+              uuid: targetUuid
             });
           }
         })();

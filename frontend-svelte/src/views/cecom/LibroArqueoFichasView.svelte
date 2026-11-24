@@ -484,7 +484,7 @@
       // Buscar si ya existe registro de apertura
       const existing = arqueoRecords.find(r => 
         String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) && 
-        r.tipo === 'apertura'
+        (r.tipo === 'apertura' || !r.tipo)
       );
       const recordUuid = existing?.uuid || existing?.id || generateSafeUuid();
 
@@ -498,48 +498,23 @@
         multisala_uuid: multisalaUuid || null,
         tipo: 'apertura',
         fichas: fichasPayload,
+        fichas_cierre: existing?.fichas_cierre || [],
         total,
+        total_apertura: total,
+        total_cierre: existing?.total_cierre || 0,
         hora_apertura: horaApertura || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
         empleado_apertura_uuid: empleadoAperturaUuid || null,
         empleado_apertura_nombre: empleadoAperturaNombre?.trim() || null,
+        hora_cierre: existing?.hora_cierre || null,
+        empleado_cierre_uuid: existing?.empleado_cierre_uuid || null,
+        empleado_cierre_nombre: existing?.empleado_cierre_nombre || null,
+        rellenos_devoluciones: existing?.rellenos_devoluciones || [],
+        diferencia: existing?.diferencia || 0,
+        nota: existing?.nota || null,
         mesa_nombre: mesaObj?.nombre || '',
         juego_nombre: mesaObj?.juego_nombre || '',
         updated_at: new Date().toISOString()
       };
-
-      // Si no existe registro de cierre para esta mesa, inicializarlo automáticamente a 0 fichas
-      const existingCierre = arqueoRecords.find(r => 
-        String(r.mesa_uuid || r.mesa_id) === String(selectedMesaId) && 
-        r.tipo === 'cierre' && !r.is_deleted
-      );
-
-      let newCierreRecord = null;
-      if (!existingCierre) {
-        const cierreUuid = generateSafeUuid();
-        const cierreFichasPayload = salaFichas.map(valor => ({
-          valor,
-          cantidad: 0,
-          total: 0
-        })).filter(f => f.valor > 0).sort((a, b) => b.valor - a.valor);
-
-        newCierreRecord = {
-          uuid: cierreUuid,
-          id: cierreUuid,
-          libro_uuid: lId,
-          libro_id: lId,
-          mesa_uuid: selectedMesaId,
-          mesa_id: selectedMesaId,
-          multisala_uuid: multisalaUuid || null,
-          tipo: 'cierre',
-          fichas: cierreFichasPayload,
-          total: 0,
-          rellenos_devoluciones: [],
-          mesa_nombre: mesaObj?.nombre || '',
-          juego_nombre: mesaObj?.juego_nombre || '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-      }
 
       // 1. Actualizar estado en memoria inmediatamente (0ms)
       const existingIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(recordUuid));
@@ -548,24 +523,12 @@
       } else {
         arqueoRecords = [...arqueoRecords, newRecord];
       }
-
-      if (newCierreRecord) {
-        const cIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(newCierreRecord.uuid || newCierreRecord.id));
-        if (cIdx !== -1) {
-          arqueoRecords[cIdx] = newCierreRecord;
-        } else {
-          arqueoRecords = [...arqueoRecords, newCierreRecord];
-        }
-      }
       arqueoRecords = [...arqueoRecords];
 
       // 2. Guardar en base de datos local IndexedDB (<5ms)
       await upsertLocalItem('libro_arqueo_fichas', newRecord);
-      if (newCierreRecord) {
-        await upsertLocalItem('libro_arqueo_fichas', newCierreRecord);
-      }
 
-      triggerToast(`Mesa "${mesaObj?.nombre || 'Mesa'}" aperturada con cierre inicial en $0.`, 'success');
+      triggerToast(`Mesa "${mesaObj?.nombre || 'Mesa'}" aperturada con éxito.`, 'success');
 
       // Limpiar y resetear el formulario tras aperturar
       selectedMesaId = '';
@@ -573,50 +536,45 @@
 
       // 3. Sincronizar en segundo plano con el backend
       const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-      const recordsToSync = [newRecord, ...(newCierreRecord ? [newCierreRecord] : [])];
-
-      for (const rec of recordsToSync) {
-        const recUuid = rec.uuid || rec.id;
-        if (isOffline) {
-          await queueOutboxAction({
-            entity: 'libro_arqueo_fichas',
-            action: 'save',
-            endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
-            method: 'POST',
-            payload: rec,
-            uuid: recUuid
-          });
-        } else {
-          (async () => {
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 4500);
-              const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(rec),
-                signal: controller.signal
-              });
-              clearTimeout(timeoutId);
-              if (res.ok) {
-                const json = await res.json();
-                if (json?.data) {
-                  await upsertLocalItem('libro_arqueo_fichas', json.data);
-                }
+      if (isOffline) {
+        await queueOutboxAction({
+          entity: 'libro_arqueo_fichas',
+          action: 'save',
+          endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+          method: 'POST',
+          payload: newRecord,
+          uuid: recordUuid
+        });
+      } else {
+        (async () => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4500);
+            const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newRecord),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.data) {
+                await upsertLocalItem('libro_arqueo_fichas', json.data);
               }
-            } catch (syncErr) {
-              console.warn('[ArqueoFichas] Encolando en Outbox:', syncErr);
-              await queueOutboxAction({
-                entity: 'libro_arqueo_fichas',
-                action: 'save',
-                endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
-                method: 'POST',
-                payload: rec,
-                uuid: recUuid
-              });
             }
-          })();
-        }
+          } catch (syncErr) {
+            console.warn('[ArqueoFichas] Encolando en Outbox:', syncErr);
+            await queueOutboxAction({
+              entity: 'libro_arqueo_fichas',
+              action: 'save',
+              endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
+              method: 'POST',
+              payload: newRecord,
+              uuid: recordUuid
+            });
+          }
+        })();
       }
     } catch (err) {
       console.error('Error aperturando mesa:', err);
@@ -659,8 +617,22 @@
       }
 
       const g = groupsMap.get(mId);
-      if (r.tipo === 'apertura') {
+      if (r.tipo === 'apertura' || !r.tipo) {
         g.apertura = r;
+        const rawFC = r.fichas_cierre;
+        const parsedFC = Array.isArray(rawFC) ? rawFC : (typeof rawFC === 'string' ? JSON.parse(rawFC || '[]') : []);
+        const hasCierreData = parsedFC.length > 0 || (r.total_cierre !== undefined && Number(r.total_cierre) > 0) || Boolean(r.hora_cierre);
+        if (hasCierreData) {
+          g.cierre = {
+            ...r,
+            tipo: 'cierre',
+            fichas: parsedFC,
+            total: Number(r.total_cierre) || 0,
+            hora_cierre: r.hora_cierre,
+            empleado_cierre_uuid: r.empleado_cierre_uuid,
+            empleado_cierre_nombre: r.empleado_cierre_nombre
+          };
+        }
       } else if (r.tipo === 'cierre') {
         g.cierre = r;
       }
@@ -722,16 +694,31 @@
     return mov.tipo === 'relleno' ? `FILL ${num}` : `CRED ${num}`;
   }
 
+  let returnToOpcionesGroup = null;
+
   // Abrir Modal de Cierre ("Arquear")
   function handleOpenCierreModal(group) {
+    if (isOpcionesModalOpen) {
+      returnToOpcionesGroup = group;
+      isOpcionesModalOpen = false;
+    }
     modalMesa = group.mesaObj || { uuid: group.mesaId, id: group.mesaId, nombre: group.mesaNombre, juego_nombre: group.juegoNombre };
     modalAperturaRecord = group.apertura;
     modalCierreRecord = group.cierre;
     isModalOpen = true;
   }
 
+  function handleCloseCierreModal() {
+    isModalOpen = false;
+    if (returnToOpcionesGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === returnToOpcionesGroup.mesaId) || returnToOpcionesGroup;
+      returnToOpcionesGroup = null;
+      isOpcionesModalOpen = true;
+    }
+  }
+
   // Abrir Modal de Rellenos y Devoluciones (Fill / Cred)
-  function handleOpenRellenoModal(tipo = 'relleno', mesaObj = null, aperturaRecord = null) {
+  function handleOpenRellenoModal(tipo = 'relleno', mesaObj = null, aperturaRecord = null, fromOpciones = false) {
     const targetMesa = mesaObj || (selectedMesaId ? availableMesas.find(m => String(m.uuid || m.id) === String(selectedMesaId)) : null);
     if (!targetMesa) {
       triggerToast('Debe seleccionar una mesa primero', 'warning');
@@ -741,13 +728,27 @@
     const mId = String(targetMesa.uuid || targetMesa.id);
     const ap = aperturaRecord || arqueoRecords.find(r => 
       String(r.mesa_uuid || r.mesa_id) === mId &&
-      r.tipo === 'apertura'
+      (r.tipo === 'apertura' || !r.tipo)
     );
+
+    if (fromOpciones && selectedOpcionesGroup) {
+      returnToOpcionesGroup = selectedOpcionesGroup;
+      isOpcionesModalOpen = false;
+    }
 
     rdModalTipo = tipo;
     rdModalMesa = targetMesa;
     rdModalApertura = ap || null;
     isRDModalOpen = true;
+  }
+
+  function handleCloseRDModal() {
+    isRDModalOpen = false;
+    if (returnToOpcionesGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === returnToOpcionesGroup.mesaId) || returnToOpcionesGroup;
+      returnToOpcionesGroup = null;
+      isOpcionesModalOpen = true;
+    }
   }
 
   // Callback cuando se guardan Rellenos o Devoluciones desde el Modal
@@ -762,34 +763,15 @@
       arqueoRecords = [...arqueoRecords, updatedApertura];
     }
 
-    // Sincronizar también con el cierre de esta misma mesa si existe
-    const mesaId = String(updatedApertura.mesa_uuid || updatedApertura.mesa_id || '');
-    if (mesaId) {
-      const cierreIdx = arqueoRecords.findIndex(r => 
-        String(r.mesa_uuid || r.mesa_id || '') === mesaId && r.tipo === 'cierre' && !r.is_deleted
-      );
-      if (cierreIdx !== -1) {
-        const updatedCierre = {
-          ...arqueoRecords[cierreIdx],
-          rellenos_devoluciones: updatedApertura.rellenos_devoluciones || [],
-          updated_at: new Date().toISOString()
-        };
-        arqueoRecords[cierreIdx] = updatedCierre;
-        upsertLocalItem('libro_arqueo_fichas', updatedCierre).catch(() => {});
-        const lId = libro?.uuid || libroId || libro?.id;
-        if (lId) {
-          fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedCierre)
-          }).catch(() => {});
-        }
-      }
-    }
-
     arqueoRecords = [...arqueoRecords];
     rdModalApertura = updatedApertura;
-    if (selectedOpcionesGroup) {
+    isRDModalOpen = false;
+
+    if (returnToOpcionesGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === returnToOpcionesGroup.mesaId) || returnToOpcionesGroup;
+      returnToOpcionesGroup = null;
+      isOpcionesModalOpen = true;
+    } else if (selectedOpcionesGroup) {
       selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === selectedOpcionesGroup.mesaId) || selectedOpcionesGroup;
     }
   }
@@ -806,7 +788,13 @@
     } else {
       arqueoRecords = [...arqueoRecords, savedRecord];
     }
-    if (selectedOpcionesGroup) {
+    isModalOpen = false;
+
+    if (returnToOpcionesGroup) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === returnToOpcionesGroup.mesaId) || returnToOpcionesGroup;
+      returnToOpcionesGroup = null;
+      isOpcionesModalOpen = true;
+    } else if (selectedOpcionesGroup) {
       selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === selectedOpcionesGroup.mesaId) || selectedOpcionesGroup;
     }
   }
@@ -836,48 +824,45 @@
     }));
 
     const apTotal = Number(group.apertura.total) || clonedFichas.reduce((a, b) => a + b.total, 0);
+    const targetUuid = group.apertura.uuid || group.apertura.id;
 
-    // Buscar si ya existe registro de cierre real en arqueoRecords
-    const existingCierre = arqueoRecords.find(r => 
-      String(r.mesa_uuid || r.mesa_id) === String(mId) && 
-      r.tipo === 'cierre' && !r.is_deleted &&
-      !String(r.uuid || r.id).startsWith('virtual-')
-    );
-
-    const cierreUuid = existingCierre?.uuid || existingCierre?.id || generateSafeUuid();
-
-    const updatedCierre = {
-      ...(existingCierre || {}),
-      uuid: cierreUuid,
-      id: cierreUuid,
+    const updatedMesa = {
+      ...group.apertura,
+      uuid: targetUuid,
+      id: targetUuid,
       libro_uuid: lId,
       libro_id: lId,
       mesa_uuid: mId,
       mesa_id: mId,
       multisala_uuid: multisalaUuid || null,
-      tipo: 'cierre',
-      fichas: clonedFichas,
-      total: apTotal,
-      rellenos_devoluciones: group.rellenosDevoluciones || group.apertura.rellenos_devoluciones || [],
-      mesa_nombre: group.mesaNombre || '',
-      juego_nombre: group.juegoNombre || '',
-      observaciones: existingCierre?.observaciones || 'Liquidado automáticamente (Cierre = Apertura)',
+      tipo: 'apertura',
+      fichas_cierre: clonedFichas,
+      total_cierre: apTotal,
+      diferencia: 0,
+      hora_cierre: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      empleado_cierre_uuid: group.apertura.empleado_apertura_uuid || null,
+      empleado_cierre_nombre: group.apertura.empleado_apertura_nombre || null,
+      observaciones: group.apertura.observaciones || 'Liquidado automáticamente (Cierre = Apertura)',
       updated_at: new Date().toISOString()
     };
 
     // 1. Actualizar estado en memoria inmediatamente (0ms)
-    const existingIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(cierreUuid));
+    const existingIdx = arqueoRecords.findIndex(r => String(r.uuid || r.id) === String(targetUuid));
     if (existingIdx !== -1) {
-      arqueoRecords[existingIdx] = updatedCierre;
+      arqueoRecords[existingIdx] = updatedMesa;
     } else {
-      arqueoRecords = [...arqueoRecords, updatedCierre];
+      arqueoRecords = [...arqueoRecords, updatedMesa];
     }
     arqueoRecords = [...arqueoRecords];
+
+    if (selectedOpcionesGroup && selectedOpcionesGroup.mesaId === mId) {
+      selectedOpcionesGroup = mesaGroups.find(g => g.mesaId === mId) || selectedOpcionesGroup;
+    }
 
     triggerToast(`Mesa "${group.mesaNombre}" liquidada (Cierre igualado a Apertura: $${formatMoney(apTotal)}).`, 'success');
 
     // 2. Guardar en base de datos local IndexedDB (<5ms)
-    await upsertLocalItem('libro_arqueo_fichas', updatedCierre);
+    await upsertLocalItem('libro_arqueo_fichas', updatedMesa);
 
     // 3. Sincronizar en segundo plano con el backend
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
@@ -887,8 +872,8 @@
         action: 'save',
         endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
         method: 'POST',
-        payload: updatedCierre,
-        uuid: cierreUuid
+        payload: updatedMesa,
+        uuid: targetUuid
       });
     } else {
       (async () => {
@@ -898,7 +883,7 @@
           const res = await fetch(toBackendUrl(`/api/master/libros/${lId}/arqueo-fichas`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatedCierre),
+            body: JSON.stringify(updatedMesa),
             signal: controller.signal
           });
           clearTimeout(timeoutId);
@@ -915,8 +900,8 @@
             action: 'save',
             endpoint: `/api/master/libros/${lId}/arqueo-fichas`,
             method: 'POST',
-            payload: updatedCierre,
-            uuid: cierreUuid
+            payload: updatedMesa,
+            uuid: targetUuid
           });
         }
       })();
@@ -1251,36 +1236,14 @@
                   {/if}
                 </td>
                 <td class="td-center td-acciones-cell">
-                  <div class="acciones-btn-row">
-                    <button 
-                      type="button" 
-                      class="btn-action-pill btn-action-liquidar"
-                      disabled={!canLiquidar}
-                      on:click={() => handleLiquidarMesa(group)}
-                      title={canLiquidar ? "Liquidar mesa (Cierre = Apertura)" : "Deshabilitado porque la mesa tiene Fills o Creds"}
-                    >
-                      Liquidar
-                    </button>
-                    <button 
-                      type="button" 
-                      class="btn-action-pill btn-action-opciones"
-                      on:click={() => handleOpenOpcionesModal(group)}
-                      title="Opciones de la mesa (Fills, Creds, Cierre, Nota y Detalle)"
-                    >
-                      Opciones
-                    </button>
-                    {#if canDelete}
-                      <button 
-                        type="button" 
-                        class="btn-action-pill btn-action-eliminar"
-                        disabled={!canEliminarMesa}
-                        on:click={() => handleEliminarMesa(group)}
-                        title={canEliminarMesa ? "Eliminar registro de esta mesa" : "Solo se puede eliminar si la mesa únicamente tiene apertura"}
-                      >
-                        Eliminar
-                      </button>
-                    {/if}
-                  </div>
+                  <button 
+                    type="button" 
+                    class="btn-action-pill btn-action-opciones"
+                    on:click={() => handleOpenOpcionesModal(group)}
+                    title="Opciones de la mesa (Fills, Creds, Cierre, Liquidar, Nota y Eliminar)"
+                  >
+                    Opciones
+                  </button>
                 </td>
               </tr>
             {/each}
@@ -1375,7 +1338,7 @@
   cierreRecord={modalCierreRecord}
   availableDenominaciones={salaFichas}
   {listaEmpleados}
-  on:close={() => { isModalOpen = false; }}
+  on:close={handleCloseCierreModal}
   on:saved={handleCierreSaved}
 />
 
@@ -1390,7 +1353,7 @@
   availableDenominaciones={salaFichas}
   initialTipo={rdModalTipo}
   {listaEmpleados}
-  on:close={() => { isRDModalOpen = false; }}
+  on:close={handleCloseRDModal}
   on:saved={handleRDSaved}
 />
 
@@ -1403,12 +1366,14 @@
   {@const totalR = selectedOpcionesGroup.totalRellenos || 0}
   {@const totalD = selectedOpcionesGroup.totalDevoluciones || 0}
   {@const difTotal = hasCierre ? ((ciTotal + totalD) - (apTotal + totalR)) : null}
+  {@const canLiquidarGroup = allMovs.length === 0 && Boolean(selectedOpcionesGroup.apertura)}
+  {@const canEliminarGroup = allMovs.length === 0 && (!hasCierre || ciTotal === 0)}
 
   <div class="modal-backdrop" on:click|self|preventDefault|stopPropagation={() => {}}>
     <div class="modal-card modal-opciones-card">
       <!-- Modal Header -->
       <div class="modal-header">
-        <div>
+        <div class="modal-header-info">
           <div class="header-badges-row">
             <span class="header-badge">Control de Mesa</span>
             {#if selectedOpcionesGroup.juegoNombre}
@@ -1436,7 +1401,7 @@
             type="button" 
             class="btn-opc-action btn-opc-fill"
             on:click={() => {
-              handleOpenRellenoModal('relleno', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura);
+              handleOpenRellenoModal('relleno', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura, true);
             }}
           >
             <span class="opc-btn-icon">➕</span>
@@ -1464,7 +1429,7 @@
             type="button" 
             class="btn-opc-action btn-opc-cred"
             on:click={() => {
-              handleOpenRellenoModal('devolucion', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura);
+              handleOpenRellenoModal('devolucion', selectedOpcionesGroup.mesaObj || { uuid: selectedOpcionesGroup.mesaId, id: selectedOpcionesGroup.mesaId, nombre: selectedOpcionesGroup.mesaNombre, juego_nombre: selectedOpcionesGroup.juegoNombre }, selectedOpcionesGroup.apertura, true);
             }}
           >
             <span class="opc-btn-icon">↩️</span>
@@ -1475,53 +1440,87 @@
           </button>
         </div>
 
-        <!-- Botón de Nota / Observación que abarca completo -->
-        <div class="nota-section-container">
-          {#if !isEditingNota}
+        <!-- 3 Botones Secundarios: Liquidar, Nota, Eliminar -->
+        <div class="opciones-secondary-buttons-grid">
+          <button 
+            type="button" 
+            class="btn-opc-sec btn-opc-sec-liquidar"
+            disabled={!canLiquidarGroup}
+            on:click={() => handleLiquidarMesa(selectedOpcionesGroup)}
+            title={canLiquidarGroup ? "Liquidar mesa (Cierre = Apertura)" : "Deshabilitado porque la mesa tiene Fills o Creds"}
+          >
+            <span class="sec-icon">⚡</span>
+            <div class="sec-text">
+              <span class="sec-title">Liquidar</span>
+              <span class="sec-sub">Cierre = Apertura</span>
+            </div>
+          </button>
+
+          <button 
+            type="button" 
+            class="btn-opc-sec btn-opc-sec-nota {isEditingNota ? 'active' : ''}"
+            on:click={() => {
+              notaTexto = selectedOpcionesGroup.apertura?.nota || selectedOpcionesGroup.cierre?.nota || '';
+              isEditingNota = !isEditingNota;
+            }}
+            title="Agregar o editar nota a la mesa"
+          >
+            <span class="sec-icon">📝</span>
+            <div class="sec-text">
+              <span class="sec-title">Nota</span>
+              <span class="sec-sub">{selectedOpcionesGroup.apertura?.nota ? 'Editar Nota' : 'Agregar Nota'}</span>
+            </div>
+          </button>
+
+          {#if canDelete}
             <button 
               type="button" 
-              class="btn-nota-full"
-              on:click={() => {
-                notaTexto = selectedOpcionesGroup.apertura?.nota || '';
-                isEditingNota = true;
+              class="btn-opc-sec btn-opc-sec-eliminar"
+              disabled={!canEliminarGroup}
+              on:click={async () => {
+                if (confirm(`¿Está seguro de eliminar el registro de arqueo de "${selectedOpcionesGroup.mesaNombre}"?`)) {
+                  const toDelete = selectedOpcionesGroup;
+                  handleCloseOpcionesModal();
+                  await handleEliminarMesa(toDelete);
+                }
               }}
+              title={canEliminarGroup ? "Eliminar registro de esta mesa" : "Solo se puede eliminar si la mesa únicamente tiene apertura"}
             >
-              <span class="nota-icon">📝</span>
-              <span class="nota-btn-title">
-                {selectedOpcionesGroup.apertura?.nota ? 'Editar Nota de la Mesa' : 'Agregar Nota a la Mesa'}
-              </span>
-              {#if selectedOpcionesGroup.apertura?.nota}
-                <span class="nota-preview-chip">Con Nota</span>
-              {/if}
+              <span class="sec-icon">🗑️</span>
+              <div class="sec-text">
+                <span class="sec-title">Eliminar</span>
+                <span class="sec-sub">Quitar Arqueo</span>
+              </div>
             </button>
-
-            {#if selectedOpcionesGroup.apertura?.nota}
-              <div class="nota-display-box">
-                <span class="nota-display-label">Nota registrada:</span>
-                <p class="nota-display-text">{selectedOpcionesGroup.apertura.nota}</p>
-              </div>
-            {/if}
-          {:else}
-            <div class="nota-editor-box">
-              <label for="textarea-nota-mesa" class="nota-editor-label">Nota / Observación de la mesa:</label>
-              <textarea 
-                id="textarea-nota-mesa"
-                class="nota-textarea"
-                placeholder="Escriba aquí la nota o novedad relevante para esta mesa..."
-                bind:value={notaTexto}
-                rows="3"
-              ></textarea>
-              <div class="nota-editor-actions">
-                <button type="button" class="btn-nota-cancel" on:click={() => { isEditingNota = false; }}>
-                  Cancelar
-                </button>
-                <button type="button" class="btn-nota-save" on:click={handleGuardarNota}>
-                  Guardar Nota
-                </button>
-              </div>
-            </div>
           {/if}
         </div>
+
+        <!-- Sección de Nota (Editor o Visualizador) -->
+        {#if isEditingNota}
+          <div class="nota-editor-box">
+            <label for="textarea-nota-mesa" class="nota-editor-label">Nota / Observación de la mesa:</label>
+            <textarea 
+              id="textarea-nota-mesa"
+              class="nota-textarea"
+              placeholder="Escriba aquí la nota o novedad relevante para esta mesa..."
+              bind:value={notaTexto}
+              rows="3"
+            ></textarea>
+            <div class="nota-editor-actions">
+              <button type="button" class="btn-nota-cancel" on:click={() => { isEditingNota = false; }}>
+                Cancelar
+              </button>
+              <button type="button" class="btn-nota-save" on:click={handleGuardarNota}>
+                Guardar Nota
+              </button>
+            </div>
+          </div>
+        {:else if selectedOpcionesGroup.apertura?.nota}
+          <div class="nota-display-box">
+            <span class="nota-display-label">Nota registrada:</span>
+            <p class="nota-display-text">{selectedOpcionesGroup.apertura.nota}</p>
+          </div>
+        {/if}
 
         <!-- Tabla detallada de la Mesa: Apertura, Fills, Creds, Cierre, Total -->
         <div class="opciones-table-container">
@@ -2483,6 +2482,49 @@
     overflow: hidden;
     border: 1px solid #e2e8f0;
   }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 20px 24px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .modal-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .header-badges-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .header-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .header-main-title {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 800;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .mesa-highlight {
+    color: #2563eb;
+  }
+  .header-sub {
+    margin: 0;
+    font-size: 12.5px;
+    color: #64748b;
+  }
   .modal-opciones-body {
     padding: 20px 24px;
     overflow-y: auto;
@@ -2551,6 +2593,76 @@
   }
   .opc-sub {
     font-size: 11px;
+    opacity: 0.85;
+  }
+
+  /* Fila de 3 Botones Secundarios: Liquidar, Nota, Eliminar */
+  .opciones-secondary-buttons-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .btn-opc-sec {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: left;
+  }
+  .btn-opc-sec:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+  }
+  .btn-opc-sec-liquidar {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #15803d;
+  }
+  .btn-opc-sec-liquidar:hover:not(:disabled) {
+    background: #dcfce7;
+    border-color: #86efac;
+    transform: translateY(-1px);
+  }
+  .btn-opc-sec-nota {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #b45309;
+  }
+  .btn-opc-sec-nota:hover:not(:disabled), .btn-opc-sec-nota.active {
+    background: #fef3c7;
+    border-color: #fcd34d;
+    transform: translateY(-1px);
+  }
+  .btn-opc-sec-eliminar {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+  }
+  .btn-opc-sec-eliminar:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    transform: translateY(-1px);
+  }
+  .sec-icon {
+    font-size: 18px;
+  }
+  .sec-text {
+    display: flex;
+    flex-direction: column;
+  }
+  .sec-title {
+    font-size: 12.5px;
+    font-weight: 800;
+  }
+  .sec-sub {
+    font-size: 10.5px;
     opacity: 0.85;
   }
 

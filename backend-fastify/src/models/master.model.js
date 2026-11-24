@@ -9767,11 +9767,36 @@ export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
 
   if (!isPgConnected || !sql) {
     const list = inMemoryData.libro_arqueo_fichas || [];
-    return list.filter(d => 
+    const filtered = list.filter(d => 
       String(d.libro_uuid || d.libro_id) === targetLibroUuid &&
       (rawMultisala === 'all' || (rawMultisala ? String(d.multisala_uuid) === String(rawMultisala) : !d.multisala_uuid)) &&
       !d.is_deleted
     );
+    // Consolidar por mesa si existen registros separados de apertura y cierre
+    const byMesa = new Map();
+    for (const r of filtered) {
+      const mId = String(r.mesa_uuid || r.mesa_id);
+      if (!byMesa.has(mId)) {
+        byMesa.set(mId, { ...r });
+      } else {
+        const existing = byMesa.get(mId);
+        if (r.tipo === 'cierre') {
+          existing.fichas_cierre = r.fichas || [];
+          existing.total_cierre = r.total || 0;
+          existing.hora_cierre = r.hora_cierre || existing.hora_cierre;
+          existing.empleado_cierre_uuid = r.empleado_cierre_uuid || existing.empleado_cierre_uuid;
+          existing.empleado_cierre_nombre = r.empleado_cierre_nombre || existing.empleado_cierre_nombre;
+        } else if (r.tipo === 'apertura') {
+          existing.fichas = r.fichas || [];
+          existing.total = r.total || 0;
+          existing.total_apertura = r.total || 0;
+          existing.hora_apertura = r.hora_apertura || existing.hora_apertura;
+          existing.empleado_apertura_uuid = r.empleado_apertura_uuid || existing.empleado_apertura_uuid;
+          existing.empleado_apertura_nombre = r.empleado_apertura_nombre || existing.empleado_apertura_nombre;
+        }
+      }
+    }
+    return Array.from(byMesa.values());
   }
 
   let whereMultisala = sql``;
@@ -9794,8 +9819,12 @@ export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
       a.mesa_uuid AS mesa_id,
       a.tipo,
       a.fichas,
+      a.fichas_cierre,
       a.rellenos_devoluciones,
       a.total,
+      a.total_apertura,
+      a.total_cierre,
+      a.diferencia,
       a.observaciones,
       a.nota,
       a.hora_apertura,
@@ -9818,16 +9847,55 @@ export async function getLibroArqueoFichasModel(libroId, multisalaUuid = null) {
     WHERE a.libro_uuid = ${targetLibroUuid}::uuid
       AND (a.is_deleted IS FALSE OR a.is_deleted IS NULL)
       ${whereMultisala}
-    ORDER BY COALESCE(m.nombre, a.mesa_uuid::text) ASC, a.tipo ASC, a.created_at ASC
+    ORDER BY COALESCE(m.nombre, a.mesa_uuid::text) ASC, 
+             CASE WHEN a.tipo = 'apertura' THEN 0 ELSE 1 END ASC, 
+             a.created_at ASC
   `;
 
-  return rows.map(r => ({
-    ...r,
-    mesa_nombre: r.mesa_nombre ? toTitleCase(r.mesa_nombre) : '',
-    juego_nombre: r.juego_nombre ? toTitleCase(r.juego_nombre) : '',
-    fichas: Array.isArray(r.fichas) ? r.fichas : (typeof r.fichas === 'string' ? JSON.parse(r.fichas || '[]') : []),
-    rellenos_devoluciones: Array.isArray(r.rellenos_devoluciones) ? r.rellenos_devoluciones : (typeof r.rellenos_devoluciones === 'string' ? JSON.parse(r.rellenos_devoluciones || '[]') : [])
-  }));
+  // Consolidar registros por mesa_uuid en caso de que existan registros legados separados de apertura y cierre
+  const consolidatedMap = new Map();
+  for (const r of rows) {
+    const mId = String(r.mesa_uuid);
+    const parsedFichas = Array.isArray(r.fichas) ? r.fichas : (typeof r.fichas === 'string' ? JSON.parse(r.fichas || '[]') : []);
+    const parsedFichasCierre = Array.isArray(r.fichas_cierre) ? r.fichas_cierre : (typeof r.fichas_cierre === 'string' ? JSON.parse(r.fichas_cierre || '[]') : []);
+    const parsedMovs = Array.isArray(r.rellenos_devoluciones) ? r.rellenos_devoluciones : (typeof r.rellenos_devoluciones === 'string' ? JSON.parse(r.rellenos_devoluciones || '[]') : []);
+
+    if (!consolidatedMap.has(mId)) {
+      consolidatedMap.set(mId, {
+        ...r,
+        mesa_nombre: r.mesa_nombre ? toTitleCase(r.mesa_nombre) : '',
+        juego_nombre: r.juego_nombre ? toTitleCase(r.juego_nombre) : '',
+        fichas: parsedFichas,
+        fichas_cierre: parsedFichasCierre,
+        rellenos_devoluciones: parsedMovs,
+        total: Number(r.total) || 0,
+        total_apertura: Number(r.total_apertura || (r.tipo === 'apertura' ? r.total : 0)) || 0,
+        total_cierre: Number(r.total_cierre || (r.tipo === 'cierre' ? r.total : 0)) || 0
+      });
+    } else {
+      const existing = consolidatedMap.get(mId);
+      // Si la fila adicional es de cierre, volcar sus datos al registro unificado
+      if (r.tipo === 'cierre') {
+        existing.fichas_cierre = parsedFichas.length > 0 ? parsedFichas : existing.fichas_cierre;
+        existing.total_cierre = Number(r.total) || existing.total_cierre;
+        existing.hora_cierre = r.hora_cierre || existing.hora_cierre;
+        existing.empleado_cierre_uuid = r.empleado_cierre_uuid || existing.empleado_cierre_uuid;
+        existing.empleado_cierre_nombre = r.empleado_cierre_nombre || existing.empleado_cierre_nombre;
+        if (parsedMovs.length > 0 && existing.rellenos_devoluciones.length === 0) {
+          existing.rellenos_devoluciones = parsedMovs;
+        }
+      } else if (r.tipo === 'apertura') {
+        existing.fichas = parsedFichas.length > 0 ? parsedFichas : existing.fichas;
+        existing.total = Number(r.total) || existing.total;
+        existing.total_apertura = Number(r.total) || existing.total_apertura;
+        existing.hora_apertura = r.hora_apertura || existing.hora_apertura;
+        existing.empleado_apertura_uuid = r.empleado_apertura_uuid || existing.empleado_apertura_uuid;
+        existing.empleado_apertura_nombre = r.empleado_apertura_nombre || existing.empleado_apertura_nombre;
+      }
+    }
+  }
+
+  return Array.from(consolidatedMap.values());
 }
 
 export async function createOrUpdateLibroArqueoFichaModel(data) {
@@ -9877,6 +9945,32 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
   const total = data.total !== undefined && !isNaN(Number(data.total)) ? Number(data.total) : calculatedTotal;
   const arqueoUuid = (data.uuid && isUuid(data.uuid)) ? data.uuid : crypto.randomUUID();
 
+  // Fichas de cierre (si se pasan explícitamente o si data.tipo === 'cierre')
+  let rawFichasCierre = data.fichas_cierre !== undefined ? data.fichas_cierre : (tipo === 'cierre' ? rawFichas : null);
+  let fichasCierreClean = null;
+  if (rawFichasCierre !== null && rawFichasCierre !== undefined) {
+    if (typeof rawFichasCierre === 'string') {
+      try { rawFichasCierre = JSON.parse(rawFichasCierre); } catch (e) { rawFichasCierre = []; }
+    }
+    fichasCierreClean = (Array.isArray(rawFichasCierre) ? rawFichasCierre : []).map(f => {
+      const v = Number(f.valor ?? f.denominacion);
+      const c = Math.max(0, parseInt(f.cantidad ?? 0, 10) || 0);
+      return {
+        valor: isNaN(v) ? 0 : v,
+        cantidad: c,
+        total: (isNaN(v) ? 0 : v) * c
+      };
+    }).filter(f => f.valor > 0).sort((a, b) => b.valor - a.valor);
+  }
+
+  const totalCierreVal = data.total_cierre !== undefined && !isNaN(Number(data.total_cierre)) 
+    ? Number(data.total_cierre) 
+    : (tipo === 'cierre' ? total : (fichasCierreClean ? fichasCierreClean.reduce((a, b) => a + b.total, 0) : null));
+
+  const totalAperturaVal = data.total_apertura !== undefined && !isNaN(Number(data.total_apertura))
+    ? Number(data.total_apertura)
+    : (tipo === 'apertura' ? total : null);
+
   const rawRellenosDevoluciones = data.rellenos_devoluciones !== undefined ? data.rellenos_devoluciones : null;
   const rellenosDevolucionesClean = Array.isArray(rawRellenosDevoluciones)
     ? rawRellenosDevoluciones
@@ -9884,10 +9978,10 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
 
   if (!isPgConnected || !sql) {
     inMemoryData.libro_arqueo_fichas = inMemoryData.libro_arqueo_fichas || [];
+    // Buscar si ya existe registro unificado para esta mesa
     const existingIdx = inMemoryData.libro_arqueo_fichas.findIndex(
       d => String(d.libro_uuid || d.libro_id) === libroUuid &&
            String(d.mesa_uuid || d.mesa_id) === mesaUuid &&
-           d.tipo === tipo &&
            (multisalaUuid ? String(d.multisala_uuid) === multisalaUuid : !d.multisala_uuid) &&
            !d.is_deleted
     );
@@ -9895,19 +9989,25 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     const mesa = (inMemoryData.mesas || []).find(m => String(m.uuid || m.id) === mesaUuid) || {};
 
     if (existingIdx !== -1) {
+      const curr = inMemoryData.libro_arqueo_fichas[existingIdx];
+      const isCierreUpdate = tipo === 'cierre' || fichasCierreClean !== null || totalCierreVal !== null;
+      
       inMemoryData.libro_arqueo_fichas[existingIdx] = {
-        ...inMemoryData.libro_arqueo_fichas[existingIdx],
-        fichas: fichasClean,
-        rellenos_devoluciones: rellenosDevolucionesClean !== null ? rellenosDevolucionesClean : (inMemoryData.libro_arqueo_fichas[existingIdx].rellenos_devoluciones || []),
-        total,
-        observaciones: nota || observaciones,
-        nota: nota || inMemoryData.libro_arqueo_fichas[existingIdx].nota,
-        hora_apertura: horaApertura || inMemoryData.libro_arqueo_fichas[existingIdx].hora_apertura,
-        empleado_apertura_uuid: empleadoAperturaUuid || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_apertura_uuid,
-        empleado_apertura_nombre: empleadoAperturaNombre || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_apertura_nombre,
-        hora_cierre: horaCierre || inMemoryData.libro_arqueo_fichas[existingIdx].hora_cierre,
-        empleado_cierre_uuid: empleadoCierreUuid || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_cierre_uuid,
-        empleado_cierre_nombre: empleadoCierreNombre || inMemoryData.libro_arqueo_fichas[existingIdx].empleado_cierre_nombre,
+        ...curr,
+        fichas: (tipo === 'apertura' && fichasClean.length > 0) ? fichasClean : curr.fichas,
+        fichas_cierre: isCierreUpdate && fichasCierreClean !== null ? fichasCierreClean : (curr.fichas_cierre || []),
+        total: (tipo === 'apertura') ? total : curr.total,
+        total_apertura: totalAperturaVal !== null ? totalAperturaVal : curr.total_apertura,
+        total_cierre: totalCierreVal !== null ? totalCierreVal : curr.total_cierre,
+        rellenos_devoluciones: rellenosDevolucionesClean !== null ? rellenosDevolucionesClean : (curr.rellenos_devoluciones || []),
+        observaciones: nota || curr.observaciones,
+        nota: nota || curr.nota,
+        hora_apertura: horaApertura || curr.hora_apertura,
+        empleado_apertura_uuid: empleadoAperturaUuid || curr.empleado_apertura_uuid,
+        empleado_apertura_nombre: empleadoAperturaNombre || curr.empleado_apertura_nombre,
+        hora_cierre: horaCierre || curr.hora_cierre,
+        empleado_cierre_uuid: empleadoCierreUuid || curr.empleado_cierre_uuid,
+        empleado_cierre_nombre: empleadoCierreNombre || curr.empleado_cierre_nombre,
         updated_at: new Date().toISOString()
       };
       return inMemoryData.libro_arqueo_fichas[existingIdx];
@@ -9921,10 +10021,13 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
       multisala_uuid: multisalaUuid,
       mesa_id: mesaUuid,
       mesa_uuid: mesaUuid,
-      tipo,
-      fichas: fichasClean,
+      tipo: 'apertura',
+      fichas: tipo === 'apertura' ? fichasClean : [],
+      fichas_cierre: tipo === 'cierre' ? fichasClean : (fichasCierreClean || []),
       rellenos_devoluciones: rellenosDevolucionesClean || [],
-      total,
+      total: tipo === 'apertura' ? total : 0,
+      total_apertura: totalAperturaVal !== null ? totalAperturaVal : (tipo === 'apertura' ? total : 0),
+      total_cierre: totalCierreVal !== null ? totalCierreVal : (tipo === 'cierre' ? total : 0),
       observaciones: nota || observaciones,
       nota,
       hora_apertura: horaApertura,
@@ -9942,36 +10045,61 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     return newRecord;
   }
 
+  // Buscar si ya existe fila para esta mesa en este libro (unificada)
   let existingRow;
   if (multisalaUuid) {
     existingRow = await sql`
-      SELECT uuid FROM libro_arqueo_fichas
+      SELECT uuid, fichas, fichas_cierre, total, total_apertura, total_cierre, rellenos_devoluciones
+      FROM libro_arqueo_fichas
       WHERE libro_uuid = ${libroUuid}::uuid 
         AND mesa_uuid = ${mesaUuid}::uuid 
         AND multisala_uuid = ${multisalaUuid}::uuid
-        AND tipo = ${tipo}
         AND (is_deleted IS FALSE OR is_deleted IS NULL)
+      ORDER BY CASE WHEN tipo = 'apertura' THEN 0 ELSE 1 END, created_at ASC
       LIMIT 1
     `;
   } else {
     existingRow = await sql`
-      SELECT uuid FROM libro_arqueo_fichas
+      SELECT uuid, fichas, fichas_cierre, total, total_apertura, total_cierre, rellenos_devoluciones
+      FROM libro_arqueo_fichas
       WHERE libro_uuid = ${libroUuid}::uuid 
         AND mesa_uuid = ${mesaUuid}::uuid 
         AND multisala_uuid IS NULL
-        AND tipo = ${tipo}
         AND (is_deleted IS FALSE OR is_deleted IS NULL)
+      ORDER BY CASE WHEN tipo = 'apertura' THEN 0 ELSE 1 END, created_at ASC
       LIMIT 1
     `;
   }
 
   let insertedUuid = null;
   if (existingRow.length > 0) {
+    const existingRec = existingRow[0];
+    const isCierreSave = tipo === 'cierre' || fichasCierreClean !== null || totalCierreVal !== null;
+
     const updated = await sql`
       UPDATE libro_arqueo_fichas SET
-        fichas = ${JSON.stringify(fichasClean)}::jsonb,
+        fichas = CASE 
+          WHEN ${tipo === 'apertura'} THEN ${JSON.stringify(fichasClean)}::jsonb 
+          ELSE fichas 
+        END,
+        fichas_cierre = CASE 
+          WHEN ${isCierreSave} AND ${fichasCierreClean !== null} THEN ${JSON.stringify(fichasCierreClean || [])}::jsonb 
+          ELSE COALESCE(fichas_cierre, '[]'::jsonb) 
+        END,
         rellenos_devoluciones = COALESCE(${rellenosDevolucionesClean !== null ? JSON.stringify(rellenosDevolucionesClean) : null}::jsonb, rellenos_devoluciones, '[]'::jsonb),
-        total = ${total},
+        total = CASE 
+          WHEN ${tipo === 'apertura'} THEN ${total} 
+          ELSE total 
+        END,
+        total_apertura = CASE 
+          WHEN ${totalAperturaVal !== null} THEN ${totalAperturaVal} 
+          WHEN ${tipo === 'apertura'} THEN ${total} 
+          ELSE total_apertura 
+        END,
+        total_cierre = CASE 
+          WHEN ${totalCierreVal !== null} THEN ${totalCierreVal} 
+          ELSE total_cierre 
+        END,
         hora_apertura = COALESCE(${horaApertura}, hora_apertura),
         empleado_apertura_uuid = COALESCE(${empleadoAperturaUuid ? sql`${empleadoAperturaUuid}::uuid` : sql`NULL`}, empleado_apertura_uuid),
         empleado_apertura_nombre = COALESCE(${empleadoAperturaNombre}, empleado_apertura_nombre),
@@ -9983,7 +10111,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
         is_deleted = false,
         deleted_at = NULL,
         updated_at = CURRENT_TIMESTAMP
-      WHERE uuid = ${existingRow[0].uuid}::uuid
+      WHERE uuid = ${existingRec.uuid}::uuid
       RETURNING uuid
     `;
     insertedUuid = updated[0].uuid;
@@ -9991,7 +10119,8 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     const res = await sql`
       INSERT INTO libro_arqueo_fichas (
         uuid, libro_uuid, mesa_uuid, multisala_uuid,
-        tipo, fichas, rellenos_devoluciones, total,
+        tipo, fichas, fichas_cierre, rellenos_devoluciones, 
+        total, total_apertura, total_cierre,
         hora_apertura, empleado_apertura_uuid, empleado_apertura_nombre,
         hora_cierre, empleado_cierre_uuid, empleado_cierre_nombre,
         nota, observaciones
@@ -10001,10 +10130,13 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
         ${libroUuid}::uuid,
         ${mesaUuid}::uuid,
         ${multisalaUuid ? multisalaUuid : null}::uuid,
-        ${tipo},
-        ${JSON.stringify(fichasClean)}::jsonb,
+        'apertura',
+        ${JSON.stringify(tipo === 'apertura' ? fichasClean : [])}::jsonb,
+        ${JSON.stringify(tipo === 'cierre' ? fichasClean : (fichasCierreClean || []))}::jsonb,
         ${JSON.stringify(rellenosDevolucionesClean || [])}::jsonb,
-        ${total},
+        ${tipo === 'apertura' ? total : 0},
+        ${totalAperturaVal !== null ? totalAperturaVal : (tipo === 'apertura' ? total : 0)},
+        ${totalCierreVal !== null ? totalCierreVal : (tipo === 'cierre' ? total : 0)},
         ${horaApertura},
         ${empleadoAperturaUuid ? sql`${empleadoAperturaUuid}::uuid` : null},
         ${empleadoAperturaNombre},
@@ -10030,8 +10162,12 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
       a.mesa_uuid AS mesa_id,
       a.tipo,
       a.fichas,
+      a.fichas_cierre,
       a.rellenos_devoluciones,
       a.total,
+      a.total_apertura,
+      a.total_cierre,
+      a.diferencia,
       a.observaciones,
       a.nota,
       a.hora_apertura,
@@ -10062,6 +10198,7 @@ export async function createOrUpdateLibroArqueoFichaModel(data) {
     mesa_nombre: finalRow.mesa_nombre ? toTitleCase(finalRow.mesa_nombre) : '',
     juego_nombre: finalRow.juego_nombre ? toTitleCase(finalRow.juego_nombre) : '',
     fichas: Array.isArray(finalRow.fichas) ? finalRow.fichas : (typeof finalRow.fichas === 'string' ? JSON.parse(finalRow.fichas || '[]') : []),
+    fichas_cierre: Array.isArray(finalRow.fichas_cierre) ? finalRow.fichas_cierre : (typeof finalRow.fichas_cierre === 'string' ? JSON.parse(finalRow.fichas_cierre || '[]') : []),
     rellenos_devoluciones: Array.isArray(finalRow.rellenos_devoluciones) ? finalRow.rellenos_devoluciones : (typeof finalRow.rellenos_devoluciones === 'string' ? JSON.parse(finalRow.rellenos_devoluciones || '[]') : [])
   };
 }
