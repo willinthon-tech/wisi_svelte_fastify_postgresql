@@ -31,7 +31,7 @@
     { id: 'arqueo-fichas', label: 'Apertura y Cierre', category: 'Mesas', categoryKey: 'mesas', icon: '', description: 'Control y arqueo de fichas (apertura y cierre) de mesas en vivo' },
     { id: 'conteo-maquinas', label: 'Billetero', category: 'Máquinas', categoryKey: 'maquinas', icon: '', description: 'Registro y cuadre de conteo de billetes de máquinas por rango' },
     { id: 'aportes-maquinas', label: 'Aporte y Devoluciones', category: 'Máquinas', categoryKey: 'maquinas', icon: '', description: 'Registro y control de aportes y devoluciones de máquinas por empleado y rango' },
-    { id: 'control-clientes', label: 'Clientes', category: 'Control', categoryKey: 'control', icon: '', description: 'Seguimiento de jugadores y eventos de sala' },
+    { id: 'control-clientes', label: 'Compras y Pagos', category: 'Control', categoryKey: 'control', icon: '', description: 'Seguimiento de compras y pagos de clientes' },
     { id: 'control-llaves', label: 'Llaves', category: 'Control', categoryKey: 'control', icon: '', description: 'Bitácora de entrega y recepción de llaves' },
     { id: 'incidencias-generales', label: 'Incidencias', category: 'Control', categoryKey: 'control', icon: '', description: 'Eventos e incidentes reportados en sala' },
     { id: 'resumen-libro', label: 'Resumen', category: 'Libro', categoryKey: 'libro', icon: '', description: 'Consolidado general y auditoría de la jornada' }
@@ -102,7 +102,7 @@
         activeSubvista = 'conteo-maquinas';
       } else if (secondPart === 'arqueo' || secondPart === 'arqueo-fichas' || secondPart === 'sobrantes-faltantes' || secondPart === 'apertura-cierre' || secondPart === 'novedades' || secondPart === 'novedades-mesas') {
         activeSubvista = 'arqueo-fichas';
-      } else if (secondPart === 'clientes' || secondPart === 'control-clientes') {
+      } else if (secondPart === 'clientes' || secondPart === 'control-clientes' || secondPart === 'compras-pagos' || secondPart === 'compras-y-pagos' || secondPart === 'compras') {
         activeSubvista = 'control-clientes';
       } else if (secondPart === 'llaves' || secondPart === 'control-llaves') {
         activeSubvista = 'control-llaves';
@@ -547,17 +547,17 @@
 
   .main-subvistas-grid {
     display: grid;
-    grid-template-columns: repeat(10, minmax(0, 1fr));
+    grid-template-columns: repeat(9, minmax(0, 1fr));
     width: 100%;
-    gap: 4px;
+    gap: 6px;
     box-sizing: border-box;
     min-width: 0;
   }
 
-  @media (max-width: 1024px) {
+  @media (max-width: 1100px) {
     .main-subvistas-grid {
-      grid-template-columns: repeat(10, minmax(88px, 1fr));
-      min-width: 880px;
+      grid-template-columns: repeat(9, minmax(110px, 1fr));
+      min-width: 990px;
     }
   }
 
@@ -580,7 +580,7 @@
   .main-subvistas-grid .subvista-tab-btn {
     width: 100%;
     min-width: 0;
-    padding: 6px 3px;
+    padding: 6px 4px;
     box-sizing: border-box;
   }
 
@@ -600,9 +600,10 @@
   }
 
   .tab-label {
-    font-size: 12.5px;
+    font-size: 12px;
     font-weight: 700;
     color: #475569;
+    letter-spacing: -0.15px;
     line-height: 1.2;
     text-align: center;
     transition: color 0.15s ease;
