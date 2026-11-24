@@ -56,3 +56,28 @@ CREATE INDEX IF NOT EXISTS idx_wa_logs_created ON public.whatsapp_logs(created_a
 CREATE INDEX IF NOT EXISTS idx_wa_logs_jid ON public.whatsapp_logs(group_jid);
 CREATE INDEX IF NOT EXISTS idx_wa_logs_status ON public.whatsapp_logs(status);
 CREATE INDEX IF NOT EXISTS idx_wa_logs_msg_id ON public.whatsapp_logs(message_id);
+
+-- 3. Tabla para el Diccionario Inteligente de WhatsApp (catálogo pre-indexado)
+CREATE TABLE IF NOT EXISTS public.whatsapp_dictionary (
+    uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category VARCHAR(50) NOT NULL,       -- 'empleado', 'rango', 'cliente', 'metodo_pago', 'maquina', 'modo'
+    sala_uuid UUID,                       -- NULL para globales (rangos, métodos), o UUID de sala
+    entity_uuid UUID NOT NULL,            -- UUID original en empleados, rangos, clientes, metodos_pago, maquinas
+    nombre VARCHAR(255) NOT NULL,
+    normalized_name VARCHAR(255) NOT NULL,
+    extra JSONB DEFAULT '{}'::jsonb,      -- tokens, cargo, cedula, aliases, serial, etc.
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_wa_dict_category ON public.whatsapp_dictionary(category);
+CREATE INDEX IF NOT EXISTS idx_wa_dict_sala ON public.whatsapp_dictionary(sala_uuid);
+CREATE INDEX IF NOT EXISTS idx_wa_dict_norm_name ON public.whatsapp_dictionary(normalized_name);
+
+-- 4. Tabla de metadata de sincronización del Diccionario
+CREATE TABLE IF NOT EXISTS public.whatsapp_dictionary_meta (
+    id INT PRIMARY KEY DEFAULT 1,
+    last_synced_at TIMESTAMPTZ,
+    stats JSONB DEFAULT '{}'::jsonb,
+    synced_by VARCHAR(100) DEFAULT 'system'
+);
