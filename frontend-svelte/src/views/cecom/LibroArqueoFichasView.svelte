@@ -893,6 +893,7 @@
       hora_cierre: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
       empleado_cierre_uuid: group.apertura.empleado_apertura_uuid || null,
       empleado_cierre_nombre: group.apertura.empleado_apertura_nombre || null,
+      nota: group.apertura.nota || 'Liquidado automáticamente (Cierre = Apertura)',
       observaciones: group.apertura.observaciones || 'Liquidado automáticamente (Cierre = Apertura)',
       updated_at: new Date().toISOString()
     };

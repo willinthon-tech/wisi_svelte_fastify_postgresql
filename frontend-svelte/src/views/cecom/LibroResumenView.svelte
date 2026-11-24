@@ -111,6 +111,10 @@
       if (String(targetId) !== String(lastLoadedId)) {
         await loadFullResumen(targetId);
       }
+      if (!isPublic) {
+        // En CECOM interno, regenerar snapshot para sincronizar inmediatamente los cambios más recientes
+        handleGenerarOActualizarReporte(true);
+      }
     } else {
       isLoading = false;
       loadError = "No se especificó ningún libro para generar el reporte";
@@ -668,8 +672,27 @@
         existingGroup.juegoNombre = r.juego_nombre;
       }
 
-      if (r.tipo === 'apertura') {
+      if (r.tipo === 'apertura' || !r.tipo) {
         existingGroup.apertura = r;
+        const rawFC = r.fichas_cierre;
+        let parsedFC = [];
+        if (Array.isArray(rawFC)) {
+          parsedFC = rawFC;
+        } else if (typeof rawFC === 'string') {
+          try { parsedFC = JSON.parse(rawFC || '[]'); } catch (e) { parsedFC = []; }
+        }
+        const hasCierreData = Boolean(r.hora_cierre) || (parsedFC && parsedFC.length > 0) || (r.total_cierre !== undefined && r.total_cierre !== null && Number(r.total_cierre) > 0);
+        if (hasCierreData) {
+          existingGroup.cierre = {
+            ...r,
+            tipo: 'cierre',
+            fichas: parsedFC,
+            total: Number(r.total_cierre) || 0,
+            hora_cierre: r.hora_cierre,
+            empleado_cierre_uuid: r.empleado_cierre_uuid,
+            empleado_cierre_nombre: r.empleado_cierre_nombre
+          };
+        }
       } else if (r.tipo === 'cierre') {
         // Si ya hay un cierre, conservar el que tenga total > 0 o sea el más actualizado
         if (!existingGroup.cierre || (Number(r.total) > 0 && !Number(existingGroup.cierre.total))) {
@@ -707,7 +730,7 @@
     const totalArqueoApertura = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.apertura?.total) || 0), 0);
     const totalArqueoRellenos = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.totalRellenos) || 0), 0);
     const totalArqueoDevoluciones = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.totalDevoluciones) || 0), 0);
-    const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (Number(g.cierre?.total) || 0), 0);
+    const totalArqueoCierre = arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre && !g.cierre.is_virtual && !String(g.cierre.uuid || '').startsWith('virtual-') ? (Number(g.cierre.total) || 0) : 0), 0);
 
     // 2.2 Consolidado por mesa para el Cuadro Total (Drop + Sobrantes - Faltantes = Total)
     const mapMesasConsolidado = new Map();
@@ -765,8 +788,7 @@
       const hasRealCierre = Boolean(
         g.cierre && 
         !g.cierre.is_virtual && 
-        !String(g.cierre.uuid || '').startsWith('virtual-') &&
-        (Number(g.cierre.total) > 0 || !g.apertura)
+        !String(g.cierre.uuid || '').startsWith('virtual-')
       );
       const ci = hasRealCierre ? (Number(g.cierre?.total) || 0) : 0;
       const r = Number(g.totalRellenos) || 0;
@@ -1328,10 +1350,6 @@
     const numResumenProduccion = hasResumenProduccion ? ++idxSeccion : 0;
     const numMesas = hasMesas ? ++idxSeccion : 0;
 
-    // Novedades de Mesas
-    const hasNovedadesMesas = Boolean(novedades_mesas && novedades_mesas.length > 0);
-    const numNovedadesMesas = hasNovedadesMesas ? ++idxSeccion : 0;
-
     // Máquinas
     const hasMaquinas = Boolean(hasBilleteros || hasAportes);
     const numMaquinas = hasMaquinas ? ++idxSeccion : 0;
@@ -1354,7 +1372,6 @@
       numResumenProduccion,
       hasMesas,
       numMesas,
-      numNovedadesMesas,
       hasMaquinas,
       numMaquinas,
       hasClientes,
@@ -2205,7 +2222,7 @@
                     <tbody>
                       {#each section.subData.arqueoMesaGroups as group, idx (group.mesaId)}
                         {@const apTotal = Number(group.apertura?.total) || 0}
-                        {@const hasCierre = Boolean(group.cierre)}
+                        {@const hasCierre = Boolean(group.cierre && !group.cierre.is_virtual && !String(group.cierre.uuid || '').startsWith('virtual-'))}
                         {@const ciTotal = hasCierre ? (Number(group.cierre.total) || 0) : null}
                         {@const allMovs = group.rellenosDevoluciones || []}
                         {@const totalR = group.totalRellenos || 0}
@@ -2383,7 +2400,7 @@
                       <tr class="total-row footer-cierre">
                         <td class="total-label-cell" colspan="4">TOTAL CIERRE</td>
                         {#each section.subData.arqueoSalaFichas as valor}
-                          {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                          {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + ((g.cierre && !g.cierre.is_virtual && !String(g.cierre.uuid || '').startsWith('virtual-')) ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
                           <td class="td-center total-val-cell">{sumCi}</td>
                         {/each}
                         <td class="td-center grand-total-cell ci-grand-total">
@@ -2398,7 +2415,7 @@
                           {@const sumAp = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (getChipCount(g.apertura, valor) || 0), 0)}
                           {@const sumR = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'relleno').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
                           {@const sumD = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.rellenosDevoluciones || []).filter(m => m.tipo === 'devolucion').reduce((a, b) => a + getMovChipCount(b, valor), 0), 0)}
-                          {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + (g.cierre ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
+                          {@const sumCi = section.subData.arqueoMesaGroups.reduce((acc, g) => acc + ((g.cierre && !g.cierre.is_virtual && !String(g.cierre.uuid || '').startsWith('virtual-')) ? (getChipCount(g.cierre, valor) || 0) : 0), 0)}
                           {@const expectedTotal = sumAp + sumR - sumD}
                           {@const dif = sumCi - expectedTotal}
                           <td class="td-center total-val-cell">
@@ -2468,59 +2485,6 @@
               {/if}
             </div>
           {/if}
-
-          <!-- Novedades de Mesas (Apertura y Cierre) si existen registros -->
-          {#if section.subData.novedades_mesas && section.subData.novedades_mesas.length > 0}
-            <div class="sheet-section sub-module-section">
-              <div class="sub-header-row">
-                <div class="sub-title-group">
-                  <h2 class="sub-section-title">
-                    {section.subData.numeracion.numNovedadesMesas}. Novedades de Mesas (Apertura y Cierre)
-                  </h2>
-                  <span class="sub-count-badge"
-                    >{section.subData.novedades_mesas.length} {section.subData.novedades_mesas.length === 1 ? 'registro' : 'registros'}</span
-                  >
-                </div>
-              </div>
-
-              <div class="mesas-section">
-                <div class="table-responsive-wrapper">
-                  <table class="sheet-official-table">
-                    <thead>
-                      <tr>
-                        <th class="th-hora-a">HORA<br />A</th>
-                        <th class="th-mesa">MESA</th>
-                        <th class="th-pitboss">PITBOSS</th>
-                        <th class="th-croupier">CROUPIER<br />APERTURA</th>
-                        <th class="th-croupier">CROUPIER<br />CIERRE</th>
-                        <th class="th-hora-c">HORA<br />C</th>
-                        <th class="th-obs">OBSERVACIÓN</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each section.subData.novedades_mesas as nov}
-                        <tr>
-                          <td class="cell-center">{nov.hora_apertura || "—"}</td>
-                          <td class="cell-mesa-name"
-                            >{nov.mesa_nombre || (nov.mesa_uuid ? `Mesa #${nov.mesa_uuid.slice(0, 8)}` : `Mesa #${nov.mesa_id}`)}</td
-                          >
-                          <td class="cell-left">{nov.pitboss || "—"}</td>
-                          <td class="cell-left">{nov.croupier_apertura || "—"}</td>
-                          <td class="cell-left">{nov.croupier_cierre || "—"}</td>
-                          <td class="cell-center">{nov.hora_cierre || "—"}</td>
-                          <td class="cell-left cell-obs">{nov.observacion || "—"}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          {/if}
-
-
-
-
 
           <!-- ============================================================
                3. MÁQUINAS (Total por rango, Billeteros y Aportes con pestañas)
