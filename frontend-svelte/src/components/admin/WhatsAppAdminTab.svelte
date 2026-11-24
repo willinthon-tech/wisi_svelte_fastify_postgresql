@@ -24,6 +24,44 @@
   let isLoadingLogs = false;
   let isSavingMapping = false;
 
+  // Estado del Diccionario Inteligente del Bot
+  let dictStatus = {
+    isLoaded: false,
+    lastSyncedAt: null,
+    stats: {
+      total_empleados: 0,
+      total_rangos: 0,
+      total_clientes: 0,
+      total_metodos: 0,
+      total_maquinas: 0,
+      total_modos: 0
+    }
+  };
+  let isSyncingDict = false;
+  let isLoadingDictStatus = false;
+  let selectedDictSalaUuid = "";
+  let dictPreview = null;
+  let isLoadingDictPreview = false;
+  let testSalaUuid = "";
+
+  function formatSyncDate(dateStr) {
+    if (!dateStr) return "Nunca";
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleString("es-VE", {
+        timeZone: "America/Caracas",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      });
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
   // Filtrar para que solo aparezcan salas válidas (excluir galpones y depósitos)
   function isTipo1Sala(sala) {
     if (!sala) return false;
@@ -138,7 +176,8 @@
     await Promise.all([
       fetchStatus(),
       fetchMappings(),
-      fetchLogs()
+      fetchLogs(),
+      fetchDictStatus()
     ]);
     runTestParse();
 
@@ -374,6 +413,66 @@
     }
   }
 
+  async function fetchDictStatus() {
+    isLoadingDictStatus = true;
+    try {
+      const res = await fetch(toBackendUrl("/api/whatsapp/dictionary/status"));
+      const json = await res.json();
+      if (json && json.success) {
+        dictStatus = json.data || dictStatus;
+      }
+    } catch (e) {
+      console.warn("Error consultando estado del diccionario:", e.message);
+    } finally {
+      isLoadingDictStatus = false;
+    }
+  }
+
+  async function handleSyncDict() {
+    isSyncingDict = true;
+    try {
+      const res = await fetch(toBackendUrl("/api/whatsapp/dictionary/sync"), { method: "POST" });
+      const json = await res.json();
+      if (json && json.success) {
+        dictStatus = {
+          isLoaded: true,
+          lastSyncedAt: json.data?.lastSyncedAt,
+          stats: json.data?.stats || dictStatus.stats
+        };
+        triggerToast("Diccionario sincronizado exitosamente con todos los empleados, rangos, clientes y métodos", "success");
+        if (selectedDictSalaUuid) {
+          fetchDictPreview(selectedDictSalaUuid);
+        }
+        runTestParse();
+      } else {
+        triggerToast(json?.error || "Error al sincronizar diccionario", "error");
+      }
+    } catch (e) {
+      triggerToast(`Error de sincronización: ${e.message}`, "error");
+    } finally {
+      isSyncingDict = false;
+    }
+  }
+
+  async function fetchDictPreview(salaUuid) {
+    if (!salaUuid) {
+      dictPreview = null;
+      return;
+    }
+    isLoadingDictPreview = true;
+    try {
+      const res = await fetch(toBackendUrl(`/api/whatsapp/dictionary/preview?sala_uuid=${salaUuid}`));
+      const json = await res.json();
+      if (json && json.success) {
+        dictPreview = json.data;
+      }
+    } catch (e) {
+      console.warn("Error cargando vista previa de sala:", e.message);
+    } finally {
+      isLoadingDictPreview = false;
+    }
+  }
+
   async function runTestParse() {
     if (!testInput.trim()) {
       testResult = null;
@@ -384,7 +483,10 @@
       const res = await fetch(toBackendUrl("/api/whatsapp/test-parse"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: testInput })
+        body: JSON.stringify({ 
+          text: testInput,
+          sala_uuid: testSalaUuid || selectedDictSalaUuid || undefined
+        })
       });
       const json = await res.json();
       if (json && json.success) {
@@ -544,14 +646,148 @@
     </div>
   {/if}
 
-  <!-- 3. PROBADOR INTERACTIVO DE SINTAXIS -->
+  <!-- 3. DICCIONARIO INTELIGENTE DEL BOT (SINCRONIZACIÓN POR SALA) -->
+  <div class="wa-card wa-dict-card">
+    <div class="section-header" style="align-items: flex-start;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <h3 class="section-title">📚 Diccionario Inteligente del Bot (Sincronización por Sala)</h3>
+          <span class="badge-status {dictStatus.isLoaded ? 'bg-green' : 'bg-yellow'}">
+            {dictStatus.isLoaded ? '⚡ Catálogo Indexado en Memoria' : '⚠️ Pendiente por Sincronizar'}
+          </span>
+        </div>
+        <p class="section-desc">
+          Mapea y pre-indexa el personal activo con su cargo y sala, los rangos existentes de máquinas, modos, clientes y métodos de pago. 
+          Al sincronizar, el bot responde de forma instantánea sin saturar PostgreSQL y aplica coincidencia exacta de nombres para evitar asociar operaciones a empleados incorrectos.
+        </p>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+        <button class="btn-primary" on:click={handleSyncDict} disabled={isSyncingDict} style="font-size: 13.5px; padding: 10px 18px; display: flex; align-items: center; gap: 8px;">
+          {#if isSyncingDict}
+            <span class="spinner-small"></span> Sincronizando Catálogo...
+          {:else}
+            <span>🔄 Sincronizar Diccionario Ahora</span>
+          {/if}
+        </button>
+        <span class="sync-timestamp">
+          {#if dictStatus.lastSyncedAt}
+            Última sincronización: <strong>{formatSyncDate(dictStatus.lastSyncedAt)}</strong>
+          {:else}
+            <em>No sincronizado en esta sesión</em>
+          {/if}
+        </span>
+      </div>
+    </div>
+
+    <!-- Contadores del Diccionario -->
+    <div class="dict-stats-grid">
+      <div class="dict-stat-card">
+        <span class="dict-stat-icon">👥</span>
+        <div>
+          <span class="dict-stat-num">{dictStatus.stats?.total_empleados || 0}</span>
+          <span class="dict-stat-lbl">Empleados (con Cargo y Sala)</span>
+        </div>
+      </div>
+      <div class="dict-stat-card">
+        <span class="dict-stat-icon">🎰</span>
+        <div>
+          <span class="dict-stat-num">{dictStatus.stats?.total_rangos || 0}</span>
+          <span class="dict-stat-lbl">Rangos de Máquinas</span>
+        </div>
+      </div>
+      <div class="dict-stat-card">
+        <span class="dict-stat-icon">👤</span>
+        <div>
+          <span class="dict-stat-num">{dictStatus.stats?.total_clientes || 0}</span>
+          <span class="dict-stat-lbl">Clientes Registrados</span>
+        </div>
+      </div>
+      <div class="dict-stat-card">
+        <span class="dict-stat-icon">💳</span>
+        <div>
+          <span class="dict-stat-num">{dictStatus.stats?.total_metodos || 0}</span>
+          <span class="dict-stat-lbl">Métodos de Pago</span>
+        </div>
+      </div>
+      <div class="dict-stat-card">
+        <span class="dict-stat-icon">🎲</span>
+        <div>
+          <span class="dict-stat-num">{dictStatus.stats?.total_maquinas || 0}</span>
+          <span class="dict-stat-lbl">Máquinas / Modos</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inspector / Explorador de Sala -->
+    <div class="dict-inspector-row">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <span style="font-size: 13px; font-weight: 700; color: #1e293b;">🏢 Explorar Catálogo de una Sala Específica:</span>
+        <select 
+          class="dict-select" 
+          bind:value={selectedDictSalaUuid} 
+          on:change={() => fetchDictPreview(selectedDictSalaUuid)}
+        >
+          <option value="">-- Seleccionar Sala para ver su personal y rangos --</option>
+          {#each availableSalas as s}
+            <option value={s.uuid || s.id}>{s.nombre || s.name}</option>
+          {/each}
+        </select>
+      </div>
+
+      {#if selectedDictSalaUuid && dictPreview}
+        <div class="dict-preview-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="color: #0f172a; font-size: 13px;">
+              Personal activo indexado en esta sala ({dictPreview.empleados?.length || 0} empleados):
+            </strong>
+            <span style="font-size: 12px; color: #64748b;">
+              {dictPreview.maquinasCount || 0} máquinas en sala
+            </span>
+          </div>
+          {#if dictPreview.empleados && dictPreview.empleados.length > 0}
+            <div class="emp-chips-container">
+              {#each dictPreview.empleados as emp}
+                <span class="emp-chip" title="Cédula: {emp.cedula || 'N/A'}">
+                  <strong>{emp.nombre}</strong>
+                  {#if emp.cargo}
+                    <small class="emp-cargo">({emp.cargo})</small>
+                  {/if}
+                </span>
+              {/each}
+            </div>
+          {:else}
+            <p style="margin: 0; font-size: 12.5px; color: #94a3b8; font-style: italic;">
+              No hay empleados asignados a los departamentos de esta sala.
+            </p>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  </div>
+
+  <!-- 4. PROBADOR INTERACTIVO DE SINTAXIS -->
   <div class="wa-card">
     <div class="section-header">
       <div>
         <h3 class="section-title">🧪 Probador Interactivo de Sintaxis</h3>
-        <p class="section-desc">Escribe cualquier mensaje de prueba tal como lo escribirían en el grupo de WhatsApp para ver cómo el sistema lo desglosa.</p>
+        <p class="section-desc">Escribe cualquier mensaje de prueba tal como lo escribirían en el grupo de WhatsApp para ver cómo el sistema lo desglosa y resuelve las entidades.</p>
       </div>
-      <span class="syntax-badge">Regex & NLP Engine v1.0</span>
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <label for="tester-sala-select" style="font-size: 12px; font-weight: 700; color: #475569;">Sala para prueba:</label>
+        <select 
+          id="tester-sala-select"
+          class="dict-select" 
+          style="min-width: 200px; padding: 4px 8px; font-size: 12px;"
+          bind:value={testSalaUuid}
+          on:change={runTestParse}
+        >
+          <option value="">Todas las Salas (Global)</option>
+          {#each availableSalas as s}
+            <option value={s.uuid || s.id}>{s.nombre || s.name}</option>
+          {/each}
+        </select>
+        <span class="syntax-badge">Motor NLP & Diccionario v2.0</span>
+      </div>
     </div>
 
     <div class="tester-input-row">
@@ -620,14 +856,44 @@
         {/if}
         {#if testResult.modulo === 'aportes_maquinas'}
           <div class="preview-item">
-            <span class="lbl">OPERADOR (EMPLEADO)</span>
+            <span class="lbl">OPERADOR (TEXTO MENSAJE)</span>
             <span class="val highlight">{testResult.operador || 'General'}</span>
           </div>
+          {#if testResult.resolved_empleado}
+            <div class="preview-item">
+              <span class="lbl">EMPLEADO RESUELTO EN SALA</span>
+              <span class="val bold {testResult.resolved_empleado.esCoincidenciaExacta ? 'text-green' : 'text-blue'}">
+                {testResult.resolved_empleado.empleadoNombre}
+                {#if testResult.resolved_empleado.cargo}
+                  <small style="color: #64748b; font-weight: normal;"> ({testResult.resolved_empleado.cargo})</small>
+                {/if}
+              </span>
+            </div>
+            <div class="preview-item">
+              <span class="lbl">CERTEZA / SCORE</span>
+              <span class="val bold {testResult.resolved_empleado.esCoincidenciaExacta ? 'text-green' : 'text-blue'}">
+                {testResult.resolved_empleado.score}% {testResult.resolved_empleado.esCoincidenciaExacta ? '✅ Certera' : '☑️ Verificar'}
+                {#if testResult.resolved_empleado.ambiguedad}
+                  <span style="display: block; font-size: 11px; color: #d97706; font-weight: normal;">
+                    ⚠️ Varios coincidentes ({testResult.resolved_empleado.candidatos?.slice(0, 2).join(', ')})
+                  </span>
+                {/if}
+              </span>
+            </div>
+          {/if}
         {:else}
           <div class="preview-item">
             <span class="lbl">CLIENTE / JUGADOR</span>
             <span class="val highlight">{testResult.cliente}</span>
           </div>
+          {#if testResult.resolved_cliente}
+            <div class="preview-item">
+              <span class="lbl">CLIENTE RESUELTO</span>
+              <span class="val bold {testResult.resolved_cliente.esCoincidenciaExacta ? 'text-green' : 'text-blue'}">
+                {testResult.resolved_cliente.clienteNombre} ({testResult.resolved_cliente.foundClient ? 'Registrado' : 'Nuevo'})
+              </span>
+            </div>
+          {/if}
         {/if}
         <div class="preview-item">
           <span class="lbl">MÓDULO DESTINO</span>
@@ -638,7 +904,12 @@
         {#if testResult.rango}
           <div class="preview-item">
             <span class="lbl">RANGO DETECTADO</span>
-            <span class="val text-purple">{testResult.rango}</span>
+            <span class="val text-purple">
+              {testResult.rango}
+              {#if testResult.resolved_rango?.rangoNombre && testResult.resolved_rango.rangoNombre !== testResult.rango}
+                <small style="color: #64748b; font-weight: normal;"> ({testResult.resolved_rango.rangoNombre})</small>
+              {/if}
+            </span>
           </div>
         {/if}
         {#if testResult.nota}
@@ -1687,6 +1958,144 @@
     padding: 16px 24px;
     border-top: 1px solid #e2e8f0;
     background: #f8fafc;
+  }
+
+  /* DICCIONARIO INTELIGENTE */
+  .wa-dict-card {
+    border-left: 4px solid #6366f1;
+    background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
+  }
+
+  .badge-status {
+    padding: 3px 9px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .bg-green {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+  }
+  .bg-yellow {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  .sync-timestamp {
+    font-size: 11.5px;
+    color: #64748b;
+  }
+
+  .dict-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+    margin-bottom: 16px;
+  }
+
+  .dict-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #ffffff;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dict-stat-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  }
+
+  .dict-stat-icon {
+    font-size: 26px;
+  }
+
+  .dict-stat-num {
+    display: block;
+    font-size: 20px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.1;
+  }
+
+  .dict-stat-lbl {
+    display: block;
+    font-size: 11.5px;
+    color: #64748b;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  .dict-inspector-row {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 8px;
+  }
+
+  .dict-select {
+    padding: 7px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #1e293b;
+    background: #f8fafc;
+    min-width: 280px;
+  }
+
+  .dict-preview-box {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #e2e8f0;
+  }
+
+  .emp-chips-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .emp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 12px;
+    color: #334155;
+  }
+  .emp-chip strong {
+    color: #0f172a;
+  }
+  .emp-cargo {
+    color: #64748b;
+    font-size: 10.5px;
+  }
+
+  .spinner-small {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>
 

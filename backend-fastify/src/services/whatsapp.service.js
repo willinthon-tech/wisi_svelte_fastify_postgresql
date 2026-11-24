@@ -6,6 +6,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { sql, isPgConnected } from '../config/db.js';
 import { parseWhatsAppMessage, normalizeText, isSystemStatusOrInformationalMessage, cleanPersonName, calculateSimilarity } from './whatsapp-parser.js';
+import { whatsappDictionaryService } from './whatsapp-dictionary.service.js';
 import { broadcastLibroUpdate } from '../config/websocket.js';
 
 // Helpers seguros para clasificar JIDs sin depender de exportaciones específicas de Baileys
@@ -225,6 +226,9 @@ class WhatsAppService {
   async init() {
     console.log('📱 [WhatsApp] Inicializando servicio...');
     await this.ensureDbSchema();
+    await whatsappDictionaryService.initDictionary().catch(err => {
+      console.warn('⚠️ [WhatsApp] Inicialización de diccionario con advertencia:', err.message);
+    });
     const hasSession = this.hasSavedSession();
     const currentDir = resolveAuthDir();
     console.log(`📁 [WhatsApp] Directorio auth: "${currentDir}" (Sesión guardada detectada: ${hasSession})`);
@@ -713,7 +717,8 @@ class WhatsAppService {
       const parsed = parseWhatsAppMessage(messageText, {
         caja_default: 'Mesas',
         modulo_destino: groupTipoOps === 'aportes_maquinas' ? 'aportes_maquinas' : 'control_clientes',
-        tipo_operaciones: groupTipoOps
+        tipo_operaciones: groupTipoOps,
+        rangoRules: whatsappDictionaryService.getRangoRules()
       });
 
       if (!parsed || !parsed.success) {
@@ -799,15 +804,18 @@ class WhatsAppService {
 
       // 4. Inserción según módulo
       if (parsed.modulo === 'control_clientes') {
-        const { clienteUuid, foundClient } = await this.resolveCliente(parsed.cliente, mapping.sala_uuid);
+        const { clienteUuid, clienteNombre, foundClient, esCoincidenciaExacta: clientExact } = await this.resolveCliente(parsed.cliente, mapping.sala_uuid);
         const { metodoPagoUuid, metodoAsignadoNombre, metodoFallbackUsado } = await this.resolveMetodoPago(parsed.metodo);
 
-        let esCoincidenciaExacta = true;
+        let esCoincidenciaExacta = Boolean(foundClient && clientExact);
         let observaciones = [];
 
         if (!foundClient) {
           esCoincidenciaExacta = false;
           observaciones.push(parsed.cliente === 'General' ? 'Cliente no especificado (asignado General)' : `Cliente nuevo (${parsed.cliente})`);
+        } else if (!clientExact) {
+          esCoincidenciaExacta = false;
+          observaciones.push(`Coincidencia parcial en cliente (${clienteNombre})`);
         }
 
         if (!parsed.explicit?.metodo) {
@@ -885,23 +893,28 @@ class WhatsAppService {
         }
 
       } else if (parsed.modulo === 'aportes_maquinas') {
-        const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango);
-        const { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
+        const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango, mapping.sala_uuid);
+        const { empleadoUuid, empleadoNombre, cargo, empFallbackUsado, foundEmp, score, esCoincidenciaExacta: empExact, ambiguedad, candidatos } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
 
-        // Regla: si encontró al empleado el chulito es verde (✅).
-        // Si no lo encontró del todo y tuvo que elegir el primero de la lista, es del otro color (☑️).
-        const encontroEmpleado = Boolean(foundEmp && !empFallbackUsado);
+        // Regla: si encontró al empleado con coincidencia exacta y sin ambigüedad el chulito es verde (✅).
+        // Si no lo encontró del todo o hay ambigüedad/coincidencia parcial, es azul (☑️).
+        const encontroEmpleado = Boolean(foundEmp && !empFallbackUsado && empExact);
         const checkEmoji = encontroEmpleado ? '✅' : '☑️';
         const logStatus = encontroEmpleado ? 'procesado' : 'procesado_por_verificar';
 
         let observaciones = [];
-        if (!encontroEmpleado) {
+        if (!foundEmp || empFallbackUsado) {
           const rawOp = cleanPersonName(parsed.operador);
           observaciones.push(rawOp 
-            ? `Empleado "${rawOp}" no encontrado en sala (asignado a ${empleadoNombre})` 
+            ? `Empleado "${rawOp}" no coincide en sala (asignado a ${empleadoNombre})` 
             : `Empleado no especificado (asignado a ${empleadoNombre})`
           );
+        } else if (ambiguedad) {
+          observaciones.push(`Ambigüedad en operador "${parsed.operador || ''}" (coincide con: ${candidatos ? candidatos.slice(0, 2).join(', ') : ''})`);
+        } else if (!empExact) {
+          observaciones.push(`Coincidencia parcial en operador (${empleadoNombre})`);
         }
+
         if (!foundRango) {
           observaciones.push(`Rango "${parsed.rango || 'no especificado'}" asignado a ${rangoNombre}`);
         }
@@ -1041,7 +1054,8 @@ class WhatsAppService {
       const parsed = parseWhatsAppMessage(messageText, {
         caja_default: 'Mesas',
         modulo_destino: groupTipoOps === 'aportes_maquinas' ? 'aportes_maquinas' : 'control_clientes',
-        tipo_operaciones: groupTipoOps
+        tipo_operaciones: groupTipoOps,
+        rangoRules: whatsappDictionaryService.getRangoRules()
       });
 
       if (!parsed || !parsed.success) {
@@ -1078,12 +1092,16 @@ class WhatsAppService {
       let observaciones = [];
 
       if (parsed.modulo === 'control_clientes') {
-        const { clienteUuid, foundClient } = await this.resolveCliente(parsed.cliente, mapping.sala_uuid);
+        const { clienteUuid, clienteNombre, foundClient, esCoincidenciaExacta: clientExact } = await this.resolveCliente(parsed.cliente, mapping.sala_uuid);
         const { metodoPagoUuid, metodoAsignadoNombre, metodoFallbackUsado } = await this.resolveMetodoPago(parsed.metodo);
+
+        esCoincidenciaExacta = Boolean(foundClient && clientExact);
 
         if (!foundClient) {
           esCoincidenciaExacta = false;
           observaciones.push(parsed.cliente === 'General' ? 'Cliente no especificado (asignado General)' : `Cliente nuevo (${parsed.cliente})`);
+        } else if (!clientExact) {
+          observaciones.push(`Coincidencia parcial en cliente (${clienteNombre})`);
         }
 
         if (!parsed.explicit?.metodo) {
@@ -1141,20 +1159,25 @@ class WhatsAppService {
         }
 
       } else if (parsed.modulo === 'aportes_maquinas') {
-        const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango);
-        const { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
+        const { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango } = await this.resolveRango(parsed.rango, mapping.sala_uuid);
+        const { empleadoUuid, empleadoNombre, cargo, empFallbackUsado, foundEmp, score, esCoincidenciaExacta: empExact, ambiguedad, candidatos } = await this.resolveEmpleado(parsed.operador, mapping.sala_uuid);
 
-        const encontroEmpleado = Boolean(foundEmp && !empFallbackUsado);
+        const encontroEmpleado = Boolean(foundEmp && !empFallbackUsado && empExact);
         const logStatus = encontroEmpleado ? 'procesado_editado' : 'procesado_por_verificar_editado';
 
         let observaciones = [];
-        if (!encontroEmpleado) {
+        if (!foundEmp || empFallbackUsado) {
           const rawOp = cleanPersonName(parsed.operador);
           observaciones.push(rawOp 
-            ? `Empleado "${rawOp}" no encontrado (asignado a ${empleadoNombre})` 
+            ? `Empleado "${rawOp}" no coincide en sala (asignado a ${empleadoNombre})` 
             : `Empleado no especificado (asignado a ${empleadoNombre})`
           );
+        } else if (ambiguedad) {
+          observaciones.push(`Ambigüedad en operador "${parsed.operador || ''}" (coincide con: ${candidatos ? candidatos.slice(0, 2).join(', ') : ''})`);
+        } else if (!empExact) {
+          observaciones.push(`Coincidencia parcial en operador (${empleadoNombre})`);
         }
+
         if (!foundRango) {
           observaciones.push(`Rango "${parsed.rango || 'no especificado'}" asignado a ${rangoNombre}`);
         }
@@ -1202,343 +1225,19 @@ class WhatsAppService {
   }
 
   async resolveCliente(parsedCliente, salaUuid) {
-    let clienteUuid = null;
-    let foundClient = null;
-
-    // Sanear el nombre del cliente eliminando preposiciones como "de", "del" que provienen del mensaje de WhatsApp
-    let cleanCliente = cleanPersonName(parsedCliente);
-    if (!cleanCliente || cleanCliente.toLowerCase() === 'general' || cleanCliente.length < 2 || ['a', 'de', 'del', 'el', 'la', 'c', 'p', 'd'].includes(cleanCliente.toLowerCase())) {
-      cleanCliente = 'General';
-    }
-
-    const allClients = await sql`
-      SELECT uuid, nombre 
-      FROM clientes 
-      WHERE ${salaUuid ? sql`(sala_uuid = ${salaUuid}::uuid OR sala_uuid IS NULL)` : sql`true`}
-        AND COALESCE(is_deleted, false) = false
-        AND length(trim(nombre)) >= 2
-        AND lower(trim(nombre)) NOT IN ('a', 'de', 'del', 'el', 'la', 'c', 'p', 'd')
-    `;
-
-    if (cleanCliente !== 'General' && allClients.length > 0) {
-      const normTarget = normalizeText(cleanCliente);
-
-      // 1. Coincidencia exacta con nombre normalizado o con nombre saneado (removiendo "De " existente en BD)
-      foundClient = allClients.find(c => {
-        const cn = normalizeText(c.nombre);
-        const cleanCn = normalizeText(cleanPersonName(c.nombre));
-        return cn === normTarget || cleanCn === normTarget;
-      });
-
-      // 2. Coincidencia por prefijo
-      if (!foundClient) {
-        foundClient = allClients.find(c => {
-          const cleanCn = normalizeText(cleanPersonName(c.nombre));
-          return cleanCn.startsWith(normTarget + ' ');
-        });
-      }
-
-      // 3. Coincidencia por palabras individuales
-      if (!foundClient) {
-        foundClient = allClients.find(c => {
-          const words = normalizeText(cleanPersonName(c.nombre)).split(/\s+/);
-          return words.includes(normTarget);
-        });
-      }
-
-      // 4. Coincidencia contenida estricta (solo si ambas cadenas tienen al menos 3 caracteres)
-      if (!foundClient) {
-        foundClient = allClients.find(c => {
-          const cleanCn = normalizeText(cleanPersonName(c.nombre));
-          if (cleanCn.length < 3 || normTarget.length < 3) return false;
-          if (cleanCn.includes(normTarget)) return true;
-          const targetWords = normTarget.split(/\s+/);
-          return targetWords.includes(cleanCn);
-        });
-      }
-
-      if (foundClient) {
-        clienteUuid = foundClient.uuid;
-        // Si el cliente en BD tenía "De " o "Del " al inicio, sanearlo de una vez en BD
-        const saneadoNombre = cleanPersonName(foundClient.nombre);
-        if (saneadoNombre && saneadoNombre !== foundClient.nombre) {
-          await sql`UPDATE clientes SET nombre = ${saneadoNombre} WHERE uuid = ${foundClient.uuid}`.catch(() => {});
-          foundClient.nombre = saneadoNombre;
-        }
-      } else {
-        const newClient = await sql`
-          INSERT INTO clientes (nombre, sala_uuid)
-          VALUES (${cleanCliente}, ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`})
-          RETURNING uuid
-        `;
-        clienteUuid = newClient[0]?.uuid;
-      }
-    } else {
-      foundClient = allClients.find(c => normalizeText(c.nombre) === 'general');
-      if (foundClient) {
-        clienteUuid = foundClient.uuid;
-      } else {
-        const newGenClient = await sql`
-          INSERT INTO clientes (nombre, sala_uuid)
-          VALUES ('General', ${salaUuid ? sql`${salaUuid}::uuid` : sql`NULL`})
-          RETURNING uuid
-        `;
-        clienteUuid = newGenClient[0]?.uuid;
-      }
-    }
-
-    return { clienteUuid, foundClient };
+    return await whatsappDictionaryService.resolveCliente(parsedCliente, salaUuid);
   }
 
   async resolveMetodoPago(parsedMetodo) {
-    let metodoPagoUuid = null;
-    let metodoFallbackUsado = false;
-    let metodoAsignadoNombre = 'General';
-
-    const allMetodos = await sql`
-      SELECT uuid, nombre FROM metodos_pago 
-      WHERE COALESCE(is_deleted, false) = false
-    `;
-
-    let foundMetodo = null;
-    if (parsedMetodo && allMetodos.length > 0) {
-      const normMetodo = normalizeText(parsedMetodo);
-      foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === normMetodo);
-      if (!foundMetodo) {
-        if (normMetodo === 'pdv' || normMetodo === 'punto') {
-          foundMetodo = allMetodos.find(m => {
-            const n = normalizeText(m.nombre);
-            return n === 'pdv' || n === 'punto' || n.includes('punto') || n === 'pos' || n.includes('debito') || n.includes('tarjeta');
-          });
-        } else if (normMetodo.includes('pago movil') || normMetodo.includes('pago mobil') || normMetodo === 'pm') {
-          foundMetodo = allMetodos.find(m => {
-            const n = normalizeText(m.nombre);
-            return n.includes('movil') || n.includes('mobil') || n === 'pm';
-          });
-        } else if (normMetodo === 'usdt') {
-          foundMetodo = allMetodos.find(m => {
-            const n = normalizeText(m.nombre);
-            return n === 'usdt' || n.includes('binance') || n.includes('crypto') || n.includes('tether');
-          });
-        } else if (normMetodo === 'cash') {
-          foundMetodo = allMetodos.find(m => {
-            const n = normalizeText(m.nombre);
-            return n === 'cash' || n.includes('efectivo') || n.includes('dolar') || n === 'usd';
-          });
-        } else if (normMetodo === 'zelle') {
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zelle') || normalizeText(m.nombre).includes('zele'));
-        } else if (normMetodo === 'transferencia') {
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('transf') || normalizeText(m.nombre).includes('banco'));
-        } else if (normMetodo === 'zinli') {
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('zinli'));
-        } else if (normMetodo === 'wally') {
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('wally'));
-        } else if (normMetodo === 'paypal') {
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('paypal'));
-        } else if (normMetodo === 'general' || normMetodo === 'otros') {
-          foundMetodo = allMetodos.find(m => normalizeText(m.nombre).includes('general') || normalizeText(m.nombre).includes('otro'));
-        }
-      }
-    }
-
-    if (!foundMetodo && allMetodos.length > 0) {
-      foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'general');
-      if (!foundMetodo) {
-        foundMetodo = allMetodos.find(m => normalizeText(m.nombre) === 'cash' || normalizeText(m.nombre).includes('efectivo'));
-      }
-      if (!foundMetodo) {
-        foundMetodo = allMetodos[0];
-      }
-      metodoFallbackUsado = true;
-    }
-
-    if (foundMetodo) {
-      metodoPagoUuid = foundMetodo.uuid;
-      metodoAsignadoNombre = foundMetodo.nombre;
-    }
-
-    return { metodoPagoUuid, metodoAsignadoNombre, metodoFallbackUsado, foundMetodo };
+    return await whatsappDictionaryService.resolveMetodoPago(parsedMetodo);
   }
 
-  async resolveRango(parsedRango) {
-    let rangoUuid = null;
-    let rangoNombre = parsedRango || 'General';
-
-    const allRangos = await sql`
-      SELECT uuid, nombre FROM rangos 
-      WHERE COALESCE(is_deleted, false) = false
-    `;
-
-    let foundRango = null;
-    if (parsedRango && allRangos.length > 0) {
-      const normTarget = normalizeText(parsedRango);
-      foundRango = allRangos.find(r => normalizeText(r.nombre) === normTarget);
-      if (!foundRango) {
-        const numMatch = normTarget.match(/\b([1-9]|1\d|20)\b/);
-        if (numMatch) {
-          const targetNum = numMatch[1];
-          foundRango = allRangos.find(r => {
-            const rn = normalizeText(r.nombre);
-            return rn.endsWith(targetNum) || rn.includes(`rango ${targetNum}`) || rn.includes(`rg ${targetNum}`) || rn.includes(`rg${targetNum}`) || rn.includes(`r${targetNum}`);
-          });
-        }
-      }
-      if (!foundRango) {
-        if (normTarget.includes('fuma')) {
-          foundRango = allRangos.find(r => normalizeText(r.nombre).includes('fuma'));
-        } else if (normTarget.includes('ruleta')) {
-          foundRango = allRangos.find(r => normalizeText(r.nombre).includes('ruleta'));
-        } else if (normTarget.includes('sin rango') || normTarget === 'sr') {
-          foundRango = allRangos.find(r => normalizeText(r.nombre).includes('sin rango') || normalizeText(r.nombre).includes('sinrango'));
-        }
-      }
-      if (!foundRango) {
-        foundRango = allRangos.find(r => normalizeText(r.nombre).includes(normTarget) || normTarget.includes(normalizeText(r.nombre)));
-      }
-
-      if (foundRango) {
-        rangoUuid = foundRango.uuid;
-        rangoNombre = foundRango.nombre;
-      }
-    }
-
-    let rangoFallbackUsado = false;
-    // Si no coincide o no se especificó, registrar como General
-    if (!rangoUuid) {
-      const genRango = allRangos.find(r => normalizeText(r.nombre) === 'general') ||
-                       allRangos.find(r => normalizeText(r.nombre) === 'sin rango') ||
-                       allRangos[0];
-      if (genRango) {
-        rangoUuid = genRango.uuid;
-        rangoNombre = genRango.nombre;
-      } else {
-        try {
-          const [createdGen] = await sql`
-            INSERT INTO rangos (nombre) VALUES ('General') RETURNING uuid, nombre
-          `;
-          if (createdGen) {
-            rangoUuid = createdGen.uuid;
-            rangoNombre = createdGen.nombre;
-          }
-        } catch (e) {}
-      }
-      rangoFallbackUsado = true;
-    }
-
-    return { rangoUuid, rangoNombre, rangoFallbackUsado, foundRango };
+  async resolveRango(parsedRango, salaUuid) {
+    return await whatsappDictionaryService.resolveRango(parsedRango, salaUuid);
   }
 
   async resolveEmpleado(parsedOperador, salaUuid) {
-    let empleadoUuid = null;
-    let empleadoNombre = parsedOperador || 'Operador General';
-    let foundEmp = null;
-    let empFallbackUsado = false;
-
-    // Sanear el nombre del operador removiendo prefijos residuales como "de", "del"
-    let cleanOperador = cleanPersonName(parsedOperador);
-    if (!cleanOperador || cleanOperador.toLowerCase() === 'general') {
-      cleanOperador = '';
-    }
-
-    let allEmps = [];
-    if (salaUuid) {
-      try {
-        allEmps = await sql`
-          SELECT e.uuid, e.nombre, e.cedula, d.sala_uuid 
-          FROM empleados e
-          LEFT JOIN cargos c ON e.cargo_uuid = c.uuid
-          LEFT JOIN areas a ON c.area_uuid = a.uuid
-          LEFT JOIN departamentos d ON a.departamento_uuid = d.uuid
-          WHERE COALESCE(e.activo, true) = true 
-            AND COALESCE(e.is_deleted, false) = false
-            AND (d.sala_uuid = ${salaUuid}::uuid OR d.sala_uuid IS NULL)
-          ORDER BY e.nombre ASC
-        `;
-      } catch (e) {
-        console.warn('Error consultando empleados por sala:', e.message);
-      }
-    }
-
-    if (allEmps.length === 0) {
-      try {
-        allEmps = await sql`
-          SELECT e.uuid, e.nombre, e.cedula 
-          FROM empleados e
-          WHERE COALESCE(e.activo, true) = true 
-            AND COALESCE(e.is_deleted, false) = false
-          ORDER BY e.nombre ASC
-        `;
-      } catch (e) {
-        console.warn('Error consultando todos los empleados:', e.message);
-      }
-    }
-
-    if (cleanOperador && allEmps.length > 0) {
-      const normTarget = normalizeText(cleanOperador);
-
-      // 1. Coincidencia exacta
-      foundEmp = allEmps.find(e => normalizeText(e.nombre) === normTarget);
-
-      // 2. Coincidencia por inicio de nombre (ej. "Pedro" coincide con "Pedro Perez")
-      if (!foundEmp) {
-        foundEmp = allEmps.find(e => normalizeText(e.nombre).startsWith(normTarget + ' '));
-      }
-
-      // 3. El texto buscado inicia con el nombre completo
-      if (!foundEmp) {
-        foundEmp = allEmps.find(e => normTarget.startsWith(normalizeText(e.nombre) + ' '));
-      }
-
-      // 4. Alguna palabra / apellido coincide exactamente
-      if (!foundEmp) {
-        foundEmp = allEmps.find(e => {
-          const empWords = normalizeText(e.nombre).split(/\s+/).filter(Boolean);
-          const targetWords = normTarget.split(/\s+/).filter(Boolean);
-          return targetWords.some(tw => tw.length > 2 && empWords.includes(tw));
-        });
-      }
-
-      // 5. Coincidencia contenida (subcadena)
-      if (!foundEmp) {
-        foundEmp = allEmps.find(e => {
-          const en = normalizeText(e.nombre);
-          return en.includes(normTarget) || normTarget.includes(en);
-        });
-      }
-
-      // 6. Si no coincide exactamente, buscar el que se le asemeje (similaridad fonética / bigramas)
-      if (!foundEmp) {
-        let bestScore = 0;
-        let bestEmp = null;
-        for (const e of allEmps) {
-          const score = calculateSimilarity(normTarget, normalizeText(e.nombre));
-          if (score > bestScore && score >= 0.55) {
-            bestScore = score;
-            bestEmp = e;
-          }
-        }
-        if (bestEmp) {
-          foundEmp = bestEmp;
-        }
-      }
-
-      if (foundEmp) {
-        empleadoUuid = foundEmp.uuid;
-        empleadoNombre = foundEmp.nombre;
-      }
-    }
-
-    // 7. Si no se encontró el empleado del todo o no se indicó operador, elegir el primero de la lista
-    if (!empleadoUuid && allEmps.length > 0) {
-      const firstEmp = allEmps.find(e => normalizeText(e.nombre) === 'general') || allEmps[0];
-      if (firstEmp) {
-        empleadoUuid = firstEmp.uuid;
-        empleadoNombre = firstEmp.nombre;
-        empFallbackUsado = true;
-      }
-    }
-
-    return { empleadoUuid, empleadoNombre, empFallbackUsado, foundEmp };
+    return await whatsappDictionaryService.resolveEmpleado(parsedOperador, salaUuid);
   }
 }
 

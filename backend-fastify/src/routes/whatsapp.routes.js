@@ -1,5 +1,6 @@
 import { whatsappService } from '../services/whatsapp.service.js';
 import { parseWhatsAppMessage } from '../services/whatsapp-parser.js';
+import { whatsappDictionaryService } from '../services/whatsapp-dictionary.service.js';
 import { sql, isPgConnected } from '../config/db.js';
 
 export default async function whatsappRoutes(fastify, options) {
@@ -194,14 +195,16 @@ export default async function whatsappRoutes(fastify, options) {
 
   // 9. Endpoint de prueba para el parser interactivo
   fastify.post('/api/whatsapp/test-parse', async (req, reply) => {
-    const { text, caja_default, modulo_destino } = req.body || {};
+    const { text, caja_default, modulo_destino, sala_uuid } = req.body || {};
     if (!text) {
       return reply.code(400).send({ success: false, error: 'Texto es requerido' });
     }
 
+    const dynamicRules = whatsappDictionaryService.getRangoRules();
     const result = parseWhatsAppMessage(text, {
       caja_default: caja_default || 'Mesas',
-      modulo_destino: modulo_destino || 'control_clientes'
+      modulo_destino: modulo_destino || 'control_clientes',
+      rangoRules: dynamicRules
     });
 
     if (result && result.success) {
@@ -211,16 +214,49 @@ export default async function whatsappRoutes(fastify, options) {
       if (result.modulo === 'aportes_maquinas') {
         const hasRg = Boolean(result.explicit?.rango);
         const hasOp = Boolean(result.explicit?.operador);
-        if (!hasRg || !hasOp) {
+
+        // Resolver operador con el diccionario para dar feedback inmediato en el probador
+        const empRes = await whatsappDictionaryService.resolveEmpleado(result.operador, sala_uuid);
+        result.resolved_empleado = empRes;
+
+        const rangoRes = await whatsappDictionaryService.resolveRango(result.rango, sala_uuid);
+        result.resolved_rango = rangoRes;
+
+        if (!hasRg || !hasOp || !empRes.foundEmp || !empRes.esCoincidenciaExacta) {
           checkEmoji = '☑️';
-          checkLabel = 'Entra por verificar (Check Azul): ' + (!hasOp ? 'Falta operador' : 'Falta rango');
+          if (!hasOp) {
+            checkLabel = 'Entra por verificar (Check Azul): Falta operador';
+          } else if (empRes.ambiguedad) {
+            checkLabel = `Entra por verificar (Check Azul): Ambigüedad en operador "${result.operador}" (${(empRes.candidatos || []).slice(0, 2).join(', ')})`;
+          } else if (!empRes.foundEmp) {
+            checkLabel = `Entra por verificar (Check Azul): Empleado "${result.operador}" no encontrado en sala`;
+          } else if (!empRes.esCoincidenciaExacta) {
+            checkLabel = `Entra por verificar (Check Azul): Coincidencia parcial con ${empRes.empleadoNombre}`;
+          } else if (!hasRg) {
+            checkLabel = 'Entra por verificar (Check Azul): Falta rango';
+          }
         }
       } else {
         const hasCl = Boolean(result.explicit?.cliente);
         const hasMet = Boolean(result.explicit?.metodo);
-        if (!hasCl || !hasMet) {
+
+        const cliRes = await whatsappDictionaryService.resolveCliente(result.cliente, sala_uuid);
+        result.resolved_cliente = cliRes;
+
+        const metRes = await whatsappDictionaryService.resolveMetodoPago(result.metodo);
+        result.resolved_metodo = metRes;
+
+        if (!hasCl || !hasMet || !cliRes.foundClient || !cliRes.esCoincidenciaExacta) {
           checkEmoji = '☑️';
-          checkLabel = 'Entra por verificar (Check Azul): ' + (!hasCl ? 'Falta cliente' : 'Falta método');
+          if (!hasCl) {
+            checkLabel = 'Entra por verificar (Check Azul): Falta cliente';
+          } else if (!cliRes.foundClient) {
+            checkLabel = `Entra por verificar (Check Azul): Cliente nuevo (${result.cliente})`;
+          } else if (!cliRes.esCoincidenciaExacta) {
+            checkLabel = `Entra por verificar (Check Azul): Coincidencia parcial de cliente (${cliRes.clienteNombre})`;
+          } else if (!hasMet) {
+            checkLabel = 'Entra por verificar (Check Azul): Falta método de pago';
+          }
         }
       }
 
@@ -232,6 +268,39 @@ export default async function whatsappRoutes(fastify, options) {
       success: true,
       data: result,
       interpreted: Boolean(result && result.success)
+    };
+  });
+
+  // 10. Estado y estadísticas del diccionario inteligente
+  fastify.get('/api/whatsapp/dictionary/status', async (req, reply) => {
+    return {
+      success: true,
+      data: whatsappDictionaryService.getStatus()
+    };
+  });
+
+  // 11. Sincronizar catálogo integral del diccionario
+  fastify.post('/api/whatsapp/dictionary/sync', async (req, reply) => {
+    try {
+      const res = await whatsappDictionaryService.syncDictionary();
+      return {
+        success: true,
+        data: res
+      };
+    } catch (err) {
+      return reply.code(500).send({
+        success: false,
+        error: `Error sincronizando diccionario: ${err.message}`
+      });
+    }
+  });
+
+  // 12. Vista previa de entidades del diccionario filtradas por sala
+  fastify.get('/api/whatsapp/dictionary/preview', async (req, reply) => {
+    const { sala_uuid } = req.query || {};
+    return {
+      success: true,
+      data: whatsappDictionaryService.getPreviewBySala(sala_uuid)
     };
   });
 }

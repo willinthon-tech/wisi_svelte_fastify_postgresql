@@ -254,7 +254,11 @@ export function parseWhatsAppMessage(text, defaultOptions = {}) {
   let rangoExplicit = false;
   let rangoMatchedText = null;
 
-  for (const rule of RANGO_RULES) {
+  const activeRangoRules = (defaultOptions && Array.isArray(defaultOptions.rangoRules) && defaultOptions.rangoRules.length > 0)
+    ? defaultOptions.rangoRules
+    : RANGO_RULES;
+
+  for (const rule of activeRangoRules) {
     const connectorRegex = new RegExp(`(?:\\b(?:en|por|de|del|al|a|para)\\s+)?${rule.regex.source}`, 'i');
     const m = textWithoutNota.match(connectorRegex);
     if (m) {
