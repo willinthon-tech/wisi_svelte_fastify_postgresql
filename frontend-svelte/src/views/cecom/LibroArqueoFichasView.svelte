@@ -1242,9 +1242,6 @@
                 <td class="td-mesa">
                   <div class="mesa-title-cell">
                     <span class="mesa-main-name">{group.mesaNombre}</span>
-                    {#if group.apertura?.hora_apertura}
-                      <span class="mesa-hora-tag">🕒 {group.apertura.hora_apertura}</span>
-                    {/if}
                   </div>
                 </td>
                 {#each salaFichas as valor}
