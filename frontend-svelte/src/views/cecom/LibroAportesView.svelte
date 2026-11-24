@@ -79,6 +79,11 @@
   let editingRecord = null;
   let modalTipo = 'Aporte';
   let modalEmpleadoId = null;
+  let modalEmpleadoSearchQuery = '';
+  let showModalEmpleadoDropdown = false;
+  let selectedModalDropdownIndex = -1;
+  let modalSelectedEmpleado = null;
+  let modalEmpleadoInputEl = null;
   let modalRangoId = null;
   let modalMonto = '';
   let modalHora = '';
@@ -234,6 +239,18 @@
   // Coincidencias de búsqueda por NOMBRE o por CARGO o Cédula (escritura rápida tolerante a acentos y orden de palabras)
   $: empleadosSugerencias = (() => {
     const q = (empleadoSearchQuery || '').trim();
+    if (!q) return listaEmpleados.slice(0, 10);
+    const normQ = normalizeSearchStr(q);
+    const tokens = normQ.split(/\s+/).filter(Boolean);
+    return listaEmpleados.filter(emp => {
+      const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
+      return tokens.every(t => targetText.includes(t));
+    }).slice(0, 10);
+  })();
+
+  // Coincidencias de búsqueda para el empleado en el Modal de Edición
+  $: modalEmpleadosSugerencias = (() => {
+    const q = (modalEmpleadoSearchQuery || '').trim();
     if (!q) return listaEmpleados.slice(0, 10);
     const normQ = normalizeSearchStr(q);
     const tokens = normQ.split(/\s+/).filter(Boolean);
@@ -624,6 +641,84 @@
     }
   }
 
+  // --- MANEJO DE AUTOCOMPLETADO Y TECLADO PARA EMPLEADO EN MODAL DE EDICIÓN ---
+  function onModalEmpleadoFocus() {
+    showModalEmpleadoDropdown = true;
+    selectedModalDropdownIndex = -1;
+  }
+
+  function onModalEmpleadoInput() {
+    showModalEmpleadoDropdown = true;
+    selectedModalDropdownIndex = -1;
+    const q = (modalEmpleadoSearchQuery || '').trim().toLowerCase();
+    if (!q) {
+      modalSelectedEmpleado = null;
+      modalEmpleadoId = null;
+      return;
+    }
+    const match = listaEmpleados.find(e => e.nombre.toLowerCase().trim() === q)
+      || allEmpleados.find(e => (e.nombre || '').toLowerCase().trim() === q);
+    if (match) {
+      modalSelectedEmpleado = match;
+      modalEmpleadoId = match.uuid || match.id;
+    } else {
+      modalSelectedEmpleado = null;
+      modalEmpleadoId = null;
+    }
+  }
+
+  function onModalEmpleadoBlur() {
+    setTimeout(() => {
+      showModalEmpleadoDropdown = false;
+      if (!modalEmpleadoId && modalEmpleadoSearchQuery) {
+        const q = modalEmpleadoSearchQuery.trim().toLowerCase();
+        const found = listaEmpleados.find(e => e.nombre.toLowerCase().trim() === q)
+          || allEmpleados.find(e => (e.nombre || '').toLowerCase().trim() === q);
+        if (found) {
+          modalSelectedEmpleado = found;
+          modalEmpleadoId = found.uuid || found.id;
+          modalEmpleadoSearchQuery = found.nombre;
+        }
+      }
+    }, 200);
+  }
+
+  function seleccionarModalEmpleado(emp) {
+    modalSelectedEmpleado = emp;
+    modalEmpleadoId = emp.uuid || emp.id;
+    modalEmpleadoSearchQuery = emp.nombre;
+    showModalEmpleadoDropdown = false;
+    selectedModalDropdownIndex = -1;
+  }
+
+  function onModalEmpleadoKeyDown(e) {
+    if (!showModalEmpleadoDropdown || modalEmpleadosSugerencias.length === 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        showModalEmpleadoDropdown = true;
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedModalDropdownIndex = (selectedModalDropdownIndex + 1) % modalEmpleadosSugerencias.length;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedModalDropdownIndex = (selectedModalDropdownIndex - 1 + modalEmpleadosSugerencias.length) % modalEmpleadosSugerencias.length;
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (selectedModalDropdownIndex >= 0 && modalEmpleadosSugerencias[selectedModalDropdownIndex]) {
+        e.preventDefault();
+        seleccionarModalEmpleado(modalEmpleadosSugerencias[selectedModalDropdownIndex]);
+      } else if (modalEmpleadosSugerencias.length > 0) {
+        e.preventDefault();
+        seleccionarModalEmpleado(modalEmpleadosSugerencias[0]);
+      }
+    } else if (e.key === 'Escape') {
+      showModalEmpleadoDropdown = false;
+      selectedModalDropdownIndex = -1;
+    }
+  }
+
   // --- MANEJO DE AUTOCOMPLETADO Y TECLADO PARA RANGO (TAB / ENTER) ---
   function onRangoInputFocus() {
     showRangoDropdown = true;
@@ -909,6 +1004,15 @@
     editingRecord = record;
     modalTipo = record.tipo || 'Aporte';
     modalEmpleadoId = record.empleado_uuid || record.empleado_id;
+
+    const foundEmp = listaEmpleados.find(e => String(e.uuid || e.id) === String(modalEmpleadoId))
+      || allEmpleados.find(e => String(e.uuid || e.id) === String(modalEmpleadoId));
+
+    modalEmpleadoSearchQuery = record.empleado_nombre || foundEmp?.nombre || '';
+    modalSelectedEmpleado = foundEmp || (modalEmpleadoId ? { uuid: modalEmpleadoId, id: modalEmpleadoId, nombre: modalEmpleadoSearchQuery } : null);
+    showModalEmpleadoDropdown = false;
+    selectedModalDropdownIndex = -1;
+
     modalRangoId = String(record.rango_uuid || record.rango_id);
     modalMonto = String(record.monto);
     modalHora = record.hora || (record.created_at ? formatHora(record.created_at) : getCurrentTimeString());
@@ -920,6 +1024,10 @@
     editingRecord = null;
     modalTipo = 'Aporte';
     modalEmpleadoId = null;
+    modalEmpleadoSearchQuery = '';
+    modalSelectedEmpleado = null;
+    showModalEmpleadoDropdown = false;
+    selectedModalDropdownIndex = -1;
     modalRangoId = null;
     modalMonto = '';
     modalHora = '';
@@ -933,6 +1041,22 @@
     const lId = libro?.uuid || libroId || libro?.id;
     if (!lId || !editingRecord) return;
 
+    // Resolver empleado si el usuario escribió y no dio click explícito
+    if (!modalEmpleadoId && modalEmpleadoSearchQuery) {
+      const q = modalEmpleadoSearchQuery.trim().toLowerCase();
+      const match = listaEmpleados.find(e => e.nombre.toLowerCase().trim() === q)
+        || allEmpleados.find(e => (e.nombre || '').toLowerCase().trim() === q);
+      if (match) {
+        modalEmpleadoId = match.uuid || match.id;
+        modalSelectedEmpleado = match;
+      }
+    }
+
+    if (!modalEmpleadoId && !modalEmpleadoSearchQuery) {
+      triggerToast('Debe seleccionar un empleado de la lista de coincidencias', 'warning');
+      return;
+    }
+
     const numMonto = parseFloat(modalMonto);
     if (isNaN(numMonto) || numMonto <= 0) {
       triggerToast('Debe ingresar un monto válido', 'warning');
@@ -945,11 +1069,21 @@
     }
 
     const targetUuid = editingRecord.uuid || editingRecord.id;
+    const empNombre = modalSelectedEmpleado?.nombre || modalEmpleadoSearchQuery || editingRecord.empleado_nombre;
+    const empCedula = modalSelectedEmpleado?.cedula || editingRecord.empleado_cedula || '';
+    const cargoNombre = modalSelectedEmpleado?.cargo_nombre || editingRecord.cargo_nombre || '';
+    const rMatch = listaRangos.find(r => String(r.uuid || r.id) === String(modalRangoId));
+    const rangoNombre = rMatch?.nombre || editingRecord.rango_nombre || '';
+
     const payload = {
       empleado_uuid: modalEmpleadoId,
       empleado_id: modalEmpleadoId,
+      empleado_nombre: empNombre,
+      empleado_cedula: empCedula,
+      cargo_nombre: cargoNombre,
       rango_uuid: modalRangoId,
       rango_id: modalRangoId,
+      rango_nombre: rangoNombre,
       monto: numMonto,
       tipo: modalTipo || 'Aporte',
       hora: modalHora
@@ -1713,14 +1847,55 @@
             </div>
           </div>
 
-          <!-- Selección de Empleado -->
-          <div class="modal-field-group">
-            <label for="modal-select-emp" class="modal-field-label">Empleado: *</label>
-            <select id="modal-select-emp" class="form-input" bind:value={modalEmpleadoId} required>
-              {#each listaEmpleados as e}
-                <option value={e.uuid || e.id}>{e.nombre} ({e.cargo_nombre})</option>
-              {/each}
-            </select>
+          <!-- Campo Empleado con Autocompletado / Coincidencias -->
+          <div class="modal-field-group relative-autocomplete">
+            <label for="m-empleado-nombre" class="modal-field-label">EMPLEADO: *</label>
+            <div class="cell-autocomplete-container">
+              <input 
+                id="m-empleado-nombre" 
+                bind:this={modalEmpleadoInputEl}
+                type="text" 
+                class="form-input {showModalEmpleadoDropdown && modalEmpleadosSugerencias.length > 0 ? 'input-active' : ''}" 
+                placeholder="Escriba Empleado (coincidencias con Tab ⇥)..." 
+                bind:value={modalEmpleadoSearchQuery}
+                on:focus={onModalEmpleadoFocus}
+                on:input={onModalEmpleadoInput}
+                on:keydown={onModalEmpleadoKeyDown}
+                on:blur={onModalEmpleadoBlur}
+                autocomplete="off"
+                required
+              />
+
+              <!-- Desplegable visual de sugerencias rápidas -->
+              {#if showModalEmpleadoDropdown && modalEmpleadosSugerencias.length > 0}
+                <div class="inline-dropdown modal-dropdown">
+                  <div class="inline-dropdown-header">
+                    <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+                  </div>
+                  <ul class="inline-dropdown-list">
+                    {#each modalEmpleadosSugerencias as emp, idx}
+                      <!-- svelte-ignore a11y-click-events-have-key-events -->
+                      <li 
+                        class="inline-dropdown-item {idx === selectedModalDropdownIndex ? 'selected' : ''}"
+                        on:mousedown|preventDefault={() => seleccionarModalEmpleado(emp)}
+                      >
+                        <span class="sug-avatar">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b2b73">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                          </svg>
+                        </span>
+                        <div class="sug-info">
+                          <span class="sug-name">{emp.nombre}</span>
+                          <span class="sug-cargo">{emp.cargo_nombre}</span>
+                        </div>
+                        <span class="sug-tab-badge">Tab ⇥</span>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
+            </div>
+            <span class="field-hint">Escriba nombre o cargo del empleado. Pulsa <b>Tab ⇥</b> para autocompletar.</span>
           </div>
 
           <!-- Selección de Rango -->
@@ -2626,8 +2801,14 @@
     width: 100%;
     max-width: 480px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
+    overflow: visible;
     animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .modal-dropdown {
+    z-index: 10001;
+    max-height: 240px;
+    overflow-y: auto;
   }
 
   @keyframes modalPopIn {
@@ -2648,6 +2829,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
   }
 
   .modal-title {
