@@ -66,7 +66,7 @@
 
   // Pestañas activas por sección
   let tabResumenProd = 'total'; // 'total' | 'mesas' | 'maquinas'
-  let tabMesa = 'grupo';        // 'grupo' (Total por juego) | 'total' (Total por mesa) | 'drop' | 'faltantes'
+  let tabMesa = 'grupo';        // 'grupo' (Total por juego) | 'total' (Total por mesa) | 'drop' | 'cierre' (Aperturas y Cierres) | 'notas'
   let tabMaquina = 'total';     // 'total' | 'billetero_rango' | 'billetero_detallado' | 'aportes_rango' | 'aportes_empleado' | 'aportes_detallado'
   let tabCliente = 'jugador';  // 'jugador' | 'metodo' | 'detallado'
 
@@ -2103,7 +2103,15 @@
                         class:active={tabMesa === 'cierre' || tabMesa === 'faltantes'}
                         on:click={() => (tabMesa = 'cierre')}
                       >
-                        Cierre
+                        Aperturas y Cierres
+                      </button>
+                      <button
+                        type="button"
+                        class="tab-toggle-btn"
+                        class:active={tabMesa === 'notas'}
+                        on:click={() => (tabMesa = 'notas')}
+                      >
+                        Notas
                       </button>
                     {/if}
                   </div>
@@ -2120,6 +2128,11 @@
                 {:else if (tabMesa === 'cierre' || tabMesa === 'faltantes') && section.subData.hasArqueoFichas && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
                   <span class="sub-count-badge">
                     {section.subData.arqueoMesaGroups?.length || 0} {section.subData.arqueoMesaGroups?.length === 1 ? 'mesa registrada' : 'mesas registradas'}
+                  </span>
+                {:else if tabMesa === 'notas'}
+                  {@const conNotas = (section.subData.arqueoMesaGroups || []).filter(g => (g.apertura?.nota || g.cierre?.nota || g.nota || g.apertura?.observaciones || g.cierre?.observaciones || '').trim()).length}
+                  <span class="sub-count-badge">
+                    {conNotas} con notas ({section.subData.arqueoMesaGroups?.length || 0} mesas)
                   </span>
                 {:else}
                   <span class="sub-count-badge">
@@ -2216,7 +2229,6 @@
                           <th class="th-center">$ {valor}</th>
                         {/each}
                         <th class="th-center th-total">TOTAL</th>
-                        <th class="th-left th-nota">NOTA</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2253,9 +2265,6 @@
                           {/each}
                           <td class="td-center td-total-val ap-total-cell font-mono">
                             {formatMoney(apTotal)}
-                          </td>
-                          <td class="td-left nota-cell text-xs" rowspan="{rowSpanTotal}">
-                            {group.apertura?.nota || group.cierre?.nota || group.nota || '—'}
                           </td>
                         </tr>
 
@@ -2366,7 +2375,6 @@
                         <td class="td-center grand-total-cell ap-grand-total">
                           {formatMoney(section.subData.totalArqueoApertura)}
                         </td>
-                        <td></td>
                       </tr>
 
                       {#if section.subData.totalArqueoRellenos > 0}
@@ -2379,7 +2387,6 @@
                           <td class="td-center grand-total-cell text-blue">
                             {formatMoney(section.subData.totalArqueoRellenos)}
                           </td>
-                          <td></td>
                         </tr>
                       {/if}
 
@@ -2393,7 +2400,6 @@
                           <td class="td-center grand-total-cell text-purple">
                             {formatMoney(section.subData.totalArqueoDevoluciones)}
                           </td>
-                          <td></td>
                         </tr>
                       {/if}
 
@@ -2406,7 +2412,6 @@
                         <td class="td-center grand-total-cell ci-grand-total">
                           {formatMoney(section.subData.totalArqueoCierre)}
                         </td>
-                        <td></td>
                       </tr>
 
                       <tr class="total-row footer-diferencia">
@@ -2429,9 +2434,40 @@
                             {formatMoney(section.subData.totalArqueoDiferencia)}
                           </span>
                         </td>
-                        <td></td>
                       </tr>
                     </tfoot>
+                  </table>
+                </div>
+              {:else if tabMesa === 'notas' && section.subData.arqueoMesaGroups && section.subData.arqueoMesaGroups.length > 0}
+                <!-- Tabla: Notas de Mesas (Abarca todo el espacio disponible) -->
+                <div class="table-responsive-wrapper">
+                  <table class="sheet-detail-table notas-mesas-table">
+                    <thead>
+                      <tr>
+                        <th class="th-mesa" style="width: 220px; min-width: 180px;">MESA</th>
+                        <th class="th-left">NOTAS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each section.subData.arqueoMesaGroups as group (group.mesaId)}
+                        {@const notaText = (group.apertura?.nota || group.cierre?.nota || group.nota || group.apertura?.observaciones || group.cierre?.observaciones || '').trim()}
+                        <tr>
+                          <td class="td-mesa font-bold" style="vertical-align: middle;">
+                            <span class="mesa-main-name font-bold">{group.mesaNombre}</span>
+                            {#if group.juegoNombre}
+                              <span class="mesa-sub-juego" style="display: block; font-size: 11px; color: #64748b; font-weight: normal; margin-top: 2px;">{group.juegoNombre}</span>
+                            {/if}
+                          </td>
+                          <td class="td-left nota-cell-expanded" style="vertical-align: middle; padding: 12px 18px; font-size: 13.5px; line-height: 1.5; color: {notaText ? '#0f172a' : '#94a3b8'};">
+                            {#if notaText}
+                              <span class="nota-text-body">{notaText}</span>
+                            {:else}
+                              <span class="val-pending" style="color: #94a3b8; font-style: italic;">—</span>
+                            {/if}
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
                   </table>
                 </div>
               {:else}
