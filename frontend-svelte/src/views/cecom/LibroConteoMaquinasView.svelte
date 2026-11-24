@@ -227,6 +227,17 @@
         }
       }
 
+      // Filtrar estrictamente solo las máquinas configuradas en modo BILL (billetero)
+      const modoNom = String(
+        m.modo_nombre ||
+        allModosList.find(mo => String(mo.uuid || mo.id) === String(m.modo_uuid || m.modo_id))?.nombre ||
+        ''
+      ).trim().toUpperCase();
+
+      if (!modoNom.includes('BILL')) {
+        return false;
+      }
+
       return true;
     }).map(m => {
       const matchedRango = allRangosList.find(r => 

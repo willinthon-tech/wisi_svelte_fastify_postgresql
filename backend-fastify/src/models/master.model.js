@@ -7724,10 +7724,16 @@ export async function createMaquinaModel(data) {
       if (checkR.length === 0) rango_uuid = null;
     }
 
-    if (serial.toUpperCase() !== 'N/A') {
+    const genericSerials = ['N/A', 'S/N', 'SN', '-', '0', 'PENDIENTE', 'SIN SERIAL', ''];
+    const cleanSerial = serial ? String(serial).trim() : '';
+    const isGeneric = genericSerials.includes(cleanSerial.toUpperCase());
+
+    if (cleanSerial && !isGeneric) {
       const existing = await sql`
         SELECT uuid, nombre, serial FROM maquinas 
-        WHERE LOWER(TRIM(serial)) = LOWER(${serial}) AND UPPER(TRIM(serial)) != 'N/A'
+        WHERE LOWER(TRIM(serial)) = LOWER(${cleanSerial})
+          AND UPPER(TRIM(serial)) NOT IN ('N/A', 'S/N', 'SN', '-', '0', 'PENDIENTE', 'SIN SERIAL', '')
+          AND COALESCE(is_deleted, false) = false
         LIMIT 1
       `;
       if (existing.length > 0) {
@@ -7846,8 +7852,16 @@ export async function createMaquinaModel(data) {
     return rows[0];
   } else {
     if (!inMemoryData.maquinas) inMemoryData.maquinas = [];
-    if (serial.toUpperCase() !== 'N/A') {
-      const exists = inMemoryData.maquinas.find(m => (m.serial || '').trim().toLowerCase() === serial.toLowerCase() && (m.serial || '').trim().toUpperCase() !== 'N/A');
+    const genericSerials = ['N/A', 'S/N', 'SN', '-', '0', 'PENDIENTE', 'SIN SERIAL', ''];
+    const cleanSerial = serial ? String(serial).trim() : '';
+    const isGeneric = genericSerials.includes(cleanSerial.toUpperCase());
+
+    if (cleanSerial && !isGeneric) {
+      const exists = (inMemoryData.maquinas || []).find(m => 
+        !m.is_deleted &&
+        (m.serial || '').trim().toLowerCase() === cleanSerial.toLowerCase() && 
+        !genericSerials.includes((m.serial || '').trim().toUpperCase())
+      );
       if (exists) {
         throw new Error(`Ya existe una máquina registrada con el serial "${serial}" (${exists.nombre})`);
       }
@@ -7992,11 +8006,29 @@ export async function updateMaquinaModel(id, data) {
       if (checkR.length === 0) rango_uuid = null;
     }
 
-    if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
+    const genericSerials = ['N/A', 'S/N', 'SN', '-', '0', 'PENDIENTE', 'SIN SERIAL', ''];
+    const cleanSerial = serial !== undefined ? String(serial).trim() : '';
+    const isGeneric = genericSerials.includes(cleanSerial.toUpperCase());
+
+    // Obtener la máquina actual para verificar si el serial realmente cambió
+    let currentMachine = null;
+    try {
+      const curRows = await sql`SELECT uuid, serial, sala_uuid FROM maquinas WHERE uuid = ${targetUuid}::uuid LIMIT 1`;
+      if (curRows.length > 0) currentMachine = curRows[0];
+    } catch (eCur) {}
+
+    const isSerialChanged = currentMachine
+      ? (cleanSerial.toLowerCase() !== (currentMachine.serial || '').trim().toLowerCase())
+      : (serial !== undefined);
+
+    // Solo comprobar duplicados si el serial fue efectivamente modificado y no es genérico
+    if (isSerialChanged && cleanSerial && !isGeneric) {
       const existing = await sql`
         SELECT uuid, nombre, serial FROM maquinas 
         WHERE uuid != ${targetUuid}::uuid
-          AND LOWER(TRIM(serial)) = LOWER(${serial}) AND UPPER(TRIM(serial)) != 'N/A'
+          AND LOWER(TRIM(serial)) = LOWER(${cleanSerial})
+          AND UPPER(TRIM(serial)) NOT IN ('N/A', 'S/N', 'SN', '-', '0', 'PENDIENTE', 'SIN SERIAL', '')
+          AND COALESCE(is_deleted, false) = false
         LIMIT 1
       `;
       if (existing.length > 0) {
@@ -8097,8 +8129,21 @@ export async function updateMaquinaModel(id, data) {
     const list = inMemoryData.maquinas || [];
     const idx = list.findIndex(m => m.uuid === targetUuid);
     if (idx !== -1) {
-      if (serial !== undefined && serial.toUpperCase() !== 'N/A') {
-        const exists = list.find(m => m.uuid !== targetUuid && (m.serial || '').trim().toLowerCase() === serial.toLowerCase() && (m.serial || '').trim().toUpperCase() !== 'N/A');
+      const currentItem = list[idx];
+      const genericSerials = ['N/A', 'S/N', 'SN', '-', '0', 'PENDIENTE', 'SIN SERIAL', ''];
+      const cleanSerial = serial !== undefined ? String(serial).trim() : '';
+      const isGeneric = genericSerials.includes(cleanSerial.toUpperCase());
+      const isSerialChanged = currentItem
+        ? (cleanSerial.toLowerCase() !== (currentItem.serial || '').trim().toLowerCase())
+        : (serial !== undefined);
+
+      if (isSerialChanged && cleanSerial && !isGeneric) {
+        const exists = list.find(m => 
+          m.uuid !== targetUuid && 
+          !m.is_deleted &&
+          (m.serial || '').trim().toLowerCase() === cleanSerial.toLowerCase() && 
+          !genericSerials.includes((m.serial || '').trim().toUpperCase())
+        );
         if (exists) {
           throw new Error(`Ya existe otra máquina registrada con el serial "${serial}" (${exists.nombre})`);
         }
