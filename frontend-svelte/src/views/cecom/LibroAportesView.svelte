@@ -184,18 +184,34 @@
     }).slice(0, 10);
   })();
 
-  $: allEmpleados = (() => {
-    const storeEmps = $masterEmpleadosStore || [];
-    if (storeEmps.length >= localEmpleados.length && storeEmps.length > 0) {
-      return storeEmps;
+  let serverSalaEmpleados = [];
+  let isFetchingSalaEmpleados = false;
+  let lastFetchedSalaUuid = null;
+
+  async function fetchEmpleadosDeSala(sUuid) {
+    if (!sUuid || isFetchingSalaEmpleados || lastFetchedSalaUuid === sUuid) return;
+    isFetchingSalaEmpleados = true;
+    lastFetchedSalaUuid = sUuid;
+    try {
+      const token = (typeof localStorage !== 'undefined') ? (localStorage.getItem('wisi_token') || localStorage.getItem('token')) : null;
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/master/empleados?limit=all&sala_ids=${encodeURIComponent(sUuid)}&activo=true`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
+          serverSalaEmpleados = json.data;
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching empleados for sala:', e);
+    } finally {
+      isFetchingSalaEmpleados = false;
     }
-    if (localEmpleados.length > 0) {
-      return localEmpleados;
-    }
-    return storeEmps;
-  })();
+  }
 
   $: effectiveSalaUuid = (() => {
+    if (multisalaUuid) return String(multisalaUuid);
     if (targetSalaUuid) return String(targetSalaUuid);
     if (targetSalaId) return String(targetSalaId);
     if (libro?.sala_nombre) {
@@ -205,10 +221,29 @@
     return null;
   })();
 
+  $: if (effectiveSalaUuid && effectiveSalaUuid !== lastFetchedSalaUuid) {
+    fetchEmpleadosDeSala(effectiveSalaUuid);
+  }
+
+  $: allEmpleados = (() => {
+    const storeEmps = $masterEmpleadosStore || [];
+    const map = new Map();
+    for (const e of storeEmps) {
+      if (e && (e.uuid || e.id)) map.set(String(e.uuid || e.id), e);
+    }
+    for (const e of serverSalaEmpleados) {
+      if (e && (e.uuid || e.id)) map.set(String(e.uuid || e.id), e);
+    }
+    for (const e of localEmpleados) {
+      if (e && (e.uuid || e.id) && !map.has(String(e.uuid || e.id))) map.set(String(e.uuid || e.id), e);
+    }
+    return Array.from(map.values());
+  })();
+
   // Lista de empleados activos de la sala (con fallback seguro para no quedar vacía)
   $: listaEmpleados = (() => {
     let filtered = allEmpleados.filter(e => {
-      if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false)) return false;
+      if (e.activo !== undefined && (Number(e.activo) === 0 || e.activo === false || String(e.activo).toLowerCase() === 'false')) return false;
       if (!effectiveSalaUuid) return true;
       const eSala = String(e.sala_uuid || e.sala_id || '');
       if (eSala && eSala === effectiveSalaUuid) return true;
@@ -216,7 +251,7 @@
     });
 
     if (filtered.length === 0 && allEmpleados.length > 0) {
-      filtered = allEmpleados.filter(e => e.activo !== false && Number(e.activo) !== 0);
+      filtered = allEmpleados.filter(e => e.activo !== false && Number(e.activo) !== 0 && String(e.activo).toLowerCase() !== 'false');
     }
 
     return filtered.map(e => {
@@ -233,31 +268,31 @@
       };
     })
     .filter(e => Boolean(e.nombre))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
   })();
 
   // Coincidencias de búsqueda por NOMBRE o por CARGO o Cédula (escritura rápida tolerante a acentos y orden de palabras)
   $: empleadosSugerencias = (() => {
     const q = (empleadoSearchQuery || '').trim();
-    if (!q) return listaEmpleados.slice(0, 10);
+    if (!q) return listaEmpleados.slice(0, 100);
     const normQ = normalizeSearchStr(q);
     const tokens = normQ.split(/\s+/).filter(Boolean);
     return listaEmpleados.filter(emp => {
       const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
       return tokens.every(t => targetText.includes(t));
-    }).slice(0, 10);
+    }).slice(0, 100);
   })();
 
   // Coincidencias de búsqueda para el empleado en el Modal de Edición
   $: modalEmpleadosSugerencias = (() => {
     const q = (modalEmpleadoSearchQuery || '').trim();
-    if (!q) return listaEmpleados.slice(0, 10);
+    if (!q) return listaEmpleados.slice(0, 100);
     const normQ = normalizeSearchStr(q);
     const tokens = normQ.split(/\s+/).filter(Boolean);
     return listaEmpleados.filter(emp => {
       const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
       return tokens.every(t => targetText.includes(t));
-    }).slice(0, 10);
+    }).slice(0, 100);
   })();
 
   // Registros ordenados y filtrados para Detallado de Operaciones (MÁS RECIENTE PRIMERO: UUID / ID DESC)
@@ -578,9 +613,12 @@
   }
 
   // --- MANEJO DE AUTOCOMPLETADO Y TECLADO PARA EMPLEADO (TAB / ENTER) ---
-  function onEmpleadoInputFocus() {
+  function onEmpleadoInputFocus(e) {
     showEmpleadoDropdown = true;
     selectedDropdownIndex = -1;
+    if (e && e.target && typeof e.target.select === 'function') {
+      e.target.select();
+    }
   }
 
   function onEmpleadoInputChange() {
@@ -642,9 +680,12 @@
   }
 
   // --- MANEJO DE AUTOCOMPLETADO Y TECLADO PARA EMPLEADO EN MODAL DE EDICIÓN ---
-  function onModalEmpleadoFocus() {
+  function onModalEmpleadoFocus(e) {
     showModalEmpleadoDropdown = true;
     selectedModalDropdownIndex = -1;
+    if (e && e.target && typeof e.target.select === 'function') {
+      e.target.select();
+    }
   }
 
   function onModalEmpleadoInput() {
@@ -1188,7 +1229,7 @@
           {#if showEmpleadoDropdown && empleadosSugerencias.length > 0}
             <div class="inline-dropdown">
               <div class="inline-dropdown-header">
-                <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+                <span>Coincidencias ({empleadosSugerencias.length}{listaEmpleados.length > empleadosSugerencias.length ? ` de ${listaEmpleados.length}` : ''}) (<b>Tab ⇥</b> o clic):</span>
               </div>
               <ul class="inline-dropdown-list">
                 {#each empleadosSugerencias as emp, idx}
@@ -1870,7 +1911,7 @@
               {#if showModalEmpleadoDropdown && modalEmpleadosSugerencias.length > 0}
                 <div class="inline-dropdown modal-dropdown">
                   <div class="inline-dropdown-header">
-                    <span>Coincidencias (<b>Tab ⇥</b> o clic):</span>
+                    <span>Coincidencias ({modalEmpleadosSugerencias.length}{listaEmpleados.length > modalEmpleadosSugerencias.length ? ` de ${listaEmpleados.length}` : ''}) (<b>Tab ⇥</b> o clic):</span>
                   </div>
                   <ul class="inline-dropdown-list">
                     {#each modalEmpleadosSugerencias as emp, idx}
@@ -2103,8 +2144,9 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    max-height: 200px;
+    max-height: 280px;
     overflow-y: auto;
+    scrollbar-width: thin;
   }
 
   .inline-dropdown-item {
