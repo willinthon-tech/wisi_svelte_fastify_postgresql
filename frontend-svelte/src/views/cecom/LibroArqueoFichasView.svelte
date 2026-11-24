@@ -101,16 +101,24 @@
       .trim();
   }
 
-  $: allEmpleados = (() => {
-    const storeEmps = $masterEmpleadosStore || [];
-    if (storeEmps.length >= localEmpleados.length && storeEmps.length > 0) {
-      return storeEmps;
+  let serverSalaEmpleados = [];
+  let lastFetchedSalaUuid = null;
+
+  async function fetchEmpleadosDeSala(salaId) {
+    if (!salaId) return;
+    lastFetchedSalaUuid = salaId;
+    try {
+      const res = await fetch(toBackendUrl(`/api/master/empleados?sala_uuid=${salaId}&limit=1000`));
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json?.data)) {
+          serverSalaEmpleados = json.data;
+        }
+      }
+    } catch (err) {
+      console.warn('[ArqueoFichas] Error fetching empleados de sala:', err);
     }
-    if (localEmpleados.length > 0) {
-      return localEmpleados;
-    }
-    return storeEmps;
-  })();
+  }
 
   $: targetSalaId = (libro?.sala_id || null);
   $: targetSalaUuid = (libro?.sala_uuid || null);
@@ -121,6 +129,25 @@
     if (currentSala?.uuid) return String(currentSala.uuid);
     if (currentSala?.id) return String(currentSala.id);
     return null;
+  })();
+
+  $: if (effectiveSalaUuid && effectiveSalaUuid !== lastFetchedSalaUuid) {
+    fetchEmpleadosDeSala(effectiveSalaUuid);
+  }
+
+  $: allEmpleados = (() => {
+    const storeEmps = $masterEmpleadosStore || [];
+    const map = new Map();
+    for (const e of storeEmps) {
+      if (e && (e.uuid || e.id)) map.set(String(e.uuid || e.id), e);
+    }
+    for (const e of serverSalaEmpleados) {
+      if (e && (e.uuid || e.id)) map.set(String(e.uuid || e.id), e);
+    }
+    for (const e of localEmpleados) {
+      if (e && (e.uuid || e.id) && !map.has(String(e.uuid || e.id))) map.set(String(e.uuid || e.id), e);
+    }
+    return Array.from(map.values());
   })();
 
   $: listaEmpleados = (() => {
@@ -156,13 +183,13 @@
   $: filteredAperturaEmpSuggestions = (() => {
     if (!aperturaEmpSugTarget) return [];
     const q = (empleadoAperturaNombre || '').trim();
-    if (!q) return (listaEmpleados || []).slice(0, 10);
+    if (!q) return listaEmpleados;
     const normQ = normalizeSearchStr(q);
     const tokens = normQ.split(/\s+/).filter(Boolean);
     return (listaEmpleados || []).filter(emp => {
       const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
       return tokens.every(token => targetText.includes(token));
-    }).slice(0, 10);
+    });
   })();
 
   function handleFocusAperturaEmp() {
@@ -1059,15 +1086,15 @@
         </select>
       </div>
 
-      <!-- Dealer / Empleado que Apertura (con autocompletado y coincidencia Tab ⇥) -->
+      <!-- Responsable que Apertura (con autocompletado y coincidencia Tab ⇥) -->
       <div class="form-group">
-        <label for="apertura-pitboss" class="form-label">Dealer:</label>
+        <label for="apertura-pitboss" class="form-label">Responsable:</label>
         <div class="cell-autocomplete-container">
           <input 
             id="apertura-pitboss" 
             type="text" 
             class="form-input {aperturaEmpSugTarget ? 'input-active' : ''}" 
-            placeholder="Escriba Dealer (coincidencias con Tab ⇥)..." 
+            placeholder="Escriba Responsable (coincidencias con Tab ⇥)..." 
             value={empleadoAperturaNombre}
             on:focus={handleFocusAperturaEmp}
             on:input={(e) => handleInputAperturaEmp(e.target.value)}
@@ -2438,7 +2465,7 @@
     border-radius: 8px;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
     z-index: 10000;
-    max-height: 220px;
+    max-height: 320px;
     overflow-y: auto;
   }
   .inline-dropdown-header {

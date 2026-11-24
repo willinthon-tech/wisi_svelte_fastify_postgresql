@@ -46,13 +46,13 @@
   $: filteredEmpSuggestions = (() => {
     if (!empSugTarget) return [];
     const q = (empleadoCierreNombre || '').trim();
-    if (!q) return (listaEmpleados || []).slice(0, 10);
+    if (!q) return (listaEmpleados || []);
     const normQ = normalizeSearchStr(q);
     const tokens = normQ.split(/\s+/).filter(Boolean);
     return (listaEmpleados || []).filter(emp => {
       const targetText = normalizeSearchStr(`${emp.nombre || ''} ${emp.cargo_nombre || ''} ${emp.cedula || ''}`);
       return tokens.every(token => targetText.includes(token));
-    }).slice(0, 10);
+    });
   })();
 
   function handleFocusEmp() {
@@ -368,14 +368,14 @@
         <div class="cierre-meta-row">
           <div class="form-group-emp">
             <div class="meta-header-line">
-              <label for="cierre-empleado" class="field-label">TRABAJADOR QUE CIERRA LA MESA:</label>
+              <label for="cierre-empleado" class="field-label">Responsable:</label>
             </div>
             <div class="cell-autocomplete-container">
               <input 
                 id="cierre-empleado" 
                 type="text" 
                 class="form-input {empSugTarget ? 'input-active' : ''}" 
-                placeholder="Escriba Empleado (coincidencias con Tab ⇥)..." 
+                placeholder="Escriba Responsable (coincidencias con Tab ⇥)..." 
                 value={empleadoCierreNombre}
                 on:focus={handleFocusEmp}
                 on:input={(e) => handleInputEmp(e.target.value)}
@@ -1114,7 +1114,7 @@
     border-radius: 8px;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
     z-index: 10000;
-    max-height: 220px;
+    max-height: 320px;
     overflow-y: auto;
   }
 
