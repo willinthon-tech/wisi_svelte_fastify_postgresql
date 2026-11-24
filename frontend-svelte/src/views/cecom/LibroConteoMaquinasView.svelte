@@ -68,9 +68,11 @@
   // Pestaña activa en la tarjeta derecha: 'detallado' | 'rangos'
   let activeTab = 'detallado';
 
-  // Registros de conteo
+  // Registros de conteo y filtros de búsqueda
   let records = [];
   let isLoadingRecords = true;
+  let busquedaDetallado = '';
+  let busquedaRangoResumen = '';
 
   // Modal de Edición
   let showModalEditar = false;
@@ -309,10 +311,82 @@
     return (n100 * 100) + (n50 * 50) + (n20 * 20) + (n10 * 10) + (n5 * 5) + (n1 * 1);
   })();
 
-  // Totales generales detallado
+  function normalizeSearchStr(str) {
+    return String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  // Registros filtrados para Detallado de Operaciones (filtrado por nombre de máquina, rango, serial o monto)
+  $: filteredRecords = (() => {
+    let list = [...records];
+    const rawQ = (busquedaDetallado || '').trim();
+    if (!rawQ) return list;
+
+    const normQ = normalizeSearchStr(rawQ);
+
+    // 1. Coincidencia directa completa
+    let matched = list.filter(r => {
+      const fieldMaquina = normalizeSearchStr(r.maquina_nombre);
+      const fieldRango = normalizeSearchStr(r.rango_nombre);
+      const fieldSerial = normalizeSearchStr(r.serial || r.maquina_serial);
+
+      if (fieldMaquina.includes(normQ)) return true;
+      if (fieldRango.includes(normQ)) return true;
+      if (fieldSerial.includes(normQ)) return true;
+
+      // Si el usuario buscó por monto con signo $ (ej: "$100", "$20")
+      if (rawQ.startsWith('$') && `${r.total}`.includes(rawQ.replace('$', '').trim())) {
+        return true;
+      }
+
+      // Combinación máquina + rango + serial
+      const combined = `${fieldMaquina} ${fieldRango} ${fieldSerial}`;
+      return combined.includes(normQ);
+    });
+
+    // 2. Si no hubo coincidencia completa, búsqueda multi-token (ej: "350 rango 3")
+    if (matched.length === 0) {
+      const tokens = normQ.split(/\s+/).filter(Boolean);
+      if (tokens.length > 1) {
+        matched = list.filter(r => {
+          const fieldMaquina = normalizeSearchStr(r.maquina_nombre);
+          const fieldRango = normalizeSearchStr(r.rango_nombre);
+          const fieldSerial = normalizeSearchStr(r.serial || r.maquina_serial);
+          const combined = `${fieldMaquina} ${fieldRango} ${fieldSerial}`;
+
+          return tokens.every(token => {
+            if (/^\d+$/.test(token)) {
+              const regex = new RegExp(`(?:^|\\s)${token}(?:$|\\s)`);
+              return regex.test(fieldRango) || regex.test(fieldMaquina) || combined.includes(token);
+            }
+            return combined.includes(token);
+          });
+        });
+      }
+    }
+
+    return matched;
+  })();
+
+  // Resumen por Rango filtrado por búsqueda
+  $: filteredResumenPorRango = (() => {
+    const q = (busquedaRangoResumen || '').trim();
+    if (!q) return resumenPorRango;
+    const norm = normalizeSearchStr(q);
+    return resumenPorRango.filter(item => {
+      const rName = normalizeSearchStr(item.rango_nombre);
+      return rName.includes(norm);
+    });
+  })();
+
+  // Totales generales detallado (dinámico según filtro o general)
   $: totalsDetallado = (() => {
     let t100 = 0, t50 = 0, t20 = 0, t10 = 0, t5 = 0, t1 = 0, grandTotal = 0;
-    for (const r of records) {
+    const source = busquedaDetallado ? filteredRecords : records;
+    for (const r of source) {
       t100 += Number(r.denominacion_100 ?? r.b100 ?? 0) || 0;
       t50 += Number(r.denominacion_50 ?? r.b50 ?? 0) || 0;
       t20 += Number(r.denominacion_20 ?? r.b20 ?? 0) || 0;
@@ -1125,7 +1199,7 @@
         <h4 class="dark-header-title">{tableHeaderTitle}</h4>
       </div>
 
-      <!-- Pestañas Superiores: Detallado de Operaciones / Resumen por Rango -->
+      <!-- Pestañas Superiores: Detallado de Operaciones / Resumen por Rango y Buscador -->
       <div class="resumen-tabs-header">
         <div class="tabs-nav-list">
           <button 
@@ -1133,16 +1207,52 @@
             class="tab-nav-btn {activeTab === 'detallado' ? 'active' : ''}"
             on:click={() => activeTab = 'detallado'}
           >
-            <span>Detallado de Operaciones ({records.length})</span>
+            <span>Detallado de Operaciones ({busquedaDetallado ? `${filteredRecords.length} de ${records.length}` : records.length})</span>
           </button>
           <button 
             type="button" 
             class="tab-nav-btn {activeTab === 'rangos' ? 'active' : ''}"
             on:click={() => activeTab = 'rangos'}
           >
-            <span>Resumen por Rango ({resumenPorRango.length})</span>
+            <span>Resumen por Rango ({busquedaRangoResumen ? `${filteredResumenPorRango.length} de ${resumenPorRango.length}` : resumenPorRango.length})</span>
           </button>
         </div>
+
+        {#if activeTab === 'detallado'}
+          <div class="tab-search-wrapper">
+            <input 
+              type="text" 
+              class="input-search-conteo-resumen" 
+              placeholder="Buscar máquina o rango..." 
+              bind:value={busquedaDetallado} 
+            />
+            {#if busquedaDetallado}
+              <button 
+                type="button" 
+                class="btn-clear-search" 
+                on:click={() => busquedaDetallado = ''}
+                title="Limpiar búsqueda"
+              >✕</button>
+            {/if}
+          </div>
+        {:else if activeTab === 'rangos'}
+          <div class="tab-search-wrapper">
+            <input 
+              type="text" 
+              class="input-search-conteo-resumen" 
+              placeholder="Buscar rango..." 
+              bind:value={busquedaRangoResumen} 
+            />
+            {#if busquedaRangoResumen}
+              <button 
+                type="button" 
+                class="btn-clear-search" 
+                on:click={() => busquedaRangoResumen = ''}
+                title="Limpiar búsqueda"
+              >✕</button>
+            {/if}
+          </div>
+        {/if}
       </div>
 
       <!-- CONTENIDO PESTAÑA 1: DETALLADO DE OPERACIONES -->
@@ -1174,8 +1284,12 @@
                 <tr>
                   <td colspan={canDelete ? 10 : 9} class="td-empty">No hay conteos de máquinas registrados en esta jornada.</td>
                 </tr>
+              {:else if filteredRecords.length === 0}
+                <tr>
+                  <td colspan={canDelete ? 10 : 9} class="td-empty">No se encontraron conteos que coincidan con "{busquedaDetallado}".</td>
+                </tr>
               {:else}
-                {#each records as record, index (record.uuid || record.id || index)}
+                {#each filteredRecords as record, index (record.uuid || record.id || index)}
                   <tr 
                     class="tr-record-item"
                     title="Haga clic para cargar en el formulario superior"
@@ -1266,8 +1380,12 @@
                 <tr>
                   <td colspan="11" class="td-empty">No hay datos para agrupar por rango todavía.</td>
                 </tr>
+              {:else if filteredResumenPorRango.length === 0}
+                <tr>
+                  <td colspan="11" class="td-empty">No se encontraron rangos que coincidan con "{busquedaRangoResumen}".</td>
+                </tr>
               {:else}
-                {#each resumenPorRango as item, idx}
+                {#each filteredResumenPorRango as item, idx}
                   {@const pct = totalsDetallado.grandTotal > 0 ? ((item.total / totalsDetallado.grandTotal) * 100).toFixed(1) : '0'}
                   <tr>
                     <td class="td-center td-index">{idx + 1}</td>
@@ -1881,15 +1999,61 @@
   }
 
   .resumen-tabs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
     padding: 8px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .tabs-nav-list {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .tab-search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .input-search-conteo-resumen {
+    padding: 6px 28px 6px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+    width: 220px;
+    background: #ffffff;
+    transition: all 0.2s ease;
+  }
+
+  .input-search-conteo-resumen:focus {
+    border-color: #3b82f6;
+    width: 260px;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  .btn-clear-search {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+    border-radius: 50%;
+    line-height: 1;
+    transition: color 0.15s ease;
+  }
+
+  .btn-clear-search:hover {
+    color: #475569;
   }
 
   .tab-nav-btn {
