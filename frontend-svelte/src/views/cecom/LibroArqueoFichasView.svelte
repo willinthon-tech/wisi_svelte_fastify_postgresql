@@ -1134,8 +1134,8 @@
       <div class="form-group">
         <div class="hora-header-line">
           <label for="apertura-hora" class="form-label">HORA APERTURA:</label>
-          <button type="button" class="btn-rayo" on:click={setActualHoraApertura} title="Usar hora actual">
-            ⚡ Usar hora actual
+          <button type="button" class="btn-mini-now" on:click={setActualHoraApertura} title="Poner hora actual">
+            ⚡ Ahora
           </button>
         </div>
         <input id="apertura-hora" type="time" class="form-input" bind:value={horaApertura} />
@@ -2417,20 +2417,19 @@
     align-items: center;
     margin-bottom: 2px;
   }
-  .btn-rayo {
-    background: #eff6ff;
+  .btn-mini-now {
+    background: none;
+    border: none;
     color: #2563eb;
-    border: 1px solid #bfdbfe;
-    border-radius: 6px;
-    padding: 2px 7px;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s;
+    padding: 0;
+    transition: color 0.15s ease;
   }
-  .btn-rayo:hover {
-    background: #dbeafe;
-    border-color: #93c5fd;
+  .btn-mini-now:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
   }
   .cell-autocomplete-container {
     position: relative;

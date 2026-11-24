@@ -414,8 +414,8 @@
           <div class="form-group-hora">
             <div class="meta-header-line">
               <label for="input-cierre-hora" class="field-label">HORA CIERRE:</label>
-              <button type="button" class="btn-rayo" on:click={setActualHoraCierre} title="Usar hora actual">
-                ⚡ Usar hora actual
+              <button type="button" class="btn-mini-now" on:click={setActualHoraCierre} title="Poner hora actual">
+                ⚡ Ahora
               </button>
             </div>
             <input id="input-cierre-hora" type="time" class="hora-input" bind:value={horaCierre} />
@@ -1050,21 +1050,20 @@
     letter-spacing: 0.5px;
   }
 
-  .btn-rayo {
-    background: #eff6ff;
+  .btn-mini-now {
+    background: none;
+    border: none;
     color: #2563eb;
-    border: 1px solid #bfdbfe;
-    border-radius: 6px;
-    padding: 2px 7px;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s;
+    padding: 0;
+    transition: color 0.15s ease;
   }
 
-  .btn-rayo:hover {
-    background: #dbeafe;
-    border-color: #93c5fd;
+  .btn-mini-now:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
   }
 
   .form-input {
