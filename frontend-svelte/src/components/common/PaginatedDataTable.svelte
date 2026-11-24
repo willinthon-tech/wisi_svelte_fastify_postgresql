@@ -358,11 +358,11 @@
       if (filteredDept.length > 0) return filteredDept;
     }
 
-    // Priority 2: Filter by sala_id / sala_nombre if row has sala context (e.g. Areas editing Departamento, but NOT when selecting Sala or Modelo directly)
+    // Priority 2: Filter by sala_id / sala_nombre if row has sala context (e.g. Areas editing Departamento, but NOT when selecting Sala, Modelo or Juego directly)
     const targetSalaId = item.sala_id ? String(item.sala_id) : null;
     const targetSalaNombre = item.sala_nombre ? String(item.sala_nombre).trim().toLowerCase() : null;
 
-    if (col.keyId !== 'sala_id' && col.key !== 'sala_nombre' && col.keyId !== 'modelo_id' && col.key !== 'modelo_nombre' && (targetSalaId || targetSalaNombre)) {
+    if (col.keyId !== 'sala_id' && col.key !== 'sala_nombre' && col.keyId !== 'modelo_id' && col.key !== 'modelo_nombre' && col.keyId !== 'juego_uuid' && col.keyId !== 'juego_id' && col.key !== 'juego_nombre' && (targetSalaId || targetSalaNombre)) {
       const filteredSala = rawOptions.filter(opt => {
         if (!opt) return false;
         if (targetSalaId && opt.sala_id) {
@@ -1111,6 +1111,13 @@
     };
     if (Array.isArray(columns)) {
       for (const col of columns) {
+        if (col.keyId && draft[col.keyId] === undefined) {
+          if (col.keyId.endsWith('_uuid') && draft[col.keyId.replace('_uuid', '_id')] !== undefined) {
+            draft[col.keyId] = draft[col.keyId.replace('_uuid', '_id')];
+          } else if (col.keyId.endsWith('_id') && draft[col.keyId.replace('_id', '_uuid')] !== undefined) {
+            draft[col.keyId] = draft[col.keyId.replace('_id', '_uuid')];
+          }
+        }
         if (col.type === 'date' && item[col.key] !== undefined && item[col.key] !== null) {
           draft[col.key] = formatDateForInput(item[col.key]) || item[col.key];
         }
@@ -1538,14 +1545,14 @@
                           {#if grp.label}
                             <optgroup label="{grp.label}">
                               {#each grp.items as opt}
-                                <option value={typeof opt === 'object' ? opt.id : opt}>
+                                <option value={typeof opt === 'object' ? (opt.uuid || opt.id) : opt}>
                                   {typeof opt === 'object' ? (opt.nombre || opt.nombre_comercial || opt.name || opt.label) : opt}
                                 </option>
                               {/each}
                             </optgroup>
                           {:else}
                             {#each grp.items as opt}
-                              <option value={typeof opt === 'object' ? opt.id : opt}>
+                              <option value={typeof opt === 'object' ? (opt.uuid || opt.id) : opt}>
                                 {typeof opt === 'object' ? (opt.nombre || opt.nombre_comercial || opt.name || opt.label) : opt}
                               </option>
                             {/each}

@@ -205,7 +205,7 @@
     { key: 'uuid', label: 'ID', type: 'id', sortable: true, editable: false },
     { key: 'nombre', label: 'Nombre de la Mesa', bold: true, sortable: true, editable: true },
     { key: 'sala_nombre', keyId: 'sala_uuid', label: 'Sala Asignada', sortable: true, editable: false },
-    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'Juego Asignado', sortable: true, editable: false },
+    { key: 'juego_nombre', keyId: 'juego_uuid', label: 'Juego Asignado', sortable: true, editable: true, type: 'select', options: globalJuegosStore },
     { key: 'banca', label: 'Fichas en Banca', type: 'fichas_banca', sortable: false, editable: false }
   ];
 
@@ -237,6 +237,15 @@
     const payload = { ...draft };
     if (payload.sala_uuid && !payload.sala_id) payload.sala_id = payload.sala_uuid;
     if (payload.juego_uuid && !payload.juego_id) payload.juego_id = payload.juego_uuid;
+    if (payload.juego_id && !payload.juego_uuid) payload.juego_uuid = payload.juego_id;
+
+    if (payload.juego_uuid) {
+      const foundJuego = (globalJuegosStore || []).find(j => String(j.uuid || j.id) === String(payload.juego_uuid));
+      if (foundJuego) {
+        payload.juego_nombre = foundJuego.nombre;
+      }
+    }
+
     const targetUuid = id;
     try {
       await masterMesasActions.update(targetUuid, payload);

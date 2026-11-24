@@ -5983,17 +5983,38 @@ export async function updateMesaModel(id, data) {
       WHERE uuid = ${id}::uuid
       RETURNING *, uuid AS id, sala_uuid AS sala_id, juego_uuid AS juego_id
     `;
-    return rows[0];
+
+    const enriched = await sql`
+      SELECT m.*, m.uuid AS id, m.sala_uuid AS sala_id, m.juego_uuid AS juego_id,
+             j.nombre AS juego_nombre, s.uuid AS sala_id, s.nombre AS sala_nombre, s.nombre_comercial AS sala_nombre_comercial
+      FROM mesas m
+      LEFT JOIN salas s ON m.sala_uuid = s.uuid
+      LEFT JOIN juegos j ON m.juego_uuid = j.uuid
+      WHERE m.uuid = ${id}::uuid
+    `;
+    return enriched[0] || rows[0];
   } else {
     const idx = (inMemoryData.mesas || []).findIndex(m => m.uuid === id || m.id === id);
     if (idx !== -1) {
+      let juegoNombre = inMemoryData.mesas[idx].juego_nombre;
+      if (rawJuego) {
+        const j = (inMemoryData.juegos || []).find(x => x.uuid === rawJuego || x.id === rawJuego);
+        if (j) juegoNombre = j.nombre;
+      }
+      let salaNombre = inMemoryData.mesas[idx].sala_nombre;
+      if (rawSala) {
+        const s = (inMemoryData.salas || []).find(x => x.uuid === rawSala || x.id === rawSala);
+        if (s) salaNombre = s.nombre;
+      }
       inMemoryData.mesas[idx] = { 
         ...inMemoryData.mesas[idx], 
         ...data, 
+        ...(juegoNombre ? { juego_nombre: juegoNombre } : {}),
+        ...(salaNombre ? { sala_nombre: salaNombre } : {}),
         banca: data.banca !== undefined 
           ? (typeof data.banca === 'string' ? JSON.parse(data.banca) : data.banca) 
           : inMemoryData.mesas[idx].banca,
-        updated_at: new Date().toISOString() 
+        updated_at: new Date().toISOString()
       };
       return inMemoryData.mesas[idx];
     }
